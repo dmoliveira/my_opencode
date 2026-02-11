@@ -25,9 +25,14 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
 - `opencode-supermemory` - persistent memory across sessions.
+- `opencode-wakatime` - tracks OpenCode coding activity and AI line changes in WakaTime.
+
+### Experimental plugin options 🧪
+
 - `github:kdcokenny/opencode-worktree` - git worktree automation with terminal spawning for isolated agent sessions.
 - `github:JRedeker/opencode-morph-fast-apply` - high-speed Morph Fast Apply edits for large or scattered code changes.
-- `opencode-wakatime` - tracks OpenCode coding activity and AI line changes in WakaTime.
+
+These two can fail to auto-resolve on some setups. Keep them disabled unless you want to test them.
 
 ## Installed instruction packs 📘
 
@@ -84,6 +89,8 @@ Use these directly in OpenCode:
 ```
 
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
+
+`all` applies only to the stable set: `notifier`, `supermemory`, `wakatime`.
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 

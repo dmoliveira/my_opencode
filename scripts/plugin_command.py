@@ -14,6 +14,8 @@ KNOWN_PLUGINS = {
     "wakatime": "opencode-wakatime",
 }
 PLUGIN_ORDER = ["notifier", "supermemory", "morph", "worktree", "wakatime"]
+STABLE_ALIASES = ["notifier", "supermemory", "wakatime"]
+EXPERIMENTAL_ALIASES = ["morph", "worktree"]
 
 
 def load_config() -> dict:
@@ -42,6 +44,8 @@ def usage() -> int:
         "usage: /plugin status | /plugin enable <name|all> | /plugin disable <name|all>"
     )
     print("names: notifier, supermemory, morph, worktree, wakatime")
+    print("note: 'all' applies stable plugins only: notifier, supermemory, wakatime")
+    print("note: morph/worktree may require manual setup depending on plugin resolver")
     return 2
 
 
@@ -49,7 +53,8 @@ def print_status(plugins: list[str]) -> None:
     for alias in PLUGIN_ORDER:
         package = KNOWN_PLUGINS[alias]
         state = "enabled" if package in plugins else "disabled"
-        print(f"{alias}: {state} ({package})")
+        kind = "stable" if alias in STABLE_ALIASES else "experimental"
+        print(f"{alias}: {state} [{kind}] ({package})")
     print(f"config: {CONFIG_PATH}")
 
 
@@ -68,7 +73,7 @@ def main(argv: list[str]) -> int:
     if action not in ("enable", "disable"):
         return usage()
 
-    targets = PLUGIN_ORDER if target == "all" else [target]
+    targets = STABLE_ALIASES if target == "all" else [target]
     if any(name not in KNOWN_PLUGINS for name in targets):
         return usage()
 
@@ -94,6 +99,14 @@ def main(argv: list[str]) -> int:
     state = "enabled" if action == "enable" else "disabled"
     for alias in targets:
         print(f"{alias}: {state}")
+    if target == "all":
+        print("applied profile: stable")
+    if action == "enable":
+        experimental_enabled = [a for a in targets if a in EXPERIMENTAL_ALIASES]
+        if experimental_enabled:
+            print(
+                "note: experimental plugin(s) enabled. If OpenCode fails to load them, disable with /plugin disable <name>."
+            )
     print(f"config: {CONFIG_PATH}")
     return 0
 
