@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+from pathlib import Path
+
+
+DEFAULT_CONFIG = Path("~/.config/opencode/opencode.json").expanduser()
+SUPPORTED = {"context7", "gh_grep"}
+
+
+def load_config(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_config(path: Path, data: dict) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
+def ensure_mcp_shape(data: dict) -> None:
+    if "mcp" not in data or not isinstance(data["mcp"], dict):
+        data["mcp"] = {}
+
+
+def set_enabled(data: dict, name: str, value: bool) -> None:
+    ensure_mcp_shape(data)
+    entry = data["mcp"].get(name)
+    if not isinstance(entry, dict):
+        data["mcp"][name] = {"enabled": value}
+        return
+    entry["enabled"] = value
+
+
+def get_status(data: dict, name: str) -> str:
+    mcp = data.get("mcp", {}) if isinstance(data.get("mcp"), dict) else {}
+    entry = mcp.get(name, {}) if isinstance(mcp.get(name), dict) else {}
+    enabled = entry.get("enabled")
+    if enabled is True:
+        return "enabled"
+    if enabled is False:
+        return "disabled"
+    return "unset"
+
+
+def parse_args(argv: list[str]) -> tuple[Path, str, str | None]:
+    config_path = DEFAULT_CONFIG
+    args = list(argv)
+
+    if args[:1] == ["--config"]:
+        if len(args) < 3:
+            raise ValueError("Missing value for --config")
+        config_path = Path(args[1]).expanduser()
+        args = args[2:]
+
+    if not args:
+        raise ValueError("Missing command")
+
+    command = args[0]
+    target = args[1] if len(args) > 1 else None
+    return config_path, command, target
+
+
+def usage() -> str:
+    return (
+        "Usage:\n"
+        "  opencode-mcp status\n"
+        "  opencode-mcp enable <context7|gh_grep|all>\n"
+        "  opencode-mcp disable <context7|gh_grep|all>\n"
+        "  opencode-mcp --config /path/to/opencode.json <command> [target]\n"
+    )
+
+
+def main() -> int:
+    try:
+        config_path, command, target = parse_args(sys.argv[1:])
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        print(usage(), file=sys.stderr)
+        return 2
+
+    try:
+        data = load_config(config_path)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if command == "status":
+        for name in sorted(SUPPORTED):
+            print(f"{name}: {get_status(data, name)}")
+        print(f"config: {config_path}")
+        return 0
+
+    if command not in {"enable", "disable"}:
+        print(f"Error: Unsupported command '{command}'", file=sys.stderr)
+        print(usage(), file=sys.stderr)
+        return 2
+
+    if target is None:
+        print("Error: Missing target", file=sys.stderr)
+        print(usage(), file=sys.stderr)
+        return 2
+
+    value = command == "enable"
+    targets = SUPPORTED if target == "all" else {target}
+
+    unknown = sorted([t for t in targets if t not in SUPPORTED])
+    if unknown:
+        print(f"Error: Unsupported target(s): {', '.join(unknown)}", file=sys.stderr)
+        print("Supported: context7, gh_grep, all", file=sys.stderr)
+        return 2
+
+    for name in sorted(targets):
+        set_enabled(data, name, value)
+
+    try:
+        save_config(config_path, data)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    state = "enabled" if value else "disabled"
+    for name in sorted(targets):
+        print(f"{name}: {state}")
+    print(f"config: {config_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
