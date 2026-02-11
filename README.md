@@ -2,23 +2,49 @@
 
 Welcome to my OpenCode command center! ✨
 
-This repo is the home base for my global OpenCode setup: a clean, portable config with quick controls for MCP tools so I can switch between focused coding and research mode in seconds. ⚡
+This repo gives you a clean, portable OpenCode setup with fast MCP controls inside OpenCode itself. Keep autonomous coding smooth, and only turn on external context when you actually need it. ⚡
 
-## Why this exists 🎯
+## Why this setup rocks 🎯
 
-- Keep one source of truth for OpenCode config.
-- Make MCP usage intentional to control token spend.
-- Enable fast toggling inside OpenCode with `/mcp`.
-- Keep everything easy to sync, version, and evolve.
+- **One source of truth** for global OpenCode config.
+- **Token-aware workflow** by keeping heavy MCPs disabled by default.
+- **Instant MCP toggling** with `/mcp` commands in the OpenCode prompt.
+- **Portable install** with a one-liner script and symlinked default config path.
+- **Worktree-friendly repo** so you can iterate on config safely in feature branches.
 
-## What is inside 📦
+## Features and benefits 🌟
 
-- `opencode.json`: Global OpenCode config (symlinked from `~/.config/opencode/opencode.json`).
-- `scripts/mcp_command.py`: Backend script used by the `/mcp` command.
+- 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
+- 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
+- 🔒 Autonomous-friendly permissions for trusted project paths.
+- 🔁 Easy updates by rerunning the installer.
+- 🧩 Clear, versioned config for experiments and rollbacks.
 
-## MCP control in OpenCode 🧠
+## Quick install (popular way) ⚡
 
-Use these commands directly in the OpenCode prompt:
+Run this from anywhere:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash
+```
+
+This will:
+
+- clone or update this repo into `~/.config/opencode/my_opencode`
+- link `~/.config/opencode/opencode.json` to this repo config
+- enable `/mcp` command backend automatically
+
+## Manual install 🛠️
+
+```bash
+git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_opencode
+ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
+chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
+```
+
+## MCP control inside OpenCode 🧠
+
+Use these directly in OpenCode:
 
 ```text
 /mcp status
@@ -30,4 +56,10 @@ Use these commands directly in the OpenCode prompt:
 /mcp disable all
 ```
 
-Happy coding! 😄
+## Repo layout 📦
+
+- `opencode.json` - global OpenCode config (linked to default path)
+- `scripts/mcp_command.py` - backend script for `/mcp`
+- `install.sh` - one-step installer/updater
+
+Happy shipping! 😄
