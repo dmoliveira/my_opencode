@@ -2,6 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/dmoliveira/my_opencode.git}"
+REPO_REF="${REPO_REF:-}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.config/opencode/my_opencode}"
 CONFIG_DIR="$HOME/.config/opencode"
 CONFIG_PATH="$CONFIG_DIR/opencode.json"
@@ -51,6 +52,12 @@ else
   fi
   printf "Cloning config repo into %s\n" "$INSTALL_DIR"
   git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+fi
+
+if [ -n "$REPO_REF" ]; then
+  printf "Checking out repo ref %s\n" "$REPO_REF"
+  git -C "$INSTALL_DIR" fetch --all --prune >/dev/null 2>&1 || true
+  git -C "$INSTALL_DIR" checkout "$REPO_REF"
 fi
 
 chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py"

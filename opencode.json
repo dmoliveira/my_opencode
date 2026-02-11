@@ -42,6 +42,10 @@
       "description": "Show plugin command usage and examples",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" help`\nShow only the command output."
     },
+    "plugin-doctor-json": {
+      "description": "Show plugin diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" doctor --json`\nShow only the command output."
+    },
     "plugin-enable-notifier": {
       "description": "Enable notifier plugin",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable notifier`\nShow only the command output."

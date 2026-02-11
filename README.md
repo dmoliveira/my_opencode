@@ -90,6 +90,7 @@ Use these directly in OpenCode:
 /plugin status
 /plugin help
 /plugin doctor
+/plugin doctor --json
 /setup-keys
 /plugin enable supermemory
 /plugin disable supermemory
@@ -114,6 +115,7 @@ Autocomplete-friendly shortcuts:
 /plugin-profile-lean
 /plugin-profile-stable
 /plugin-profile-experimental
+/plugin-doctor-json
 ```
 
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
@@ -121,6 +123,8 @@ Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatim
 `all` applies only to the stable set: `notifier`, `supermemory`, `wakatime`.
 
 `/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
+
+`/plugin doctor --json` (or `/plugin-doctor-json`) prints machine-readable diagnostics for automation.
 
 `/setup-keys` prints exact environment/file snippets for missing API keys.
 
@@ -139,5 +143,20 @@ For WakaTime, configure `~/.wakatime.cfg` with your `api_key` before enabling `w
 - `scripts/mcp_command.py` - backend script for `/mcp`
 - `scripts/plugin_command.py` - backend script for `/plugin`
 - `install.sh` - one-step installer/updater
+- `Makefile` - common maintenance commands (`make help`)
+- `.github/workflows/ci.yml` - CI checks and installer smoke test
+
+## Maintenance commands 🛠️
+
+```bash
+make help
+make validate
+make doctor
+make doctor-json
+make install-test
+make release VERSION=0.1.1
+```
+
+Tip: for local branch testing, installer accepts `REPO_REF`.
 
 Happy shipping! 😄
