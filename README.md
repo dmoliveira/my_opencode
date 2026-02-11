@@ -1,20 +1,20 @@
 # my_opencode
 
-Personal OpenCode configuration and helper scripts.
+Personal OpenCode configuration.
 
 ## Files
 
 - `opencode.json`: Global OpenCode config (symlinked from `~/.config/opencode/opencode.json`).
-- `bin/opencode-mcp`: Toggle MCP servers in the OpenCode config.
-- `bin/oc7`: Shortcut for `context7` MCP (`on`, `off`, `status`).
-- `bin/ocg`: Shortcut for `gh_grep` MCP (`on`, `off`, `status`).
+- `scripts/mcp_command.py`: Backend script for the `/mcp` OpenCode custom command.
 
-## Usage
+## Usage in OpenCode
 
-```bash
-opencode-mcp status
-oc7 on
-oc7 off
-ocg on
-ocg off
+```text
+/mcp status
+/mcp enable context7
+/mcp disable context7
+/mcp enable gh_grep
+/mcp disable gh_grep
+/mcp enable all
+/mcp disable all
 ```
