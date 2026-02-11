@@ -29,10 +29,15 @@
     "mcp": {
       "description": "Manage MCP usage (status|enable|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "plugin": {
+      "description": "Manage plugin usage (status|enable|disable)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" $ARGUMENTS`\nShow only the command output."
     }
   },
   "plugin": [
-    "@mohak34/opencode-notifier@latest"
+    "@mohak34/opencode-notifier@latest",
+    "opencode-supermemory"
   ],
   "instructions": [
     "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",
