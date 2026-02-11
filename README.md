@@ -24,6 +24,10 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
 
+## Installed instruction packs 📘
+
+- `instructions/shell_strategy.md` - non-interactive shell strategy rules to avoid hangs and improve autonomous execution.
+
 ## Quick install (popular way) ⚡
 
 Run this from anywhere:

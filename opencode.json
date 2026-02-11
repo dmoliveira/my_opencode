@@ -35,6 +35,7 @@
     "@mohak34/opencode-notifier@latest"
   ],
   "instructions": [
-    "{env:HOME}/Codes/Projects/agents_md/AGENTS.md"
+    "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",
+    "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
   ]
 }
