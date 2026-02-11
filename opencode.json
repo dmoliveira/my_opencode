@@ -28,10 +28,10 @@
   "command": {
     "mcp": {
       "description": "Manage MCP usage (status|enable|disable)",
-      "template": "!`python3 /Users/diego/Codes/Projects/my_opencode/scripts/mcp_command.py $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
     }
   },
   "instructions": [
-    "/Users/diego/Codes/Projects/agents_md/AGENTS.md"
+    "{env:HOME}/Codes/Projects/agents_md/AGENTS.md"
   ]
 }
