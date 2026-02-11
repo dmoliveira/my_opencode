@@ -25,6 +25,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
 - `opencode-supermemory` - persistent memory across sessions.
+- `github:kdcokenny/opencode-worktree` - git worktree automation with terminal spawning for isolated agent sessions.
 
 ## Installed instruction packs 📘
 

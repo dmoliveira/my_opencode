@@ -37,7 +37,8 @@
   },
   "plugin": [
     "@mohak34/opencode-notifier@latest",
-    "opencode-supermemory"
+    "opencode-supermemory",
+    "github:kdcokenny/opencode-worktree"
   ],
   "instructions": [
     "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",
