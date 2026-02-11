@@ -39,7 +39,8 @@
     "@mohak34/opencode-notifier@latest",
     "opencode-supermemory",
     "github:kdcokenny/opencode-worktree",
-    "github:JRedeker/opencode-morph-fast-apply"
+    "github:JRedeker/opencode-morph-fast-apply",
+    "opencode-wakatime"
   ],
   "instructions": [
     "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",
