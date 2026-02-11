@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate doctor doctor-json install-test release
+.PHONY: help validate selftest doctor doctor-json install-test release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -8,6 +8,9 @@ help: ## Show available targets
 validate: ## Validate scripts and JSON config
 	python3 -m py_compile scripts/*.py
 	python3 -m json.tool opencode.json >/dev/null
+
+selftest: ## Run deterministic command self-tests
+	python3 scripts/selftest.py
 
 doctor: ## Run plugin diagnostics (human-readable)
 	python3 scripts/plugin_command.py doctor
