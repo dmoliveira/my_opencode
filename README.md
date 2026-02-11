@@ -58,6 +58,7 @@ This will:
 git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_opencode
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 ```
 
 ## MCP control inside OpenCode 🧠
@@ -80,6 +81,7 @@ Use these directly in OpenCode:
 
 ```text
 /plugin status
+/plugin doctor
 /plugin enable supermemory
 /plugin disable supermemory
 /plugin enable notifier
@@ -91,6 +93,8 @@ Use these directly in OpenCode:
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
 
 `all` applies only to the stable set: `notifier`, `supermemory`, `wakatime`.
+
+`/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 
