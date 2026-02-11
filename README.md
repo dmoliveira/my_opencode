@@ -88,6 +88,7 @@ Use these directly in OpenCode:
 
 ```text
 /plugin status
+/plugin help
 /plugin doctor
 /setup-keys
 /plugin enable supermemory
@@ -99,6 +100,20 @@ Use these directly in OpenCode:
 /plugin disable notifier
 /plugin enable all
 /plugin disable all
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/plugin-help
+/plugin-enable-notifier
+/plugin-enable-supermemory
+/plugin-enable-wakatime
+/plugin-enable-morph
+/plugin-enable-worktree
+/plugin-profile-lean
+/plugin-profile-stable
+/plugin-profile-experimental
 ```
 
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.

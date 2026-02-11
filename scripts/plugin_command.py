@@ -59,6 +59,17 @@ def usage() -> int:
     return 2
 
 
+def print_next_steps() -> None:
+    print("\nnext:")
+    print("- /plugin enable notifier")
+    print("- /plugin enable supermemory")
+    print("- /plugin enable wakatime")
+    print("- /plugin enable morph")
+    print("- /plugin enable worktree")
+    print("- /plugin profile lean|stable|experimental")
+    print("- /plugin doctor")
+
+
 def print_status(plugins: list[str]) -> None:
     for alias in PLUGIN_ORDER:
         package = KNOWN_PLUGINS[alias]
@@ -233,6 +244,12 @@ def main(argv: list[str]) -> int:
 
     if not argv or argv[0] == "status":
         print_status(plugins)
+        print_next_steps()
+        return 0
+
+    if argv[0] == "help":
+        usage()
+        print_next_steps()
         return 0
 
     if argv[0] == "doctor":
