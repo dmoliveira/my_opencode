@@ -51,7 +51,7 @@ def set_plugins(data: dict, plugins: list[str]) -> None:
 
 def usage() -> int:
     print(
-        "usage: /plugin status | /plugin doctor | /plugin setup-keys | /plugin profile <lean|stable|experimental> | /plugin enable <name|all> | /plugin disable <name|all>"
+        "usage: /plugin status | /plugin doctor [--json] | /plugin setup-keys | /plugin profile <lean|stable|experimental> | /plugin enable <name|all> | /plugin disable <name|all>"
     )
     print("names: notifier, supermemory, morph, worktree, wakatime")
     print("note: 'all' applies stable plugins only: notifier, supermemory, wakatime")
@@ -111,24 +111,24 @@ def has_wakatime_key() -> bool:
     return bool(re.search(r"(?im)^\s*api_key\s*=\s*\S+", content))
 
 
-def print_doctor(plugins: list[str]) -> int:
+def collect_doctor(plugins: list[str]) -> dict:
     problems: list[str] = []
     warnings: list[str] = []
-
-    print("plugin doctor")
-    print("-------------")
-    print(f"config: {CONFIG_PATH}")
-    print(f"python: {sys.executable}")
-
-    if not CONFIG_PATH.exists():
-        problems.append(f"missing config file: {CONFIG_PATH}")
+    plugin_states: dict[str, dict[str, str]] = {}
 
     for alias in PLUGIN_ORDER:
         package = KNOWN_PLUGINS[alias]
         enabled = package in plugins
         status = "enabled" if enabled else "disabled"
         kind = "stable" if alias in STABLE_ALIASES else "experimental"
-        print(f"- {alias}: {status} [{kind}]")
+        plugin_states[alias] = {
+            "status": status,
+            "kind": kind,
+            "package": package,
+        }
+
+    if not CONFIG_PATH.exists():
+        problems.append(f"missing config file: {CONFIG_PATH}")
 
     if KNOWN_PLUGINS["supermemory"] in plugins and not has_supermemory_key():
         problems.append(
@@ -157,21 +157,51 @@ def print_doctor(plugins: list[str]) -> int:
     if not cache_dir.exists():
         warnings.append("plugin cache not found yet (~/.cache/opencode/node_modules)")
 
-    if warnings:
+    return {
+        "result": "PASS" if not problems else "FAIL",
+        "config": str(CONFIG_PATH),
+        "python": sys.executable,
+        "plugins": plugin_states,
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": [
+            "set SUPERMEMORY_API_KEY and/or create ~/.config/opencode/supermemory.jsonc",
+            "add api_key to ~/.wakatime.cfg",
+            "disable unmet plugins with: /plugin disable <name>",
+        ]
+        if problems
+        else [],
+    }
+
+
+def print_doctor(plugins: list[str], json_output: bool = False) -> int:
+    report = collect_doctor(plugins)
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0 if report["result"] == "PASS" else 1
+
+    print("plugin doctor")
+    print("-------------")
+    print(f"config: {report['config']}")
+    print(f"python: {report['python']}")
+
+    for alias in PLUGIN_ORDER:
+        state = report["plugins"][alias]
+        print(f"- {alias}: {state['status']} [{state['kind']}]")
+
+    if report["warnings"]:
         print("\nwarnings:")
-        for item in warnings:
+        for item in report["warnings"]:
             print(f"- {item}")
 
-    if problems:
+    if report["problems"]:
         print("\nproblems:")
-        for item in problems:
+        for item in report["problems"]:
             print(f"- {item}")
         print("\nquick fixes:")
-        print(
-            "- set SUPERMEMORY_API_KEY and/or create ~/.config/opencode/supermemory.jsonc"
-        )
-        print("- add api_key to ~/.wakatime.cfg")
-        print("- disable unmet plugins with: /plugin disable <name>")
+        for item in report["quick_fixes"]:
+            print(f"- {item}")
         print("\nresult: FAIL")
         return 1
 
@@ -253,7 +283,10 @@ def main(argv: list[str]) -> int:
         return 0
 
     if argv[0] == "doctor":
-        return print_doctor(plugins)
+        json_output = len(argv) > 1 and argv[1] == "--json"
+        if len(argv) > 1 and not json_output:
+            return usage()
+        return print_doctor(plugins, json_output=json_output)
 
     if argv[0] == "setup-keys":
         return print_setup_keys(plugins)

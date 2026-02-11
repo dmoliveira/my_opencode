@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.1.1 - 2026-02-12
+
+### Adds
+- Added `/plugin doctor --json` output for automation and CI integrations.
+- Added plugin command next-step suggestions and `/plugin help` guidance output.
+- Added autocomplete-friendly shortcut commands like `/plugin-enable-supermemory` and `/plugin-profile-stable`.
+- Added GitHub Actions CI workflow for script/config validation and installer smoke tests.
+- Added `Makefile` with `help`, `validate`, `doctor`, `doctor-json`, `install-test`, and `release` targets.
+
+### Changes
+- Expanded README with maintenance commands and machine-readable diagnostics usage.
+
+### Fixes
+- Added `.gitignore` entries for Python cache artifacts.
+
 ## v0.1.0 - 2026-02-11
 
 ### Adds

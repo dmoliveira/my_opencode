@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate scripts and config
+        run: |
+          python -m py_compile scripts/*.py
+          python -m json.tool opencode.json > /dev/null
+
+      - name: Installer smoke test
+        run: |
+          TMP_HOME="$(mktemp -d)"
+          HOME="$TMP_HOME" REPO_URL="$GITHUB_WORKSPACE" REPO_REF="$GITHUB_SHA" ./install.sh --skip-self-check
+          HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/mcp_command.py" status
+          HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" profile lean
+          HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" doctor --json
