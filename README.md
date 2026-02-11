@@ -27,6 +27,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - `opencode-supermemory` - persistent memory across sessions.
 - `github:kdcokenny/opencode-worktree` - git worktree automation with terminal spawning for isolated agent sessions.
 - `github:JRedeker/opencode-morph-fast-apply` - high-speed Morph Fast Apply edits for large or scattered code changes.
+- `opencode-wakatime` - tracks OpenCode coding activity and AI line changes in WakaTime.
 
 ## Installed instruction packs 📘
 
@@ -85,6 +86,8 @@ Use these directly in OpenCode:
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
+
+For WakaTime, configure `~/.wakatime.cfg` with your `api_key` before enabling `wakatime`.
 
 ## Repo layout 📦
 
