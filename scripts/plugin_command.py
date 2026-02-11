@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 import json
+import os
+import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -41,7 +44,7 @@ def set_plugins(data: dict, plugins: list[str]) -> None:
 
 def usage() -> int:
     print(
-        "usage: /plugin status | /plugin enable <name|all> | /plugin disable <name|all>"
+        "usage: /plugin status | /plugin doctor | /plugin enable <name|all> | /plugin disable <name|all>"
     )
     print("names: notifier, supermemory, morph, worktree, wakatime")
     print("note: 'all' applies stable plugins only: notifier, supermemory, wakatime")
@@ -58,6 +61,106 @@ def print_status(plugins: list[str]) -> None:
     print(f"config: {CONFIG_PATH}")
 
 
+def has_supermemory_key() -> bool:
+    env_key = os.environ.get("SUPERMEMORY_API_KEY", "").strip()
+    if env_key:
+        return True
+
+    candidates = [
+        Path("~/.config/opencode/supermemory.json").expanduser(),
+        Path("~/.config/opencode/supermemory.jsonc").expanduser(),
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if re.search(r'"apiKey"\s*:\s*".+"', content):
+            return True
+    return False
+
+
+def has_wakatime_key() -> bool:
+    cfg = Path("~/.wakatime.cfg").expanduser()
+    if not cfg.exists():
+        return False
+    try:
+        content = cfg.read_text(encoding="utf-8")
+    except Exception:
+        return False
+    return bool(re.search(r"(?im)^\s*api_key\s*=\s*\S+", content))
+
+
+def print_doctor(plugins: list[str]) -> int:
+    problems: list[str] = []
+    warnings: list[str] = []
+
+    print("plugin doctor")
+    print("-------------")
+    print(f"config: {CONFIG_PATH}")
+    print(f"python: {sys.executable}")
+
+    if not CONFIG_PATH.exists():
+        problems.append(f"missing config file: {CONFIG_PATH}")
+
+    for alias in PLUGIN_ORDER:
+        package = KNOWN_PLUGINS[alias]
+        enabled = package in plugins
+        status = "enabled" if enabled else "disabled"
+        kind = "stable" if alias in STABLE_ALIASES else "experimental"
+        print(f"- {alias}: {status} [{kind}]")
+
+    if KNOWN_PLUGINS["supermemory"] in plugins and not has_supermemory_key():
+        problems.append(
+            "supermemory enabled but no API key found (set SUPERMEMORY_API_KEY or ~/.config/opencode/supermemory.json[c])"
+        )
+
+    if KNOWN_PLUGINS["wakatime"] in plugins and not has_wakatime_key():
+        problems.append("wakatime enabled but ~/.wakatime.cfg api_key is missing")
+
+    if (
+        KNOWN_PLUGINS["morph"] in plugins
+        and not os.environ.get("MORPH_API_KEY", "").strip()
+    ):
+        problems.append("morph enabled but MORPH_API_KEY is not set")
+
+    if KNOWN_PLUGINS["worktree"] in plugins and shutil.which("git") is None:
+        problems.append("worktree enabled but git command is not available")
+
+    if KNOWN_PLUGINS["morph"] in plugins or KNOWN_PLUGINS["worktree"] in plugins:
+        if shutil.which("bun") is None:
+            warnings.append(
+                "bun is not in PATH; some github: plugins may fail to resolve depending on OpenCode runtime"
+            )
+
+    cache_dir = Path("~/.cache/opencode/node_modules").expanduser()
+    if not cache_dir.exists():
+        warnings.append("plugin cache not found yet (~/.cache/opencode/node_modules)")
+
+    if warnings:
+        print("\nwarnings:")
+        for item in warnings:
+            print(f"- {item}")
+
+    if problems:
+        print("\nproblems:")
+        for item in problems:
+            print(f"- {item}")
+        print("\nquick fixes:")
+        print(
+            "- set SUPERMEMORY_API_KEY and/or create ~/.config/opencode/supermemory.jsonc"
+        )
+        print("- add api_key to ~/.wakatime.cfg")
+        print("- disable unmet plugins with: /plugin disable <name>")
+        print("\nresult: FAIL")
+        return 1
+
+    print("\nresult: PASS")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     data = load_config()
     plugins = get_plugins(data)
@@ -65,6 +168,9 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] == "status":
         print_status(plugins)
         return 0
+
+    if argv[0] == "doctor":
+        return print_doctor(plugins)
 
     if len(argv) < 2:
         return usage()
