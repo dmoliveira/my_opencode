@@ -37,6 +37,42 @@
     "setup-keys": {
       "description": "Show exact key setup snippets for enabled plugins",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" setup-keys`\nShow only the command output."
+    },
+    "plugin-help": {
+      "description": "Show plugin command usage and examples",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" help`\nShow only the command output."
+    },
+    "plugin-enable-notifier": {
+      "description": "Enable notifier plugin",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable notifier`\nShow only the command output."
+    },
+    "plugin-enable-supermemory": {
+      "description": "Enable supermemory plugin",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable supermemory`\nShow only the command output."
+    },
+    "plugin-enable-wakatime": {
+      "description": "Enable wakatime plugin",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable wakatime`\nShow only the command output."
+    },
+    "plugin-enable-morph": {
+      "description": "Enable morph plugin (experimental)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable morph`\nShow only the command output."
+    },
+    "plugin-enable-worktree": {
+      "description": "Enable worktree plugin (experimental)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable worktree`\nShow only the command output."
+    },
+    "plugin-profile-stable": {
+      "description": "Switch plugin profile to stable",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile stable`\nShow only the command output."
+    },
+    "plugin-profile-experimental": {
+      "description": "Switch plugin profile to experimental",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile experimental`\nShow only the command output."
+    },
+    "plugin-profile-lean": {
+      "description": "Switch plugin profile to lean",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile lean`\nShow only the command output."
     }
   },
   "plugin": [
