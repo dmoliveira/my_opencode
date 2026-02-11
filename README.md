@@ -74,12 +74,31 @@ Use these directly in OpenCode:
 
 ```text
 /mcp status
+/mcp help
+/mcp doctor
+/mcp doctor --json
+/mcp profile minimal
+/mcp profile research
+/mcp profile context7
+/mcp profile ghgrep
 /mcp enable context7
 /mcp disable context7
 /mcp enable gh_grep
 /mcp disable gh_grep
 /mcp enable all
 /mcp disable all
+```
+
+MCP autocomplete-friendly shortcuts:
+
+```text
+/mcp-help
+/mcp-doctor
+/mcp-doctor-json
+/mcp-profile-minimal
+/mcp-profile-research
+/mcp-profile-context7
+/mcp-profile-ghgrep
 ```
 
 ## Plugin control inside OpenCode 🎛️

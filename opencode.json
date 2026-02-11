@@ -27,8 +27,36 @@
   },
   "command": {
     "mcp": {
-      "description": "Manage MCP usage (status|enable|disable)",
+      "description": "Manage MCP usage (status|help|doctor|profile|enable|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "mcp-help": {
+      "description": "Show MCP command usage and examples",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."
+    },
+    "mcp-doctor": {
+      "description": "Run MCP diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" doctor`\nShow only the command output."
+    },
+    "mcp-doctor-json": {
+      "description": "Run MCP diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" doctor --json`\nShow only the command output."
+    },
+    "mcp-profile-minimal": {
+      "description": "Disable all MCP servers",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile minimal`\nShow only the command output."
+    },
+    "mcp-profile-research": {
+      "description": "Enable both MCP servers",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile research`\nShow only the command output."
+    },
+    "mcp-profile-context7": {
+      "description": "Enable only context7 MCP",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile context7`\nShow only the command output."
+    },
+    "mcp-profile-ghgrep": {
+      "description": "Enable only gh_grep MCP",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile ghgrep`\nShow only the command output."
     },
     "plugin": {
       "description": "Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)",
