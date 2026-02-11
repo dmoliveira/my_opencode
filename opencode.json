@@ -38,8 +38,6 @@
   "plugin": [
     "@mohak34/opencode-notifier@latest",
     "opencode-supermemory",
-    "github:kdcokenny/opencode-worktree",
-    "github:JRedeker/opencode-morph-fast-apply",
     "opencode-wakatime"
   ],
   "instructions": [

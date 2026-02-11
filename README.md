@@ -32,7 +32,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - `github:kdcokenny/opencode-worktree` - git worktree automation with terminal spawning for isolated agent sessions.
 - `github:JRedeker/opencode-morph-fast-apply` - high-speed Morph Fast Apply edits for large or scattered code changes.
 
-These two can fail to auto-resolve on some setups. Keep them disabled unless you want to test them.
+These two can fail to auto-resolve on some setups and are disabled by default. Enable them only when you want to test them.
 
 ## Installed instruction packs 📘
 
