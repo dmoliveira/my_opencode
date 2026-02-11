@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 
 
-CONFIG_PATH = Path("~/.config/opencode/opencode.json").expanduser()
+CONFIG_PATH = Path(
+    os.environ.get("OPENCODE_CONFIG_PATH", "~/.config/opencode/opencode.json")
+).expanduser()
 KNOWN_PLUGINS = {
     "notifier": "@mohak34/opencode-notifier@latest",
     "supermemory": "opencode-supermemory",
@@ -19,6 +21,11 @@ KNOWN_PLUGINS = {
 PLUGIN_ORDER = ["notifier", "supermemory", "morph", "worktree", "wakatime"]
 STABLE_ALIASES = ["notifier", "supermemory", "wakatime"]
 EXPERIMENTAL_ALIASES = ["morph", "worktree"]
+PROFILE_MAP = {
+    "lean": ["notifier"],
+    "stable": ["notifier", "supermemory", "wakatime"],
+    "experimental": ["notifier", "supermemory", "wakatime", "morph", "worktree"],
+}
 
 
 def load_config() -> dict:
@@ -44,7 +51,7 @@ def set_plugins(data: dict, plugins: list[str]) -> None:
 
 def usage() -> int:
     print(
-        "usage: /plugin status | /plugin doctor | /plugin enable <name|all> | /plugin disable <name|all>"
+        "usage: /plugin status | /plugin doctor | /plugin setup-keys | /plugin profile <lean|stable|experimental> | /plugin enable <name|all> | /plugin disable <name|all>"
     )
     print("names: notifier, supermemory, morph, worktree, wakatime")
     print("note: 'all' applies stable plugins only: notifier, supermemory, wakatime")
@@ -161,6 +168,65 @@ def print_doctor(plugins: list[str]) -> int:
     return 0
 
 
+def print_setup_keys(plugins: list[str]) -> int:
+    print("setup keys")
+    print("----------")
+
+    needs_supermemory = (
+        KNOWN_PLUGINS["supermemory"] in plugins and not has_supermemory_key()
+    )
+    needs_wakatime = KNOWN_PLUGINS["wakatime"] in plugins and not has_wakatime_key()
+    needs_morph = (
+        KNOWN_PLUGINS["morph"] in plugins
+        and not os.environ.get("MORPH_API_KEY", "").strip()
+    )
+
+    if not (needs_supermemory or needs_wakatime or needs_morph):
+        print("all required keys are already configured for enabled plugins")
+        return 0
+
+    if needs_supermemory:
+        print("\n[supermemory]")
+        print("export SUPERMEMORY_API_KEY='sm_your_key_here'")
+        print("or create ~/.config/opencode/supermemory.jsonc:")
+        print("{")
+        print('  "apiKey": "sm_your_key_here"')
+        print("}")
+
+    if needs_wakatime:
+        print("\n[wakatime]")
+        print("create ~/.wakatime.cfg with:")
+        print("[settings]")
+        print("api_key = waka_your_key_here")
+
+    if needs_morph:
+        print("\n[morph]")
+        print("export MORPH_API_KEY='sk_your_key_here'")
+
+    print("\nthen run: /plugin doctor")
+    return 0
+
+
+def apply_profile(data: dict, current_plugins: list[str], profile: str) -> int:
+    if profile not in PROFILE_MAP:
+        return usage()
+
+    profile_aliases = PROFILE_MAP[profile]
+    profile_packages = [KNOWN_PLUGINS[a] for a in profile_aliases]
+    known_packages = [KNOWN_PLUGINS[a] for a in PLUGIN_ORDER]
+    unknown_existing = [p for p in current_plugins if p not in known_packages]
+    updated = profile_packages + unknown_existing
+    set_plugins(data, updated)
+    save_config(data)
+
+    print(f"profile: {profile}")
+    print("enabled aliases:")
+    for alias in profile_aliases:
+        print(f"- {alias}")
+    print(f"config: {CONFIG_PATH}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     data = load_config()
     plugins = get_plugins(data)
@@ -171,6 +237,14 @@ def main(argv: list[str]) -> int:
 
     if argv[0] == "doctor":
         return print_doctor(plugins)
+
+    if argv[0] == "setup-keys":
+        return print_setup_keys(plugins)
+
+    if argv[0] == "profile":
+        if len(argv) < 2:
+            return usage()
+        return apply_profile(data, plugins, argv[1])
 
     if len(argv) < 2:
         return usage()
