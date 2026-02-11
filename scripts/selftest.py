@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
+MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
+BASE_CONFIG = REPO_ROOT / "opencode.json"
+
+
+def run_script(
+    script: Path, cfg: Path, home: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["OPENCODE_CONFIG_PATH"] = str(cfg)
+    env["HOME"] = str(home)
+    env.pop("SUPERMEMORY_API_KEY", None)
+    env.pop("MORPH_API_KEY", None)
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+
+def expect(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def parse_json_output(text: str) -> dict:
+    return json.loads(text)
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        home = tmp / "home"
+        home.mkdir(parents=True, exist_ok=True)
+        cfg = tmp / "opencode.json"
+        shutil.copy2(BASE_CONFIG, cfg)
+
+        # Plugin profile lean should pass doctor.
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "profile", "lean")
+        expect(result.returncode == 0, f"plugin profile lean failed: {result.stderr}")
+
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 0,
+            f"plugin doctor --json (lean) failed: {result.stderr}",
+        )
+        report = parse_json_output(result.stdout)
+        expect(
+            report.get("result") == "PASS", "plugin doctor should pass for lean profile"
+        )
+
+        # Plugin stable should fail doctor without keys in isolated HOME.
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "profile", "stable")
+        expect(result.returncode == 0, f"plugin profile stable failed: {result.stderr}")
+
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 1,
+            "plugin doctor stable should fail when keys are absent",
+        )
+        report = parse_json_output(result.stdout)
+        problems = "\n".join(report.get("problems", []))
+        expect("supermemory enabled" in problems, "expected supermemory key problem")
+        expect("wakatime enabled" in problems, "expected wakatime key problem")
+
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "setup-keys")
+        expect(result.returncode == 0, f"plugin setup-keys failed: {result.stderr}")
+        expect(
+            "[supermemory]" in result.stdout, "setup-keys missing supermemory section"
+        )
+        expect("[wakatime]" in result.stdout, "setup-keys missing wakatime section")
+
+        # MCP minimal should pass with disabled warning.
+        result = run_script(MCP_SCRIPT, cfg, home, "profile", "minimal")
+        expect(result.returncode == 0, f"mcp profile minimal failed: {result.stderr}")
+
+        result = run_script(MCP_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 0,
+            f"mcp doctor --json (minimal) failed: {result.stderr}",
+        )
+        report = parse_json_output(result.stdout)
+        expect(
+            report.get("result") == "PASS", "mcp doctor should pass for minimal profile"
+        )
+        warnings = "\n".join(report.get("warnings", []))
+        expect(
+            "all MCP servers are disabled" in warnings, "expected disabled MCP warning"
+        )
+
+        # MCP research should enable both servers and pass.
+        result = run_script(MCP_SCRIPT, cfg, home, "profile", "research")
+        expect(result.returncode == 0, f"mcp profile research failed: {result.stderr}")
+
+        result = run_script(MCP_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 0,
+            f"mcp doctor --json (research) failed: {result.stderr}",
+        )
+        report = parse_json_output(result.stdout)
+        expect(
+            report.get("result") == "PASS",
+            "mcp doctor should pass for research profile",
+        )
+        expect(
+            report.get("servers", {}).get("context7", {}).get("status") == "enabled",
+            "context7 should be enabled in research profile",
+        )
+        expect(
+            report.get("servers", {}).get("gh_grep", {}).get("status") == "enabled",
+            "gh_grep should be enabled in research profile",
+        )
+
+    print("selftest: PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except AssertionError as exc:
+        print(f"selftest: FAIL - {exc}")
+        raise SystemExit(1)

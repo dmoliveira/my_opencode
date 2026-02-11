@@ -22,6 +22,10 @@ jobs:
           python -m py_compile scripts/*.py
           python -m json.tool opencode.json > /dev/null
 
+      - name: Run deterministic self-tests
+        run: |
+          make selftest
+
       - name: Installer smoke test
         run: |
           TMP_HOME="$(mktemp -d)"

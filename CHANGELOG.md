@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Adds
+- Added deterministic `scripts/selftest.py` to verify MCP/plugin command behavior with isolated config and environment.
+
+### Changes
+- Added `make selftest` and wired it into CI for regression coverage.
+
 ## v0.1.1 - 2026-02-12
 
 ### Adds

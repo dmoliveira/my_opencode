@@ -170,6 +170,7 @@ For WakaTime, configure `~/.wakatime.cfg` with your `api_key` before enabling `w
 ```bash
 make help
 make validate
+make selftest
 make doctor
 make doctor-json
 make install-test
