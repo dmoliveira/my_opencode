@@ -26,7 +26,7 @@ else
   git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
-chmod +x "$INSTALL_DIR/scripts/mcp_command.py"
+chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py"
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 printf "\nDone! ✅\n"
@@ -35,3 +35,6 @@ printf "\nOpen OpenCode and use:\n"
 printf "  /mcp status\n"
 printf "  /mcp enable context7\n"
 printf "  /mcp disable context7\n"
+printf "  /plugin status\n"
+printf "  /plugin enable supermemory\n"
+printf "  /plugin disable supermemory\n"

@@ -15,6 +15,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 ## Features and benefits 🌟
 
 - 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
+- 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -23,6 +24,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
+- `opencode-supermemory` - persistent memory across sessions.
 
 ## Installed instruction packs 📘
 
@@ -64,10 +66,27 @@ Use these directly in OpenCode:
 /mcp disable all
 ```
 
+## Plugin control inside OpenCode 🎛️
+
+Use these directly in OpenCode:
+
+```text
+/plugin status
+/plugin enable supermemory
+/plugin disable supermemory
+/plugin enable notifier
+/plugin disable notifier
+/plugin enable all
+/plugin disable all
+```
+
+Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
+
 ## Repo layout 📦
 
 - `opencode.json` - global OpenCode config (linked to default path)
 - `scripts/mcp_command.py` - backend script for `/mcp`
+- `scripts/plugin_command.py` - backend script for `/plugin`
 - `install.sh` - one-step installer/updater
 
 Happy shipping! 😄
