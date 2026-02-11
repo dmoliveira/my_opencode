@@ -20,6 +20,10 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🔁 Easy updates by rerunning the installer.
 - 🧩 Clear, versioned config for experiments and rollbacks.
 
+## Installed plugin stack 🔌
+
+- `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
+
 ## Quick install (popular way) ⚡
 
 Run this from anywhere:

@@ -31,6 +31,9 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
     }
   },
+  "plugin": [
+    "@mohak34/opencode-notifier@latest"
+  ],
   "instructions": [
     "{env:HOME}/Codes/Projects/agents_md/AGENTS.md"
   ]
