@@ -46,11 +46,18 @@ Run this from anywhere:
 curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash
 ```
 
+CI/non-interactive mode:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash -s -- --non-interactive
+```
+
 This will:
 
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -82,8 +89,12 @@ Use these directly in OpenCode:
 ```text
 /plugin status
 /plugin doctor
+/setup-keys
 /plugin enable supermemory
 /plugin disable supermemory
+/plugin profile lean
+/plugin profile stable
+/plugin profile experimental
 /plugin enable notifier
 /plugin disable notifier
 /plugin enable all
@@ -95,6 +106,13 @@ Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatim
 `all` applies only to the stable set: `notifier`, `supermemory`, `wakatime`.
 
 `/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
+
+`/setup-keys` prints exact environment/file snippets for missing API keys.
+
+Profiles:
+- `lean` -> `notifier`
+- `stable` -> `notifier`, `supermemory`, `wakatime`
+- `experimental` -> `stable` + `morph`, `worktree`
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 

@@ -31,8 +31,12 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "plugin": {
-      "description": "Manage plugin usage (status|doctor|enable|disable)",
+      "description": "Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "setup-keys": {
+      "description": "Show exact key setup snippets for enabled plugins",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" setup-keys`\nShow only the command output."
     }
   },
   "plugin": [
