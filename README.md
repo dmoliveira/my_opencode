@@ -16,6 +16,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
+- 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -156,11 +157,50 @@ For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 
 For WakaTime, configure `~/.wakatime.cfg` with your `api_key` before enabling `wakatime`.
 
+## Notification control inside OpenCode 🔔
+
+Use these directly in OpenCode:
+
+```text
+/notify status
+/notify help
+/notify profile all
+/notify profile quiet
+/notify profile focus
+/notify profile sound-only
+/notify profile visual-only
+/notify enable all
+/notify disable all
+/notify enable sound
+/notify disable visual
+/notify disable complete
+/notify enable permission
+/notify channel question sound off
+/notify channel error visual on
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/notify-help
+/notify-profile-all
+/notify-profile-focus
+/notify-sound-only
+/notify-visual-only
+```
+
+`/notify` writes preferences to `~/.config/opencode/opencode-notifications.json` with controls at four levels:
+- global: `enabled`
+- channel: `sound.enabled`, `visual.enabled`
+- event: `events.<type>`
+- per-event channel: `channels.<type>.sound|visual`
+
 ## Repo layout 📦
 
 - `opencode.json` - global OpenCode config (linked to default path)
 - `scripts/mcp_command.py` - backend script for `/mcp`
 - `scripts/plugin_command.py` - backend script for `/plugin`
+- `scripts/notify_command.py` - backend script for `/notify`
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.github/workflows/ci.yml` - CI checks and installer smoke test
