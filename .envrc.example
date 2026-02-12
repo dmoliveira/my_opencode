@@ -1,0 +1,12 @@
+# Copy this file to .envrc, customize values, then run: direnv allow
+
+# OpenCode plugin keys
+export SUPERMEMORY_API_KEY=""
+export MORPH_API_KEY=""
+
+# Optional digest/post-session overrides
+# export MY_OPENCODE_DIGEST_PATH="$HOME/.config/opencode/digests/last-session.json"
+# export MY_OPENCODE_DIGEST_HOOK="make validate"
+
+# Optional OpenCode config path override
+# export OPENCODE_CONFIG_PATH="$HOME/.config/opencode/opencode.json"

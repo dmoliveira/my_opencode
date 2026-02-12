@@ -1,0 +1,5 @@
+pre-commit:
+  parallel: true
+  commands:
+    pre-commit:
+      run: pre-commit run --hook-stage pre-commit --files {staged_files}

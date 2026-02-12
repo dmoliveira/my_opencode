@@ -25,6 +25,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
+- 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -137,6 +138,52 @@ openchamber stop --port 3111
 - `OpenChamber`: recommended when you want a richer visual layer over OpenCode sessions and remote access.
 - Keep both optional; core repo behavior remains terminal-first and fully functional without them.
 
+## External productivity tooling (outside OpenCode) ⚙️
+
+Recommended baseline stack:
+
+- `direnv` for per-project environment auto-loading (`.envrc`).
+- `gh-dash` for terminal-native GitHub issue/PR/check workflow.
+- `ripgrep-all` (`rga`) for broad content search beyond plain source files.
+- `pre-commit` + `lefthook` for fast local hooks aligned with CI checks.
+
+Use these directly in OpenCode:
+
+```text
+/devtools status
+/devtools help
+/devtools install all
+/devtools doctor
+/devtools doctor --json
+/devtools hooks-install
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/devtools-help
+/devtools-install
+/devtools-doctor-json
+```
+
+First-time shell setup for direnv (`zsh`):
+
+```bash
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
+```
+
+Project setup for direnv:
+
+```bash
+cp .envrc.example .envrc
+direnv allow
+```
+
+Notes:
+- This repo ships `lefthook.yml` and `.pre-commit-config.yaml`.
+- `gh-dash` is installed as a GitHub CLI extension (`gh extension install dlvhdr/gh-dash`).
+- For Node-only repositories, Husky is also a valid alternative to Lefthook.
+
 ## Quick install (popular way) ⚡
 
 Run this from anywhere:
@@ -178,6 +225,7 @@ ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 ```
 
 ## Install wizard flow 🧭
@@ -537,8 +585,12 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`
+- `scripts/devtools_command.py` - backend script for `/devtools`
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
+- `.pre-commit-config.yaml` - pre-commit hook definitions
+- `lefthook.yml` - fast git hook runner config
+- `.envrc.example` - direnv template for local environment variables
 - `.github/workflows/ci.yml` - CI checks and installer smoke test
 
 ## Maintenance commands 🛠️
@@ -549,6 +601,8 @@ make validate
 make selftest
 make doctor
 make doctor-json
+make devtools-status
+make hooks-install
 make install-test
 make release-check
 make release VERSION=0.1.1
