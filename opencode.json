@@ -102,6 +102,22 @@
       "description": "Run Neovim integration diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" doctor --json`\nShow only the command output."
     },
+    "devtools": {
+      "description": "Manage external productivity tools (status|doctor|install|hooks-install)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "devtools-help": {
+      "description": "Show external devtools command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" help`\nShow only the command output."
+    },
+    "devtools-install": {
+      "description": "Install all recommended external productivity tools",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" install all`\nShow only the command output."
+    },
+    "devtools-doctor-json": {
+      "description": "Run external devtools diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" doctor --json`\nShow only the command output."
+    },
     "mcp-help": {
       "description": "Show MCP command usage and examples",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."

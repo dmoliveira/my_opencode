@@ -11,11 +11,14 @@ All notable changes to this project are documented in this file.
 - Added installer flags `--wizard` and `--reconfigure` for guided setup and repeatable reconfiguration.
 - Added `/nvim` command suite with installable Neovim keymap profiles (`minimal`, `power`) plus status/doctor/uninstall flows.
 - Added autocomplete shortcuts for Neovim integration workflows and JSON diagnostics.
+- Added `/devtools` command suite for external productivity tooling status, doctor, install, and hook bootstrap flows.
+- Added `.pre-commit-config.yaml`, `lefthook.yml`, and `.envrc.example` to standardize local productivity setup.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
 - Expanded install smoke and self-tests to cover non-interactive wizard execution paths.
 - Expanded install smoke and selftest coverage for Neovim integration provisioning.
+- Expanded installer and README guidance for direnv, gh-dash, ripgrep-all, and pre-commit + lefthook workflows.
 
 ## v0.2.0 - 2026-02-12
 

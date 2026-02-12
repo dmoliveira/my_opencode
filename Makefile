@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -17,6 +17,12 @@ doctor: ## Run plugin diagnostics (human-readable)
 
 doctor-json: ## Run plugin diagnostics (JSON)
 	python3 scripts/doctor_command.py run --json
+
+devtools-status: ## Show external productivity tooling status
+	python3 scripts/devtools_command.py status
+
+hooks-install: ## Install pre-commit and lefthook git hooks
+	python3 scripts/devtools_command.py hooks-install
 
 install-test: ## Run installer smoke test in temp HOME
 	@TMP_HOME="$$(mktemp -d)"; \
@@ -41,6 +47,7 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py" status; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py" install minimal --link-init; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py" status; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/devtools_command.py" status; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/install_wizard.py" --non-interactive --skip-extras --plugin-profile lean --mcp-profile research --policy-profile balanced --notify-profile skip --telemetry-profile local --post-session-profile manual-validate; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json
 
