@@ -114,6 +114,14 @@
       "description": "Show notification command usage",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" help`\nShow only the command output."
     },
+    "notify-doctor": {
+      "description": "Run notification diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" doctor`\nShow only the command output."
+    },
+    "notify-doctor-json": {
+      "description": "Run notification diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" doctor --json`\nShow only the command output."
+    },
     "notify-profile-all": {
       "description": "Enable all notification channels and events",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile all`\nShow only the command output."
@@ -145,6 +153,14 @@
     "digest-show": {
       "description": "Show latest saved session digest",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" show`\nShow only the command output."
+    },
+    "digest-doctor": {
+      "description": "Run digest diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" doctor`\nShow only the command output."
+    },
+    "digest-doctor-json": {
+      "description": "Run digest diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" doctor --json`\nShow only the command output."
     },
     "post-session": {
       "description": "Manage post-session hook config (status|enable|disable|set)",
