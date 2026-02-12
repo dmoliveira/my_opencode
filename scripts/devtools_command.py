@@ -8,7 +8,7 @@ import sys
 
 TOOLS = {
     "direnv": {"bin": "direnv", "brew": "direnv"},
-    "gh-dash": {"bin": "gh-dash", "brew": "gh-dash"},
+    "gh-dash": {"bin": "gh", "gh_extension": "dlvhdr/gh-dash"},
     "ripgrep-all": {"bin": "rga", "brew": "ripgrep-all"},
     "pre-commit": {"bin": "pre-commit", "brew": "pre-commit"},
     "lefthook": {"bin": "lefthook", "brew": "lefthook"},
@@ -27,12 +27,29 @@ def installed_path(name: str) -> str | None:
     return shutil.which(TOOLS[name]["bin"])
 
 
+def gh_extension_installed(repo: str) -> bool:
+    if not shutil.which("gh"):
+        return False
+    out = subprocess.run(
+        ["gh", "extension", "list"], capture_output=True, text=True, check=False
+    )
+    if out.returncode != 0:
+        return False
+    return repo in out.stdout
+
+
+def tool_installed(name: str) -> bool:
+    if name == "gh-dash":
+        return gh_extension_installed(TOOLS[name]["gh_extension"])
+    return bool(installed_path(name))
+
+
 def list_status() -> dict:
     result = {}
     for name in TOOLS:
         path = installed_path(name)
         result[name] = {
-            "installed": bool(path),
+            "installed": tool_installed(name),
             "binary": TOOLS[name]["bin"],
             "path": path,
         }
@@ -90,6 +107,20 @@ def brew_install(formula: str) -> int:
     return subprocess.run(["brew", "install", formula], check=False).returncode
 
 
+def install_gh_dash() -> int:
+    if not shutil.which("gh"):
+        print("error: gh CLI is required for gh-dash extension install")
+        return 1
+    if gh_extension_installed(TOOLS["gh-dash"]["gh_extension"]):
+        return subprocess.run(
+            ["gh", "extension", "upgrade", "gh-dash"], check=False
+        ).returncode
+    return subprocess.run(
+        ["gh", "extension", "install", TOOLS["gh-dash"]["gh_extension"]],
+        check=False,
+    ).returncode
+
+
 def install_tools(targets: list[str]) -> int:
     if not shutil.which("brew"):
         print("error: Homebrew is required for automated install")
@@ -103,9 +134,15 @@ def install_tools(targets: list[str]) -> int:
 
     failed = []
     for name in names:
-        if installed_path(name):
+        if tool_installed(name):
             print(f"{name}: already installed")
             continue
+        if name == "gh-dash":
+            print("installing gh-dash via gh extension...")
+            if install_gh_dash() != 0:
+                failed.append(name)
+            continue
+
         print(f"installing {name} via brew...")
         if brew_install(TOOLS[name]["brew"]) != 0:
             failed.append(name)

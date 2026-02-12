@@ -181,6 +181,7 @@ direnv allow
 
 Notes:
 - This repo ships `lefthook.yml` and `.pre-commit-config.yaml`.
+- `gh-dash` is installed as a GitHub CLI extension (`gh extension install dlvhdr/gh-dash`).
 - For Node-only repositories, Husky is also a valid alternative to Lefthook.
 
 ## Quick install (popular way) ⚡
