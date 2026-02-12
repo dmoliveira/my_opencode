@@ -22,6 +22,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
+- 💾 Built-in `/config` command for backup/restore snapshots.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -63,7 +64,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -72,8 +73,30 @@ git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_op
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
-chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py
 ```
+
+## Config backup inside OpenCode 💾
+
+Use these directly in OpenCode:
+
+```text
+/config status
+/config backup
+/config backup --name pre-upgrade
+/config list
+/config restore <backup-id>
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/config-help
+/config-backup
+/config-list
+```
+
+`/config` snapshots all `opencode*.json` files under `~/.config/opencode/` into `~/.config/opencode/my_opencode-backups/`.
 
 ## Unified doctor inside OpenCode 🩺
 
@@ -369,6 +392,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/post_session_command.py` - backend script for `/post-session`
 - `scripts/policy_command.py` - backend script for `/policy`
 - `scripts/doctor_command.py` - backend script for `/doctor`
+- `scripts/config_command.py` - backend script for `/config`
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.github/workflows/ci.yml` - CI checks and installer smoke test

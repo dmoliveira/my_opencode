@@ -35,6 +35,8 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason manual --run-post; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" profile strict; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" status; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" backup --name install-test; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" list; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json
 
 release: ## Create and publish release (VERSION=0.1.1)

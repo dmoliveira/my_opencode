@@ -42,6 +42,22 @@
       "description": "Run all diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
     },
+    "config": {
+      "description": "Backup and restore OpenCode config files",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "config-help": {
+      "description": "Show config backup/restore command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" help`\nShow only the command output."
+    },
+    "config-backup": {
+      "description": "Create a config backup snapshot",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" backup`\nShow only the command output."
+    },
+    "config-list": {
+      "description": "List available config backups",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" list`\nShow only the command output."
+    },
     "mcp-help": {
       "description": "Show MCP command usage and examples",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."
