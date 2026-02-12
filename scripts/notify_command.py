@@ -74,6 +74,12 @@ def default_state() -> dict:
     }
 
 
+def to_bool(value, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    return fallback
+
+
 def load_config(config_path: Path) -> dict:
     if not config_path.exists():
         return default_state()
@@ -81,22 +87,24 @@ def load_config(config_path: Path) -> dict:
     data = json.loads(config_path.read_text(encoding="utf-8"))
     state = default_state()
 
-    state["enabled"] = bool(data.get("enabled", state["enabled"]))
+    state["enabled"] = to_bool(data.get("enabled"), state["enabled"])
 
     if isinstance(data.get("sound"), dict):
-        state["sound"]["enabled"] = bool(
-            data["sound"].get("enabled", state["sound"]["enabled"])
+        state["sound"]["enabled"] = to_bool(
+            data["sound"].get("enabled"), state["sound"]["enabled"]
         )
 
     if isinstance(data.get("visual"), dict):
-        state["visual"]["enabled"] = bool(
-            data["visual"].get("enabled", state["visual"]["enabled"])
+        state["visual"]["enabled"] = to_bool(
+            data["visual"].get("enabled"), state["visual"]["enabled"]
         )
 
     if isinstance(data.get("events"), dict):
         for event in EVENTS:
             if event in data["events"]:
-                state["events"][event] = bool(data["events"][event])
+                state["events"][event] = to_bool(
+                    data["events"][event], state["events"][event]
+                )
 
     if isinstance(data.get("channels"), dict):
         for event in EVENTS:
@@ -105,7 +113,9 @@ def load_config(config_path: Path) -> dict:
                 continue
             for channel in CHANNELS:
                 if channel in entry:
-                    state["channels"][event][channel] = bool(entry[channel])
+                    state["channels"][event][channel] = to_bool(
+                        entry[channel], state["channels"][event][channel]
+                    )
 
     return state
 
