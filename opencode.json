@@ -141,6 +141,30 @@
     "digest-show": {
       "description": "Show latest saved session digest",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" show`\nShow only the command output."
+    },
+    "telemetry": {
+      "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "telemetry-help": {
+      "description": "Show telemetry command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" help`\nShow only the command output."
+    },
+    "telemetry-doctor": {
+      "description": "Run telemetry diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" doctor`\nShow only the command output."
+    },
+    "telemetry-doctor-json": {
+      "description": "Run telemetry diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" doctor --json`\nShow only the command output."
+    },
+    "telemetry-profile-off": {
+      "description": "Disable telemetry forwarding",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" profile off`\nShow only the command output."
+    },
+    "telemetry-profile-local": {
+      "description": "Enable telemetry forwarding to local endpoint",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" profile local`\nShow only the command output."
     }
   },
   "plugin": [

@@ -18,6 +18,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
 - 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
+- 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -59,7 +60,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -68,6 +69,7 @@ git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_op
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py
 ```
 
 ## MCP control inside OpenCode 🧠
@@ -225,6 +227,42 @@ Optional environment variables:
 - `MY_OPENCODE_DIGEST_HOOK` command to run after digest is written
 - `DIGEST_REASON_ON_EXIT` custom reason label (default `exit`)
 
+## Telemetry forwarding inside OpenCode 📡
+
+Use these directly in OpenCode:
+
+```text
+/telemetry status
+/telemetry help
+/telemetry doctor
+/telemetry doctor --json
+/telemetry profile off
+/telemetry profile local
+/telemetry profile errors-only
+/telemetry set endpoint http://localhost:3000/opencode/events
+/telemetry set timeout 1500
+/telemetry enable error
+/telemetry disable question
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/telemetry-help
+/telemetry-doctor
+/telemetry-doctor-json
+/telemetry-profile-off
+/telemetry-profile-local
+```
+
+`/telemetry` writes to `~/.config/opencode/opencode-telemetry.json` and supports:
+- global on/off (`enabled`)
+- endpoint URL (`endpoint`)
+- timeout (`timeout_ms`)
+- per-event toggles (`events.complete|error|permission|question`)
+
+For your LangGraph setup, default endpoint target is `http://localhost:3000/opencode/events`.
+
 ## Repo layout 📦
 
 - `opencode.json` - global OpenCode config (linked to default path)
@@ -233,6 +271,7 @@ Optional environment variables:
 - `scripts/notify_command.py` - backend script for `/notify`
 - `scripts/session_digest.py` - backend script for `/digest`
 - `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
+- `scripts/telemetry_command.py` - backend script for `/telemetry`
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.github/workflows/ci.yml` - CI checks and installer smoke test

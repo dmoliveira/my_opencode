@@ -3,9 +3,11 @@
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 
@@ -14,6 +16,7 @@ PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
 MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
 DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
+TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -45,6 +48,41 @@ def parse_json_output(text: str) -> dict:
 
 def load_json_file(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+class LocalTcpProbeServer:
+    def __init__(self) -> None:
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(1)
+        self.port = self.sock.getsockname()[1]
+        self._stop = threading.Event()
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+
+    def _serve(self) -> None:
+        self.sock.settimeout(0.2)
+        while not self._stop.is_set():
+            try:
+                conn, _ = self.sock.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                break
+            try:
+                conn.close()
+            except OSError:
+                pass
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def close(self) -> None:
+        self._stop.set()
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+        self.thread.join(timeout=1)
 
 
 def main() -> int:
@@ -207,6 +245,70 @@ def main() -> int:
         )
         expect(result.returncode == 0, f"digest show failed: {result.stderr}")
         expect("reason: selftest" in result.stdout, "digest show should print reason")
+
+        telemetry_path = home / ".config" / "opencode" / "opencode-telemetry.json"
+        telemetry_env = os.environ.copy()
+        telemetry_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
+
+        def run_telemetry(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(TELEMETRY_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=telemetry_env,
+                check=False,
+            )
+
+        result = run_telemetry("profile", "local")
+        expect(
+            result.returncode == 0, f"telemetry profile local failed: {result.stderr}"
+        )
+
+        server = LocalTcpProbeServer()
+        server.start()
+        try:
+            result = run_telemetry(
+                "set",
+                "endpoint",
+                f"http://127.0.0.1:{server.port}/opencode/events",
+            )
+            expect(
+                result.returncode == 0,
+                f"telemetry set endpoint failed: {result.stderr}",
+            )
+
+            result = run_telemetry("set", "timeout", "800")
+            expect(
+                result.returncode == 0, f"telemetry set timeout failed: {result.stderr}"
+            )
+
+            result = run_telemetry("disable", "question")
+            expect(
+                result.returncode == 0,
+                f"telemetry disable question failed: {result.stderr}",
+            )
+
+            cfg = load_json_file(telemetry_path)
+            expect(cfg.get("enabled") is True, "telemetry should remain enabled")
+            expect(cfg.get("timeout_ms") == 800, "telemetry timeout should be updated")
+            expect(
+                cfg.get("events", {}).get("question") is False,
+                "telemetry question event should be disabled",
+            )
+
+            result = run_telemetry("doctor", "--json")
+            expect(
+                result.returncode == 0,
+                f"telemetry doctor --json failed: {result.stderr}",
+            )
+            report = parse_json_output(result.stdout)
+            expect(report.get("result") == "PASS", "telemetry doctor should pass")
+            expect(
+                report.get("reachability", {}).get("ok") is True,
+                "telemetry doctor should report endpoint reachable",
+            )
+        finally:
+            server.close()
 
     print("selftest: PASS")
     return 0
