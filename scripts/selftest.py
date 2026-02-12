@@ -19,6 +19,7 @@ DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
+DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -96,7 +97,9 @@ def main() -> int:
         shutil.copy2(BASE_CONFIG, cfg)
 
         # Plugin profile lean should pass doctor.
-        result = run_script(PLUGIN_SCRIPT, cfg, home, "profile", "lean")
+        result = run_script(
+            PLUGIN_SCRIPT, tmp / "opencode.json", home, "profile", "lean"
+        )
         expect(result.returncode == 0, f"plugin profile lean failed: {result.stderr}")
 
         result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor", "--json")
@@ -440,6 +443,39 @@ def main() -> int:
         result = run_policy("status")
         expect(result.returncode == 0, f"policy status failed: {result.stderr}")
         expect("profile: strict" in result.stdout, "policy status should report strict")
+
+        result = run_script(
+            PLUGIN_SCRIPT, tmp / "opencode.json", home, "profile", "lean"
+        )
+        expect(
+            result.returncode == 0,
+            f"plugin profile lean (for doctor summary) failed: {result.stderr}",
+        )
+
+        doctor_env = os.environ.copy()
+        doctor_env["OPENCODE_CONFIG_PATH"] = str(tmp / "opencode.json")
+        doctor_env["HOME"] = str(home)
+        doctor_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_path)
+        doctor_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
+        doctor_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
+        doctor_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
+        doctor_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
+
+        result = subprocess.run(
+            [sys.executable, str(DOCTOR_SCRIPT), "run", "--json"],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"doctor run --json failed: {result.stderr}")
+        report = parse_json_output(result.stdout)
+        expect(report.get("result") == "PASS", "doctor summary should pass")
+        expect(
+            report.get("failed_count") == 0,
+            "doctor summary should have zero failed checks",
+        )
 
     print("selftest: PASS")
     return 0
