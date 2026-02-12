@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
 MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
+DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -178,6 +179,34 @@ def main() -> int:
         result = run_notify("status")
         expect(result.returncode == 0, f"notify status failed: {result.stderr}")
         expect("config:" in result.stdout, "notify status should print config path")
+
+        digest_path = home / ".config" / "opencode" / "digests" / "selftest.json"
+        digest_env = os.environ.copy()
+        digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
+
+        result = subprocess.run(
+            [sys.executable, str(DIGEST_SCRIPT), "run", "--reason", "selftest"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"digest run failed: {result.stderr}")
+        expect(digest_path.exists(), "digest run should create digest file")
+        digest = load_json_file(digest_path)
+        expect(digest.get("reason") == "selftest", "digest reason should match")
+
+        result = subprocess.run(
+            [sys.executable, str(DIGEST_SCRIPT), "show", "--path", str(digest_path)],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"digest show failed: {result.stderr}")
+        expect("reason: selftest" in result.stdout, "digest show should print reason")
 
     print("selftest: PASS")
     return 0

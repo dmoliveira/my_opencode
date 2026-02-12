@@ -17,6 +17,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
 - 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
+- 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -195,12 +196,43 @@ Autocomplete-friendly shortcuts:
 - event: `events.<type>`
 - per-event channel: `channels.<type>.sound|visual`
 
+## Session digest inside OpenCode 🧾
+
+Use these directly in OpenCode:
+
+```text
+/digest run --reason manual
+/digest show
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/digest-run
+/digest-show
+```
+
+The digest command writes to `~/.config/opencode/digests/last-session.json` by default.
+
+For automatic digest-on-exit behavior (including `Ctrl+C`), launch OpenCode through:
+
+```bash
+~/.config/opencode/my_opencode/scripts/opencode_session.sh
+```
+
+Optional environment variables:
+- `MY_OPENCODE_DIGEST_PATH` custom output path
+- `MY_OPENCODE_DIGEST_HOOK` command to run after digest is written
+- `DIGEST_REASON_ON_EXIT` custom reason label (default `exit`)
+
 ## Repo layout 📦
 
 - `opencode.json` - global OpenCode config (linked to default path)
 - `scripts/mcp_command.py` - backend script for `/mcp`
 - `scripts/plugin_command.py` - backend script for `/plugin`
 - `scripts/notify_command.py` - backend script for `/notify`
+- `scripts/session_digest.py` - backend script for `/digest`
+- `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.github/workflows/ci.yml` - CI checks and installer smoke test
