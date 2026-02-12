@@ -19,6 +19,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
+- ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -69,7 +70,7 @@ git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_op
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
-chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py
 ```
 
 ## MCP control inside OpenCode 🧠
@@ -204,6 +205,7 @@ Use these directly in OpenCode:
 
 ```text
 /digest run --reason manual
+/digest run --reason manual --run-post
 /digest show
 ```
 
@@ -211,6 +213,7 @@ Autocomplete-friendly shortcuts:
 
 ```text
 /digest-run
+/digest-run-post
 /digest-show
 ```
 
@@ -226,6 +229,40 @@ Optional environment variables:
 - `MY_OPENCODE_DIGEST_PATH` custom output path
 - `MY_OPENCODE_DIGEST_HOOK` command to run after digest is written
 - `DIGEST_REASON_ON_EXIT` custom reason label (default `exit`)
+
+When `--run-post` is used, digest also evaluates `post_session` config and stores hook results in the digest JSON.
+
+## Post-session hook inside OpenCode ✅
+
+Use these directly in OpenCode:
+
+```text
+/post-session status
+/post-session enable
+/post-session disable
+/post-session set command make test
+/post-session set timeout 120000
+/post-session set run-on exit,manual
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/post-session-help
+/post-session-enable
+```
+
+`/post-session` writes to `~/.config/opencode/opencode-session.json`:
+- `post_session.enabled`
+- `post_session.command`
+- `post_session.timeout_ms`
+- `post_session.run_on` (`exit`, `manual`, `idle`)
+
+Typical flow:
+1. Configure command with `/post-session set command <your-test-or-lint-command>`
+2. Enable with `/post-session enable`
+3. Use wrapper `opencode_session.sh` so command runs automatically on exit/Ctrl+C
+4. Optionally run now with `/digest run --reason manual --run-post`
 
 ## Telemetry forwarding inside OpenCode 📡
 
@@ -272,6 +309,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/session_digest.py` - backend script for `/digest`
 - `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
 - `scripts/telemetry_command.py` - backend script for `/telemetry`
+- `scripts/post_session_command.py` - backend script for `/post-session`
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.github/workflows/ci.yml` - CI checks and installer smoke test
