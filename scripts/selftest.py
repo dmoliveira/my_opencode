@@ -220,6 +220,11 @@ def main() -> int:
         expect(result.returncode == 0, f"notify status failed: {result.stderr}")
         expect("config:" in result.stdout, "notify status should print config path")
 
+        result = run_notify("doctor", "--json")
+        expect(result.returncode == 0, f"notify doctor --json failed: {result.stderr}")
+        report = parse_json_output(result.stdout)
+        expect(report.get("result") == "PASS", "notify doctor should pass")
+
         digest_path = home / ".config" / "opencode" / "digests" / "selftest.json"
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
@@ -247,6 +252,25 @@ def main() -> int:
         )
         expect(result.returncode == 0, f"digest show failed: {result.stderr}")
         expect("reason: selftest" in result.stdout, "digest show should print reason")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DIGEST_SCRIPT),
+                "doctor",
+                "--path",
+                str(digest_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"digest doctor --json failed: {result.stderr}")
+        report = parse_json_output(result.stdout)
+        expect(report.get("result") == "PASS", "digest doctor should pass")
 
         telemetry_path = home / ".config" / "opencode" / "opencode-telemetry.json"
         telemetry_env = os.environ.copy()

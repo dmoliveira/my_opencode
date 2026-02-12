@@ -68,7 +68,9 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/mcp_command.py" status
   python3 "$INSTALL_DIR/scripts/plugin_command.py" status
   python3 "$INSTALL_DIR/scripts/notify_command.py" status
+  python3 "$INSTALL_DIR/scripts/notify_command.py" doctor
   python3 "$INSTALL_DIR/scripts/session_digest.py" show || true
+  python3 "$INSTALL_DIR/scripts/session_digest.py" doctor
   python3 "$INSTALL_DIR/scripts/telemetry_command.py" status
   python3 "$INSTALL_DIR/scripts/post_session_command.py" status
   python3 "$INSTALL_DIR/scripts/policy_command.py" status
@@ -94,9 +96,11 @@ printf "  /plugin status\n"
 printf "  /plugin doctor\n"
 printf "  /notify status\n"
 printf "  /notify profile focus\n"
+printf "  /notify doctor\n"
 printf "  /digest run --reason manual\n"
 printf "  /digest-run-post\n"
 printf "  /digest show\n"
+printf "  /digest doctor\n"
 printf "  /telemetry status\n"
 printf "  /telemetry profile local\n"
 printf "  /post-session status\n"

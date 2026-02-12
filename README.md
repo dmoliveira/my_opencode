@@ -169,6 +169,8 @@ Use these directly in OpenCode:
 ```text
 /notify status
 /notify help
+/notify doctor
+/notify doctor --json
 /notify profile all
 /notify profile quiet
 /notify profile focus
@@ -188,6 +190,8 @@ Autocomplete-friendly shortcuts:
 
 ```text
 /notify-help
+/notify-doctor
+/notify-doctor-json
 /notify-profile-all
 /notify-profile-focus
 /notify-sound-only
@@ -208,6 +212,8 @@ Use these directly in OpenCode:
 /digest run --reason manual
 /digest run --reason manual --run-post
 /digest show
+/digest doctor
+/digest doctor --json
 ```
 
 Autocomplete-friendly shortcuts:
@@ -216,6 +222,8 @@ Autocomplete-friendly shortcuts:
 /digest-run
 /digest-run-post
 /digest-show
+/digest-doctor
+/digest-doctor-json
 ```
 
 The digest command writes to `~/.config/opencode/digests/last-session.json` by default.

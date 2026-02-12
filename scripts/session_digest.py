@@ -166,7 +166,7 @@ def print_summary(path: Path, digest: dict) -> None:
 
 def usage() -> int:
     print(
-        'usage: /digest run [--reason <idle|exit|manual>] [--path <digest.json>] [--hook "command"] [--run-post] | /digest show [--path <digest.json>]'
+        'usage: /digest run [--reason <idle|exit|manual>] [--path <digest.json>] [--hook "command"] [--run-post] | /digest show [--path <digest.json>] | /digest doctor [--path <digest.json>] [--json]'
     )
     return 2
 
@@ -233,6 +233,89 @@ def command_show(argv: list[str]) -> int:
     return 0
 
 
+def collect_doctor(path: Path) -> dict:
+    problems: list[str] = []
+    warnings: list[str] = []
+
+    if not path.exists():
+        warnings.append("digest file does not exist yet")
+        return {
+            "result": "PASS",
+            "path": str(path),
+            "exists": False,
+            "warnings": warnings,
+            "problems": problems,
+            "quick_fixes": ["run /digest run --reason manual"],
+        }
+
+    try:
+        digest = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        problems.append(f"failed to parse digest JSON: {exc}")
+        return {
+            "result": "FAIL",
+            "path": str(path),
+            "exists": True,
+            "warnings": warnings,
+            "problems": problems,
+            "quick_fixes": ["run /digest run --reason manual to regenerate"],
+        }
+
+    for field in ("timestamp", "reason", "cwd", "git"):
+        if field not in digest:
+            warnings.append(f"missing digest field: {field}")
+
+    git_block = digest.get("git")
+    if not isinstance(git_block, dict):
+        warnings.append("git block is missing or invalid")
+    else:
+        if git_block.get("branch") is None:
+            warnings.append("git branch is unknown")
+
+    return {
+        "result": "PASS" if not problems else "FAIL",
+        "path": str(path),
+        "exists": True,
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": ["run /digest run --reason manual"] if warnings else [],
+    }
+
+
+def command_doctor(argv: list[str]) -> int:
+    path_value = parse_option(argv, "--path")
+    json_output = "--json" in argv
+    if len([x for x in argv if x == "--json"]) > 1:
+        return usage()
+
+    path = Path(path_value).expanduser() if path_value else DEFAULT_DIGEST_PATH
+    report = collect_doctor(path)
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0 if report["result"] == "PASS" else 1
+
+    print("digest doctor")
+    print("------------")
+    print(f"path: {report['path']}")
+    print(f"exists: {'yes' if report['exists'] else 'no'}")
+
+    if report["warnings"]:
+        print("\nwarnings:")
+        for item in report["warnings"]:
+            print(f"- {item}")
+
+    if report["problems"]:
+        print("\nproblems:")
+        for item in report["problems"]:
+            print(f"- {item}")
+        print("\nresult: FAIL")
+        return 1
+
+    print("\nresult: PASS")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return usage()
@@ -246,6 +329,8 @@ def main(argv: list[str]) -> int:
         return command_run(rest)
     if command == "show":
         return command_show(rest)
+    if command == "doctor":
+        return command_doctor(rest)
     return usage()
 
 

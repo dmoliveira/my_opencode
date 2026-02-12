@@ -134,9 +134,89 @@ def write_config(config_path: Path, state: dict) -> None:
 
 def usage() -> int:
     print(
-        "usage: /notify status | /notify help | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|complete|error|permission|question> | /notify disable <all|sound|visual|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off>"
+        "usage: /notify status | /notify help | /notify doctor [--json] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|complete|error|permission|question> | /notify disable <all|sound|visual|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off>"
     )
     return 2
+
+
+def collect_doctor(config_path: Path, state: dict) -> dict:
+    problems: list[str] = []
+    warnings: list[str] = []
+
+    if not config_path.exists():
+        warnings.append("notification config file not found yet (using defaults)")
+
+    if not state["enabled"]:
+        warnings.append("global notifications are disabled")
+
+    if not state["sound"]["enabled"] and not state["visual"]["enabled"]:
+        warnings.append("both sound and visual channels are disabled")
+
+    enabled_events = [name for name in EVENTS if state["events"][name]]
+    if not enabled_events:
+        warnings.append("all events are disabled")
+
+    for event in EVENTS:
+        if state["events"][event] and not (
+            state["channels"][event]["sound"] or state["channels"][event]["visual"]
+        ):
+            warnings.append(
+                f"event {event} is enabled but both per-event channels are off"
+            )
+
+    return {
+        "result": "PASS" if not problems else "FAIL",
+        "config": str(config_path),
+        "enabled": state["enabled"],
+        "sound_enabled": state["sound"]["enabled"],
+        "visual_enabled": state["visual"]["enabled"],
+        "events": state["events"],
+        "channels": state["channels"],
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": [
+            "run /notify profile focus for low-noise defaults",
+            "run /notify enable visual or /notify enable sound",
+            "run /notify enable permission or /notify enable error",
+        ]
+        if warnings or problems
+        else [],
+    }
+
+
+def print_doctor(config_path: Path, state: dict, json_output: bool) -> int:
+    report = collect_doctor(config_path, state)
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0 if report["result"] == "PASS" else 1
+
+    print("notify doctor")
+    print("-----------")
+    print(f"config: {report['config']}")
+    print(f"global: {'enabled' if report['enabled'] else 'disabled'}")
+    print(f"sound: {'enabled' if report['sound_enabled'] else 'disabled'}")
+    print(f"visual: {'enabled' if report['visual_enabled'] else 'disabled'}")
+    print("events:")
+    for event in EVENTS:
+        print(
+            f"- {event}: {'enabled' if state['events'][event] else 'disabled'} [sound={'on' if state['channels'][event]['sound'] else 'off'}, visual={'on' if state['channels'][event]['visual'] else 'off'}]"
+        )
+
+    if report["warnings"]:
+        print("\nwarnings:")
+        for item in report["warnings"]:
+            print(f"- {item}")
+
+    if report["problems"]:
+        print("\nproblems:")
+        for item in report["problems"]:
+            print(f"- {item}")
+        print("\nresult: FAIL")
+        return 1
+
+    print("\nresult: PASS")
+    return 0
 
 
 def print_status(config_path: Path, state: dict) -> int:
@@ -214,6 +294,12 @@ def main(argv: list[str]) -> int:
 
     if argv[0] == "help":
         return usage()
+
+    if argv[0] == "doctor":
+        json_output = len(argv) > 1 and argv[1] == "--json"
+        if len(argv) > 1 and not json_output:
+            return usage()
+        return print_doctor(config_path, state, json_output)
 
     if argv[0] == "profile":
         if len(argv) < 2:
