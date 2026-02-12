@@ -24,6 +24,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
+- 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -77,6 +78,38 @@ Quick verify inside Neovim:
 ```vim
 :checkhealth opencode
 ```
+
+Use OpenCode-native setup and diagnostics:
+
+```text
+/nvim status
+/nvim help
+/nvim install minimal --link-init
+/nvim install power --link-init
+/nvim doctor
+/nvim doctor --json
+/nvim uninstall --unlink-init
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/nvim-help
+/nvim-status
+/nvim-install-minimal
+/nvim-install-power
+/nvim-doctor-json
+```
+
+Profiles:
+- `minimal`: two keymaps (`<leader>oa`, `<leader>os`) for fast ask/select loops.
+- `power`: adds draft ask and health shortcuts for heavier editor-driven workflows.
+
+Installed integration file path:
+- `~/.config/nvim/lua/my_opencode/opencode.lua`
+
+When `--link-init` is used, the command appends:
+- `require("my_opencode.opencode")` to `~/.config/nvim/init.lua`.
 
 ### 2) Rich desktop/web UI: `OpenChamber`
 
@@ -144,7 +177,7 @@ git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_op
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
-chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py
+chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 ```
 
 ## Install wizard flow 🧭
@@ -154,6 +187,7 @@ The wizard lets each user decide what they want now and reconfigure later.
 - Select plugin profile (`lean`, `stable`, `experimental`, or custom plugin-by-plugin).
 - Select MCP, policy, telemetry, and post-session defaults.
 - Optionally install/uninstall ecosystem integrations (`opencode.nvim`, `OpenChamber`).
+- When `opencode.nvim` is selected, wizard bootstraps a minimal integration profile at `~/.config/nvim/lua/my_opencode/opencode.lua`.
 - Re-run any time to change choices: `~/.config/opencode/my_opencode/install.sh --wizard --reconfigure`.
 - Wizard state is stored in `~/.config/opencode/my_opencode-install-state.json`.
 
@@ -502,6 +536,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
+- `scripts/nvim_integration_command.py` - backend script for `/nvim`
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.github/workflows/ci.yml` - CI checks and installer smoke test

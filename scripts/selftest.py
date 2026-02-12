@@ -23,6 +23,7 @@ DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
+NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -607,6 +608,76 @@ def main() -> int:
         expect(
             post_after_wizard.get("post_session", {}).get("command") == "make validate",
             "wizard manual-validate profile should configure make validate",
+        )
+
+        nvim_cfg_dir = home / ".config" / "nvim"
+        nvim_plugin_dir = (
+            home
+            / ".local"
+            / "share"
+            / "nvim"
+            / "site"
+            / "pack"
+            / "opencode"
+            / "start"
+            / "opencode.nvim"
+        )
+        (nvim_plugin_dir / "lua").mkdir(parents=True, exist_ok=True)
+        nvim_env = os.environ.copy()
+        nvim_env["HOME"] = str(home)
+        nvim_env["MY_OPENCODE_NVIM_CONFIG_DIR"] = str(nvim_cfg_dir)
+        nvim_env["MY_OPENCODE_NVIM_PLUGIN_DIR"] = str(nvim_plugin_dir)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(NVIM_INTEGRATION_SCRIPT),
+                "install",
+                "minimal",
+                "--link-init",
+            ],
+            capture_output=True,
+            text=True,
+            env=nvim_env,
+            check=False,
+        )
+        expect(result.returncode == 0, f"nvim install minimal failed: {result.stderr}")
+        expect(
+            (nvim_cfg_dir / "lua" / "my_opencode" / "opencode.lua").exists(),
+            "nvim integration install should write lua profile",
+        )
+        expect(
+            (nvim_cfg_dir / "init.lua").exists(),
+            "nvim integration install should write init.lua require",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(NVIM_INTEGRATION_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=nvim_env,
+            check=False,
+        )
+        expect(result.returncode == 0, f"nvim doctor json failed: {result.stderr}")
+        report = parse_json_output(result.stdout)
+        expect(report.get("result") == "PASS", "nvim doctor should pass after install")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(NVIM_INTEGRATION_SCRIPT),
+                "uninstall",
+                "--unlink-init",
+            ],
+            capture_output=True,
+            text=True,
+            env=nvim_env,
+            check=False,
+        )
+        expect(result.returncode == 0, f"nvim uninstall failed: {result.stderr}")
+        expect(
+            not (nvim_cfg_dir / "lua" / "my_opencode" / "opencode.lua").exists(),
+            "nvim uninstall should remove lua profile",
         )
 
         result = run_script(
