@@ -20,6 +20,7 @@ TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
 DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
+CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -443,6 +444,46 @@ def main() -> int:
         result = run_policy("status")
         expect(result.returncode == 0, f"policy status failed: {result.stderr}")
         expect("profile: strict" in result.stdout, "policy status should report strict")
+
+        config_env = os.environ.copy()
+        config_env["OPENCODE_CONFIG_DIR"] = str(home / ".config" / "opencode")
+
+        def run_config(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(CONFIG_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=config_env,
+                check=False,
+            )
+
+        result = run_config("backup", "--name", "selftest")
+        expect(result.returncode == 0, f"config backup failed: {result.stderr}")
+        backup_line = next(
+            (
+                line
+                for line in result.stdout.splitlines()
+                if line.startswith("backup: ")
+            ),
+            "",
+        )
+        expect(bool(backup_line), "config backup should output backup id")
+        backup_id = backup_line.replace("backup: ", "", 1).strip()
+
+        notify_policy_path.write_text('{"enabled": false}\n', encoding="utf-8")
+
+        result = run_config("restore", backup_id)
+        expect(result.returncode == 0, f"config restore failed: {result.stderr}")
+
+        restored_notify = load_json_file(notify_policy_path)
+        expect(
+            restored_notify.get("events", {}).get("complete") is False,
+            "config restore should recover previous notify file",
+        )
+
+        result = run_config("list")
+        expect(result.returncode == 0, f"config list failed: {result.stderr}")
+        expect(backup_id in result.stdout, "config list should include created backup")
 
         result = run_script(
             PLUGIN_SCRIPT, tmp / "opencode.json", home, "profile", "lean"
