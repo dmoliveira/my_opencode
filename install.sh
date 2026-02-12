@@ -60,7 +60,7 @@ if [ -n "$REPO_REF" ]; then
   git -C "$INSTALL_DIR" checkout "$REPO_REF"
 fi
 
-chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py"
+chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh"
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$SKIP_SELF_CHECK" = false ]; then
@@ -68,6 +68,7 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/mcp_command.py" status
   python3 "$INSTALL_DIR/scripts/plugin_command.py" status
   python3 "$INSTALL_DIR/scripts/notify_command.py" status
+  python3 "$INSTALL_DIR/scripts/session_digest.py" show || true
   if ! python3 "$INSTALL_DIR/scripts/plugin_command.py" doctor; then
     if [ "$NON_INTERACTIVE" = true ]; then
       printf "\nSelf-check failed in non-interactive mode.\n" >&2
@@ -90,6 +91,8 @@ printf "  /plugin status\n"
 printf "  /plugin doctor\n"
 printf "  /notify status\n"
 printf "  /notify profile focus\n"
+printf "  /digest run --reason manual\n"
+printf "  /digest show\n"
 printf "  /setup-keys\n"
 printf "  /plugin enable supermemory\n"
 printf "  /plugin disable supermemory\n"

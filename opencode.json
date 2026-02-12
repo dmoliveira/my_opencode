@@ -129,6 +129,18 @@
     "notify-visual-only": {
       "description": "Switch notifications to visual only",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile visual-only`\nShow only the command output."
+    },
+    "digest": {
+      "description": "Generate or show session digests (run|show)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "digest-run": {
+      "description": "Generate a manual session digest now",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason manual`\nShow only the command output."
+    },
+    "digest-show": {
+      "description": "Show latest saved session digest",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" show`\nShow only the command output."
     }
   },
   "plugin": [
