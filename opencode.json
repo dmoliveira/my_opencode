@@ -158,6 +158,26 @@
       "description": "Enable post-session hook execution",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" enable`\nShow only the command output."
     },
+    "policy": {
+      "description": "Apply notification policy profiles (strict|balanced|fast)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "policy-help": {
+      "description": "Show policy command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" help`\nShow only the command output."
+    },
+    "policy-profile-strict": {
+      "description": "Apply strict permission-risk policy",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile strict`\nShow only the command output."
+    },
+    "policy-profile-balanced": {
+      "description": "Apply balanced permission-risk policy",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile balanced`\nShow only the command output."
+    },
+    "policy-profile-fast": {
+      "description": "Apply fast permission-risk policy",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile fast`\nShow only the command output."
+    },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
