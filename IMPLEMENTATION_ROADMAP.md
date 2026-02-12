@@ -8,6 +8,26 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 - Epic status values: `planned`, `in_progress`, `paused`, `done`, `postponed`.
 - Recommendation: move only one epic to `in_progress` at a time.
 
+## Status Playbook
+
+- `planned`: scoped and ready, not started.
+- `in_progress`: actively being implemented now.
+- `paused`: started but intentionally stopped; can resume any time.
+- `postponed`: intentionally deferred; not expected this cycle.
+- `done`: fully implemented, documented, and validated.
+
+## Epic Dashboard
+
+| Epic | Title | Status | Priority | Depends On | Notes |
+|---|---|---|---|---|---|
+| E1 | Config Layering + JSONC Support | planned | High | - | Foundation for most later epics |
+| E2 | Background Task Orchestration | planned | High | E1 | Keep minimal and stable first |
+| E3 | Refactor Workflow Command | planned | High | E1 | Safer rollout after config layering |
+| E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | Start with minimal hooks only |
+| E5 | Category-Based Model Routing | planned | Medium | E1 | Can partially overlap with E2/E3 |
+| E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | Resume when core orchestration stabilizes |
+| E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | Optional power-user feature |
+
 ---
 
 ## Epic 1 - Config Layering + JSONC Support
@@ -15,6 +35,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `planned`
 **Priority:** High
 **Goal:** Add user/project layered config and JSONC parsing so behavior can be customized per repo without mutating global defaults.
+**Depends on:** None
 
 - [ ] Task 1.1: Define configuration precedence and file discovery
   - [ ] Subtask 1.1.1: Document precedence order (`project` > `user` > bundled defaults)
@@ -32,6 +53,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 1.4.1: Add docs with examples for user/project overrides
   - [ ] Subtask 1.4.2: Add selftests for precedence and JSONC behavior
   - [ ] Subtask 1.4.3: Add install-test coverage for layered config discovery
+- [ ] Exit criteria: all command scripts resolve config through shared layered loader
+- [ ] Exit criteria: precedence + JSONC behavior covered by tests and docs
 
 ---
 
@@ -40,6 +63,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `planned`
 **Priority:** High
 **Goal:** Add lightweight background job workflows for async research and result retrieval.
+**Depends on:** Epic 1
 
 - [ ] Task 2.1: Design minimal background task model
   - [ ] Subtask 2.1.1: Define job lifecycle (`queued`, `running`, `completed`, `failed`, `cancelled`)
@@ -57,6 +81,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 2.4.1: Add optional completion notification via existing notify stack
   - [ ] Subtask 2.4.2: Add JSON diagnostics output for background subsystem
   - [ ] Subtask 2.4.3: Add docs and examples for async workflows
+- [ ] Exit criteria: background workflows are deterministic, inspectable, and cancel-safe
+- [ ] Exit criteria: doctor + docs cover baseline troubleshooting
 
 ---
 
@@ -65,6 +91,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `planned`
 **Priority:** High
 **Goal:** Add a safe, repeatable refactor workflow command using existing tools and verification gates.
+**Depends on:** Epic 1
 
 - [ ] Task 3.1: Define command contract
   - [ ] Subtask 3.1.1: Define syntax (`/refactor-lite <target> [--scope] [--strategy]`)
@@ -82,6 +109,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 3.4.1: Add selftest scenarios for argument parsing and safe-mode behavior
   - [ ] Subtask 3.4.2: Add docs for safe vs aggressive strategies
   - [ ] Subtask 3.4.3: Add install-test smoke checks
+- [ ] Exit criteria: safe mode is default and validates before completion
+- [ ] Exit criteria: failure output gives actionable remediation
 
 ---
 
@@ -90,9 +119,10 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `planned`
 **Priority:** Medium
 **Goal:** Add minimal lifecycle automation hooks for continuation and resilience without introducing heavy complexity.
+**Depends on:** Epic 1, Epic 2
 
 - [ ] Task 4.1: Hook framework baseline
-  - [ ] Subtask 4.1.1: Define hook events (`pre_command`, `post_command`, `idle`) for our scope
+  - [ ] Subtask 4.1.1: Define hook events (`PreToolUse`, `PostToolUse`, `Stop`) for our scope
   - [ ] Subtask 4.1.2: Define hook config and disable list
   - [ ] Subtask 4.1.3: Implement deterministic execution order
 - [ ] Task 4.2: Initial hooks
@@ -107,6 +137,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 4.4.1: Add selftests for hook order and disable behavior
   - [ ] Subtask 4.4.2: Add install-test smoke checks
   - [ ] Subtask 4.4.3: Add doctor check summary for hook health
+- [ ] Exit criteria: hooks are optional, predictable, and low-noise by default
+- [ ] Exit criteria: disabling individual hooks is tested and documented
 
 ---
 
@@ -115,6 +147,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `planned`
 **Priority:** Medium
 **Goal:** Introduce category presets (quick/deep/visual/writing) for better cost/performance model routing.
+**Depends on:** Epic 1
 
 - [ ] Task 5.1: Define category schema
   - [ ] Subtask 5.1.1: Define baseline categories and descriptions
@@ -132,6 +165,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 5.4.1: Add tests for precedence and fallback
   - [ ] Subtask 5.4.2: Add tests for stack integration
   - [ ] Subtask 5.4.3: Add install-test checks
+- [ ] Exit criteria: effective model resolution is visible and explainable
+- [ ] Exit criteria: fallback behavior is deterministic and tested
 
 ---
 
@@ -140,6 +175,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `paused`
 **Priority:** Medium
 **Goal:** Add lightweight session listing/search and structured resume cues.
+**Depends on:** Epic 2
 
 - [ ] Task 6.1: Session metadata index
   - [ ] Subtask 6.1.1: Define session metadata store format
@@ -153,6 +189,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 6.3.1: Add `resume-hints` output after interrupted workflows
   - [ ] Subtask 6.3.2: Add docs for common recovery playbooks
   - [ ] Subtask 6.3.3: Add optional integration with digest summaries
+- [ ] Exit criteria: sessions are searchable and resume hints are practical
 
 ---
 
@@ -161,6 +198,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 **Status:** `postponed`
 **Priority:** Low
 **Goal:** Add optional tmux pane orchestration for observing background jobs in real time.
+**Depends on:** Epic 2
+**Postpone reason:** deliver core orchestration reliability before adding visual runtime complexity.
 
 - [ ] Task 7.1: Design tmux mode constraints
   - [ ] Subtask 7.1.1: Define supported layouts and minimum pane sizes
@@ -174,6 +213,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 7.3.1: Add `/tmux` status/config helpers
   - [ ] Subtask 7.3.2: Add shell helper snippets for macOS/Linux
   - [ ] Subtask 7.3.3: Add troubleshooting for pane/orphan cleanup
+- [ ] Exit criteria: feature is opt-in, non-disruptive, and gracefully degrades outside tmux
 
 ---
 
@@ -195,6 +235,12 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C3.1: Weekly status update section in this file
   - [ ] Subtask C3.2: Keep one epic `in_progress`
   - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
+
+## Weekly Status Updates
+
+Use this log to track what changed week by week.
+
+- [ ] YYYY-MM-DD: update epic statuses, completed checkboxes, and next focus epic
 
 ---
 
