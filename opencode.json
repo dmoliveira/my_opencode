@@ -105,6 +105,30 @@
     "plugin-profile-lean": {
       "description": "Switch plugin profile to lean",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile lean`\nShow only the command output."
+    },
+    "notify": {
+      "description": "Manage notification controls (status|profile|enable|disable|channel)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "notify-help": {
+      "description": "Show notification command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" help`\nShow only the command output."
+    },
+    "notify-profile-all": {
+      "description": "Enable all notification channels and events",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile all`\nShow only the command output."
+    },
+    "notify-profile-focus": {
+      "description": "Keep only visual alerts for important events",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile focus`\nShow only the command output."
+    },
+    "notify-sound-only": {
+      "description": "Switch notifications to sound only",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile sound-only`\nShow only the command output."
+    },
+    "notify-visual-only": {
+      "description": "Switch notifications to visual only",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile visual-only`\nShow only the command output."
     }
   },
   "plugin": [

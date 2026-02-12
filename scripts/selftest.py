@@ -12,6 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
 MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
+NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -39,6 +40,10 @@ def expect(condition: bool, message: str) -> None:
 
 def parse_json_output(text: str) -> dict:
     return json.loads(text)
+
+
+def load_json_file(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def main() -> int:
@@ -124,6 +129,55 @@ def main() -> int:
             report.get("servers", {}).get("gh_grep", {}).get("status") == "enabled",
             "gh_grep should be enabled in research profile",
         )
+
+        notify_path = home / ".config" / "opencode" / "opencode-notifications.json"
+        notify_env = os.environ.copy()
+        notify_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_path)
+
+        def run_notify(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(NOTIFY_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=notify_env,
+                check=False,
+            )
+
+        result = run_notify("profile", "focus")
+        expect(result.returncode == 0, f"notify profile focus failed: {result.stderr}")
+        cfg = load_json_file(notify_path)
+        expect(cfg.get("enabled") is True, "notify focus should keep global enabled")
+        expect(
+            cfg.get("events", {}).get("complete") is False,
+            "notify focus should disable complete event",
+        )
+        expect(
+            cfg.get("channels", {}).get("error", {}).get("visual") is True,
+            "notify focus should keep error visual on",
+        )
+
+        result = run_notify("disable", "sound")
+        expect(result.returncode == 0, f"notify disable sound failed: {result.stderr}")
+        cfg = load_json_file(notify_path)
+        expect(
+            cfg.get("sound", {}).get("enabled") is False,
+            "notify disable sound should set sound.enabled false",
+        )
+
+        result = run_notify("channel", "permission", "visual", "off")
+        expect(
+            result.returncode == 0,
+            f"notify channel permission visual off failed: {result.stderr}",
+        )
+        cfg = load_json_file(notify_path)
+        expect(
+            cfg.get("channels", {}).get("permission", {}).get("visual") is False,
+            "notify channel should set permission.visual off",
+        )
+
+        result = run_notify("status")
+        expect(result.returncode == 0, f"notify status failed: {result.stderr}")
+        expect("config:" in result.stdout, "notify status should print config path")
 
     print("selftest: PASS")
     return 0
