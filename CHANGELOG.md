@@ -5,10 +5,28 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
-- Added deterministic `scripts/selftest.py` to verify MCP/plugin command behavior with isolated config and environment.
+- None yet.
 
 ### Changes
-- Added `make selftest` and wired it into CI for regression coverage.
+- None yet.
+
+## v0.2.0 - 2026-02-12
+
+### Adds
+- Added `/notify` command with granular controls (global, channel, event, and per-event channel), plus shortcut commands and presets.
+- Added `/digest` command enhancements including `--run-post`, plus a session wrapper script for digest on exit/Ctrl+C.
+- Added `/telemetry` command for LangGraph/local endpoint forwarding with endpoint, timeout, per-event toggles, and diagnostics.
+- Added `/post-session` command to configure and run post-session test/lint hooks with timeout and run-on policies.
+- Added `/policy` command with `strict`, `balanced`, and `fast` permission-risk presets.
+- Added `/notify doctor` and `/digest doctor` diagnostics with JSON output for automation.
+
+### Changes
+- Expanded installer self-check and command hints to include notify, digest, telemetry, post-session, and policy workflows.
+- Expanded deterministic self-tests and `make install-test` coverage across notify, digest, telemetry, post-session, and policy flows.
+- Updated README with complete usage, shortcuts, and configuration guidance for new command groups.
+
+### Fixes
+- Hardened notification config parsing to safely handle invalid/non-boolean values.
 
 ## v0.1.1 - 2026-02-12
 
