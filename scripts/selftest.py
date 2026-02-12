@@ -21,6 +21,7 @@ POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
 DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
+STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -484,6 +485,67 @@ def main() -> int:
         result = run_config("list")
         expect(result.returncode == 0, f"config list failed: {result.stderr}")
         expect(backup_id in result.stdout, "config list should include created backup")
+
+        stack_state_path = home / ".config" / "opencode" / "opencode-stack-profile.json"
+        stack_env = os.environ.copy()
+        stack_env["HOME"] = str(home)
+        stack_env["MY_OPENCODE_STACK_PROFILE_PATH"] = str(stack_state_path)
+        stack_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
+        stack_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_policy_path)
+        stack_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
+        stack_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
+
+        def run_stack(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(STACK_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=stack_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+
+        result = run_stack("apply", "focus")
+        expect(result.returncode == 0, f"stack apply focus failed: {result.stderr}")
+
+        notify_after_focus = load_json_file(notify_policy_path)
+        telemetry_after_focus = load_json_file(telemetry_path)
+        post_after_focus = load_json_file(session_cfg_path)
+        policy_after_focus = load_json_file(policy_path)
+        expect(
+            notify_after_focus.get("events", {}).get("complete") is False,
+            "focus stack should disable complete notifications",
+        )
+        expect(
+            telemetry_after_focus.get("enabled") is False,
+            "focus stack should disable telemetry",
+        )
+        expect(
+            post_after_focus.get("post_session", {}).get("enabled") is False,
+            "focus stack should disable post-session hook",
+        )
+        expect(
+            policy_after_focus.get("current") == "strict",
+            "focus stack should apply strict policy",
+        )
+
+        result = run_stack("apply", "quiet-ci")
+        expect(result.returncode == 0, f"stack apply quiet-ci failed: {result.stderr}")
+        post_after_quiet = load_json_file(session_cfg_path)
+        expect(
+            post_after_quiet.get("post_session", {}).get("enabled") is True,
+            "quiet-ci stack should enable post-session",
+        )
+        expect(
+            post_after_quiet.get("post_session", {}).get("command") == "make validate",
+            "quiet-ci stack should set validate command",
+        )
+
+        result = run_stack("status")
+        expect(result.returncode == 0, f"stack status failed: {result.stderr}")
+        expect(
+            "profile: quiet-ci" in result.stdout, "stack status should report quiet-ci"
+        )
 
         result = run_script(
             PLUGIN_SCRIPT, tmp / "opencode.json", home, "profile", "lean"

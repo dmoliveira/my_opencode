@@ -60,7 +60,7 @@ if [ -n "$REPO_REF" ]; then
   git -C "$INSTALL_DIR" checkout "$REPO_REF"
 fi
 
-chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py"
+chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py"
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$SKIP_SELF_CHECK" = false ]; then
@@ -75,6 +75,7 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/post_session_command.py" status
   python3 "$INSTALL_DIR/scripts/policy_command.py" status
   python3 "$INSTALL_DIR/scripts/config_command.py" status
+  python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
   if ! python3 "$INSTALL_DIR/scripts/plugin_command.py" doctor; then
     if [ "$NON_INTERACTIVE" = true ]; then
@@ -110,6 +111,7 @@ printf "  /post-session status\n"
 printf "  /policy profile strict\n"
 printf "  /config status\n"
 printf "  /config backup\n"
+printf "  /stack apply focus\n"
 printf "  /doctor-json\n"
 printf "  /setup-keys\n"
 printf "  /plugin enable supermemory\n"
