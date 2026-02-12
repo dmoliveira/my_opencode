@@ -434,6 +434,7 @@ make selftest
 make doctor
 make doctor-json
 make install-test
+make release-check
 make release VERSION=0.1.1
 ```
 

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json install-test release
+.PHONY: help validate selftest doctor doctor-json install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -41,7 +41,13 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py" status; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json
 
-release: ## Create and publish release (VERSION=0.1.1)
+release-check: validate selftest ## Verify release prerequisites
+	@git diff --quiet && git diff --cached --quiet || (echo "working tree must be clean before release" && exit 1)
+	@git ls-files --error-unmatch CHANGELOG.md >/dev/null 2>&1 || (echo "CHANGELOG.md is missing" && exit 1)
+	@git diff-tree --no-commit-id --name-only -r HEAD | grep -qx "CHANGELOG.md" || (echo "latest commit must update CHANGELOG.md before release" && exit 1)
+	@echo "release-check: PASS"
+
+release: release-check ## Create and publish release (VERSION=0.1.1)
 	@test -n "$(VERSION)" || (echo "VERSION is required, eg: make release VERSION=0.1.1" && exit 2)
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
