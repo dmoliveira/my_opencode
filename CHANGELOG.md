@@ -5,10 +5,11 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
-- None yet.
+- Added ecosystem extension guidance for `opencode.nvim` (Neovim integration) and `OpenChamber` (desktop/web UI).
+- Added install and verification commands for both optional integrations.
 
 ### Changes
-- None yet.
+- Documented extension evaluation outcomes and when each tool is the better fit.
 
 ## v0.2.0 - 2026-02-12
 
