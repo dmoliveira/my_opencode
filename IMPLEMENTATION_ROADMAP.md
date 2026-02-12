@@ -27,6 +27,13 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
+| E8 | Keyword-Triggered Execution Modes | planned | High | E1, E4 | TBD | Fast power-mode activation from prompt text |
+| E9 | Conditional Rules Injector | planned | High | E1 | TBD | Enforce project conventions with scoped rules |
+| E10 | Auto Slash Command Detector | planned | Medium | E1, E8 | TBD | Convert natural prompts to command workflows |
+| E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
+| E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
+| E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
+| E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 
 ## Scope Guardrails
 
@@ -65,6 +72,13 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | Model routing confusion (E5) | Medium | Expose effective resolution in doctor output and docs |
 | Session index growth (E6) | Low | Add retention policy and cleanup command |
 | Tmux complexity support burden (E7) | Low | Keep postponed unless strong usage signal appears |
+| Keyword mode false positives (E8) alter behavior unexpectedly | Medium | Require explicit keywords and add safe opt-out switch |
+| Rules injector over-constrains outputs (E9) | Medium | Add precedence, conflict reporting, and per-rule disable |
+| Auto slash misfires on normal prompts (E10) | Medium | Add confidence threshold and preview-before-run mode |
+| Context pruning removes needed evidence (E11) | High | Protect critical tools/messages and keep reversible summaries |
+| Fallback reporting leaks noisy internals (E12) | Low | Keep verbose chain behind debug/doctor views only |
+| Browser profile setup drift (E13) | Medium | Add doctor checks and install verification scripts |
+| Plan execution diverges from approved plan (E14) | Medium | Lock plan snapshot and require explicit deviation notes |
 
 ---
 
@@ -255,6 +269,202 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 
 ---
 
+## Epic 8 - Keyword-Triggered Execution Modes
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Enable explicit keywords (for example, `ulw`) to activate high-value execution modes without manual command chaining.
+**Depends on:** Epic 1, Epic 4
+
+- [ ] Task 8.1: Define keyword dictionary and behavior mapping
+  - [ ] Subtask 8.1.1: Define reserved keywords (`ulw`, `deep-analyze`, `parallel-research`, `safe-apply`)
+  - [ ] Subtask 8.1.2: Define mode side-effects and precedence rules
+  - [ ] Subtask 8.1.3: Define explicit opt-out syntax and defaults
+- [ ] Task 8.2: Implement keyword detector engine
+  - [ ] Subtask 8.2.1: Parse user prompts and resolve keyword intents
+  - [ ] Subtask 8.2.2: Apply mode flags to runtime execution context
+  - [ ] Subtask 8.2.3: Add conflict handling when multiple keywords appear
+- [ ] Task 8.3: User visibility and control
+  - [ ] Subtask 8.3.1: Add status command for active mode stack
+  - [ ] Subtask 8.3.2: Add config toggles to disable selected keywords
+  - [ ] Subtask 8.3.3: Document examples and anti-patterns
+- [ ] Task 8.4: Verification
+  - [ ] Subtask 8.4.1: Add tests for matching accuracy and false positives
+  - [ ] Subtask 8.4.2: Add install-test smoke scenarios for keyword activation
+  - [ ] Subtask 8.4.3: Add doctor visibility for keyword subsystem
+- [ ] Exit criteria: keyword activation is deterministic and low-surprise
+- [ ] Exit criteria: users can disable or override keyword behavior safely
+
+---
+
+## Epic 9 - Conditional Rules Injector
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Load project/user rule files with optional glob conditions to enforce coding conventions contextually.
+**Depends on:** Epic 1
+
+- [ ] Task 9.1: Define rule file schema and precedence
+  - [ ] Subtask 9.1.1: Define frontmatter fields (`globs`, `alwaysApply`, `description`, `priority`)
+  - [ ] Subtask 9.1.2: Define project/user rule search paths
+  - [ ] Subtask 9.1.3: Define rule conflict resolution strategy
+- [ ] Task 9.2: Implement rule discovery and matching engine
+  - [ ] Subtask 9.2.1: Discover markdown rule files recursively
+  - [ ] Subtask 9.2.2: Match rules by file path and operation context
+  - [ ] Subtask 9.2.3: Inject effective rule set into execution context
+- [ ] Task 9.3: Operations and diagnostics
+  - [ ] Subtask 9.3.1: Add `/rules status` and `/rules explain <path>` commands
+  - [ ] Subtask 9.3.2: Add per-rule disable list in config
+  - [ ] Subtask 9.3.3: Add doctor output for rule source and conflicts
+- [ ] Task 9.4: Verification and docs
+  - [ ] Subtask 9.4.1: Add tests for glob matching and precedence
+  - [ ] Subtask 9.4.2: Add docs with examples for team rule packs
+  - [ ] Subtask 9.4.3: Add install-test smoke checks
+- [ ] Exit criteria: applicable rules are explainable for any target file
+- [ ] Exit criteria: conflicting rules are surfaced with clear remediation
+
+---
+
+## Epic 10 - Auto Slash Command Detector
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Detect natural-language intent that maps to existing slash commands and optionally execute with guardrails.
+**Depends on:** Epic 1, Epic 8
+
+- [ ] Task 10.1: Define intent-to-command mappings
+  - [ ] Subtask 10.1.1: Map common intents to existing commands (`/doctor`, `/stack`, `/nvim`, `/devtools`)
+  - [ ] Subtask 10.1.2: Define confidence scoring and ambiguity thresholds
+  - [ ] Subtask 10.1.3: Define no-op behavior when confidence is low
+- [ ] Task 10.2: Implement detection and dispatch
+  - [ ] Subtask 10.2.1: Parse prompt intent candidates
+  - [ ] Subtask 10.2.2: Resolve best command + argument template
+  - [ ] Subtask 10.2.3: Execute with safe preview mode option
+- [ ] Task 10.3: Controls and safety
+  - [ ] Subtask 10.3.1: Add config toggles (global and per-command)
+  - [ ] Subtask 10.3.2: Add audit log for auto-executed commands
+  - [ ] Subtask 10.3.3: Add fast cancel/undo guidance in output
+- [ ] Task 10.4: Validation
+  - [ ] Subtask 10.4.1: Add tests for mapping precision and ambiguity handling
+  - [ ] Subtask 10.4.2: Add smoke tests for preview + execute modes
+  - [ ] Subtask 10.4.3: Add docs with examples and limitations
+- [ ] Exit criteria: detector reduces manual command typing without unsafe surprises
+- [ ] Exit criteria: low-confidence intents never auto-execute
+
+---
+
+## Epic 11 - Context-Window Resilience Toolkit
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Improve long-session reliability with configurable truncation/pruning/recovery policies.
+**Depends on:** Epic 4
+
+- [ ] Task 11.1: Define resilience policy schema
+  - [ ] Subtask 11.1.1: Define truncation modes (`default`, `aggressive`)
+  - [ ] Subtask 11.1.2: Define protected tools/messages list
+  - [ ] Subtask 11.1.3: Define pruning and recovery notification levels
+- [ ] Task 11.2: Implement context pruning engine
+  - [ ] Subtask 11.2.1: Add deduplication and superseded-write pruning
+  - [ ] Subtask 11.2.2: Add old-error input purge with turn thresholds
+  - [ ] Subtask 11.2.3: Preserve critical evidence and command outcomes
+- [ ] Task 11.3: Recovery workflows
+  - [ ] Subtask 11.3.1: Add automatic resume hints after successful recovery
+  - [ ] Subtask 11.3.2: Add safe fallback when recovery cannot proceed
+  - [ ] Subtask 11.3.3: Add diagnostics for pruning/recovery actions
+- [ ] Task 11.4: Validation and docs
+  - [ ] Subtask 11.4.1: Add stress tests for long-session behavior
+  - [ ] Subtask 11.4.2: Add docs for tuning resilience settings
+  - [ ] Subtask 11.4.3: Add doctor summary for context resilience health
+- [ ] Exit criteria: long sessions remain stable under constrained context budgets
+- [ ] Exit criteria: recovery decisions are transparent and auditable
+
+---
+
+## Epic 12 - Provider/Model Fallback Visibility
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Make model routing and provider fallback decisions observable and explainable.
+**Depends on:** Epic 5
+
+- [ ] Task 12.1: Define explanation model
+  - [ ] Subtask 12.1.1: Define resolution trace format (requested -> attempted -> selected)
+  - [ ] Subtask 12.1.2: Define compact vs verbose output levels
+  - [ ] Subtask 12.1.3: Define redaction rules for sensitive provider details
+- [ ] Task 12.2: Implement resolution tracing
+  - [ ] Subtask 12.2.1: Capture fallback chain attempts in runtime
+  - [ ] Subtask 12.2.2: Store latest trace per command/session
+  - [ ] Subtask 12.2.3: Expose trace to doctor and debug commands
+- [ ] Task 12.3: User-facing command surface
+  - [ ] Subtask 12.3.1: Add `/routing status` and `/routing explain` commands
+  - [ ] Subtask 12.3.2: Add examples for category-driven routing outcomes
+  - [ ] Subtask 12.3.3: Add docs for troubleshooting unexpected model selection
+- [ ] Task 12.4: Verification
+  - [ ] Subtask 12.4.1: Add tests for deterministic trace output
+  - [ ] Subtask 12.4.2: Add tests for fallback and no-fallback scenarios
+  - [ ] Subtask 12.4.3: Add install-test smoke checks
+- [ ] Exit criteria: users can explain model/provider selection for every routed task
+- [ ] Exit criteria: trace output remains readable in default mode
+
+---
+
+## Epic 13 - Browser Automation Profile Switching
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Add first-class profile switching between browser automation engines with install/runtime checks.
+**Depends on:** Epic 1
+
+- [ ] Task 13.1: Define browser profile model
+  - [ ] Subtask 13.1.1: Define supported providers (`playwright`, `agent-browser`)
+  - [ ] Subtask 13.1.2: Define profile settings and defaults
+  - [ ] Subtask 13.1.3: Define migration behavior for existing installs
+- [ ] Task 13.2: Implement profile command backend
+  - [ ] Subtask 13.2.1: Add `/browser profile <provider>` command
+  - [ ] Subtask 13.2.2: Add status and doctor checks for selected provider
+  - [ ] Subtask 13.2.3: Add install helper guidance for missing dependencies
+- [ ] Task 13.3: Integrate with wizard and docs
+  - [ ] Subtask 13.3.1: Add provider selection into install/reconfigure wizard
+  - [ ] Subtask 13.3.2: Document provider trade-offs and examples
+  - [ ] Subtask 13.3.3: Add recommended defaults for stable-first users
+- [ ] Task 13.4: Verification
+  - [ ] Subtask 13.4.1: Add tests for profile switching and persistence
+  - [ ] Subtask 13.4.2: Add smoke tests for status/doctor across providers
+  - [ ] Subtask 13.4.3: Add install-test checks
+- [ ] Exit criteria: provider switching is one-command and reversible
+- [ ] Exit criteria: missing dependency states are diagnosed with exact fixes
+
+---
+
+## Epic 14 - Plan-to-Execution Bridge Command
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Add a command to execute from an approved plan artifact with progress tracking and deviation reporting.
+**Depends on:** Epic 2, Epic 3
+
+- [ ] Task 14.1: Define plan artifact contract
+  - [ ] Subtask 14.1.1: Define accepted plan format (markdown checklist + metadata)
+  - [ ] Subtask 14.1.2: Define validation rules before execution starts
+  - [ ] Subtask 14.1.3: Define step state transitions and completion semantics
+- [ ] Task 14.2: Implement execution bridge backend
+  - [ ] Subtask 14.2.1: Add `/start-work <plan>` command implementation
+  - [ ] Subtask 14.2.2: Execute steps sequentially with checkpoint updates
+  - [ ] Subtask 14.2.3: Capture and report deviations from original plan
+- [ ] Task 14.3: Integrations and observability
+  - [ ] Subtask 14.3.1: Integrate with background subsystem where safe
+  - [ ] Subtask 14.3.2: Integrate with digest summaries for end-of-run recap
+  - [ ] Subtask 14.3.3: Expose execution status in doctor/debug outputs
+- [ ] Task 14.4: Validation and docs
+  - [ ] Subtask 14.4.1: Add tests for plan parsing and execution flow
+  - [ ] Subtask 14.4.2: Add recovery tests for interrupted plan runs
+  - [ ] Subtask 14.4.3: Add docs with sample plans and workflows
+- [ ] Exit criteria: approved plans can be executed and resumed with clear state
+- [ ] Exit criteria: deviations are explicitly surfaced and reviewable
+
+---
+
 ## Cross-Cutting Delivery Tasks
 
 **Status:** `planned`
@@ -263,7 +473,10 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C1.1: Phase A (low-risk foundation): Epic 1
   - [ ] Subtask C1.2: Phase B (workflow power): Epic 2 + Epic 3
   - [ ] Subtask C1.3: Phase C (advanced automation): Epic 4 + Epic 5
-  - [ ] Subtask C1.4: Phase D (optional power-user): Epic 6 + Epic 7
+  - [ ] Subtask C1.4: Phase D (control layer): Epic 8 + Epic 9 + Epic 10
+  - [ ] Subtask C1.5: Phase E (resilience and observability): Epic 11 + Epic 12
+  - [ ] Subtask C1.6: Phase F (workflow expansion): Epic 13 + Epic 14
+  - [ ] Subtask C1.7: Phase G (optional power-user): Epic 6 + Epic 7
 - [ ] Task C2: Add acceptance criteria template per epic
   - [ ] Subtask C2.1: Functional criteria
   - [ ] Subtask C2.2: Reliability criteria
@@ -287,11 +500,13 @@ Use this log to track what changed week by week.
 - [x] 2026-02-12: Adopt stable-first sequencing; prioritize E1 before orchestration-heavy epics.
 - [x] 2026-02-12: Keep E6 paused until E1-E5 foundations stabilize.
 - [x] 2026-02-12: Keep E7 postponed pending stronger demand for tmux visual mode.
+- [x] 2026-02-12: Add E8-E14 as high-value extensions identified from comparative analysis.
 
 ---
 
 ## Current Recommendation
 
 - Start with **Epic 1** next (lowest risk, highest leverage).
-- Keep **Epic 6** paused until Epics 1-5 stabilize.
-- Keep **Epic 7** postponed unless there is strong demand for visual tmux orchestration.
+- Prioritize **E8-E10** after E1-E5 for fast workflow gains.
+- Prioritize **E11-E12** before E13-E14 when stability concerns are high.
+- Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
