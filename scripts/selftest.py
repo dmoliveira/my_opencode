@@ -18,6 +18,7 @@ NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
 DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
+POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -381,6 +382,40 @@ def main() -> int:
         expect(
             post_info.get("exit_code") == 0, "post-session command should exit cleanly"
         )
+
+        policy_path = home / ".config" / "opencode" / "opencode-policy.json"
+        notify_policy_path = (
+            home / ".config" / "opencode" / "opencode-notifications.json"
+        )
+        policy_env = os.environ.copy()
+        policy_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
+        policy_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_policy_path)
+
+        def run_policy(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(POLICY_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=policy_env,
+                check=False,
+            )
+
+        result = run_policy("profile", "strict")
+        expect(result.returncode == 0, f"policy profile strict failed: {result.stderr}")
+
+        notify_cfg = load_json_file(notify_policy_path)
+        expect(
+            notify_cfg.get("events", {}).get("complete") is False,
+            "strict policy should disable complete event",
+        )
+        expect(
+            notify_cfg.get("channels", {}).get("permission", {}).get("visual") is True,
+            "strict policy should keep permission visual enabled",
+        )
+
+        result = run_policy("status")
+        expect(result.returncode == 0, f"policy status failed: {result.stderr}")
+        expect("profile: strict" in result.stdout, "policy status should report strict")
 
     print("selftest: PASS")
     return 0
