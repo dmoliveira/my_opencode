@@ -14,6 +14,12 @@ DEFAULT_DIGEST_PATH = Path(
     )
 ).expanduser()
 
+SESSION_CONFIG_PATH = Path(
+    os.environ.get(
+        "MY_OPENCODE_SESSION_CONFIG_PATH", "~/.config/opencode/opencode-session.json"
+    )
+).expanduser()
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -69,6 +75,81 @@ def run_hook(command: str, digest_path: Path) -> int:
     return result.returncode
 
 
+def load_post_session_config() -> dict:
+    config = {
+        "enabled": False,
+        "command": "",
+        "timeout_ms": 120000,
+        "run_on": ["exit"],
+    }
+
+    if not SESSION_CONFIG_PATH.exists():
+        return config
+
+    data = json.loads(SESSION_CONFIG_PATH.read_text(encoding="utf-8"))
+    post = data.get("post_session")
+    if not isinstance(post, dict):
+        return config
+
+    if isinstance(post.get("enabled"), bool):
+        config["enabled"] = post["enabled"]
+    if isinstance(post.get("command"), str):
+        config["command"] = post["command"]
+    if isinstance(post.get("timeout_ms"), int) and post["timeout_ms"] > 0:
+        config["timeout_ms"] = post["timeout_ms"]
+    if isinstance(post.get("run_on"), list):
+        values = [x for x in post["run_on"] if isinstance(x, str)]
+        if values:
+            config["run_on"] = values
+
+    return config
+
+
+def run_post_session(config: dict, reason: str, digest_path: Path) -> dict:
+    if not config["enabled"]:
+        return {"attempted": False, "reason": "disabled"}
+
+    if reason not in config["run_on"]:
+        return {
+            "attempted": False,
+            "reason": f"reason {reason} not in run_on",
+            "run_on": config["run_on"],
+        }
+
+    command = (config.get("command") or "").strip()
+    if not command:
+        return {"attempted": False, "reason": "command is unset"}
+
+    env = os.environ.copy()
+    env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
+    env["MY_OPENCODE_POST_REASON"] = reason
+
+    timeout_seconds = max(config["timeout_ms"] / 1000.0, 0.2)
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            env=env,
+            check=False,
+            timeout=timeout_seconds,
+        )
+        return {
+            "attempted": True,
+            "command": command,
+            "exit_code": result.returncode,
+            "timed_out": False,
+            "timeout_ms": config["timeout_ms"],
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "attempted": True,
+            "command": command,
+            "exit_code": None,
+            "timed_out": True,
+            "timeout_ms": config["timeout_ms"],
+        }
+
+
 def print_summary(path: Path, digest: dict) -> None:
     print(f"digest: {path}")
     print(f"timestamp: {digest.get('timestamp')}")
@@ -77,11 +158,15 @@ def print_summary(path: Path, digest: dict) -> None:
     git = digest.get("git", {}) if isinstance(digest.get("git"), dict) else {}
     print(f"branch: {git.get('branch')}")
     print(f"changes: {git.get('status_count')}")
+    post = digest.get("post_session")
+    if isinstance(post, dict) and post.get("attempted"):
+        status = "timeout" if post.get("timed_out") else f"exit {post.get('exit_code')}"
+        print(f"post_session: {status}")
 
 
 def usage() -> int:
     print(
-        'usage: /digest run [--reason <idle|exit|manual>] [--path <digest.json>] [--hook "command"] | /digest show [--path <digest.json>]'
+        'usage: /digest run [--reason <idle|exit|manual>] [--path <digest.json>] [--hook "command"] [--run-post] | /digest show [--path <digest.json>]'
     )
     return 2
 
@@ -99,20 +184,35 @@ def command_run(argv: list[str]) -> int:
     reason = parse_option(argv, "--reason") or "manual"
     path_value = parse_option(argv, "--path")
     hook_value = parse_option(argv, "--hook")
+    run_post = "--run-post" in argv
 
     path = Path(path_value).expanduser() if path_value else DEFAULT_DIGEST_PATH
     cwd = Path.cwd()
 
     digest = build_digest(reason=reason, cwd=cwd)
+
+    post_result = None
+    if run_post:
+        post_config = load_post_session_config()
+        post_result = run_post_session(post_config, reason=reason, digest_path=path)
+        digest["post_session"] = post_result
+
     write_digest(path, digest)
     print_summary(path, digest)
+
+    post_exit = 0
+    if isinstance(post_result, dict) and post_result.get("attempted"):
+        if post_result.get("timed_out"):
+            post_exit = 124
+        else:
+            post_exit = int(post_result.get("exit_code", 0) or 0)
 
     if hook_value:
         code = run_hook(hook_value, path)
         print(f"hook: exited with code {code}")
-        return code
+        return code if code != 0 else post_exit
 
-    return 0
+    return post_exit
 
 
 def command_show(argv: list[str]) -> int:

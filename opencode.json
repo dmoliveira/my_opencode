@@ -138,9 +138,25 @@
       "description": "Generate a manual session digest now",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason manual`\nShow only the command output."
     },
+    "digest-run-post": {
+      "description": "Generate digest and run configured post-session hook",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason manual --run-post`\nShow only the command output."
+    },
     "digest-show": {
       "description": "Show latest saved session digest",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" show`\nShow only the command output."
+    },
+    "post-session": {
+      "description": "Manage post-session hook config (status|enable|disable|set)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "post-session-help": {
+      "description": "Show post-session command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" help`\nShow only the command output."
+    },
+    "post-session-enable": {
+      "description": "Enable post-session hook execution",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" enable`\nShow only the command output."
     },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",

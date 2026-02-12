@@ -17,6 +17,7 @@ MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
 DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
+POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -309,6 +310,77 @@ def main() -> int:
             )
         finally:
             server.close()
+
+        session_cfg_path = home / ".config" / "opencode" / "opencode-session.json"
+        post_env = os.environ.copy()
+        post_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
+        post_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
+
+        def run_post_session(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(POST_SESSION_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=post_env,
+                check=False,
+            )
+
+        result = run_post_session(
+            "set",
+            "command",
+            "python3 -c \"import os,pathlib;pathlib.Path(os.environ['MY_OPENCODE_DIGEST_PATH'] + '.hook').write_text(os.environ.get('MY_OPENCODE_POST_REASON',''))\"",
+        )
+        expect(
+            result.returncode == 0,
+            f"post-session set command failed: {result.stderr}",
+        )
+
+        result = run_post_session("set", "run-on", "manual,exit")
+        expect(
+            result.returncode == 0,
+            f"post-session set run-on failed: {result.stderr}",
+        )
+
+        result = run_post_session("enable")
+        expect(result.returncode == 0, f"post-session enable failed: {result.stderr}")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DIGEST_SCRIPT),
+                "run",
+                "--reason",
+                "manual",
+                "--run-post",
+            ],
+            capture_output=True,
+            text=True,
+            env=post_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"digest run --run-post failed: {result.stderr}",
+        )
+
+        hook_path = Path(str(digest_path) + ".hook")
+        expect(
+            hook_path.exists(), "post-session command should create hook output file"
+        )
+        expect(
+            hook_path.read_text(encoding="utf-8") == "manual",
+            "post-session command should receive manual reason",
+        )
+
+        digest_after = load_json_file(digest_path)
+        post_info = digest_after.get("post_session", {})
+        expect(
+            post_info.get("attempted") is True, "digest should record post-session run"
+        )
+        expect(
+            post_info.get("exit_code") == 0, "post-session command should exit cleanly"
+        )
 
     print("selftest: PASS")
     return 0

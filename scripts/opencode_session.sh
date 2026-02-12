@@ -12,9 +12,9 @@ DIGEST_HOOK="${MY_OPENCODE_DIGEST_HOOK:-}"
 
 run_digest() {
   if [ -n "$DIGEST_HOOK" ]; then
-    python3 "$HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason "$DIGEST_REASON_ON_EXIT" --path "$DIGEST_OUTPUT_PATH" --hook "$DIGEST_HOOK" >/dev/null 2>&1 || true
+    python3 "$HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason "$DIGEST_REASON_ON_EXIT" --path "$DIGEST_OUTPUT_PATH" --run-post --hook "$DIGEST_HOOK" >/dev/null 2>&1 || true
   else
-    python3 "$HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason "$DIGEST_REASON_ON_EXIT" --path "$DIGEST_OUTPUT_PATH" >/dev/null 2>&1 || true
+    python3 "$HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason "$DIGEST_REASON_ON_EXIT" --path "$DIGEST_OUTPUT_PATH" --run-post >/dev/null 2>&1 || true
   fi
 }
 
