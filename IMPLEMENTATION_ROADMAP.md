@@ -18,15 +18,53 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 
 ## Epic Dashboard
 
-| Epic | Title | Status | Priority | Depends On | Notes |
-|---|---|---|---|---|---|
-| E1 | Config Layering + JSONC Support | planned | High | - | Foundation for most later epics |
-| E2 | Background Task Orchestration | planned | High | E1 | Keep minimal and stable first |
-| E3 | Refactor Workflow Command | planned | High | E1 | Safer rollout after config layering |
-| E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | Start with minimal hooks only |
-| E5 | Category-Based Model Routing | planned | Medium | E1 | Can partially overlap with E2/E3 |
-| E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | Resume when core orchestration stabilizes |
-| E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | Optional power-user feature |
+| Epic | Title | Status | Priority | Depends On | br Issue | Notes |
+|---|---|---|---|---|---|---|
+| E1 | Config Layering + JSONC Support | planned | High | - | TBD | Foundation for most later epics |
+| E2 | Background Task Orchestration | planned | High | E1 | TBD | Keep minimal and stable first |
+| E3 | Refactor Workflow Command | planned | High | E1 | TBD | Safer rollout after config layering |
+| E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | TBD | Start with minimal hooks only |
+| E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
+| E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
+| E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
+
+## Scope Guardrails
+
+- Keep migration **stable-first**: ship low-risk foundations before advanced orchestration.
+- Prefer additive changes and compatibility fallbacks over breaking behavior.
+- Do not expand to unrelated feature areas during in-progress epics.
+
+## Out of Scope (for this roadmap cycle)
+
+- Full rewrite of existing command scripts in a new language/runtime.
+- Broad UI redesign of docs/install flows unrelated to orchestration objectives.
+- Large provider/model benchmarking initiatives beyond routing correctness.
+
+## Epic Start Checklist
+
+- [ ] Epic moved to `in_progress` in this file and dashboard row updated.
+- [ ] Matching `br` issue created and linked in dashboard.
+- [ ] Worktree branch created using full workflow.
+- [ ] Success metrics and risk notes reviewed before implementation starts.
+
+## Epic Finish Checklist
+
+- [ ] All epic tasks/subtasks and exit criteria checked `[x]`.
+- [ ] Docs and tests updated and validated (`make validate`, `make selftest`, `make install-test`).
+- [ ] PR merged and cleanup completed (branch/worktree removed, main synced).
+- [ ] Epic status moved to `done`, dashboard row updated, and weekly log updated.
+
+## Risk Register
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Config precedence bugs (E1) break expected behavior | High | Add golden-file tests for precedence + compatibility fallback |
+| Background jobs leak state/processes (E2) | High | Add retention cleanup, stale timeout, and cancel-safe handling |
+| Refactor workflow too aggressive (E3) | Medium | Default to safe mode and require verification gates |
+| Hooks generate noise/regressions (E4) | Medium | Keep hooks opt-in/disableable with deterministic ordering |
+| Model routing confusion (E5) | Medium | Expose effective resolution in doctor output and docs |
+| Session index growth (E6) | Low | Add retention policy and cleanup command |
+| Tmux complexity support burden (E7) | Low | Keep postponed unless strong usage signal appears |
 
 ---
 
@@ -231,16 +269,24 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C2.2: Reliability criteria
   - [ ] Subtask C2.3: Documentation criteria
   - [ ] Subtask C2.4: Validation criteria (`make validate`, `make selftest`, `make install-test`)
+  - [ ] Subtask C2.5: Evidence links (PR, commit, test output summary)
 - [ ] Task C3: Add tracking cadence
   - [ ] Subtask C3.1: Weekly status update section in this file
   - [ ] Subtask C3.2: Keep one epic `in_progress`
   - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
+  - [ ] Subtask C3.4: Revisit paused/postponed epics at least once per month
 
 ## Weekly Status Updates
 
 Use this log to track what changed week by week.
 
 - [ ] YYYY-MM-DD: update epic statuses, completed checkboxes, and next focus epic
+
+## Decision Log
+
+- [x] 2026-02-12: Adopt stable-first sequencing; prioritize E1 before orchestration-heavy epics.
+- [x] 2026-02-12: Keep E6 paused until E1-E5 foundations stabilize.
+- [x] 2026-02-12: Keep E7 postponed pending stronger demand for tmux visual mode.
 
 ---
 
