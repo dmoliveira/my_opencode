@@ -8,6 +8,8 @@ CONFIG_DIR="$HOME/.config/opencode"
 CONFIG_PATH="$CONFIG_DIR/opencode.json"
 NON_INTERACTIVE=false
 SKIP_SELF_CHECK=false
+RUN_WIZARD=false
+WIZARD_RECONFIGURE=false
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -17,8 +19,14 @@ while [ "$#" -gt 0 ]; do
     --skip-self-check)
       SKIP_SELF_CHECK=true
       ;;
+    --wizard)
+      RUN_WIZARD=true
+      ;;
+    --reconfigure)
+      WIZARD_RECONFIGURE=true
+      ;;
     -h|--help)
-      printf "Usage: %s [--non-interactive] [--skip-self-check]\n" "$0"
+      printf "Usage: %s [--non-interactive] [--skip-self-check] [--wizard] [--reconfigure]\n" "$0"
       exit 0
       ;;
     *)
@@ -60,8 +68,20 @@ if [ -n "$REPO_REF" ]; then
   git -C "$INSTALL_DIR" checkout "$REPO_REF"
 fi
 
-chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py"
+chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py" "$INSTALL_DIR/scripts/install_wizard.py"
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
+
+if [ "$RUN_WIZARD" = true ]; then
+  printf "\nRunning install wizard...\n"
+  WIZARD_ARGS=()
+  if [ "$WIZARD_RECONFIGURE" = true ]; then
+    WIZARD_ARGS+=("--reconfigure")
+  fi
+  if [ "$NON_INTERACTIVE" = true ]; then
+    WIZARD_ARGS+=("--non-interactive")
+  fi
+  python3 "$INSTALL_DIR/scripts/install_wizard.py" "${WIZARD_ARGS[@]}"
+fi
 
 if [ "$SKIP_SELF_CHECK" = false ]; then
   printf "\nRunning self-check...\n"
@@ -112,6 +132,7 @@ printf "  /policy profile strict\n"
 printf "  /config status\n"
 printf "  /config backup\n"
 printf "  /stack apply focus\n"
+printf "  ~/.config/opencode/my_opencode/install.sh --wizard --reconfigure\n"
 printf "  /doctor-json\n"
 printf "  /setup-keys\n"
 printf "  /plugin enable supermemory\n"

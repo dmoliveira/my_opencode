@@ -22,6 +22,7 @@ POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
 DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
+INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -545,6 +546,67 @@ def main() -> int:
         expect(result.returncode == 0, f"stack status failed: {result.stderr}")
         expect(
             "profile: quiet-ci" in result.stdout, "stack status should report quiet-ci"
+        )
+
+        wizard_state_path = (
+            home / ".config" / "opencode" / "my_opencode-install-state.json"
+        )
+        wizard_env = os.environ.copy()
+        wizard_env["OPENCODE_CONFIG_PATH"] = str(tmp / "opencode.json")
+        wizard_env["HOME"] = str(home)
+        wizard_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_policy_path)
+        wizard_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
+        wizard_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
+        wizard_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
+        wizard_env["MY_OPENCODE_INSTALL_STATE_PATH"] = str(wizard_state_path)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(INSTALL_WIZARD_SCRIPT),
+                "--non-interactive",
+                "--skip-extras",
+                "--plugin-profile",
+                "stable",
+                "--mcp-profile",
+                "research",
+                "--policy-profile",
+                "balanced",
+                "--notify-profile",
+                "skip",
+                "--telemetry-profile",
+                "local",
+                "--post-session-profile",
+                "manual-validate",
+            ],
+            capture_output=True,
+            text=True,
+            env=wizard_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"install wizard non-interactive run failed: {result.stderr}",
+        )
+        expect(wizard_state_path.exists(), "wizard should persist state file")
+        wizard_state = load_json_file(wizard_state_path)
+        expect(
+            wizard_state.get("profiles", {}).get("plugin") == "stable",
+            "wizard should persist selected plugin profile",
+        )
+        expect(
+            wizard_state.get("profiles", {}).get("telemetry") == "local",
+            "wizard should persist selected telemetry profile",
+        )
+        post_after_wizard = load_json_file(session_cfg_path)
+        expect(
+            post_after_wizard.get("post_session", {}).get("enabled") is True,
+            "wizard manual-validate profile should enable post-session",
+        )
+        expect(
+            post_after_wizard.get("post_session", {}).get("command") == "make validate",
+            "wizard manual-validate profile should configure make validate",
         )
 
         result = run_script(

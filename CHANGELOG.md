@@ -7,9 +7,12 @@ All notable changes to this project are documented in this file.
 ### Adds
 - Added ecosystem extension guidance for `opencode.nvim` (Neovim integration) and `OpenChamber` (desktop/web UI).
 - Added install and verification commands for both optional integrations.
+- Added `scripts/install_wizard.py` for guided install/reconfigure flows across plugin, MCP, policy, telemetry, post-session, and optional ecosystem integrations.
+- Added installer flags `--wizard` and `--reconfigure` for guided setup and repeatable reconfiguration.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
+- Expanded install smoke and self-tests to cover non-interactive wizard execution paths.
 
 ## v0.2.0 - 2026-02-12
 
