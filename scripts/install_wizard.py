@@ -351,6 +351,11 @@ def main(argv: list[str]) -> int:
     if not args.skip_extras:
         if opencode_nvim_action == "install":
             if install_opencode_nvim() == 0:
+                if (
+                    run_repo_script("nvim_integration_command.py", "install", "minimal")
+                    != 0
+                ):
+                    failures.append("opencode.nvim integration profile")
                 managed["opencode_nvim"] = {
                     "installed": True,
                     "path": str(OPENCODE_NVIM_PATH),
@@ -360,6 +365,8 @@ def main(argv: list[str]) -> int:
                 failures.append("opencode.nvim install")
         elif opencode_nvim_action == "uninstall":
             if managed.get("opencode_nvim", {}).get("installed"):
+                if run_repo_script("nvim_integration_command.py", "uninstall") != 0:
+                    failures.append("opencode.nvim integration uninstall")
                 if uninstall_opencode_nvim() == 0:
                     managed["opencode_nvim"] = {
                         "installed": False,

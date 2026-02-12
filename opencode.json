@@ -78,6 +78,30 @@
       "description": "Apply quiet-ci stack profile",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply quiet-ci`\nShow only the command output."
     },
+    "nvim": {
+      "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "nvim-help": {
+      "description": "Show Neovim integration command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" help`\nShow only the command output."
+    },
+    "nvim-status": {
+      "description": "Show Neovim integration status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" status`\nShow only the command output."
+    },
+    "nvim-install-minimal": {
+      "description": "Install minimal Neovim keymap integration",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" install minimal --link-init`\nShow only the command output."
+    },
+    "nvim-install-power": {
+      "description": "Install power Neovim keymap integration",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" install power --link-init`\nShow only the command output."
+    },
+    "nvim-doctor-json": {
+      "description": "Run Neovim integration diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" doctor --json`\nShow only the command output."
+    },
     "mcp-help": {
       "description": "Show MCP command usage and examples",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."
