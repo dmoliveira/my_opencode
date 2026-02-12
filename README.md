@@ -46,6 +46,64 @@ These two can fail to auto-resolve on some setups and are disabled by default. E
 
 - `instructions/shell_strategy.md` - non-interactive shell strategy rules to avoid hangs and improve autonomous execution.
 
+## Ecosystem extensions (optional) 🧰
+
+These are not managed by `opencode.json` plugins, but they pair well with this setup.
+
+### 1) Neovim integration: `opencode.nvim`
+
+- Repo: `nickjvandyke/opencode.nvim`
+- Best for editor-native OpenCode workflows (selection-aware prompts, statusline, and provider controls)
+
+Minimal `lazy.nvim` setup:
+
+```lua
+{
+  "nickjvandyke/opencode.nvim",
+  config = function()
+    vim.o.autoread = true
+    vim.keymap.set({ "n", "x" }, "<leader>oa", function()
+      require("opencode").ask("@this: ", { submit = true })
+    end, { desc = "Ask opencode" })
+    vim.keymap.set({ "n", "x" }, "<leader>os", function()
+      require("opencode").select()
+    end, { desc = "Select opencode action" })
+  end,
+}
+```
+
+Quick verify inside Neovim:
+
+```vim
+:checkhealth opencode
+```
+
+### 2) Rich desktop/web UI: `OpenChamber`
+
+- Repo: `btriapitsyn/openchamber`
+- Best for visual session management, remote/browser access, and mobile continuation
+
+Install and run:
+
+```bash
+npm install -g @openchamber/web
+openchamber --port 3000
+```
+
+Useful commands:
+
+```bash
+openchamber status
+openchamber serve --daemon --port 3111
+openchamber stop --port 3111
+```
+
+### Evaluation result
+
+- `opencode.nvim`: recommended when your main loop is Neovim and you want context-rich editor prompts.
+- `OpenChamber`: recommended when you want a richer visual layer over OpenCode sessions and remote access.
+- Keep both optional; core repo behavior remains terminal-first and fully functional without them.
+
 ## Quick install (popular way) ⚡
 
 Run this from anywhere:
