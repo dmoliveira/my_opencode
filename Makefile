@@ -13,10 +13,10 @@ selftest: ## Run deterministic command self-tests
 	python3 scripts/selftest.py
 
 doctor: ## Run plugin diagnostics (human-readable)
-	python3 scripts/plugin_command.py doctor
+	python3 scripts/doctor_command.py run
 
 doctor-json: ## Run plugin diagnostics (JSON)
-	python3 scripts/plugin_command.py doctor --json
+	python3 scripts/doctor_command.py run --json
 
 install-test: ## Run installer smoke test in temp HOME
 	@TMP_HOME="$$(mktemp -d)"; \
@@ -34,7 +34,8 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/post_session_command.py" status; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason manual --run-post; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" profile strict; \
-	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" status
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" status; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json
 
 release: ## Create and publish release (VERSION=0.1.1)
 	@test -n "$(VERSION)" || (echo "VERSION is required, eg: make release VERSION=0.1.1" && exit 2)

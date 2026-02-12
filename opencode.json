@@ -30,6 +30,18 @@
       "description": "Manage MCP usage (status|help|doctor|profile|enable|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
     },
+    "doctor": {
+      "description": "Run all diagnostics in one pass",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run $ARGUMENTS`\nShow only the command output."
+    },
+    "doctor-help": {
+      "description": "Show unified doctor command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" help`\nShow only the command output."
+    },
+    "doctor-json": {
+      "description": "Run all diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
+    },
     "mcp-help": {
       "description": "Show MCP command usage and examples",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."
