@@ -58,6 +58,26 @@
       "description": "List available config backups",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" list`\nShow only the command output."
     },
+    "stack": {
+      "description": "Apply cross-command profile bundles",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "stack-help": {
+      "description": "Show stack profile command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" help`\nShow only the command output."
+    },
+    "stack-focus": {
+      "description": "Apply focus stack profile",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply focus`\nShow only the command output."
+    },
+    "stack-research": {
+      "description": "Apply research stack profile",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply research`\nShow only the command output."
+    },
+    "stack-quiet-ci": {
+      "description": "Apply quiet-ci stack profile",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply quiet-ci`\nShow only the command output."
+    },
     "mcp-help": {
       "description": "Show MCP command usage and examples",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."
