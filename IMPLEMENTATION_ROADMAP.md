@@ -247,10 +247,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 3.2.2: Add structured plan preview output
   - [x] Subtask 3.2.3: Add post-change verification hooks (`make validate`, optional `make selftest`)
   - [x] Notes: Implemented in `scripts/refactor_lite_command.py` with deterministic selftest coverage.
-- [ ] Task 3.3: OpenCode integration
-  - [ ] Subtask 3.3.1: Add `/refactor-lite` and helper commands to `opencode.json`
-  - [ ] Subtask 3.3.2: Add installer self-check hints
-  - [ ] Subtask 3.3.3: Add `/doctor` optional check when command is configured
+- [x] Task 3.3: OpenCode integration
+  - [x] Subtask 3.3.1: Add `/refactor-lite` and helper commands to `opencode.json`
+  - [x] Subtask 3.3.2: Add installer self-check hints
+  - [x] Subtask 3.3.3: Add `/doctor` optional check when command is configured
+  - [x] Notes: Added `/refactor-lite` templates, installer hints, and optional `refactor-lite` doctor check.
 - [ ] Task 3.4: Tests and docs
   - [ ] Subtask 3.4.1: Add selftest scenarios for argument parsing and safe-mode behavior
   - [ ] Subtask 3.4.2: Add docs for safe vs aggressive strategies

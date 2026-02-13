@@ -22,6 +22,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
+- 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
@@ -220,7 +221,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/stack status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/stack status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -335,7 +336,29 @@ Autocomplete-friendly shortcuts:
 /doctor-help
 ```
 
-`/doctor` runs diagnostics across `mcp`, `plugin`, `notify`, `digest`, `telemetry`, `post-session`, `policy`, and `bg` in one pass.
+`/doctor` runs diagnostics across `mcp`, `plugin`, `notify`, `digest`, `telemetry`, `post-session`, `policy`, `bg`, and optional `refactor-lite` checks in one pass.
+
+## Refactor workflow backend inside OpenCode 🧱
+
+Use these directly in OpenCode:
+
+```text
+/refactor-lite <target>
+/refactor-lite <target> --scope scripts/*.py --dry-run --json
+/refactor-lite <target> --scope scripts/*.py --run-selftest --json
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/refactor-lite-help
+/refactor-lite-dry-run <target> --scope scripts/*.py
+```
+
+`/refactor-lite` backend behavior:
+- runs deterministic preflight analysis (target search + file map)
+- defaults to `--strategy safe` guardrails
+- executes verification hooks on non-dry runs (`make validate`, optional `make selftest`)
 
 ## Background jobs inside OpenCode 🧵
 
