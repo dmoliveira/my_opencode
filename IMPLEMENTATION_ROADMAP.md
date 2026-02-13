@@ -686,9 +686,10 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 18.2.3: Add diff validation for changed references
   - [x] Notes: Added `scripts/safe_edit_adapters.py` with deterministic operation/backend selection (`lsp`, `ast`, guarded `text`) and changed-reference validation helpers, plus selftest coverage for fallback/ambiguity/validation outcomes.
 - [ ] Task 18.3: Command integration
-  - [ ] Subtask 18.3.1: Add `/safe-edit` or mode flag integration with `/refactor-lite`
-  - [ ] Subtask 18.3.2: Add status/doctor checks for available semantic tools
-  - [ ] Subtask 18.3.3: Document safe-edit best practices and limitations
+  - [x] Subtask 18.3.1: Add `/safe-edit` or mode flag integration with `/refactor-lite`
+  - [x] Subtask 18.3.2: Add status/doctor checks for available semantic tools
+  - [x] Subtask 18.3.3: Document safe-edit best practices and limitations
+  - [x] Notes: Added `scripts/safe_edit_command.py` and `/safe-edit*` aliases, wired `safe-edit` diagnostics into unified `/doctor`, and expanded README/install guidance for semantic planning and fallback diagnostics.
 - [ ] Task 18.4: Verification
   - [ ] Subtask 18.4.1: Add cross-language tests for rename/reference correctness
   - [ ] Subtask 18.4.2: Add fallback tests when LSP/AST unavailable

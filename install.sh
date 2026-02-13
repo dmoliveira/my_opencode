@@ -81,6 +81,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/resume_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/safe_edit_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/safe_edit_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -140,6 +143,10 @@ if isinstance(steps, list) and len(steps) >= 2:
 data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"
     python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --json || true
     python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
+  fi
+  if [ -f "$INSTALL_DIR/scripts/safe_edit_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/safe_edit_command.py" status --json
+    python3 "$INSTALL_DIR/scripts/safe_edit_command.py" doctor --json || true
   fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
@@ -209,6 +216,9 @@ printf "  /todo enforce --json\n"
 printf "  /resume status --json\n"
 printf "  /resume now --interruption-class tool_failure --json\n"
 printf "  /resume disable --json\n"
+printf "  /safe-edit status --json\n"
+printf "  /safe-edit plan --operation rename --scope scripts/*.py --json\n"
+printf "  /safe-edit doctor --json\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
 printf "  /devtools install all\n"

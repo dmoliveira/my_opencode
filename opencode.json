@@ -318,6 +318,18 @@
       "description": "Disable resume automation in runtime state",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" disable --json`\nShow only the command output."
     },
+    "safe-edit": {
+      "description": "Plan semantic safe-edit execution (status|plan|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "safe-edit-status": {
+      "description": "Show safe-edit backend availability in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" status --json`\nShow only the command output."
+    },
+    "safe-edit-doctor": {
+      "description": "Run safe-edit diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" doctor --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."

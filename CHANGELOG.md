@@ -59,6 +59,7 @@ All notable changes to this project are documented in this file.
 - Added interruption-class verification coverage for recovery eligibility and cooldown behavior across `tool_failure`, `timeout`, `context_reset`, and `process_crash`.
 - Added `instructions/safe_edit_capability_matrix.md` defining Epic 18 Task 18.1 safe-edit operations, backend capability matrix, language/tool readiness checks, and guarded text fallback rules.
 - Added `scripts/safe_edit_adapters.py` implementing deterministic semantic backend selection (LSP/AST/text fallback) and changed-reference validation helpers for Epic 18 Task 18.2.
+- Added `scripts/safe_edit_command.py` with `/safe-edit status|plan|doctor` command surface and `/safe-edit*` aliases in `opencode.json` for Epic 18 Task 18.3.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -112,6 +113,7 @@ All notable changes to this project are documented in this file.
 - Expanded install smoke flow to include interrupted-run replay scenarios with non-idempotent approval gating for `/resume now`.
 - Marked Epic 18 as in progress and completed Task 18.1 safe-edit capability definition notes in the roadmap.
 - Expanded selftest coverage for safe-edit adapter backend selection, guarded fallback failure modes, and changed-reference validation behavior.
+- Integrated `safe-edit` diagnostics into unified `/doctor` and expanded README/install guidance with semantic planning examples.
 
 ## v0.2.0 - 2026-02-12
 

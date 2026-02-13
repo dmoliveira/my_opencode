@@ -76,6 +76,7 @@ BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
+SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1210,6 +1211,71 @@ def main() -> int:
         expect(
             ref_validation_fail.get("result") == "FAIL",
             "safe-edit adapter should fail validation when old references remain",
+        )
+
+        safe_edit_status = subprocess.run(
+            [sys.executable, str(SAFE_EDIT_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            safe_edit_status.returncode == 0,
+            f"safe-edit status should succeed: {safe_edit_status.stderr}",
+        )
+        safe_edit_status_report = parse_json_output(safe_edit_status.stdout)
+        expect(
+            isinstance(safe_edit_status_report.get("backend_status"), dict),
+            "safe-edit status should report backend availability map",
+        )
+
+        safe_edit_plan = subprocess.run(
+            [
+                sys.executable,
+                str(SAFE_EDIT_SCRIPT),
+                "plan",
+                "--operation",
+                "rename",
+                "--scope",
+                "scripts/*.py",
+                "--allow-text-fallback",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            safe_edit_plan.returncode == 0,
+            f"safe-edit plan should succeed for scripts scope: {safe_edit_plan.stderr}",
+        )
+        safe_edit_plan_report = parse_json_output(safe_edit_plan.stdout)
+        expect(
+            safe_edit_plan_report.get("result") == "PASS"
+            and isinstance(safe_edit_plan_report.get("adapters"), list),
+            "safe-edit plan should emit adapter decisions for matched files",
+        )
+
+        safe_edit_doctor = subprocess.run(
+            [sys.executable, str(SAFE_EDIT_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            safe_edit_doctor.returncode == 0,
+            f"safe-edit doctor should succeed in test environment: {safe_edit_doctor.stderr}",
+        )
+        safe_edit_doctor_report = parse_json_output(safe_edit_doctor.stdout)
+        expect(
+            safe_edit_doctor_report.get("result") == "PASS",
+            "safe-edit doctor should report PASS when at least one backend is available",
         )
 
         hook_plan = resolve_event_plan(
@@ -3461,6 +3527,20 @@ version: 1
         ]
         expect(bool(todo_checks), "doctor summary should include todo check")
         expect(todo_checks[0].get("ok") is True, "doctor todo check should pass")
+
+        safe_edit_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "safe-edit"
+        ]
+        expect(
+            bool(safe_edit_checks),
+            "doctor summary should include safe-edit check",
+        )
+        expect(
+            safe_edit_checks[0].get("ok") is True,
+            "doctor safe-edit check should pass",
+        )
 
     print("selftest: PASS")
     return 0
