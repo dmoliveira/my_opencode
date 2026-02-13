@@ -70,6 +70,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/budget_command.py` with `/budget status|profile|override|doctor` controls for execution budget visibility and tuning.
 - Added `/budget`, `/budget-status`, `/budget-profile`, `/budget-override`, and `/budget-doctor-json` aliases in `opencode.json`.
 - Added `instructions/autoflow_command_contract.md` defining Epic 22 Task 22.1 `/autoflow` subcommands, validation/error contract, output schema modes, lifecycle states, and safety defaults.
+- Added `scripts/autoflow_adapter.py` implementing Epic 22 Task 22.2 primitive composition and deterministic transition/explain logic for unified orchestration.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -136,6 +137,7 @@ All notable changes to this project are documented in this file.
 - Expanded budget verification coverage for invalid override input handling and usage guidance in selftest.
 - Marked Epic 20 Task 20.4 complete and promoted Epic 20 status to done in the roadmap.
 - Marked Epic 22 as in progress and completed Task 22.1 contract definition notes in the roadmap.
+- Expanded selftest coverage with `/autoflow` adapter status and explain-path checks for illegal transitions and resume-gating fallback reason codes.
 
 ## v0.2.0 - 2026-02-12
 
