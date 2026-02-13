@@ -206,6 +206,18 @@
       "description": "Run rules diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" doctor --json`\nShow only the command output."
     },
+    "resilience": {
+      "description": "Inspect context resilience health (status|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "resilience-status": {
+      "description": "Show context resilience policy status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" status --json`\nShow only the command output."
+    },
+    "resilience-doctor": {
+      "description": "Run context resilience diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" doctor --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

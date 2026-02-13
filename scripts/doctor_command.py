@@ -156,6 +156,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "resilience",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("context_resilience_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("context_resilience_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 
