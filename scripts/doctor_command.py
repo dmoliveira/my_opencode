@@ -217,6 +217,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "release-train",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("release_train_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("release_train_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "budget",
         "kind": "doctor-json",
         "optional": True,

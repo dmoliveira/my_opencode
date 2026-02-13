@@ -96,6 +96,7 @@ AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
+RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1318,6 +1319,54 @@ index 3333333..4444444 100644
             release_engine_draft_payload.get("result") == "PASS"
             and isinstance(release_engine_draft_payload.get("entries"), list),
             "release-train draft should emit structured release note entries",
+        )
+
+        release_command_doctor = subprocess.run(
+            [sys.executable, str(RELEASE_TRAIN_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_command_doctor.returncode == 0,
+            "release-train command doctor should pass",
+        )
+        release_command_doctor_payload = parse_json_output(
+            release_command_doctor.stdout
+        )
+        expect(
+            release_command_doctor_payload.get("result") == "PASS"
+            and release_command_doctor_payload.get("engine_exists") is True,
+            "release-train command doctor should confirm engine availability",
+        )
+
+        release_command_prepare = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "prepare",
+                "--version",
+                "0.0.1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_command_prepare.returncode == 1,
+            "release-train command should block prepare when preconditions fail",
+        )
+        release_command_prepare_payload = parse_json_output(
+            release_command_prepare.stdout
+        )
+        expect(
+            "reason_codes" in release_command_prepare_payload,
+            "release-train command prepare should emit reason codes",
         )
 
         result = subprocess.run(

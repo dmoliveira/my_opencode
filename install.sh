@@ -96,6 +96,12 @@ fi
 if [ -f "$INSTALL_DIR/scripts/pr_review_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/pr_review_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/release_train_engine.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/release_train_engine.py"
+fi
+if [ -f "$INSTALL_DIR/scripts/release_train_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/release_train_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -188,6 +194,12 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
     python3 "$INSTALL_DIR/scripts/pr_review_command.py" checklist --diff-file "$SELF_CHECK_DIFF" --json
     python3 "$INSTALL_DIR/scripts/pr_review_command.py" doctor --json
   fi
+  if [ -f "$INSTALL_DIR/scripts/release_train_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/release_train_command.py" status --json
+    python3 "$INSTALL_DIR/scripts/release_train_command.py" prepare --version 0.0.1 --json || true
+    python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --head HEAD --json
+    python3 "$INSTALL_DIR/scripts/release_train_command.py" doctor --json
+  fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -262,6 +274,10 @@ printf "  /autoflow stop --reason manual --json\n"
 printf "  /pr-review --base main --head HEAD --json\n"
 printf "  /pr-review-checklist --base main --head HEAD\n"
 printf "  /pr-review-doctor\n"
+printf "  /release-train status --json\n"
+printf "  /release-train prepare --version 0.0.1 --json\n"
+printf "  /release-train draft --head HEAD --json\n"
+printf "  /release-train-doctor\n"
 printf "  /todo status --json\n"
 printf "  /todo enforce --json\n"
 printf "  /resume status --json\n"

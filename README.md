@@ -274,6 +274,22 @@ Task 24.2 release assistant engine notes:
 - `draft` composes release-note entries from git history since the latest (or provided) tag.
 - `publish` enforces readiness and explicit confirmation, with dry-run and rollback action metadata.
 
+Task 24.3 command integration notes:
+
+- command module: `scripts/release_train_command.py`
+- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-doctor`
+- doctor integration: unified `/doctor run --json` now includes `release-train` subsystem readiness checks.
+- release-check integration: `make release-check VERSION=x.y.z` now invokes release-train preflight gating.
+
+Examples:
+
+```text
+/release-train status --json
+/release-train prepare --version 0.3.0 --json
+/release-train draft --head HEAD --json
+/release-train doctor --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -1261,6 +1277,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/autoflow_command.py` - unified `/autoflow` command surface with dry-run and kill-switch controls
 - `scripts/budget_command.py` - backend script for `/budget`
 - `scripts/release_train_engine.py` - release-train backend engine for preflight, draft, and publish gating
+- `scripts/release_train_command.py` - `/release-train` command surface and doctor/checklist integration
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
