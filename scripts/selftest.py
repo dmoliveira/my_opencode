@@ -2457,6 +2457,88 @@ version: 1
             "autoflow start should recover after kill-switch stop",
         )
 
+        autoflow_report = subprocess.run(
+            [sys.executable, str(AUTOFLOW_COMMAND_SCRIPT), "report", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(autoflow_report.returncode == 0, "autoflow report should succeed")
+        autoflow_report_payload = parse_json_output(autoflow_report.stdout)
+        expect(
+            isinstance(autoflow_report_payload.get("deviation_count"), int),
+            "autoflow report should include deterministic deviation_count",
+        )
+
+        runtime_path = Path(str(start_work_report.get("config") or ""))
+        runtime_cfg = load_json_file(runtime_path)
+        runtime_cfg.setdefault("plan_execution", {})["status"] = "failed"
+        runtime_cfg["plan_execution"]["steps"] = [
+            {"ordinal": 1, "state": "done", "idempotent": True},
+            {"ordinal": 2, "state": "pending", "idempotent": False},
+        ]
+        runtime_cfg["plan_execution"]["resume"] = {
+            "enabled": True,
+            "attempt_count": 0,
+            "max_attempts": 3,
+            "trail": [],
+        }
+        runtime_path.write_text(
+            json.dumps(runtime_cfg, indent=2) + "\n", encoding="utf-8"
+        )
+
+        autoflow_resume_blocked = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_COMMAND_SCRIPT),
+                "resume",
+                "--interruption-class",
+                "tool_failure",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_resume_blocked.returncode == 1,
+            "autoflow resume should block non-idempotent pending steps without approval",
+        )
+        autoflow_resume_blocked_payload = parse_json_output(
+            autoflow_resume_blocked.stdout
+        )
+        expect(
+            autoflow_resume_blocked_payload.get("reason_code")
+            == "resume_non_idempotent_step",
+            "autoflow resume should expose deterministic non-idempotent gating reason",
+        )
+
+        autoflow_resume_approved = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_COMMAND_SCRIPT),
+                "resume",
+                "--interruption-class",
+                "tool_failure",
+                "--approve-step",
+                "2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_resume_approved.returncode == 0,
+            "autoflow resume should proceed when non-idempotent step is explicitly approved",
+        )
+
         todo_status = subprocess.run(
             [sys.executable, str(TODO_SCRIPT), "status", "--json"],
             capture_output=True,

@@ -234,7 +234,12 @@ def command_resume(args: list[str]) -> int:
         return usage()
 
     gate = evaluate_request("resume", interruption_class=interruption_class)
-    if gate.get("result") != "PASS":
+    gate_reason = str(gate.get("reason_code") or "")
+    approved = {item for item in approved_steps if item.strip()}
+    allow_non_idempotent_approved = (
+        gate_reason == "resume_non_idempotent_step" and bool(approved)
+    )
+    if gate.get("result") != "PASS" and not allow_non_idempotent_approved:
         gate_payload = {
             "result": "FAIL",
             "status": gate.get("status", "unknown"),

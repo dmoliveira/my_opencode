@@ -141,6 +141,8 @@ All notable changes to this project are documented in this file.
 - Marked Epic 22 as in progress and completed Task 22.1 contract definition notes in the roadmap.
 - Expanded selftest coverage with `/autoflow` adapter status and explain-path checks for illegal transitions and resume-gating fallback reason codes.
 - Integrated `/autoflow` diagnostics into unified `/doctor`, expanded install smoke with `/autoflow` dry-run/status/report/stop checks, and documented migration guidance from `/start-work` and `/resume` flows.
+- Expanded `/autoflow` verification coverage for report lifecycle payloads and approval-gated resume recovery paths in selftest.
+- Marked Epic 22 Task 22.4 complete and promoted Epic 22 status to done in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 

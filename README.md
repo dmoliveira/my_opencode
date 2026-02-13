@@ -196,6 +196,12 @@ Task 22.3 safety and usability controls:
   - `/start-work deviations --json` -> `/autoflow report --json`
   - `/resume now --interruption-class <class> --json` -> `/autoflow resume --interruption-class <class> --json`
 
+Task 22.4 verification notes:
+
+- selftest validates `/autoflow` lifecycle coverage across `start -> status/report` with deterministic payload assertions.
+- selftest validates `/autoflow resume` recovery gating for non-idempotent steps and explicit approval replay.
+- install smoke validates `/autoflow dry-run`, `/autoflow status`, `/autoflow report`, and `/autoflow stop` happy-path controls.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
