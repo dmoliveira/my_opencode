@@ -23,6 +23,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
+- 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
@@ -56,6 +57,21 @@ Task 18.2 implementation baseline:
 - adapter module: `scripts/safe_edit_adapters.py`
 - operation planner: deterministic backend choice (`lsp`, `ast`, or guarded `text` fallback)
 - validation helper: changed-reference verification for rename-like symbol updates
+
+Task 18.3 command integration:
+
+- command module: `scripts/safe_edit_command.py`
+- diagnostics: `/safe-edit status --json`, `/safe-edit doctor --json`
+- planning surface: `/safe-edit plan --operation <rename|extract|organize_imports|scoped_replace> --scope <glob[,glob...]> [--allow-text-fallback] --json`
+
+Examples:
+
+```text
+/safe-edit status --json
+/safe-edit plan --operation rename --scope scripts/*.py --json
+/safe-edit plan --operation scoped_replace --scope scripts/*.py --allow-text-fallback --json
+/safe-edit doctor --json
+```
 
 ## Installed plugin stack 🔌
 
@@ -241,7 +257,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -253,7 +269,7 @@ chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/start_work_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
-chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py
 ```
 
 ## Install wizard flow 🧭
@@ -1042,6 +1058,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
+- `scripts/safe_edit_command.py` - `/safe-edit` command surface for semantic adapter planning and diagnostics
 - `scripts/todo_enforcement.py` - shared todo compliance enforcement helpers
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`

@@ -216,6 +216,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "safe-edit",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("safe_edit_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("safe_edit_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 
