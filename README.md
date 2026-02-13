@@ -451,6 +451,19 @@ Use:
 /model-routing resolve --category deep --override-model openai/gpt-5.3-codex --json
 ```
 
+Model-profile aliases:
+```text
+/model-profile status
+/model-profile set visual
+/model-profile resolve --category writing
+```
+
+Practical routing examples:
+- Fast repo hygiene (`git status`, light checks): `quick`
+- Architecture/debug planning and complex refactors: `deep`
+- UI polish and design-heavy implementation notes: `visual`
+- Changelogs, release notes, and long-form docs: `writing`
+
 Integration points:
 - `/stack apply <profile>` now sets a routing category (`focus/research -> deep`, `quiet-ci -> quick`).
 - install wizard supports `--model-profile <quick|deep|visual|writing>`.

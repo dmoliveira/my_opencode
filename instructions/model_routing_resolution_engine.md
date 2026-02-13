@@ -34,3 +34,14 @@ Epic 5 Task 5.2 implements deterministic settings resolution and integration poi
 - `status [--json]`
 - `set-category <category>`
 - `resolve [overrides] [--json]`
+
+Task 5.3 command aliases in `opencode.json`:
+
+- `/model-profile status`
+- `/model-profile set <category>`
+- `/model-profile resolve ...`
+
+Doctor integration:
+
+- `scripts/doctor_command.py` includes optional `model-routing` check using
+  `model_routing_command.py resolve --json`.
