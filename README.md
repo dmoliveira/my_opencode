@@ -290,6 +290,12 @@ Examples:
 /release-train doctor --json
 ```
 
+Task 24.4 verification notes:
+
+- selftest validates breaking-change/changelog mismatch blocking with `version_mismatch_breaking_change` reason codes.
+- selftest validates publish behavior split between `--dry-run` pass and confirmation-required blocking for live publish.
+- install smoke validates `/release-train` status, prepare, draft, and doctor command paths.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

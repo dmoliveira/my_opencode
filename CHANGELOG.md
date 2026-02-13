@@ -155,6 +155,7 @@ All notable changes to this project are documented in this file.
 - Added release-train policy contract covering deterministic preflight gates, semantic-version blocking rules, and partial-failure rollback reason codes; marked Epic 24 Task 24.1 complete in the roadmap.
 - Added `release_train_engine.py` backend with deterministic release preflight diagnostics, draft-note generation from git history, and confirmation-gated publish dry-run flow; marked Epic 24 Task 24.2 complete in the roadmap.
 - Added `/release-train` command integration with aliases, doctor/install smoke wiring, and `make release-check VERSION=x.y.z` preflight gating via release-train diagnostics; marked Epic 24 Task 24.3 complete in the roadmap.
+- Expanded release-train verification coverage for breaking-change/version mismatch blocking and publish dry-run vs confirmation gating, and marked Epic 24 Task 24.4/exit criteria complete in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 
