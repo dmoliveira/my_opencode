@@ -47,7 +47,7 @@ Use this map to avoid overlapping implementations.
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
-| E11 | Context-Window Resilience Toolkit | in_progress | High | E4 | bd-2tj, bd-n9y, bd-2t0 | Improve long-session stability and recovery |
+| E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
@@ -467,7 +467,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 11 - Context-Window Resilience Toolkit
 
-**Status:** `planned`
+**Status:** `done`
 **Priority:** High
 **Goal:** Improve long-session reliability with configurable truncation/pruning/recovery policies.
 **Depends on:** Epic 4
@@ -487,12 +487,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 11.3.2: Add safe fallback when recovery cannot proceed
   - [x] Subtask 11.3.3: Add diagnostics for pruning/recovery actions
   - [x] Notes: Added recovery-plan generation in `scripts/context_resilience.py` with resume hints, safe fallback actions, and structured pruning/recovery diagnostics.
-- [ ] Task 11.4: Validation and docs
-  - [ ] Subtask 11.4.1: Add stress tests for long-session behavior
-  - [ ] Subtask 11.4.2: Add docs for tuning resilience settings
-  - [ ] Subtask 11.4.3: Add doctor summary for context resilience health
-- [ ] Exit criteria: long sessions remain stable under constrained context budgets
-- [ ] Exit criteria: recovery decisions are transparent and auditable
+- [x] Task 11.4: Validation and docs
+  - [x] Subtask 11.4.1: Add stress tests for long-session behavior
+  - [x] Subtask 11.4.2: Add docs for tuning resilience settings
+  - [x] Subtask 11.4.3: Add doctor summary for context resilience health
+  - [x] Notes: Added `instructions/context_resilience_tuning.md`, `/resilience` command diagnostics, and unified `/doctor` resilience subsystem checks.
+- [x] Exit criteria: long sessions remain stable under constrained context budgets
+- [x] Exit criteria: recovery decisions are transparent and auditable
 
 ---
 

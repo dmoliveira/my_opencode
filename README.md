@@ -538,7 +538,9 @@ Recommended workflow:
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
 
 - schema contract: `instructions/context_resilience_policy_schema.md`
+- tuning guide: `instructions/context_resilience_tuning.md`
 - pruning engine: `scripts/context_resilience.py`
+- command diagnostics: `scripts/context_resilience_command.py`
 
 Initial schema covers:
 - truncation modes (`default`, `aggressive`)
@@ -551,6 +553,12 @@ Engine behavior currently includes:
 - stale error purging once newer successful command outcomes exist beyond threshold
 - preservation of protected artifacts and latest command outcomes as critical evidence
 - recovery planning with automatic resume hints, safe fallback steps, and pruning diagnostics
+
+Use:
+```text
+/resilience status --json
+/resilience doctor --json
+```
 
 ## Background jobs inside OpenCode 🧵
 

@@ -55,6 +55,7 @@ HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
+RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -2013,6 +2014,43 @@ def main() -> int:
             "safe fallback should include actionable recovery steps",
         )
 
+        resilience_status = subprocess.run(
+            [sys.executable, str(RESILIENCE_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            resilience_status.returncode == 0,
+            "resilience status should succeed",
+        )
+        resilience_status_report = parse_json_output(resilience_status.stdout)
+        expect(
+            resilience_status_report.get("enabled") is True,
+            "resilience status should report subsystem enabled by default",
+        )
+
+        resilience_doctor = subprocess.run(
+            [sys.executable, str(RESILIENCE_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(resilience_doctor.returncode == 0, "resilience doctor should succeed")
+        resilience_doctor_report = parse_json_output(resilience_doctor.stdout)
+        expect(
+            resilience_doctor_report.get("result") == "PASS",
+            "resilience doctor should pass stress diagnostics",
+        )
+        expect(
+            int(resilience_doctor_report.get("stress_dropped_count", 0)) > 0,
+            "resilience doctor stress run should prune at least one message",
+        )
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )
@@ -2240,6 +2278,20 @@ def main() -> int:
         expect(
             rules_checks[0].get("ok") is True,
             "doctor rules check should pass",
+        )
+
+        resilience_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "resilience"
+        ]
+        expect(
+            bool(resilience_checks),
+            "doctor summary should include resilience check",
+        )
+        expect(
+            resilience_checks[0].get("ok") is True,
+            "doctor resilience check should pass",
         )
 
     print("selftest: PASS")

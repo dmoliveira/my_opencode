@@ -34,6 +34,8 @@ All notable changes to this project are documented in this file.
 - Added `instructions/context_resilience_policy_schema.md` defining truncation modes, protected artifacts, and resilience notification levels for Epic 11 Task 11.1.
 - Added `scripts/context_resilience.py` implementing resilience policy resolution and deterministic context pruning primitives.
 - Added recovery workflow planning in `scripts/context_resilience.py` with resume hints, safe fallback steps, and diagnostics payloads.
+- Added `scripts/context_resilience_command.py` with `/resilience status` and `/resilience doctor` stress diagnostics.
+- Added `instructions/context_resilience_tuning.md` with practical tuning guidance and operating playbook.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -67,6 +69,7 @@ All notable changes to this project are documented in this file.
 - Expanded rules verification to cover always-apply behavior, equal-priority lexical ordering, and richer discovery scenarios.
 - Expanded selftest coverage for context resilience policy validation and pruning behavior (dedupe, superseded writes, stale error purge, protected evidence retention).
 - Expanded selftest coverage for context recovery outcomes, including resume hints and fallback-path diagnostics.
+- Expanded doctor summary coverage to include context resilience subsystem health checks.
 
 ## v0.2.0 - 2026-02-12
 
