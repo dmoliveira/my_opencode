@@ -60,7 +60,7 @@ Use this map to avoid overlapping implementations.
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | done | High | E3 | bd-u6t | Pre-PR quality, output, and risk review automation |
-| E24 | Release Train Assistant | in_progress | High | E14, E23 | bd-vur | Validate, draft, and gate releases reliably |
+| E24 | Release Train Assistant | done | High | E14, E23 | bd-nk3 | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
@@ -841,7 +841,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 24 - Release Train Assistant
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Automate release preparation checks, release-note drafting, and tag gating.
 **Depends on:** Epic 14, Epic 23
@@ -861,12 +861,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 24.3.2: Integrate with existing `make release-check` and changelog flow
   - [x] Subtask 24.3.3: Document release operator workflow
   - [x] Notes: Added `scripts/release_train_command.py` with status/prepare/draft/publish/doctor command surface, wired `/release-train*` aliases in `opencode.json`, integrated release-train diagnostics into unified doctor and installer smoke/hints, and connected `make release-check VERSION=x.y.z` to release-train preflight gating.
-- [ ] Task 24.4: Verification
-  - [ ] Subtask 24.4.1: Add tests for version and changelog mismatch handling
-  - [ ] Subtask 24.4.2: Add tests for dry-run vs publish behavior
-  - [ ] Subtask 24.4.3: Add install-test smoke checks
-- [ ] Exit criteria: releases are blocked when preconditions are unmet
-- [ ] Exit criteria: release-note drafts are generated consistently and reviewable
+- [x] Task 24.4: Verification
+  - [x] Subtask 24.4.1: Add tests for version and changelog mismatch handling
+  - [x] Subtask 24.4.2: Add tests for dry-run vs publish behavior
+  - [x] Subtask 24.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with fixture-based coverage for breaking-change/version mismatch gating and publish confirmation vs dry-run behavior, while install smoke exercises `/release-train` status/prepare/draft/doctor command paths.
+- [x] Exit criteria: releases are blocked when preconditions are unmet
+- [x] Exit criteria: release-note drafts are generated consistently and reviewable
 
 ---
 

@@ -1369,6 +1369,175 @@ index 3333333..4444444 100644
             "release-train command prepare should emit reason codes",
         )
 
+        release_repo = tmp / "release_repo"
+        release_repo.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "selftest@example.com"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Selftest"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        (release_repo / "Makefile").write_text(
+            "validate:\n\t@true\nselftest:\n\t@true\ninstall-test:\n\t@true\n",
+            encoding="utf-8",
+        )
+        (release_repo / "CHANGELOG.md").write_text(
+            "## v1.0.0\n\n- baseline release\n\n## v1.1.0\n\n- breaking: incompatible flag removal\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            ["git", "add", "Makefile", "CHANGELOG.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "seed release fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "tag", "v1.0.0"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+
+        release_engine_breaking = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_ENGINE_SCRIPT),
+                "prepare",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.1.0",
+                "--allowed-branch-re",
+                ".*",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_engine_breaking.returncode == 1,
+            "release-train prepare should block changelog breaking mismatches",
+        )
+        release_engine_breaking_payload = parse_json_output(
+            release_engine_breaking.stdout
+        )
+        expect(
+            "version_mismatch_breaking_change"
+            in set(release_engine_breaking_payload.get("reason_codes", [])),
+            "release-train prepare should report breaking-change version mismatch",
+        )
+
+        (release_repo / "CHANGELOG.md").write_text(
+            "## v1.0.0\n\n- baseline release\n\n## v1.0.1\n\n- patch follow-up\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            ["git", "add", "CHANGELOG.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "prepare patch release changelog"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+
+        release_publish_dry_run = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_dry_run.returncode == 0,
+            "release-train publish dry-run should pass when preconditions are met",
+        )
+        release_publish_dry_run_payload = parse_json_output(
+            release_publish_dry_run.stdout
+        )
+        expect(
+            release_publish_dry_run_payload.get("result") == "PASS"
+            and release_publish_dry_run_payload.get("dry_run") is True,
+            "release-train publish dry-run should emit pass payload",
+        )
+
+        release_publish_confirmation = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_confirmation.returncode == 1,
+            "release-train publish should require explicit confirmation when not dry-run",
+        )
+        release_publish_confirmation_payload = parse_json_output(
+            release_publish_confirmation.stdout
+        )
+        expect(
+            "confirmation_required"
+            in set(release_publish_confirmation_payload.get("reason_codes", [])),
+            "release-train publish should emit confirmation_required reason code",
+        )
+
         result = subprocess.run(
             [
                 sys.executable,
