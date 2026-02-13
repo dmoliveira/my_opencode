@@ -64,6 +64,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/checkpoint_snapshot_lifecycle.md` defining Epic 19 Task 19.1 snapshot schema, trigger cadence, retention, and rotation/compression rules.
 - Added `scripts/checkpoint_snapshot_manager.py` implementing atomic checkpoint writes, integrity-aware load/list operations, and retention/rotation pruning with optional compression.
 - Added `scripts/checkpoint_command.py` with `/checkpoint list|show|prune|doctor` checkpoint visibility and maintenance commands.
+- Added deterministic checkpoint verification coverage for atomic writes, corrupted payload handling, integrity mismatch detection, bounded retention, and gzip rotation behavior.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -122,6 +123,7 @@ All notable changes to this project are documented in this file.
 - Marked Epic 19 as in progress and completed Task 19.1 checkpoint lifecycle definition notes in the roadmap.
 - Integrated checkpoint snapshot persistence into `/start-work` and `/start-work recover`, and expanded selftest coverage for checkpoint list/show/prune behavior.
 - Integrated checkpoint diagnostics into unified `/doctor`, expanded README command examples, and added selftest coverage for `/checkpoint` command flows.
+- Expanded installer self-check smoke flow and command hints to include `/checkpoint list|show|prune|doctor` lifecycle checks.
 
 ## v0.2.0 - 2026-02-12
 
