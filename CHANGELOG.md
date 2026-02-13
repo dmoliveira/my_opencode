@@ -41,6 +41,7 @@ All notable changes to this project are documented in this file.
 - Added optional `/doctor` integration check for `refactor-lite` when backend script is present.
 - Expanded `/refactor-lite` tests/docs for argument parsing, safe-vs-aggressive strategy guidance, and install smoke coverage.
 - Added hook framework baseline module with `PreToolUse`/`PostToolUse`/`Stop` events, config normalization (`hooks.enabled`, `hooks.disabled`, `hooks.order`), and deterministic execution planning.
+- Added initial safety hook implementations for continuation reminders, output truncation, and common error recovery hints with a new `/hooks` command wrapper.
 
 ## v0.2.0 - 2026-02-12
 

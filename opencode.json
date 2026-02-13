@@ -102,6 +102,14 @@
       "description": "Run /refactor-lite dry-run with JSON output",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" $ARGUMENTS --dry-run --json`\nShow only the command output."
     },
+    "hooks": {
+      "description": "Run initial safety hooks (status|help|run)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "hooks-help": {
+      "description": "Show /hooks command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" help`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
