@@ -157,6 +157,7 @@ All notable changes to this project are documented in this file.
 - Added `/release-train` command integration with aliases, doctor/install smoke wiring, and `make release-check VERSION=x.y.z` preflight gating via release-train diagnostics; marked Epic 24 Task 24.3 complete in the roadmap.
 - Expanded release-train verification coverage for breaking-change/version mismatch blocking and publish dry-run vs confirmation gating, and marked Epic 24 Task 24.4/exit criteria complete in the roadmap.
 - Added hotfix-mode policy contract for incident activation, mandatory non-skippable checks, reduced validation boundaries, and post-incident follow-up/audit requirements; marked Epic 25 Task 25.1 complete in the roadmap.
+- Added `hotfix_runtime.py` backend implementing constrained incident runtime profiles, rollback checkpoint capture, and append-only timeline/closure guardrails; marked Epic 25 Task 25.2 complete in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 
