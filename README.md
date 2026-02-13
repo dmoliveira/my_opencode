@@ -21,6 +21,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
+- 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
@@ -219,7 +220,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/stack status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/stack status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -230,6 +231,7 @@ chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencod
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
 ```
 
 ## Install wizard flow 🧭
@@ -333,7 +335,37 @@ Autocomplete-friendly shortcuts:
 /doctor-help
 ```
 
-`/doctor` runs diagnostics across `mcp`, `plugin`, `notify`, `digest`, `telemetry`, `post-session`, and `policy` in one pass.
+`/doctor` runs diagnostics across `mcp`, `plugin`, `notify`, `digest`, `telemetry`, `post-session`, `policy`, and `bg` in one pass.
+
+## Background jobs inside OpenCode 🧵
+
+Use these directly in OpenCode:
+
+```text
+/bg start -- python3 scripts/selftest.py
+/bg status
+/bg status <job-id>
+/bg list
+/bg list --status running
+/bg read <job-id>
+/bg cancel <job-id>
+/bg cleanup
+/bg doctor --json
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/bg-help
+/bg-list
+/bg-running
+/bg-doctor-json
+```
+
+`/bg` uses `~/.config/opencode/my_opencode/bg/` by default with:
+- `jobs.json` as authoritative state
+- `runs/<job-id>.log` for combined stdout/stderr
+- `runs/<job-id>.meta.json` for execution metadata
 
 ## MCP control inside OpenCode 🧠
 

@@ -215,10 +215,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 2.2.2: Capture stdout/stderr and execution metadata
   - [x] Subtask 2.2.3: Add stale job detection and cleanup
   - [x] Notes: Implemented in `scripts/background_task_manager.py` with deterministic selftest coverage.
-- [ ] Task 2.3: Expose OpenCode commands
-  - [ ] Subtask 2.3.1: Add `/bg` command family (`start|status|list|read|cancel`)
-  - [ ] Subtask 2.3.2: Add autocomplete shortcuts for high-frequency operations
-  - [ ] Subtask 2.3.3: Integrate with `/doctor` summary checks
+- [x] Task 2.3: Expose OpenCode commands
+  - [x] Subtask 2.3.1: Add `/bg` command family (`start|status|list|read|cancel`)
+  - [x] Subtask 2.3.2: Add autocomplete shortcuts for high-frequency operations
+  - [x] Subtask 2.3.3: Integrate with `/doctor` summary checks
+  - [x] Notes: Added `/bg` command + shortcuts in `opencode.json` and wired `bg` diagnostics into `scripts/doctor_command.py`.
 - [ ] Task 2.4: Notifications and diagnostics
   - [ ] Subtask 2.4.1: Add optional completion notification via existing notify stack
   - [ ] Subtask 2.4.2: Add JSON diagnostics output for background subsystem

@@ -217,19 +217,43 @@ def cleanup_jobs(
 
 
 def command_enqueue(args: argparse.Namespace) -> int:
-    command_tokens = list(args.cmd or [])
-    if command_tokens and command_tokens[0] == "--":
-        command_tokens = command_tokens[1:]
-    if not command_tokens:
-        print("error: enqueue requires a command; use: enqueue -- <command>")
+    job = enqueue_job(
+        list(args.cmd or []),
+        cwd_value=args.cwd,
+        labels=list(args.label or []),
+        timeout_seconds=int(args.timeout_seconds),
+        stale_after_seconds=int(args.stale_after_seconds),
+    )
+    if job is None:
         return 2
 
-    cwd = Path(args.cwd).expanduser().resolve()
+    print(f"id: {job['id']}")
+    print("status: queued")
+    print(f"command: {job['command']}")
+    print(f"cwd: {job['cwd']}")
+    return 0
+
+
+def enqueue_job(
+    command_tokens: list[str],
+    cwd_value: str,
+    labels: list[str],
+    timeout_seconds: int,
+    stale_after_seconds: int,
+) -> dict | None:
+    tokens = list(command_tokens)
+    if tokens and tokens[0] == "--":
+        tokens = tokens[1:]
+    if not tokens:
+        print("error: enqueue requires a command; use: enqueue -- <command>")
+        return None
+
+    cwd = Path(cwd_value).expanduser().resolve()
     if not cwd.exists() or not cwd.is_dir():
         print(f"error: cwd does not exist: {cwd}")
-        return 1
+        return None
 
-    command = shlex.join(command_tokens)
+    command = shlex.join(tokens)
     job_id = new_job_id()
     job = {
         "id": job_id,
@@ -240,9 +264,9 @@ def command_enqueue(args: argparse.Namespace) -> int:
         "ended_at": None,
         "status": "queued",
         "exit_code": None,
-        "timeout_seconds": int(args.timeout_seconds),
-        "stale_after_seconds": int(args.stale_after_seconds),
-        "labels": list(args.label or []),
+        "timeout_seconds": timeout_seconds,
+        "stale_after_seconds": stale_after_seconds,
+        "labels": labels,
         "summary": None,
         "pid": None,
         "log_path": str(RUNS_DIR / f"{job_id}.log"),
@@ -253,11 +277,34 @@ def command_enqueue(args: argparse.Namespace) -> int:
         cleanup_jobs(data)
         data.setdefault("jobs", []).append(job)
         data["jobs"].sort(key=job_sort_key)
+    return job
 
-    print(f"id: {job_id}")
+
+def command_start(args: argparse.Namespace) -> int:
+    job = enqueue_job(
+        list(args.cmd or []),
+        cwd_value=args.cwd,
+        labels=list(args.label or []),
+        timeout_seconds=int(args.timeout_seconds),
+        stale_after_seconds=int(args.stale_after_seconds),
+    )
+    if job is None:
+        return 2
+
+    worker = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "run", "--id", str(job["id"])],
+        cwd=str(Path(job["cwd"])),
+        env=os.environ.copy(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    print(f"id: {job['id']}")
     print("status: queued")
-    print(f"command: {command}")
-    print(f"cwd: {cwd}")
+    print(f"worker_pid: {worker.pid}")
+    print(f"next: /bg status {job['id']}")
     return 0
 
 
@@ -506,6 +553,93 @@ def command_cleanup(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_status(args: argparse.Namespace) -> int:
+    if args.id:
+        return command_read(argparse.Namespace(id=args.id, tail=40, json=False))
+
+    with locked_jobs(writeback=False) as data:
+        jobs = list(data.get("jobs", []))
+
+    counts = {"queued": 0, "running": 0, "completed": 0, "failed": 0, "cancelled": 0}
+    for job in jobs:
+        status = str(job.get("status"))
+        if status in counts:
+            counts[status] += 1
+
+    print(f"root: {BG_ROOT}")
+    print(f"jobs_total: {len(jobs)}")
+    print(f"queued: {counts['queued']}")
+    print(f"running: {counts['running']}")
+    print(f"completed: {counts['completed']}")
+    print(f"failed: {counts['failed']}")
+    print(f"cancelled: {counts['cancelled']}")
+    return 0
+
+
+def command_doctor(args: argparse.Namespace) -> int:
+    with locked_jobs(writeback=False) as data:
+        jobs = list(data.get("jobs", []))
+
+    now = now_utc()
+    warnings: list[str] = []
+    problems: list[str] = []
+    statuses = {"queued": 0, "running": 0, "completed": 0, "failed": 0, "cancelled": 0}
+
+    for job in jobs:
+        status = str(job.get("status"))
+        if status not in statuses:
+            problems.append(f"unknown job status for {job.get('id')}: {status}")
+            continue
+        statuses[status] += 1
+        if status == "running":
+            baseline = parse_iso(job.get("started_at")) or parse_iso(
+                job.get("created_at")
+            )
+            stale_after = int(
+                job.get("stale_after_seconds") or DEFAULT_STALE_AFTER_SECONDS
+            )
+            if baseline and now > baseline + timedelta(seconds=stale_after):
+                warnings.append(
+                    f"job {job.get('id')} exceeds stale threshold ({stale_after}s)"
+                )
+
+    report = {
+        "result": "PASS" if not problems else "FAIL",
+        "root": str(BG_ROOT),
+        "jobs_path": str(JOBS_PATH),
+        "jobs_total": len(jobs),
+        "active_jobs": statuses["queued"] + statuses["running"],
+        "terminal_jobs": statuses["completed"]
+        + statuses["failed"]
+        + statuses["cancelled"],
+        "counts": statuses,
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": [
+            "/bg cleanup",
+            "/bg list --status running",
+            "/bg status <job-id>",
+        ],
+    }
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0 if report["result"] == "PASS" else 1
+
+    print(f"result: {report['result']}")
+    print(f"jobs_total: {report['jobs_total']}")
+    print(f"active_jobs: {report['active_jobs']}")
+    if warnings:
+        print("warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
+    if problems:
+        print("problems:")
+        for problem in problems:
+            print(f"- {problem}")
+    return 0 if report["result"] == "PASS" else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="/bg-manager",
@@ -521,6 +655,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--stale-after-seconds", type=int, default=DEFAULT_STALE_AFTER_SECONDS
     )
     enqueue.add_argument("cmd", nargs=argparse.REMAINDER)
+
+    start = sub.add_parser("start", help="enqueue job and start worker immediately")
+    start.add_argument("--cwd", default=str(Path.cwd()))
+    start.add_argument("--label", action="append")
+    start.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
+    start.add_argument(
+        "--stale-after-seconds", type=int, default=DEFAULT_STALE_AFTER_SECONDS
+    )
+    start.add_argument("cmd", nargs=argparse.REMAINDER)
 
     run = sub.add_parser("run", help="run queued jobs")
     run.add_argument("--id")
@@ -548,6 +691,12 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup.add_argument("--max-terminal", type=int, default=DEFAULT_MAX_TERMINAL)
     cleanup.add_argument("--json", action="store_true")
 
+    status = sub.add_parser("status", help="show background task summary")
+    status.add_argument("id", nargs="?")
+
+    doctor = sub.add_parser("doctor", help="run background task diagnostics")
+    doctor.add_argument("--json", action="store_true")
+
     sub.add_parser("help", help="show usage")
     return parser
 
@@ -565,16 +714,25 @@ def main(argv: list[str]) -> int:
             print("error: timeout and stale-after must be greater than zero")
             return 1
         return command_enqueue(args)
+    if args.subcommand == "start":
+        if args.timeout_seconds <= 0 or args.stale_after_seconds <= 0:
+            print("error: timeout and stale-after must be greater than zero")
+            return 1
+        return command_start(args)
     if args.subcommand == "run":
         return command_run(args)
     if args.subcommand == "list":
         return command_list(args)
+    if args.subcommand == "status":
+        return command_status(args)
     if args.subcommand == "read":
         return command_read(args)
     if args.subcommand == "cancel":
         return command_cancel(args)
     if args.subcommand == "cleanup":
         return command_cleanup(args)
+    if args.subcommand == "doctor":
+        return command_doctor(args)
 
     parser.print_help()
     return 2

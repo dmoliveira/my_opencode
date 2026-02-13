@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 
@@ -818,6 +819,41 @@ def main() -> int:
             "bg cleanup should prune terminal jobs when max-terminal is low",
         )
 
+        result = run_bg("status")
+        expect(result.returncode == 0, f"bg status failed: {result.stderr}")
+        expect(
+            "jobs_total:" in result.stdout, "bg status should print aggregate counts"
+        )
+
+        result = run_bg("start", "--", sys.executable, "-c", 'print("bg-start")')
+        expect(result.returncode == 0, f"bg start failed: {result.stderr}")
+        start_job_id = ""
+        for line in result.stdout.splitlines():
+            if line.startswith("id: "):
+                start_job_id = line.replace("id: ", "", 1).strip()
+                break
+        expect(bool(start_job_id), "bg start should print job id")
+
+        start_done = False
+        for _ in range(30):
+            result = run_bg("read", start_job_id, "--json")
+            expect(result.returncode == 0, f"bg read start job failed: {result.stderr}")
+            start_report = parse_json_output(result.stdout)
+            if start_report.get("job", {}).get("status") == "completed":
+                start_done = True
+                expect(
+                    "bg-start" in start_report.get("log_tail", ""),
+                    "bg start job log should include output",
+                )
+                break
+            time.sleep(0.1)
+        expect(start_done, "bg start should complete asynchronously")
+
+        result = run_bg("doctor", "--json")
+        expect(result.returncode == 0, f"bg doctor json failed: {result.stderr}")
+        bg_doctor_report = parse_json_output(result.stdout)
+        expect(bg_doctor_report.get("result") == "PASS", "bg doctor should pass")
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )
@@ -981,6 +1017,11 @@ def main() -> int:
             report.get("failed_count") == 0,
             "doctor summary should have zero failed checks",
         )
+        bg_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "bg"
+        ]
+        expect(bool(bg_checks), "doctor summary should include bg check")
+        expect(bg_checks[0].get("ok") is True, "doctor bg check should pass")
 
     print("selftest: PASS")
     return 0
