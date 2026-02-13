@@ -72,6 +72,9 @@ chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_comm
 if [ -f "$INSTALL_DIR/scripts/browser_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/browser_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/start_work_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/start_work_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -107,6 +110,13 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
   python3 "$INSTALL_DIR/scripts/browser_command.py" status
   python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
+  if [ -f "$INSTALL_DIR/scripts/start_work_command.py" ]; then
+    SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
+    python3 -c "from pathlib import Path; Path('$SELF_CHECK_PLAN').write_text('---\nid: install-selfcheck-plan\ntitle: Install Selfcheck Plan\nowner: installer\ncreated_at: 2026-02-13T00:00:00Z\nversion: 1\n---\n\n# Plan\n\n- [ ] 1. Confirm command wiring\n- [ ] 2. Confirm checkpoint persistence\n', encoding='utf-8')"
+    python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --deviation "install self-check" --json
+    python3 "$INSTALL_DIR/scripts/start_work_command.py" status --json
+    python3 "$INSTALL_DIR/scripts/start_work_command.py" deviations --json
+  fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -165,6 +175,9 @@ printf "  /stack apply focus\n"
 printf "  /browser status\n"
 printf "  /browser profile agent-browser\n"
 printf "  /browser doctor --json\n"
+printf "  /start-work ~/.config/opencode/my_opencode/plan.md --json\n"
+printf "  /start-work status --json\n"
+printf "  /start-work deviations --json\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
 printf "  /devtools install all\n"

@@ -270,6 +270,18 @@
       "description": "Run browser provider diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
     },
+    "start-work": {
+      "description": "Execute an approved plan artifact and persist checkpoints",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "start-work-status": {
+      "description": "Show latest plan execution status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" status --json`\nShow only the command output."
+    },
+    "start-work-deviations": {
+      "description": "Show captured plan execution deviations",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" deviations --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."
