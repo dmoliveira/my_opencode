@@ -958,6 +958,16 @@ Every command-oriented epic must ship all of the following:
   - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
   - [ ] Subtask C3.4: Revisit paused/postponed epics at least once per month
 
+## Roadmap QA Checklist
+
+Run this checklist for every roadmap refinement pass:
+
+- [ ] No duplicate command ownership across epics.
+- [ ] No ambiguous command names (`or equivalent`, placeholder aliases).
+- [ ] Dependencies are acyclic and point to existing epics only.
+- [ ] Each high-priority epic has explicit safety and rollback notes.
+- [ ] Docs requirements are present (`README`, examples, workflow guide).
+
 ## Weekly Status Updates
 
 Use this log to track what changed week by week.
