@@ -60,7 +60,7 @@ Use this map to avoid overlapping implementations.
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | done | High | E3 | bd-u6t | Pre-PR quality, output, and risk review automation |
-| E24 | Release Train Assistant | planned | High | E14, E23 | TBD | Validate, draft, and gate releases reliably |
+| E24 | Release Train Assistant | in_progress | High | E14, E23 | bd-219 | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
@@ -841,15 +841,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 24 - Release Train Assistant
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Automate release preparation checks, release-note drafting, and tag gating.
 **Depends on:** Epic 14, Epic 23
 
-- [ ] Task 24.1: Define release policy contract
-  - [ ] Subtask 24.1.1: Define required preconditions (clean tree, tests passing, changelog updated)
-  - [ ] Subtask 24.1.2: Define semantic version rules and validation
-  - [ ] Subtask 24.1.3: Define rollback strategy for partial release failures
+- [x] Task 24.1: Define release policy contract
+  - [x] Subtask 24.1.1: Define required preconditions (clean tree, tests passing, changelog updated)
+  - [x] Subtask 24.1.2: Define semantic version rules and validation
+  - [x] Subtask 24.1.3: Define rollback strategy for partial release failures
+  - [x] Notes: Added `instructions/release_train_policy_contract.md` with deterministic preflight gates, semantic version mapping rules, command reason-code requirements, and partial-failure rollback strategy for `/release-train` workflows.
 - [ ] Task 24.2: Implement release assistant engine
   - [ ] Subtask 24.2.1: Add preflight checks and blocking diagnostics
   - [ ] Subtask 24.2.2: Generate draft release notes from merged changes

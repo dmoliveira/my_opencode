@@ -261,6 +261,12 @@ Task 23.4 verification notes:
 - selftest validates false-positive control for docs-only diffs (`recommendation=approve`, no findings).
 - install smoke validates `/pr-review`, `/pr-review checklist`, and `/pr-review doctor` command paths.
 
+Task 24.1 release policy contract notes:
+
+- release preconditions now require clean git state plus passing `make validate`, `make selftest`, and `make install-test` evidence before publish readiness.
+- semantic-version gating now defines deterministic patch/minor/major validation and breaking-change mismatch blocking.
+- rollback policy now defines partial-failure handling with explicit reason codes and follow-up guidance.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -277,6 +283,7 @@ These two can fail to auto-resolve on some setups and are disabled by default. E
 ## Installed instruction packs 📘
 
 - `instructions/shell_strategy.md` - non-interactive shell strategy rules to avoid hangs and improve autonomous execution.
+- `instructions/release_train_policy_contract.md` - release preflight, semver gating, reason-code, and rollback contract for upcoming `/release-train` flows.
 
 ## Ecosystem extensions (optional) 🧰
 
