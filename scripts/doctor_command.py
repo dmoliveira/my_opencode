@@ -193,6 +193,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "budget",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("budget_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("budget_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "todo",
         "kind": "doctor-json",
         "optional": True,

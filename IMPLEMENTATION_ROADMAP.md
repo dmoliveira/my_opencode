@@ -749,10 +749,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 20.2.2: Block/soft-stop execution at threshold boundaries
   - [x] Subtask 20.2.3: Emit summary and next-step recommendations on stop
   - [x] Notes: Added `scripts/execution_budget_runtime.py` and integrated `/start-work` + `/start-work recover` budget evaluation payloads with hard-stop status (`budget_stopped`) and recommendation output when limits are exceeded.
-- [ ] Task 20.3: Commands and diagnostics
-  - [ ] Subtask 20.3.1: Add `/budget status|profile|override` commands
-  - [ ] Subtask 20.3.2: Expose budget consumption in doctor/debug outputs
-  - [ ] Subtask 20.3.3: Document budget tuning by workload type
+- [x] Task 20.3: Commands and diagnostics
+  - [x] Subtask 20.3.1: Add `/budget status|profile|override` commands
+  - [x] Subtask 20.3.2: Expose budget consumption in doctor/debug outputs
+  - [x] Subtask 20.3.3: Document budget tuning by workload type
+  - [x] Notes: Added `scripts/budget_command.py`, wired `/budget*` aliases in `opencode.json`, integrated budget checks into unified `/doctor`, and expanded README/install/selftest flows for profile+override diagnostics.
 - [ ] Task 20.4: Verification
   - [ ] Subtask 20.4.1: Add tests for threshold crossings and stop behavior
   - [ ] Subtask 20.4.2: Add tests for override and reset flows

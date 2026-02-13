@@ -90,6 +90,7 @@ TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
+BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -2162,6 +2163,107 @@ version: 1
             "start-work status should persist latest run status",
         )
 
+        budget_status = subprocess.run(
+            [sys.executable, str(BUDGET_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(budget_status.returncode == 0, "budget status should succeed")
+        budget_status_report = parse_json_output(budget_status.stdout)
+        expect(
+            budget_status_report.get("profile")
+            in {"conservative", "balanced", "extended"}
+            and isinstance(budget_status_report.get("limits"), dict),
+            "budget status should report active profile and limits",
+        )
+
+        budget_profile_set = subprocess.run(
+            [sys.executable, str(BUDGET_SCRIPT), "profile", "conservative"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            budget_profile_set.returncode == 0,
+            "budget profile should update successfully",
+        )
+
+        budget_override_set = subprocess.run(
+            [
+                sys.executable,
+                str(BUDGET_SCRIPT),
+                "override",
+                "--tool-call-count",
+                "120",
+                "--token-estimate",
+                "120000",
+                "--reason",
+                "selftest",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            budget_override_set.returncode == 0,
+            "budget override should accept deterministic positive values",
+        )
+        budget_override_report = parse_json_output(budget_override_set.stdout)
+        expect(
+            budget_override_report.get("overrides", {}).get("tool_call_count") == 120
+            and budget_override_report.get("override_reason") == "selftest",
+            "budget override should persist explicit limits and reason",
+        )
+
+        budget_doctor = subprocess.run(
+            [sys.executable, str(BUDGET_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(budget_doctor.returncode == 0, "budget doctor should succeed")
+        budget_doctor_report = parse_json_output(budget_doctor.stdout)
+        expect(
+            budget_doctor_report.get("result") == "PASS",
+            "budget doctor should report PASS for valid profile and overrides",
+        )
+
+        budget_override_clear = subprocess.run(
+            [sys.executable, str(BUDGET_SCRIPT), "override", "--clear", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            budget_override_clear.returncode == 0,
+            "budget override clear should remove temporary limits",
+        )
+
+        budget_profile_reset = subprocess.run(
+            [sys.executable, str(BUDGET_SCRIPT), "profile", "balanced"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            budget_profile_reset.returncode == 0,
+            "budget profile should reset to balanced for remaining checks",
+        )
+
         todo_status = subprocess.run(
             [sys.executable, str(TODO_SCRIPT), "status", "--json"],
             capture_output=True,
@@ -3962,6 +4064,15 @@ version: 1
         expect(
             start_work_checks[0].get("ok") is True,
             "doctor start-work check should pass",
+        )
+
+        budget_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "budget"
+        ]
+        expect(bool(budget_checks), "doctor summary should include budget check")
+        expect(
+            budget_checks[0].get("ok") is True,
+            "doctor budget check should pass",
         )
 
         todo_checks = [

@@ -290,6 +290,26 @@
       "description": "Run plan execution health diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" doctor --json`\nShow only the command output."
     },
+    "budget": {
+      "description": "Manage execution budget controls (status|profile|override|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "budget-status": {
+      "description": "Show active execution budget profile and limits in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" status --json`\nShow only the command output."
+    },
+    "budget-profile": {
+      "description": "Set execution budget profile",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" profile $ARGUMENTS`\nShow only the command output."
+    },
+    "budget-override": {
+      "description": "Set or clear execution budget overrides",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" override $ARGUMENTS --json`\nShow only the command output."
+    },
+    "budget-doctor-json": {
+      "description": "Run execution budget diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" doctor --json`\nShow only the command output."
+    },
     "todo": {
       "description": "Inspect todo compliance state (status|enforce)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" $ARGUMENTS`\nShow only the command output."

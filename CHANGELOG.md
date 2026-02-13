@@ -67,6 +67,8 @@ All notable changes to this project are documented in this file.
 - Added deterministic checkpoint verification coverage for atomic writes, corrupted payload handling, integrity mismatch detection, bounded retention, and gzip rotation behavior.
 - Added `instructions/execution_budget_model.md` defining Epic 20 Task 20.1 budget dimensions, profile defaults, threshold semantics, and override/emergency-stop rules.
 - Added `scripts/execution_budget_runtime.py` implementing budget policy resolution, counter tracking, and threshold evaluation for runtime guardrails.
+- Added `scripts/budget_command.py` with `/budget status|profile|override|doctor` controls for execution budget visibility and tuning.
+- Added `/budget`, `/budget-status`, `/budget-profile`, `/budget-override`, and `/budget-doctor-json` aliases in `opencode.json`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -128,6 +130,8 @@ All notable changes to this project are documented in this file.
 - Expanded installer self-check smoke flow and command hints to include `/checkpoint list|show|prune|doctor` lifecycle checks.
 - Marked Epic 20 as in progress and completed Task 20.1 execution budget model definition notes in the roadmap.
 - Integrated budget runtime evaluation into `/start-work` and `/start-work recover`, including `budget_stopped` hard-stop behavior and actionable continuation recommendations.
+- Integrated budget diagnostics into unified `/doctor` summary checks and expanded selftest/install smoke coverage for budget profile+override workflows.
+- Updated README and roadmap notes to document budget workload tuning commands and Epic 20 Task 20.3 completion.
 
 ## v0.2.0 - 2026-02-12
 
