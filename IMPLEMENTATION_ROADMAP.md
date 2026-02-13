@@ -61,7 +61,7 @@ Use this map to avoid overlapping implementations.
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | done | High | E3 | bd-u6t | Pre-PR quality, output, and risk review automation |
 | E24 | Release Train Assistant | done | High | E14, E23 | bd-nk3 | Validate, draft, and gate releases reliably |
-| E25 | Incident Hotfix Mode | in_progress | Medium | E20, E22 | bd-28z | Constrained emergency workflow with strict safety |
+| E25 | Incident Hotfix Mode | in_progress | Medium | E20, E22 | bd-kow | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
 | E28 | Autopilot Objective Runner Command | paused | High | E20, E22 | TBD | Start only after real-world Autoflow stability evidence |
@@ -883,10 +883,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 25.1.2: Define reduced-scope validation profile
   - [x] Subtask 25.1.3: Define post-hotfix follow-up requirements
   - [x] Notes: Added `instructions/hotfix_mode_policy_contract.md` defining activation constraints, mandatory non-skippable checks, reduced validation profile limits, required post-incident follow-up artifacts, timeline/audit schema, and deterministic failure reason codes for `/hotfix` workflows.
-- [ ] Task 25.2: Implement hotfix runtime profile
-  - [ ] Subtask 25.2.1: Add constrained budget and tool permission settings
-  - [ ] Subtask 25.2.2: Add expedited patch flow with rollback checkpoint
-  - [ ] Subtask 25.2.3: Add incident timeline capture for auditability
+- [x] Task 25.2: Implement hotfix runtime profile
+  - [x] Subtask 25.2.1: Add constrained budget and tool permission settings
+  - [x] Subtask 25.2.2: Add expedited patch flow with rollback checkpoint
+  - [x] Subtask 25.2.3: Add incident timeline capture for auditability
+  - [x] Notes: Added `scripts/hotfix_runtime.py` runtime backend with incident activation gating, constrained budget/permission profile defaults, rollback checkpoint capture, patch and validation event tracking, closure guardrails, and append-only incident timeline persistence under `~/.config/opencode/my_opencode/runtime/hotfix_mode.json`.
 - [ ] Task 25.3: Command integration and docs
   - [ ] Subtask 25.3.1: Add `/hotfix start|status|close`
   - [ ] Subtask 25.3.2: Add automatic reminder for post-incident hardening tasks

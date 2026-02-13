@@ -97,6 +97,7 @@ PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
+HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1536,6 +1537,182 @@ index 3333333..4444444 100644
             "confirmation_required"
             in set(release_publish_confirmation_payload.get("reason_codes", [])),
             "release-train publish should emit confirmation_required reason code",
+        )
+
+        hotfix_repo = tmp / "hotfix_repo"
+        hotfix_repo.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "selftest@example.com"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Selftest"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        (hotfix_repo / "README.md").write_text("hotfix fixture\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "README.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "seed hotfix fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_repo,
+        )
+
+        hotfix_start = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "start",
+                "--incident-id",
+                "INC-123",
+                "--scope",
+                "patch",
+                "--impact",
+                "sev2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(hotfix_start.returncode == 0, "hotfix runtime start should succeed")
+        hotfix_start_payload = parse_json_output(hotfix_start.stdout)
+        expect(
+            hotfix_start_payload.get("active") is True,
+            "hotfix runtime should activate incident mode on start",
+        )
+
+        hotfix_checkpoint = subprocess.run(
+            [sys.executable, str(HOTFIX_RUNTIME_SCRIPT), "checkpoint", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_checkpoint.returncode == 0,
+            "hotfix runtime should create rollback checkpoint",
+        )
+
+        hotfix_mark_patch = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "mark-patch",
+                "--summary",
+                "apply urgent mitigation",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_mark_patch.returncode == 0,
+            "hotfix runtime should capture patch timeline event",
+        )
+
+        hotfix_validate = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "validate",
+                "--target",
+                "validate",
+                "--result",
+                "pass",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_validate.returncode == 0,
+            "hotfix runtime should record mandatory validation result",
+        )
+
+        hotfix_close_missing_followup = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "close",
+                "--outcome",
+                "resolved",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_close_missing_followup.returncode == 1,
+            "hotfix runtime close should enforce follow-up requirements",
+        )
+        hotfix_close_missing_followup_payload = parse_json_output(
+            hotfix_close_missing_followup.stdout
+        )
+        expect(
+            "followup_issue_required"
+            in set(hotfix_close_missing_followup_payload.get("reason_codes", [])),
+            "hotfix runtime close should emit followup_issue_required reason code",
+        )
+
+        hotfix_close = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "close",
+                "--outcome",
+                "resolved",
+                "--followup-issue",
+                "bd-xyz",
+                "--deferred-validation-owner",
+                "oncall",
+                "--deferred-validation-due",
+                "2026-02-20",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(hotfix_close.returncode == 0, "hotfix runtime close should succeed")
+        hotfix_close_payload = parse_json_output(hotfix_close.stdout)
+        expect(
+            hotfix_close_payload.get("result") == "PASS",
+            "hotfix runtime close should report pass result",
         )
 
         result = subprocess.run(

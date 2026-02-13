@@ -303,6 +303,13 @@ Task 25.1 hotfix policy contract notes:
 - reduced validation profile allows targeted tests during incident response but requires deferred full-suite follow-up with ownership.
 - post-incident closure now requires follow-up issue linkage, deferred validation plan, and timeline export artifacts.
 
+Task 25.2 hotfix runtime notes:
+
+- backend module: `scripts/hotfix_runtime.py` with `start`, `checkpoint`, `mark-patch`, `validate`, `close`, `status`, and `doctor` flows.
+- runtime profile now persists constrained budget and tool-permission defaults for incident handling.
+- rollback checkpoint and patch/validation events are captured in append-only timeline records.
+- closure now enforces follow-up issue linkage and deferred validation ownership metadata.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -1292,6 +1299,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/budget_command.py` - backend script for `/budget`
 - `scripts/release_train_engine.py` - release-train backend engine for preflight, draft, and publish gating
 - `scripts/release_train_command.py` - `/release-train` command surface and doctor/checklist integration
+- `scripts/hotfix_runtime.py` - incident hotfix runtime profile with checkpoint and timeline capture
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
