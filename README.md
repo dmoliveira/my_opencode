@@ -360,6 +360,16 @@ Autocomplete-friendly shortcuts:
 - defaults to `--strategy safe` guardrails
 - executes verification hooks on non-dry runs (`make validate`, optional `make selftest`)
 
+Strategies:
+- `safe` (default): blocks ambiguous broad targets unless scope is narrowed.
+- `balanced`: broader analysis with the same verification expectations.
+- `aggressive`: explicit opt-in for broad target analysis when ambiguity is acceptable.
+
+Recommended flow:
+1. Start with `--dry-run --json` and inspect `preflight.file_map`.
+2. Narrow with `--scope` until safe mode is deterministic.
+3. Run without `--dry-run` to enforce verification hooks.
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:
