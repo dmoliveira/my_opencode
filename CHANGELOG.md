@@ -47,6 +47,7 @@ All notable changes to this project are documented in this file.
 - Added category-routing schema baseline (`quick`, `deep`, `visual`, `writing`) with deterministic fallback behavior and validation helpers.
 - Added model-routing resolution engine with deterministic precedence/fallback tracing and integration points in stack profiles and install wizard model profile selection.
 - Added `/model-profile` command aliases, practical routing guidance, and unified doctor visibility for model-routing health.
+- Tightened model-routing verification coverage with deterministic fallback-reason assertions and expanded install smoke resolve scenarios.
 
 ## v0.2.0 - 2026-02-12
 
