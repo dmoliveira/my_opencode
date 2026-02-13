@@ -53,7 +53,7 @@ Use this map to avoid overlapping implementations.
 | E14 | Plan-to-Execution Bridge Command | done | Medium | E2, E3 | bd-1z6, bd-2te, bd-3sg, bd-2bv | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | done | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
-| E17 | Auto-Resume and Recovery Loop | in_progress | High | E11, E14 | bd-1ho | Resume interrupted work from checkpoints safely |
+| E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
@@ -638,7 +638,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 17 - Auto-Resume and Recovery Loop
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Resume interrupted workflows from last valid checkpoint with explicit safety checks.
 **Depends on:** Epic 11, Epic 14
@@ -658,12 +658,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 17.3.2: Add clear output explaining why resume did/did not trigger
   - [x] Subtask 17.3.3: Document recommended recovery playbooks
   - [x] Notes: Added `scripts/resume_command.py` and `/resume*` aliases with eligibility/status/disable controls, added human-readable recovery reasons via `explain_resume_reason`, and documented recovery playbooks in README.
-- [ ] Task 17.4: Verification
-  - [ ] Subtask 17.4.1: Add tests for each interruption class
-  - [ ] Subtask 17.4.2: Add tests for idempotency safeguards
-  - [ ] Subtask 17.4.3: Add install-test scenarios for interrupted flows
-- [ ] Exit criteria: interrupted runs can be resumed safely with deterministic outcomes
-- [ ] Exit criteria: recovery decisions are visible and auditable
+- [x] Task 17.4: Verification
+  - [x] Subtask 17.4.1: Add tests for each interruption class
+  - [x] Subtask 17.4.2: Add tests for idempotency safeguards
+  - [x] Subtask 17.4.3: Add install-test scenarios for interrupted flows
+  - [x] Notes: Expanded `scripts/selftest.py` with interruption-class eligibility/cooldown/disable-guard assertions and added interrupted-flow smoke recovery (`resume now` approval gating) to `install.sh` self-check.
+- [x] Exit criteria: interrupted runs can be resumed safely with deterministic outcomes
+- [x] Exit criteria: recovery decisions are visible and auditable
 
 ---
 

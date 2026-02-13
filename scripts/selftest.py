@@ -2133,6 +2133,81 @@ version: 1
             "recovery engine should block non-idempotent pending step without explicit approval",
         )
 
+        for interruption_class in (
+            "tool_failure",
+            "timeout",
+            "context_reset",
+            "process_crash",
+        ):
+            class_runtime = {
+                "status": "failed",
+                "steps": [
+                    {"ordinal": 1, "state": "done", "idempotent": True},
+                    {"ordinal": 2, "state": "pending", "idempotent": True},
+                ],
+                "resume": {
+                    "enabled": True,
+                    "attempt_count": 0,
+                    "max_attempts": 3,
+                    "last_attempt_at": "2026-02-13T00:00:00Z",
+                    "trail": [],
+                },
+            }
+            eval_allowed = evaluate_resume_eligibility(
+                class_runtime, interruption_class
+            )
+            expect(
+                eval_allowed.get("eligible") is True
+                and eval_allowed.get("reason_code") == "resume_allowed",
+                f"recovery engine should allow interruption class {interruption_class} when cooldown has elapsed",
+            )
+
+        eval_timeout_cooldown = evaluate_resume_eligibility(
+            {
+                "status": "failed",
+                "steps": [
+                    {"ordinal": 1, "state": "done", "idempotent": True},
+                    {"ordinal": 2, "state": "pending", "idempotent": True},
+                ],
+                "resume": {
+                    "enabled": True,
+                    "attempt_count": 0,
+                    "max_attempts": 3,
+                    "last_attempt_at": "2026-02-13T00:00:30Z",
+                    "trail": [],
+                },
+            },
+            "timeout",
+            now_ts="2026-02-13T00:01:00Z",
+        )
+        expect(
+            eval_timeout_cooldown.get("eligible") is False
+            and eval_timeout_cooldown.get("reason_code") == "resume_blocked_cooldown",
+            "recovery engine should enforce timeout interruption cooldown windows",
+        )
+
+        eval_disabled = evaluate_resume_eligibility(
+            {
+                "status": "failed",
+                "steps": [
+                    {"ordinal": 1, "state": "done", "idempotent": True},
+                    {"ordinal": 2, "state": "pending", "idempotent": True},
+                ],
+                "resume": {
+                    "enabled": False,
+                    "attempt_count": 0,
+                    "max_attempts": 3,
+                    "trail": [],
+                },
+            },
+            "tool_failure",
+        )
+        expect(
+            eval_disabled.get("eligible") is False
+            and eval_disabled.get("reason_code") == "resume_disabled",
+            "recovery engine should block resume when runtime controls disable automation",
+        )
+
         resume_exec_allowed = execute_resume(
             resume_runtime,
             "tool_failure",

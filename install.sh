@@ -132,6 +132,14 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   fi
   if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
     python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true
+    python3 -c "import json,pathlib; p=pathlib.Path('$CONFIG_PATH'); data=json.loads(p.read_text(encoding='utf-8')); pe=data.get('plan_execution', {}); steps=pe.get('steps', []); pe['status']='failed'; pe['resume']={'enabled': True, 'attempt_count': 0, 'max_attempts': 3, 'trail': []};
+if isinstance(steps, list) and len(steps) >= 2:
+  steps[0]['state']='done';
+  steps[1]['state']='pending';
+  steps[1]['idempotent']=False;
+data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"
+    python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --json || true
+    python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
   fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status

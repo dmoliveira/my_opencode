@@ -669,6 +669,10 @@ Recovery playbooks:
 - `resume_attempt_limit_reached`: escalate to manual review and restart from `/start-work <plan.md>` after inspection.
 - `resume_disabled`: keep disabled during high-risk runs; re-enable by updating runtime `plan_execution.resume.enabled` to `true`.
 
+Verification notes:
+- selftest now covers all interruption classes (`tool_failure`, `timeout`, `context_reset`, `process_crash`) plus cooldown and disable safeguards.
+- install smoke includes interrupted-flow replay with expected non-idempotent block and explicit approval retry.
+
 ## Context resilience policy
 
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
