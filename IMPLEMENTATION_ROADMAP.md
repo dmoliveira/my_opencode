@@ -39,7 +39,7 @@ Use this map to avoid overlapping implementations.
 |---|---|---|---|---|---|---|
 | E1 | Config Layering + JSONC Support | done | High | - | bd-1g0, bd-208, bd-4j1 | Foundation for most later epics |
 | E2 | Background Task Orchestration | done | High | E1 | bd-1ob, bd-3lf, bd-2xo, bd-mb2 | Keep minimal and stable first |
-| E3 | Refactor Workflow Command | planned | High | E1 | TBD | Safer rollout after config layering |
+| E3 | Refactor Workflow Command | in_progress | High | E1 | bd-zfx | Safer rollout after config layering |
 | E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | TBD | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
@@ -232,15 +232,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 3 - Refactor Workflow Command (`/refactor-lite`)
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Add a safe, repeatable refactor workflow command using existing tools and verification gates.
 **Depends on:** Epic 1
 
-- [ ] Task 3.1: Define command contract
-  - [ ] Subtask 3.1.1: Define syntax (`/refactor-lite <target> [--scope] [--strategy]`)
-  - [ ] Subtask 3.1.2: Define safe defaults and guardrails (`safe` by default)
-  - [ ] Subtask 3.1.3: Define success/failure output shape
+- [x] Task 3.1: Define command contract
+  - [x] Subtask 3.1.1: Define syntax (`/refactor-lite <target> [--scope] [--strategy]`)
+  - [x] Subtask 3.1.2: Define safe defaults and guardrails (`safe` by default)
+  - [x] Subtask 3.1.3: Define success/failure output shape
+  - [x] Notes: See `instructions/refactor_lite_contract.md`.
 - [ ] Task 3.2: Implement workflow backend
   - [ ] Subtask 3.2.1: Add preflight analysis step (grep + file map)
   - [ ] Subtask 3.2.2: Add structured plan preview output
