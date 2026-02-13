@@ -75,6 +75,7 @@ All notable changes to this project are documented in this file.
 - Expanded doctor summary coverage to include context resilience subsystem health checks.
 - Expanded selftest coverage for model-routing trace persistence and runtime fallback-chain reporting.
 - Expanded README guidance with category-driven routing examples and troubleshooting steps for unexpected model selection.
+- Expanded routing verification coverage for deterministic trace stability and explicit fallback/no-fallback explain outcomes, and added `/routing` smoke hints in install output.
 
 ## v0.2.0 - 2026-02-12
 
