@@ -45,6 +45,10 @@ from recovery_engine import (  # type: ignore
     evaluate_resume_eligibility,
     execute_resume,
 )
+from safe_edit_adapters import (  # type: ignore
+    evaluate_semantic_capability,
+    validate_changed_references,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1117,6 +1121,95 @@ def main() -> int:
         expect(
             aggressive_report.get("result") == "PASS",
             "refactor-lite aggressive mode should pass dry-run preflight",
+        )
+
+        semantic_lsp = evaluate_semantic_capability(
+            "rename",
+            ["src/example.py"],
+            available_binaries={
+                "pyright-langserver": True,
+                "python3": True,
+            },
+        )
+        expect(
+            semantic_lsp.get("result") == "PASS"
+            and semantic_lsp.get("adapters", [{}])[0].get("backend") == "lsp",
+            "safe-edit adapter should prefer lsp backend for rename when available",
+        )
+
+        semantic_extract_blocked = evaluate_semantic_capability(
+            "extract",
+            ["src/example.py"],
+            available_binaries={
+                "pyright-langserver": False,
+                "python3": False,
+            },
+            allow_text_fallback=True,
+            scope_explicit=True,
+        )
+        expect(
+            semantic_extract_blocked.get("result") == "FAIL"
+            and semantic_extract_blocked.get("reason_code")
+            == "safe_edit_ast_unavailable",
+            "safe-edit adapter should block extract when semantic backends are unavailable",
+        )
+
+        semantic_fallback_needs_opt_in = evaluate_semantic_capability(
+            "rename",
+            ["src/example.py"],
+            available_binaries={
+                "pyright-langserver": False,
+                "python3": False,
+            },
+            allow_text_fallback=False,
+            scope_explicit=True,
+        )
+        expect(
+            semantic_fallback_needs_opt_in.get("result") == "FAIL"
+            and semantic_fallback_needs_opt_in.get("reason_code")
+            == "safe_edit_fallback_requires_opt_in",
+            "safe-edit adapter should require explicit fallback opt-in",
+        )
+
+        semantic_fallback_ambiguous = evaluate_semantic_capability(
+            "rename",
+            ["src/example.py"],
+            available_binaries={
+                "pyright-langserver": False,
+                "python3": False,
+            },
+            allow_text_fallback=True,
+            scope_explicit=True,
+            ambiguous_target=True,
+        )
+        expect(
+            semantic_fallback_ambiguous.get("result") == "FAIL"
+            and semantic_fallback_ambiguous.get("reason_code")
+            == "safe_edit_fallback_blocked_ambiguity",
+            "safe-edit adapter should block fallback for ambiguous targets",
+        )
+
+        ref_validation_pass = validate_changed_references(
+            "def foo():\n    return foo\n",
+            "def bar():\n    return bar\n",
+            "foo",
+            "bar",
+        )
+        expect(
+            ref_validation_pass.get("result") == "PASS"
+            and int(ref_validation_pass.get("changed_references", 0)) >= 2,
+            "safe-edit adapter should validate changed references for rename paths",
+        )
+
+        ref_validation_fail = validate_changed_references(
+            "def foo():\n    return foo\n",
+            "def bar():\n    return foo\n",
+            "foo",
+            "bar",
+        )
+        expect(
+            ref_validation_fail.get("result") == "FAIL",
+            "safe-edit adapter should fail validation when old references remain",
         )
 
         hook_plan = resolve_event_plan(
