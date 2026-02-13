@@ -485,6 +485,7 @@ Use:
 /keyword-mode enable-keyword ulw
 /keyword-mode disable
 /keyword-mode enable
+/keyword-mode doctor --json
 ```
 
 Detector behavior:

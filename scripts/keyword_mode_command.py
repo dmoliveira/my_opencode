@@ -29,7 +29,7 @@ SECTION = "keyword_modes"
 
 def usage() -> int:
     print(
-        "usage: /keyword-mode status [--json] | /keyword-mode detect --prompt <text> [--json] | /keyword-mode apply --prompt <text> [--json] | /keyword-mode enable | /keyword-mode disable | /keyword-mode disable-keyword <keyword> | /keyword-mode enable-keyword <keyword>"
+        "usage: /keyword-mode status [--json] | /keyword-mode detect --prompt <text> [--json] | /keyword-mode apply --prompt <text> [--json] | /keyword-mode enable | /keyword-mode disable | /keyword-mode disable-keyword <keyword> | /keyword-mode enable-keyword <keyword> | /keyword-mode doctor [--json]"
     )
     return 2
 
@@ -135,6 +135,46 @@ def command_disable_keyword(argv: list[str], disable: bool) -> int:
     return 0
 
 
+def command_doctor(argv: list[str]) -> int:
+    if any(arg not in ("--json",) for arg in argv):
+        return usage()
+    json_output = "--json" in argv
+    _, state, write_path = load_state()
+    disabled_keywords = sorted(
+        normalize_disabled_keywords(state.get("disabled_keywords"))
+    )
+    payload = {
+        "result": "PASS",
+        "enabled": bool(state.get("enabled", True)),
+        "disabled_keywords": disabled_keywords,
+        "active_modes": state.get("active_modes", []),
+        "effective_flags": state.get("effective_flags", {}),
+        "available_keywords": sorted(KEYWORDS.keys()),
+        "config": str(write_path),
+        "warnings": [],
+        "problems": [],
+        "quick_fixes": [
+            "/keyword-mode status",
+            "/keyword-mode detect --prompt 'safe-apply deep-analyze review this diff' --json",
+        ],
+    }
+    if not payload["enabled"]:
+        payload["warnings"].append("keyword mode detection is globally disabled")
+    if json_output:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"result: {payload['result']}")
+    print(f"enabled: {'yes' if payload['enabled'] else 'no'}")
+    print(f"disabled_keywords: {','.join(disabled_keywords) or '(none)'}")
+    print(f"active_modes: {','.join(payload['active_modes']) or '(none)'}")
+    print(f"config: {payload['config']}")
+    if payload["warnings"]:
+        print("warnings:")
+        for warning in payload["warnings"]:
+            print(f"- {warning}")
+    return 0
+
+
 def command_status(argv: list[str]) -> int:
     if any(arg not in ("--json",) for arg in argv):
         return usage()
@@ -221,6 +261,8 @@ def main(argv: list[str]) -> int:
         return command_disable_keyword(argv[1:], True)
     if argv[0] == "enable-keyword":
         return command_disable_keyword(argv[1:], False)
+    if argv[0] == "doctor":
+        return command_doctor(argv[1:])
     if argv[0] == "help":
         return usage()
     return usage()

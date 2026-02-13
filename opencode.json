@@ -186,6 +186,10 @@
       "description": "Re-enable a specific keyword",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" enable-keyword $ARGUMENTS`\nShow only the command output."
     },
+    "keyword-mode-doctor": {
+      "description": "Run keyword mode diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" doctor --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
