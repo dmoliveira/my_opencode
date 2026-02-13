@@ -53,7 +53,7 @@ Use this map to avoid overlapping implementations.
 | E14 | Plan-to-Execution Bridge Command | done | Medium | E2, E3 | bd-1z6, bd-2te, bd-3sg, bd-2bv | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | done | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
-| E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
+| E17 | Auto-Resume and Recovery Loop | in_progress | High | E11, E14 | bd-1ho | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
@@ -638,15 +638,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 17 - Auto-Resume and Recovery Loop
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Resume interrupted workflows from last valid checkpoint with explicit safety checks.
 **Depends on:** Epic 11, Epic 14
 
-- [ ] Task 17.1: Define resume policy
-  - [ ] Subtask 17.1.1: Define interruption classes (tool failure, timeout, context reset, crash)
-  - [ ] Subtask 17.1.2: Define resume eligibility and cool-down rules
-  - [ ] Subtask 17.1.3: Define max resume attempts and escalation path
+- [x] Task 17.1: Define resume policy
+  - [x] Subtask 17.1.1: Define interruption classes (tool failure, timeout, context reset, crash)
+  - [x] Subtask 17.1.2: Define resume eligibility and cool-down rules
+  - [x] Subtask 17.1.3: Define max resume attempts and escalation path
+  - [x] Notes: Added `instructions/resume_policy_model.md` with interruption classes, deterministic eligibility/cool-down/attempt-limit rules, reason codes, and audit event contract.
 - [ ] Task 17.2: Implement recovery engine
   - [ ] Subtask 17.2.1: Load last safe checkpoint and reconstruct state
   - [ ] Subtask 17.2.2: Re-run only idempotent or explicitly approved steps

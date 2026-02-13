@@ -52,6 +52,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/todo_enforcement.py` with deterministic todo transition/completion validation and remediation hint helpers for Epic 15 Task 15.2.
 - Added `scripts/todo_command.py` with `/todo status` and `/todo enforce` diagnostics for runtime compliance visibility.
 - Added `/todo`, `/todo-status`, and `/todo-enforce` aliases in `opencode.json`.
+- Added `instructions/resume_policy_model.md` defining interruption classes, resume eligibility/cool-down rules, attempt limits, escalation semantics, and deterministic reason codes for Epic 17 Task 17.1.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -99,6 +100,7 @@ All notable changes to this project are documented in this file.
 - Updated `/start-work` execution to enforce todo compliance transitions, emit audit events, and block completion when required items remain unchecked.
 - Integrated todo compliance checks into `/doctor` summary, installer self-checks, and install-test smoke coverage.
 - Expanded selftest coverage for todo transition gating, completion blocking, and bypass audit-event payload validation.
+- Marked Epic 17 as in progress and completed Task 17.1 resume-policy definition notes in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 
