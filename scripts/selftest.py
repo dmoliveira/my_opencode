@@ -83,6 +83,7 @@ START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
+CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -2632,14 +2633,93 @@ version: 1
             )
             prune_report = prune_snapshots(
                 recover_config_path,
-                max_per_run=1,
-                max_age_days=0,
-                compress_after_hours=0,
+                max_per_run=10,
+                max_age_days=30,
+                compress_after_hours=720,
             )
             expect(
                 prune_report.get("result") == "PASS",
                 "snapshot manager prune should complete successfully with bounded retention policy",
             )
+
+        checkpoint_list = subprocess.run(
+            [sys.executable, str(CHECKPOINT_SCRIPT), "list", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(checkpoint_list.returncode == 0, "checkpoint list should succeed")
+        checkpoint_list_report = parse_json_output(checkpoint_list.stdout)
+        expect(
+            int(checkpoint_list_report.get("count", 0)) >= 1,
+            "checkpoint list should report at least one snapshot after start-work execution",
+        )
+
+        checkpoint_show = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKPOINT_SCRIPT),
+                "show",
+                "--snapshot",
+                "latest",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(checkpoint_show.returncode == 0, "checkpoint show should succeed")
+        checkpoint_show_report = parse_json_output(checkpoint_show.stdout)
+        expect(
+            checkpoint_show_report.get("result") == "PASS"
+            and isinstance(checkpoint_show_report.get("snapshot"), dict),
+            "checkpoint show should return latest snapshot payload",
+        )
+
+        checkpoint_prune = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKPOINT_SCRIPT),
+                "prune",
+                "--max-per-run",
+                "10",
+                "--max-age-days",
+                "30",
+                "--compress-after-hours",
+                "720",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(checkpoint_prune.returncode == 0, "checkpoint prune should succeed")
+        checkpoint_prune_report = parse_json_output(checkpoint_prune.stdout)
+        expect(
+            checkpoint_prune_report.get("result") == "PASS",
+            "checkpoint prune should return PASS for valid retention settings",
+        )
+
+        checkpoint_doctor = subprocess.run(
+            [sys.executable, str(CHECKPOINT_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(checkpoint_doctor.returncode == 0, "checkpoint doctor should succeed")
+        checkpoint_doctor_report = parse_json_output(checkpoint_doctor.stdout)
+        expect(
+            checkpoint_doctor_report.get("result") == "PASS",
+            "checkpoint doctor should report PASS when snapshots are readable",
+        )
 
         recover_cfg_after_allowed = load_json_file(recover_config_path)
         recover_state_after_allowed = recover_cfg_after_allowed.get("plan_execution")

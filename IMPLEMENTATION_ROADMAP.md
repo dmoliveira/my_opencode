@@ -717,10 +717,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 19.2.2: Add list/show/prune operations
   - [x] Subtask 19.2.3: Integrate with resume/recovery engine
   - [x] Notes: Added `scripts/checkpoint_snapshot_manager.py` with atomic history/latest writes, integrity-aware load/list APIs, retention+compression pruning, and `/start-work` + `/start-work recover` persistence integration.
-- [ ] Task 19.3: Visibility and tooling
-  - [ ] Subtask 19.3.1: Add `/checkpoint list|show|prune` commands
-  - [ ] Subtask 19.3.2: Add doctor diagnostics for snapshot health
-  - [ ] Subtask 19.3.3: Document rollback/restart examples
+- [x] Task 19.3: Visibility and tooling
+  - [x] Subtask 19.3.1: Add `/checkpoint list|show|prune` commands
+  - [x] Subtask 19.3.2: Add doctor diagnostics for snapshot health
+  - [x] Subtask 19.3.3: Document rollback/restart examples
+  - [x] Notes: Added `scripts/checkpoint_command.py` and `/checkpoint*` aliases, integrated checkpoint doctor checks into unified `/doctor`, and documented checkpoint list/show/prune usage in README.
 - [ ] Task 19.4: Verification
   - [ ] Subtask 19.4.1: Add tests for atomic write and corruption handling
   - [ ] Subtask 19.4.2: Add retention/rotation tests

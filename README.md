@@ -99,6 +99,21 @@ Task 19.2 implementation baseline:
 - runtime integration: `/start-work` and `/start-work recover` now persist checkpoint snapshots after state writes
 - lifecycle controls: list/show/prune APIs with integrity verification and bounded retention defaults
 
+Task 19.3 visibility tooling:
+
+- command module: `scripts/checkpoint_command.py`
+- command surface: `/checkpoint list|show|prune|doctor`
+- doctor integration: unified `/doctor run --json` now includes checkpoint health checks
+
+Examples:
+
+```text
+/checkpoint list --json
+/checkpoint show --snapshot latest --json
+/checkpoint prune --max-per-run 50 --max-age-days 14 --json
+/checkpoint doctor --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
