@@ -61,7 +61,7 @@ Use this map to avoid overlapping implementations.
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | done | High | E3 | bd-u6t | Pre-PR quality, output, and risk review automation |
 | E24 | Release Train Assistant | done | High | E14, E23 | bd-nk3 | Validate, draft, and gate releases reliably |
-| E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
+| E25 | Incident Hotfix Mode | in_progress | Medium | E20, E22 | bd-28z | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
 | E28 | Autopilot Objective Runner Command | paused | High | E20, E22 | TBD | Start only after real-world Autoflow stability evidence |
@@ -873,15 +873,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 25 - Incident Hotfix Mode
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Provide an emergency workflow mode that is faster but still bounded and auditable.
 **Depends on:** Epic 20, Epic 22
 
-- [ ] Task 25.1: Define hotfix constraints and policy
-  - [ ] Subtask 25.1.1: Define mandatory checks that cannot be skipped
-  - [ ] Subtask 25.1.2: Define reduced-scope validation profile
-  - [ ] Subtask 25.1.3: Define post-hotfix follow-up requirements
+- [x] Task 25.1: Define hotfix constraints and policy
+  - [x] Subtask 25.1.1: Define mandatory checks that cannot be skipped
+  - [x] Subtask 25.1.2: Define reduced-scope validation profile
+  - [x] Subtask 25.1.3: Define post-hotfix follow-up requirements
+  - [x] Notes: Added `instructions/hotfix_mode_policy_contract.md` defining activation constraints, mandatory non-skippable checks, reduced validation profile limits, required post-incident follow-up artifacts, timeline/audit schema, and deterministic failure reason codes for `/hotfix` workflows.
 - [ ] Task 25.2: Implement hotfix runtime profile
   - [ ] Subtask 25.2.1: Add constrained budget and tool permission settings
   - [ ] Subtask 25.2.2: Add expedited patch flow with rollback checkpoint

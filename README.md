@@ -296,6 +296,13 @@ Task 24.4 verification notes:
 - selftest validates publish behavior split between `--dry-run` pass and confirmation-required blocking for live publish.
 - install smoke validates `/release-train` status, prepare, draft, and doctor command paths.
 
+Task 25.1 hotfix policy contract notes:
+
+- hotfix activation now requires incident id, declared scope, declared impact, and recorded operator context.
+- mandatory guardrails define non-skippable checks for git hygiene, `make validate`, rollback checkpoint, and timeline completeness.
+- reduced validation profile allows targeted tests during incident response but requires deferred full-suite follow-up with ownership.
+- post-incident closure now requires follow-up issue linkage, deferred validation plan, and timeline export artifacts.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -313,6 +320,7 @@ These two can fail to auto-resolve on some setups and are disabled by default. E
 
 - `instructions/shell_strategy.md` - non-interactive shell strategy rules to avoid hangs and improve autonomous execution.
 - `instructions/release_train_policy_contract.md` - release preflight, semver gating, reason-code, and rollback contract for upcoming `/release-train` flows.
+- `instructions/hotfix_mode_policy_contract.md` - incident hotfix activation, mandatory safety checks, reduced validation limits, and follow-up audit contract.
 
 ## Ecosystem extensions (optional) 🧰
 
