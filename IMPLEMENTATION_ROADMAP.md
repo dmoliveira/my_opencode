@@ -974,6 +974,13 @@ Every command-oriented epic must ship all of the following:
   - [ ] Subtask C3.2: Keep one epic `in_progress`
   - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
   - [ ] Subtask C3.4: Revisit paused/postponed epics at least once per month
+- [ ] Task C4: Command UX baseline (quality-of-life required)
+  - [ ] Subtask C4.1: Add command autocomplete shortcuts in `opencode.json`
+  - [ ] Subtask C4.2: Add command help and doctor JSON outputs
+  - [ ] Subtask C4.3: Add code-assistant guidance snippets (inputs, expected outputs, safe defaults)
+  - [ ] Subtask C4.4: Add tips/troubleshooting output for common failures
+  - [ ] Subtask C4.5: Add hover-like inline explanation docs (what it does, when to use, limits)
+  - [ ] Subtask C4.6: Add at least one easy-path command alias for frequent workflows
 
 ## Roadmap QA Checklist
 
