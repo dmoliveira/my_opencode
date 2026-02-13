@@ -734,7 +734,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 20 - Execution Budget Guardrails
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Prevent runaway autonomous runs by enforcing configurable limits for time, tool calls, and token usage.
 **Depends on:** Epic 2, Epic 11
@@ -754,12 +754,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 20.3.2: Expose budget consumption in doctor/debug outputs
   - [x] Subtask 20.3.3: Document budget tuning by workload type
   - [x] Notes: Added `scripts/budget_command.py`, wired `/budget*` aliases in `opencode.json`, integrated budget checks into unified `/doctor`, and expanded README/install/selftest flows for profile+override diagnostics.
-- [ ] Task 20.4: Verification
-  - [ ] Subtask 20.4.1: Add tests for threshold crossings and stop behavior
-  - [ ] Subtask 20.4.2: Add tests for override and reset flows
-  - [ ] Subtask 20.4.3: Add install-test smoke checks
-- [ ] Exit criteria: runaway loops are prevented by hard and soft limits
-- [ ] Exit criteria: budget stops provide actionable continuation guidance
+- [x] Task 20.4: Verification
+  - [x] Subtask 20.4.1: Add tests for threshold crossings and stop behavior
+  - [x] Subtask 20.4.2: Add tests for override and reset flows
+  - [x] Subtask 20.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with threshold-stop, override/reset, and invalid-override checks; install smoke now exercises `/budget status|override|doctor|override --clear` flows.
+- [x] Exit criteria: runaway loops are prevented by hard and soft limits
+- [x] Exit criteria: budget stops provide actionable continuation guidance
 
 ---
 

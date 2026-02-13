@@ -2223,6 +2223,30 @@ version: 1
             "budget override should persist explicit limits and reason",
         )
 
+        budget_override_invalid = subprocess.run(
+            [
+                sys.executable,
+                str(BUDGET_SCRIPT),
+                "override",
+                "--tool-call-count",
+                "0",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            budget_override_invalid.returncode == 2,
+            "budget override should reject non-positive numeric values",
+        )
+        expect(
+            "usage: /budget" in budget_override_invalid.stdout,
+            "budget override invalid path should emit usage guidance",
+        )
+
         budget_doctor = subprocess.run(
             [sys.executable, str(BUDGET_SCRIPT), "doctor", "--json"],
             capture_output=True,

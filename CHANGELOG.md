@@ -132,6 +132,8 @@ All notable changes to this project are documented in this file.
 - Integrated budget runtime evaluation into `/start-work` and `/start-work recover`, including `budget_stopped` hard-stop behavior and actionable continuation recommendations.
 - Integrated budget diagnostics into unified `/doctor` summary checks and expanded selftest/install smoke coverage for budget profile+override workflows.
 - Updated README and roadmap notes to document budget workload tuning commands and Epic 20 Task 20.3 completion.
+- Expanded budget verification coverage for invalid override input handling and usage guidance in selftest.
+- Marked Epic 20 Task 20.4 complete and promoted Epic 20 status to done in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 

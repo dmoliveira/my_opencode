@@ -158,6 +158,12 @@ Examples:
 /budget doctor --json
 ```
 
+Task 20.4 verification notes:
+
+- selftest covers PASS/WARN/FAIL budget threshold evaluation and `budget_stopped` hard-stop behavior in `/start-work`.
+- selftest covers override apply/clear paths plus invalid override input rejection with deterministic usage guidance.
+- install smoke includes `/budget status`, `/budget override`, `/budget doctor`, and `/budget override --clear` checks.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
