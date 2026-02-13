@@ -326,6 +326,26 @@
       "description": "Run PR review subsystem diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" doctor --json`\nShow only the command output."
     },
+    "release-train": {
+      "description": "Run release-train workflow controls (status|prepare|draft|publish)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "release-train-json": {
+      "description": "Run release-train command in JSON mode",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS --json`\nShow only the command output."
+    },
+    "release-train-prepare": {
+      "description": "Run release preflight gating checks",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" prepare $ARGUMENTS --json`\nShow only the command output."
+    },
+    "release-train-draft": {
+      "description": "Generate release note draft from git history",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft $ARGUMENTS --json`\nShow only the command output."
+    },
+    "release-train-doctor": {
+      "description": "Run release-train diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" doctor --json`\nShow only the command output."
+    },
     "budget": {
       "description": "Manage execution budget controls (status|profile|override|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."
