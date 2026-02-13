@@ -681,9 +681,10 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 18.1.3: Define text-mode fallback when semantic tooling is missing
   - [x] Notes: Added `instructions/safe_edit_capability_matrix.md` with operation/backend matrix, deterministic availability checks, guarded text-fallback rules, and reason-code contract.
 - [ ] Task 18.2: Implement semantic edit adapters
-  - [ ] Subtask 18.2.1: Add LSP adapter for symbol-aware operations
-  - [ ] Subtask 18.2.2: Add AST adapter for deterministic structural edits
-  - [ ] Subtask 18.2.3: Add diff validation for changed references
+  - [x] Subtask 18.2.1: Add LSP adapter for symbol-aware operations
+  - [x] Subtask 18.2.2: Add AST adapter for deterministic structural edits
+  - [x] Subtask 18.2.3: Add diff validation for changed references
+  - [x] Notes: Added `scripts/safe_edit_adapters.py` with deterministic operation/backend selection (`lsp`, `ast`, guarded `text`) and changed-reference validation helpers, plus selftest coverage for fallback/ambiguity/validation outcomes.
 - [ ] Task 18.3: Command integration
   - [ ] Subtask 18.3.1: Add `/safe-edit` or mode flag integration with `/refactor-lite`
   - [ ] Subtask 18.3.2: Add status/doctor checks for available semantic tools

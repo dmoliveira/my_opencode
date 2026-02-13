@@ -51,6 +51,12 @@ Current scope includes:
 - deterministic availability checks for language, LSP, and AST readiness
 - explicit fallback blocking conditions and reason-code contract for explainability
 
+Task 18.2 implementation baseline:
+
+- adapter module: `scripts/safe_edit_adapters.py`
+- operation planner: deterministic backend choice (`lsp`, `ast`, or guarded `text` fallback)
+- validation helper: changed-reference verification for rename-like symbol updates
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -1035,6 +1041,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/start_work_command.py` - backend script for `/start-work`
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`
+- `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
 - `scripts/todo_enforcement.py` - shared todo compliance enforcement helpers
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`
