@@ -26,6 +26,7 @@ STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
 NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
+REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -897,6 +898,67 @@ def main() -> int:
         expect(
             isinstance(bg_doctor_report.get("notify"), dict),
             "bg doctor should include notify diagnostics",
+        )
+
+        refactor_env = os.environ.copy()
+        refactor_env["HOME"] = str(home)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REFACTOR_LITE_SCRIPT),
+                "profile",
+                "--scope",
+                "scripts/*.py",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"refactor-lite dry-run json failed: {result.stderr}",
+        )
+        refactor_report = parse_json_output(result.stdout)
+        expect(
+            refactor_report.get("result") == "PASS", "refactor-lite dry-run should pass"
+        )
+        expect(
+            refactor_report.get("preflight", {}).get("matched_file_count", 0) > 0,
+            "refactor-lite should return a non-empty file map",
+        )
+
+        refactor_tmp = tmp / "refactor_tmp"
+        refactor_tmp.mkdir(parents=True, exist_ok=True)
+        (refactor_tmp / "sample.py").write_text(
+            'def run_profile():\n    return "profile"\n', encoding="utf-8"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REFACTOR_LITE_SCRIPT),
+                "profile",
+                "--scope",
+                "*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=refactor_tmp,
+        )
+        expect(
+            result.returncode == 1, "refactor-lite should fail when hooks cannot run"
+        )
+        refactor_fail_report = parse_json_output(result.stdout)
+        expect(
+            refactor_fail_report.get("error_code") == "verification_failed",
+            "refactor-lite should report verification_failed when make validate is unavailable",
         )
 
         wizard_state_path = (

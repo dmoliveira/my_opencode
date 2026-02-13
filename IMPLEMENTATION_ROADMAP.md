@@ -242,10 +242,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 3.1.2: Define safe defaults and guardrails (`safe` by default)
   - [x] Subtask 3.1.3: Define success/failure output shape
   - [x] Notes: See `instructions/refactor_lite_contract.md`.
-- [ ] Task 3.2: Implement workflow backend
-  - [ ] Subtask 3.2.1: Add preflight analysis step (grep + file map)
-  - [ ] Subtask 3.2.2: Add structured plan preview output
-  - [ ] Subtask 3.2.3: Add post-change verification hooks (`make validate`, optional `make selftest`)
+- [x] Task 3.2: Implement workflow backend
+  - [x] Subtask 3.2.1: Add preflight analysis step (grep + file map)
+  - [x] Subtask 3.2.2: Add structured plan preview output
+  - [x] Subtask 3.2.3: Add post-change verification hooks (`make validate`, optional `make selftest`)
+  - [x] Notes: Implemented in `scripts/refactor_lite_command.py` with deterministic selftest coverage.
 - [ ] Task 3.3: OpenCode integration
   - [ ] Subtask 3.3.1: Add `/refactor-lite` and helper commands to `opencode.json`
   - [ ] Subtask 3.3.2: Add installer self-check hints

@@ -68,7 +68,7 @@ if [ -n "$REPO_REF" ]; then
   git -C "$INSTALL_DIR" checkout "$REPO_REF"
 fi
 
-chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py" "$INSTALL_DIR/scripts/install_wizard.py" "$INSTALL_DIR/scripts/nvim_integration_command.py" "$INSTALL_DIR/scripts/devtools_command.py" "$INSTALL_DIR/scripts/background_task_manager.py"
+chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py" "$INSTALL_DIR/scripts/install_wizard.py" "$INSTALL_DIR/scripts/nvim_integration_command.py" "$INSTALL_DIR/scripts/devtools_command.py" "$INSTALL_DIR/scripts/background_task_manager.py" "$INSTALL_DIR/scripts/refactor_lite_command.py"
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
