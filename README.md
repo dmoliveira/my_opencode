@@ -133,6 +133,13 @@ Current baseline includes:
 - deterministic soft/hard threshold semantics and reason-code contract.
 - auditable override and emergency-stop behavior with bounded escalation limits.
 
+Task 20.2 runtime integration:
+
+- runtime module: `scripts/execution_budget_runtime.py`
+- `/start-work` and `/start-work recover` now emit budget counters, threshold evaluation, and recommendations in JSON reports
+- hard-limit crossings transition run state to `budget_stopped` with deterministic `budget_*` reason codes
+- `/start-work status` and `/start-work doctor` include persisted budget diagnostics
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

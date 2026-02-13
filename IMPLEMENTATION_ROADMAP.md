@@ -744,10 +744,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 20.1.2: Define profiles (`conservative`, `balanced`, `extended`)
   - [x] Subtask 20.1.3: Define override and emergency-stop semantics
   - [x] Notes: Added `instructions/execution_budget_model.md` defining budget dimensions, profile defaults, threshold semantics, and auditable override/emergency-stop rules.
-- [ ] Task 20.2: Implement budget enforcement runtime
-  - [ ] Subtask 20.2.1: Track usage counters in real time
-  - [ ] Subtask 20.2.2: Block/soft-stop execution at threshold boundaries
-  - [ ] Subtask 20.2.3: Emit summary and next-step recommendations on stop
+- [x] Task 20.2: Implement budget enforcement runtime
+  - [x] Subtask 20.2.1: Track usage counters in real time
+  - [x] Subtask 20.2.2: Block/soft-stop execution at threshold boundaries
+  - [x] Subtask 20.2.3: Emit summary and next-step recommendations on stop
+  - [x] Notes: Added `scripts/execution_budget_runtime.py` and integrated `/start-work` + `/start-work recover` budget evaluation payloads with hard-stop status (`budget_stopped`) and recommendation output when limits are exceeded.
 - [ ] Task 20.3: Commands and diagnostics
   - [ ] Subtask 20.3.1: Add `/budget status|profile|override` commands
   - [ ] Subtask 20.3.2: Expose budget consumption in doctor/debug outputs

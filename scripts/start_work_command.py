@@ -36,6 +36,11 @@ from checkpoint_snapshot_manager import (  # type: ignore
     prune_snapshots,
     write_snapshot,
 )
+from execution_budget_runtime import (  # type: ignore
+    build_budget_state,
+    evaluate_budget,
+    resolve_budget_policy,
+)
 
 
 SECTION = "plan_execution"
@@ -43,7 +48,14 @@ PLAN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-_]{2,63}$")
 STEP_RE = re.compile(r"^- \[(?P<mark>[ xX])\] (?P<text>.+)$")
 ORDINAL_RE = re.compile(r"^(?P<ordinal>\d+)\.\s+(?P<detail>.+)$")
 REQUIRED_KEYS = ("id", "title", "owner", "created_at", "version")
-ALLOWED_STATUSES = {"idle", "completed", "failed", "in_progress", "resume_escalated"}
+ALLOWED_STATUSES = {
+    "idle",
+    "completed",
+    "failed",
+    "in_progress",
+    "resume_escalated",
+    "budget_stopped",
+}
 
 
 def usage() -> int:
@@ -55,6 +67,18 @@ def usage() -> int:
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def estimate_token_count(
+    steps: list[dict[str, Any]], deviations: list[dict[str, Any]]
+) -> int:
+    text_units = 0
+    for step in steps:
+        text_units += len(str(step.get("text") or ""))
+    for entry in deviations:
+        text_units += len(str(entry.get("reason") or ""))
+    # conservative token estimate proxy using 4 chars/token
+    return max(1, text_units // 4)
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, str], int, list[dict[str, Any]]]:
@@ -447,6 +471,8 @@ def command_start(args: list[str]) -> int:
         1 for step in steps if normalize_todo_state(step.get("state")) == "done"
     )
     status = "completed" if not compliance_violations else "failed"
+    started_at = now_iso()
+    finished_at = now_iso()
     run_state = {
         "plan": {
             "path": str(plan_path),
@@ -471,8 +497,8 @@ def command_start(args: list[str]) -> int:
             "remediation": remediation_prompts(compliance_violations),
             "audit_events": audit_events,
         },
-        "started_at": now_iso(),
-        "finished_at": now_iso(),
+        "started_at": started_at,
+        "finished_at": finished_at,
         "resume": {
             "enabled": True,
             "attempt_count": 0,
@@ -490,6 +516,30 @@ def command_start(args: list[str]) -> int:
             and existing_resume.get("enabled") is False
         ):
             run_state["resume"]["enabled"] = False
+
+    budget_policy = resolve_budget_policy(config)
+    budget_counters = build_budget_state(
+        started_at,
+        tool_call_count=max(1, len(transitions) + 1),
+        token_estimate=estimate_token_count(run_state["steps"], deviation_records),
+        now_ts=finished_at,
+    )
+    budget_eval = evaluate_budget(budget_policy, budget_counters)
+    run_state["budget"] = {
+        "profile": budget_policy.get("profile"),
+        "limits": budget_policy.get("limits"),
+        "soft_ratio": budget_policy.get("soft_ratio"),
+        "counters": budget_counters,
+        "result": budget_eval.get("result"),
+        "reason_code": budget_eval.get("reason_code"),
+        "reason_codes": budget_eval.get("reason_codes", []),
+        "warnings": budget_eval.get("warnings", []),
+        "usage_ratio": budget_eval.get("usage_ratio", {}),
+        "recommendations": budget_eval.get("recommendations", []),
+    }
+    if budget_eval.get("result") == "FAIL":
+        status = "budget_stopped"
+        run_state["status"] = status
 
     if background:
         bg_script = SCRIPT_DIR / "background_task_manager.py"
@@ -582,15 +632,18 @@ def command_start(args: list[str]) -> int:
             {
                 "kind": "slash_command",
                 "name": "/start-work",
-                "result": "PASS" if status == "completed" else "FAIL",
+                "result": "PASS" if run_state["status"] == "completed" else "FAIL",
                 "duration_ms": 0,
-                "summary": f"plan execution finished with status {status}",
+                "reason_code": str(
+                    run_state.get("budget", {}).get("reason_code") or ""
+                ),
+                "summary": f"plan execution finished with status {run_state['status']}",
             }
         ],
     )
 
     report = {
-        "result": "PASS" if status == "completed" else "FAIL",
+        "result": "PASS" if run_state["status"] == "completed" else "FAIL",
         "status": run_state["status"],
         "plan": run_state["plan"],
         "step_counts": {
@@ -600,6 +653,7 @@ def command_start(args: list[str]) -> int:
         },
         "deviation_count": len(deviation_records),
         "todo_compliance": run_state["todo_compliance"],
+        "budget": run_state.get("budget", {}),
         "checkpoint": persistence,
         "config": str(write_path),
     }
@@ -615,8 +669,11 @@ def command_start(args: list[str]) -> int:
             print("todo_compliance: FAIL")
             for prompt in remediation_prompts(compliance_violations):
                 print(f"- {prompt}")
+        budget_report = run_state.get("budget")
+        if isinstance(budget_report, dict):
+            print(f"budget: {budget_report.get('result', 'unknown')}")
         print(f"config: {write_path}")
-    return 0 if status == "completed" else 1
+    return 0 if run_state["status"] == "completed" else 1
 
 
 def read_runtime_state() -> tuple[dict[str, Any], Path]:
@@ -667,6 +724,7 @@ def command_status(args: list[str]) -> int:
         "plan": runtime.get("plan", {}),
         "step_counts": counts,
         "todo_compliance": runtime.get("todo_compliance", {}),
+        "budget": runtime.get("budget", {}),
         "config": str(write_path),
     }
     if json_output:
@@ -778,6 +836,17 @@ def command_doctor(args: list[str]) -> int:
                 )
             )
 
+    budget_any = runtime.get("budget")
+    budget = budget_any if isinstance(budget_any, dict) else {}
+    budget_result = str(budget.get("result") or "")
+    if budget_result == "FAIL":
+        problems.append("budget limits exceeded; execution was hard-stopped")
+    elif budget_result == "WARN":
+        warnings.append("budget usage is near configured thresholds")
+    for warning in budget.get("warnings", []):
+        if isinstance(warning, str) and warning not in warnings:
+            warnings.append(warning)
+
     report = {
         "result": "PASS" if not problems else "FAIL",
         "status": status,
@@ -785,6 +854,7 @@ def command_doctor(args: list[str]) -> int:
         "step_count": len(steps),
         "todo_compliance": runtime.get("todo_compliance", {}),
         "resume": runtime.get("resume", {}),
+        "budget": budget,
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
@@ -872,6 +942,47 @@ def command_recover(args: list[str]) -> int:
     config, _ = load_state()
     next_runtime = result.get("runtime")
     if isinstance(next_runtime, dict):
+        budget_policy = resolve_budget_policy(config)
+        resumed_steps_any = result.get("resumed_steps")
+        resumed_steps = resumed_steps_any if isinstance(resumed_steps_any, list) else []
+        step_entries_any = next_runtime.get("steps")
+        step_entries = (
+            [entry for entry in step_entries_any if isinstance(entry, dict)]
+            if isinstance(step_entries_any, list)
+            else []
+        )
+        deviations_any = next_runtime.get("deviations")
+        deviation_entries = (
+            [entry for entry in deviations_any if isinstance(entry, dict)]
+            if isinstance(deviations_any, list)
+            else []
+        )
+        budget_counters = build_budget_state(
+            str(next_runtime.get("started_at") or now_iso()),
+            tool_call_count=max(1, len(resumed_steps) + 1),
+            token_estimate=estimate_token_count(step_entries, deviation_entries),
+            now_ts=str(next_runtime.get("finished_at") or now_iso()),
+        )
+        budget_eval = evaluate_budget(budget_policy, budget_counters)
+        next_runtime["budget"] = {
+            "profile": budget_policy.get("profile"),
+            "limits": budget_policy.get("limits"),
+            "soft_ratio": budget_policy.get("soft_ratio"),
+            "counters": budget_counters,
+            "result": budget_eval.get("result"),
+            "reason_code": budget_eval.get("reason_code"),
+            "reason_codes": budget_eval.get("reason_codes", []),
+            "warnings": budget_eval.get("warnings", []),
+            "usage_ratio": budget_eval.get("usage_ratio", {}),
+            "recommendations": budget_eval.get("recommendations", []),
+        }
+        if budget_eval.get("result") == "FAIL":
+            next_runtime["status"] = "budget_stopped"
+            result["result"] = "FAIL"
+            result["reason_code"] = str(
+                budget_eval.get("reason_code") or "budget_wall_clock_exceeded"
+            )
+
         persistence = save_state(
             config,
             write_path,
@@ -912,6 +1023,9 @@ def command_recover(args: list[str]) -> int:
         "cooldown_remaining": int(result.get("cooldown_remaining", 0) or 0),
         "checkpoint": result.get("checkpoint"),
         "resumed_steps": result.get("resumed_steps", []),
+        "budget": next_runtime.get("budget", {})
+        if isinstance(next_runtime, dict)
+        else {},
         "snapshot": persistence,
         "config": str(write_path),
     }
