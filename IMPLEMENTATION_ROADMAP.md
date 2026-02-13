@@ -787,10 +787,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 22.1.2: Define input plan requirements and validation errors
   - [x] Subtask 22.1.3: Define output format for concise and verbose modes
   - [x] Notes: Added `instructions/autoflow_command_contract.md` defining `/autoflow` subcommands, deterministic validation/error shape, concise-vs-JSON output schema, lifecycle status model, and safety defaults for Task 22.2 implementation.
-- [ ] Task 22.2: Implement orchestration adapter layer
-  - [ ] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives
-  - [ ] Subtask 22.2.2: Add deterministic state machine transitions
-  - [ ] Subtask 22.2.3: Add explain mode showing decisions and fallbacks
+- [x] Task 22.2: Implement orchestration adapter layer
+  - [x] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives
+  - [x] Subtask 22.2.2: Add deterministic state machine transitions
+  - [x] Subtask 22.2.3: Add explain mode showing decisions and fallbacks
+  - [x] Notes: Added `scripts/autoflow_adapter.py` to compose runtime primitives (`plan`, `todo`, `budget`, `checkpoint`, `resume`, `loop_guard`) and resolve deterministic intent transitions with explain traces and fallback reason codes.
 - [ ] Task 22.3: Add safety and usability controls
   - [ ] Subtask 22.3.1: Add `dry-run` to preview actions without mutating state
   - [ ] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states

@@ -177,6 +177,13 @@ Current baseline includes:
 - concise human output plus structured `--json` schema for automation
 - lifecycle status model and safety defaults for dry-run, stop, and recovery gating
 
+Task 22.2 adapter baseline:
+
+- adapter module: `scripts/autoflow_adapter.py`
+- primitive composition: `plan`, `todo_compliance`, `budget`, `checkpoint`, `resume`, and `loop_guard`
+- deterministic transition matrix for `start|status|resume|stop|report|dry-run`
+- explain path that returns trace entries plus fallback intent/reason when transitions are illegal or resume gating fails
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -1159,6 +1166,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`
 - `scripts/start_work_command.py` - backend script for `/start-work`
+- `scripts/autoflow_adapter.py` - orchestration adapter for `/autoflow` transition and explain planning
 - `scripts/budget_command.py` - backend script for `/budget`
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`

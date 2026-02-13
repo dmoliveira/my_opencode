@@ -91,6 +91,7 @@ RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
+AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -2286,6 +2287,86 @@ version: 1
         expect(
             budget_profile_reset.returncode == 0,
             "budget profile should reset to balanced for remaining checks",
+        )
+
+        autoflow_status = subprocess.run(
+            [sys.executable, str(AUTOFLOW_ADAPTER_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(autoflow_status.returncode == 0, "autoflow adapter status should pass")
+        autoflow_status_report = parse_json_output(autoflow_status.stdout)
+        expect(
+            autoflow_status_report.get("result") == "PASS"
+            and isinstance(autoflow_status_report.get("primitives"), dict),
+            "autoflow adapter status should return composed primitive payload",
+        )
+
+        autoflow_explain_transition_fail = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_ADAPTER_SCRIPT),
+                "explain",
+                "--intent",
+                "resume",
+                "--status",
+                "queued",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_explain_transition_fail.returncode == 1,
+            "autoflow adapter should reject illegal queued->resume transitions",
+        )
+        autoflow_explain_transition_fail_report = parse_json_output(
+            autoflow_explain_transition_fail.stdout
+        )
+        expect(
+            autoflow_explain_transition_fail_report.get("reason_code")
+            == "autoflow_illegal_transition"
+            and autoflow_explain_transition_fail_report.get("effective_intent")
+            == "status",
+            "autoflow adapter should expose deterministic fallback decision for illegal transitions",
+        )
+
+        autoflow_explain_resume_blocked = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_ADAPTER_SCRIPT),
+                "explain",
+                "--intent",
+                "resume",
+                "--status",
+                "failed",
+                "--interruption-class",
+                "unknown-class",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_explain_resume_blocked.returncode == 1,
+            "autoflow adapter should block resume when interruption class is unknown",
+        )
+        autoflow_explain_resume_blocked_report = parse_json_output(
+            autoflow_explain_resume_blocked.stdout
+        )
+        expect(
+            autoflow_explain_resume_blocked_report.get("reason_code")
+            == "resume_unknown_interruption_class",
+            "autoflow adapter explain should preserve resume eligibility reason codes",
         )
 
         todo_status = subprocess.run(
