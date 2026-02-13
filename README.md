@@ -550,6 +550,7 @@ Engine behavior currently includes:
 - superseded write pruning (older writes to same target path)
 - stale error purging once newer successful command outcomes exist beyond threshold
 - preservation of protected artifacts and latest command outcomes as critical evidence
+- recovery planning with automatic resume hints, safe fallback steps, and pruning diagnostics
 
 ## Background jobs inside OpenCode 🧵
 
