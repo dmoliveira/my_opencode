@@ -41,6 +41,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | planned | Medium | E8, E20 | TBD | Structured iterative loops with strict caps |
+| E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20, E21 | TBD | One command for plan-run-resume-report lifecycle |
 
 ## Scope Guardrails
 
@@ -93,6 +94,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | Checkpoint snapshots grow too quickly (E19) | Low | Add retention cap and compression/rotation |
 | Budget guardrails too strict for complex tasks (E20) | Medium | Provide profile-based limits and controlled override |
 | Loop presets run away despite caps (E21) | High | Enforce hard-stop counters and mandatory summary checkpoints |
+| Autoflow hides too much control and confuses users (E22) | Medium | Keep subcommands explicit and expose dry-run plus explain mode |
 
 ---
 
@@ -675,6 +677,34 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 
 ---
 
+## Epic 22 - Autoflow Unified Orchestration Command
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Provide a single command (`/autoflow`) that orchestrates plan execution, enforcement, recovery, and reporting with safe defaults.
+**Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20, Epic 21
+
+- [ ] Task 22.1: Define `/autoflow` command contract
+  - [ ] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `stop`, `report`, `dry-run`)
+  - [ ] Subtask 22.1.2: Define input plan requirements and validation errors
+  - [ ] Subtask 22.1.3: Define output format for concise and verbose modes
+- [ ] Task 22.2: Implement orchestration adapter layer
+  - [ ] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives
+  - [ ] Subtask 22.2.2: Add deterministic state machine transitions
+  - [ ] Subtask 22.2.3: Add explain mode showing decisions and fallbacks
+- [ ] Task 22.3: Add safety and usability controls
+  - [ ] Subtask 22.3.1: Add `dry-run` to preview actions without mutating state
+  - [ ] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states
+  - [ ] Subtask 22.3.3: Add docs and migration guidance from low-level commands
+- [ ] Task 22.4: Verification
+  - [ ] Subtask 22.4.1: Add integration tests for full lifecycle (`start -> status -> report`)
+  - [ ] Subtask 22.4.2: Add recovery tests (`resume` after interruption)
+  - [ ] Subtask 22.4.3: Add install-test smoke checks for `/autoflow` happy path
+- [ ] Exit criteria: `/autoflow` can run end-to-end flows with auditable outputs
+- [ ] Exit criteria: users can always fall back to lower-level commands safely
+
+---
+
 ## Cross-Cutting Delivery Tasks
 
 **Status:** `planned`
@@ -689,7 +719,8 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C1.7: Phase G (quality and control): Epic 15 + Epic 16
   - [ ] Subtask C1.8: Phase H (recovery and semantic safety): Epic 17 + Epic 18 + Epic 19
   - [ ] Subtask C1.9: Phase I (bounded autonomy): Epic 20 + Epic 21
-  - [ ] Subtask C1.10: Phase J (optional power-user): Epic 6 + Epic 7
+  - [ ] Subtask C1.10: Phase J (unified orchestration): Epic 22
+  - [ ] Subtask C1.11: Phase K (optional power-user): Epic 6 + Epic 7
 - [ ] Task C2: Add acceptance criteria template per epic
   - [ ] Subtask C2.1: Functional criteria
   - [ ] Subtask C2.2: Reliability criteria
