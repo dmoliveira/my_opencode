@@ -71,6 +71,12 @@ Use this map to avoid overlapping implementations.
 - Prefer additive changes and compatibility fallbacks over breaking behavior.
 - Do not expand to unrelated feature areas during in-progress epics.
 
+## Dependency Rules
+
+- Dependencies must reference earlier or same-phase epics only (no forward references).
+- Avoid circular dependencies; when uncertain, split shared prerequisites into a separate task.
+- If an epic dependency changes, update both the epic block and dashboard row in the same PR.
+
 ## Out of Scope (for this roadmap cycle)
 
 - Full rewrite of existing command scripts in a new language/runtime.
