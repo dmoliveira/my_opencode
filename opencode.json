@@ -58,6 +58,14 @@
       "description": "List available config backups",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" list`\nShow only the command output."
     },
+    "config-layers": {
+      "description": "Show layered config precedence and active paths",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" layers`\nShow only the command output."
+    },
+    "config-layers-json": {
+      "description": "Show layered config precedence in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" layers --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

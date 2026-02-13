@@ -275,6 +275,8 @@ Use these directly in OpenCode:
 
 ```text
 /config status
+/config layers
+/config layers --json
 /config backup
 /config backup --name pre-upgrade
 /config list
@@ -287,9 +289,13 @@ Autocomplete-friendly shortcuts:
 /config-help
 /config-backup
 /config-list
+/config-layers
+/config-layers-json
 ```
 
 `/config` snapshots all `opencode*.json` files under `~/.config/opencode/` into `~/.config/opencode/my_opencode-backups/`.
+
+`/config layers` shows effective layered config precedence and selected write path.
 
 ## Layered config precedence 🧩
 

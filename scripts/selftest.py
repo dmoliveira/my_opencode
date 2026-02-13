@@ -520,6 +520,7 @@ def main() -> int:
 
         config_env = os.environ.copy()
         config_env["OPENCODE_CONFIG_DIR"] = str(home / ".config" / "opencode")
+        config_env["HOME"] = str(home)
 
         def run_config(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -557,6 +558,69 @@ def main() -> int:
         result = run_config("list")
         expect(result.returncode == 0, f"config list failed: {result.stderr}")
         expect(backup_id in result.stdout, "config list should include created backup")
+
+        layered_project_dir = tmp / "layered-project"
+        (layered_project_dir / ".opencode").mkdir(parents=True, exist_ok=True)
+        (layered_project_dir / ".opencode" / "my_opencode.jsonc").write_text(
+            """
+            {
+              // project layered config for selftest
+              "plugin": ["@mohak34/opencode-notifier@latest"],
+            }
+            """,
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(CONFIG_SCRIPT), "layers"],
+            capture_output=True,
+            text=True,
+            env=config_env,
+            check=False,
+            cwd=layered_project_dir,
+        )
+        expect(result.returncode == 0, f"config layers failed: {result.stderr}")
+        expect("config layers" in result.stdout, "config layers should print heading")
+        expect(
+            "project_jsonc" in result.stdout,
+            "config layers should include project_jsonc layer",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(CONFIG_SCRIPT), "layers", "--json"],
+            capture_output=True,
+            text=True,
+            env=config_env,
+            check=False,
+            cwd=layered_project_dir,
+        )
+        expect(
+            result.returncode == 0,
+            f"config layers --json failed: {result.stderr}",
+        )
+        layers_report = parse_json_output(result.stdout)
+        expect(
+            isinstance(layers_report.get("layers"), list),
+            "config layers --json should emit layers list",
+        )
+        project_layer = next(
+            (
+                layer
+                for layer in layers_report.get("layers", [])
+                if layer.get("name") == "project_jsonc"
+            ),
+            {},
+        )
+        expect(
+            project_layer.get("exists") is True,
+            "config layers --json should mark project_jsonc as active when present",
+        )
+        expect(
+            str(layers_report.get("write_path", "")).endswith(
+                "/.opencode/my_opencode.jsonc"
+            ),
+            "config layers --json should choose project_jsonc write path",
+        )
 
         stack_state_path = home / ".config" / "opencode" / "opencode-stack-profile.json"
         stack_env = os.environ.copy()

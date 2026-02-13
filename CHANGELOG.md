@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 - Added `/devtools` command suite for external productivity tooling status, doctor, install, and hook bootstrap flows.
 - Added `.pre-commit-config.yaml`, `lefthook.yml`, and `.envrc.example` to standardize local productivity setup.
 - Added `scripts/config_layering.py` with shared layered config discovery and JSONC parsing support.
+- Added `/config layers` (and `--json`) to inspect layered config precedence and effective write path.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -22,6 +23,7 @@ All notable changes to this project are documented in this file.
 - Expanded installer and README guidance for direnv, gh-dash, ripgrep-all, and pre-commit + lefthook workflows.
 - Updated `/mcp` and `/plugin` to resolve layered project/user config with runtime override support.
 - Added selftest coverage for layered config precedence (`project > user > base`) and JSONC parsing.
+- Expanded installer/readme/install-test coverage for layered config diagnostics.
 
 ## v0.2.0 - 2026-02-12
 

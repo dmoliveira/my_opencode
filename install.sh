@@ -95,6 +95,7 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/post_session_command.py" status
   python3 "$INSTALL_DIR/scripts/policy_command.py" status
   python3 "$INSTALL_DIR/scripts/config_command.py" status
+  python3 "$INSTALL_DIR/scripts/config_command.py" layers
   python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
@@ -132,6 +133,7 @@ printf "  /telemetry profile local\n"
 printf "  /post-session status\n"
 printf "  /policy profile strict\n"
 printf "  /config status\n"
+printf "  /config layers\n"
 printf "  /config backup\n"
 printf "  /stack apply focus\n"
 printf "  /nvim status\n"
