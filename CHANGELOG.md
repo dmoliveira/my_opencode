@@ -20,6 +20,7 @@ All notable changes to this project are documented in this file.
 - Added `/bg` command suite (`start|status|list|read|cancel|cleanup|doctor`) and autocomplete shortcuts (`/bg-help`, `/bg-list`, `/bg-running`, `/bg-doctor-json`).
 - Added optional background completion/error notifications that honor existing `/notify` event/channel settings, with `MY_OPENCODE_BG_NOTIFICATIONS_ENABLED` override support.
 - Added `/bg-status-json` shortcut and richer background diagnostics payloads (`/bg status --json`, `/bg doctor --json`).
+- Added `instructions/refactor_lite_contract.md` defining `/refactor-lite` syntax, guardrails, and success/failure output contract for Epic 3.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
