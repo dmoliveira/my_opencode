@@ -58,6 +58,7 @@ KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
+START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1647,6 +1648,122 @@ def main() -> int:
             browser_doctor_playwright_report.get("provider") == "playwright"
             and browser_doctor_playwright_report.get("selected_ready") is True,
             "browser doctor should report ready selected provider after reset",
+        )
+
+        plan_path = tmp / "plan_execution_selftest.md"
+        plan_path.write_text(
+            """---
+id: selftest-plan-001
+title: Selftest Plan
+owner: selftest
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+- [x] 1. Preserve previously completed setup
+- [ ] 2. Execute pending task
+- [ ] 3. Capture final checkpoint
+""",
+            encoding="utf-8",
+        )
+
+        start_work = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                str(plan_path),
+                "--deviation",
+                "manual verification note",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(start_work.returncode == 0, "start-work should execute valid plan")
+        start_work_report = parse_json_output(start_work.stdout)
+        expect(
+            start_work_report.get("status") == "completed",
+            "start-work should report completed status for fully executed plan",
+        )
+        expect(
+            start_work_report.get("step_counts", {}).get("completed") == 3,
+            "start-work should complete all plan steps",
+        )
+        expect(
+            start_work_report.get("deviation_count", 0) >= 2,
+            "start-work should capture precompleted and manual deviations",
+        )
+
+        start_work_status = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(start_work_status.returncode == 0, "start-work status should succeed")
+        start_work_status_report = parse_json_output(start_work_status.stdout)
+        expect(
+            start_work_status_report.get("status") == "completed",
+            "start-work status should persist latest run status",
+        )
+
+        start_work_deviations = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), "deviations", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            start_work_deviations.returncode == 0,
+            "start-work deviations should succeed",
+        )
+        start_work_deviation_report = parse_json_output(start_work_deviations.stdout)
+        expect(
+            start_work_deviation_report.get("count", 0) >= 2,
+            "start-work deviations should return captured deviation entries",
+        )
+
+        invalid_plan_path = tmp / "invalid_plan_execution_selftest.md"
+        invalid_plan_path.write_text(
+            """---
+id: invalid-plan-001
+title: Invalid Plan
+owner: selftest
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+- [ ] validate command wiring without ordinal
+""",
+            encoding="utf-8",
+        )
+        invalid_start_work = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), str(invalid_plan_path), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            invalid_start_work.returncode == 1,
+            "start-work should fail invalid plan artifacts",
+        )
+        invalid_start_work_report = parse_json_output(invalid_start_work.stdout)
+        expect(
+            invalid_start_work_report.get("code") == "validation_failed",
+            "start-work should report validation_failed for invalid plan format",
         )
 
         keyword_report = resolve_prompt_modes(

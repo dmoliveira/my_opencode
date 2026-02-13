@@ -44,6 +44,8 @@ All notable changes to this project are documented in this file.
 - Added `/browser`, `/browser-status`, `/browser-profile`, and `/browser-doctor-json` aliases in `opencode.json`.
 - Added browser profile selection support to `scripts/install_wizard.py` via `--browser-profile <playwright|agent-browser>`.
 - Added `instructions/plan_artifact_contract.md` defining `/start-work` plan metadata/checklist format, validation rules, step transitions, and deviation capture requirements.
+- Added `scripts/start_work_command.py` with `/start-work <plan>` execution, persisted checkpoint status, and deviation reporting (`status`, `deviations`).
+- Added `/start-work`, `/start-work-status`, and `/start-work-deviations` aliases in `opencode.json`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -85,6 +87,7 @@ All notable changes to this project are documented in this file.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
 - Expanded browser verification coverage to assert provider reset readiness and added install smoke checks that run browser status/doctor after switching across providers.
+- Expanded install/selftest coverage for `/start-work` plan validation, execution state persistence, and deviation diagnostics.
 
 ## v0.2.0 - 2026-02-12
 

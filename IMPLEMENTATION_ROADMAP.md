@@ -50,7 +50,7 @@ Use this map to avoid overlapping implementations.
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | done | Medium | E1 | bd-3rs, bd-2qy, bd-f6g, bd-393 | Toggle Playwright/agent-browser with checks |
-| E14 | Plan-to-Execution Bridge Command | in_progress | Medium | E2, E3 | bd-1z6 | Execute validated plans with progress tracking |
+| E14 | Plan-to-Execution Bridge Command | in_progress | Medium | E2, E3 | bd-1z6, bd-2te | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
@@ -573,10 +573,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 14.1.2: Define validation rules before execution starts
   - [x] Subtask 14.1.3: Define step state transitions and completion semantics
   - [x] Notes: Added `instructions/plan_artifact_contract.md` covering artifact schema, deterministic validation failures, transition rules, and deviation capture requirements for `/start-work`.
-- [ ] Task 14.2: Implement execution bridge backend
-  - [ ] Subtask 14.2.1: Add `/start-work <plan>` command implementation
-  - [ ] Subtask 14.2.2: Execute steps sequentially with checkpoint updates
-  - [ ] Subtask 14.2.3: Capture and report deviations from original plan
+- [x] Task 14.2: Implement execution bridge backend
+  - [x] Subtask 14.2.1: Add `/start-work <plan>` command implementation
+  - [x] Subtask 14.2.2: Execute steps sequentially with checkpoint updates
+  - [x] Subtask 14.2.3: Capture and report deviations from original plan
+  - [x] Notes: Added `scripts/start_work_command.py` with plan parsing + validation, sequential checkpoint transitions, persisted execution status, and deviation reporting; wired aliases and smoke/selftest coverage.
 - [ ] Task 14.3: Integrations and observability
   - [ ] Subtask 14.3.1: Integrate with background subsystem where safe
   - [ ] Subtask 14.3.2: Integrate with digest summaries for end-of-run recap
