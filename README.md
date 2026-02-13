@@ -605,6 +605,15 @@ Integration notes:
 - `/digest run` now includes a `plan_execution` recap block (status, plan id, step counts, deviation count)
 - `/doctor run` includes `start-work` health diagnostics for execution-state visibility
 
+## Todo compliance model
+
+Epic 15 Task 15.1 defines the baseline compliance contract for enforced todo execution:
+
+- compliance spec: `instructions/todo_compliance_model.md`
+- required states: `pending`, `in_progress`, `done`, `skipped`
+- enforcement: one active item at a time with deterministic transition validation
+- bypass path: explicit metadata + audit event requirements for controlled exceptions
+
 ## Context resilience policy
 
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:

@@ -51,7 +51,7 @@ Use this map to avoid overlapping implementations.
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | done | Medium | E1 | bd-3rs, bd-2qy, bd-f6g, bd-393 | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | done | Medium | E2, E3 | bd-1z6, bd-2te, bd-3sg, bd-2bv | Execute validated plans with progress tracking |
-| E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
+| E15 | Todo Enforcer and Plan Compliance | in_progress | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
@@ -595,15 +595,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 15 - Todo Enforcer and Plan Compliance
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Enforce explicit checklist progress during execution so outcomes stay aligned with approved plans.
 **Depends on:** Epic 14
 
-- [ ] Task 15.1: Define compliance model
-  - [ ] Subtask 15.1.1: Define required todo states (`pending`, `in_progress`, `done`, `skipped`)
-  - [ ] Subtask 15.1.2: Define rules for one-active-item-at-a-time enforcement
-  - [ ] Subtask 15.1.3: Define acceptable bypass annotations and audit format
+- [x] Task 15.1: Define compliance model
+  - [x] Subtask 15.1.1: Define required todo states (`pending`, `in_progress`, `done`, `skipped`)
+  - [x] Subtask 15.1.2: Define rules for one-active-item-at-a-time enforcement
+  - [x] Subtask 15.1.3: Define acceptable bypass annotations and audit format
+  - [x] Notes: Added `instructions/todo_compliance_model.md` with state model, transition constraints, bypass metadata requirements, and audit event contract.
 - [ ] Task 15.2: Implement enforcement engine
   - [ ] Subtask 15.2.1: Validate state transitions before major actions
   - [ ] Subtask 15.2.2: Block completion when required tasks remain unchecked

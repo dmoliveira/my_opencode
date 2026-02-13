@@ -48,6 +48,7 @@ All notable changes to this project are documented in this file.
 - Added `/start-work`, `/start-work-status`, and `/start-work-deviations` aliases in `opencode.json`.
 - Added `/start-work-bg` and `/start-work-doctor-json` aliases for background-safe queueing and execution health diagnostics.
 - Added `instructions/plan_execution_workflows.md` with sample plans and direct/background/recovery workflows for `/start-work`.
+- Added `instructions/todo_compliance_model.md` defining todo states, transition enforcement, bypass metadata, and compliance audit event format for Epic 15 Task 15.1.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
