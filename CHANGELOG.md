@@ -39,6 +39,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/model_fallback_explanation_model.md` defining provider/model fallback trace structure, output levels, and redaction rules for Epic 12 Task 12.1.
 - Added persistent model-routing trace runtime support with `/model-routing trace --json` for latest requested/attempted/selected fallback diagnostics.
 - Added `/routing` command surface (`status`, `explain`) via `scripts/routing_command.py` for compact fallback visibility workflows.
+- Added `instructions/browser_profile_model.md` defining Browser Automation profile providers, defaults, migration behavior, and validation rules for Epic 13 Task 13.1.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -76,6 +77,7 @@ All notable changes to this project are documented in this file.
 - Expanded selftest coverage for model-routing trace persistence and runtime fallback-chain reporting.
 - Expanded README guidance with category-driven routing examples and troubleshooting steps for unexpected model selection.
 - Expanded routing verification coverage for deterministic trace stability and explicit fallback/no-fallback explain outcomes, and added `/routing` smoke hints in install output.
+- Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 
 ## v0.2.0 - 2026-02-12
 

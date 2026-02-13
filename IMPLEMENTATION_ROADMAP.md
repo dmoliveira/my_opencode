@@ -49,7 +49,7 @@ Use this map to avoid overlapping implementations.
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
-| E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
+| E13 | Browser Automation Profile Switching | in_progress | Medium | E1 | bd-3rs | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
@@ -531,15 +531,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 13 - Browser Automation Profile Switching
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Add first-class profile switching between browser automation engines with install/runtime checks.
 **Depends on:** Epic 1
 
-- [ ] Task 13.1: Define browser profile model
-  - [ ] Subtask 13.1.1: Define supported providers (`playwright`, `agent-browser`)
-  - [ ] Subtask 13.1.2: Define profile settings and defaults
-  - [ ] Subtask 13.1.3: Define migration behavior for existing installs
+- [x] Task 13.1: Define browser profile model
+  - [x] Subtask 13.1.1: Define supported providers (`playwright`, `agent-browser`)
+  - [x] Subtask 13.1.2: Define profile settings and defaults
+  - [x] Subtask 13.1.3: Define migration behavior for existing installs
+  - [x] Notes: Added `instructions/browser_profile_model.md` with provider schema, defaults, migration behavior, and validation contract.
 - [ ] Task 13.2: Implement profile command backend
   - [ ] Subtask 13.2.1: Add `/browser profile <provider>` command
   - [ ] Subtask 13.2.2: Add status and doctor checks for selected provider
