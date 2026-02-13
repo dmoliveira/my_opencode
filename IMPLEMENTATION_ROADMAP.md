@@ -54,7 +54,7 @@ Use this map to avoid overlapping implementations.
 | E15 | Todo Enforcer and Plan Compliance | done | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
-| E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
+| E18 | LSP/AST-Assisted Safe Edit Mode | in_progress | High | E3 | bd-3cg | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
@@ -670,15 +670,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 18 - LSP/AST-Assisted Safe Edit Mode
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Prefer semantic edits via language tooling to reduce refactor regressions.
 **Depends on:** Epic 3
 
-- [ ] Task 18.1: Define safe-edit capability matrix
-  - [ ] Subtask 18.1.1: Define supported operations (`rename`, `extract`, `organize imports`, scoped replace)
-  - [ ] Subtask 18.1.2: Define language/tool availability checks
-  - [ ] Subtask 18.1.3: Define text-mode fallback when semantic tooling is missing
+- [x] Task 18.1: Define safe-edit capability matrix
+  - [x] Subtask 18.1.1: Define supported operations (`rename`, `extract`, `organize imports`, scoped replace)
+  - [x] Subtask 18.1.2: Define language/tool availability checks
+  - [x] Subtask 18.1.3: Define text-mode fallback when semantic tooling is missing
+  - [x] Notes: Added `instructions/safe_edit_capability_matrix.md` with operation/backend matrix, deterministic availability checks, guarded text-fallback rules, and reason-code contract.
 - [ ] Task 18.2: Implement semantic edit adapters
   - [ ] Subtask 18.2.1: Add LSP adapter for symbol-aware operations
   - [ ] Subtask 18.2.2: Add AST adapter for deterministic structural edits
