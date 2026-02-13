@@ -24,6 +24,7 @@ from model_routing_schema import (  # type: ignore
     validate_schema,
 )
 from keyword_mode_schema import resolve_prompt_modes  # type: ignore
+from context_resilience import prune_context, resolve_policy  # type: ignore
 from rules_engine import (  # type: ignore
     discover_rules,
     parse_frontmatter,
@@ -1826,6 +1827,133 @@ def main() -> int:
             cwd=project_tmp,
         )
         expect(rules_enable_id.returncode == 0, "rules enable-id should succeed")
+
+        resilience_policy, resilience_policy_problems = resolve_policy(
+            {
+                "truncation_mode": "aggressive",
+                "notification_level": "verbose",
+                "protected_tools": ["read"],
+                "protected_message_kinds": ["decision"],
+            }
+        )
+        expect(
+            not resilience_policy_problems,
+            "resilience policy should accept valid aggressive configuration",
+        )
+        expect(
+            resilience_policy.get("old_error_turn_threshold") == 2,
+            "aggressive resilience mode should tighten old-error threshold",
+        )
+
+        invalid_policy, invalid_policy_problems = resolve_policy(
+            {
+                "truncation_mode": "unsafe",
+                "notification_level": "loud",
+                "protected_tools": "bash",
+            }
+        )
+        expect(
+            bool(invalid_policy_problems),
+            "resilience policy should report schema problems for invalid values",
+        )
+        expect(
+            invalid_policy.get("truncation_mode") == "default",
+            "invalid resilience mode should fall back to default",
+        )
+
+        context_messages = [
+            {
+                "role": "assistant",
+                "kind": "analysis",
+                "content": "consider option A",
+                "turn": 1,
+            },
+            {
+                "role": "assistant",
+                "kind": "analysis",
+                "content": "consider option A",
+                "turn": 2,
+            },
+            {
+                "role": "tool",
+                "tool_name": "write",
+                "kind": "write",
+                "target_path": "README.md",
+                "content": "draft 1",
+                "turn": 3,
+            },
+            {
+                "role": "tool",
+                "tool_name": "write",
+                "kind": "write",
+                "target_path": "README.md",
+                "content": "draft 2",
+                "turn": 4,
+            },
+            {
+                "role": "tool",
+                "tool_name": "bash",
+                "kind": "error",
+                "command": "make validate",
+                "exit_code": 1,
+                "content": "lint failed",
+                "turn": 5,
+            },
+            {
+                "role": "tool",
+                "tool_name": "bash",
+                "kind": "result",
+                "command": "make validate",
+                "exit_code": 0,
+                "content": "lint pass",
+                "turn": 9,
+            },
+            {
+                "role": "assistant",
+                "kind": "decision",
+                "content": "ship with tests",
+                "turn": 10,
+            },
+            {
+                "role": "assistant",
+                "kind": "analysis",
+                "content": "historical note",
+                "turn": 2,
+            },
+        ]
+        pruned_context = prune_context(
+            context_messages, resilience_policy, max_messages=5
+        )
+        drop_reasons = {
+            item.get("reason") for item in pruned_context.get("dropped", [])
+        }
+        expect(
+            "deduplicated" in drop_reasons,
+            "context pruning should deduplicate repeated non-protected messages",
+        )
+        expect(
+            "superseded_write" in drop_reasons,
+            "context pruning should prune superseded writes for same target",
+        )
+        expect(
+            "stale_error_purged" in drop_reasons,
+            "context pruning should purge old errors when newer success exists",
+        )
+        expect(
+            any(
+                message.get("kind") == "decision"
+                for message in pruned_context.get("messages", [])
+            ),
+            "context pruning should preserve protected decision messages",
+        )
+        expect(
+            any(
+                message.get("command") == "make validate"
+                and message.get("exit_code") == 0
+                for message in pruned_context.get("messages", [])
+            ),
+            "context pruning should preserve latest command outcomes as critical evidence",
+        )
 
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"

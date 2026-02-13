@@ -32,6 +32,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/rules_command.py` with `/rules status`, `/rules explain`, per-rule disable/enable controls, and `/rules doctor` diagnostics.
 - Added `instructions/rules_team_pack_examples.md` with practical team rule-pack layout and sample rule files.
 - Added `instructions/context_resilience_policy_schema.md` defining truncation modes, protected artifacts, and resilience notification levels for Epic 11 Task 11.1.
+- Added `scripts/context_resilience.py` implementing resilience policy resolution and deterministic context pruning primitives.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -63,6 +64,7 @@ All notable changes to this project are documented in this file.
 - Expanded selftest coverage for conditional rule discovery and effective-stack resolution behavior.
 - Added `/doctor` rules subsystem integration and expanded install/selftest coverage for rules command workflows.
 - Expanded rules verification to cover always-apply behavior, equal-priority lexical ordering, and richer discovery scenarios.
+- Expanded selftest coverage for context resilience policy validation and pruning behavior (dedupe, superseded writes, stale error purge, protected evidence retention).
 
 ## v0.2.0 - 2026-02-12
 
