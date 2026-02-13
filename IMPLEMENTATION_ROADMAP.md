@@ -41,7 +41,7 @@ Use this map to avoid overlapping implementations.
 | E2 | Background Task Orchestration | done | High | E1 | bd-1ob, bd-3lf, bd-2xo, bd-mb2 | Keep minimal and stable first |
 | E3 | Refactor Workflow Command | done | High | E1 | bd-zfx, bd-vc3, bd-2ps, bd-3fr | Safer rollout after config layering |
 | E4 | Continuation and Safety Hooks | done | Medium | E1, E2 | bd-1h0, bd-1ex, bd-1dr, bd-3uq | Start with minimal hooks only |
-| E5 | Category-Based Model Routing | in_progress | Medium | E1 | bd-2z6 | Can partially overlap with E2/E3 |
+| E5 | Category-Based Model Routing | in_progress | Medium | E1 | bd-2z6, bd-m48 | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
 | E8 | Keyword-Triggered Execution Modes | planned | High | E1, E4 | TBD | Fast power-mode activation from prompt text |
@@ -306,10 +306,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 5.1.2: Define category settings (`model`, `temperature`, `reasoning`, `verbosity`)
   - [x] Subtask 5.1.3: Define fallback behavior when model is unavailable
   - [x] Notes: Added baseline schema/validation/resolution helpers in `scripts/model_routing_schema.py` and schema docs in `instructions/model_routing_schema.md`.
-- [ ] Task 5.2: Implement resolution engine
-  - [ ] Subtask 5.2.1: Resolve from user override -> category default -> system default
-  - [ ] Subtask 5.2.2: Add deterministic fallback logging for diagnostics
-  - [ ] Subtask 5.2.3: Add integration points with `/stack` and wizard profiles
+- [x] Task 5.2: Implement resolution engine
+  - [x] Subtask 5.2.1: Resolve from user override -> category default -> system default
+  - [x] Subtask 5.2.2: Add deterministic fallback logging for diagnostics
+  - [x] Subtask 5.2.3: Add integration points with `/stack` and wizard profiles
+  - [x] Notes: Added `scripts/model_routing_command.py`, deterministic resolution trace in `resolve_model_settings`, and stack/wizard integration for model profile selection.
 - [ ] Task 5.3: UX and docs
   - [ ] Subtask 5.3.1: Add `/model-profile` command surface
   - [ ] Subtask 5.3.2: Document practical routing examples by workload

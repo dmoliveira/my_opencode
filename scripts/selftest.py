@@ -20,6 +20,7 @@ from hook_actions import (  # type: ignore
 from model_routing_schema import (  # type: ignore
     default_schema,
     resolve_category,
+    resolve_model_settings,
     validate_schema,
 )
 
@@ -40,6 +41,7 @@ NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
+MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -706,6 +708,24 @@ def main() -> int:
             "focus stack should apply strict policy",
         )
 
+        model_focus = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=stack_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_focus.returncode == 0,
+            f"model-routing status after focus failed: {model_focus.stderr}",
+        )
+        model_focus_report = parse_json_output(model_focus.stdout)
+        expect(
+            model_focus_report.get("active_category") == "deep",
+            "focus stack should set deep model routing category",
+        )
+
         result = run_stack("apply", "quiet-ci")
         expect(result.returncode == 0, f"stack apply quiet-ci failed: {result.stderr}")
         post_after_quiet = load_json_file(session_cfg_path)
@@ -716,6 +736,24 @@ def main() -> int:
         expect(
             post_after_quiet.get("post_session", {}).get("command") == "make validate",
             "quiet-ci stack should set validate command",
+        )
+
+        model_quiet = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=stack_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_quiet.returncode == 0,
+            f"model-routing status after quiet-ci failed: {model_quiet.stderr}",
+        )
+        model_quiet_report = parse_json_output(model_quiet.stdout)
+        expect(
+            model_quiet_report.get("active_category") == "quick",
+            "quiet-ci stack should set quick model routing category",
         )
 
         result = run_stack("status")
@@ -1266,6 +1304,69 @@ def main() -> int:
             "model routing should fallback when requested model is unavailable",
         )
 
+        resolved_with_precedence = resolve_model_settings(
+            schema=routing_schema,
+            requested_category="deep",
+            user_overrides={"verbosity": "high", "model": "openai/custom-unavailable"},
+            system_defaults={
+                "model": "openai/gpt-5.3-codex",
+                "temperature": 0.3,
+                "reasoning": "medium",
+                "verbosity": "low",
+            },
+            available_models={"openai/gpt-5-mini", "openai/gpt-5.3-codex"},
+        )
+        expect(
+            resolved_with_precedence.get("settings", {}).get("model")
+            == "openai/gpt-5.3-codex",
+            "model routing should fallback to available category/system model deterministically",
+        )
+        expect(
+            len(resolved_with_precedence.get("trace", [])) >= 4,
+            "model routing should include deterministic fallback trace",
+        )
+
+        model_routing_set = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "set-category", "visual"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_set.returncode == 0,
+            "model-routing set-category should succeed",
+        )
+        model_routing_resolve = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "resolve",
+                "--override-model",
+                "openai/nonexistent",
+                "--available-models",
+                "openai/gpt-5-mini,openai/gpt-5.3-codex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_resolve.returncode == 0,
+            "model-routing resolve should succeed",
+        )
+        model_routing_report = parse_json_output(model_routing_resolve.stdout)
+        expect(
+            model_routing_report.get("category") == "visual"
+            and model_routing_report.get("settings", {}).get("model")
+            == "openai/gpt-5.3-codex",
+            "model-routing resolve should keep active category and apply model fallback",
+        )
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )
@@ -1296,6 +1397,8 @@ def main() -> int:
                 "local",
                 "--post-session-profile",
                 "manual-validate",
+                "--model-profile",
+                "deep",
             ],
             capture_output=True,
             text=True,
@@ -1316,6 +1419,10 @@ def main() -> int:
         expect(
             wizard_state.get("profiles", {}).get("telemetry") == "local",
             "wizard should persist selected telemetry profile",
+        )
+        expect(
+            wizard_state.get("profiles", {}).get("model_routing") == "deep",
+            "wizard should persist selected model routing profile",
         )
         post_after_wizard = load_json_file(session_cfg_path)
         expect(

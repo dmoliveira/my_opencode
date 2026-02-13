@@ -130,6 +130,14 @@
       "description": "Run hook diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" doctor --json`\nShow only the command output."
     },
+    "model-routing": {
+      "description": "Manage model routing (status|set-category|resolve)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "model-routing-status": {
+      "description": "Show active model routing category",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" status`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

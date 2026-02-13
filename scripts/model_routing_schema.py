@@ -6,6 +6,12 @@ from typing import Any
 
 
 DEFAULT_CATEGORY = "quick"
+SYSTEM_DEFAULTS = {
+    "model": "openai/gpt-5.3-codex",
+    "temperature": 0.2,
+    "reasoning": "medium",
+    "verbosity": "medium",
+}
 
 
 def default_schema() -> dict[str, Any]:
@@ -103,4 +109,91 @@ def resolve_category(
         "category": choice,
         "settings": selected,
         "reason": reason,
+    }
+
+
+def resolve_model_settings(
+    schema: dict[str, Any],
+    requested_category: str | None,
+    user_overrides: dict[str, Any] | None = None,
+    system_defaults: dict[str, Any] | None = None,
+    available_models: set[str] | None = None,
+) -> dict[str, Any]:
+    overrides = user_overrides if isinstance(user_overrides, dict) else {}
+    base_system = dict(SYSTEM_DEFAULTS)
+    if isinstance(system_defaults, dict):
+        for key in ("model", "temperature", "reasoning", "verbosity"):
+            if key in system_defaults:
+                base_system[key] = system_defaults[key]
+
+    category_result = resolve_category(
+        schema=schema,
+        requested_category=requested_category,
+        available_models=available_models,
+    )
+    category_settings = category_result.get("settings", {})
+    if not isinstance(category_settings, dict):
+        category_settings = {}
+
+    resolved = dict(base_system)
+    trace = [
+        {
+            "step": 1,
+            "source": "system_default",
+            "reason": "base_defaults",
+            "applied": dict(base_system),
+        }
+    ]
+
+    for field in ("model", "temperature", "reasoning", "verbosity"):
+        if field in category_settings:
+            resolved[field] = category_settings[field]
+    trace.append(
+        {
+            "step": 2,
+            "source": "category_default",
+            "reason": category_result.get("reason"),
+            "category": category_result.get("category"),
+            "applied": {
+                field: category_settings.get(field)
+                for field in ("model", "temperature", "reasoning", "verbosity")
+                if field in category_settings
+            },
+        }
+    )
+
+    override_applied: dict[str, Any] = {}
+    for field in ("model", "temperature", "reasoning", "verbosity"):
+        if field in overrides and overrides[field] is not None:
+            resolved[field] = overrides[field]
+            override_applied[field] = overrides[field]
+    trace.append(
+        {
+            "step": 3,
+            "source": "user_override",
+            "reason": "explicit_override" if override_applied else "none",
+            "applied": override_applied,
+        }
+    )
+
+    if available_models is not None and resolved.get("model") not in available_models:
+        fallback_model = category_settings.get("model")
+        fallback_reason = "fallback_unavailable_model_to_category"
+        if fallback_model not in available_models:
+            fallback_model = base_system.get("model")
+            fallback_reason = "fallback_unavailable_model_to_system_default"
+        resolved["model"] = fallback_model
+        trace.append(
+            {
+                "step": 4,
+                "source": "availability_fallback",
+                "reason": fallback_reason,
+                "applied": {"model": fallback_model},
+            }
+        )
+
+    return {
+        "category": category_result.get("category"),
+        "settings": resolved,
+        "trace": trace,
     }
