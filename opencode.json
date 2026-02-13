@@ -66,6 +66,26 @@
       "description": "Show layered config precedence in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" layers --json`\nShow only the command output."
     },
+    "bg": {
+      "description": "Manage background jobs (start|status|list|read|cancel|cleanup|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "bg-help": {
+      "description": "Show background task command usage",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" help`\nShow only the command output."
+    },
+    "bg-list": {
+      "description": "List recent background jobs",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" list`\nShow only the command output."
+    },
+    "bg-running": {
+      "description": "List running background jobs",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" list --status running`\nShow only the command output."
+    },
+    "bg-doctor-json": {
+      "description": "Run background task diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" doctor --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

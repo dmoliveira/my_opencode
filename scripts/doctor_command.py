@@ -83,6 +83,16 @@ CHECKS = [
             "status",
         ],
     },
+    {
+        "name": "bg",
+        "kind": "doctor-json",
+        "command": [
+            sys.executable,
+            str(script_path("background_task_manager.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 
