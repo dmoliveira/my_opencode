@@ -22,6 +22,7 @@ All notable changes to this project are documented in this file.
 - Added `/bg-status-json` shortcut and richer background diagnostics payloads (`/bg status --json`, `/bg doctor --json`).
 - Added `instructions/refactor_lite_contract.md` defining `/refactor-lite` syntax, guardrails, and success/failure output contract for Epic 3.
 - Added `scripts/refactor_lite_command.py` backend with preflight target analysis, structured plan output, and verification hooks (`make validate`, optional `make selftest`).
+- Added `/refactor-lite` command templates and shortcuts in `opencode.json`, plus installer hints for dry-run/self-check usage.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -37,6 +38,7 @@ All notable changes to this project are documented in this file.
 - Integrated background task diagnostics into `/doctor` summary output.
 - Expanded README async workflow examples for `/bg` including failure/recovery troubleshooting.
 - Expanded selftest and install smoke coverage for `/refactor-lite` backend preflight and verification behavior.
+- Added optional `/doctor` integration check for `refactor-lite` when backend script is present.
 
 ## v0.2.0 - 2026-02-12
 

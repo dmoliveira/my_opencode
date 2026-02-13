@@ -1130,6 +1130,20 @@ def main() -> int:
         expect(bool(bg_checks), "doctor summary should include bg check")
         expect(bg_checks[0].get("ok") is True, "doctor bg check should pass")
 
+        refactor_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "refactor-lite"
+        ]
+        expect(
+            bool(refactor_checks),
+            "doctor summary should include optional refactor-lite check",
+        )
+        expect(
+            refactor_checks[0].get("ok") is True,
+            "doctor refactor-lite check should pass when backend exists",
+        )
+
     print("selftest: PASS")
     return 0
 

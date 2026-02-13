@@ -93,6 +93,21 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "refactor-lite",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("refactor_lite_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("refactor_lite_command.py")),
+            "profile",
+            "--scope",
+            "scripts/*.py",
+            "--dry-run",
+            "--json",
+        ],
+    },
 ]
 
 
@@ -102,6 +117,20 @@ def usage() -> int:
 
 
 def run_check(entry: dict) -> dict:
+    if entry.get("optional"):
+        required = Path(str(entry.get("required_path") or ""))
+        if not required.exists():
+            return {
+                "name": entry["name"],
+                "kind": entry["kind"],
+                "exit_code": 0,
+                "ok": True,
+                "stdout": "",
+                "stderr": "",
+                "skipped": True,
+                "skip_reason": f"optional check unavailable: {required}",
+            }
+
     result = subprocess.run(
         entry["command"],
         capture_output=True,
@@ -138,6 +167,8 @@ def summarize(items: list[dict]) -> dict:
     failed = [item for item in items if not item.get("ok")]
     warnings = []
     for item in items:
+        if item.get("skipped"):
+            warnings.append(f"{item['name']}: {item.get('skip_reason')}")
         report = item.get("report")
         if isinstance(report, dict):
             for warning in report.get("warnings", []):
