@@ -90,6 +90,12 @@ fi
 if [ -f "$INSTALL_DIR/scripts/autoflow_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/autoflow_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/pr_review_analyzer.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/pr_review_analyzer.py"
+fi
+if [ -f "$INSTALL_DIR/scripts/pr_review_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/pr_review_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -141,12 +147,13 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   fi
   if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
     python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true
-    python3 -c "import json,pathlib; p=pathlib.Path('$CONFIG_PATH'); data=json.loads(p.read_text(encoding='utf-8')); pe=data.get('plan_execution', {}); steps=pe.get('steps', []); pe['status']='failed'; pe['resume']={'enabled': True, 'attempt_count': 0, 'max_attempts': 3, 'trail': []};
+    RUNTIME_PATH="$HOME/.config/opencode/my_opencode/runtime/plan_execution.json"
+    python3 -c "import json,pathlib; p=pathlib.Path('$RUNTIME_PATH'); data=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; steps=data.get('steps', []); data['status']='failed'; data['resume']={'enabled': True, 'attempt_count': 0, 'max_attempts': 3, 'trail': []};
 if isinstance(steps, list) and len(steps) >= 2:
   steps[0]['state']='done';
   steps[1]['state']='pending';
   steps[1]['idempotent']=False;
-data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"
+p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"
     python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --json || true
     python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
   fi
@@ -173,6 +180,13 @@ data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encodin
     python3 "$INSTALL_DIR/scripts/autoflow_command.py" report --json
     python3 "$INSTALL_DIR/scripts/autoflow_command.py" stop --reason install-self-check --json
     python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --deviation "install self-check" --json
+  fi
+  if [ -f "$INSTALL_DIR/scripts/pr_review_command.py" ]; then
+    SELF_CHECK_DIFF="$HOME/.config/opencode/my_opencode/.install-selfcheck-pr.diff"
+    python3 -c "from pathlib import Path; Path('$SELF_CHECK_DIFF').write_text('diff --git a/scripts/install_selfcheck.py b/scripts/install_selfcheck.py\nindex 0000000..1111111 100644\n--- a/scripts/install_selfcheck.py\n+++ b/scripts/install_selfcheck.py\n@@ -0,0 +1,1 @@\n+print(\"install\")\n', encoding='utf-8')"
+    python3 "$INSTALL_DIR/scripts/pr_review_command.py" --diff-file "$SELF_CHECK_DIFF" --json
+    python3 "$INSTALL_DIR/scripts/pr_review_command.py" checklist --diff-file "$SELF_CHECK_DIFF" --json
+    python3 "$INSTALL_DIR/scripts/pr_review_command.py" doctor --json
   fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
@@ -245,6 +259,9 @@ printf "  /autoflow dry-run ~/.config/opencode/my_opencode/plan.md --json\n"
 printf "  /autoflow status --json\n"
 printf "  /autoflow report --json\n"
 printf "  /autoflow stop --reason manual --json\n"
+printf "  /pr-review --base main --head HEAD --json\n"
+printf "  /pr-review-checklist --base main --head HEAD\n"
+printf "  /pr-review-doctor\n"
 printf "  /todo status --json\n"
 printf "  /todo enforce --json\n"
 printf "  /resume status --json\n"

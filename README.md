@@ -234,6 +234,27 @@ python3 ~/.config/opencode/my_opencode/scripts/pr_review_analyzer.py analyze --b
 python3 ~/.config/opencode/my_opencode/scripts/pr_review_analyzer.py analyze --diff-file /tmp/pr.diff --json
 ```
 
+Task 23.3 command integration:
+
+- command module: `scripts/pr_review_command.py`
+- command surface: `/pr-review`, `/pr-review-json`, `/pr-review-checklist`, `/pr-review-doctor`
+- doctor integration: unified `/doctor run --json` includes `pr-review` subsystem readiness
+
+Warning vs blocker triage flow:
+
+- `block`: at least one `S3` finding with `C2+` confidence and hard evidence; do not merge until fixed.
+- `changes_requested`: repeated `S2` findings with concrete remediation and missing evidence.
+- `needs_review`: medium-risk findings or uncertain evidence requiring reviewer attention.
+- `approve`: no meaningful risk findings beyond informational noise.
+
+Examples:
+
+```text
+/pr-review --base main --head HEAD --json
+/pr-review checklist --base main --head HEAD --json
+/pr-review doctor --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

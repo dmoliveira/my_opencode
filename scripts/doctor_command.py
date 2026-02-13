@@ -205,6 +205,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "pr-review",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("pr_review_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("pr_review_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "budget",
         "kind": "doctor-json",
         "optional": True,
