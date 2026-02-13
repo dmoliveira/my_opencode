@@ -56,6 +56,11 @@ from checkpoint_snapshot_manager import (  # type: ignore
     show_snapshot,
     write_snapshot,
 )
+from execution_budget_runtime import (  # type: ignore
+    build_budget_state,
+    evaluate_budget,
+    resolve_budget_policy,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2056,6 +2061,90 @@ version: 1
         expect(
             start_work_report.get("deviation_count", 0) >= 2,
             "start-work should capture precompleted and manual deviations",
+        )
+        expect(
+            isinstance(start_work_report.get("budget"), dict)
+            and start_work_report.get("budget", {}).get("result")
+            in {"PASS", "WARN", "FAIL"},
+            "start-work should include budget runtime evaluation payload",
+        )
+
+        budget_policy = resolve_budget_policy(
+            {"budget_runtime": {"profile": "balanced"}}
+        )
+        budget_counters = build_budget_state(
+            "2026-02-13T00:00:00Z",
+            tool_call_count=5,
+            token_estimate=100,
+            now_ts="2026-02-13T00:00:05Z",
+        )
+        budget_eval_ok = evaluate_budget(budget_policy, budget_counters)
+        expect(
+            budget_eval_ok.get("result") == "PASS",
+            "budget runtime should stay PASS when counters are below thresholds",
+        )
+
+        config_path = Path(str(start_work_report.get("config") or ""))
+        forced_budget_config = load_json_file(config_path)
+        forced_budget_config["budget_runtime"] = {
+            "profile": "conservative",
+            "overrides": {
+                "wall_clock_seconds": 2,
+                "tool_call_count": 2,
+                "token_estimate": 10,
+            },
+        }
+        config_path.write_text(
+            json.dumps(forced_budget_config, indent=2) + "\n", encoding="utf-8"
+        )
+        start_work_budget_stop = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), str(plan_path), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            start_work_budget_stop.returncode == 1,
+            "start-work should fail when budget hard thresholds are exceeded",
+        )
+        start_work_budget_stop_report = parse_json_output(start_work_budget_stop.stdout)
+        expect(
+            start_work_budget_stop_report.get("status") == "budget_stopped"
+            and start_work_budget_stop_report.get("budget", {}).get("result") == "FAIL",
+            "start-work should report budget_stopped with FAIL budget payload",
+        )
+        expect(
+            str(
+                start_work_budget_stop_report.get("budget", {}).get("reason_code", "")
+            ).startswith("budget_"),
+            "start-work budget stop should expose deterministic budget reason codes",
+        )
+
+        restored_config = load_json_file(config_path)
+        restored_config.pop("budget_runtime", None)
+        config_path.write_text(
+            json.dumps(restored_config, indent=2) + "\n", encoding="utf-8"
+        )
+        start_work_reset = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                str(plan_path),
+                "--deviation",
+                "manual verification note",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            start_work_reset.returncode == 0,
+            "start-work should recover to completed status after clearing forced budget override",
         )
 
         start_work_status = subprocess.run(

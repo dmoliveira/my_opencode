@@ -66,6 +66,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/checkpoint_command.py` with `/checkpoint list|show|prune|doctor` checkpoint visibility and maintenance commands.
 - Added deterministic checkpoint verification coverage for atomic writes, corrupted payload handling, integrity mismatch detection, bounded retention, and gzip rotation behavior.
 - Added `instructions/execution_budget_model.md` defining Epic 20 Task 20.1 budget dimensions, profile defaults, threshold semantics, and override/emergency-stop rules.
+- Added `scripts/execution_budget_runtime.py` implementing budget policy resolution, counter tracking, and threshold evaluation for runtime guardrails.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -126,6 +127,7 @@ All notable changes to this project are documented in this file.
 - Integrated checkpoint diagnostics into unified `/doctor`, expanded README command examples, and added selftest coverage for `/checkpoint` command flows.
 - Expanded installer self-check smoke flow and command hints to include `/checkpoint list|show|prune|doctor` lifecycle checks.
 - Marked Epic 20 as in progress and completed Task 20.1 execution budget model definition notes in the roadmap.
+- Integrated budget runtime evaluation into `/start-work` and `/start-work recover`, including `budget_stopped` hard-stop behavior and actionable continuation recommendations.
 
 ## v0.2.0 - 2026-02-12
 
