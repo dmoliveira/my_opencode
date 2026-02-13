@@ -47,7 +47,7 @@ Use this map to avoid overlapping implementations.
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
-| E11 | Context-Window Resilience Toolkit | in_progress | High | E4 | bd-2tj, bd-n9y | Improve long-session stability and recovery |
+| E11 | Context-Window Resilience Toolkit | in_progress | High | E4 | bd-2tj, bd-n9y, bd-2t0 | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
@@ -482,10 +482,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 11.2.2: Add old-error input purge with turn thresholds
   - [x] Subtask 11.2.3: Preserve critical evidence and command outcomes
   - [x] Notes: Added `scripts/context_resilience.py` with policy resolution plus deterministic pruning (dedupe, superseded writes, stale error purge, budget trim) while preserving protected artifacts and latest command outcomes.
-- [ ] Task 11.3: Recovery workflows
-  - [ ] Subtask 11.3.1: Add automatic resume hints after successful recovery
-  - [ ] Subtask 11.3.2: Add safe fallback when recovery cannot proceed
-  - [ ] Subtask 11.3.3: Add diagnostics for pruning/recovery actions
+- [x] Task 11.3: Recovery workflows
+  - [x] Subtask 11.3.1: Add automatic resume hints after successful recovery
+  - [x] Subtask 11.3.2: Add safe fallback when recovery cannot proceed
+  - [x] Subtask 11.3.3: Add diagnostics for pruning/recovery actions
+  - [x] Notes: Added recovery-plan generation in `scripts/context_resilience.py` with resume hints, safe fallback actions, and structured pruning/recovery diagnostics.
 - [ ] Task 11.4: Validation and docs
   - [ ] Subtask 11.4.1: Add stress tests for long-session behavior
   - [ ] Subtask 11.4.2: Add docs for tuning resilience settings

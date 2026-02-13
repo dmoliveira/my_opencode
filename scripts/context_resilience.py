@@ -241,3 +241,78 @@ def prune_context(
         "kept_count": len(kept_messages),
         "dropped_count": len(dropped),
     }
+
+
+def build_recovery_plan(
+    original_messages: list[dict[str, Any]],
+    pruned_report: dict[str, Any],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    kept_messages = list(pruned_report.get("messages", []))
+    drop_counts = dict(pruned_report.get("drop_counts", {}))
+
+    latest_success: dict[str, Any] | None = None
+    latest_error: dict[str, Any] | None = None
+    for idx, message in enumerate(kept_messages):
+        exit_code = message.get("exit_code")
+        if isinstance(exit_code, int) and exit_code == 0:
+            latest_success = {
+                "index": idx,
+                "command": str(message.get("command", "")).strip(),
+                "tool_name": str(message.get("tool_name", "")).strip(),
+            }
+        kind = str(message.get("kind", "")).strip().lower()
+        if kind == "error":
+            latest_error = {
+                "index": idx,
+                "command": str(message.get("command", "")).strip(),
+                "content": str(message.get("content", "")).strip(),
+            }
+
+    protected_retained = sum(
+        1 for message in kept_messages if _is_protected(message, policy)
+    )
+
+    if latest_success:
+        command = latest_success.get("command") or "latest successful command"
+        plan = {
+            "can_resume": True,
+            "recovery_action": "resume_hint",
+            "resume_hint": f"Resume from the last successful step: `{command}`.",
+            "fallback": None,
+        }
+    elif latest_error:
+        failed_command = latest_error.get("command") or "last failed command"
+        plan = {
+            "can_resume": False,
+            "recovery_action": "safe_fallback",
+            "resume_hint": None,
+            "fallback": {
+                "reason": "no_successful_recovery_anchor",
+                "steps": [
+                    "restore full context snapshot for the current workflow",
+                    f"re-run `{failed_command}` in isolation with explicit logging",
+                    "request operator review before applying any destructive edits",
+                ],
+            },
+        }
+    else:
+        plan = {
+            "can_resume": True,
+            "recovery_action": "resume_hint",
+            "resume_hint": "Resume from the latest retained decision and rerun validation.",
+            "fallback": None,
+        }
+
+    return {
+        **plan,
+        "diagnostics": {
+            "original_count": len(original_messages),
+            "kept_count": len(kept_messages),
+            "dropped_count": int(pruned_report.get("dropped_count", 0)),
+            "drop_counts": drop_counts,
+            "protected_retained_count": protected_retained,
+            "notification_level": str(policy.get("notification_level", "normal")),
+            "truncation_mode": str(policy.get("truncation_mode", "default")),
+        },
+    }

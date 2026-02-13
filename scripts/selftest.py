@@ -24,7 +24,11 @@ from model_routing_schema import (  # type: ignore
     validate_schema,
 )
 from keyword_mode_schema import resolve_prompt_modes  # type: ignore
-from context_resilience import prune_context, resolve_policy  # type: ignore
+from context_resilience import (  # type: ignore
+    build_recovery_plan,
+    prune_context,
+    resolve_policy,
+)
 from rules_engine import (  # type: ignore
     discover_rules,
     parse_frontmatter,
@@ -1953,6 +1957,60 @@ def main() -> int:
                 for message in pruned_context.get("messages", [])
             ),
             "context pruning should preserve latest command outcomes as critical evidence",
+        )
+
+        recovery_plan = build_recovery_plan(
+            context_messages, pruned_context, resilience_policy
+        )
+        expect(
+            recovery_plan.get("can_resume") is True,
+            "recovery plan should allow resume when success anchor exists",
+        )
+        expect(
+            recovery_plan.get("recovery_action") == "resume_hint",
+            "recovery plan should emit resume hints after successful recovery",
+        )
+        expect(
+            "make validate" in str(recovery_plan.get("resume_hint", "")),
+            "resume hint should reference latest successful command",
+        )
+        expect(
+            isinstance(recovery_plan.get("diagnostics", {}).get("drop_counts"), dict),
+            "recovery diagnostics should include pruning reason counts",
+        )
+
+        failed_only_messages = [
+            {
+                "role": "tool",
+                "tool_name": "bash",
+                "kind": "error",
+                "command": "make install-test",
+                "exit_code": 2,
+                "content": "missing dependency",
+                "turn": 1,
+            },
+            {
+                "role": "assistant",
+                "kind": "analysis",
+                "content": "investigate dependency mismatch",
+                "turn": 2,
+            },
+        ]
+        failed_pruned = prune_context(failed_only_messages, resilience_policy)
+        failed_plan = build_recovery_plan(
+            failed_only_messages, failed_pruned, resilience_policy
+        )
+        expect(
+            failed_plan.get("can_resume") is False,
+            "recovery plan should block resume when no success anchor is available",
+        )
+        expect(
+            failed_plan.get("recovery_action") == "safe_fallback",
+            "recovery plan should provide safe fallback path for unrecoverable contexts",
+        )
+        expect(
+            bool(failed_plan.get("fallback", {}).get("steps")),
+            "safe fallback should include actionable recovery steps",
         )
 
         wizard_state_path = (
