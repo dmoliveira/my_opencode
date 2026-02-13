@@ -49,6 +49,9 @@ All notable changes to this project are documented in this file.
 - Added `/start-work-bg` and `/start-work-doctor-json` aliases for background-safe queueing and execution health diagnostics.
 - Added `instructions/plan_execution_workflows.md` with sample plans and direct/background/recovery workflows for `/start-work`.
 - Added `instructions/todo_compliance_model.md` defining todo states, transition enforcement, bypass metadata, and compliance audit event format for Epic 15 Task 15.1.
+- Added `scripts/todo_enforcement.py` with deterministic todo transition/completion validation and remediation hint helpers for Epic 15 Task 15.2.
+- Added `scripts/todo_command.py` with `/todo status` and `/todo enforce` diagnostics for runtime compliance visibility.
+- Added `/todo`, `/todo-status`, and `/todo-enforce` aliases in `opencode.json`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -93,6 +96,9 @@ All notable changes to this project are documented in this file.
 - Expanded install/selftest coverage for `/start-work` plan validation, execution state persistence, and deviation diagnostics.
 - Expanded `/start-work` integrations with background queue handoff, digest recap payloads, and unified `/doctor` visibility.
 - Expanded `/start-work` validation coverage for missing frontmatter, out-of-order ordinals, and recovery from invalid runtime state.
+- Updated `/start-work` execution to enforce todo compliance transitions, emit audit events, and block completion when required items remain unchecked.
+- Integrated todo compliance checks into `/doctor` summary, installer self-checks, and install-test smoke coverage.
+- Expanded selftest coverage for todo transition gating, completion blocking, and bypass audit-event payload validation.
 
 ## v0.2.0 - 2026-02-12
 

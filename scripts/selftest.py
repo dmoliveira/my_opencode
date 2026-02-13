@@ -34,6 +34,13 @@ from rules_engine import (  # type: ignore
     parse_frontmatter,
     resolve_effective_rules,
 )
+from todo_enforcement import (  # type: ignore
+    build_bypass_event,
+    remediation_prompts,
+    validate_plan_completion,
+    validate_todo_set,
+    validate_todo_transition,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +66,7 @@ RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
+TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1291,6 +1299,83 @@ def main() -> int:
             "hooks doctor json should report PASS",
         )
 
+        invalid_todo_transition = validate_todo_transition(
+            todo_id="todo-1",
+            from_state="pending",
+            to_state="done",
+        )
+        expect(
+            isinstance(invalid_todo_transition, dict)
+            and invalid_todo_transition.get("code") == "missing_bypass_metadata",
+            "todo enforcement should require bypass metadata for pending->done transition",
+        )
+
+        valid_bypass_transition = validate_todo_transition(
+            todo_id="todo-2",
+            from_state="pending",
+            to_state="done",
+            bypass={
+                "bypass_reason": "covered by prior migration",
+                "bypass_actor": "owner",
+                "bypass_at": "2026-02-13T12:05:00Z",
+                "bypass_type": "scope_change",
+            },
+        )
+        expect(
+            valid_bypass_transition is None,
+            "todo enforcement should allow pending->done with valid bypass metadata",
+        )
+
+        bypass_event = build_bypass_event(
+            todo_id="todo-2",
+            from_state="pending",
+            to_state="done",
+            at="2026-02-13T12:05:00Z",
+            actor="owner",
+            bypass={
+                "bypass_reason": "covered by prior migration",
+                "bypass_actor": "owner",
+                "bypass_at": "2026-02-13T12:05:00Z",
+                "bypass_type": "scope_change",
+            },
+        )
+        expect(
+            bypass_event.get("event") == "todo_bypass"
+            and bypass_event.get("bypass", {}).get("type") == "scope_change",
+            "todo enforcement should emit deterministic bypass audit event payloads",
+        )
+
+        todo_set_violations = validate_todo_set(
+            [
+                {"id": "todo-1", "state": "in_progress"},
+                {"id": "todo-2", "state": "in_progress"},
+            ]
+        )
+        expect(
+            any(
+                v.get("code") == "multiple_in_progress_items"
+                for v in todo_set_violations
+            ),
+            "todo enforcement should detect multiple in-progress items",
+        )
+
+        completion_violations = validate_plan_completion(
+            [
+                {"id": "todo-1", "state": "done"},
+                {"id": "todo-2", "state": "pending"},
+            ]
+        )
+        expect(
+            any(v.get("code") == "incomplete_todo_set" for v in completion_violations),
+            "todo enforcement should block completion when required todos remain pending",
+        )
+
+        remediation = remediation_prompts(completion_violations)
+        expect(
+            len(remediation) >= 1,
+            "todo enforcement should emit actionable remediation prompts",
+        )
+
         routing_schema = default_schema()
         schema_problems = validate_schema(routing_schema)
         expect(not schema_problems, "default model routing schema should validate")
@@ -1691,8 +1776,12 @@ version: 1
             "start-work should report completed status for fully executed plan",
         )
         expect(
-            start_work_report.get("step_counts", {}).get("completed") == 3,
+            start_work_report.get("step_counts", {}).get("done") == 3,
             "start-work should complete all plan steps",
+        )
+        expect(
+            start_work_report.get("todo_compliance", {}).get("result") == "PASS",
+            "start-work should report PASS todo compliance for valid plan execution",
         )
         expect(
             start_work_report.get("deviation_count", 0) >= 2,
@@ -1712,6 +1801,36 @@ version: 1
         expect(
             start_work_status_report.get("status") == "completed",
             "start-work status should persist latest run status",
+        )
+
+        todo_status = subprocess.run(
+            [sys.executable, str(TODO_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(todo_status.returncode == 0, "todo status should succeed")
+        todo_status_report = parse_json_output(todo_status.stdout)
+        expect(
+            todo_status_report.get("result") == "PASS",
+            "todo status should pass after compliant start-work run",
+        )
+
+        todo_enforce = subprocess.run(
+            [sys.executable, str(TODO_SCRIPT), "enforce", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(todo_enforce.returncode == 0, "todo enforce should pass")
+        todo_enforce_report = parse_json_output(todo_enforce.stdout)
+        expect(
+            todo_enforce_report.get("result") == "PASS",
+            "todo enforce should report PASS for complete todo set",
         )
 
         start_work_deviations = subprocess.run(
@@ -1941,6 +2060,29 @@ version: 1
         expect(
             start_work_doctor_fail_report.get("result") == "FAIL",
             "start-work doctor should report FAIL for invalid recovery state",
+        )
+
+        todo_enforce_fail = subprocess.run(
+            [sys.executable, str(TODO_SCRIPT), "enforce", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            todo_enforce_fail.returncode == 1,
+            "todo enforce should fail for invalid runtime todo state",
+        )
+        todo_enforce_fail_report = parse_json_output(todo_enforce_fail.stdout)
+        expect(
+            any(
+                violation.get("code")
+                in ("multiple_in_progress_items", "incomplete_todo_set")
+                for violation in todo_enforce_fail_report.get("violations", [])
+                if isinstance(violation, dict)
+            ),
+            "todo enforce should surface compliance violations with deterministic codes",
         )
 
         start_work_recover = subprocess.run(
@@ -2893,6 +3035,12 @@ version: 1
             start_work_checks[0].get("ok") is True,
             "doctor start-work check should pass",
         )
+
+        todo_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "todo"
+        ]
+        expect(bool(todo_checks), "doctor summary should include todo check")
+        expect(todo_checks[0].get("ok") is True, "doctor todo check should pass")
 
     print("selftest: PASS")
     return 0

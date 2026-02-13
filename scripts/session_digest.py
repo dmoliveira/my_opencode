@@ -12,6 +12,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import load_layered_config  # type: ignore
+from todo_enforcement import normalize_todo_state  # type: ignore
 
 
 DEFAULT_DIGEST_PATH = Path(
@@ -85,10 +86,11 @@ def collect_plan_execution_snapshot() -> dict:
     steps = raw_steps if isinstance(raw_steps, list) else []
     counts = {
         "total": len(steps),
-        "completed": sum(
+        "done": sum(
             1
             for step in steps
-            if isinstance(step, dict) and step.get("state") == "completed"
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "done"
         ),
         "failed": sum(
             1
@@ -98,7 +100,20 @@ def collect_plan_execution_snapshot() -> dict:
         "in_progress": sum(
             1
             for step in steps
-            if isinstance(step, dict) and step.get("state") == "in_progress"
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "in_progress"
+        ),
+        "pending": sum(
+            1
+            for step in steps
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "pending"
+        ),
+        "skipped": sum(
+            1
+            for step in steps
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "skipped"
         ),
     }
     raw_plan = section.get("plan")

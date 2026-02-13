@@ -75,6 +75,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/start_work_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/start_work_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/todo_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -119,6 +122,10 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
     python3 "$INSTALL_DIR/scripts/start_work_command.py" status --json
     python3 "$INSTALL_DIR/scripts/start_work_command.py" deviations --json
     python3 "$INSTALL_DIR/scripts/start_work_command.py" doctor --json
+  fi
+  if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/todo_command.py" status --json
+    python3 "$INSTALL_DIR/scripts/todo_command.py" enforce --json
   fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
@@ -183,6 +190,8 @@ printf "  /start-work-bg ~/.config/opencode/my_opencode/plan.md\n"
 printf "  /start-work status --json\n"
 printf "  /start-work deviations --json\n"
 printf "  /start-work-doctor-json\n"
+printf "  /todo status --json\n"
+printf "  /todo enforce --json\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
 printf "  /devtools install all\n"

@@ -588,7 +588,7 @@ Epic 14 Task 14.1 defines the baseline plan format and execution-state rules for
 - backend command: `scripts/start_work_command.py`
 - format scope: markdown checklist + YAML metadata frontmatter
 - validation scope: deterministic preflight failures with line-level remediation hints
-- state model scope: `pending/in_progress/completed/failed/skipped` with strict transition semantics
+- state model scope: `pending/in_progress/done/skipped` with strict transition semantics
 
 Use:
 ```text
@@ -613,6 +613,23 @@ Epic 15 Task 15.1 defines the baseline compliance contract for enforced todo exe
 - required states: `pending`, `in_progress`, `done`, `skipped`
 - enforcement: one active item at a time with deterministic transition validation
 - bypass path: explicit metadata + audit event requirements for controlled exceptions
+
+Epic 15 Task 15.2 implements the enforcement backend:
+
+- engine module: `scripts/todo_enforcement.py`
+- `/start-work` now validates todo transitions before state mutation and blocks completion when required items remain unchecked
+- compliance violations now emit deterministic remediation prompts and persisted audit events
+
+Use:
+```text
+/todo status --json
+/todo enforce --json
+```
+
+Compliant workflow pattern:
+- run `/start-work path/to/plan.md --json`
+- inspect `/todo status --json` for current state counts
+- gate handoff/closure with `/todo enforce --json`
 
 ## Context resilience policy
 
@@ -961,6 +978,8 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`
 - `scripts/start_work_command.py` - backend script for `/start-work`
+- `scripts/todo_command.py` - backend script for `/todo`
+- `scripts/todo_enforcement.py` - shared todo compliance enforcement helpers
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`
 - `scripts/devtools_command.py` - backend script for `/devtools`

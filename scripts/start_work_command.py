@@ -19,6 +19,14 @@ from config_layering import (  # type: ignore
     resolve_write_path,
     save_config as save_config_file,
 )
+from todo_enforcement import (  # type: ignore
+    build_transition_event,
+    normalize_todo_state,
+    remediation_prompts,
+    validate_plan_completion,
+    validate_todo_set,
+    validate_todo_transition,
+)
 
 
 SECTION = "plan_execution"
@@ -325,10 +333,13 @@ def command_start(args: list[str]) -> int:
     assert parsed is not None
     steps = parsed["steps"]
     transitions: list[dict[str, Any]] = []
+    compliance_violations: list[dict[str, Any]] = []
+    audit_events: list[dict[str, Any]] = []
     deviation_records: list[dict[str, Any]] = []
+    actor = str(parsed["metadata"].get("owner") or "unknown")
 
     for step in steps:
-        state = "completed" if step["checked"] else "pending"
+        state = "done" if step["checked"] else "pending"
         step["state"] = state
         if step["checked"]:
             deviation_records.append(
@@ -354,17 +365,58 @@ def command_start(args: list[str]) -> int:
     for step in steps:
         if step["state"] != "pending":
             continue
-        step["state"] = "in_progress"
-        transitions.append(
-            {"step_ordinal": step["ordinal"], "to": "in_progress", "at": now_iso()}
+        todo_id = f"todo-{step['ordinal']}"
+        to_in_progress = validate_todo_transition(
+            todo_id=todo_id,
+            from_state=str(step["state"]),
+            to_state="in_progress",
         )
-        step["state"] = "completed"
+        if to_in_progress:
+            compliance_violations.append(to_in_progress)
+            continue
+        step["state"] = "in_progress"
+        transition_ts = now_iso()
         transitions.append(
-            {"step_ordinal": step["ordinal"], "to": "completed", "at": now_iso()}
+            {"step_ordinal": step["ordinal"], "to": "in_progress", "at": transition_ts}
+        )
+        audit_events.append(
+            build_transition_event(
+                todo_id=todo_id,
+                from_state="pending",
+                to_state="in_progress",
+                at=transition_ts,
+                actor=actor,
+            )
+        )
+        to_done = validate_todo_transition(
+            todo_id=todo_id,
+            from_state="in_progress",
+            to_state="done",
+        )
+        if to_done:
+            compliance_violations.append(to_done)
+            continue
+        step["state"] = "done"
+        completion_ts = now_iso()
+        transitions.append(
+            {"step_ordinal": step["ordinal"], "to": "done", "at": completion_ts}
+        )
+        audit_events.append(
+            build_transition_event(
+                todo_id=todo_id,
+                from_state="in_progress",
+                to_state="done",
+                at=completion_ts,
+                actor=actor,
+            )
         )
 
-    completed = sum(1 for step in steps if step["state"] == "completed")
-    status = "completed" if completed == len(steps) else "failed"
+    compliance_violations.extend(validate_todo_set(steps))
+    compliance_violations.extend(validate_plan_completion(steps))
+    done_count = sum(
+        1 for step in steps if normalize_todo_state(step.get("state")) == "done"
+    )
+    status = "completed" if not compliance_violations else "failed"
     run_state = {
         "plan": {
             "path": str(plan_path),
@@ -376,12 +428,18 @@ def command_start(args: list[str]) -> int:
                 "ordinal": step["ordinal"],
                 "text": step["text"],
                 "line": step["line"],
-                "state": step["state"],
+                "state": normalize_todo_state(step["state"]),
             }
             for step in steps
         ],
         "transitions": transitions,
         "deviations": deviation_records,
+        "todo_compliance": {
+            "result": "PASS" if not compliance_violations else "FAIL",
+            "violations": compliance_violations,
+            "remediation": remediation_prompts(compliance_violations),
+            "audit_events": audit_events,
+        },
         "started_at": now_iso(),
         "finished_at": now_iso(),
     }
@@ -472,15 +530,16 @@ def command_start(args: list[str]) -> int:
     save_state(config, write_path, run_state)
 
     report = {
-        "result": "PASS",
+        "result": "PASS" if status == "completed" else "FAIL",
         "status": run_state["status"],
         "plan": run_state["plan"],
         "step_counts": {
             "total": len(steps),
-            "completed": completed,
-            "pending": len(steps) - completed,
+            "done": done_count,
+            "pending": len(steps) - done_count,
         },
         "deviation_count": len(deviation_records),
+        "todo_compliance": run_state["todo_compliance"],
         "config": str(write_path),
     }
 
@@ -489,10 +548,14 @@ def command_start(args: list[str]) -> int:
     else:
         print(f"plan: {run_state['plan']['path']}")
         print(f"status: {run_state['status']}")
-        print(f"steps: {completed}/{len(steps)} completed")
+        print(f"steps: {done_count}/{len(steps)} done")
         print(f"deviations: {len(deviation_records)}")
+        if compliance_violations:
+            print("todo_compliance: FAIL")
+            for prompt in remediation_prompts(compliance_violations):
+                print(f"- {prompt}")
         print(f"config: {write_path}")
-    return 0
+    return 0 if status == "completed" else 1
 
 
 def read_runtime_state() -> tuple[dict[str, Any], Path]:
@@ -512,20 +575,29 @@ def command_status(args: list[str]) -> int:
     steps: list[Any] = raw_steps if isinstance(raw_steps, list) else []
     counts = {
         "total": len(steps),
-        "completed": sum(
+        "done": sum(
             1
             for step in steps
-            if isinstance(step, dict) and step.get("state") == "completed"
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "done"
         ),
         "in_progress": sum(
             1
             for step in steps
-            if isinstance(step, dict) and step.get("state") == "in_progress"
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "in_progress"
         ),
         "pending": sum(
             1
             for step in steps
-            if isinstance(step, dict) and step.get("state") == "pending"
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "pending"
+        ),
+        "skipped": sum(
+            1
+            for step in steps
+            if isinstance(step, dict)
+            and normalize_todo_state(step.get("state")) == "skipped"
         ),
     }
     report = {
@@ -533,13 +605,18 @@ def command_status(args: list[str]) -> int:
         "status": runtime.get("status", "idle"),
         "plan": runtime.get("plan", {}),
         "step_counts": counts,
+        "todo_compliance": runtime.get("todo_compliance", {}),
         "config": str(write_path),
     }
     if json_output:
         print(json.dumps(report, indent=2))
     else:
         print(f"status: {report['status']}")
-        print(f"steps: {counts['completed']}/{counts['total']} completed")
+        print(f"steps: {counts['done']}/{counts['total']} done")
+        if isinstance(report.get("todo_compliance"), dict):
+            print(
+                f"todo_compliance: {report['todo_compliance'].get('result', 'unknown')}"
+            )
         print(f"config: {write_path}")
     return 0
 
@@ -584,7 +661,8 @@ def command_doctor(args: list[str]) -> int:
     in_progress_count = sum(
         1
         for step in steps
-        if isinstance(step, dict) and step.get("state") == "in_progress"
+        if isinstance(step, dict)
+        and normalize_todo_state(step.get("state")) == "in_progress"
     )
     if in_progress_count > 1:
         problems.append("multiple steps marked in_progress; expected at most one")
@@ -592,11 +670,41 @@ def command_doctor(args: list[str]) -> int:
     if not runtime:
         warnings.append("no plan execution run recorded yet")
 
+    normalized_steps = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        normalized = dict(step)
+        normalized["state"] = normalize_todo_state(step.get("state"))
+        normalized_steps.append(normalized)
+
+    for violation in validate_todo_set(normalized_steps):
+        message = str(
+            violation.get("message") or violation.get("code") or "todo violation"
+        )
+        if message not in problems:
+            problems.append(message)
+
+    if status == "completed":
+        for violation in validate_plan_completion(normalized_steps):
+            message = str(
+                violation.get("message") or violation.get("code") or "todo violation"
+            )
+            if message not in problems:
+                problems.append(message)
+
+    compliance = runtime.get("todo_compliance")
+    if isinstance(compliance, dict) and compliance.get("result") == "FAIL":
+        for prompt in compliance.get("remediation", []):
+            if isinstance(prompt, str) and prompt not in warnings:
+                warnings.append(prompt)
+
     report = {
         "result": "PASS" if not problems else "FAIL",
         "status": status,
         "plan": runtime.get("plan", {}),
         "step_count": len(steps),
+        "todo_compliance": runtime.get("todo_compliance", {}),
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
