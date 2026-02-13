@@ -43,6 +43,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/browser_command.py` with `/browser status`, `/browser profile <provider>`, and `/browser doctor` for provider switching and dependency diagnostics.
 - Added `/browser`, `/browser-status`, `/browser-profile`, and `/browser-doctor-json` aliases in `opencode.json`.
 - Added browser profile selection support to `scripts/install_wizard.py` via `--browser-profile <playwright|agent-browser>`.
+- Added `instructions/plan_artifact_contract.md` defining `/start-work` plan metadata/checklist format, validation rules, step transitions, and deviation capture requirements.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.

@@ -50,7 +50,7 @@ Use this map to avoid overlapping implementations.
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | done | Medium | E1 | bd-3rs, bd-2qy, bd-f6g, bd-393 | Toggle Playwright/agent-browser with checks |
-| E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
+| E14 | Plan-to-Execution Bridge Command | in_progress | Medium | E2, E3 | bd-1z6 | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
@@ -563,15 +563,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 14 - Plan-to-Execution Bridge Command
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Add a command to execute from an approved plan artifact with progress tracking and deviation reporting.
 **Depends on:** Epic 2, Epic 3
 
-- [ ] Task 14.1: Define plan artifact contract
-  - [ ] Subtask 14.1.1: Define accepted plan format (markdown checklist + metadata)
-  - [ ] Subtask 14.1.2: Define validation rules before execution starts
-  - [ ] Subtask 14.1.3: Define step state transitions and completion semantics
+- [x] Task 14.1: Define plan artifact contract
+  - [x] Subtask 14.1.1: Define accepted plan format (markdown checklist + metadata)
+  - [x] Subtask 14.1.2: Define validation rules before execution starts
+  - [x] Subtask 14.1.3: Define step state transitions and completion semantics
+  - [x] Notes: Added `instructions/plan_artifact_contract.md` covering artifact schema, deterministic validation failures, transition rules, and deviation capture requirements for `/start-work`.
 - [ ] Task 14.2: Implement execution bridge backend
   - [ ] Subtask 14.2.1: Add `/start-work <plan>` command implementation
   - [ ] Subtask 14.2.2: Execute steps sequentially with checkpoint updates
