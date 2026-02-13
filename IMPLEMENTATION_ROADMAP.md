@@ -83,6 +83,14 @@ Use this map to avoid overlapping implementations.
 - Broad UI redesign of docs/install flows unrelated to orchestration objectives.
 - Large provider/model benchmarking initiatives beyond routing correctness.
 
+## Documentation Standard (All Epics)
+
+Every command-oriented epic must ship all of the following:
+
+- README updates with command purpose and options.
+- At least 3 practical examples (basic, intermediate, failure/recovery).
+- One end-to-end workflow showing where the command maximizes throughput.
+
 ## Epic Start Checklist
 
 - [ ] Epic moved to `in_progress` in this file and dashboard row updated.
