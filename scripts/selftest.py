@@ -24,6 +24,11 @@ from model_routing_schema import (  # type: ignore
     validate_schema,
 )
 from keyword_mode_schema import resolve_prompt_modes  # type: ignore
+from rules_engine import (  # type: ignore
+    discover_rules,
+    parse_frontmatter,
+    resolve_effective_rules,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1613,6 +1618,78 @@ def main() -> int:
         expect(
             keyword_doctor_report.get("result") == "PASS",
             "keyword-mode doctor should report PASS",
+        )
+
+        frontmatter, body = parse_frontmatter(
+            """---\ndescription: Rule example\npriority: 60\nglobs:\n  - scripts/*.py\n---\nUse safe edits.\n"""
+        )
+        expect(
+            frontmatter.get("priority") == 60,
+            "rules frontmatter should parse integer fields",
+        )
+        expect(
+            frontmatter.get("globs") == ["scripts/*.py"],
+            "rules frontmatter should parse list fields",
+        )
+        expect(
+            body.strip() == "Use safe edits.",
+            "rules frontmatter parser should return markdown body",
+        )
+
+        project_tmp = tmp / "rules-project"
+        project_rules_dir = project_tmp / ".opencode" / "rules"
+        user_rules_dir = home / ".config" / "opencode" / "rules"
+        project_rules_dir.mkdir(parents=True, exist_ok=True)
+        user_rules_dir.mkdir(parents=True, exist_ok=True)
+
+        (project_rules_dir / "python-safe.md").write_text(
+            """---\nid: style-python\ndescription: Python strict style\npriority: 80\nglobs:\n  - scripts/*.py\n---\nPrefer explicit typing for new functions.\n""",
+            encoding="utf-8",
+        )
+        (user_rules_dir / "python-safe.md").write_text(
+            """---\nid: style-python\ndescription: User python defaults\npriority: 70\nglobs:\n  - scripts/*.py\n---\nPrefer concise comments.\n""",
+            encoding="utf-8",
+        )
+        (user_rules_dir / "docs-rule.md").write_text(
+            """---\ndescription: Docs guidance\npriority: 50\nglobs:\n  - README.md\n---\nKeep examples concise.\n""",
+            encoding="utf-8",
+        )
+
+        discovered_rules = discover_rules(project_tmp, home=home)
+        expect(
+            len(discovered_rules) == 3,
+            "rules discovery should include user and project markdown rules",
+        )
+        resolved_rules = resolve_effective_rules(
+            discovered_rules, "scripts/selftest.py"
+        )
+        effective_rule_ids = [
+            str(rule.get("id")) for rule in resolved_rules.get("effective_rules", [])
+        ]
+        expect(
+            "style-python" in effective_rule_ids,
+            "rules resolution should include matching python rule",
+        )
+        winning_python_rule = next(
+            rule
+            for rule in resolved_rules.get("effective_rules", [])
+            if rule.get("id") == "style-python"
+        )
+        expect(
+            winning_python_rule.get("scope") == "project",
+            "project-scoped rule should win when duplicate ids conflict",
+        )
+        expect(
+            len(resolved_rules.get("conflicts", [])) == 1,
+            "rules resolution should report duplicate-id conflicts",
+        )
+        readme_rules = resolve_effective_rules(discovered_rules, "README.md")
+        expect(
+            any(
+                str(rule.get("id")) == "docs-rule"
+                for rule in readme_rules.get("effective_rules", [])
+            ),
+            "rules resolution should match README-targeted docs rule",
         )
 
         wizard_state_path = (
