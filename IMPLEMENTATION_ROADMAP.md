@@ -91,6 +91,12 @@ Every command-oriented epic must ship all of the following:
 - At least 3 practical examples (basic, intermediate, failure/recovery).
 - One end-to-end workflow showing where the command maximizes throughput.
 
+## Task Authoring Simplification Rules
+
+- Prefer one concrete verb per subtask (`define`, `implement`, `integrate`, `verify`, `document`).
+- Avoid duplicate subtasks when covered by cross-cutting criteria in `Task C2`.
+- Keep subtask text implementation-specific; move generic policy wording to shared sections.
+
 ## Epic Start Checklist
 
 - [ ] Epic moved to `in_progress` in this file and dashboard row updated.
