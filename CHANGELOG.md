@@ -73,6 +73,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/autoflow_adapter.py` implementing Epic 22 Task 22.2 primitive composition and deterministic transition/explain logic for unified orchestration.
 - Added `scripts/autoflow_command.py` with `/autoflow start|status|resume|stop|report|dry-run` command controls, including non-mutating dry-run and explicit kill-switch stop behavior.
 - Added `/autoflow`, `/autoflow-status`, `/autoflow-report`, `/autoflow-dry-run`, and `/autoflow-stop` aliases in `opencode.json`.
+- Added `instructions/pr_review_rubric.md` defining Epic 23 Task 23.1 deterministic risk categories, severity/confidence scoring, blocker evidence thresholds, and low-noise recommendation mapping for `/pr-review`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -143,6 +144,8 @@ All notable changes to this project are documented in this file.
 - Integrated `/autoflow` diagnostics into unified `/doctor`, expanded install smoke with `/autoflow` dry-run/status/report/stop checks, and documented migration guidance from `/start-work` and `/resume` flows.
 - Expanded `/autoflow` verification coverage for report lifecycle payloads and approval-gated resume recovery paths in selftest.
 - Marked Epic 22 Task 22.4 complete and promoted Epic 22 status to done in the roadmap.
+- Marked Epic 23 as in progress and completed Task 23.1 rubric-definition notes in the roadmap.
+- Moved `plan_execution` runtime persistence out of `opencode.json` into `~/.config/opencode/my_opencode/runtime/plan_execution.json` to prevent OpenCode startup failures caused by unrecognized top-level config keys.
 
 ## v0.2.0 - 2026-02-12
 

@@ -17,6 +17,7 @@ from config_layering import (  # type: ignore
     resolve_write_path,
     save_config as save_config_file,
 )
+from plan_execution_runtime import load_plan_execution_state  # type: ignore
 from execution_budget_runtime import (  # type: ignore
     DEFAULT_PROFILE,
     PROFILE_LIMITS,
@@ -81,8 +82,8 @@ def command_status(args: list[str]) -> int:
     config, write_path = _load()
     section = _section(config)
     policy = resolve_budget_policy(config)
-    runtime = config.get("plan_execution")
-    runtime_budget = runtime.get("budget", {}) if isinstance(runtime, dict) else {}
+    runtime, _ = load_plan_execution_state(config, write_path)
+    runtime_budget = runtime.get("budget", {})
 
     report = {
         "result": "PASS",
@@ -219,7 +220,7 @@ def command_doctor(args: list[str]) -> int:
     config, write_path = _load()
     section = _section(config)
     policy = resolve_budget_policy(config)
-    runtime = config.get("plan_execution")
+    runtime, _ = load_plan_execution_state(config, write_path)
     runtime_budget = runtime.get("budget") if isinstance(runtime, dict) else {}
 
     warnings: list[str] = []

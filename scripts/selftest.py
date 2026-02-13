@@ -144,6 +144,22 @@ def load_json_file(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def plan_runtime_path(config_path: Path) -> Path:
+    return config_path.parent / "my_opencode" / "runtime" / "plan_execution.json"
+
+
+def load_plan_runtime(config_path: Path) -> dict:
+    runtime_path = plan_runtime_path(config_path)
+    expect(runtime_path.exists(), "plan runtime state file should exist")
+    return load_json_file(runtime_path)
+
+
+def save_plan_runtime(config_path: Path, runtime: dict) -> None:
+    runtime_path = plan_runtime_path(config_path)
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+    runtime_path.write_text(json.dumps(runtime, indent=2) + "\n", encoding="utf-8")
+
+
 class LocalTcpProbeServer:
     def __init__(self) -> None:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -2472,22 +2488,20 @@ version: 1
             "autoflow report should include deterministic deviation_count",
         )
 
-        runtime_path = Path(str(start_work_report.get("config") or ""))
-        runtime_cfg = load_json_file(runtime_path)
-        runtime_cfg.setdefault("plan_execution", {})["status"] = "failed"
-        runtime_cfg["plan_execution"]["steps"] = [
+        runtime_config_path = Path(str(start_work_report.get("config") or ""))
+        runtime_cfg = load_plan_runtime(runtime_config_path)
+        runtime_cfg["status"] = "failed"
+        runtime_cfg["steps"] = [
             {"ordinal": 1, "state": "done", "idempotent": True},
             {"ordinal": 2, "state": "pending", "idempotent": False},
         ]
-        runtime_cfg["plan_execution"]["resume"] = {
+        runtime_cfg["resume"] = {
             "enabled": True,
             "attempt_count": 0,
             "max_attempts": 3,
             "trail": [],
         }
-        runtime_path.write_text(
-            json.dumps(runtime_cfg, indent=2) + "\n", encoding="utf-8"
-        )
+        save_plan_runtime(runtime_config_path, runtime_cfg)
 
         autoflow_resume_blocked = subprocess.run(
             [
@@ -2770,15 +2784,13 @@ version: 1
             runtime_config_path.exists(),
             "start-work should report writable config path",
         )
-        runtime_cfg = load_json_file(runtime_config_path)
-        runtime_cfg.setdefault("plan_execution", {})["status"] = "in_progress"
-        runtime_cfg["plan_execution"]["steps"] = [
+        runtime_cfg = load_plan_runtime(runtime_config_path)
+        runtime_cfg["status"] = "in_progress"
+        runtime_cfg["steps"] = [
             {"ordinal": 1, "state": "in_progress"},
             {"ordinal": 2, "state": "in_progress"},
         ]
-        runtime_config_path.write_text(
-            json.dumps(runtime_cfg, indent=2) + "\n", encoding="utf-8"
-        )
+        save_plan_runtime(runtime_config_path, runtime_cfg)
 
         start_work_doctor_fail = subprocess.run(
             [sys.executable, str(START_WORK_SCRIPT), "doctor", "--json"],
@@ -2983,8 +2995,7 @@ version: 1
         recover_config_path = Path(
             str(parse_json_output(recover_start.stdout).get("config"))
         )
-        recover_cfg = load_json_file(recover_config_path)
-        recover_state = recover_cfg.get("plan_execution", {})
+        recover_state = load_plan_runtime(recover_config_path)
         if isinstance(recover_state, dict):
             recover_state["status"] = "failed"
             recover_steps = recover_state.get("steps")
@@ -2999,10 +3010,7 @@ version: 1
                 "max_attempts": 3,
                 "trail": [],
             }
-        recover_config_path.write_text(
-            json.dumps(recover_cfg, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        save_plan_runtime(recover_config_path, recover_state)
 
         recover_blocked = subprocess.run(
             [
@@ -3034,17 +3042,13 @@ version: 1
             "start-work recover should provide a human-readable reason",
         )
 
-        recover_cfg_after_block = load_json_file(recover_config_path)
-        recover_state_after_block = recover_cfg_after_block.get("plan_execution")
+        recover_state_after_block = load_plan_runtime(recover_config_path)
         if isinstance(recover_state_after_block, dict):
             resume_meta = recover_state_after_block.get("resume")
             if isinstance(resume_meta, dict):
                 resume_meta["last_attempt_at"] = "2026-02-13T00:00:00Z"
                 resume_meta["attempt_count"] = 0
-        recover_config_path.write_text(
-            json.dumps(recover_cfg_after_block, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        save_plan_runtime(recover_config_path, recover_state_after_block)
 
         recover_allowed = subprocess.run(
             [
@@ -3081,8 +3085,7 @@ version: 1
             "start-work recover should persist checkpoint snapshots via snapshot manager",
         )
 
-        recover_runtime_cfg = load_json_file(recover_config_path)
-        recover_runtime = recover_runtime_cfg.get("plan_execution")
+        recover_runtime = load_plan_runtime(recover_config_path)
         if isinstance(recover_runtime, dict):
             listed_snapshots = list_snapshots(recover_config_path)
             expect(
@@ -3321,16 +3324,12 @@ version: 1
             "checkpoint prune should rotate old snapshots into compressed history artifacts",
         )
 
-        recover_cfg_after_allowed = load_json_file(recover_config_path)
-        recover_state_after_allowed = recover_cfg_after_allowed.get("plan_execution")
+        recover_state_after_allowed = load_plan_runtime(recover_config_path)
         if isinstance(recover_state_after_allowed, dict):
             resume_meta = recover_state_after_allowed.get("resume")
             if isinstance(resume_meta, dict):
                 resume_meta["last_attempt_at"] = "2026-02-13T00:00:00Z"
-        recover_config_path.write_text(
-            json.dumps(recover_cfg_after_allowed, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        save_plan_runtime(recover_config_path, recover_state_after_allowed)
 
         resume_status_ok = subprocess.run(
             [sys.executable, str(RESUME_SCRIPT), "status", "--json"],
