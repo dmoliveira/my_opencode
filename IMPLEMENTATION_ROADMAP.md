@@ -44,7 +44,7 @@ Use this map to avoid overlapping implementations.
 | E5 | Category-Based Model Routing | done | Medium | E1 | bd-2z6, bd-m48, bd-15y, bd-222 | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
-| E8 | Keyword-Triggered Execution Modes | planned | High | E1, E4 | TBD | Fast power-mode activation from prompt text |
+| E8 | Keyword-Triggered Execution Modes | in_progress | High | E1, E4 | bd-302 | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | planned | High | E1 | TBD | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
@@ -375,15 +375,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 8 - Keyword-Triggered Execution Modes
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Enable explicit keywords (for example, `ulw`) to activate high-value execution modes without manual command chaining.
 **Depends on:** Epic 1, Epic 4
 
-- [ ] Task 8.1: Define keyword dictionary and behavior mapping
-  - [ ] Subtask 8.1.1: Define reserved keywords (`ulw`, `deep-analyze`, `parallel-research`, `safe-apply`)
-  - [ ] Subtask 8.1.2: Define mode side-effects and precedence rules
-  - [ ] Subtask 8.1.3: Define explicit opt-out syntax and defaults
+- [x] Task 8.1: Define keyword dictionary and behavior mapping
+  - [x] Subtask 8.1.1: Define reserved keywords (`ulw`, `deep-analyze`, `parallel-research`, `safe-apply`)
+  - [x] Subtask 8.1.2: Define mode side-effects and precedence rules
+  - [x] Subtask 8.1.3: Define explicit opt-out syntax and defaults
+  - [x] Notes: Added `instructions/keyword_execution_modes.md` with deterministic keyword matching, precedence, conflict handling, and opt-out syntax.
 - [ ] Task 8.2: Implement keyword detector engine
   - [ ] Subtask 8.2.1: Parse user prompts and resolve keyword intents
   - [ ] Subtask 8.2.2: Apply mode flags to runtime execution context
