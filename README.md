@@ -92,6 +92,13 @@ Current baseline includes:
 - retention/rotation defaults (bounded history per run plus terminal snapshot preservation).
 - optional history compression policy with checksum continuity requirements.
 
+Task 19.2 implementation baseline:
+
+- manager module: `scripts/checkpoint_snapshot_manager.py`
+- persistence semantics: atomic writes to `checkpoints/<run_id>/history/<snapshot_id>.json` and `checkpoints/<run_id>/latest.json`
+- runtime integration: `/start-work` and `/start-work recover` now persist checkpoint snapshots after state writes
+- lifecycle controls: list/show/prune APIs with integrity verification and bounded retention defaults
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

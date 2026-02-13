@@ -32,6 +32,10 @@ from recovery_engine import (  # type: ignore
     evaluate_resume_eligibility,
     explain_resume_reason,
 )
+from checkpoint_snapshot_manager import (  # type: ignore
+    prune_snapshots,
+    write_snapshot,
+)
 
 
 SECTION = "plan_execution"
@@ -275,9 +279,27 @@ def load_state() -> tuple[dict[str, Any], Path]:
     return config, resolve_write_path()
 
 
-def save_state(config: dict[str, Any], write_path: Path, state: dict[str, Any]) -> None:
+def save_state(
+    config: dict[str, Any],
+    write_path: Path,
+    state: dict[str, Any],
+    *,
+    snapshot_source: str = "step_boundary",
+    command_outcomes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     config[SECTION] = state
     save_config_file(config, write_path)
+    snapshot_result = write_snapshot(
+        write_path,
+        state,
+        source=snapshot_source,
+        command_outcomes=command_outcomes,
+    )
+    prune_result = prune_snapshots(write_path)
+    return {
+        "snapshot": snapshot_result,
+        "prune": prune_result,
+    }
 
 
 def command_start(args: list[str]) -> int:
@@ -551,7 +573,21 @@ def command_start(args: list[str]) -> int:
             print("next: /bg run --id <job-id>")
         return 0
 
-    save_state(config, write_path, run_state)
+    persistence = save_state(
+        config,
+        write_path,
+        run_state,
+        snapshot_source="step_boundary",
+        command_outcomes=[
+            {
+                "kind": "slash_command",
+                "name": "/start-work",
+                "result": "PASS" if status == "completed" else "FAIL",
+                "duration_ms": 0,
+                "summary": f"plan execution finished with status {status}",
+            }
+        ],
+    )
 
     report = {
         "result": "PASS" if status == "completed" else "FAIL",
@@ -564,6 +600,7 @@ def command_start(args: list[str]) -> int:
         },
         "deviation_count": len(deviation_records),
         "todo_compliance": run_state["todo_compliance"],
+        "checkpoint": persistence,
         "config": str(write_path),
     }
 
@@ -835,7 +872,32 @@ def command_recover(args: list[str]) -> int:
     config, _ = load_state()
     next_runtime = result.get("runtime")
     if isinstance(next_runtime, dict):
-        save_state(config, write_path, next_runtime)
+        persistence = save_state(
+            config,
+            write_path,
+            next_runtime,
+            snapshot_source=(
+                "step_boundary" if result.get("result") == "PASS" else "error_boundary"
+            ),
+            command_outcomes=[
+                {
+                    "kind": "slash_command",
+                    "name": "/start-work recover",
+                    "result": str(result.get("result") or "FAIL"),
+                    "duration_ms": 0,
+                    "reason_code": str(result.get("reason_code") or ""),
+                    "summary": str(result.get("reason_code") or "resume_unknown"),
+                }
+            ],
+        )
+    else:
+        persistence = {
+            "snapshot": {
+                "result": "FAIL",
+                "reason_code": "checkpoint_atomic_write_failed",
+            },
+            "prune": {"result": "PASS", "removed": 0, "compressed": 0},
+        }
 
     report = {
         "result": result.get("result", "FAIL"),
@@ -850,6 +912,7 @@ def command_recover(args: list[str]) -> int:
         "cooldown_remaining": int(result.get("cooldown_remaining", 0) or 0),
         "checkpoint": result.get("checkpoint"),
         "resumed_steps": result.get("resumed_steps", []),
+        "snapshot": persistence,
         "config": str(write_path),
     }
     if json_output:

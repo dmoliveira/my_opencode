@@ -712,10 +712,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 19.1.2: Define frequency and trigger points (step boundary, error boundary, timer)
   - [x] Subtask 19.1.3: Define retention, rotation, and optional compression
   - [x] Notes: Added `instructions/checkpoint_snapshot_lifecycle.md` defining snapshot schema, deterministic trigger boundaries, retention/rotation defaults, optional compression, and failure reason-code semantics.
-- [ ] Task 19.2: Implement snapshot manager
-  - [ ] Subtask 19.2.1: Write atomic snapshots with corruption-safe semantics
-  - [ ] Subtask 19.2.2: Add list/show/prune operations
-  - [ ] Subtask 19.2.3: Integrate with resume/recovery engine
+- [x] Task 19.2: Implement snapshot manager
+  - [x] Subtask 19.2.1: Write atomic snapshots with corruption-safe semantics
+  - [x] Subtask 19.2.2: Add list/show/prune operations
+  - [x] Subtask 19.2.3: Integrate with resume/recovery engine
+  - [x] Notes: Added `scripts/checkpoint_snapshot_manager.py` with atomic history/latest writes, integrity-aware load/list APIs, retention+compression pruning, and `/start-work` + `/start-work recover` persistence integration.
 - [ ] Task 19.3: Visibility and tooling
   - [ ] Subtask 19.3.1: Add `/checkpoint list|show|prune` commands
   - [ ] Subtask 19.3.2: Add doctor diagnostics for snapshot health

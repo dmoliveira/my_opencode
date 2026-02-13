@@ -50,6 +50,11 @@ from safe_edit_adapters import (  # type: ignore
     evaluate_semantic_capability,
     validate_changed_references,
 )
+from checkpoint_snapshot_manager import (  # type: ignore
+    list_snapshots,
+    prune_snapshots,
+    show_snapshot,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2600,6 +2605,41 @@ version: 1
             and recover_allowed_report.get("status") == "completed",
             "start-work recover should complete failed run when recovery eligibility is satisfied",
         )
+        recover_persistence = recover_allowed_report.get("snapshot", {})
+        expect(
+            isinstance(recover_persistence, dict)
+            and isinstance(recover_persistence.get("snapshot"), dict)
+            and recover_persistence.get("snapshot", {}).get("result") == "PASS",
+            "start-work recover should persist checkpoint snapshots via snapshot manager",
+        )
+
+        recover_runtime_cfg = load_json_file(recover_config_path)
+        recover_runtime = recover_runtime_cfg.get("plan_execution")
+        if isinstance(recover_runtime, dict):
+            listed_snapshots = list_snapshots(recover_config_path)
+            expect(
+                bool(listed_snapshots),
+                "snapshot manager should list persisted snapshots for active run",
+            )
+            run_id = str(listed_snapshots[0].get("run_id") or "")
+            latest_snapshot = show_snapshot(recover_config_path, run_id, "latest")
+            expect(
+                latest_snapshot.get("result") == "PASS"
+                and isinstance(latest_snapshot.get("snapshot"), dict)
+                and latest_snapshot.get("snapshot", {}).get("status")
+                == recover_runtime.get("status"),
+                "snapshot manager should load latest checkpoint snapshot with matching runtime status",
+            )
+            prune_report = prune_snapshots(
+                recover_config_path,
+                max_per_run=1,
+                max_age_days=0,
+                compress_after_hours=0,
+            )
+            expect(
+                prune_report.get("result") == "PASS",
+                "snapshot manager prune should complete successfully with bounded retention policy",
+            )
 
         recover_cfg_after_allowed = load_json_file(recover_config_path)
         recover_state_after_allowed = recover_cfg_after_allowed.get("plan_execution")
