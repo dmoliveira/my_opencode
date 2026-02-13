@@ -210,6 +210,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--model-profile", choices=["quick", "deep", "visual", "writing"]
     )
+    parser.add_argument("--browser-profile", choices=["playwright", "agent-browser"])
     parser.add_argument("--opencode-nvim", choices=["install", "uninstall", "skip"])
     parser.add_argument("--openchamber", choices=["install", "uninstall", "skip"])
     return parser.parse_args(argv)
@@ -288,6 +289,12 @@ def main(argv: list[str]) -> int:
         prev_profiles.get("model_routing", "quick"),
         args.non_interactive,
     )
+    browser_profile = args.browser_profile or choose(
+        "Browser automation provider",
+        ["playwright", "agent-browser"],
+        prev_profiles.get("browser", "playwright"),
+        args.non_interactive,
+    )
 
     if args.skip_extras:
         opencode_nvim_action = "skip"
@@ -322,6 +329,8 @@ def main(argv: list[str]) -> int:
         failures.append("telemetry profile")
     if run_repo_script("model_routing_command.py", "set-category", model_profile) != 0:
         failures.append("model routing profile")
+    if run_repo_script("browser_command.py", "profile", browser_profile) != 0:
+        failures.append("browser profile")
 
     if post_profile == "disabled":
         if run_repo_script("post_session_command.py", "disable") != 0:
@@ -423,6 +432,7 @@ def main(argv: list[str]) -> int:
         "telemetry": telemetry_profile,
         "post_session": post_profile,
         "model_routing": model_profile,
+        "browser": browser_profile,
         "opencode_nvim": opencode_nvim_action,
         "openchamber": openchamber_action,
     }

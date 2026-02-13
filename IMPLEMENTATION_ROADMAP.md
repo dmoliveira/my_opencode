@@ -49,7 +49,7 @@ Use this map to avoid overlapping implementations.
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
-| E13 | Browser Automation Profile Switching | in_progress | Medium | E1 | bd-3rs, bd-2qy | Toggle Playwright/agent-browser with checks |
+| E13 | Browser Automation Profile Switching | in_progress | Medium | E1 | bd-3rs, bd-2qy, bd-f6g | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
@@ -546,10 +546,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 13.2.2: Add status and doctor checks for selected provider
   - [x] Subtask 13.2.3: Add install helper guidance for missing dependencies
   - [x] Notes: Added `scripts/browser_command.py`, `/browser*` aliases in `opencode.json`, doctor integration, and install/selftest smoke coverage for provider switching and dependency diagnostics.
-- [ ] Task 13.3: Integrate with wizard and docs
-  - [ ] Subtask 13.3.1: Add provider selection into install/reconfigure wizard
-  - [ ] Subtask 13.3.2: Document provider trade-offs and examples
-  - [ ] Subtask 13.3.3: Add recommended defaults for stable-first users
+- [x] Task 13.3: Integrate with wizard and docs
+  - [x] Subtask 13.3.1: Add provider selection into install/reconfigure wizard
+  - [x] Subtask 13.3.2: Document provider trade-offs and examples
+  - [x] Subtask 13.3.3: Add recommended defaults for stable-first users
+  - [x] Notes: Extended `scripts/install_wizard.py` with browser profile selection (`--browser-profile`) and updated README install/browser guidance with provider trade-offs plus stable-first recommendations.
 - [ ] Task 13.4: Verification
   - [ ] Subtask 13.4.1: Add tests for profile switching and persistence
   - [ ] Subtask 13.4.2: Add smoke tests for status/doctor across providers
