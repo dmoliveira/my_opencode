@@ -1325,6 +1325,12 @@ def main() -> int:
             len(resolved_with_precedence.get("trace", [])) >= 4,
             "model routing should include deterministic fallback trace",
         )
+        last_trace = resolved_with_precedence.get("trace", [])[-1]
+        expect(
+            isinstance(last_trace, dict)
+            and last_trace.get("reason") == "fallback_unavailable_model_to_category",
+            "model routing fallback reason should be deterministic and explicit",
+        )
 
         model_routing_set = subprocess.run(
             [sys.executable, str(MODEL_ROUTING_SCRIPT), "set-category", "visual"],
