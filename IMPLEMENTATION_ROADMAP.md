@@ -71,6 +71,23 @@ Use this map to avoid overlapping implementations.
 - Prefer additive changes and compatibility fallbacks over breaking behavior.
 - Do not expand to unrelated feature areas during in-progress epics.
 
+## Value Gate (Before Starting Any Epic)
+
+Start an epic only when all are true:
+
+- Clear user pain is documented and measurable.
+- Existing command/profile cannot solve the problem with small changes.
+- Expected value is higher than maintenance cost after launch.
+- Rollback path is defined and tested.
+
+If any condition is missing, keep the epic `paused` or `postponed`.
+
+## Complexity Budget
+
+- Prefer extending existing commands over introducing new top-level commands.
+- Prefer one robust implementation path over multiple experimental variants.
+- Defer optional UX layers until core reliability/diagnostics are stable.
+
 ## Dependency Rules
 
 - Dependencies must reference earlier or same-phase epics only (no forward references).
