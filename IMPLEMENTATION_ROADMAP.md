@@ -55,7 +55,7 @@ Use this map to avoid overlapping implementations.
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | done | High | E3 | bd-3cg, bd-2ln, bd-10l, bd-lds | Prefer semantic edits over plain text replacements |
-| E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
+| E19 | Session Checkpoint Snapshots | in_progress | Medium | E2, E17 | bd-553 | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
@@ -702,15 +702,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 19 - Session Checkpoint Snapshots
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Persist periodic snapshots of execution state to improve rollback, restart, and auditability.
 **Depends on:** Epic 2, Epic 17
 
-- [ ] Task 19.1: Define snapshot format and lifecycle
-  - [ ] Subtask 19.1.1: Define snapshot schema (step state, context digest, command outcomes)
-  - [ ] Subtask 19.1.2: Define frequency and trigger points (step boundary, error boundary, timer)
-  - [ ] Subtask 19.1.3: Define retention, rotation, and optional compression
+- [x] Task 19.1: Define snapshot format and lifecycle
+  - [x] Subtask 19.1.1: Define snapshot schema (step state, context digest, command outcomes)
+  - [x] Subtask 19.1.2: Define frequency and trigger points (step boundary, error boundary, timer)
+  - [x] Subtask 19.1.3: Define retention, rotation, and optional compression
+  - [x] Notes: Added `instructions/checkpoint_snapshot_lifecycle.md` defining snapshot schema, deterministic trigger boundaries, retention/rotation defaults, optional compression, and failure reason-code semantics.
 - [ ] Task 19.2: Implement snapshot manager
   - [ ] Subtask 19.2.1: Write atomic snapshots with corruption-safe semantics
   - [ ] Subtask 19.2.2: Add list/show/prune operations
