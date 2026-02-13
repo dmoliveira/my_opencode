@@ -777,15 +777,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 22 - Autoflow Unified Orchestration Command
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Provide a single command (`/autoflow`) that orchestrates plan execution, enforcement, recovery, and reporting with safe defaults.
 **Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20
 
-- [ ] Task 22.1: Define `/autoflow` command contract
-  - [ ] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `stop`, `report`, `dry-run`)
-  - [ ] Subtask 22.1.2: Define input plan requirements and validation errors
-  - [ ] Subtask 22.1.3: Define output format for concise and verbose modes
+- [x] Task 22.1: Define `/autoflow` command contract
+  - [x] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `stop`, `report`, `dry-run`)
+  - [x] Subtask 22.1.2: Define input plan requirements and validation errors
+  - [x] Subtask 22.1.3: Define output format for concise and verbose modes
+  - [x] Notes: Added `instructions/autoflow_command_contract.md` defining `/autoflow` subcommands, deterministic validation/error shape, concise-vs-JSON output schema, lifecycle status model, and safety defaults for Task 22.2 implementation.
 - [ ] Task 22.2: Implement orchestration adapter layer
   - [ ] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives
   - [ ] Subtask 22.2.2: Add deterministic state machine transitions

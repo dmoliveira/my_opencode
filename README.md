@@ -164,6 +164,19 @@ Task 20.4 verification notes:
 - selftest covers override apply/clear paths plus invalid override input rejection with deterministic usage guidance.
 - install smoke includes `/budget status`, `/budget override`, `/budget doctor`, and `/budget override --clear` checks.
 
+## Autoflow contract baseline
+
+Epic 22 Task 22.1 defines unified orchestration command semantics in:
+
+- `instructions/autoflow_command_contract.md`
+
+Current baseline includes:
+
+- `/autoflow` subcommands: `start`, `status`, `resume`, `stop`, `report`, `dry-run`
+- deterministic validation/error payload rules with stable reason codes and remediation hints
+- concise human output plus structured `--json` schema for automation
+- lifecycle status model and safety defaults for dry-run, stop, and recovery gating
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
