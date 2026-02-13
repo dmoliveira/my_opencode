@@ -83,6 +83,7 @@ All notable changes to this project are documented in this file.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
+- Expanded browser verification coverage to assert provider reset readiness and added install smoke checks that run browser status/doctor after switching across providers.
 
 ## v0.2.0 - 2026-02-12
 

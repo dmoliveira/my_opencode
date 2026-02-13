@@ -1616,6 +1616,39 @@ def main() -> int:
             "browser doctor should report missing selected-provider dependencies",
         )
 
+        browser_profile_reset = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "profile", "playwright"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            browser_profile_reset.returncode == 0,
+            "browser profile should switch back to playwright",
+        )
+        browser_doctor_playwright = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            browser_doctor_playwright.returncode == 0,
+            "browser doctor should succeed after switching back to playwright",
+        )
+        browser_doctor_playwright_report = parse_json_output(
+            browser_doctor_playwright.stdout
+        )
+        expect(
+            browser_doctor_playwright_report.get("provider") == "playwright"
+            and browser_doctor_playwright_report.get("selected_ready") is True,
+            "browser doctor should report ready selected provider after reset",
+        )
+
         keyword_report = resolve_prompt_modes(
             "Please safe-apply and deep-analyze this migration; ulw can wait.",
             enabled=True,
