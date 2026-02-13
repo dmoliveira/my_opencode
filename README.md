@@ -533,6 +533,17 @@ Recommended workflow:
 - run `/rules status` after edits to validate discovery
 - use `/rules explain <path> --json` to verify effective rule stack before relying on behavior
 
+## Context resilience policy
+
+Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
+
+- schema contract: `instructions/context_resilience_policy_schema.md`
+
+Initial schema covers:
+- truncation modes (`default`, `aggressive`)
+- protected tools/messages to preserve critical evidence
+- pruning/recovery notification levels (`quiet`, `normal`, `verbose`)
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:
