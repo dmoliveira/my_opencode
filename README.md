@@ -327,6 +327,12 @@ Examples:
 /hotfix doctor --json
 ```
 
+Task 25.4 hotfix verification notes:
+
+- selftest now validates mandatory guardrail enforcement for dirty-worktree incident start blocking (`reason_code=dirty_worktree`).
+- selftest now validates rollback incident flow end-to-end (`scope=rollback`) including `rollback_applied` timeline events and closure with `outcome=rolled_back`.
+- install smoke now validates both failure and success closure paths for `/hotfix close` to ensure follow-up metadata remains mandatory.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

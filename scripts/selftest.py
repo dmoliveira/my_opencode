@@ -1579,6 +1579,37 @@ index 3333333..4444444 100644
             cwd=hotfix_repo,
         )
 
+        (hotfix_repo / "DIRTY.md").write_text("dirty fixture\n", encoding="utf-8")
+        hotfix_start_dirty = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "start",
+                "--incident-id",
+                "INC-DIRTY",
+                "--scope",
+                "patch",
+                "--impact",
+                "sev2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_start_dirty.returncode == 1,
+            "hotfix runtime start should fail on dirty worktree",
+        )
+        hotfix_start_dirty_payload = parse_json_output(hotfix_start_dirty.stdout)
+        expect(
+            "dirty_worktree" in set(hotfix_start_dirty_payload.get("reason_codes", [])),
+            "hotfix runtime start should emit dirty_worktree reason code",
+        )
+        (hotfix_repo / "DIRTY.md").unlink(missing_ok=True)
+
         hotfix_start = subprocess.run(
             [
                 sys.executable,
@@ -1851,6 +1882,104 @@ index 3333333..4444444 100644
             "followup_issue_required"
             in set(hotfix_command_close_missing_payload.get("reason_codes", [])),
             "hotfix command close should emit followup_issue_required reason code",
+        )
+
+        hotfix_rollback_start = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "start",
+                "--incident-id",
+                "INC-ROLLBACK",
+                "--scope",
+                "rollback",
+                "--impact",
+                "sev1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_rollback_start.returncode == 0,
+            "hotfix runtime should allow rollback incident start",
+        )
+        subprocess.run(
+            [sys.executable, str(HOTFIX_RUNTIME_SCRIPT), "checkpoint", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        hotfix_rollback_patch = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "mark-patch",
+                "--summary",
+                "rollback to stable commit",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_rollback_patch.returncode == 0,
+            "hotfix runtime rollback mark-patch should succeed",
+        )
+        hotfix_rollback_patch_payload = parse_json_output(hotfix_rollback_patch.stdout)
+        expect(
+            hotfix_rollback_patch_payload.get("event") == "rollback_applied",
+            "hotfix runtime should emit rollback_applied for rollback scope",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "validate",
+                "--target",
+                "validate",
+                "--result",
+                "pass",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        hotfix_rollback_close = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "close",
+                "--outcome",
+                "rolled_back",
+                "--followup-issue",
+                "bd-rollback",
+                "--deferred-validation-owner",
+                "incident-commander",
+                "--deferred-validation-due",
+                "2026-03-02",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_rollback_close.returncode == 0,
+            "hotfix runtime rollback close should succeed",
         )
 
         result = subprocess.run(
