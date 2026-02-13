@@ -957,6 +957,13 @@ Use this log to track what changed week by week.
 
 - [ ] YYYY-MM-DD: update epic statuses, completed checkboxes, and next focus epic
 
+## Execution Queue (Simplified)
+
+- `Now`: E1 -> E2 -> E3 -> E20
+- `Next`: E14 -> E15 -> E22 -> E28
+- `Later`: E23 -> E24 -> E26 -> E27
+- `Deferred`: E6 (paused), E7 (postponed)
+
 ## Decision Log
 
 - [x] 2026-02-12: Adopt stable-first sequencing; prioritize E1 before orchestration-heavy epics.
