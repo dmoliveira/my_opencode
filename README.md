@@ -73,6 +73,12 @@ Examples:
 /safe-edit doctor --json
 ```
 
+Verification notes:
+
+- selftest now covers cross-language rename/reference validation samples (`python`, `typescript`, `go`, `rust`).
+- fallback tests cover explicit-scope gating and unsupported-language failure paths.
+- install smoke now exercises `/safe-edit plan` in addition to status/doctor checks.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
