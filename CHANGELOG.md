@@ -69,6 +69,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/execution_budget_runtime.py` implementing budget policy resolution, counter tracking, and threshold evaluation for runtime guardrails.
 - Added `scripts/budget_command.py` with `/budget status|profile|override|doctor` controls for execution budget visibility and tuning.
 - Added `/budget`, `/budget-status`, `/budget-profile`, `/budget-override`, and `/budget-doctor-json` aliases in `opencode.json`.
+- Added `instructions/autoflow_command_contract.md` defining Epic 22 Task 22.1 `/autoflow` subcommands, validation/error contract, output schema modes, lifecycle states, and safety defaults.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -134,6 +135,7 @@ All notable changes to this project are documented in this file.
 - Updated README and roadmap notes to document budget workload tuning commands and Epic 20 Task 20.3 completion.
 - Expanded budget verification coverage for invalid override input handling and usage guidance in selftest.
 - Marked Epic 20 Task 20.4 complete and promoted Epic 20 status to done in the roadmap.
+- Marked Epic 22 as in progress and completed Task 22.1 contract definition notes in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 
