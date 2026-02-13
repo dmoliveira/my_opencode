@@ -40,6 +40,7 @@ All notable changes to this project are documented in this file.
 - Expanded selftest and install smoke coverage for `/refactor-lite` backend preflight and verification behavior.
 - Added optional `/doctor` integration check for `refactor-lite` when backend script is present.
 - Expanded `/refactor-lite` tests/docs for argument parsing, safe-vs-aggressive strategy guidance, and install smoke coverage.
+- Added hook framework baseline module with `PreToolUse`/`PostToolUse`/`Stop` events, config normalization (`hooks.enabled`, `hooks.disabled`, `hooks.order`), and deterministic execution planning.
 
 ## v0.2.0 - 2026-02-12
 
