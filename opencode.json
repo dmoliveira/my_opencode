@@ -86,6 +86,10 @@
       "description": "Run background task diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" doctor --json`\nShow only the command output."
     },
+    "bg-status-json": {
+      "description": "Show background task status summary in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" status --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

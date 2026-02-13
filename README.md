@@ -351,6 +351,7 @@ Use these directly in OpenCode:
 /bg cancel <job-id>
 /bg cleanup
 /bg doctor --json
+/bg status --json
 ```
 
 Autocomplete-friendly shortcuts:
@@ -360,12 +361,22 @@ Autocomplete-friendly shortcuts:
 /bg-list
 /bg-running
 /bg-doctor-json
+/bg-status-json
 ```
 
 `/bg` uses `~/.config/opencode/my_opencode/bg/` by default with:
 - `jobs.json` as authoritative state
 - `runs/<job-id>.log` for combined stdout/stderr
 - `runs/<job-id>.meta.json` for execution metadata
+
+Examples:
+- Basic async start + read: `/bg start -- make validate` then `/bg list --status running` and `/bg read <job-id>`
+- Intermediate queue workflow: `/bg enqueue -- make selftest`, `/bg enqueue -- make install-test`, then `/bg run --max-jobs 1`
+- Failure/recovery: `/bg start -- python3 -c "import time; time.sleep(5)" --timeout-seconds 1`, inspect with `/bg doctor --json`, then `/bg cleanup`
+
+Notification behavior:
+- Background terminal states emit optional alerts through the existing notify stack (`notify` config event/channel rules).
+- Set `MY_OPENCODE_BG_NOTIFICATIONS_ENABLED=0` to suppress background notifications without changing global notify settings.
 
 ## MCP control inside OpenCode 🧠
 
