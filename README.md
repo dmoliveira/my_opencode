@@ -26,6 +26,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
+- 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
@@ -221,7 +222,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/stack status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -230,7 +231,7 @@ git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_op
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
-chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
 ```
@@ -241,8 +242,10 @@ The wizard lets each user decide what they want now and reconfigure later.
 
 - Select plugin profile (`lean`, `stable`, `experimental`, or custom plugin-by-plugin).
 - Select MCP, policy, telemetry, and post-session defaults.
+- Select browser automation provider (`playwright` recommended stable-first, `agent-browser` optional).
 - Optionally install/uninstall ecosystem integrations (`opencode.nvim`, `OpenChamber`).
 - When `opencode.nvim` is selected, wizard bootstraps a minimal integration profile at `~/.config/nvim/lua/my_opencode/opencode.lua`.
+- Stable-first recommendation: keep `playwright` unless you specifically rely on `agent-browser` workflows.
 - Re-run any time to change choices: `~/.config/opencode/my_opencode/install.sh --wizard --reconfigure`.
 - Wizard state is stored in `~/.config/opencode/my_opencode-install-state.json`.
 
@@ -487,6 +490,29 @@ Practical routing examples:
 Integration points:
 - `/stack apply <profile>` now sets a routing category (`focus/research -> deep`, `quiet-ci -> quick`).
 - install wizard supports `--model-profile <quick|deep|visual|writing>`.
+
+## Browser profile switching
+
+Use:
+```text
+/browser status
+/browser profile playwright
+/browser profile agent-browser
+/browser doctor --json
+```
+
+Provider trade-offs:
+- `playwright`: stable-first default and broad compatibility.
+- `agent-browser`: optional path when your workflow depends on agent-browser tooling.
+
+Recommended defaults:
+- start with `playwright`
+- switch to `agent-browser` only when you need those capabilities
+- run `/browser doctor --json` after changes to confirm dependency readiness
+
+Wizard support:
+- `install_wizard.py` supports `--browser-profile <playwright|agent-browser>`
+- interactive wizard includes the same provider choice during fresh setup and reconfigure
 
 ## Keyword-triggered execution modes
 
@@ -898,6 +924,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/doctor_command.py` - backend script for `/doctor`
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
+- `scripts/browser_command.py` - backend script for `/browser`
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`
 - `scripts/devtools_command.py` - backend script for `/devtools`

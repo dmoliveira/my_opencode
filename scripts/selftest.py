@@ -2312,6 +2312,8 @@ def main() -> int:
                 "manual-validate",
                 "--model-profile",
                 "deep",
+                "--browser-profile",
+                "playwright",
             ],
             capture_output=True,
             text=True,
@@ -2336,6 +2338,10 @@ def main() -> int:
         expect(
             wizard_state.get("profiles", {}).get("model_routing") == "deep",
             "wizard should persist selected model routing profile",
+        )
+        expect(
+            wizard_state.get("profiles", {}).get("browser") == "playwright",
+            "wizard should persist selected browser profile",
         )
         post_after_wizard = load_json_file(session_cfg_path)
         expect(

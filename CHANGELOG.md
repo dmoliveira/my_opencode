@@ -42,6 +42,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/browser_profile_model.md` defining Browser Automation profile providers, defaults, migration behavior, and validation rules for Epic 13 Task 13.1.
 - Added `scripts/browser_command.py` with `/browser status`, `/browser profile <provider>`, and `/browser doctor` for provider switching and dependency diagnostics.
 - Added `/browser`, `/browser-status`, `/browser-profile`, and `/browser-doctor-json` aliases in `opencode.json`.
+- Added browser profile selection support to `scripts/install_wizard.py` via `--browser-profile <playwright|agent-browser>`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -81,6 +82,7 @@ All notable changes to this project are documented in this file.
 - Expanded routing verification coverage for deterministic trace stability and explicit fallback/no-fallback explain outcomes, and added `/routing` smoke hints in install output.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
+- Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
 
 ## v0.2.0 - 2026-02-12
 
