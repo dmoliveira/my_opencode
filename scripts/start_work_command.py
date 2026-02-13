@@ -30,6 +30,7 @@ from todo_enforcement import (  # type: ignore
 from recovery_engine import (  # type: ignore
     execute_resume,
     evaluate_resume_eligibility,
+    explain_resume_reason,
 )
 
 
@@ -451,6 +452,7 @@ def command_start(args: list[str]) -> int:
         "started_at": now_iso(),
         "finished_at": now_iso(),
         "resume": {
+            "enabled": True,
             "attempt_count": 0,
             "max_attempts": 3,
             "trail": [],
@@ -458,6 +460,15 @@ def command_start(args: list[str]) -> int:
     }
 
     config, write_path = load_state()
+    existing_runtime = config.get(SECTION)
+    if isinstance(existing_runtime, dict):
+        existing_resume = existing_runtime.get("resume")
+        if (
+            isinstance(existing_resume, dict)
+            and existing_resume.get("enabled") is False
+        ):
+            run_state["resume"]["enabled"] = False
+
     if background:
         bg_script = SCRIPT_DIR / "background_task_manager.py"
         if not bg_script.exists():
@@ -720,7 +731,15 @@ def command_doctor(args: list[str]) -> int:
         eligibility = evaluate_resume_eligibility(runtime, interruption_class)
         if not eligibility.get("eligible"):
             reason = str(eligibility.get("reason_code") or "resume blocked")
-            warnings.append(f"resume eligibility: {reason}")
+            warnings.append(
+                "resume eligibility: "
+                + explain_resume_reason(
+                    reason,
+                    cooldown_remaining=int(
+                        eligibility.get("cooldown_remaining", 0) or 0
+                    ),
+                )
+            )
 
     report = {
         "result": "PASS" if not problems else "FAIL",
@@ -824,6 +843,11 @@ def command_recover(args: list[str]) -> int:
         if isinstance(next_runtime, dict)
         else None,
         "reason_code": result.get("reason_code"),
+        "reason": explain_resume_reason(
+            str(result.get("reason_code") or "unknown"),
+            cooldown_remaining=int(result.get("cooldown_remaining", 0) or 0),
+        ),
+        "cooldown_remaining": int(result.get("cooldown_remaining", 0) or 0),
         "checkpoint": result.get("checkpoint"),
         "resumed_steps": result.get("resumed_steps", []),
         "config": str(write_path),
@@ -833,7 +857,7 @@ def command_recover(args: list[str]) -> int:
     else:
         print(f"result: {report['result']}")
         print(f"status: {report['status']}")
-        print(f"reason: {report['reason_code']}")
+        print(f"reason: {report['reason']}")
         print(f"resumed_steps: {len(report['resumed_steps'])}")
         print(f"config: {write_path}")
     return 0 if report["result"] == "PASS" else 1

@@ -302,6 +302,22 @@
       "description": "Run todo compliance enforcement checks in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" enforce --json`\nShow only the command output."
     },
+    "resume": {
+      "description": "Manage runtime recovery controls (status|now|disable)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "resume-status": {
+      "description": "Show current resume eligibility status in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" status --json`\nShow only the command output."
+    },
+    "resume-now": {
+      "description": "Attempt immediate resume from latest checkpoint",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" now --json`\nShow only the command output."
+    },
+    "resume-disable": {
+      "description": "Disable resume automation in runtime state",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" disable --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."

@@ -54,6 +54,8 @@ All notable changes to this project are documented in this file.
 - Added `/todo`, `/todo-status`, and `/todo-enforce` aliases in `opencode.json`.
 - Added `instructions/resume_policy_model.md` defining interruption classes, resume eligibility/cool-down rules, attempt limits, escalation semantics, and deterministic reason codes for Epic 17 Task 17.1.
 - Added `scripts/recovery_engine.py` implementing checkpoint loading, eligibility evaluation, idempotency gating, and persisted resume decision/transition trail events for Epic 17 Task 17.2.
+- Added `scripts/resume_command.py` with `/resume status`, `/resume now`, and `/resume disable` runtime controls for Epic 17 Task 17.3.
+- Added `/resume`, `/resume-status`, `/resume-now`, and `/resume-disable` aliases in `opencode.json`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -103,6 +105,7 @@ All notable changes to this project are documented in this file.
 - Expanded selftest coverage for todo transition gating, completion blocking, and bypass audit-event payload validation.
 - Marked Epic 17 as in progress and completed Task 17.1 resume-policy definition notes in the roadmap.
 - Added `/start-work recover` backend path with explicit interruption class handling and approval-gated replay for non-idempotent pending steps.
+- Added human-readable recovery reason output (`reason`) for resume eligibility/execution responses and documented recovery playbooks in README.
 
 ## v0.2.0 - 2026-02-12
 

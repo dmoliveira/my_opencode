@@ -234,6 +234,7 @@ chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/start_work_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
+chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py
 ```
 
 ## Install wizard flow 🧭
@@ -647,6 +648,27 @@ Epic 17 Task 17.2 implements the recovery backend:
 - approval gate: non-idempotent pending steps require explicit `--approve-step <ordinal>`
 - audit trail: persisted `resume_decision` and `resume_transition` events under runtime `resume.trail`
 
+Epic 17 Task 17.3 adds operator-facing resume controls:
+
+- command module: `scripts/resume_command.py`
+- status surface: `/resume status --json` with explicit `reason_code` + human-readable `reason`
+- execution control: `/resume now --interruption-class <class> --json`
+- safety toggle: `/resume disable --json` to block resume attempts until re-enabled in runtime state
+
+Use:
+```text
+/resume status --json
+/resume now --interruption-class tool_failure --json
+/resume now --interruption-class tool_failure --approve-step 2 --json
+/resume disable --json
+```
+
+Recovery playbooks:
+- `resume_blocked_cooldown`: wait for cooldown and rerun `/resume status --json` until eligible.
+- `resume_non_idempotent_step`: explicitly approve only the needed step with `--approve-step <ordinal>`.
+- `resume_attempt_limit_reached`: escalate to manual review and restart from `/start-work <plan.md>` after inspection.
+- `resume_disabled`: keep disabled during high-risk runs; re-enable by updating runtime `plan_execution.resume.enabled` to `true`.
+
 ## Context resilience policy
 
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
@@ -995,6 +1017,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/browser_command.py` - backend script for `/browser`
 - `scripts/start_work_command.py` - backend script for `/start-work`
 - `scripts/todo_command.py` - backend script for `/todo`
+- `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/todo_enforcement.py` - shared todo compliance enforcement helpers
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`
