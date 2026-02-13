@@ -69,6 +69,9 @@ if [ -n "$REPO_REF" ]; then
 fi
 
 chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py" "$INSTALL_DIR/scripts/install_wizard.py" "$INSTALL_DIR/scripts/nvim_integration_command.py" "$INSTALL_DIR/scripts/devtools_command.py" "$INSTALL_DIR/scripts/background_task_manager.py" "$INSTALL_DIR/scripts/refactor_lite_command.py"
+if [ -f "$INSTALL_DIR/scripts/browser_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/browser_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -102,6 +105,8 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
     python3 "$INSTALL_DIR/scripts/refactor_lite_command.py" profile --scope "scripts/*.py" --dry-run --json
   fi
   python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
+  python3 "$INSTALL_DIR/scripts/browser_command.py" status
+  python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -157,6 +162,9 @@ printf "  /keyword-mode doctor --json\n"
 printf "  /rules status\n"
 printf "  /rules explain scripts/selftest.py --json\n"
 printf "  /stack apply focus\n"
+printf "  /browser status\n"
+printf "  /browser profile agent-browser\n"
+printf "  /browser doctor --json\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
 printf "  /devtools install all\n"

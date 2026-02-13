@@ -254,6 +254,22 @@
       "description": "Apply quiet-ci stack profile",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply quiet-ci`\nShow only the command output."
     },
+    "browser": {
+      "description": "Manage browser automation provider profile (status|profile|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "browser-status": {
+      "description": "Show active browser automation provider",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" status`\nShow only the command output."
+    },
+    "browser-profile": {
+      "description": "Switch browser provider profile",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" profile $ARGUMENTS`\nShow only the command output."
+    },
+    "browser-doctor-json": {
+      "description": "Run browser provider diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."

@@ -40,6 +40,8 @@ All notable changes to this project are documented in this file.
 - Added persistent model-routing trace runtime support with `/model-routing trace --json` for latest requested/attempted/selected fallback diagnostics.
 - Added `/routing` command surface (`status`, `explain`) via `scripts/routing_command.py` for compact fallback visibility workflows.
 - Added `instructions/browser_profile_model.md` defining Browser Automation profile providers, defaults, migration behavior, and validation rules for Epic 13 Task 13.1.
+- Added `scripts/browser_command.py` with `/browser status`, `/browser profile <provider>`, and `/browser doctor` for provider switching and dependency diagnostics.
+- Added `/browser`, `/browser-status`, `/browser-profile`, and `/browser-doctor-json` aliases in `opencode.json`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -78,6 +80,7 @@ All notable changes to this project are documented in this file.
 - Expanded README guidance with category-driven routing examples and troubleshooting steps for unexpected model selection.
 - Expanded routing verification coverage for deterministic trace stability and explicit fallback/no-fallback explain outcomes, and added `/routing` smoke hints in install output.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
+- Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 
 ## v0.2.0 - 2026-02-12
 
