@@ -146,6 +146,7 @@ data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encodin
   fi
   if [ -f "$INSTALL_DIR/scripts/safe_edit_command.py" ]; then
     python3 "$INSTALL_DIR/scripts/safe_edit_command.py" status --json
+    python3 "$INSTALL_DIR/scripts/safe_edit_command.py" plan --operation rename --scope "scripts/*.py" --allow-text-fallback --json
     python3 "$INSTALL_DIR/scripts/safe_edit_command.py" doctor --json || true
   fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status

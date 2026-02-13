@@ -54,7 +54,7 @@ Use this map to avoid overlapping implementations.
 | E15 | Todo Enforcer and Plan Compliance | done | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
-| E18 | LSP/AST-Assisted Safe Edit Mode | in_progress | High | E3 | bd-3cg | Prefer semantic edits over plain text replacements |
+| E18 | LSP/AST-Assisted Safe Edit Mode | done | High | E3 | bd-3cg, bd-2ln, bd-10l, bd-lds | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
@@ -670,7 +670,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 18 - LSP/AST-Assisted Safe Edit Mode
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Prefer semantic edits via language tooling to reduce refactor regressions.
 **Depends on:** Epic 3
@@ -690,12 +690,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 18.3.2: Add status/doctor checks for available semantic tools
   - [x] Subtask 18.3.3: Document safe-edit best practices and limitations
   - [x] Notes: Added `scripts/safe_edit_command.py` and `/safe-edit*` aliases, wired `safe-edit` diagnostics into unified `/doctor`, and expanded README/install guidance for semantic planning and fallback diagnostics.
-- [ ] Task 18.4: Verification
-  - [ ] Subtask 18.4.1: Add cross-language tests for rename/reference correctness
-  - [ ] Subtask 18.4.2: Add fallback tests when LSP/AST unavailable
-  - [ ] Subtask 18.4.3: Add install-test smoke checks
-- [ ] Exit criteria: semantic mode reduces accidental text-based regressions
-- [ ] Exit criteria: fallback behavior is safe and clearly reported
+- [x] Task 18.4: Verification
+  - [x] Subtask 18.4.1: Add cross-language tests for rename/reference correctness
+  - [x] Subtask 18.4.2: Add fallback tests when LSP/AST unavailable
+  - [x] Subtask 18.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with cross-language safe-edit planning + reference-validation fixtures, added deterministic fallback failure assertions, and added `/safe-edit plan` smoke coverage in installer self-check.
+- [x] Exit criteria: semantic mode reduces accidental text-based regressions
+- [x] Exit criteria: fallback behavior is safe and clearly reported
 
 ---
 

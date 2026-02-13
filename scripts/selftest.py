@@ -46,6 +46,7 @@ from recovery_engine import (  # type: ignore
     execute_resume,
 )
 from safe_edit_adapters import (  # type: ignore
+    detect_language,
     evaluate_semantic_capability,
     validate_changed_references,
 )
@@ -1276,6 +1277,104 @@ def main() -> int:
         expect(
             safe_edit_doctor_report.get("result") == "PASS",
             "safe-edit doctor should report PASS when at least one backend is available",
+        )
+
+        cross_language_plan = evaluate_semantic_capability(
+            "rename",
+            [
+                "src/a.py",
+                "src/b.ts",
+                "src/c.go",
+                "src/d.rs",
+            ],
+            available_binaries={
+                "pyright-langserver": True,
+                "python3": True,
+                "typescript-language-server": True,
+                "node": True,
+                "gopls": True,
+                "go": True,
+                "rust-analyzer": True,
+                "cargo": True,
+            },
+        )
+        expect(
+            cross_language_plan.get("result") == "PASS"
+            and len(cross_language_plan.get("adapters", [])) == 4,
+            "safe-edit adapter should support deterministic cross-language backend planning",
+        )
+
+        expect(
+            detect_language("src/a.py") == "python", "safe-edit should detect python"
+        )
+        expect(
+            detect_language("src/a.ts") == "typescript",
+            "safe-edit should detect typescript",
+        )
+        expect(detect_language("src/a.go") == "go", "safe-edit should detect go")
+        expect(detect_language("src/a.rs") == "rust", "safe-edit should detect rust")
+
+        for before_text, after_text in (
+            (
+                "def old_name():\n    return old_name\n",
+                "def new_name():\n    return new_name\n",
+            ),
+            (
+                "function old_name() { return old_name }\n",
+                "function new_name() { return new_name }\n",
+            ),
+            (
+                "func old_name() { _ = old_name }\n",
+                "func new_name() { _ = new_name }\n",
+            ),
+            (
+                "fn old_name() { let _x = old_name; }\n",
+                "fn new_name() { let _x = new_name; }\n",
+            ),
+        ):
+            cross_ref = validate_changed_references(
+                before_text,
+                after_text,
+                "old_name",
+                "new_name",
+            )
+            expect(
+                cross_ref.get("result") == "PASS",
+                "safe-edit changed-reference validation should pass across language samples",
+            )
+
+        fallback_scope_block = evaluate_semantic_capability(
+            "rename",
+            ["src/example.py"],
+            available_binaries={
+                "pyright-langserver": False,
+                "python3": False,
+            },
+            allow_text_fallback=True,
+            scope_explicit=False,
+        )
+        expect(
+            fallback_scope_block.get("result") == "FAIL"
+            and fallback_scope_block.get("reason_code")
+            == "safe_edit_fallback_blocked_scope",
+            "safe-edit fallback should fail when explicit scope is missing",
+        )
+
+        fallback_unknown_language = evaluate_semantic_capability(
+            "rename",
+            ["docs/unknown.txt"],
+            available_binaries={
+                "pyright-langserver": True,
+                "python3": True,
+            },
+            allow_text_fallback=True,
+            scope_explicit=True,
+        )
+        expect(
+            fallback_unknown_language.get("result") == "FAIL"
+            and fallback_unknown_language.get("reason_code")
+            == "safe_edit_unknown_language",
+            "safe-edit adapter should fail deterministically for unsupported file languages",
         )
 
         hook_plan = resolve_event_plan(
