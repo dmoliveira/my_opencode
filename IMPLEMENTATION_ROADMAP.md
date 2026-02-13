@@ -48,7 +48,7 @@ Use this map to avoid overlapping implementations.
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
-| E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
+| E12 | Provider/Model Fallback Visibility | in_progress | Medium | E5 | bd-1jq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
@@ -499,15 +499,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 12 - Provider/Model Fallback Visibility
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Make model routing and provider fallback decisions observable and explainable.
 **Depends on:** Epic 5
 
-- [ ] Task 12.1: Define explanation model
-  - [ ] Subtask 12.1.1: Define resolution trace format (requested -> attempted -> selected)
-  - [ ] Subtask 12.1.2: Define compact vs verbose output levels
-  - [ ] Subtask 12.1.3: Define redaction rules for sensitive provider details
+- [x] Task 12.1: Define explanation model
+  - [x] Subtask 12.1.1: Define resolution trace format (requested -> attempted -> selected)
+  - [x] Subtask 12.1.2: Define compact vs verbose output levels
+  - [x] Subtask 12.1.3: Define redaction rules for sensitive provider details
+  - [x] Notes: Added `instructions/model_fallback_explanation_model.md` defining fallback trace shape, output levels, redaction policy, and deterministic reason-code requirements.
 - [ ] Task 12.2: Implement resolution tracing
   - [ ] Subtask 12.2.1: Capture fallback chain attempts in runtime
   - [ ] Subtask 12.2.2: Store latest trace per command/session
