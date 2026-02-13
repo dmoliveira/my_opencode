@@ -131,6 +131,78 @@ def _base_config_path() -> Path:
     return Path(__file__).resolve().parents[1] / "opencode.json"
 
 
+def layer_candidates(env_var: str = "OPENCODE_CONFIG_PATH") -> list[dict[str, Any]]:
+    env_path = os.environ.get(env_var, "").strip()
+    rows: list[dict[str, Any]] = []
+    if env_path:
+        path = Path(env_path).expanduser()
+        rows.append(
+            {
+                "name": "env_override",
+                "priority": 1,
+                "path": str(path),
+                "exists": path.exists(),
+                "kind": "jsonc" if path.suffix == ".jsonc" else "json",
+            }
+        )
+        return rows
+
+    rows = [
+        {
+            "name": "project_jsonc",
+            "priority": 2,
+            "path": str(Path.cwd() / ".opencode" / "my_opencode.jsonc"),
+            "exists": (Path.cwd() / ".opencode" / "my_opencode.jsonc").exists(),
+            "kind": "jsonc",
+        },
+        {
+            "name": "project_json",
+            "priority": 3,
+            "path": str(Path.cwd() / ".opencode" / "my_opencode.json"),
+            "exists": (Path.cwd() / ".opencode" / "my_opencode.json").exists(),
+            "kind": "json",
+        },
+        {
+            "name": "user_jsonc",
+            "priority": 4,
+            "path": str(Path("~/.config/opencode/my_opencode.jsonc").expanduser()),
+            "exists": Path("~/.config/opencode/my_opencode.jsonc")
+            .expanduser()
+            .exists(),
+            "kind": "jsonc",
+        },
+        {
+            "name": "user_json",
+            "priority": 5,
+            "path": str(Path("~/.config/opencode/my_opencode.json").expanduser()),
+            "exists": Path("~/.config/opencode/my_opencode.json").expanduser().exists(),
+            "kind": "json",
+        },
+        {
+            "name": "legacy_jsonc",
+            "priority": 6,
+            "path": str(Path("~/.config/opencode/opencode.jsonc").expanduser()),
+            "exists": Path("~/.config/opencode/opencode.jsonc").expanduser().exists(),
+            "kind": "jsonc",
+        },
+        {
+            "name": "legacy_json",
+            "priority": 7,
+            "path": str(Path("~/.config/opencode/opencode.json").expanduser()),
+            "exists": Path("~/.config/opencode/opencode.json").expanduser().exists(),
+            "kind": "json",
+        },
+        {
+            "name": "bundled_base",
+            "priority": 8,
+            "path": str(_base_config_path()),
+            "exists": _base_config_path().exists(),
+            "kind": "json",
+        },
+    ]
+    return rows
+
+
 def resolve_write_path(env_var: str = "OPENCODE_CONFIG_PATH") -> Path:
     env_path = os.environ.get(env_var, "").strip()
     if env_path:
@@ -162,6 +234,17 @@ def load_layered_config(
             merged = _deep_merge(merged, _load_json_or_jsonc(path))
 
     return merged, resolve_write_path(env_var=env_var)
+
+
+def layering_report(env_var: str = "OPENCODE_CONFIG_PATH") -> dict[str, Any]:
+    layers = layer_candidates(env_var=env_var)
+    active = [layer for layer in layers if layer["exists"]]
+    return {
+        "env_override": os.environ.get(env_var, "").strip() or None,
+        "layers": layers,
+        "active_layers": active,
+        "write_path": str(resolve_write_path(env_var=env_var)),
+    }
 
 
 def save_config(data: dict[str, Any], path: Path) -> None:
