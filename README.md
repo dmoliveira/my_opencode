@@ -631,6 +631,15 @@ Compliant workflow pattern:
 - inspect `/todo status --json` for current state counts
 - gate handoff/closure with `/todo enforce --json`
 
+## Resume policy model
+
+Epic 17 Task 17.1 defines the baseline policy contract for safe auto-resume behavior:
+
+- policy spec: `instructions/resume_policy_model.md`
+- interruption classes: `tool_failure`, `timeout`, `context_reset`, `process_crash`
+- eligibility gate: checkpoint availability + idempotency + artifact readiness + attempt budget
+- safety controls: class-specific cool-down windows and escalation after max attempts
+
 ## Context resilience policy
 
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
