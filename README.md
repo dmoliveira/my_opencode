@@ -509,6 +509,7 @@ Anti-patterns:
 Epic 9 introduces a rules engine for conditional instruction injection:
 
 - schema contract: `instructions/conditional_rules_schema.md`
+- team pack examples: `instructions/rules_team_pack_examples.md`
 - engine implementation: `scripts/rules_engine.py`
 - command wrapper: `scripts/rules_command.py`
 
@@ -526,6 +527,11 @@ Rules are discovered from:
 - project scope: `.opencode/rules/**/*.md`
 
 Precedence is deterministic: priority desc, then scope (`project` before `user`), then lexical rule id.
+
+Recommended workflow:
+- create project rules under `.opencode/rules/`
+- run `/rules status` after edits to validate discovery
+- use `/rules explain <path> --json` to verify effective rule stack before relying on behavior
 
 ## Background jobs inside OpenCode 🧵
 
