@@ -945,6 +945,7 @@ Every command-oriented epic must ship all of the following:
   - [ ] Subtask C2.4: Validation criteria (`make validate`, `make selftest`, `make install-test`)
   - [ ] Subtask C2.5: Evidence links (PR, commit, test output summary)
   - [ ] Subtask C2.6: Docs quality criteria (`README` updates + command examples + end-to-end workflow guides)
+  - [ ] Subtask C2.7: Measurable thresholds (0 failing checks, explicit risk notes, clear rollback path)
 - [ ] Task C3: Add tracking cadence
   - [ ] Subtask C3.1: Weekly status update section in this file
   - [ ] Subtask C3.2: Keep one epic `in_progress`
