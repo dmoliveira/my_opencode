@@ -13,10 +13,10 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from checkpoint_snapshot_manager import list_snapshots  # type: ignore
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from plan_execution_runtime import load_plan_execution_state  # type: ignore
 from recovery_engine import evaluate_resume_eligibility  # type: ignore
 
 
-SECTION = "plan_execution"
 KNOWN_STATUSES = {
     "idle",
     "queued",
@@ -118,8 +118,7 @@ def usage() -> int:
 def _load_runtime() -> tuple[dict[str, Any], Path]:
     config, _ = load_layered_config()
     write_path = resolve_write_path()
-    runtime_any = config.get(SECTION)
-    runtime = runtime_any if isinstance(runtime_any, dict) else {}
+    runtime, _ = load_plan_execution_state(config, write_path)
     return runtime, write_path
 
 

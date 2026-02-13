@@ -202,6 +202,24 @@ Task 22.4 verification notes:
 - selftest validates `/autoflow resume` recovery gating for non-idempotent steps and explicit approval replay.
 - install smoke validates `/autoflow dry-run`, `/autoflow status`, `/autoflow report`, and `/autoflow stop` happy-path controls.
 
+Runtime storage note:
+
+- `plan_execution` runtime state is persisted to `~/.config/opencode/my_opencode/runtime/plan_execution.json`.
+- this avoids invalid top-level keys in `~/.config/opencode/opencode.json` and prevents OpenCode startup config parsing errors.
+
+## PR review rubric baseline
+
+Epic 23 Task 23.1 defines pre-merge risk scoring semantics in:
+
+- `instructions/pr_review_rubric.md`
+
+Current baseline includes:
+
+- deterministic risk categories for `security`, `data_loss`, `migration_impact`, `test_coverage`, and `docs_changelog`.
+- explicit severity (`S0-S3`) and confidence (`C0-C3`) scales with conservative blocker thresholds.
+- required evidence contract for every finding (`file_refs`, rationale, and remediation), plus hard-evidence gating for blocker recommendations.
+- low-noise recommendation mapping (`approve`, `needs_review`, `changes_requested`, `block`) with deterministic tie-break behavior.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

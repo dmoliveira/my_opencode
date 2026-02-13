@@ -14,7 +14,10 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
+)
+from plan_execution_runtime import (  # type: ignore
+    load_plan_execution_state,
+    save_plan_execution_state,
 )
 from recovery_engine import (  # type: ignore
     execute_resume,
@@ -23,7 +26,6 @@ from recovery_engine import (  # type: ignore
 )
 
 
-SECTION = "plan_execution"
 DEFAULT_INTERRUPTION_CLASS = "tool_failure"
 
 
@@ -38,16 +40,15 @@ def usage() -> int:
 
 def _load_runtime() -> tuple[dict[str, Any], dict[str, Any], Path]:
     config, _ = load_layered_config()
-    runtime_any = config.get(SECTION)
-    runtime: dict[str, Any] = runtime_any if isinstance(runtime_any, dict) else {}
-    return config, runtime, resolve_write_path()
+    write_path = resolve_write_path()
+    runtime, _ = load_plan_execution_state(config, write_path)
+    return config, runtime, write_path
 
 
 def _save_runtime(
     config: dict[str, Any], write_path: Path, runtime: dict[str, Any]
 ) -> None:
-    config[SECTION] = runtime
-    save_config_file(config, write_path)
+    save_plan_execution_state(config, write_path, runtime)
 
 
 def _default_interruption_class(runtime: dict[str, Any]) -> str:

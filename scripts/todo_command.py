@@ -12,6 +12,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from plan_execution_runtime import load_plan_execution_state  # type: ignore
 from todo_enforcement import (  # type: ignore
     normalize_todo_state,
     remediation_prompts,
@@ -27,10 +28,9 @@ def usage() -> int:
 
 def _load_runtime() -> tuple[dict[str, Any], Path]:
     config, _ = load_layered_config()
-    runtime = config.get("plan_execution")
-    if not isinstance(runtime, dict):
-        runtime = {}
-    return runtime, resolve_write_path()
+    write_path = resolve_write_path()
+    runtime, _ = load_plan_execution_state(config, write_path)
+    return runtime, write_path
 
 
 def _normalized_steps(runtime: dict[str, Any]) -> list[dict[str, Any]]:

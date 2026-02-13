@@ -11,7 +11,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import load_layered_config  # type: ignore
+from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from plan_execution_runtime import load_plan_execution_state  # type: ignore
 from todo_enforcement import normalize_todo_state  # type: ignore
 
 
@@ -75,10 +76,11 @@ def build_digest(reason: str, cwd: Path) -> dict:
 def collect_plan_execution_snapshot() -> dict:
     try:
         layered, _ = load_layered_config()
+        write_path = resolve_write_path()
     except Exception:
         return {"status": "unknown", "available": False}
 
-    section = layered.get("plan_execution")
+    section, _ = load_plan_execution_state(layered, write_path)
     if not isinstance(section, dict) or not section:
         return {"status": "idle", "available": False}
 

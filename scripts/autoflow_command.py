@@ -17,11 +17,13 @@ from autoflow_adapter import evaluate_request  # type: ignore
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
+)
+from plan_execution_runtime import (  # type: ignore
+    load_plan_execution_state,
+    save_plan_execution_state,
 )
 
 
-SECTION = "plan_execution"
 START_WORK_SCRIPT = SCRIPT_DIR / "start_work_command.py"
 
 
@@ -53,8 +55,7 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
 def _load_runtime() -> tuple[dict[str, Any], Path, dict[str, Any]]:
     config, _ = load_layered_config()
     write_path = resolve_write_path()
-    runtime_any = config.get(SECTION)
-    runtime = runtime_any if isinstance(runtime_any, dict) else {}
+    runtime, _ = load_plan_execution_state(config, write_path)
     return config, write_path, runtime
 
 
@@ -298,8 +299,7 @@ def command_stop(args: list[str]) -> int:
         "actor": "autoflow stop",
         "at": now_iso(),
     }
-    config[SECTION] = runtime
-    save_config_file(config, write_path)
+    save_plan_execution_state(config, write_path, runtime)
 
     payload = evaluate_request("status")
     payload["result"] = "PASS"

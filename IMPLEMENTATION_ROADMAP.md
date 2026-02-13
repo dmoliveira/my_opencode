@@ -56,10 +56,10 @@ Use this map to avoid overlapping implementations.
 | E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | done | High | E3 | bd-3cg, bd-2ln, bd-10l, bd-lds | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | done | Medium | E2, E17 | bd-553, bd-3tb, bd-3um, bd-3gm | Durable state for rollback and restart safety |
-| E20 | Execution Budget Guardrails | in_progress | High | E2, E11 | bd-63f | Bound time/tool/token usage for autonomous runs |
+| E20 | Execution Budget Guardrails | done | High | E2, E11 | bd-63f | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
-| E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
-| E23 | PR Review Copilot | planned | High | E3 | TBD | Pre-PR quality, output, and risk review automation |
+| E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
+| E23 | PR Review Copilot | in_progress | High | E3 | bd-2vx | Pre-PR quality, output, and risk review automation |
 | E24 | Release Train Assistant | planned | High | E14, E23 | TBD | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
@@ -172,7 +172,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 1 - Config Layering + JSONC Support
 
-**Status:** `paused`
+**Status:** `done`
 **Priority:** High
 **Goal:** Add user/project layered config and JSONC parsing so behavior can be customized per repo without mutating global defaults.
 **Depends on:** None
@@ -809,15 +809,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 23 - PR Review Copilot
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Add a command that reviews pending PR changes for risk, quality, and release readiness before merge.
 **Depends on:** Epic 3
 
-- [ ] Task 23.1: Define review rubric and risk scoring
-  - [ ] Subtask 23.1.1: Define risk categories (security, data loss, migration impact, test coverage)
-  - [ ] Subtask 23.1.2: Define confidence and severity scoring model
-  - [ ] Subtask 23.1.3: Define required evidence for blocking recommendations
+- [x] Task 23.1: Define review rubric and risk scoring
+  - [x] Subtask 23.1.1: Define risk categories (security, data loss, migration impact, test coverage)
+  - [x] Subtask 23.1.2: Define confidence and severity scoring model
+  - [x] Subtask 23.1.3: Define required evidence for blocking recommendations
+  - [x] Notes: Added `instructions/pr_review_rubric.md` with deterministic risk category signals, severity/confidence scoring scales, conservative blocker-evidence thresholds, and recommendation mapping optimized for low-noise pre-merge triage.
 - [ ] Task 23.2: Implement copilot analyzer
   - [ ] Subtask 23.2.1: Parse git diff and classify changed areas
   - [ ] Subtask 23.2.2: Detect missing tests/docs/changelog implications
@@ -949,7 +950,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 28 - Autopilot Objective Runner Command
 
-**Status:** `planned`
+**Status:** `paused`
 **Priority:** High
 **Goal:** Add `/autopilot` as a high-level objective runner that executes bounded autonomous cycles with explicit controls.
 **Depends on:** Epic 20, Epic 22

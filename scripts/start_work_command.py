@@ -17,7 +17,10 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
+)
+from plan_execution_runtime import (  # type: ignore
+    load_plan_execution_state,
+    save_plan_execution_state,
 )
 from todo_enforcement import (  # type: ignore
     build_transition_event,
@@ -43,7 +46,6 @@ from execution_budget_runtime import (  # type: ignore
 )
 
 
-SECTION = "plan_execution"
 PLAN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-_]{2,63}$")
 STEP_RE = re.compile(r"^- \[(?P<mark>[ xX])\] (?P<text>.+)$")
 ORDINAL_RE = re.compile(r"^(?P<ordinal>\d+)\.\s+(?P<detail>.+)$")
@@ -311,8 +313,7 @@ def save_state(
     snapshot_source: str = "step_boundary",
     command_outcomes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    config[SECTION] = state
-    save_config_file(config, write_path)
+    save_plan_execution_state(config, write_path, state)
     snapshot_result = write_snapshot(
         write_path,
         state,
@@ -508,8 +509,8 @@ def command_start(args: list[str]) -> int:
     }
 
     config, write_path = load_state()
-    existing_runtime = config.get(SECTION)
-    if isinstance(existing_runtime, dict):
+    existing_runtime, _ = load_plan_execution_state(config, write_path)
+    if existing_runtime:
         existing_resume = existing_runtime.get("resume")
         if (
             isinstance(existing_resume, dict)
@@ -678,9 +679,7 @@ def command_start(args: list[str]) -> int:
 
 def read_runtime_state() -> tuple[dict[str, Any], Path]:
     config, write_path = load_state()
-    runtime = config.get(SECTION)
-    if not isinstance(runtime, dict):
-        runtime = {}
+    runtime, _ = load_plan_execution_state(config, write_path)
     return runtime, write_path
 
 
