@@ -1466,6 +1466,110 @@ def main() -> int:
             "keyword-mode status should expose persisted runtime context",
         )
 
+        keyword_disable_ulw = subprocess.run(
+            [sys.executable, str(KEYWORD_MODE_SCRIPT), "disable-keyword", "ulw"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            keyword_disable_ulw.returncode == 0,
+            "keyword-mode disable-keyword should succeed",
+        )
+        keyword_detect_after_disable = subprocess.run(
+            [
+                sys.executable,
+                str(KEYWORD_MODE_SCRIPT),
+                "detect",
+                "--prompt",
+                "ulw deep-analyze",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            keyword_detect_after_disable.returncode == 0,
+            "keyword-mode detect after disable-keyword should succeed",
+        )
+        keyword_detect_after_disable_report = parse_json_output(
+            keyword_detect_after_disable.stdout
+        )
+        expect(
+            keyword_detect_after_disable_report.get("matched_keywords")
+            == ["deep-analyze"],
+            "keyword-mode detect should respect disabled keyword config",
+        )
+
+        keyword_global_disable = subprocess.run(
+            [sys.executable, str(KEYWORD_MODE_SCRIPT), "disable"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            keyword_global_disable.returncode == 0,
+            "keyword-mode disable should succeed",
+        )
+        keyword_detect_disabled = subprocess.run(
+            [
+                sys.executable,
+                str(KEYWORD_MODE_SCRIPT),
+                "detect",
+                "--prompt",
+                "safe-apply deep-analyze",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            keyword_detect_disabled.returncode == 0,
+            "keyword detect should run while disabled",
+        )
+        keyword_detect_disabled_report = parse_json_output(
+            keyword_detect_disabled.stdout
+        )
+        expect(
+            keyword_detect_disabled_report.get("request_opt_out") == "global_disabled"
+            and keyword_detect_disabled_report.get("matched_keywords") == [],
+            "keyword-mode detect should report global disabled state",
+        )
+
+        keyword_global_enable = subprocess.run(
+            [sys.executable, str(KEYWORD_MODE_SCRIPT), "enable"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            keyword_global_enable.returncode == 0, "keyword-mode enable should succeed"
+        )
+        keyword_enable_ulw = subprocess.run(
+            [sys.executable, str(KEYWORD_MODE_SCRIPT), "enable-keyword", "ulw"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            keyword_enable_ulw.returncode == 0,
+            "keyword-mode enable-keyword should succeed",
+        )
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )

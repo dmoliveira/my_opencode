@@ -26,6 +26,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/keyword_execution_modes.md` defining reserved keywords, deterministic precedence rules, and request-level opt-out syntax for Epic 8 Task 8.1.
 - Added `scripts/keyword_mode_schema.py` and `scripts/keyword_mode_command.py` to parse prompt keywords, resolve precedence-aware mode flags, and persist keyword mode runtime context.
 - Added `/keyword-mode` aliases (`status|detect|apply`) to inspect and apply keyword-triggered execution modes.
+- Added keyword mode controls for global enable/disable and per-keyword toggles (`disable-keyword` / `enable-keyword`) with persisted config state.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -51,6 +52,7 @@ All notable changes to this project are documented in this file.
 - Added model-routing resolution engine with deterministic precedence/fallback tracing and integration points in stack profiles and install wizard model profile selection.
 - Added `/model-profile` command aliases, practical routing guidance, and unified doctor visibility for model-routing health.
 - Tightened model-routing verification coverage with deterministic fallback-reason assertions and expanded install smoke resolve scenarios.
+- Expanded keyword mode docs with examples and anti-pattern guidance, plus stronger selftest/install smoke coverage for keyword toggle behavior.
 
 ## v0.2.0 - 2026-02-12
 

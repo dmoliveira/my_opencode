@@ -170,6 +170,22 @@
       "description": "Apply keyword modes for a prompt",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" apply $ARGUMENTS --json`\nShow only the command output."
     },
+    "keyword-mode-enable": {
+      "description": "Enable keyword mode detection globally",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" enable`\nShow only the command output."
+    },
+    "keyword-mode-disable": {
+      "description": "Disable keyword mode detection globally",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" disable`\nShow only the command output."
+    },
+    "keyword-mode-disable-keyword": {
+      "description": "Disable a specific keyword",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" disable-keyword $ARGUMENTS`\nShow only the command output."
+    },
+    "keyword-mode-enable-keyword": {
+      "description": "Re-enable a specific keyword",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" enable-keyword $ARGUMENTS`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

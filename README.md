@@ -481,6 +481,10 @@ Use:
 /keyword-mode status
 /keyword-mode detect --prompt "safe-apply deep-analyze review this migration" --json
 /keyword-mode apply --prompt "parallel-research deep-analyze inspect API usage" --json
+/keyword-mode disable-keyword ulw
+/keyword-mode enable-keyword ulw
+/keyword-mode disable
+/keyword-mode enable
 ```
 
 Detector behavior:
@@ -488,6 +492,16 @@ Detector behavior:
 - deterministic precedence for conflicts (`safe-apply` > `deep-analyze` > `parallel-research` > `ulw`)
 - prompt-level opt-out support (`no-keyword-mode` and `no-<keyword>` tokens)
 - persisted runtime context via `keyword_modes` config section (`active_modes`, `effective_flags`)
+
+Examples:
+- basic: `/keyword-mode apply --prompt "safe-apply review this migration" --json`
+- intermediate: `/keyword-mode disable-keyword ulw` then `/keyword-mode detect --prompt "ulw deep-analyze audit" --json`
+- override path: `/keyword-mode detect --prompt "no-keyword-mode safe-apply deep-analyze" --json`
+
+Anti-patterns:
+- avoid mixing contradictory intent keywords casually (`ulw` + `deep-analyze`) unless you expect precedence conflict resolution.
+- avoid relying on partial words (`deep` or `safe`) because matching is exact-token only.
+- avoid forgetting local opt-outs in copied prompts; `no-keyword-mode` intentionally disables all activation for that request.
 
 ## Background jobs inside OpenCode 🧵
 
