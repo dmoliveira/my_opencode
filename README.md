@@ -267,6 +267,13 @@ Task 24.1 release policy contract notes:
 - semantic-version gating now defines deterministic patch/minor/major validation and breaking-change mismatch blocking.
 - rollback policy now defines partial-failure handling with explicit reason codes and follow-up guidance.
 
+Task 24.2 release assistant engine notes:
+
+- backend module: `scripts/release_train_engine.py` with `status`, `prepare`, `draft`, `publish`, and `doctor` command flows.
+- `prepare` emits deterministic `reason_codes` and remediation for clean-tree, branch, validation, changelog, and semver gating checks.
+- `draft` composes release-note entries from git history since the latest (or provided) tag.
+- `publish` enforces readiness and explicit confirmation, with dry-run and rollback action metadata.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -1253,6 +1260,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/autoflow_adapter.py` - orchestration adapter for `/autoflow` transition and explain planning
 - `scripts/autoflow_command.py` - unified `/autoflow` command surface with dry-run and kill-switch controls
 - `scripts/budget_command.py` - backend script for `/budget`
+- `scripts/release_train_engine.py` - release-train backend engine for preflight, draft, and publish gating
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers

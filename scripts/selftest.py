@@ -95,6 +95,7 @@ AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
 AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
+RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1244,6 +1245,79 @@ index 3333333..4444444 100644
             "tests"
             not in set(analyzer_tested_change_report.get("missing_evidence", [])),
             "pr-review analyzer should not report missing tests when test files changed",
+        )
+
+        release_engine_doctor = subprocess.run(
+            [sys.executable, str(RELEASE_TRAIN_ENGINE_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_engine_doctor.returncode == 0,
+            "release-train engine doctor should pass when policy contract exists",
+        )
+        release_engine_doctor_payload = parse_json_output(release_engine_doctor.stdout)
+        expect(
+            release_engine_doctor_payload.get("result") == "PASS"
+            and release_engine_doctor_payload.get("contract_exists") is True,
+            "release-train engine doctor should confirm policy contract wiring",
+        )
+
+        release_engine_prepare = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_ENGINE_SCRIPT),
+                "prepare",
+                "--version",
+                "0.0.1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_engine_prepare.returncode == 1,
+            "release-train prepare should block invalid release preconditions",
+        )
+        release_engine_prepare_payload = parse_json_output(
+            release_engine_prepare.stdout
+        )
+        expect(
+            "changelog_missing_version"
+            in set(release_engine_prepare_payload.get("reason_codes", [])),
+            "release-train prepare should report missing changelog version evidence",
+        )
+
+        release_engine_draft = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_ENGINE_SCRIPT),
+                "draft",
+                "--head",
+                "HEAD",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_engine_draft.returncode == 0,
+            "release-train draft should generate release note entries",
+        )
+        release_engine_draft_payload = parse_json_output(release_engine_draft.stdout)
+        expect(
+            release_engine_draft_payload.get("result") == "PASS"
+            and isinstance(release_engine_draft_payload.get("entries"), list),
+            "release-train draft should emit structured release note entries",
         )
 
         result = subprocess.run(
