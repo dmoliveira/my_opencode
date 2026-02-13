@@ -24,6 +24,7 @@ CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
 NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
+BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -706,6 +707,115 @@ def main() -> int:
         expect(result.returncode == 0, f"stack status failed: {result.stderr}")
         expect(
             "profile: quiet-ci" in result.stdout, "stack status should report quiet-ci"
+        )
+
+        bg_dir = home / ".config" / "opencode" / "my_opencode" / "bg"
+        bg_env = os.environ.copy()
+        bg_env["HOME"] = str(home)
+        bg_env["MY_OPENCODE_BG_DIR"] = str(bg_dir)
+
+        def run_bg(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(BG_MANAGER_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=bg_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+
+        result = run_bg(
+            "enqueue",
+            "--timeout-seconds",
+            "30",
+            "--",
+            sys.executable,
+            "-c",
+            'print("bg-ok")',
+        )
+        expect(result.returncode == 0, f"bg enqueue failed: {result.stderr}")
+        bg_job_id = ""
+        for line in result.stdout.splitlines():
+            if line.startswith("id: "):
+                bg_job_id = line.replace("id: ", "", 1).strip()
+                break
+        expect(bool(bg_job_id), "bg enqueue should print id")
+
+        result = run_bg("run", "--id", bg_job_id)
+        expect(result.returncode == 0, f"bg run failed: {result.stderr}")
+        expect(bg_job_id in result.stdout, "bg run output should include job id")
+
+        result = run_bg("read", bg_job_id, "--json")
+        expect(result.returncode == 0, f"bg read json failed: {result.stderr}")
+        bg_report = parse_json_output(result.stdout)
+        expect(
+            bg_report.get("job", {}).get("status") == "completed",
+            "bg run should complete successful job",
+        )
+        expect("bg-ok" in bg_report.get("log_tail", ""), "bg log should include output")
+
+        result = run_bg(
+            "enqueue",
+            "--timeout-seconds",
+            "1",
+            "--",
+            sys.executable,
+            "-c",
+            "import time; time.sleep(2)",
+        )
+        expect(
+            result.returncode == 0, f"bg enqueue timeout job failed: {result.stderr}"
+        )
+        timeout_job_id = ""
+        for line in result.stdout.splitlines():
+            if line.startswith("id: "):
+                timeout_job_id = line.replace("id: ", "", 1).strip()
+                break
+        expect(bool(timeout_job_id), "bg timeout enqueue should print id")
+
+        result = run_bg("run", "--id", timeout_job_id)
+        expect(result.returncode == 1, "bg timeout run should fail with non-zero")
+
+        result = run_bg("read", timeout_job_id, "--json")
+        expect(result.returncode == 0, f"bg read timeout json failed: {result.stderr}")
+        timeout_report = parse_json_output(result.stdout)
+        expect(
+            timeout_report.get("job", {}).get("status") == "failed",
+            "bg timeout job should be marked failed",
+        )
+        expect(
+            "timed out" in str(timeout_report.get("job", {}).get("summary", "")),
+            "bg timeout job should include timeout summary",
+        )
+
+        result = run_bg("enqueue", "--", sys.executable, "-c", 'print("queued")')
+        expect(result.returncode == 0, f"bg enqueue cancel job failed: {result.stderr}")
+        cancel_job_id = ""
+        for line in result.stdout.splitlines():
+            if line.startswith("id: "):
+                cancel_job_id = line.replace("id: ", "", 1).strip()
+                break
+        expect(bool(cancel_job_id), "bg cancel enqueue should print id")
+
+        result = run_bg("cancel", cancel_job_id)
+        expect(result.returncode == 0, f"bg cancel failed: {result.stderr}")
+
+        result = run_bg("read", cancel_job_id, "--json")
+        expect(
+            result.returncode == 0, f"bg read cancelled json failed: {result.stderr}"
+        )
+        cancel_report = parse_json_output(result.stdout)
+        expect(
+            cancel_report.get("job", {}).get("status") == "cancelled",
+            "bg cancelled job should be marked cancelled",
+        )
+
+        result = run_bg("cleanup", "--max-terminal", "1", "--json")
+        expect(result.returncode == 0, f"bg cleanup failed: {result.stderr}")
+        cleanup_report = parse_json_output(result.stdout)
+        expect(
+            int(cleanup_report.get("pruned", 0)) >= 1,
+            "bg cleanup should prune terminal jobs when max-terminal is low",
         )
 
         wizard_state_path = (

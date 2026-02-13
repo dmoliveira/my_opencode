@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/config_layering.py` with shared layered config discovery and JSONC parsing support.
 - Added `/config layers` (and `--json`) to inspect layered config precedence and effective write path.
 - Added `instructions/background_task_model.md` defining lifecycle, storage schema, retention, concurrency, and stale-timeout defaults for Epic 2 background orchestration.
+- Added `scripts/background_task_manager.py` with enqueue/run/read/list/cancel/cleanup operations, log+metadata capture, and stale/retention cleanup controls.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -27,6 +28,7 @@ All notable changes to this project are documented in this file.
 - Expanded installer/readme/install-test coverage for layered config diagnostics.
 - Migrated `/notify`, `/telemetry`, `/post-session`, `/policy`, and `/stack` state to layered config sections with legacy file fallback and env-var compatibility overrides.
 - Expanded selftest coverage to validate layered command-state writes for telemetry/policy/post-session flows.
+- Expanded selftest and installer smoke coverage for the background task manager backend.
 
 ## v0.2.0 - 2026-02-12
 
