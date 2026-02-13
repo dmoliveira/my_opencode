@@ -15,6 +15,17 @@ INTERRUPTION_COOLDOWNS = {
 }
 MAX_RESUME_ATTEMPTS_DEFAULT = 3
 
+REASON_MESSAGES = {
+    "resume_allowed": "resume is allowed from the latest safe checkpoint",
+    "resume_missing_checkpoint": "no checkpoint is available yet; run /start-work first",
+    "resume_unknown_interruption_class": "the interruption class is not recognized",
+    "resume_missing_runtime_artifacts": "runtime state is incomplete for recovery",
+    "resume_attempt_limit_reached": "max resume attempts reached; manual escalation required",
+    "resume_blocked_cooldown": "resume is cooling down after the previous attempt",
+    "resume_non_idempotent_step": "next step is non-idempotent and requires explicit approval",
+    "resume_disabled": "resume is disabled in runtime controls",
+}
+
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -38,6 +49,13 @@ def _normalize_steps(runtime: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(step, dict):
             steps.append(step)
     return steps
+
+
+def explain_resume_reason(reason_code: str, *, cooldown_remaining: int = 0) -> str:
+    message = REASON_MESSAGES.get(reason_code, reason_code)
+    if reason_code == "resume_blocked_cooldown" and cooldown_remaining > 0:
+        return f"{message} ({cooldown_remaining}s remaining)"
+    return message
 
 
 def load_last_safe_checkpoint(runtime: dict[str, Any]) -> dict[str, Any]:
@@ -114,6 +132,20 @@ def evaluate_resume_eligibility(
         resume_meta_any if isinstance(resume_meta_any, dict) else {}
     )
     attempt_count = int(resume_meta.get("attempt_count", 0) or 0)
+    enabled = bool(resume_meta.get("enabled", True))
+    if not enabled:
+        return {
+            "eligible": False,
+            "reason_code": "resume_disabled",
+            "checkpoint": checkpoint_info.get("checkpoint"),
+            "cooldown_remaining": 0,
+            "attempt_count": attempt_count,
+            "max_attempts": int(
+                resume_meta.get("max_attempts", MAX_RESUME_ATTEMPTS_DEFAULT)
+                or MAX_RESUME_ATTEMPTS_DEFAULT
+            ),
+        }
+
     max_attempts = int(
         resume_meta.get("max_attempts", MAX_RESUME_ATTEMPTS_DEFAULT)
         or MAX_RESUME_ATTEMPTS_DEFAULT
@@ -230,6 +262,7 @@ def execute_resume(
             "result": "FAIL",
             "runtime": next_runtime,
             "reason_code": evaluation.get("reason_code"),
+            "cooldown_remaining": int(evaluation.get("cooldown_remaining", 0) or 0),
             "checkpoint": evaluation.get("checkpoint"),
             "resumed_steps": [],
         }

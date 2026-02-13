@@ -204,6 +204,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "resume",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("resume_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("resume_command.py")),
+            "status",
+            "--json",
+        ],
+    },
 ]
 
 

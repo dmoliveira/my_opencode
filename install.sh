@@ -78,6 +78,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/todo_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/resume_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -126,6 +129,9 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
     python3 "$INSTALL_DIR/scripts/todo_command.py" status --json
     python3 "$INSTALL_DIR/scripts/todo_command.py" enforce --json
+  fi
+  if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true
   fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
@@ -192,6 +198,9 @@ printf "  /start-work deviations --json\n"
 printf "  /start-work-doctor-json\n"
 printf "  /todo status --json\n"
 printf "  /todo enforce --json\n"
+printf "  /resume status --json\n"
+printf "  /resume now --interruption-class tool_failure --json\n"
+printf "  /resume disable --json\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
 printf "  /devtools install all\n"

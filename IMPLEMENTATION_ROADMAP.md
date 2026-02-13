@@ -653,10 +653,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 17.2.2: Re-run only idempotent or explicitly approved steps
   - [x] Subtask 17.2.3: Persist resume trail for audit/debugging
   - [x] Notes: Added `scripts/recovery_engine.py` and `/start-work recover` backend path for checkpoint eligibility checks, approval-gated replay, and persisted resume audit trail events.
-- [ ] Task 17.3: User control surfaces
-  - [ ] Subtask 17.3.1: Add `/resume status`, `/resume now`, `/resume disable` commands
-  - [ ] Subtask 17.3.2: Add clear output explaining why resume did/did not trigger
-  - [ ] Subtask 17.3.3: Document recommended recovery playbooks
+- [x] Task 17.3: User control surfaces
+  - [x] Subtask 17.3.1: Add `/resume status`, `/resume now`, `/resume disable` commands
+  - [x] Subtask 17.3.2: Add clear output explaining why resume did/did not trigger
+  - [x] Subtask 17.3.3: Document recommended recovery playbooks
+  - [x] Notes: Added `scripts/resume_command.py` and `/resume*` aliases with eligibility/status/disable controls, added human-readable recovery reasons via `explain_resume_reason`, and documented recovery playbooks in README.
 - [ ] Task 17.4: Verification
   - [ ] Subtask 17.4.1: Add tests for each interruption class
   - [ ] Subtask 17.4.2: Add tests for idempotency safeguards

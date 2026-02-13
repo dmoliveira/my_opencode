@@ -71,6 +71,7 @@ RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
+RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -2221,6 +2222,11 @@ version: 1
             recover_blocked_report.get("reason_code") == "resume_non_idempotent_step",
             "start-work recover should surface deterministic reason code",
         )
+        expect(
+            "requires explicit approval"
+            in str(recover_blocked_report.get("reason", "")),
+            "start-work recover should provide a human-readable reason",
+        )
 
         recover_cfg_after_block = load_json_file(recover_config_path)
         recover_state_after_block = recover_cfg_after_block.get("plan_execution")
@@ -2260,6 +2266,88 @@ version: 1
             recover_allowed_report.get("result") == "PASS"
             and recover_allowed_report.get("status") == "completed",
             "start-work recover should complete failed run when recovery eligibility is satisfied",
+        )
+
+        recover_cfg_after_allowed = load_json_file(recover_config_path)
+        recover_state_after_allowed = recover_cfg_after_allowed.get("plan_execution")
+        if isinstance(recover_state_after_allowed, dict):
+            resume_meta = recover_state_after_allowed.get("resume")
+            if isinstance(resume_meta, dict):
+                resume_meta["last_attempt_at"] = "2026-02-13T00:00:00Z"
+        recover_config_path.write_text(
+            json.dumps(recover_cfg_after_allowed, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        resume_status_ok = subprocess.run(
+            [sys.executable, str(RESUME_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            resume_status_ok.returncode == 0,
+            "resume status should pass when runtime recovery is eligible",
+        )
+        resume_status_ok_report = parse_json_output(resume_status_ok.stdout)
+        expect(
+            resume_status_ok_report.get("reason_code") == "resume_allowed",
+            "resume status should report resume_allowed when checkpoint is resumable",
+        )
+
+        resume_disable = subprocess.run(
+            [sys.executable, str(RESUME_SCRIPT), "disable", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(resume_disable.returncode == 0, "resume disable should succeed")
+
+        resume_status_disabled = subprocess.run(
+            [sys.executable, str(RESUME_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            resume_status_disabled.returncode == 0,
+            "resume status should return diagnostics even when resume is disabled",
+        )
+        resume_status_disabled_report = parse_json_output(resume_status_disabled.stdout)
+        expect(
+            resume_status_disabled_report.get("reason_code") == "resume_disabled",
+            "resume status should expose resume_disabled reason code",
+        )
+
+        resume_now_disabled = subprocess.run(
+            [
+                sys.executable,
+                str(RESUME_SCRIPT),
+                "now",
+                "--interruption-class",
+                "tool_failure",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            resume_now_disabled.returncode == 1,
+            "resume now should fail while resume automation is disabled",
+        )
+        resume_now_disabled_report = parse_json_output(resume_now_disabled.stdout)
+        expect(
+            resume_now_disabled_report.get("reason_code") == "resume_disabled",
+            "resume now should surface resume_disabled reason code",
         )
 
         keyword_report = resolve_prompt_modes(
