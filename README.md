@@ -79,6 +79,19 @@ Verification notes:
 - fallback tests cover explicit-scope gating and unsupported-language failure paths.
 - install smoke now exercises `/safe-edit plan` in addition to status/doctor checks.
 
+## Checkpoint snapshot baseline
+
+Epic 19 Task 19.1 defines checkpoint snapshot lifecycle semantics in:
+
+- `instructions/checkpoint_snapshot_lifecycle.md`
+
+Current baseline includes:
+
+- snapshot schema for step state, context digest, command outcomes, and integrity metadata.
+- deterministic trigger boundaries (`step_boundary`, `error_boundary`, `timer`, `manual`) with coalescing behavior.
+- retention/rotation defaults (bounded history per run plus terminal snapshot preservation).
+- optional history compression policy with checksum continuity requirements.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
