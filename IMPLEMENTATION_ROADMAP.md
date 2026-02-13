@@ -777,7 +777,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 22 - Autoflow Unified Orchestration Command
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Provide a single command (`/autoflow`) that orchestrates plan execution, enforcement, recovery, and reporting with safe defaults.
 **Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20
@@ -797,12 +797,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states
   - [x] Subtask 22.3.3: Add docs and migration guidance from low-level commands
   - [x] Notes: Added `scripts/autoflow_command.py` plus `/autoflow*` aliases with non-mutating `dry-run`, explicit `stop` kill-switch semantics, doctor integration, installer smoke coverage, and README migration mappings from low-level commands.
-- [ ] Task 22.4: Verification
-  - [ ] Subtask 22.4.1: Add integration tests for full lifecycle (`start -> status -> report`)
-  - [ ] Subtask 22.4.2: Add recovery tests (`resume` after interruption)
-  - [ ] Subtask 22.4.3: Add install-test smoke checks for `/autoflow` happy path
-- [ ] Exit criteria: `/autoflow` can run end-to-end flows with auditable outputs
-- [ ] Exit criteria: users can always fall back to lower-level commands safely
+- [x] Task 22.4: Verification
+  - [x] Subtask 22.4.1: Add integration tests for full lifecycle (`start -> status -> report`)
+  - [x] Subtask 22.4.2: Add recovery tests (`resume` after interruption)
+  - [x] Subtask 22.4.3: Add install-test smoke checks for `/autoflow` happy path
+  - [x] Notes: Expanded `scripts/selftest.py` with `/autoflow report` lifecycle assertions and approval-gated `/autoflow resume` recovery checks; install smoke validates `/autoflow dry-run|status|report|stop` flows.
+- [x] Exit criteria: `/autoflow` can run end-to-end flows with auditable outputs
+- [x] Exit criteria: users can always fall back to lower-level commands safely
 
 ---
 
