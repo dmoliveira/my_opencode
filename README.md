@@ -220,6 +220,20 @@ Current baseline includes:
 - required evidence contract for every finding (`file_refs`, rationale, and remediation), plus hard-evidence gating for blocker recommendations.
 - low-noise recommendation mapping (`approve`, `needs_review`, `changes_requested`, `block`) with deterministic tie-break behavior.
 
+Task 23.2 analyzer baseline:
+
+- analyzer module: `scripts/pr_review_analyzer.py`
+- parses unified git diffs (`git diff --unified=0`) into file/line evidence and classifies changed areas.
+- emits rubric-aligned findings with deterministic severity/confidence and `file_refs`.
+- detects missing release evidence (`tests`, `README`, `CHANGELOG`) and folds gaps into recommendation scoring.
+
+Examples:
+
+```text
+python3 ~/.config/opencode/my_opencode/scripts/pr_review_analyzer.py analyze --base main --head HEAD --json
+python3 ~/.config/opencode/my_opencode/scripts/pr_review_analyzer.py analyze --diff-file /tmp/pr.diff --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
