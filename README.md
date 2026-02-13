@@ -422,6 +422,22 @@ Governance controls:
 - telemetry-safe audit log: `~/.config/opencode/hooks/actions.jsonl`
 - audit log records only metadata (hook id, category, triggered, exit status), not raw command output
 
+## Category routing schema baseline
+
+Epic 5 starts with a schema contract in `scripts/model_routing_schema.py` and docs in
+`instructions/model_routing_schema.md`.
+
+Baseline categories:
+- `quick`
+- `deep`
+- `visual`
+- `writing`
+
+Each category includes `model`, `temperature`, `reasoning`, `verbosity`, and `description`.
+Fallback behavior is deterministic:
+- unknown category -> `default_category`
+- unavailable model -> `default_category`
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:

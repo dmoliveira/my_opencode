@@ -17,6 +17,11 @@ from hook_actions import (  # type: ignore
     error_recovery_hint,
     output_truncation_safety,
 )
+from model_routing_schema import (  # type: ignore
+    default_schema,
+    resolve_category,
+    validate_schema,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1229,6 +1234,36 @@ def main() -> int:
         expect(
             hooks_doctor_report.get("result") == "PASS",
             "hooks doctor json should report PASS",
+        )
+
+        routing_schema = default_schema()
+        schema_problems = validate_schema(routing_schema)
+        expect(not schema_problems, "default model routing schema should validate")
+
+        resolved_requested = resolve_category(routing_schema, "deep")
+        expect(
+            resolved_requested.get("category") == "deep"
+            and resolved_requested.get("reason") == "requested_category",
+            "model routing should resolve explicit known category",
+        )
+
+        resolved_missing = resolve_category(routing_schema, "unknown")
+        expect(
+            resolved_missing.get("category") == routing_schema.get("default_category")
+            and resolved_missing.get("reason") == "fallback_missing_category",
+            "model routing should fallback to default when category is missing",
+        )
+
+        resolved_unavailable = resolve_category(
+            routing_schema,
+            "deep",
+            available_models={"openai/gpt-5-mini"},
+        )
+        expect(
+            resolved_unavailable.get("category")
+            == routing_schema.get("default_category")
+            and resolved_unavailable.get("reason") == "fallback_unavailable_model",
+            "model routing should fallback when requested model is unavailable",
         )
 
         wizard_state_path = (
