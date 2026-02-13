@@ -383,6 +383,28 @@ Epic 4 starts with a minimal hook framework in `scripts/hook_framework.py`.
 
 This baseline intentionally ships without default active hooks. Epic 4.2 adds concrete hook implementations.
 
+## Initial safety hooks
+
+Use these directly in OpenCode:
+
+```text
+/hooks status
+/hooks run continuation-reminder --json '{"checklist":["update docs","run tests"]}'
+/hooks run truncate-safety --json '{"text":"...large output...","max_lines":120,"max_chars":8000}'
+/hooks run error-hints --json '{"command":"git status","exit_code":128,"stderr":"fatal: not a git repository"}'
+```
+
+Autocomplete-friendly shortcut:
+
+```text
+/hooks-help
+```
+
+Hook behavior:
+- `continuation-reminder` triggers when checklist items remain unfinished.
+- `truncate-safety` clips oversized output and returns warnings with limits used.
+- `error-hints` maps common failures (missing command/path, permission, git context, timeout) to actionable hints.
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:

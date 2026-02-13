@@ -12,6 +12,11 @@ import time
 from pathlib import Path
 
 from hook_framework import HookRegistration, resolve_event_plan  # type: ignore
+from hook_actions import (  # type: ignore
+    continuation_reminder,
+    error_recovery_hint,
+    output_truncation_safety,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +34,7 @@ INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
 NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
+HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1069,6 +1075,73 @@ def main() -> int:
         expect(
             [hook.hook_id for hook in hook_tie_break] == ["aaa", "bbb"],
             "hook framework should use stable id ordering as deterministic fallback",
+        )
+
+        reminder_report = continuation_reminder(
+            {"checklist": ["update docs", "", "run tests"]}
+        )
+        expect(
+            reminder_report.get("triggered") is True
+            and reminder_report.get("pending_count") == 2,
+            "continuation reminder should trigger for unfinished checklist items",
+        )
+
+        no_reminder_report = continuation_reminder({"checklist": []})
+        expect(
+            no_reminder_report.get("triggered") is False,
+            "continuation reminder should stay quiet when checklist is empty",
+        )
+
+        truncation_report = output_truncation_safety(
+            {
+                "text": "\n".join(f"line {idx}" for idx in range(300)),
+                "max_lines": 120,
+                "max_chars": 2_000,
+            }
+        )
+        expect(
+            truncation_report.get("truncated") is True,
+            "truncate safety should trigger for oversized output",
+        )
+
+        git_hint_report = error_recovery_hint(
+            {
+                "command": "git status",
+                "exit_code": 128,
+                "stderr": "fatal: not a git repository",
+            }
+        )
+        expect(
+            git_hint_report.get("category") == "git_context",
+            "error hints should detect git context failures",
+        )
+
+        hook_run = subprocess.run(
+            [
+                sys.executable,
+                str(HOOKS_SCRIPT),
+                "run",
+                "error-hints",
+                "--json",
+                json.dumps(
+                    {
+                        "command": "python3 missing.py",
+                        "exit_code": 2,
+                        "stderr": "No such file or directory",
+                    }
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(hook_run.returncode == 0, "hooks command run should succeed")
+        hook_report = parse_json_output(hook_run.stdout)
+        expect(
+            hook_report.get("category") == "path_missing",
+            "hooks command should return path_missing category",
         )
 
         wizard_state_path = (
