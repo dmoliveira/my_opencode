@@ -59,7 +59,7 @@ Use this map to avoid overlapping implementations.
 | E20 | Execution Budget Guardrails | done | High | E2, E11 | bd-63f | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
-| E23 | PR Review Copilot | in_progress | High | E3 | bd-2vx | Pre-PR quality, output, and risk review automation |
+| E23 | PR Review Copilot | in_progress | High | E3 | bd-2zt | Pre-PR quality, output, and risk review automation |
 | E24 | Release Train Assistant | planned | High | E14, E23 | TBD | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
@@ -819,10 +819,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 23.1.2: Define confidence and severity scoring model
   - [x] Subtask 23.1.3: Define required evidence for blocking recommendations
   - [x] Notes: Added `instructions/pr_review_rubric.md` with deterministic risk category signals, severity/confidence scoring scales, conservative blocker-evidence thresholds, and recommendation mapping optimized for low-noise pre-merge triage.
-- [ ] Task 23.2: Implement copilot analyzer
-  - [ ] Subtask 23.2.1: Parse git diff and classify changed areas
-  - [ ] Subtask 23.2.2: Detect missing tests/docs/changelog implications
-  - [ ] Subtask 23.2.3: Produce actionable findings with file-level references
+- [x] Task 23.2: Implement copilot analyzer
+  - [x] Subtask 23.2.1: Parse git diff and classify changed areas
+  - [x] Subtask 23.2.2: Detect missing tests/docs/changelog implications
+  - [x] Subtask 23.2.3: Produce actionable findings with file-level references
+  - [x] Notes: Added `scripts/pr_review_analyzer.py` with deterministic unified-diff parsing, changed-area classification, rubric-aligned finding generation, missing evidence detection (`tests`, `README`, `CHANGELOG`), and recommendation mapping (`approve|needs_review|changes_requested|block`) with file-level references and blocker evidence gates.
 - [ ] Task 23.3: Command surface and workflow integration
   - [ ] Subtask 23.3.1: Add `/pr-review` with concise and JSON modes
   - [ ] Subtask 23.3.2: Integrate with pre-merge checklist and doctor output

@@ -93,6 +93,7 @@ CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
 AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
+PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1022,6 +1023,96 @@ def main() -> int:
         refactor_env["HOME"] = str(home)
         hook_audit_path = home / ".config" / "opencode" / "hooks" / "actions.jsonl"
         refactor_env["MY_OPENCODE_HOOK_AUDIT_PATH"] = str(hook_audit_path)
+
+        analyzer_missing_evidence_diff = tmp / "pr_review_missing_evidence.diff"
+        analyzer_missing_evidence_diff.write_text(
+            """diff --git a/scripts/new_logic.py b/scripts/new_logic.py
+index 1111111..2222222 100644
+--- a/scripts/new_logic.py
++++ b/scripts/new_logic.py
+@@ -0,0 +1,2 @@
++def compute_total(values):
++    return sum(values)
+""",
+            encoding="utf-8",
+        )
+        analyzer_missing_evidence = subprocess.run(
+            [
+                sys.executable,
+                str(PR_REVIEW_ANALYZER_SCRIPT),
+                "analyze",
+                "--diff-file",
+                str(analyzer_missing_evidence_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            analyzer_missing_evidence.returncode == 0,
+            "pr-review analyzer should parse synthetic missing-evidence diff",
+        )
+        analyzer_missing_evidence_report = parse_json_output(
+            analyzer_missing_evidence.stdout
+        )
+        expect(
+            analyzer_missing_evidence_report.get("recommendation")
+            == "changes_requested",
+            "pr-review analyzer should request changes when tests/docs evidence is missing",
+        )
+        expect(
+            set(analyzer_missing_evidence_report.get("missing_evidence", []))
+            == {"CHANGELOG", "README", "tests"},
+            "pr-review analyzer should report deterministic missing evidence keys",
+        )
+
+        analyzer_security_diff = tmp / "pr_review_security.diff"
+        analyzer_security_diff.write_text(
+            """diff --git a/scripts/unsafe_runner.py b/scripts/unsafe_runner.py
+index 3333333..4444444 100644
+--- a/scripts/unsafe_runner.py
++++ b/scripts/unsafe_runner.py
+@@ -10,0 +11,2 @@
++def run(raw):
++    return eval(raw)
+""",
+            encoding="utf-8",
+        )
+        analyzer_security = subprocess.run(
+            [
+                sys.executable,
+                str(PR_REVIEW_ANALYZER_SCRIPT),
+                "analyze",
+                "--diff-file",
+                str(analyzer_security_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            analyzer_security.returncode == 0,
+            "pr-review analyzer should parse synthetic security diff",
+        )
+        analyzer_security_report = parse_json_output(analyzer_security.stdout)
+        expect(
+            analyzer_security_report.get("recommendation") == "block",
+            "pr-review analyzer should block high-severity security findings with hard evidence",
+        )
+        expect(
+            any(
+                finding.get("category") == "security"
+                for finding in analyzer_security_report.get("findings", [])
+                if isinstance(finding, dict)
+            ),
+            "pr-review analyzer should emit security category findings",
+        )
 
         result = subprocess.run(
             [
