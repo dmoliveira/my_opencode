@@ -168,6 +168,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "browser",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("browser_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("browser_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 

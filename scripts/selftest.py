@@ -57,6 +57,7 @@ ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
+BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1524,6 +1525,97 @@ def main() -> int:
             "model routing resolution trace should remain deterministic for identical inputs",
         )
 
+        browser_status = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(browser_status.returncode == 0, "browser status should succeed")
+        browser_status_report = parse_json_output(browser_status.stdout)
+        expect(
+            browser_status_report.get("provider") == "playwright",
+            "browser status should default to playwright provider",
+        )
+
+        browser_profile = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "profile", "agent-browser"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(browser_profile.returncode == 0, "browser profile switch should succeed")
+
+        browser_write_path_line = next(
+            (
+                line
+                for line in browser_profile.stdout.splitlines()
+                if line.startswith("config: ")
+            ),
+            "",
+        )
+        expect(
+            bool(browser_write_path_line),
+            "browser profile output should include config path",
+        )
+        browser_config_path = Path(
+            browser_write_path_line.replace("config: ", "", 1).strip()
+        )
+
+        browser_status_after = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            browser_status_after.returncode == 0,
+            "browser status should succeed after profile change",
+        )
+        browser_status_after_report = parse_json_output(browser_status_after.stdout)
+        expect(
+            browser_status_after_report.get("provider") == "agent-browser",
+            "browser status should show updated provider",
+        )
+
+        expect(
+            browser_config_path.exists(),
+            "browser profile should persist to layered config path",
+        )
+        browser_cfg = load_json_file(browser_config_path)
+        browser_cfg.setdefault("browser", {}).setdefault("providers", {}).setdefault(
+            "agent-browser", {}
+        ).setdefault("doctor", {})["required_binaries"] = ["__missing_browser_binary__"]
+        browser_config_path.write_text(
+            json.dumps(browser_cfg, indent=2) + "\n", encoding="utf-8"
+        )
+
+        browser_doctor = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(browser_doctor.returncode == 0, "browser doctor should succeed")
+        browser_doctor_report = parse_json_output(browser_doctor.stdout)
+        expect(
+            browser_doctor_report.get("result") == "PASS",
+            "browser doctor should keep PASS when config is valid",
+        )
+        warnings_text = "\n".join(browser_doctor_report.get("warnings", []))
+        expect(
+            "__missing_browser_binary__" in warnings_text,
+            "browser doctor should report missing selected-provider dependencies",
+        )
+
         keyword_report = resolve_prompt_modes(
             "Please safe-apply and deep-analyze this migration; ulw can wait.",
             enabled=True,
@@ -2429,6 +2521,17 @@ def main() -> int:
         expect(
             resilience_checks[0].get("ok") is True,
             "doctor resilience check should pass",
+        )
+
+        browser_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "browser"
+        ]
+        expect(bool(browser_checks), "doctor summary should include browser check")
+        expect(
+            browser_checks[0].get("ok") is True,
+            "doctor browser check should pass",
         )
 
     print("selftest: PASS")
