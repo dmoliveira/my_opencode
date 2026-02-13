@@ -7,10 +7,18 @@ import shutil
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
-CONFIG_PATH = Path(
-    os.environ.get("OPENCODE_CONFIG_PATH", "~/.config/opencode/opencode.json")
-).expanduser()
+from config_layering import (  # type: ignore
+    load_layered_config,
+    resolve_write_path,
+    save_config as save_config_file,
+)
+
+
+CONFIG_PATH = resolve_write_path()
 KNOWN_PLUGINS = {
     "notifier": "@mohak34/opencode-notifier@latest",
     "supermemory": "opencode-supermemory",
@@ -29,13 +37,14 @@ PROFILE_MAP = {
 
 
 def load_config() -> dict:
-    if not CONFIG_PATH.exists():
-        raise FileNotFoundError(f"Config file not found: {CONFIG_PATH}")
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    data, _ = load_layered_config()
+    return data
 
 
 def save_config(data: dict) -> None:
-    CONFIG_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    global CONFIG_PATH
+    CONFIG_PATH = resolve_write_path()
+    save_config_file(data, CONFIG_PATH)
 
 
 def get_plugins(data: dict) -> list[str]:

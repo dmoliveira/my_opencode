@@ -291,6 +291,24 @@ Autocomplete-friendly shortcuts:
 
 `/config` snapshots all `opencode*.json` files under `~/.config/opencode/` into `~/.config/opencode/my_opencode-backups/`.
 
+## Layered config precedence 🧩
+
+`/mcp` and `/plugin` now resolve configuration with stable layered precedence:
+
+1. `OPENCODE_CONFIG_PATH` (runtime override, highest priority)
+2. `.opencode/my_opencode.jsonc` (project override)
+3. `.opencode/my_opencode.json`
+4. `~/.config/opencode/my_opencode.jsonc` (user override)
+5. `~/.config/opencode/my_opencode.json`
+6. `~/.config/opencode/opencode.jsonc` (legacy user override)
+7. `~/.config/opencode/opencode.json` (legacy user override)
+8. bundled `opencode.json` from this repo (base)
+
+Notes:
+- Merge behavior is deep for objects and replace-on-write for arrays.
+- JSONC files support comments and trailing commas.
+- Writes target the highest-precedence existing config path (or `~/.config/opencode/opencode.json` when no override exists).
+
 ## Unified doctor inside OpenCode 🩺
 
 Use these directly in OpenCode:
@@ -590,6 +608,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/install_wizard.py` - interactive install/reconfigure wizard
 - `scripts/nvim_integration_command.py` - backend script for `/nvim`
 - `scripts/devtools_command.py` - backend script for `/devtools`
+- `scripts/config_layering.py` - shared layered config + JSONC loader for command scripts
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.pre-commit-config.yaml` - pre-commit hook definitions

@@ -44,6 +44,24 @@ def run_script(
     )
 
 
+def run_script_layered(
+    script: Path, home: Path, cwd: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env.pop("OPENCODE_CONFIG_PATH", None)
+    env.pop("SUPERMEMORY_API_KEY", None)
+    env.pop("MORPH_API_KEY", None)
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        cwd=cwd,
+    )
+
+
 def expect(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -176,6 +194,58 @@ def main() -> int:
         expect(
             report.get("servers", {}).get("gh_grep", {}).get("status") == "enabled",
             "gh_grep should be enabled in research profile",
+        )
+
+        # Layered config precedence: project override should beat user override.
+        project_dir = tmp / "project"
+        (project_dir / ".opencode").mkdir(parents=True, exist_ok=True)
+        user_cfg_dir = home / ".config" / "opencode"
+        user_cfg_dir.mkdir(parents=True, exist_ok=True)
+
+        (user_cfg_dir / "my_opencode.json").write_text(
+            json.dumps(
+                {
+                    "plugin": ["@mohak34/opencode-notifier@latest"],
+                    "mcp": {"context7": {"enabled": False}},
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (project_dir / ".opencode" / "my_opencode.jsonc").write_text(
+            """
+            {
+              // project override wins over user
+              "plugin": [
+                "@mohak34/opencode-notifier@latest",
+                "opencode-supermemory",
+              ],
+              "mcp": {
+                "context7": { "enabled": true },
+              },
+            }
+            """,
+            encoding="utf-8",
+        )
+
+        result = run_script_layered(PLUGIN_SCRIPT, home, project_dir, "status")
+        expect(result.returncode == 0, f"plugin layered status failed: {result.stderr}")
+        expect(
+            "supermemory: enabled" in result.stdout,
+            "project layered config should enable supermemory",
+        )
+        expect(
+            "config: " in result.stdout
+            and str(project_dir / ".opencode" / "my_opencode.jsonc") in result.stdout,
+            "layered writes should target highest-precedence existing config",
+        )
+
+        result = run_script_layered(MCP_SCRIPT, home, project_dir, "status")
+        expect(result.returncode == 0, f"mcp layered status failed: {result.stderr}")
+        expect(
+            "context7: enabled" in result.stdout,
+            "project layered config should override user mcp context7 to enabled",
         )
 
         notify_path = home / ".config" / "opencode" / "opencode-notifications.json"
