@@ -856,7 +856,7 @@ Use this map to avoid overlapping implementations.
   - [ ] Subtask 27.2.3: Support review/edit/publish lifecycle
 - [ ] Task 27.3: Command and integration surface
   - [ ] Subtask 27.3.1: Add `/learn capture|review|publish|search`
-  - [ ] Subtask 27.3.2: Integrate published patterns with rules injector and runbook docs
+  - [ ] Subtask 27.3.2: Integrate published patterns with rules injector and `/autoflow` workflow docs
   - [ ] Subtask 27.3.3: Document maintenance process for stale entries
 - [ ] Task 27.4: Verification
   - [ ] Subtask 27.4.1: Add tests for extraction quality thresholds
