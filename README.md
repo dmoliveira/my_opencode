@@ -579,6 +579,15 @@ Recommended workflow:
 - run `/rules status` after edits to validate discovery
 - use `/rules explain <path> --json` to verify effective rule stack before relying on behavior
 
+## Plan execution artifact contract
+
+Epic 14 Task 14.1 defines the baseline plan format and execution-state rules for the upcoming `/start-work <plan>` command:
+
+- contract spec: `instructions/plan_artifact_contract.md`
+- format scope: markdown checklist + YAML metadata frontmatter
+- validation scope: deterministic preflight failures with line-level remediation hints
+- state model scope: `pending/in_progress/completed/failed/skipped` with strict transition semantics
+
 ## Context resilience policy
 
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
