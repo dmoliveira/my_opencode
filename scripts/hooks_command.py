@@ -101,7 +101,7 @@ def write_audit_log(record: dict[str, Any]) -> None:
 
 def usage() -> int:
     print(
-        "usage: /hooks status | /hooks help | /hooks enable | /hooks disable | /hooks disable-hook <hook-id> | /hooks enable-hook <hook-id> | /hooks run <continuation-reminder|truncate-safety|error-hints> [--json '<payload>']"
+        "usage: /hooks status | /hooks help | /hooks enable | /hooks disable | /hooks disable-hook <hook-id> | /hooks enable-hook <hook-id> | /hooks run <continuation-reminder|truncate-safety|error-hints> [--json '<payload>'] | /hooks doctor [--json]"
     )
     return 2
 
@@ -234,6 +234,88 @@ def command_run(argv: list[str]) -> int:
     return 0
 
 
+def collect_doctor() -> dict[str, Any]:
+    _, settings, write_path = load_hook_settings()
+    warnings: list[str] = []
+    problems: list[str] = []
+
+    for hook_id in settings.get("disabled", []):
+        if hook_id not in HOOK_IDS:
+            problems.append(f"unknown disabled hook id in config: {hook_id}")
+
+    if not settings.get("enabled"):
+        warnings.append("hooks are globally disabled")
+
+    if not HOOK_LOG_PATH.exists():
+        warnings.append("hook audit log does not exist yet")
+    else:
+        try:
+            lines = [
+                line.strip()
+                for line in HOOK_LOG_PATH.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            if lines:
+                sample = json.loads(lines[-1])
+                forbidden = [
+                    field for field in ("stderr", "stdout", "text") if field in sample
+                ]
+                if forbidden:
+                    problems.append(
+                        "hook audit includes forbidden raw-output fields: "
+                        + ",".join(forbidden)
+                    )
+            else:
+                warnings.append("hook audit log is empty")
+        except Exception as exc:
+            problems.append(f"failed to parse hook audit log: {exc}")
+
+    return {
+        "result": "PASS" if not problems else "FAIL",
+        "enabled": bool(settings.get("enabled", False)),
+        "disabled": settings.get("disabled", []),
+        "available_hooks": list(HOOK_IDS),
+        "audit_log": str(HOOK_LOG_PATH),
+        "config": str(write_path),
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": [
+            "/hooks enable",
+            '/hooks run continuation-reminder --json \'{"checklist":["update docs"]}\'',
+        ]
+        if warnings or problems
+        else [],
+    }
+
+
+def command_doctor(argv: list[str]) -> int:
+    json_output = "--json" in argv
+    if any(arg not in ("--json",) for arg in argv):
+        return usage()
+    report = collect_doctor()
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0 if report["result"] == "PASS" else 1
+
+    print("hooks doctor")
+    print("------------")
+    print(f"result: {report['result']}")
+    print(f"enabled: {'yes' if report['enabled'] else 'no'}")
+    print(
+        f"disabled: {','.join(report['disabled']) if report['disabled'] else '(none)'}"
+    )
+    print(f"audit_log: {report['audit_log']}")
+    if report["warnings"]:
+        print("warnings:")
+        for warning in report["warnings"]:
+            print(f"- {warning}")
+    if report["problems"]:
+        print("problems:")
+        for problem in report["problems"]:
+            print(f"- {problem}")
+    return 0 if report["result"] == "PASS" else 1
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] == "status":
         return command_status()
@@ -249,6 +331,8 @@ def main(argv: list[str]) -> int:
         return command_enable_hook(argv[1:])
     if argv[0] == "run":
         return command_run(argv[1:])
+    if argv[0] == "doctor":
+        return command_doctor(argv[1:])
     return usage()
 
 

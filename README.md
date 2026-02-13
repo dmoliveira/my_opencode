@@ -393,6 +393,8 @@ Use these directly in OpenCode:
 /hooks disable
 /hooks disable-hook truncate-safety
 /hooks enable-hook truncate-safety
+/hooks doctor
+/hooks doctor --json
 /hooks run continuation-reminder --json '{"checklist":["update docs","run tests"]}'
 /hooks run truncate-safety --json '{"text":"...large output...","max_lines":120,"max_chars":8000}'
 /hooks run error-hints --json '{"command":"git status","exit_code":128,"stderr":"fatal: not a git repository"}'
@@ -405,6 +407,8 @@ Autocomplete-friendly shortcut:
 /hooks-enable
 /hooks-disable
 /hooks-status
+/hooks-doctor
+/hooks-doctor-json
 ```
 
 Hook behavior:

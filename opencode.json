@@ -122,6 +122,14 @@
       "description": "Show hook configuration and audit path",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" status`\nShow only the command output."
     },
+    "hooks-doctor": {
+      "description": "Run hook diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" doctor`\nShow only the command output."
+    },
+    "hooks-doctor-json": {
+      "description": "Run hook diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" doctor --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

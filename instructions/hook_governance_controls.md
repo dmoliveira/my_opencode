@@ -35,3 +35,8 @@ Hook executions append JSON lines to:
 
 Audit rows include only metadata (timestamp, hook id, category, triggered, exit_code).
 Raw `stdout`/`stderr`/payload text are intentionally excluded.
+
+## Health checks
+
+- `/hooks doctor --json` validates config, audit log shape, and raw-output safety.
+- Unified `/doctor` now includes an optional `hooks` check when `hooks_command.py` is present.
