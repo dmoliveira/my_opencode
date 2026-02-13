@@ -584,6 +584,7 @@ Recommended workflow:
 Epic 14 Task 14.1 defines the baseline plan format and execution-state rules for the upcoming `/start-work <plan>` command:
 
 - contract spec: `instructions/plan_artifact_contract.md`
+- validation/workflow guide: `instructions/plan_execution_workflows.md`
 - backend command: `scripts/start_work_command.py`
 - format scope: markdown checklist + YAML metadata frontmatter
 - validation scope: deterministic preflight failures with line-level remediation hints

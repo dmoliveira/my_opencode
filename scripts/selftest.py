@@ -1840,6 +1840,122 @@ version: 1
             "start-work should report validation_failed for invalid plan format",
         )
 
+        malformed_frontmatter_plan = tmp / "invalid_frontmatter_plan.md"
+        malformed_frontmatter_plan.write_text(
+            """# Plan
+
+- [ ] 1. Missing metadata should fail
+""",
+            encoding="utf-8",
+        )
+        malformed_start_work = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                str(malformed_frontmatter_plan),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            malformed_start_work.returncode == 1,
+            "start-work should fail when frontmatter is missing",
+        )
+        malformed_start_work_report = parse_json_output(malformed_start_work.stdout)
+        expect(
+            malformed_start_work_report.get("code") == "validation_failed",
+            "start-work should return validation_failed for missing frontmatter",
+        )
+
+        out_of_order_plan = tmp / "invalid_out_of_order_plan.md"
+        out_of_order_plan.write_text(
+            """---
+id: out-of-order-plan
+title: Out Of Order Plan
+owner: selftest
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+- [ ] 2. Second task appears first
+- [ ] 1. First task appears second
+""",
+            encoding="utf-8",
+        )
+        out_of_order_start_work = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), str(out_of_order_plan), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            out_of_order_start_work.returncode == 1,
+            "start-work should fail out-of-order step ordinals",
+        )
+        out_of_order_report = parse_json_output(out_of_order_start_work.stdout)
+        expect(
+            any(
+                violation.get("code") == "out_of_order_ordinals"
+                for violation in out_of_order_report.get("violations", [])
+                if isinstance(violation, dict)
+            ),
+            "start-work should surface out_of_order_ordinals violation",
+        )
+
+        runtime_config_path = Path(str(start_work_report.get("config") or ""))
+        expect(
+            runtime_config_path.exists(),
+            "start-work should report writable config path",
+        )
+        runtime_cfg = load_json_file(runtime_config_path)
+        runtime_cfg.setdefault("plan_execution", {})["status"] = "in_progress"
+        runtime_cfg["plan_execution"]["steps"] = [
+            {"ordinal": 1, "state": "in_progress"},
+            {"ordinal": 2, "state": "in_progress"},
+        ]
+        runtime_config_path.write_text(
+            json.dumps(runtime_cfg, indent=2) + "\n", encoding="utf-8"
+        )
+
+        start_work_doctor_fail = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            start_work_doctor_fail.returncode == 1,
+            "start-work doctor should fail invalid in-progress step recovery state",
+        )
+        start_work_doctor_fail_report = parse_json_output(start_work_doctor_fail.stdout)
+        expect(
+            start_work_doctor_fail_report.get("result") == "FAIL",
+            "start-work doctor should report FAIL for invalid recovery state",
+        )
+
+        start_work_recover = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), str(plan_path), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            start_work_recover.returncode == 0,
+            "start-work should recover by re-running valid plan after invalid runtime state",
+        )
+
         keyword_report = resolve_prompt_modes(
             "Please safe-apply and deep-analyze this migration; ulw can wait.",
             enabled=True,
