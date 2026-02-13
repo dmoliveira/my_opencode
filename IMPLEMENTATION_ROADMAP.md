@@ -41,6 +41,12 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | planned | Medium | E8, E20 | TBD | Structured iterative loops with strict caps |
+| E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20, E21 | TBD | One command for plan-run-resume-report lifecycle |
+| E23 | PR Review Copilot | planned | High | E3, E16 | TBD | Pre-PR quality and risk review automation |
+| E24 | Release Train Assistant | planned | High | E14, E16 | TBD | Validate, draft, and gate releases reliably |
+| E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
+| E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
+| E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E16 | TBD | Convert delivered work into reusable team memory |
 
 ## Scope Guardrails
 
@@ -93,6 +99,12 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | Checkpoint snapshots grow too quickly (E19) | Low | Add retention cap and compression/rotation |
 | Budget guardrails too strict for complex tasks (E20) | Medium | Provide profile-based limits and controlled override |
 | Loop presets run away despite caps (E21) | High | Enforce hard-stop counters and mandatory summary checkpoints |
+| Autoflow hides too much control and confuses users (E22) | Medium | Keep subcommands explicit and expose dry-run plus explain mode |
+| PR copilot misses critical regressions (E23) | Medium | Blend deterministic checks with configurable risk heuristics |
+| Release assistant automates wrong tag/version (E24) | High | Enforce explicit version confirmation and dry-run output |
+| Hotfix mode bypasses important checks (E25) | High | Keep mandatory minimum verification and post-hotfix audit |
+| Health score becomes noisy and ignored (E26) | Medium | Weight high-signal checks and suppress repetitive noise |
+| Knowledge capture stores low-quality patterns (E27) | Medium | Add approval workflow and confidence scoring before publish |
 
 ---
 
@@ -675,6 +687,174 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 
 ---
 
+## Epic 22 - Autoflow Unified Orchestration Command
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Provide a single command (`/autoflow`) that orchestrates plan execution, enforcement, recovery, and reporting with safe defaults.
+**Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20, Epic 21
+
+- [ ] Task 22.1: Define `/autoflow` command contract
+  - [ ] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `stop`, `report`, `dry-run`)
+  - [ ] Subtask 22.1.2: Define input plan requirements and validation errors
+  - [ ] Subtask 22.1.3: Define output format for concise and verbose modes
+- [ ] Task 22.2: Implement orchestration adapter layer
+  - [ ] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives
+  - [ ] Subtask 22.2.2: Add deterministic state machine transitions
+  - [ ] Subtask 22.2.3: Add explain mode showing decisions and fallbacks
+- [ ] Task 22.3: Add safety and usability controls
+  - [ ] Subtask 22.3.1: Add `dry-run` to preview actions without mutating state
+  - [ ] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states
+  - [ ] Subtask 22.3.3: Add docs and migration guidance from low-level commands
+- [ ] Task 22.4: Verification
+  - [ ] Subtask 22.4.1: Add integration tests for full lifecycle (`start -> status -> report`)
+  - [ ] Subtask 22.4.2: Add recovery tests (`resume` after interruption)
+  - [ ] Subtask 22.4.3: Add install-test smoke checks for `/autoflow` happy path
+- [ ] Exit criteria: `/autoflow` can run end-to-end flows with auditable outputs
+- [ ] Exit criteria: users can always fall back to lower-level commands safely
+
+---
+
+## Epic 23 - PR Review Copilot
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Add a command that reviews pending PR changes for risk, quality, and release readiness before merge.
+**Depends on:** Epic 3, Epic 16
+
+- [ ] Task 23.1: Define review rubric and risk scoring
+  - [ ] Subtask 23.1.1: Define risk categories (security, data loss, migration impact, test coverage)
+  - [ ] Subtask 23.1.2: Define confidence and severity scoring model
+  - [ ] Subtask 23.1.3: Define required evidence for blocking recommendations
+- [ ] Task 23.2: Implement copilot analyzer
+  - [ ] Subtask 23.2.1: Parse git diff and classify changed areas
+  - [ ] Subtask 23.2.2: Detect missing tests/docs/changelog implications
+  - [ ] Subtask 23.2.3: Produce actionable findings with file-level references
+- [ ] Task 23.3: Command surface and workflow integration
+  - [ ] Subtask 23.3.1: Add `/pr-review` with concise and JSON modes
+  - [ ] Subtask 23.3.2: Integrate with pre-merge checklist and doctor output
+  - [ ] Subtask 23.3.3: Document triage flow for warnings vs blockers
+- [ ] Task 23.4: Verification
+  - [ ] Subtask 23.4.1: Add tests for risk detection and false positive control
+  - [ ] Subtask 23.4.2: Add tests for missing-evidence behavior
+  - [ ] Subtask 23.4.3: Add install-test smoke checks
+- [ ] Exit criteria: copilot catches high-risk omissions before merge
+- [ ] Exit criteria: outputs are actionable and low-noise in default mode
+
+---
+
+## Epic 24 - Release Train Assistant
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Automate release preparation checks, release-note drafting, and tag gating.
+**Depends on:** Epic 14, Epic 16
+
+- [ ] Task 24.1: Define release policy contract
+  - [ ] Subtask 24.1.1: Define required preconditions (clean tree, tests passing, changelog updated)
+  - [ ] Subtask 24.1.2: Define semantic version rules and validation
+  - [ ] Subtask 24.1.3: Define rollback strategy for partial release failures
+- [ ] Task 24.2: Implement release assistant engine
+  - [ ] Subtask 24.2.1: Add preflight checks and blocking diagnostics
+  - [ ] Subtask 24.2.2: Generate draft release notes from merged changes
+  - [ ] Subtask 24.2.3: Add dry-run publish flow with explicit confirmation step
+- [ ] Task 24.3: Command integration
+  - [ ] Subtask 24.3.1: Add `/release-train status|prepare|draft|publish`
+  - [ ] Subtask 24.3.2: Integrate with existing `make release-check` and changelog flow
+  - [ ] Subtask 24.3.3: Document release operator workflow
+- [ ] Task 24.4: Verification
+  - [ ] Subtask 24.4.1: Add tests for version and changelog mismatch handling
+  - [ ] Subtask 24.4.2: Add tests for dry-run vs publish behavior
+  - [ ] Subtask 24.4.3: Add install-test smoke checks
+- [ ] Exit criteria: releases are blocked when preconditions are unmet
+- [ ] Exit criteria: release-note drafts are generated consistently and reviewable
+
+---
+
+## Epic 25 - Incident Hotfix Mode
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Provide an emergency workflow mode that is faster but still bounded and auditable.
+**Depends on:** Epic 20, Epic 22
+
+- [ ] Task 25.1: Define hotfix constraints and policy
+  - [ ] Subtask 25.1.1: Define mandatory checks that cannot be skipped
+  - [ ] Subtask 25.1.2: Define reduced-scope validation profile
+  - [ ] Subtask 25.1.3: Define post-hotfix follow-up requirements
+- [ ] Task 25.2: Implement hotfix runtime profile
+  - [ ] Subtask 25.2.1: Add constrained budget and tool permission settings
+  - [ ] Subtask 25.2.2: Add expedited patch flow with rollback checkpoint
+  - [ ] Subtask 25.2.3: Add incident timeline capture for auditability
+- [ ] Task 25.3: Command integration and docs
+  - [ ] Subtask 25.3.1: Add `/hotfix start|status|close`
+  - [ ] Subtask 25.3.2: Add automatic reminder for post-incident hardening tasks
+  - [ ] Subtask 25.3.3: Document incident playbooks and escalation notes
+- [ ] Task 25.4: Verification
+  - [ ] Subtask 25.4.1: Add tests for mandatory guardrail enforcement
+  - [ ] Subtask 25.4.2: Add tests for rollback and closure flow
+  - [ ] Subtask 25.4.3: Add install-test smoke checks
+- [ ] Exit criteria: hotfix mode is faster while preserving mandatory safety controls
+- [ ] Exit criteria: each hotfix run produces a clear post-incident audit trail
+
+---
+
+## Epic 26 - Repo Health Score and Drift Monitor
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Aggregate repository operational signals into a health score with drift alerts.
+**Depends on:** Epic 9, Epic 12, Epic 20
+
+- [ ] Task 26.1: Define health model and scoring weights
+  - [ ] Subtask 26.1.1: Define high-signal indicators (tests, hooks, stale branches, config drift)
+  - [ ] Subtask 26.1.2: Define weighted scoring and status thresholds
+  - [ ] Subtask 26.1.3: Define suppression window for repeated alerts
+- [ ] Task 26.2: Implement health collector
+  - [ ] Subtask 26.2.1: Collect diagnostics from existing command subsystems
+  - [ ] Subtask 26.2.2: Detect drift from expected profile/policy baselines
+  - [ ] Subtask 26.2.3: Persist score history and trend snapshots
+- [ ] Task 26.3: Command and reporting integration
+  - [ ] Subtask 26.3.1: Add `/health status|trend|drift`
+  - [ ] Subtask 26.3.2: Add JSON export for dashboards/CI
+  - [ ] Subtask 26.3.3: Document remediation recommendations by score bucket
+- [ ] Task 26.4: Verification
+  - [ ] Subtask 26.4.1: Add tests for score determinism and threshold behavior
+  - [ ] Subtask 26.4.2: Add tests for drift detection precision
+  - [ ] Subtask 26.4.3: Add install-test smoke checks
+- [ ] Exit criteria: health score reflects real operational risk with actionable guidance
+- [ ] Exit criteria: drift signals are precise enough to avoid alert fatigue
+
+---
+
+## Epic 27 - Knowledge Capture from Completed Tasks
+
+**Status:** `planned`
+**Priority:** Medium
+**Goal:** Turn completed work into reusable patterns, checklists, and guidance for future runs.
+**Depends on:** Epic 9, Epic 14, Epic 16
+
+- [ ] Task 27.1: Define capture schema and quality gates
+  - [ ] Subtask 27.1.1: Define entry types (pattern, pitfall, checklist, rule candidate)
+  - [ ] Subtask 27.1.2: Define confidence score and approval workflow
+  - [ ] Subtask 27.1.3: Define tagging and search metadata
+- [ ] Task 27.2: Implement knowledge extraction pipeline
+  - [ ] Subtask 27.2.1: Extract signals from merged PRs and task digests
+  - [ ] Subtask 27.2.2: Generate draft entries with source links
+  - [ ] Subtask 27.2.3: Support review/edit/publish lifecycle
+- [ ] Task 27.3: Command and integration surface
+  - [ ] Subtask 27.3.1: Add `/learn capture|review|publish|search`
+  - [ ] Subtask 27.3.2: Integrate published patterns with rules injector and runbook docs
+  - [ ] Subtask 27.3.3: Document maintenance process for stale entries
+- [ ] Task 27.4: Verification
+  - [ ] Subtask 27.4.1: Add tests for extraction quality thresholds
+  - [ ] Subtask 27.4.2: Add tests for approval/publish permissions
+  - [ ] Subtask 27.4.3: Add install-test smoke checks
+- [ ] Exit criteria: completed work reliably yields reusable, reviewed guidance
+- [ ] Exit criteria: stale/low-confidence knowledge can be pruned safely
+
+---
+
 ## Cross-Cutting Delivery Tasks
 
 **Status:** `planned`
@@ -689,7 +869,10 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C1.7: Phase G (quality and control): Epic 15 + Epic 16
   - [ ] Subtask C1.8: Phase H (recovery and semantic safety): Epic 17 + Epic 18 + Epic 19
   - [ ] Subtask C1.9: Phase I (bounded autonomy): Epic 20 + Epic 21
-  - [ ] Subtask C1.10: Phase J (optional power-user): Epic 6 + Epic 7
+  - [ ] Subtask C1.10: Phase J (unified orchestration): Epic 22
+  - [ ] Subtask C1.11: Phase K (delivery acceleration): Epic 23 + Epic 24 + Epic 25
+  - [ ] Subtask C1.12: Phase L (operational intelligence): Epic 26 + Epic 27
+  - [ ] Subtask C1.13: Phase M (optional power-user): Epic 6 + Epic 7
 - [ ] Task C2: Add acceptance criteria template per epic
   - [ ] Subtask C2.1: Functional criteria
   - [ ] Subtask C2.2: Reliability criteria
@@ -715,6 +898,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-12: Keep E7 postponed pending stronger demand for tmux visual mode.
 - [x] 2026-02-12: Add E8-E14 as high-value extensions identified from comparative analysis.
 - [x] 2026-02-12: Add E15-E21 for enforcement, quality, recovery, semantic editing, checkpointing, budgets, and bounded loops.
+- [x] 2026-02-12: Add E22-E27 to unify orchestration and accelerate delivery quality and release reliability.
 
 ---
 
@@ -724,4 +908,5 @@ Use this log to track what changed week by week.
 - Prioritize **E8-E10** after E1-E5 for fast workflow gains.
 - Prioritize **E11-E12** before E13-E14 when stability concerns are high.
 - Prioritize **E15 + E20** before E21 to keep autonomy controlled and auditable.
+- Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
 - Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
