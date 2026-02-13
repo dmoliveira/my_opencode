@@ -7,6 +7,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import (  # type: ignore
+    load_layered_config,
+    resolve_write_path,
+    save_config as save_config_file,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = Path(
@@ -15,6 +25,9 @@ STATE_PATH = Path(
         "~/.config/opencode/opencode-stack-profile.json",
     )
 ).expanduser()
+LEGACY_ENV_SET = "MY_OPENCODE_STACK_PROFILE_PATH" in os.environ
+LAYERED_WRITE_PATH = resolve_write_path()
+SECTION = "stack_profile"
 
 
 def now_iso() -> str:
@@ -91,25 +104,44 @@ def usage() -> int:
 
 
 def load_state() -> dict:
-    if not STATE_PATH.exists():
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if LEGACY_ENV_SET:
+        if STATE_PATH.exists():
+            return json.loads(STATE_PATH.read_text(encoding="utf-8"))
         return {"current": None, "updated_at": None, "description": None}
-    return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+
+    config, _ = load_layered_config()
+    section = config.get(SECTION)
+    if isinstance(section, dict):
+        return {
+            "current": section.get("current"),
+            "updated_at": section.get("updated_at"),
+            "description": section.get("description"),
+        }
+    if STATE_PATH.exists():
+        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    return {"current": None, "updated_at": None, "description": None}
 
 
 def save_state(profile: str, description: str) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(
-        json.dumps(
-            {
-                "current": profile,
-                "description": description,
-                "updated_at": now_iso(),
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+    payload = {
+        "current": profile,
+        "description": description,
+        "updated_at": now_iso(),
+    }
+
+    if LEGACY_ENV_SET:
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return
+
+    config, _ = load_layered_config()
+    config[SECTION] = payload
+    save_config_file(config, LAYERED_WRITE_PATH)
 
 
 def print_status() -> int:
@@ -117,7 +149,7 @@ def print_status() -> int:
     print(f"profile: {state.get('current')}")
     print(f"description: {state.get('description')}")
     print(f"updated_at: {state.get('updated_at')}")
-    print(f"state_path: {STATE_PATH}")
+    print(f"state_path: {STATE_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
     return 0
 
 
@@ -146,7 +178,7 @@ def apply_profile(profile: str) -> int:
     save_state(profile, entry["description"])
     print(f"profile: {profile}")
     print(f"description: {entry['description']}")
-    print(f"state_path: {STATE_PATH}")
+    print(f"state_path: {STATE_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
     return 0
 
 

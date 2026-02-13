@@ -299,7 +299,7 @@ Autocomplete-friendly shortcuts:
 
 ## Layered config precedence 🧩
 
-`/mcp` and `/plugin` now resolve configuration with stable layered precedence:
+`/mcp`, `/plugin`, `/notify`, `/telemetry`, `/post-session`, `/policy`, and `/stack` now resolve configuration with stable layered precedence:
 
 1. `OPENCODE_CONFIG_PATH` (runtime override, highest priority)
 2. `.opencode/my_opencode.jsonc` (project override)
@@ -314,6 +314,7 @@ Notes:
 - Merge behavior is deep for objects and replace-on-write for arrays.
 - JSONC files support comments and trailing commas.
 - Writes target the highest-precedence existing config path (or `~/.config/opencode/opencode.json` when no override exists).
+- Legacy per-command files remain supported for compatibility and env-var override use.
 
 ## Unified doctor inside OpenCode 🩺
 
@@ -458,7 +459,7 @@ Autocomplete-friendly shortcuts:
 /notify-visual-only
 ```
 
-`/notify` writes preferences to `~/.config/opencode/opencode-notifications.json` with controls at four levels:
+`/notify` writes preferences into layered config under `notify` (or `OPENCODE_NOTIFICATIONS_PATH` when explicitly set):
 - global: `enabled`
 - channel: `sound.enabled`, `visual.enabled`
 - event: `events.<type>`
@@ -521,7 +522,7 @@ Autocomplete-friendly shortcuts:
 /post-session-enable
 ```
 
-`/post-session` writes to `~/.config/opencode/opencode-session.json`:
+`/post-session` writes to layered config under `post_session` (or `MY_OPENCODE_SESSION_CONFIG_PATH` when explicitly set):
 - `post_session.enabled`
 - `post_session.command`
 - `post_session.timeout_ms`
@@ -554,7 +555,7 @@ Autocomplete-friendly shortcuts:
 /policy-profile-fast
 ```
 
-`/policy` writes profile metadata to `~/.config/opencode/opencode-policy.json` and applies the corresponding notification posture to `~/.config/opencode/opencode-notifications.json`.
+`/policy` writes profile metadata to layered config under `policy` and applies notification posture under `notify` (legacy path env overrides remain supported).
 
 Profiles:
 - `strict`: visual alerts for high-risk events, minimal noise
@@ -589,7 +590,7 @@ Autocomplete-friendly shortcuts:
 /telemetry-profile-local
 ```
 
-`/telemetry` writes to `~/.config/opencode/opencode-telemetry.json` and supports:
+`/telemetry` writes to layered config under `telemetry` (or `OPENCODE_TELEMETRY_PATH` when explicitly set) and supports:
 - global on/off (`enabled`)
 - endpoint URL (`endpoint`)
 - timeout (`timeout_ms`)

@@ -24,6 +24,8 @@ All notable changes to this project are documented in this file.
 - Updated `/mcp` and `/plugin` to resolve layered project/user config with runtime override support.
 - Added selftest coverage for layered config precedence (`project > user > base`) and JSONC parsing.
 - Expanded installer/readme/install-test coverage for layered config diagnostics.
+- Migrated `/notify`, `/telemetry`, `/post-session`, `/policy`, and `/stack` state to layered config sections with legacy file fallback and env-var compatibility overrides.
+- Expanded selftest coverage to validate layered command-state writes for telemetry/policy/post-session flows.
 
 ## v0.2.0 - 2026-02-12
 

@@ -6,6 +6,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import (  # type: ignore
+    load_layered_config,
+    resolve_write_path,
+    save_config as save_config_file,
+)
+
 
 POLICY_PATH = Path(
     os.environ.get("MY_OPENCODE_POLICY_PATH", "~/.config/opencode/opencode-policy.json")
@@ -15,6 +25,11 @@ NOTIFY_PATH = Path(
         "OPENCODE_NOTIFICATIONS_PATH", "~/.config/opencode/opencode-notifications.json"
     )
 ).expanduser()
+POLICY_ENV_SET = "MY_OPENCODE_POLICY_PATH" in os.environ
+NOTIFY_ENV_SET = "OPENCODE_NOTIFICATIONS_PATH" in os.environ
+LAYERED_WRITE_PATH = resolve_write_path()
+POLICY_SECTION = "policy"
+NOTIFY_SECTION = "notify"
 
 EVENTS = ("complete", "error", "permission", "question")
 
@@ -79,25 +94,64 @@ def usage() -> int:
 
 
 def load_policy() -> dict:
-    if not POLICY_PATH.exists():
-        return {
-            "current": "balanced",
-            "description": PROFILE_MAP["balanced"]["description"],
-            "updated_at": None,
-            "notify_config": str(NOTIFY_PATH),
-        }
-    return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if POLICY_ENV_SET:
+        if POLICY_PATH.exists():
+            return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+        return default_policy()
+
+    data, _ = load_layered_config()
+    section = data.get(POLICY_SECTION)
+    if isinstance(section, dict):
+        policy = default_policy()
+        policy.update(section)
+        if not policy.get("notify_config"):
+            policy["notify_config"] = str(LAYERED_WRITE_PATH)
+        return policy
+
+    if POLICY_PATH.exists():
+        return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    return default_policy()
+
+
+def default_policy() -> dict:
+    return {
+        "current": "balanced",
+        "description": PROFILE_MAP["balanced"]["description"],
+        "updated_at": None,
+        "notify_config": str(LAYERED_WRITE_PATH),
+    }
 
 
 def save_policy(data: dict) -> None:
-    POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    POLICY_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if POLICY_ENV_SET:
+        POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        POLICY_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        return
+
+    config, _ = load_layered_config()
+    config[POLICY_SECTION] = data
+    save_config_file(config, LAYERED_WRITE_PATH)
 
 
 def save_notify_config(profile_name: str) -> None:
     cfg = PROFILE_MAP[profile_name]["notify"]
-    NOTIFY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    NOTIFY_PATH.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if NOTIFY_ENV_SET:
+        NOTIFY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        NOTIFY_PATH.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+        return
+
+    config, _ = load_layered_config()
+    config[NOTIFY_SECTION] = cfg
+    save_config_file(config, LAYERED_WRITE_PATH)
 
 
 def print_status(policy: dict) -> int:
@@ -105,8 +159,10 @@ def print_status(policy: dict) -> int:
     print(f"profile: {current}")
     print(f"description: {policy.get('description')}")
     print(f"updated_at: {policy.get('updated_at')}")
-    print(f"policy_config: {POLICY_PATH}")
-    print(f"notify_config: {policy.get('notify_config', str(NOTIFY_PATH))}")
+    print(f"policy_config: {POLICY_PATH if POLICY_ENV_SET else LAYERED_WRITE_PATH}")
+    print(
+        f"notify_config: {policy.get('notify_config', str(NOTIFY_PATH if NOTIFY_ENV_SET else LAYERED_WRITE_PATH))}"
+    )
     return 0
 
 
@@ -119,14 +175,14 @@ def apply_profile(name: str) -> int:
         "current": name,
         "description": PROFILE_MAP[name]["description"],
         "updated_at": now_iso(),
-        "notify_config": str(NOTIFY_PATH),
+        "notify_config": str(NOTIFY_PATH if NOTIFY_ENV_SET else LAYERED_WRITE_PATH),
     }
     save_policy(policy)
 
     print(f"profile: {name}")
     print(f"description: {PROFILE_MAP[name]['description']}")
-    print(f"notify_config: {NOTIFY_PATH}")
-    print(f"policy_config: {POLICY_PATH}")
+    print(f"notify_config: {NOTIFY_PATH if NOTIFY_ENV_SET else LAYERED_WRITE_PATH}")
+    print(f"policy_config: {POLICY_PATH if POLICY_ENV_SET else LAYERED_WRITE_PATH}")
     return 0
 
 

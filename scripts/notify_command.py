@@ -5,12 +5,25 @@ import os
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import (  # type: ignore
+    load_layered_config,
+    resolve_write_path,
+    save_config as save_config_file,
+)
+
 
 DEFAULT_CONFIG_PATH = Path(
     os.environ.get(
         "OPENCODE_NOTIFICATIONS_PATH", "~/.config/opencode/opencode-notifications.json"
     )
 ).expanduser()
+LEGACY_ENV_SET = "OPENCODE_NOTIFICATIONS_PATH" in os.environ
+CONFIG_PATH = resolve_write_path()
+SECTION = "notify"
 
 EVENTS = ("complete", "error", "permission", "question")
 CHANNELS = ("sound", "visual")
@@ -120,6 +133,59 @@ def load_config(config_path: Path) -> dict:
     return state
 
 
+def load_state() -> dict:
+    global CONFIG_PATH
+    CONFIG_PATH = resolve_write_path()
+
+    if LEGACY_ENV_SET:
+        return load_config(DEFAULT_CONFIG_PATH)
+
+    data, _ = load_layered_config()
+    section = data.get(SECTION)
+    if isinstance(section, dict):
+        return load_config_from_dict(section)
+
+    if DEFAULT_CONFIG_PATH.exists():
+        return load_config(DEFAULT_CONFIG_PATH)
+    return default_state()
+
+
+def load_config_from_dict(data: dict) -> dict:
+    state = default_state()
+
+    state["enabled"] = to_bool(data.get("enabled"), state["enabled"])
+
+    if isinstance(data.get("sound"), dict):
+        state["sound"]["enabled"] = to_bool(
+            data["sound"].get("enabled"), state["sound"]["enabled"]
+        )
+
+    if isinstance(data.get("visual"), dict):
+        state["visual"]["enabled"] = to_bool(
+            data["visual"].get("enabled"), state["visual"]["enabled"]
+        )
+
+    if isinstance(data.get("events"), dict):
+        for event in EVENTS:
+            if event in data["events"]:
+                state["events"][event] = to_bool(
+                    data["events"][event], state["events"][event]
+                )
+
+    if isinstance(data.get("channels"), dict):
+        for event in EVENTS:
+            entry = data["channels"].get(event)
+            if not isinstance(entry, dict):
+                continue
+            for channel in CHANNELS:
+                if channel in entry:
+                    state["channels"][event][channel] = to_bool(
+                        entry[channel], state["channels"][event][channel]
+                    )
+
+    return state
+
+
 def write_config(config_path: Path, state: dict) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config = {
@@ -130,6 +196,24 @@ def write_config(config_path: Path, state: dict) -> None:
         "channels": state["channels"],
     }
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+def save_state(state: dict) -> None:
+    global CONFIG_PATH
+    CONFIG_PATH = resolve_write_path()
+    if LEGACY_ENV_SET:
+        write_config(DEFAULT_CONFIG_PATH, state)
+        return
+
+    data, _ = load_layered_config()
+    data[SECTION] = {
+        "enabled": state["enabled"],
+        "sound": {"enabled": state["sound"]["enabled"]},
+        "visual": {"enabled": state["visual"]["enabled"]},
+        "events": state["events"],
+        "channels": state["channels"],
+    }
+    save_config_file(data, CONFIG_PATH)
 
 
 def usage() -> int:
@@ -286,8 +370,8 @@ def set_channel(state: dict, event: str, channel: str, value_text: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    config_path = DEFAULT_CONFIG_PATH
-    state = load_config(config_path)
+    state = load_state()
+    config_path = DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH
 
     if not argv or argv[0] == "status":
         return print_status(config_path, state)
@@ -307,8 +391,8 @@ def main(argv: list[str]) -> int:
         code = apply_profile(state, argv[1])
         if code != 0:
             return code
-        write_config(config_path, state)
-        print(f"config: {config_path}")
+        save_state(state)
+        print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     if argv[0] in ("enable", "disable"):
@@ -317,8 +401,8 @@ def main(argv: list[str]) -> int:
         code = set_toggle(state, argv[0], argv[1])
         if code != 0:
             return code
-        write_config(config_path, state)
-        print(f"config: {config_path}")
+        save_state(state)
+        print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     if argv[0] == "channel":
@@ -327,8 +411,8 @@ def main(argv: list[str]) -> int:
         code = set_channel(state, argv[1], argv[2], argv[3])
         if code != 0:
             return code
-        write_config(config_path, state)
-        print(f"config: {config_path}")
+        save_state(state)
+        print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     return usage()
