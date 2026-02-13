@@ -62,6 +62,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/safe_edit_command.py` with `/safe-edit status|plan|doctor` command surface and `/safe-edit*` aliases in `opencode.json` for Epic 18 Task 18.3.
 - Added cross-language safe-edit verification coverage for semantic planning and changed-reference correctness across Python/TypeScript/Go/Rust fixtures.
 - Added `instructions/checkpoint_snapshot_lifecycle.md` defining Epic 19 Task 19.1 snapshot schema, trigger cadence, retention, and rotation/compression rules.
+- Added `scripts/checkpoint_snapshot_manager.py` implementing atomic checkpoint writes, integrity-aware load/list operations, and retention/rotation pruning with optional compression.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -118,6 +119,7 @@ All notable changes to this project are documented in this file.
 - Integrated `safe-edit` diagnostics into unified `/doctor` and expanded README/install guidance with semantic planning examples.
 - Expanded fallback verification for missing-scope and unsupported-language failure modes, and added `/safe-edit plan` installer smoke coverage.
 - Marked Epic 19 as in progress and completed Task 19.1 checkpoint lifecycle definition notes in the roadmap.
+- Integrated checkpoint snapshot persistence into `/start-work` and `/start-work recover`, and expanded selftest coverage for checkpoint list/show/prune behavior.
 
 ## v0.2.0 - 2026-02-12
 
