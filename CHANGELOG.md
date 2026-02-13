@@ -15,6 +15,7 @@ All notable changes to this project are documented in this file.
 - Added `.pre-commit-config.yaml`, `lefthook.yml`, and `.envrc.example` to standardize local productivity setup.
 - Added `scripts/config_layering.py` with shared layered config discovery and JSONC parsing support.
 - Added `/config layers` (and `--json`) to inspect layered config precedence and effective write path.
+- Added `instructions/background_task_model.md` defining lifecycle, storage schema, retention, concurrency, and stale-timeout defaults for Epic 2 background orchestration.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.

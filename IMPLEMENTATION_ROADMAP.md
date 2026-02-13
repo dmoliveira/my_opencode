@@ -37,8 +37,8 @@ Use this map to avoid overlapping implementations.
 
 | Epic | Title | Status | Priority | Depends On | br Issue | Notes |
 |---|---|---|---|---|---|---|
-| E1 | Config Layering + JSONC Support | planned | High | - | TBD | Foundation for most later epics |
-| E2 | Background Task Orchestration | planned | High | E1 | TBD | Keep minimal and stable first |
+| E1 | Config Layering + JSONC Support | done | High | - | bd-1g0, bd-208, bd-4j1 | Foundation for most later epics |
+| E2 | Background Task Orchestration | in_progress | High | E1 | bd-1ob | Keep minimal and stable first |
 | E3 | Refactor Workflow Command | planned | High | E1 | TBD | Safer rollout after config layering |
 | E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | TBD | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
@@ -172,43 +172,44 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 1 - Config Layering + JSONC Support
 
-**Status:** `planned`
+**Status:** `done`
 **Priority:** High
 **Goal:** Add user/project layered config and JSONC parsing so behavior can be customized per repo without mutating global defaults.
 **Depends on:** None
 
-- [ ] Task 1.1: Define configuration precedence and file discovery
-  - [ ] Subtask 1.1.1: Document precedence order (`project` > `user` > bundled defaults)
-  - [ ] Subtask 1.1.2: Define file paths (`.opencode/my_opencode.jsonc`, `.opencode/my_opencode.json`, `~/.config/opencode/my_opencode.jsonc`, `~/.config/opencode/my_opencode.json`)
-  - [ ] Subtask 1.1.3: Define merge semantics (object merge, array replacement, explicit overrides)
-- [ ] Task 1.2: Implement config loader module
-  - [ ] Subtask 1.2.1: Create parser supporting JSON and JSONC
-  - [ ] Subtask 1.2.2: Implement precedence-based merge and validation
-  - [ ] Subtask 1.2.3: Add schema validation and actionable error messages
-- [ ] Task 1.3: Integrate layered config into command scripts
-  - [ ] Subtask 1.3.1: Wire loader into `mcp/plugin/notify/telemetry/post-session/policy/stack/nvim/devtools` flows
-  - [ ] Subtask 1.3.2: Keep existing env var overrides as highest-priority runtime override
-  - [ ] Subtask 1.3.3: Add compatibility fallback when only legacy files exist
-- [ ] Task 1.4: Documentation and tests
-  - [ ] Subtask 1.4.1: Add docs with examples for user/project overrides
-  - [ ] Subtask 1.4.2: Add selftests for precedence and JSONC behavior
-  - [ ] Subtask 1.4.3: Add install-test coverage for layered config discovery
-- [ ] Exit criteria: all command scripts resolve config through shared layered loader
-- [ ] Exit criteria: precedence + JSONC behavior covered by tests and docs
+- [x] Task 1.1: Define configuration precedence and file discovery
+  - [x] Subtask 1.1.1: Document precedence order (`project` > `user` > bundled defaults)
+  - [x] Subtask 1.1.2: Define file paths (`.opencode/my_opencode.jsonc`, `.opencode/my_opencode.json`, `~/.config/opencode/my_opencode.jsonc`, `~/.config/opencode/my_opencode.json`)
+  - [x] Subtask 1.1.3: Define merge semantics (object merge, array replacement, explicit overrides)
+- [x] Task 1.2: Implement config loader module
+  - [x] Subtask 1.2.1: Create parser supporting JSON and JSONC
+  - [x] Subtask 1.2.2: Implement precedence-based merge and validation
+  - [x] Subtask 1.2.3: Add schema validation and actionable error messages
+- [x] Task 1.3: Integrate layered config into command scripts
+  - [x] Subtask 1.3.1: Wire loader into `mcp/plugin/notify/telemetry/post-session/policy/stack/nvim/devtools` flows
+  - [x] Subtask 1.3.2: Keep existing env var overrides as highest-priority runtime override
+  - [x] Subtask 1.3.3: Add compatibility fallback when only legacy files exist
+- [x] Task 1.4: Documentation and tests
+  - [x] Subtask 1.4.1: Add docs with examples for user/project overrides
+  - [x] Subtask 1.4.2: Add selftests for precedence and JSONC behavior
+  - [x] Subtask 1.4.3: Add install-test coverage for layered config discovery
+- [x] Exit criteria: all command scripts resolve config through shared layered loader
+- [x] Exit criteria: precedence + JSONC behavior covered by tests and docs
 
 ---
 
 ## Epic 2 - Background Task Orchestration (Minimal Safe Version)
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Add lightweight background job workflows for async research and result retrieval.
 **Depends on:** Epic 1
 
-- [ ] Task 2.1: Design minimal background task model
-  - [ ] Subtask 2.1.1: Define job lifecycle (`queued`, `running`, `completed`, `failed`, `cancelled`)
-  - [ ] Subtask 2.1.2: Define persistent state file format and retention policy
-  - [ ] Subtask 2.1.3: Define maximum concurrency and stale-timeout defaults
+- [x] Task 2.1: Design minimal background task model
+  - [x] Subtask 2.1.1: Define job lifecycle (`queued`, `running`, `completed`, `failed`, `cancelled`)
+  - [x] Subtask 2.1.2: Define persistent state file format and retention policy
+  - [x] Subtask 2.1.3: Define maximum concurrency and stale-timeout defaults
+  - [x] Notes: See `instructions/background_task_model.md` for lifecycle transitions, storage schema, and deterministic defaults.
 - [ ] Task 2.2: Implement background task manager script
   - [ ] Subtask 2.2.1: Add enqueue/run/read/list/cancel operations
   - [ ] Subtask 2.2.2: Capture stdout/stderr and execution metadata
