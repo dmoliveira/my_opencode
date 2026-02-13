@@ -47,6 +47,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/start_work_command.py` with `/start-work <plan>` execution, persisted checkpoint status, and deviation reporting (`status`, `deviations`).
 - Added `/start-work`, `/start-work-status`, and `/start-work-deviations` aliases in `opencode.json`.
 - Added `/start-work-bg` and `/start-work-doctor-json` aliases for background-safe queueing and execution health diagnostics.
+- Added `instructions/plan_execution_workflows.md` with sample plans and direct/background/recovery workflows for `/start-work`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -90,6 +91,7 @@ All notable changes to this project are documented in this file.
 - Expanded browser verification coverage to assert provider reset readiness and added install smoke checks that run browser status/doctor after switching across providers.
 - Expanded install/selftest coverage for `/start-work` plan validation, execution state persistence, and deviation diagnostics.
 - Expanded `/start-work` integrations with background queue handoff, digest recap payloads, and unified `/doctor` visibility.
+- Expanded `/start-work` validation coverage for missing frontmatter, out-of-order ordinals, and recovery from invalid runtime state.
 
 ## v0.2.0 - 2026-02-12
 
