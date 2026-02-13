@@ -330,6 +330,26 @@
       "description": "Run safe-edit diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" doctor --json`\nShow only the command output."
     },
+    "checkpoint": {
+      "description": "Inspect checkpoint snapshots (list|show|prune|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "checkpoint-list": {
+      "description": "List checkpoint snapshots in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" list --json`\nShow only the command output."
+    },
+    "checkpoint-show": {
+      "description": "Show latest checkpoint snapshot in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" show --snapshot latest --json`\nShow only the command output."
+    },
+    "checkpoint-prune": {
+      "description": "Prune old checkpoint snapshots",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" prune --max-per-run 50 --max-age-days 14 --json`\nShow only the command output."
+    },
+    "checkpoint-doctor-json": {
+      "description": "Run checkpoint health diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" doctor --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."
