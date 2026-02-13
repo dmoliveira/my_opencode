@@ -94,6 +94,7 @@ BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
 AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
+PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1112,6 +1113,51 @@ index 3333333..4444444 100644
                 if isinstance(finding, dict)
             ),
             "pr-review analyzer should emit security category findings",
+        )
+
+        pr_review_command_report = subprocess.run(
+            [
+                sys.executable,
+                str(PR_REVIEW_COMMAND_SCRIPT),
+                "--diff-file",
+                str(analyzer_missing_evidence_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            pr_review_command_report.returncode == 0,
+            "pr-review command should succeed for synthetic diff",
+        )
+        pr_review_command_payload = parse_json_output(pr_review_command_report.stdout)
+        checklist = pr_review_command_payload.get("checklist", {})
+        checks = checklist.get("checks", []) if isinstance(checklist, dict) else []
+        expect(
+            isinstance(checks, list) and len(checks) >= 4,
+            "pr-review command should include deterministic pre-merge checklist entries",
+        )
+
+        pr_review_command_doctor = subprocess.run(
+            [sys.executable, str(PR_REVIEW_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            pr_review_command_doctor.returncode == 0,
+            "pr-review doctor should pass when command and rubric files are present",
+        )
+        pr_review_doctor_payload = parse_json_output(pr_review_command_doctor.stdout)
+        expect(
+            pr_review_doctor_payload.get("result") == "PASS"
+            and pr_review_doctor_payload.get("analyzer_exists") is True,
+            "pr-review doctor should confirm analyzer readiness",
         )
 
         result = subprocess.run(
