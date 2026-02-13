@@ -47,6 +47,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E16 | TBD | Convert delivered work into reusable team memory |
+| E28 | Autopilot Objective Runner Command | planned | High | E20, E22 | TBD | Bounded objective execution with strict safety defaults |
 
 ## Scope Guardrails
 
@@ -105,6 +106,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 | Hotfix mode bypasses important checks (E25) | High | Keep mandatory minimum verification and post-hotfix audit |
 | Health score becomes noisy and ignored (E26) | Medium | Weight high-signal checks and suppress repetitive noise |
 | Knowledge capture stores low-quality patterns (E27) | Medium | Add approval workflow and confidence scoring before publish |
+| Autopilot over-automation causes unintended actions (E28) | High | Keep objective scope limits, dry-run default, and hard budget caps |
 
 ---
 
@@ -855,6 +857,38 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 
 ---
 
+## Epic 28 - Autopilot Objective Runner Command
+
+**Status:** `planned`
+**Priority:** High
+**Goal:** Add `/autopilot` as a high-level objective runner that executes bounded autonomous cycles with explicit controls.
+**Depends on:** Epic 20, Epic 22
+
+- [ ] Task 28.1: Define command contract and safety defaults
+  - [ ] Subtask 28.1.1: Define subcommands (`start`, `status`, `pause`, `resume`, `stop`, `report`)
+  - [ ] Subtask 28.1.2: Define required objective fields (`goal`, `scope`, `done-criteria`, `max-budget`)
+  - [ ] Subtask 28.1.3: Define safe default behavior (`dry-run` preview before first execution)
+- [ ] Task 28.2: Implement objective orchestration loop
+  - [ ] Subtask 28.2.1: Break objective into bounded execution cycles
+  - [ ] Subtask 28.2.2: Apply budget guardrails and mandatory checkpoints per cycle
+  - [ ] Subtask 28.2.3: Emit progress, blockers, and next-step recommendations
+- [ ] Task 28.3: Integrate with existing control subsystems
+  - [ ] Subtask 28.3.1: Reuse `/autoflow` primitives for plan and state transitions
+  - [ ] Subtask 28.3.2: Integrate with todo enforcement and resume/checkpoint systems
+  - [ ] Subtask 28.3.3: Add explicit manual handoff mode when confidence drops
+- [ ] Task 28.4: Command UX, docs, and workflows
+  - [ ] Subtask 28.4.1: Add `/autopilot` examples in `README.md`
+  - [ ] Subtask 28.4.2: Add workflow guides (quick-fix objective, feature objective, release objective)
+  - [ ] Subtask 28.4.3: Add troubleshooting guide for stopped/paused runs
+- [ ] Task 28.5: Verification
+  - [ ] Subtask 28.5.1: Add tests for scope bounding and budget cap enforcement
+  - [ ] Subtask 28.5.2: Add tests for pause/resume/stop transitions
+  - [ ] Subtask 28.5.3: Add install-test smoke scenarios for objective lifecycle
+- [ ] Exit criteria: `/autopilot` never exceeds declared objective scope and budget limits
+- [ ] Exit criteria: users can inspect and control every run stage with clear status output
+
+---
+
 ## Cross-Cutting Delivery Tasks
 
 **Status:** `planned`
@@ -872,13 +906,15 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C1.10: Phase J (unified orchestration): Epic 22
   - [ ] Subtask C1.11: Phase K (delivery acceleration): Epic 23 + Epic 24 + Epic 25
   - [ ] Subtask C1.12: Phase L (operational intelligence): Epic 26 + Epic 27
-  - [ ] Subtask C1.13: Phase M (optional power-user): Epic 6 + Epic 7
+  - [ ] Subtask C1.13: Phase M (objective autonomy): Epic 28
+  - [ ] Subtask C1.14: Phase N (optional power-user): Epic 6 + Epic 7
 - [ ] Task C2: Add acceptance criteria template per epic
   - [ ] Subtask C2.1: Functional criteria
   - [ ] Subtask C2.2: Reliability criteria
   - [ ] Subtask C2.3: Documentation criteria
   - [ ] Subtask C2.4: Validation criteria (`make validate`, `make selftest`, `make install-test`)
   - [ ] Subtask C2.5: Evidence links (PR, commit, test output summary)
+  - [ ] Subtask C2.6: Docs quality criteria (`README` updates + command examples + end-to-end workflow guides)
 - [ ] Task C3: Add tracking cadence
   - [ ] Subtask C3.1: Weekly status update section in this file
   - [ ] Subtask C3.2: Keep one epic `in_progress`
@@ -899,6 +935,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-12: Add E8-E14 as high-value extensions identified from comparative analysis.
 - [x] 2026-02-12: Add E15-E21 for enforcement, quality, recovery, semantic editing, checkpointing, budgets, and bounded loops.
 - [x] 2026-02-12: Add E22-E27 to unify orchestration and accelerate delivery quality and release reliability.
+- [x] 2026-02-13: Add E28 `/autopilot` as a non-duplicated high-value command on top of `/autoflow`.
 
 ---
 
@@ -909,4 +946,5 @@ Use this log to track what changed week by week.
 - Prioritize **E11-E12** before E13-E14 when stability concerns are high.
 - Prioritize **E15 + E20** before E21 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
+- Prioritize **E28** only after E20 + E22 are stable in production-like workflows.
 - Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
