@@ -28,6 +28,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
+- ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
@@ -139,6 +140,23 @@ Task 20.2 runtime integration:
 - `/start-work` and `/start-work recover` now emit budget counters, threshold evaluation, and recommendations in JSON reports
 - hard-limit crossings transition run state to `budget_stopped` with deterministic `budget_*` reason codes
 - `/start-work status` and `/start-work doctor` include persisted budget diagnostics
+
+Task 20.3 commands and diagnostics:
+
+- command module: `scripts/budget_command.py`
+- command surface: `/budget status|profile|override|doctor`
+- unified diagnostics: `/doctor run --json` includes budget guardrail health checks
+- runtime tuning path: profile switching plus auditable temporary overrides for high-variance workloads
+
+Examples:
+
+```text
+/budget status --json
+/budget profile conservative
+/budget override --tool-call-count 120 --token-estimate 120000 --reason "large refactor" --json
+/budget override --clear --json
+/budget doctor --json
+```
 
 ## Installed plugin stack 🔌
 
@@ -1122,6 +1140,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`
 - `scripts/start_work_command.py` - backend script for `/start-work`
+- `scripts/budget_command.py` - backend script for `/budget`
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
