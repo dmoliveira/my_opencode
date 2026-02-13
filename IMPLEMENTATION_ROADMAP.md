@@ -45,7 +45,7 @@ Use this map to avoid overlapping implementations.
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
-| E9 | Conditional Rules Injector | in_progress | High | E1 | bd-1q8, bd-3rj, bd-fo8 | Enforce project conventions with scoped rules |
+| E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
@@ -407,7 +407,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 9 - Conditional Rules Injector
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Load project/user rule files with optional glob conditions to enforce coding conventions contextually.
 **Depends on:** Epic 1
@@ -427,12 +427,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 9.3.2: Add per-rule disable list in config
   - [x] Subtask 9.3.3: Add doctor output for rule source and conflicts
   - [x] Notes: Added `scripts/rules_command.py` with status/explain/disable-id/enable-id/doctor workflows, wired `/doctor` integration for rules diagnostics, and added command aliases/install smoke coverage.
-- [ ] Task 9.4: Verification and docs
-  - [ ] Subtask 9.4.1: Add tests for glob matching and precedence
-  - [ ] Subtask 9.4.2: Add docs with examples for team rule packs
-  - [ ] Subtask 9.4.3: Add install-test smoke checks
-- [ ] Exit criteria: applicable rules are explainable for any target file
-- [ ] Exit criteria: conflicting rules are surfaced with clear remediation
+- [x] Task 9.4: Verification and docs
+  - [x] Subtask 9.4.1: Add tests for glob matching and precedence
+  - [x] Subtask 9.4.2: Add docs with examples for team rule packs
+  - [x] Subtask 9.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded rules selftest/install smoke coverage for precedence/always-apply/disable-id flows and added team rule-pack examples in `instructions/rules_team_pack_examples.md`.
+- [x] Exit criteria: applicable rules are explainable for any target file
+- [x] Exit criteria: conflicting rules are surfaced with clear remediation
 
 ---
 

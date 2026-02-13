@@ -1647,6 +1647,14 @@ def main() -> int:
             """---\nid: style-python\ndescription: Python strict style\npriority: 80\nglobs:\n  - scripts/*.py\n---\nPrefer explicit typing for new functions.\n""",
             encoding="utf-8",
         )
+        (project_rules_dir / "docs-a.md").write_text(
+            """---\nid: docs-a\ndescription: Project docs first\npriority: 50\nglobs:\n  - README.md\n---\nProject docs ordering A.\n""",
+            encoding="utf-8",
+        )
+        (project_rules_dir / "docs-z.md").write_text(
+            """---\nid: docs-z\ndescription: Project docs second\npriority: 50\nglobs:\n  - README.md\n---\nProject docs ordering Z.\n""",
+            encoding="utf-8",
+        )
         (user_rules_dir / "python-safe.md").write_text(
             """---\nid: style-python\ndescription: User python defaults\npriority: 70\nglobs:\n  - scripts/*.py\n---\nPrefer concise comments.\n""",
             encoding="utf-8",
@@ -1655,10 +1663,14 @@ def main() -> int:
             """---\ndescription: Docs guidance\npriority: 50\nglobs:\n  - README.md\n---\nKeep examples concise.\n""",
             encoding="utf-8",
         )
+        (user_rules_dir / "global-safety.md").write_text(
+            """---\nid: global-safety\ndescription: Always-on safety guidance\npriority: 40\nalwaysApply: true\n---\nKeep generated code deterministic and auditable.\n""",
+            encoding="utf-8",
+        )
 
         discovered_rules = discover_rules(project_tmp, home=home)
         expect(
-            len(discovered_rules) == 3,
+            len(discovered_rules) == 6,
             "rules discovery should include user and project markdown rules",
         )
         resolved_rules = resolve_effective_rules(
@@ -1692,6 +1704,24 @@ def main() -> int:
             ),
             "rules resolution should match README-targeted docs rule",
         )
+        readme_rule_ids = [
+            str(rule.get("id")) for rule in readme_rules.get("effective_rules", [])
+        ]
+        expect(
+            readme_rule_ids[:2] == ["docs-a", "docs-z"],
+            "rules resolution should preserve deterministic lexical ordering for equal-priority project rules",
+        )
+
+        non_matching_rules = resolve_effective_rules(
+            discovered_rules, "scripts/unknown.txt"
+        )
+        expect(
+            any(
+                str(rule.get("id")) == "global-safety"
+                for rule in non_matching_rules.get("effective_rules", [])
+            ),
+            "alwaysApply rules should apply regardless of target path",
+        )
 
         rules_env = os.environ.copy()
         rules_env["HOME"] = str(home)
@@ -1708,7 +1738,7 @@ def main() -> int:
         expect(rules_status.returncode == 0, "rules status should succeed")
         rules_status_report = parse_json_output(rules_status.stdout)
         expect(
-            rules_status_report.get("discovered_count") == 3,
+            rules_status_report.get("discovered_count") == 6,
             "rules status should report discovered rules count",
         )
 

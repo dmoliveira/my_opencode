@@ -30,6 +30,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/conditional_rules_schema.md` defining rule frontmatter schema, discovery precedence, conflict resolution, and validation requirements for Epic 9 Task 9.1.
 - Added `scripts/rules_engine.py` implementing frontmatter parsing, layered rule discovery, path-based matching, deterministic precedence sorting, and duplicate-id conflict reporting.
 - Added `scripts/rules_command.py` with `/rules status`, `/rules explain`, per-rule disable/enable controls, and `/rules doctor` diagnostics.
+- Added `instructions/rules_team_pack_examples.md` with practical team rule-pack layout and sample rule files.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -60,6 +61,7 @@ All notable changes to this project are documented in this file.
 - Expanded keyword mode verification for false-positive resistance (partial words and code-literal contexts) and opt-out/toggle smoke scenarios.
 - Expanded selftest coverage for conditional rule discovery and effective-stack resolution behavior.
 - Added `/doctor` rules subsystem integration and expanded install/selftest coverage for rules command workflows.
+- Expanded rules verification to cover always-apply behavior, equal-priority lexical ordering, and richer discovery scenarios.
 
 ## v0.2.0 - 2026-02-12
 
