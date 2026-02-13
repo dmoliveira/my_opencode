@@ -29,7 +29,7 @@ SECTION = "keyword_modes"
 
 def usage() -> int:
     print(
-        "usage: /keyword-mode status [--json] | /keyword-mode detect --prompt <text> [--json] | /keyword-mode apply --prompt <text> [--json]"
+        "usage: /keyword-mode status [--json] | /keyword-mode detect --prompt <text> [--json] | /keyword-mode apply --prompt <text> [--json] | /keyword-mode enable | /keyword-mode disable | /keyword-mode disable-keyword <keyword> | /keyword-mode enable-keyword <keyword>"
     )
     return 2
 
@@ -96,6 +96,45 @@ def resolve_from_prompt(state: dict[str, Any], prompt: str) -> dict[str, Any]:
     }
 
 
+def parse_keyword(argv: list[str]) -> str | None:
+    if len(argv) != 1:
+        return None
+    keyword = argv[0].strip().lower()
+    if keyword not in KEYWORDS:
+        return None
+    return keyword
+
+
+def command_enable(argv: list[str], enabled: bool) -> int:
+    if argv:
+        return usage()
+    config, state, write_path = load_state()
+    state["enabled"] = enabled
+    save_state(config, state, write_path)
+    print(f"enabled: {'yes' if enabled else 'no'}")
+    print(f"config: {write_path}")
+    return 0
+
+
+def command_disable_keyword(argv: list[str], disable: bool) -> int:
+    keyword = parse_keyword(argv)
+    if not keyword:
+        return usage()
+    config, state, write_path = load_state()
+    disabled_keywords = normalize_disabled_keywords(state.get("disabled_keywords"))
+    if disable:
+        disabled_keywords.add(keyword)
+    else:
+        disabled_keywords.discard(keyword)
+    state["disabled_keywords"] = sorted(disabled_keywords)
+    save_state(config, state, write_path)
+    print(f"keyword: {keyword}")
+    print(f"disabled: {'yes' if disable else 'no'}")
+    print(f"disabled_keywords: {','.join(state['disabled_keywords']) or '(none)'}")
+    print(f"config: {write_path}")
+    return 0
+
+
 def command_status(argv: list[str]) -> int:
     if any(arg not in ("--json",) for arg in argv):
         return usage()
@@ -108,6 +147,7 @@ def command_status(argv: list[str]) -> int:
         ),
         "active_modes": state.get("active_modes", []),
         "effective_flags": state.get("effective_flags", {}),
+        "last_prompt": state.get("last_prompt"),
         "available_keywords": sorted(KEYWORDS.keys()),
         "config": str(write_path),
     }
@@ -119,6 +159,8 @@ def command_status(argv: list[str]) -> int:
             f"disabled_keywords: {','.join(payload['disabled_keywords']) or '(none)'}"
         )
         print(f"active_modes: {','.join(payload['active_modes']) or '(none)'}")
+        print(f"effective_flags: {json.dumps(payload['effective_flags'])}")
+        print(f"last_prompt: {payload['last_prompt'] or '(none)'}")
         print(f"config: {payload['config']}")
     return 0
 
@@ -171,6 +213,14 @@ def main(argv: list[str]) -> int:
         return command_detect(argv[1:])
     if argv[0] == "apply":
         return command_apply(argv[1:])
+    if argv[0] == "enable":
+        return command_enable(argv[1:], True)
+    if argv[0] == "disable":
+        return command_enable(argv[1:], False)
+    if argv[0] == "disable-keyword":
+        return command_disable_keyword(argv[1:], True)
+    if argv[0] == "enable-keyword":
+        return command_disable_keyword(argv[1:], False)
     if argv[0] == "help":
         return usage()
     return usage()
