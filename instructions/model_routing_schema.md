@@ -31,3 +31,17 @@ Current implementation lives in `scripts/model_routing_schema.py` with:
 - `default_schema()`
 - `validate_schema(schema)`
 - `resolve_category(schema, requested_category, available_models)`
+
+Task 5.2 adds deterministic settings resolution:
+
+- `resolve_model_settings(schema, requested_category, user_overrides, system_defaults, available_models)`
+
+Resolution order is:
+
+1. system defaults
+2. selected category defaults
+3. user overrides
+4. model-availability fallback
+
+The command wrapper lives in `scripts/model_routing_command.py` and provides
+`status`, `set-category`, and `resolve` commands for diagnostics and integration.

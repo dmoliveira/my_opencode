@@ -45,6 +45,7 @@ All notable changes to this project are documented in this file.
 - Added hook governance controls with global/per-hook toggles in config and telemetry-safe hook audit logging (`~/.config/opencode/hooks/actions.jsonl`).
 - Added hook health diagnostics via `/hooks doctor --json` and wired hook checks into unified `/doctor` diagnostics.
 - Added category-routing schema baseline (`quick`, `deep`, `visual`, `writing`) with deterministic fallback behavior and validation helpers.
+- Added model-routing resolution engine with deterministic precedence/fallback tracing and integration points in stack profiles and install wizard model profile selection.
 
 ## v0.2.0 - 2026-02-12
 

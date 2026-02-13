@@ -46,6 +46,12 @@ PROFILES = {
             [sys.executable, str(script("telemetry_command.py")), "profile", "off"],
             [sys.executable, str(script("post_session_command.py")), "disable"],
             [sys.executable, str(script("policy_command.py")), "profile", "strict"],
+            [
+                sys.executable,
+                str(script("model_routing_command.py")),
+                "set-category",
+                "deep",
+            ],
         ],
     },
     "research": {
@@ -69,6 +75,12 @@ PROFILES = {
                 "exit,manual",
             ],
             [sys.executable, str(script("policy_command.py")), "profile", "balanced"],
+            [
+                sys.executable,
+                str(script("model_routing_command.py")),
+                "set-category",
+                "deep",
+            ],
         ],
     },
     "quiet-ci": {
@@ -93,6 +105,12 @@ PROFILES = {
                 "manual",
             ],
             [sys.executable, str(script("policy_command.py")), "profile", "strict"],
+            [
+                sys.executable,
+                str(script("model_routing_command.py")),
+                "set-category",
+                "quick",
+            ],
         ],
     },
 }

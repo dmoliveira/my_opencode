@@ -438,6 +438,23 @@ Fallback behavior is deterministic:
 - unknown category -> `default_category`
 - unavailable model -> `default_category`
 
+Resolution precedence (Task 5.2):
+1. `system_defaults`
+2. selected category defaults
+3. explicit user overrides
+4. model availability fallback (category -> system default)
+
+Use:
+```text
+/model-routing status
+/model-routing set-category deep
+/model-routing resolve --category deep --override-model openai/gpt-5.3-codex --json
+```
+
+Integration points:
+- `/stack apply <profile>` now sets a routing category (`focus/research -> deep`, `quiet-ci -> quick`).
+- install wizard supports `--model-profile <quick|deep|visual|writing>`.
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:
