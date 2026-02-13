@@ -45,25 +45,25 @@ Use this map to avoid overlapping implementations.
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
 | E8 | Keyword-Triggered Execution Modes | planned | High | E1, E4 | TBD | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | planned | High | E1 | TBD | Enforce project conventions with scoped rules |
-| E10 | Auto Slash Command Detector | planned | Medium | E1, E8 | TBD | Convert natural prompts to command workflows |
+| E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
-| E16 | Comment and Output Quality Checker Loop | planned | Medium | E3, E14 | TBD | Raise code/doc clarity and rationale quality |
+| E16 | Comment and Output Quality Checker Loop | paused | Medium | E3, E14 | TBD | Fold into E23 first; keep separate only if gap remains |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
-| E21 | Bounded Loop Mode Presets | planned | Medium | E8, E20 | TBD | Structured iterative loops with strict caps |
+| E21 | Bounded Loop Mode Presets | postponed | Medium | E8, E20 | TBD | Defer until E22 proves stable and useful |
 | E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20, E21 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | planned | High | E3, E16 | TBD | Pre-PR quality and risk review automation |
 | E24 | Release Train Assistant | planned | High | E14, E16 | TBD | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E16 | TBD | Convert delivered work into reusable team memory |
-| E28 | Autopilot Objective Runner Command | planned | High | E20, E22 | TBD | Bounded objective execution with strict safety defaults |
+| E28 | Autopilot Objective Runner Command | paused | High | E20, E22 | TBD | Start only after real-world Autoflow stability evidence |
 
 ## Scope Guardrails
 
@@ -71,11 +71,36 @@ Use this map to avoid overlapping implementations.
 - Prefer additive changes and compatibility fallbacks over breaking behavior.
 - Do not expand to unrelated feature areas during in-progress epics.
 
+## Value Gate (Before Starting Any Epic)
+
+Start an epic only when all are true:
+
+- Clear user pain is documented and measurable.
+- Existing command/profile cannot solve the problem with small changes.
+- Expected value is higher than maintenance cost after launch.
+- Rollback path is defined and tested.
+
+If any condition is missing, keep the epic `paused` or `postponed`.
+
+## Complexity Budget
+
+- Prefer extending existing commands over introducing new top-level commands.
+- Prefer one robust implementation path over multiple experimental variants.
+- Defer optional UX layers until core reliability/diagnostics are stable.
+
 ## Dependency Rules
 
 - Dependencies must reference earlier or same-phase epics only (no forward references).
 - Avoid circular dependencies; when uncertain, split shared prerequisites into a separate task.
 - If an epic dependency changes, update both the epic block and dashboard row in the same PR.
+
+## Robustness Gate (High-Risk Epics)
+
+For high-risk automation epics (E20, E22, E28), require:
+
+- A prototype phase with success/failure metrics before full implementation.
+- A kill-switch and rollback checklist in the first delivery PR.
+- A post-release observation window with explicit go/no-go decision.
 
 ## Out of Scope (for this roadmap cycle)
 
@@ -957,6 +982,13 @@ Every command-oriented epic must ship all of the following:
   - [ ] Subtask C3.2: Keep one epic `in_progress`
   - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
   - [ ] Subtask C3.4: Revisit paused/postponed epics at least once per month
+- [ ] Task C4: Command UX baseline (quality-of-life required)
+  - [ ] Subtask C4.1: Add command autocomplete shortcuts in `opencode.json`
+  - [ ] Subtask C4.2: Add command help and doctor JSON outputs
+  - [ ] Subtask C4.3: Add code-assistant guidance snippets (inputs, expected outputs, safe defaults)
+  - [ ] Subtask C4.4: Add tips/troubleshooting output for common failures
+  - [ ] Subtask C4.5: Add hover-like inline explanation docs (what it does, when to use, limits)
+  - [ ] Subtask C4.6: Add at least one easy-path command alias for frequent workflows
 
 ## Roadmap QA Checklist
 
@@ -967,6 +999,7 @@ Run this checklist for every roadmap refinement pass:
 - [ ] Dependencies are acyclic and point to existing epics only.
 - [ ] Each high-priority epic has explicit safety and rollback notes.
 - [ ] Docs requirements are present (`README`, examples, workflow guide).
+- [ ] Low-value or high-noise epics are paused/postponed unless a measurable gap exists.
 
 ## Weekly Status Updates
 
@@ -977,9 +1010,9 @@ Use this log to track what changed week by week.
 ## Execution Queue (Simplified)
 
 - `Now`: E1 -> E2 -> E3 -> E20
-- `Next`: E14 -> E15 -> E22 -> E28
+- `Next`: E14 -> E15 -> E22
 - `Later`: E23 -> E24 -> E26 -> E27
-- `Deferred`: E6 (paused), E7 (postponed)
+- `Deferred`: E6 (paused), E7 (postponed), E10 (paused), E16 (paused), E21 (postponed), E28 (paused)
 
 ## Decision Log
 
@@ -990,6 +1023,8 @@ Use this log to track what changed week by week.
 - [x] 2026-02-12: Add E15-E21 for enforcement, quality, recovery, semantic editing, checkpointing, budgets, and bounded loops.
 - [x] 2026-02-12: Add E22-E27 to unify orchestration and accelerate delivery quality and release reliability.
 - [x] 2026-02-13: Add E28 `/autopilot` as a non-duplicated high-value command on top of `/autoflow`.
+- [x] 2026-02-13: Pause/postpone lower-confidence epics (E10, E16, E21, E28) until measurable value is proven.
+- [x] 2026-02-13: Require command UX baseline (autocomplete, assistant tips, hovers/explanations, QoL aliases) for all new command features.
 
 ---
 
@@ -1000,5 +1035,6 @@ Use this log to track what changed week by week.
 - Prioritize **E11-E12** before E13-E14 when stability concerns are high.
 - Prioritize **E15 + E20** before E21 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
-- Prioritize **E28** only after E20 + E22 are stable in production-like workflows.
+- Keep **E28** paused until E22 proves stable in production-like workflows.
+- Keep **E10/E16/E21** paused or postponed unless explicit user-value metrics justify implementation.
 - Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
