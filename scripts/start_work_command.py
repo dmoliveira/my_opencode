@@ -27,6 +27,10 @@ from todo_enforcement import (  # type: ignore
     validate_todo_set,
     validate_todo_transition,
 )
+from recovery_engine import (  # type: ignore
+    execute_resume,
+    evaluate_resume_eligibility,
+)
 
 
 SECTION = "plan_execution"
@@ -34,12 +38,12 @@ PLAN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-_]{2,63}$")
 STEP_RE = re.compile(r"^- \[(?P<mark>[ xX])\] (?P<text>.+)$")
 ORDINAL_RE = re.compile(r"^(?P<ordinal>\d+)\.\s+(?P<detail>.+)$")
 REQUIRED_KEYS = ("id", "title", "owner", "created_at", "version")
-ALLOWED_STATUSES = {"idle", "completed", "failed", "in_progress"}
+ALLOWED_STATUSES = {"idle", "completed", "failed", "in_progress", "resume_escalated"}
 
 
 def usage() -> int:
     print(
-        "usage: /start-work <plan.md> [--deviation <note> ...] [--background] [--json] | /start-work status [--json] | /start-work deviations [--json] | /start-work doctor [--json]"
+        "usage: /start-work <plan.md> [--deviation <note> ...] [--background] [--json] | /start-work status [--json] | /start-work deviations [--json] | /start-work recover --interruption-class <class> [--approve-step <ordinal> ...] [--json] | /start-work doctor [--json]"
     )
     return 2
 
@@ -202,9 +206,12 @@ def parse_steps(
         steps.append(
             {
                 "ordinal": int(ordinal_match.group("ordinal")),
-                "text": ordinal_match.group("detail").strip(),
+                "text": ordinal_match.group("detail")
+                .replace("[non-idempotent]", "")
+                .strip(),
                 "line": index + 1,
                 "checked": match.group("mark").lower() == "x",
+                "idempotent": "[non-idempotent]" not in ordinal_match.group("detail"),
             }
         )
 
@@ -429,6 +436,7 @@ def command_start(args: list[str]) -> int:
                 "text": step["text"],
                 "line": step["line"],
                 "state": normalize_todo_state(step["state"]),
+                "idempotent": bool(step.get("idempotent", True)),
             }
             for step in steps
         ],
@@ -442,6 +450,11 @@ def command_start(args: list[str]) -> int:
         },
         "started_at": now_iso(),
         "finished_at": now_iso(),
+        "resume": {
+            "attempt_count": 0,
+            "max_attempts": 3,
+            "trail": [],
+        },
     }
 
     config, write_path = load_state()
@@ -699,12 +712,23 @@ def command_doctor(args: list[str]) -> int:
             if isinstance(prompt, str) and prompt not in warnings:
                 warnings.append(prompt)
 
+    resume_meta = runtime.get("resume")
+    if isinstance(resume_meta, dict):
+        interruption_class = str(
+            resume_meta.get("last_interruption_class") or "tool_failure"
+        )
+        eligibility = evaluate_resume_eligibility(runtime, interruption_class)
+        if not eligibility.get("eligible"):
+            reason = str(eligibility.get("reason_code") or "resume blocked")
+            warnings.append(f"resume eligibility: {reason}")
+
     report = {
         "result": "PASS" if not problems else "FAIL",
         "status": status,
         "plan": runtime.get("plan", {}),
         "step_count": len(steps),
         "todo_compliance": runtime.get("todo_compliance", {}),
+        "resume": runtime.get("resume", {}),
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
@@ -733,6 +757,88 @@ def command_doctor(args: list[str]) -> int:
     return 0 if report["result"] == "PASS" else 1
 
 
+def command_recover(args: list[str]) -> int:
+    json_output = "--json" in args
+    interruption_class = ""
+    approved_steps: set[int] = set()
+
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--interruption-class":
+            if index + 1 >= len(args):
+                return usage()
+            interruption_class = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--approve-step":
+            if index + 1 >= len(args):
+                return usage()
+            try:
+                approved_steps.add(int(args[index + 1]))
+            except ValueError:
+                return usage()
+            index += 2
+            continue
+        return usage()
+
+    if not interruption_class:
+        return usage()
+
+    runtime, write_path = read_runtime_state()
+    if not runtime:
+        report = {
+            "result": "FAIL",
+            "code": "resume_missing_checkpoint",
+            "hint": "run /start-work <plan.md> before attempting recovery",
+            "config": str(write_path),
+        }
+        print(json.dumps(report, indent=2) if json_output else report["hint"])
+        return 1
+
+    actor = "system"
+    raw_plan = runtime.get("plan")
+    if isinstance(raw_plan, dict):
+        raw_metadata = raw_plan.get("metadata")
+        if isinstance(raw_metadata, dict):
+            actor = str(raw_metadata.get("owner") or actor)
+
+    result = execute_resume(
+        runtime,
+        interruption_class,
+        approved_steps=approved_steps,
+        actor=actor,
+    )
+
+    config, _ = load_state()
+    next_runtime = result.get("runtime")
+    if isinstance(next_runtime, dict):
+        save_state(config, write_path, next_runtime)
+
+    report = {
+        "result": result.get("result", "FAIL"),
+        "status": next_runtime.get("status")
+        if isinstance(next_runtime, dict)
+        else None,
+        "reason_code": result.get("reason_code"),
+        "checkpoint": result.get("checkpoint"),
+        "resumed_steps": result.get("resumed_steps", []),
+        "config": str(write_path),
+    }
+    if json_output:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"result: {report['result']}")
+        print(f"status: {report['status']}")
+        print(f"reason: {report['reason_code']}")
+        print(f"resumed_steps: {len(report['resumed_steps'])}")
+        print(f"config: {write_path}")
+    return 0 if report["result"] == "PASS" else 1
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return usage()
@@ -745,6 +851,8 @@ def main(argv: list[str]) -> int:
         return command_status(rest)
     if command == "deviations":
         return command_deviations(rest)
+    if command == "recover":
+        return command_recover(rest)
     if command == "doctor":
         return command_doctor(rest)
     return command_start(argv)

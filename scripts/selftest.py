@@ -41,6 +41,10 @@ from todo_enforcement import (  # type: ignore
     validate_todo_set,
     validate_todo_transition,
 )
+from recovery_engine import (  # type: ignore
+    evaluate_resume_eligibility,
+    execute_resume,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2096,6 +2100,166 @@ version: 1
         expect(
             start_work_recover.returncode == 0,
             "start-work should recover by re-running valid plan after invalid runtime state",
+        )
+
+        resume_runtime = {
+            "status": "failed",
+            "steps": [
+                {
+                    "ordinal": 1,
+                    "state": "done",
+                    "idempotent": True,
+                },
+                {
+                    "ordinal": 2,
+                    "state": "pending",
+                    "idempotent": False,
+                },
+            ],
+            "resume": {
+                "attempt_count": 0,
+                "max_attempts": 3,
+                "trail": [],
+            },
+        }
+        resume_eval_blocked = evaluate_resume_eligibility(
+            resume_runtime,
+            "tool_failure",
+        )
+        expect(
+            resume_eval_blocked.get("eligible") is False
+            and resume_eval_blocked.get("reason_code") == "resume_non_idempotent_step",
+            "recovery engine should block non-idempotent pending step without explicit approval",
+        )
+
+        resume_exec_allowed = execute_resume(
+            resume_runtime,
+            "tool_failure",
+            approved_steps={2},
+            actor="selftest",
+        )
+        expect(
+            resume_exec_allowed.get("result") == "PASS"
+            and resume_exec_allowed.get("runtime", {}).get("status") == "completed",
+            "recovery engine should resume approved non-idempotent step and complete run",
+        )
+
+        recover_plan_path = tmp / "recovery_plan_selftest.md"
+        recover_plan_path.write_text(
+            """---
+id: selftest-recovery-plan
+title: Recovery Plan
+owner: selftest
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+- [ ] 1. Stable resumable setup
+- [ ] 2. [non-idempotent] Risky operation requiring explicit approval
+""",
+            encoding="utf-8",
+        )
+        recover_start = subprocess.run(
+            [sys.executable, str(START_WORK_SCRIPT), str(recover_plan_path), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            recover_start.returncode == 0, "start-work recover fixture should execute"
+        )
+
+        recover_config_path = Path(
+            str(parse_json_output(recover_start.stdout).get("config"))
+        )
+        recover_cfg = load_json_file(recover_config_path)
+        recover_state = recover_cfg.get("plan_execution", {})
+        if isinstance(recover_state, dict):
+            recover_state["status"] = "failed"
+            recover_steps = recover_state.get("steps")
+            if isinstance(recover_steps, list) and len(recover_steps) >= 2:
+                if isinstance(recover_steps[0], dict):
+                    recover_steps[0]["state"] = "done"
+                if isinstance(recover_steps[1], dict):
+                    recover_steps[1]["state"] = "pending"
+                    recover_steps[1]["idempotent"] = False
+            recover_state["resume"] = {
+                "attempt_count": 0,
+                "max_attempts": 3,
+                "trail": [],
+            }
+        recover_config_path.write_text(
+            json.dumps(recover_cfg, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        recover_blocked = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                "recover",
+                "--interruption-class",
+                "tool_failure",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            recover_blocked.returncode == 1,
+            "start-work recover should fail for non-idempotent pending step without approval",
+        )
+        recover_blocked_report = parse_json_output(recover_blocked.stdout)
+        expect(
+            recover_blocked_report.get("reason_code") == "resume_non_idempotent_step",
+            "start-work recover should surface deterministic reason code",
+        )
+
+        recover_cfg_after_block = load_json_file(recover_config_path)
+        recover_state_after_block = recover_cfg_after_block.get("plan_execution")
+        if isinstance(recover_state_after_block, dict):
+            resume_meta = recover_state_after_block.get("resume")
+            if isinstance(resume_meta, dict):
+                resume_meta["last_attempt_at"] = "2026-02-13T00:00:00Z"
+                resume_meta["attempt_count"] = 0
+        recover_config_path.write_text(
+            json.dumps(recover_cfg_after_block, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        recover_allowed = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                "recover",
+                "--interruption-class",
+                "tool_failure",
+                "--approve-step",
+                "2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            recover_allowed.returncode == 0,
+            "start-work recover should pass when explicit approval is provided",
+        )
+        recover_allowed_report = parse_json_output(recover_allowed.stdout)
+        expect(
+            recover_allowed_report.get("result") == "PASS"
+            and recover_allowed_report.get("status") == "completed",
+            "start-work recover should complete failed run when recovery eligibility is satisfied",
         )
 
         keyword_report = resolve_prompt_modes(

@@ -640,6 +640,13 @@ Epic 17 Task 17.1 defines the baseline policy contract for safe auto-resume beha
 - eligibility gate: checkpoint availability + idempotency + artifact readiness + attempt budget
 - safety controls: class-specific cool-down windows and escalation after max attempts
 
+Epic 17 Task 17.2 implements the recovery backend:
+
+- engine module: `scripts/recovery_engine.py`
+- backend path: `/start-work recover --interruption-class <tool_failure|timeout|context_reset|process_crash> --json`
+- approval gate: non-idempotent pending steps require explicit `--approve-step <ordinal>`
+- audit trail: persisted `resume_decision` and `resume_transition` events under runtime `resume.trail`
+
 ## Context resilience policy
 
 Epic 11 Task 11.1 defines the baseline policy schema for context-window resilience:
