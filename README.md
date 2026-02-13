@@ -38,6 +38,19 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - Track upcoming orchestration features in `IMPLEMENTATION_ROADMAP.md`.
 
+## Safe-edit capability baseline
+
+Epic 18 Task 18.1 defines the semantic safe-edit baseline in:
+
+- `instructions/safe_edit_capability_matrix.md`
+
+Current scope includes:
+
+- supported operations: `rename`, `extract`, `organize_imports`, `scoped_replace`
+- operation/backend matrix: preferred LSP/AST path plus guarded text fallback
+- deterministic availability checks for language, LSP, and AST readiness
+- explicit fallback blocking conditions and reason-code contract for explainability
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
