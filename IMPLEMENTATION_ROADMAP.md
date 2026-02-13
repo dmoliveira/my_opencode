@@ -94,6 +94,14 @@ If any condition is missing, keep the epic `paused` or `postponed`.
 - Avoid circular dependencies; when uncertain, split shared prerequisites into a separate task.
 - If an epic dependency changes, update both the epic block and dashboard row in the same PR.
 
+## Robustness Gate (High-Risk Epics)
+
+For high-risk automation epics (E20, E22, E28), require:
+
+- A prototype phase with success/failure metrics before full implementation.
+- A kill-switch and rollback checklist in the first delivery PR.
+- A post-release observation window with explicit go/no-go decision.
+
 ## Out of Scope (for this roadmap cycle)
 
 - Full rewrite of existing command scripts in a new language/runtime.
