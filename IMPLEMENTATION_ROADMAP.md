@@ -260,7 +260,7 @@ Use this map to avoid overlapping implementations.
   - [ ] Subtask 5.2.2: Add deterministic fallback logging for diagnostics
   - [ ] Subtask 5.2.3: Add integration points with `/stack` and wizard profiles
 - [ ] Task 5.3: UX and docs
-  - [ ] Subtask 5.3.1: Add `/model-profile` (or equivalent) command surface
+  - [ ] Subtask 5.3.1: Add `/model-profile` command surface
   - [ ] Subtask 5.3.2: Document practical routing examples by workload
   - [ ] Subtask 5.3.3: Add doctor visibility for effective routing
 - [ ] Task 5.4: Verification
