@@ -14,6 +14,13 @@ SYSTEM_DEFAULTS = {
 }
 
 
+def _provider_from_model(model: Any) -> str:
+    value = str(model or "").strip()
+    if "/" in value:
+        return value.split("/", 1)[0]
+    return "unknown"
+
+
 def default_schema() -> dict[str, Any]:
     return {
         "default_category": DEFAULT_CATEGORY,
@@ -192,8 +199,60 @@ def resolve_model_settings(
             }
         )
 
+    requested_model = overrides.get("model")
+    if not isinstance(requested_model, str) or not requested_model.strip():
+        requested_model = category_settings.get("model")
+    if not isinstance(requested_model, str) or not requested_model.strip():
+        requested_model = base_system.get("model")
+
+    attempted: list[dict[str, Any]] = []
+    first_model = requested_model
+    first_available = available_models is None or first_model in available_models
+    attempted.append(
+        {
+            "rank": 1,
+            "model": first_model,
+            "provider": _provider_from_model(first_model),
+            "result": "accepted" if first_available else "unavailable",
+            "reason": "requested_or_override_candidate",
+        }
+    )
+
+    final_model = resolved.get("model")
+    if final_model != first_model:
+        attempted.append(
+            {
+                "rank": 2,
+                "model": final_model,
+                "provider": _provider_from_model(final_model),
+                "result": "accepted",
+                "reason": trace[-1].get("reason") if trace else "fallback_selected",
+            }
+        )
+
+    resolution_trace = {
+        "requested": {
+            "category": requested_category,
+            "model": requested_model,
+            "source": (
+                "user_override"
+                if isinstance(overrides.get("model"), str)
+                and str(overrides.get("model")).strip()
+                else "category_default"
+            ),
+        },
+        "attempted": attempted,
+        "selected": {
+            "category": category_result.get("category"),
+            "model": final_model,
+            "provider": _provider_from_model(final_model),
+            "reason": trace[-1].get("reason") if trace else "selected",
+        },
+    }
+
     return {
         "category": category_result.get("category"),
         "settings": resolved,
         "trace": trace,
+        "resolution_trace": resolution_trace,
     }

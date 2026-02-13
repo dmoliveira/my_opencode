@@ -33,12 +33,13 @@ DEFAULT_STATE = {
         "reasoning": "medium",
         "verbosity": "medium",
     },
+    "latest_trace": {},
 }
 
 
 def usage() -> int:
     print(
-        "usage: /model-routing status [--json] | /model-routing set-category <quick|deep|visual|writing> | /model-routing resolve [--category <name>] [--override-model <id>] [--override-temperature <value>] [--override-reasoning <value>] [--override-verbosity <value>] [--available-models <csv>] [--json]"
+        "usage: /model-routing status [--json] | /model-routing set-category <quick|deep|visual|writing> | /model-routing resolve [--category <name>] [--override-model <id>] [--override-temperature <value>] [--override-reasoning <value>] [--override-verbosity <value>] [--available-models <csv>] [--json] | /model-routing trace [--json]"
     )
     return 2
 
@@ -60,6 +61,7 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
     config[SECTION] = {
         "active_category": state.get("active_category", "quick"),
         "system_defaults": state.get("system_defaults", {}),
+        "latest_trace": state.get("latest_trace", {}),
     }
     save_config_file(config, write_path)
 
@@ -133,6 +135,7 @@ def command_status(argv: list[str]) -> int:
     payload = {
         "active_category": state.get("active_category"),
         "system_defaults": state.get("system_defaults"),
+        "has_latest_trace": bool(state.get("latest_trace")),
         "config": str(write_path),
     }
     if json_output:
@@ -140,6 +143,7 @@ def command_status(argv: list[str]) -> int:
     else:
         print(f"active_category: {payload['active_category']}")
         print(f"system_defaults: {json.dumps(payload['system_defaults'])}")
+        print(f"has_latest_trace: {'yes' if payload['has_latest_trace'] else 'no'}")
         print(f"config: {payload['config']}")
     return 0
 
@@ -163,11 +167,17 @@ def command_set_category(argv: list[str]) -> int:
 def command_resolve(argv: list[str]) -> int:
     json_output = "--json" in argv
     filtered = [arg for arg in argv if arg != "--json"]
-    _, state, _ = load_state()
+    config, state, write_path = load_state()
     report = run_resolve(state, filtered)
     if report.get("result") != "PASS":
         print(json.dumps(report, indent=2))
         return 1
+
+    resolution_trace = report.get("resolution_trace")
+    if isinstance(resolution_trace, dict):
+        state["latest_trace"] = resolution_trace
+        save_state(config, state, write_path)
+
     if json_output:
         print(json.dumps(report, indent=2))
         return 0
@@ -181,6 +191,28 @@ def command_resolve(argv: list[str]) -> int:
     return 0
 
 
+def command_trace(argv: list[str]) -> int:
+    if any(arg not in ("--json",) for arg in argv):
+        return usage()
+    json_output = "--json" in argv
+    _, state, _ = load_state()
+    trace = state.get("latest_trace")
+    payload = {
+        "result": "PASS",
+        "has_trace": isinstance(trace, dict) and bool(trace),
+        "trace": trace if isinstance(trace, dict) else {},
+    }
+    if json_output:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print(f"has_trace: {'yes' if payload['has_trace'] else 'no'}")
+    if payload["has_trace"]:
+        selected = payload["trace"].get("selected", {})
+        print(f"selected_model: {selected.get('model')}")
+        print(f"selected_reason: {selected.get('reason')}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] == "status":
         return command_status(argv[1:] if argv else [])
@@ -188,6 +220,8 @@ def main(argv: list[str]) -> int:
         return command_set_category(argv[1:])
     if argv[0] == "resolve":
         return command_resolve(argv[1:])
+    if argv[0] == "trace":
+        return command_trace(argv[1:])
     if argv[0] == "help":
         return usage()
     return usage()
