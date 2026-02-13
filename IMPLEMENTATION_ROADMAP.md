@@ -50,7 +50,7 @@ Use this map to avoid overlapping implementations.
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | done | Medium | E1 | bd-3rs, bd-2qy, bd-f6g, bd-393 | Toggle Playwright/agent-browser with checks |
-| E14 | Plan-to-Execution Bridge Command | in_progress | Medium | E2, E3 | bd-1z6, bd-2te | Execute validated plans with progress tracking |
+| E14 | Plan-to-Execution Bridge Command | in_progress | Medium | E2, E3 | bd-1z6, bd-2te, bd-3sg | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
@@ -578,10 +578,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 14.2.2: Execute steps sequentially with checkpoint updates
   - [x] Subtask 14.2.3: Capture and report deviations from original plan
   - [x] Notes: Added `scripts/start_work_command.py` with plan parsing + validation, sequential checkpoint transitions, persisted execution status, and deviation reporting; wired aliases and smoke/selftest coverage.
-- [ ] Task 14.3: Integrations and observability
-  - [ ] Subtask 14.3.1: Integrate with background subsystem where safe
-  - [ ] Subtask 14.3.2: Integrate with digest summaries for end-of-run recap
-  - [ ] Subtask 14.3.3: Expose execution status in doctor/debug outputs
+- [x] Task 14.3: Integrations and observability
+  - [x] Subtask 14.3.1: Integrate with background subsystem where safe
+  - [x] Subtask 14.3.2: Integrate with digest summaries for end-of-run recap
+  - [x] Subtask 14.3.3: Expose execution status in doctor/debug outputs
+  - [x] Notes: Added background-safe `/start-work` queueing (`--background` + `/start-work-bg`), digest `plan_execution` recap output, and `/doctor` integration via `/start-work doctor --json`.
 - [ ] Task 14.4: Validation and docs
   - [ ] Subtask 14.4.1: Add tests for plan parsing and execution flow
   - [ ] Subtask 14.4.2: Add recovery tests for interrupted plan runs

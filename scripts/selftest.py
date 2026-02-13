@@ -1732,6 +1732,80 @@ version: 1
             "start-work deviations should return captured deviation entries",
         )
 
+        start_work_background = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                str(plan_path),
+                "--background",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            start_work_background.returncode == 0,
+            "start-work should enqueue background-safe execution",
+        )
+        start_work_background_report = parse_json_output(start_work_background.stdout)
+        expect(
+            start_work_background_report.get("status") == "queued"
+            and bool(start_work_background_report.get("job_id")),
+            "start-work background mode should return queued job id",
+        )
+        queued_job_id = str(start_work_background_report.get("job_id"))
+
+        bg_run_plan = subprocess.run(
+            [
+                sys.executable,
+                str(BG_MANAGER_SCRIPT),
+                "run",
+                "--id",
+                queued_job_id,
+                "--max-jobs",
+                "1",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            bg_run_plan.returncode == 0,
+            "bg run should execute queued start-work job successfully",
+        )
+
+        digest_plan_path = home / ".config" / "opencode" / "digests" / "plan-run.json"
+        digest_plan_env = refactor_env.copy()
+        digest_plan_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_plan_path)
+        digest_after_plan = subprocess.run(
+            [sys.executable, str(DIGEST_SCRIPT), "run", "--reason", "manual"],
+            capture_output=True,
+            text=True,
+            env=digest_plan_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            digest_after_plan.returncode == 0,
+            "digest run should succeed after start-work execution",
+        )
+        digest_after_plan_payload = load_json_file(digest_plan_path)
+        plan_digest_block = digest_after_plan_payload.get("plan_execution", {})
+        expect(
+            isinstance(plan_digest_block, dict)
+            and plan_digest_block.get("status") == "completed",
+            "digest should include completed plan execution recap",
+        )
+        expect(
+            plan_digest_block.get("plan_id") == "selftest-plan-001",
+            "digest plan execution recap should include plan id",
+        )
+
         invalid_plan_path = tmp / "invalid_plan_execution_selftest.md"
         invalid_plan_path.write_text(
             """---
@@ -2688,6 +2762,20 @@ version: 1
         expect(
             browser_checks[0].get("ok") is True,
             "doctor browser check should pass",
+        )
+
+        start_work_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "start-work"
+        ]
+        expect(
+            bool(start_work_checks),
+            "doctor summary should include start-work check",
+        )
+        expect(
+            start_work_checks[0].get("ok") is True,
+            "doctor start-work check should pass",
         )
 
     print("selftest: PASS")

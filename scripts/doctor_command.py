@@ -180,6 +180,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "start-work",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("start_work_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("start_work_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 

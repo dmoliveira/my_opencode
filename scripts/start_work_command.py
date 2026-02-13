@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,11 +26,12 @@ PLAN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-_]{2,63}$")
 STEP_RE = re.compile(r"^- \[(?P<mark>[ xX])\] (?P<text>.+)$")
 ORDINAL_RE = re.compile(r"^(?P<ordinal>\d+)\.\s+(?P<detail>.+)$")
 REQUIRED_KEYS = ("id", "title", "owner", "created_at", "version")
+ALLOWED_STATUSES = {"idle", "completed", "failed", "in_progress"}
 
 
 def usage() -> int:
     print(
-        "usage: /start-work <plan.md> [--deviation <note> ...] [--json] | /start-work status [--json] | /start-work deviations [--json]"
+        "usage: /start-work <plan.md> [--deviation <note> ...] [--background] [--json] | /start-work status [--json] | /start-work deviations [--json] | /start-work doctor [--json]"
     )
     return 2
 
@@ -264,6 +266,7 @@ def save_state(config: dict[str, Any], write_path: Path, state: dict[str, Any]) 
 
 def command_start(args: list[str]) -> int:
     json_output = False
+    background = False
     deviations: list[str] = []
     filtered: list[str] = []
 
@@ -272,6 +275,8 @@ def command_start(args: list[str]) -> int:
         token = args[index]
         if token == "--json":
             json_output = True
+        elif token == "--background":
+            background = True
         elif token == "--deviation":
             if index + 1 >= len(args):
                 return usage()
@@ -382,6 +387,88 @@ def command_start(args: list[str]) -> int:
     }
 
     config, write_path = load_state()
+    if background:
+        bg_script = SCRIPT_DIR / "background_task_manager.py"
+        if not bg_script.exists():
+            report = {
+                "result": "FAIL",
+                "code": "background_manager_unavailable",
+                "hint": "install scripts/background_task_manager.py before using --background",
+            }
+            print(json.dumps(report, indent=2) if json_output else report["hint"])
+            return 1
+
+        enqueue_cmd = [
+            sys.executable,
+            str(bg_script),
+            "enqueue",
+            "--cwd",
+            str(Path.cwd()),
+            "--label",
+            "plan-execution",
+            "--label",
+            f"plan:{parsed['metadata'].get('id', 'unknown')}",
+            "--",
+            sys.executable,
+            str(Path(__file__).resolve()),
+            str(plan_path),
+            "--json",
+        ]
+        for note in deviations:
+            enqueue_cmd.extend(["--deviation", note])
+
+        enqueue_result = subprocess.run(
+            enqueue_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path.cwd(),
+        )
+        if enqueue_result.returncode != 0:
+            report = {
+                "result": "FAIL",
+                "code": "background_enqueue_failed",
+                "stderr": enqueue_result.stderr.strip(),
+                "stdout": enqueue_result.stdout.strip(),
+            }
+            print(json.dumps(report, indent=2) if json_output else "failed to enqueue")
+            return 1
+
+        job_id = ""
+        for line in enqueue_result.stdout.splitlines():
+            if line.startswith("id: "):
+                job_id = line.replace("id: ", "", 1).strip()
+                break
+        if not job_id:
+            report = {
+                "result": "FAIL",
+                "code": "background_enqueue_parse_failed",
+                "stdout": enqueue_result.stdout.strip(),
+            }
+            print(
+                json.dumps(report, indent=2)
+                if json_output
+                else "failed to parse job id"
+            )
+            return 1
+
+        report = {
+            "result": "PASS",
+            "status": "queued",
+            "background": True,
+            "job_id": job_id,
+            "plan": {"path": str(plan_path), "metadata": parsed["metadata"]},
+            "hint": "run /bg run --id <job-id> to execute queued plan",
+        }
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"plan: {plan_path}")
+            print("status: queued")
+            print(f"job_id: {job_id}")
+            print("next: /bg run --id <job-id>")
+        return 0
+
     save_state(config, write_path, run_state)
 
     report = {
@@ -480,6 +567,64 @@ def command_deviations(args: list[str]) -> int:
     return 0
 
 
+def command_doctor(args: list[str]) -> int:
+    if any(arg not in ("--json",) for arg in args):
+        return usage()
+    json_output = "--json" in args
+    runtime, write_path = read_runtime_state()
+
+    warnings: list[str] = []
+    problems: list[str] = []
+    status = str(runtime.get("status") or "idle")
+    if status not in ALLOWED_STATUSES:
+        problems.append(f"unknown plan execution status: {status}")
+
+    raw_steps = runtime.get("steps")
+    steps: list[Any] = raw_steps if isinstance(raw_steps, list) else []
+    in_progress_count = sum(
+        1
+        for step in steps
+        if isinstance(step, dict) and step.get("state") == "in_progress"
+    )
+    if in_progress_count > 1:
+        problems.append("multiple steps marked in_progress; expected at most one")
+
+    if not runtime:
+        warnings.append("no plan execution run recorded yet")
+
+    report = {
+        "result": "PASS" if not problems else "FAIL",
+        "status": status,
+        "plan": runtime.get("plan", {}),
+        "step_count": len(steps),
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": [
+            "/start-work path/to/plan.md --json",
+            "/start-work status --json",
+        ],
+        "config": str(write_path),
+    }
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0 if report["result"] == "PASS" else 1
+
+    print(f"result: {report['result']}")
+    print(f"status: {status}")
+    print(f"step_count: {len(steps)}")
+    if warnings:
+        print("warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
+    if problems:
+        print("problems:")
+        for problem in problems:
+            print(f"- {problem}")
+    print(f"config: {write_path}")
+    return 0 if report["result"] == "PASS" else 1
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return usage()
@@ -492,6 +637,8 @@ def main(argv: list[str]) -> int:
         return command_status(rest)
     if command == "deviations":
         return command_deviations(rest)
+    if command == "doctor":
+        return command_doctor(rest)
     return command_start(argv)
 
 
