@@ -53,6 +53,8 @@ All notable changes to this project are documented in this file.
 - Added `/model-profile` command aliases, practical routing guidance, and unified doctor visibility for model-routing health.
 - Tightened model-routing verification coverage with deterministic fallback-reason assertions and expanded install smoke resolve scenarios.
 - Expanded keyword mode docs with examples and anti-pattern guidance, plus stronger selftest/install smoke coverage for keyword toggle behavior.
+- Added `/keyword-mode doctor --json` diagnostics and integrated keyword subsystem health into unified `/doctor` checks.
+- Expanded keyword mode verification for false-positive resistance (partial words and code-literal contexts) and opt-out/toggle smoke scenarios.
 
 ## v0.2.0 - 2026-02-12
 

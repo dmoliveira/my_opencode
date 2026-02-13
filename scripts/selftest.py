@@ -1405,6 +1405,36 @@ def main() -> int:
             "keyword detector should support prompt-level global opt-out",
         )
 
+        keyword_no_partial_match = resolve_prompt_modes(
+            "please go deeper and safely apply this refactor",
+            enabled=True,
+            disabled_keywords=set(),
+        )
+        expect(
+            keyword_no_partial_match.get("matched_keywords") == [],
+            "keyword detector should avoid partial-word false positives",
+        )
+
+        keyword_ignore_inline_code = resolve_prompt_modes(
+            "Document this literal command: `safe-apply deep-analyze`",
+            enabled=True,
+            disabled_keywords=set(),
+        )
+        expect(
+            keyword_ignore_inline_code.get("matched_keywords") == [],
+            "keyword detector should ignore inline code literal keywords",
+        )
+
+        keyword_ignore_fenced_code = resolve_prompt_modes(
+            """Use this snippet:\n```text\nsafe-apply deep-analyze\n```\nthen explain docs.""",
+            enabled=True,
+            disabled_keywords=set(),
+        )
+        expect(
+            keyword_ignore_fenced_code.get("matched_keywords") == [],
+            "keyword detector should ignore fenced code literal keywords",
+        )
+
         keyword_detect = subprocess.run(
             [
                 sys.executable,
@@ -1568,6 +1598,21 @@ def main() -> int:
         expect(
             keyword_enable_ulw.returncode == 0,
             "keyword-mode enable-keyword should succeed",
+        )
+
+        keyword_doctor = subprocess.run(
+            [sys.executable, str(KEYWORD_MODE_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(keyword_doctor.returncode == 0, "keyword-mode doctor should succeed")
+        keyword_doctor_report = parse_json_output(keyword_doctor.stdout)
+        expect(
+            keyword_doctor_report.get("result") == "PASS",
+            "keyword-mode doctor should report PASS",
         )
 
         wizard_state_path = (
@@ -1771,6 +1816,20 @@ def main() -> int:
         expect(
             model_routing_checks[0].get("ok") is True,
             "doctor model-routing check should pass",
+        )
+
+        keyword_mode_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "keyword-mode"
+        ]
+        expect(
+            bool(keyword_mode_checks),
+            "doctor summary should include keyword-mode check",
+        )
+        expect(
+            keyword_mode_checks[0].get("ok") is True,
+            "doctor keyword-mode check should pass",
         )
 
     print("selftest: PASS")

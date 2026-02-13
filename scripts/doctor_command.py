@@ -132,6 +132,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "keyword-mode",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("keyword_mode_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("keyword_mode_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 

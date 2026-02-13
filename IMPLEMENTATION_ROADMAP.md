@@ -44,7 +44,7 @@ Use this map to avoid overlapping implementations.
 | E5 | Category-Based Model Routing | done | Medium | E1 | bd-2z6, bd-m48, bd-15y, bd-222 | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
-| E8 | Keyword-Triggered Execution Modes | in_progress | High | E1, E4 | bd-302, bd-2fb, bd-2zq | Fast power-mode activation from prompt text |
+| E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | planned | High | E1 | TBD | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
@@ -375,7 +375,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 8 - Keyword-Triggered Execution Modes
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Enable explicit keywords (for example, `ulw`) to activate high-value execution modes without manual command chaining.
 **Depends on:** Epic 1, Epic 4
@@ -395,12 +395,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 8.3.2: Add config toggles to disable selected keywords
   - [x] Subtask 8.3.3: Document examples and anti-patterns
   - [x] Notes: Extended `/keyword-mode` with global enable/disable and per-keyword toggles, surfaced effective mode stack details in status output, and documented examples/anti-patterns in README.
-- [ ] Task 8.4: Verification
-  - [ ] Subtask 8.4.1: Add tests for matching accuracy and false positives
-  - [ ] Subtask 8.4.2: Add install-test smoke scenarios for keyword activation
-  - [ ] Subtask 8.4.3: Add doctor visibility for keyword subsystem
-- [ ] Exit criteria: keyword activation is deterministic and low-surprise
-- [ ] Exit criteria: users can disable or override keyword behavior safely
+- [x] Task 8.4: Verification
+  - [x] Subtask 8.4.1: Add tests for matching accuracy and false positives
+  - [x] Subtask 8.4.2: Add install-test smoke scenarios for keyword activation
+  - [x] Subtask 8.4.3: Add doctor visibility for keyword subsystem
+  - [x] Notes: Expanded selftest/install smoke for false-positive resistance and keyword toggle flows, and added `/doctor` integration via `keyword-mode` diagnostics.
+- [x] Exit criteria: keyword activation is deterministic and low-surprise
+- [x] Exit criteria: users can disable or override keyword behavior safely
 
 ---
 
