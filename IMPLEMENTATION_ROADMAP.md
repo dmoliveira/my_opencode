@@ -210,10 +210,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 2.1.2: Define persistent state file format and retention policy
   - [x] Subtask 2.1.3: Define maximum concurrency and stale-timeout defaults
   - [x] Notes: See `instructions/background_task_model.md` for lifecycle transitions, storage schema, and deterministic defaults.
-- [ ] Task 2.2: Implement background task manager script
-  - [ ] Subtask 2.2.1: Add enqueue/run/read/list/cancel operations
-  - [ ] Subtask 2.2.2: Capture stdout/stderr and execution metadata
-  - [ ] Subtask 2.2.3: Add stale job detection and cleanup
+- [x] Task 2.2: Implement background task manager script
+  - [x] Subtask 2.2.1: Add enqueue/run/read/list/cancel operations
+  - [x] Subtask 2.2.2: Capture stdout/stderr and execution metadata
+  - [x] Subtask 2.2.3: Add stale job detection and cleanup
+  - [x] Notes: Implemented in `scripts/background_task_manager.py` with deterministic selftest coverage.
 - [ ] Task 2.3: Expose OpenCode commands
   - [ ] Subtask 2.3.1: Add `/bg` command family (`start|status|list|read|cancel`)
   - [ ] Subtask 2.3.2: Add autocomplete shortcuts for high-frequency operations
