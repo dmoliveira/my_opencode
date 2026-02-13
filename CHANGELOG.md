@@ -31,6 +31,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/rules_engine.py` implementing frontmatter parsing, layered rule discovery, path-based matching, deterministic precedence sorting, and duplicate-id conflict reporting.
 - Added `scripts/rules_command.py` with `/rules status`, `/rules explain`, per-rule disable/enable controls, and `/rules doctor` diagnostics.
 - Added `instructions/rules_team_pack_examples.md` with practical team rule-pack layout and sample rule files.
+- Added `instructions/context_resilience_policy_schema.md` defining truncation modes, protected artifacts, and resilience notification levels for Epic 11 Task 11.1.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.

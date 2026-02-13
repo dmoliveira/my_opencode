@@ -47,7 +47,7 @@ Use this map to avoid overlapping implementations.
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
-| E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
+| E11 | Context-Window Resilience Toolkit | in_progress | High | E4 | bd-2tj | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
@@ -439,7 +439,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 10 - Auto Slash Command Detector
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Detect natural-language intent that maps to existing slash commands and optionally execute with guardrails.
 **Depends on:** Epic 1, Epic 8
@@ -472,10 +472,11 @@ Every command-oriented epic must ship all of the following:
 **Goal:** Improve long-session reliability with configurable truncation/pruning/recovery policies.
 **Depends on:** Epic 4
 
-- [ ] Task 11.1: Define resilience policy schema
-  - [ ] Subtask 11.1.1: Define truncation modes (`default`, `aggressive`)
-  - [ ] Subtask 11.1.2: Define protected tools/messages list
-  - [ ] Subtask 11.1.3: Define pruning and recovery notification levels
+- [x] Task 11.1: Define resilience policy schema
+  - [x] Subtask 11.1.1: Define truncation modes (`default`, `aggressive`)
+  - [x] Subtask 11.1.2: Define protected tools/messages list
+  - [x] Subtask 11.1.3: Define pruning and recovery notification levels
+  - [x] Notes: Added `instructions/context_resilience_policy_schema.md` documenting config shape, truncation modes, protected artifact constraints, notification levels, and validation requirements.
 - [ ] Task 11.2: Implement context pruning engine
   - [ ] Subtask 11.2.1: Add deduplication and superseded-write pruning
   - [ ] Subtask 11.2.2: Add old-error input purge with turn thresholds
