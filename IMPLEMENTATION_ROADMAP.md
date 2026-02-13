@@ -999,6 +999,7 @@ Run this checklist for every roadmap refinement pass:
 - [ ] Dependencies are acyclic and point to existing epics only.
 - [ ] Each high-priority epic has explicit safety and rollback notes.
 - [ ] Docs requirements are present (`README`, examples, workflow guide).
+- [ ] Low-value or high-noise epics are paused/postponed unless a measurable gap exists.
 
 ## Weekly Status Updates
 
@@ -1022,6 +1023,8 @@ Use this log to track what changed week by week.
 - [x] 2026-02-12: Add E15-E21 for enforcement, quality, recovery, semantic editing, checkpointing, budgets, and bounded loops.
 - [x] 2026-02-12: Add E22-E27 to unify orchestration and accelerate delivery quality and release reliability.
 - [x] 2026-02-13: Add E28 `/autopilot` as a non-duplicated high-value command on top of `/autoflow`.
+- [x] 2026-02-13: Pause/postpone lower-confidence epics (E10, E16, E21, E28) until measurable value is proven.
+- [x] 2026-02-13: Require command UX baseline (autocomplete, assistant tips, hovers/explanations, QoL aliases) for all new command features.
 
 ---
 
@@ -1033,4 +1036,5 @@ Use this log to track what changed week by week.
 - Prioritize **E15 + E20** before E21 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
 - Keep **E28** paused until E22 proves stable in production-like workflows.
+- Keep **E10/E16/E21** paused or postponed unless explicit user-value metrics justify implementation.
 - Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
