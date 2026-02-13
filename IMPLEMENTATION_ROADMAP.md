@@ -16,6 +16,16 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 - `postponed`: intentionally deferred; not expected this cycle.
 - `done`: fully implemented, documented, and validated.
 
+## Command Boundary Map
+
+Use this map to avoid overlapping implementations.
+
+- `/start-work` (E14): executes a prepared plan artifact step-by-step.
+- `/autoflow` (E22): unified orchestration wrapper for plan/todo/recovery/report primitives.
+- `/autopilot` (E28): bounded objective runner on top of `/autoflow` with strict budget control.
+- `/loop` (E21): explicit iterative preset executor for repeated research/apply/verify cycles.
+- `/hotfix` (E25): constrained emergency path with mandatory minimum safeguards.
+
 ## Epic Dashboard
 
 | Epic | Title | Status | Priority | Depends On | br Issue | Notes |
