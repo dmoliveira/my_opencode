@@ -438,6 +438,12 @@ Fallback behavior is deterministic:
 - unknown category -> `default_category`
 - unavailable model -> `default_category`
 
+Fallback explanation contract (Epic 12 Task 12.1):
+- `instructions/model_fallback_explanation_model.md`
+- trace stages: `requested -> attempted -> selected`
+- output levels: `compact` and `verbose`
+- redaction policy for sensitive provider details
+
 Resolution precedence (Task 5.2):
 1. `system_defaults`
 2. selected category defaults

@@ -36,6 +36,7 @@ All notable changes to this project are documented in this file.
 - Added recovery workflow planning in `scripts/context_resilience.py` with resume hints, safe fallback steps, and diagnostics payloads.
 - Added `scripts/context_resilience_command.py` with `/resilience status` and `/resilience doctor` stress diagnostics.
 - Added `instructions/context_resilience_tuning.md` with practical tuning guidance and operating playbook.
+- Added `instructions/model_fallback_explanation_model.md` defining provider/model fallback trace structure, output levels, and redaction rules for Epic 12 Task 12.1.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
