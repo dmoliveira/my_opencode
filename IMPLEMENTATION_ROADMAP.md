@@ -16,6 +16,22 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 - `postponed`: intentionally deferred; not expected this cycle.
 - `done`: fully implemented, documented, and validated.
 
+## Priority Playbook
+
+- `High`: foundational or high-risk controls; implement in near-term phases.
+- `Medium`: meaningful acceleration; schedule after foundations stabilize.
+- `Low`: optional power-user capability; defer when capacity is constrained.
+
+## Command Boundary Map
+
+Use this map to avoid overlapping implementations.
+
+- `/start-work` (E14): executes a prepared plan artifact step-by-step.
+- `/autoflow` (E22): unified orchestration wrapper for plan/todo/recovery/report primitives.
+- `/autopilot` (E28): bounded objective runner on top of `/autoflow` with strict budget control.
+- `/loop` (E21): explicit iterative preset executor for repeated research/apply/verify cycles.
+- `/hotfix` (E25): constrained emergency path with mandatory minimum safeguards.
+
 ## Epic Dashboard
 
 | Epic | Title | Status | Priority | Depends On | br Issue | Notes |
@@ -55,11 +71,31 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 - Prefer additive changes and compatibility fallbacks over breaking behavior.
 - Do not expand to unrelated feature areas during in-progress epics.
 
+## Dependency Rules
+
+- Dependencies must reference earlier or same-phase epics only (no forward references).
+- Avoid circular dependencies; when uncertain, split shared prerequisites into a separate task.
+- If an epic dependency changes, update both the epic block and dashboard row in the same PR.
+
 ## Out of Scope (for this roadmap cycle)
 
 - Full rewrite of existing command scripts in a new language/runtime.
 - Broad UI redesign of docs/install flows unrelated to orchestration objectives.
 - Large provider/model benchmarking initiatives beyond routing correctness.
+
+## Documentation Standard (All Epics)
+
+Every command-oriented epic must ship all of the following:
+
+- README updates with command purpose and options.
+- At least 3 practical examples (basic, intermediate, failure/recovery).
+- One end-to-end workflow showing where the command maximizes throughput.
+
+## Task Authoring Simplification Rules
+
+- Prefer one concrete verb per subtask (`define`, `implement`, `integrate`, `verify`, `document`).
+- Avoid duplicate subtasks when covered by cross-cutting criteria in `Task C2`.
+- Keep subtask text implementation-specific; move generic policy wording to shared sections.
 
 ## Epic Start Checklist
 
@@ -238,7 +274,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 5.2.2: Add deterministic fallback logging for diagnostics
   - [ ] Subtask 5.2.3: Add integration points with `/stack` and wizard profiles
 - [ ] Task 5.3: UX and docs
-  - [ ] Subtask 5.3.1: Add `/model-profile` (or equivalent) command surface
+  - [ ] Subtask 5.3.1: Add `/model-profile` command surface
   - [ ] Subtask 5.3.2: Document practical routing examples by workload
   - [ ] Subtask 5.3.3: Add doctor visibility for effective routing
 - [ ] Task 5.4: Verification
@@ -846,7 +882,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask 27.2.3: Support review/edit/publish lifecycle
 - [ ] Task 27.3: Command and integration surface
   - [ ] Subtask 27.3.1: Add `/learn capture|review|publish|search`
-  - [ ] Subtask 27.3.2: Integrate published patterns with rules injector and runbook docs
+  - [ ] Subtask 27.3.2: Integrate published patterns with rules injector and `/autoflow` workflow docs
   - [ ] Subtask 27.3.3: Document maintenance process for stale entries
 - [ ] Task 27.4: Verification
   - [ ] Subtask 27.4.1: Add tests for extraction quality thresholds
@@ -915,17 +951,35 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
   - [ ] Subtask C2.4: Validation criteria (`make validate`, `make selftest`, `make install-test`)
   - [ ] Subtask C2.5: Evidence links (PR, commit, test output summary)
   - [ ] Subtask C2.6: Docs quality criteria (`README` updates + command examples + end-to-end workflow guides)
+  - [ ] Subtask C2.7: Measurable thresholds (0 failing checks, explicit risk notes, clear rollback path)
 - [ ] Task C3: Add tracking cadence
   - [ ] Subtask C3.1: Weekly status update section in this file
   - [ ] Subtask C3.2: Keep one epic `in_progress`
   - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
   - [ ] Subtask C3.4: Revisit paused/postponed epics at least once per month
 
+## Roadmap QA Checklist
+
+Run this checklist for every roadmap refinement pass:
+
+- [ ] No duplicate command ownership across epics.
+- [ ] No ambiguous command names (`or equivalent`, placeholder aliases).
+- [ ] Dependencies are acyclic and point to existing epics only.
+- [ ] Each high-priority epic has explicit safety and rollback notes.
+- [ ] Docs requirements are present (`README`, examples, workflow guide).
+
 ## Weekly Status Updates
 
 Use this log to track what changed week by week.
 
 - [ ] YYYY-MM-DD: update epic statuses, completed checkboxes, and next focus epic
+
+## Execution Queue (Simplified)
+
+- `Now`: E1 -> E2 -> E3 -> E20
+- `Next`: E14 -> E15 -> E22 -> E28
+- `Later`: E23 -> E24 -> E26 -> E27
+- `Deferred`: E6 (paused), E7 (postponed)
 
 ## Decision Log
 
