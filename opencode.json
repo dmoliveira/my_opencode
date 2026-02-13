@@ -190,6 +190,22 @@
       "description": "Run keyword mode diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" doctor --json`\nShow only the command output."
     },
+    "rules": {
+      "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "rules-status": {
+      "description": "Show rules discovery and config status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" status`\nShow only the command output."
+    },
+    "rules-explain": {
+      "description": "Explain effective rules for a target path",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" explain $ARGUMENTS --json`\nShow only the command output."
+    },
+    "rules-doctor": {
+      "description": "Run rules diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" doctor --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."

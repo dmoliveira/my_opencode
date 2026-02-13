@@ -49,6 +49,7 @@ REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
+RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1692,6 +1693,110 @@ def main() -> int:
             "rules resolution should match README-targeted docs rule",
         )
 
+        rules_env = os.environ.copy()
+        rules_env["HOME"] = str(home)
+        rules_env.pop("OPENCODE_CONFIG_PATH", None)
+
+        rules_status = subprocess.run(
+            [sys.executable, str(RULES_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=project_tmp,
+        )
+        expect(rules_status.returncode == 0, "rules status should succeed")
+        rules_status_report = parse_json_output(rules_status.stdout)
+        expect(
+            rules_status_report.get("discovered_count") == 3,
+            "rules status should report discovered rules count",
+        )
+
+        rules_explain = subprocess.run(
+            [
+                sys.executable,
+                str(RULES_SCRIPT),
+                "explain",
+                "scripts/selftest.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=project_tmp,
+        )
+        expect(rules_explain.returncode == 0, "rules explain should succeed")
+        rules_explain_report = parse_json_output(rules_explain.stdout)
+        expect(
+            any(
+                str(rule.get("id")) == "style-python"
+                for rule in rules_explain_report.get("effective_rules", [])
+            ),
+            "rules explain should include effective matching rules",
+        )
+
+        rules_disable_id = subprocess.run(
+            [sys.executable, str(RULES_SCRIPT), "disable-id", "style-python"],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=project_tmp,
+        )
+        expect(rules_disable_id.returncode == 0, "rules disable-id should succeed")
+        rules_explain_disabled = subprocess.run(
+            [
+                sys.executable,
+                str(RULES_SCRIPT),
+                "explain",
+                "scripts/selftest.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=project_tmp,
+        )
+        expect(
+            rules_explain_disabled.returncode == 0,
+            "rules explain after disable-id should succeed",
+        )
+        rules_explain_disabled_report = parse_json_output(rules_explain_disabled.stdout)
+        expect(
+            not any(
+                str(rule.get("id")) == "style-python"
+                for rule in rules_explain_disabled_report.get("effective_rules", [])
+            ),
+            "rules explain should exclude disabled rule ids",
+        )
+
+        rules_doctor = subprocess.run(
+            [sys.executable, str(RULES_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=project_tmp,
+        )
+        expect(rules_doctor.returncode == 0, "rules doctor should succeed")
+        rules_doctor_report = parse_json_output(rules_doctor.stdout)
+        expect(
+            rules_doctor_report.get("result") == "PASS",
+            "rules doctor should report PASS for valid rules",
+        )
+
+        rules_enable_id = subprocess.run(
+            [sys.executable, str(RULES_SCRIPT), "enable-id", "style-python"],
+            capture_output=True,
+            text=True,
+            env=rules_env,
+            check=False,
+            cwd=project_tmp,
+        )
+        expect(rules_enable_id.returncode == 0, "rules enable-id should succeed")
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )
@@ -1907,6 +2012,18 @@ def main() -> int:
         expect(
             keyword_mode_checks[0].get("ok") is True,
             "doctor keyword-mode check should pass",
+        )
+
+        rules_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "rules"
+        ]
+        expect(
+            bool(rules_checks),
+            "doctor summary should include rules check",
+        )
+        expect(
+            rules_checks[0].get("ok") is True,
+            "doctor rules check should pass",
         )
 
     print("selftest: PASS")

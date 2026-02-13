@@ -504,6 +504,29 @@ Anti-patterns:
 - avoid relying on partial words (`deep` or `safe`) because matching is exact-token only.
 - avoid forgetting local opt-outs in copied prompts; `no-keyword-mode` intentionally disables all activation for that request.
 
+## Conditional rules injector
+
+Epic 9 introduces a rules engine for conditional instruction injection:
+
+- schema contract: `instructions/conditional_rules_schema.md`
+- engine implementation: `scripts/rules_engine.py`
+- command wrapper: `scripts/rules_command.py`
+
+Use:
+```text
+/rules status
+/rules explain scripts/selftest.py --json
+/rules disable-id style-python
+/rules enable-id style-python
+/rules doctor --json
+```
+
+Rules are discovered from:
+- user scope: `~/.config/opencode/rules/**/*.md`
+- project scope: `.opencode/rules/**/*.md`
+
+Precedence is deterministic: priority desc, then scope (`project` before `user`), then lexical rule id.
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:
