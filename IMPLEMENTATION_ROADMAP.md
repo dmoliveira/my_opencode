@@ -45,7 +45,7 @@ Use this map to avoid overlapping implementations.
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
-| E9 | Conditional Rules Injector | planned | High | E1 | TBD | Enforce project conventions with scoped rules |
+| E9 | Conditional Rules Injector | in_progress | High | E1 | bd-1q8 | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | planned | Medium | E5 | TBD | Explain why model routing decisions happen |
@@ -407,15 +407,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 9 - Conditional Rules Injector
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Load project/user rule files with optional glob conditions to enforce coding conventions contextually.
 **Depends on:** Epic 1
 
-- [ ] Task 9.1: Define rule file schema and precedence
-  - [ ] Subtask 9.1.1: Define frontmatter fields (`globs`, `alwaysApply`, `description`, `priority`)
-  - [ ] Subtask 9.1.2: Define project/user rule search paths
-  - [ ] Subtask 9.1.3: Define rule conflict resolution strategy
+- [x] Task 9.1: Define rule file schema and precedence
+  - [x] Subtask 9.1.1: Define frontmatter fields (`globs`, `alwaysApply`, `description`, `priority`)
+  - [x] Subtask 9.1.2: Define project/user rule search paths
+  - [x] Subtask 9.1.3: Define rule conflict resolution strategy
+  - [x] Notes: Added `instructions/conditional_rules_schema.md` with deterministic discovery, matching, precedence, conflict handling, and validation requirements.
 - [ ] Task 9.2: Implement rule discovery and matching engine
   - [ ] Subtask 9.2.1: Discover markdown rule files recursively
   - [ ] Subtask 9.2.2: Match rules by file path and operation context

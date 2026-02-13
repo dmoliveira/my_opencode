@@ -27,6 +27,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/keyword_mode_schema.py` and `scripts/keyword_mode_command.py` to parse prompt keywords, resolve precedence-aware mode flags, and persist keyword mode runtime context.
 - Added `/keyword-mode` aliases (`status|detect|apply`) to inspect and apply keyword-triggered execution modes.
 - Added keyword mode controls for global enable/disable and per-keyword toggles (`disable-keyword` / `enable-keyword`) with persisted config state.
+- Added `instructions/conditional_rules_schema.md` defining rule frontmatter schema, discovery precedence, conflict resolution, and validation requirements for Epic 9 Task 9.1.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
