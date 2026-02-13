@@ -59,7 +59,7 @@ Use this map to avoid overlapping implementations.
 | E20 | Execution Budget Guardrails | done | High | E2, E11 | bd-63f | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
-| E23 | PR Review Copilot | in_progress | High | E3 | bd-1hc | Pre-PR quality, output, and risk review automation |
+| E23 | PR Review Copilot | done | High | E3 | bd-u6t | Pre-PR quality, output, and risk review automation |
 | E24 | Release Train Assistant | planned | High | E14, E23 | TBD | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
@@ -809,7 +809,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 23 - PR Review Copilot
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Add a command that reviews pending PR changes for risk, quality, and release readiness before merge.
 **Depends on:** Epic 3
@@ -829,12 +829,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 23.3.2: Integrate with pre-merge checklist and doctor output
   - [x] Subtask 23.3.3: Document triage flow for warnings vs blockers
   - [x] Notes: Added `scripts/pr_review_command.py` command surface with concise/JSON output and `checklist`/`doctor` subcommands, wired aliases in `opencode.json`, integrated `pr-review` into unified doctor checks, and documented blocker-vs-warning triage guidance in README.
-- [ ] Task 23.4: Verification
-  - [ ] Subtask 23.4.1: Add tests for risk detection and false positive control
-  - [ ] Subtask 23.4.2: Add tests for missing-evidence behavior
-  - [ ] Subtask 23.4.3: Add install-test smoke checks
-- [ ] Exit criteria: copilot catches high-risk omissions before merge
-- [ ] Exit criteria: outputs are actionable and low-noise in default mode
+- [x] Task 23.4: Verification
+  - [x] Subtask 23.4.1: Add tests for risk detection and false positive control
+  - [x] Subtask 23.4.2: Add tests for missing-evidence behavior
+  - [x] Subtask 23.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with docs-only false-positive guard assertions and tested-source-change missing-evidence checks, and installer smoke now exercises `/pr-review`, `/pr-review checklist`, and `/pr-review doctor` workflows.
+- [x] Exit criteria: copilot catches high-risk omissions before merge
+- [x] Exit criteria: outputs are actionable and low-noise in default mode
 
 ---
 

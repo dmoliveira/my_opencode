@@ -151,6 +151,7 @@ All notable changes to this project are documented in this file.
 - Moved `plan_execution` runtime persistence out of `opencode.json` into `~/.config/opencode/my_opencode/runtime/plan_execution.json` to prevent OpenCode startup failures caused by unrecognized top-level config keys.
 - Added selftest coverage for `/pr-review` analyzer missing-evidence and blocker-evidence decision paths, and marked Task 23.2 complete in the roadmap.
 - Integrated `pr-review` checks into unified `/doctor`, updated installer self-check/hints for PR review workflows, and marked Task 23.3 complete in the roadmap.
+- Expanded pr-review verification coverage for risk-detection false-positive control and missing-evidence behavior, and marked Epic 23 Task 23.4/exit criteria complete in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 
