@@ -103,12 +103,24 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" $ARGUMENTS --dry-run --json`\nShow only the command output."
     },
     "hooks": {
-      "description": "Run initial safety hooks (status|help|run)",
+      "description": "Manage safety hooks (status|help|enable|disable|run)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "hooks-help": {
       "description": "Show /hooks command usage",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" help`\nShow only the command output."
+    },
+    "hooks-enable": {
+      "description": "Enable hook execution",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" enable`\nShow only the command output."
+    },
+    "hooks-disable": {
+      "description": "Disable hook execution",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" disable`\nShow only the command output."
+    },
+    "hooks-status": {
+      "description": "Show hook configuration and audit path",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" status`\nShow only the command output."
     },
     "stack": {
       "description": "Apply cross-command profile bundles",
