@@ -29,6 +29,7 @@ All notable changes to this project are documented in this file.
 - Added keyword mode controls for global enable/disable and per-keyword toggles (`disable-keyword` / `enable-keyword`) with persisted config state.
 - Added `instructions/conditional_rules_schema.md` defining rule frontmatter schema, discovery precedence, conflict resolution, and validation requirements for Epic 9 Task 9.1.
 - Added `scripts/rules_engine.py` implementing frontmatter parsing, layered rule discovery, path-based matching, deterministic precedence sorting, and duplicate-id conflict reporting.
+- Added `scripts/rules_command.py` with `/rules status`, `/rules explain`, per-rule disable/enable controls, and `/rules doctor` diagnostics.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -58,6 +59,7 @@ All notable changes to this project are documented in this file.
 - Added `/keyword-mode doctor --json` diagnostics and integrated keyword subsystem health into unified `/doctor` checks.
 - Expanded keyword mode verification for false-positive resistance (partial words and code-literal contexts) and opt-out/toggle smoke scenarios.
 - Expanded selftest coverage for conditional rule discovery and effective-stack resolution behavior.
+- Added `/doctor` rules subsystem integration and expanded install/selftest coverage for rules command workflows.
 
 ## v0.2.0 - 2026-02-12
 

@@ -132,11 +132,30 @@ def rule_applies(rule: dict[str, Any], target_path: str) -> bool:
 
 
 def resolve_effective_rules(
-    rules: list[dict[str, Any]], target_path: str
+    rules: list[dict[str, Any]],
+    target_path: str,
+    *,
+    disabled_rule_ids: set[str] | None = None,
 ) -> dict[str, Any]:
+    disabled = {item.strip().lower() for item in (disabled_rule_ids or set()) if item}
     applicable = [rule for rule in rules if rule_applies(rule, target_path)]
+    enabled_applicable: list[dict[str, Any]] = []
+    skipped_disabled: list[dict[str, str]] = []
+    for rule in applicable:
+        rule_id = str(rule.get("id", "")).strip().lower()
+        if rule_id in disabled:
+            skipped_disabled.append(
+                {
+                    "id": rule_id,
+                    "path": str(rule.get("path", "")),
+                    "reason": "disabled_rule_id",
+                }
+            )
+            continue
+        enabled_applicable.append(rule)
+
     sorted_rules = sorted(
-        applicable,
+        enabled_applicable,
         key=lambda rule: (
             -int(rule.get("priority", 0)),
             0 if rule.get("scope") == "project" else 1,
@@ -165,6 +184,8 @@ def resolve_effective_rules(
         "target_path": target_path,
         "effective_rules": effective,
         "conflicts": conflicts,
+        "skipped_disabled": skipped_disabled,
         "discovered_count": len(rules),
         "applicable_count": len(applicable),
+        "enabled_applicable_count": len(enabled_applicable),
     }

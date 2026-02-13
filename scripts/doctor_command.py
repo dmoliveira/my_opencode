@@ -144,6 +144,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "rules",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("rules_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("rules_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
 ]
 
 
