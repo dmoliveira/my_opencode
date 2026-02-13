@@ -873,7 +873,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 25 - Incident Hotfix Mode
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Provide an emergency workflow mode that is faster but still bounded and auditable.
 **Depends on:** Epic 20, Epic 22
@@ -893,12 +893,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 25.3.2: Add automatic reminder for post-incident hardening tasks
   - [x] Subtask 25.3.3: Document incident playbooks and escalation notes
   - [x] Notes: Added `scripts/hotfix_command.py` command surface with start/status/close passthrough plus `remind` and `doctor`, wired `/hotfix*` aliases in `opencode.json`, integrated hotfix checks into installer self-check and install smoke workflows, and documented incident playbook usage in README.
-- [ ] Task 25.4: Verification
-  - [ ] Subtask 25.4.1: Add tests for mandatory guardrail enforcement
-  - [ ] Subtask 25.4.2: Add tests for rollback and closure flow
-  - [ ] Subtask 25.4.3: Add install-test smoke checks
-- [ ] Exit criteria: hotfix mode is faster while preserving mandatory safety controls
-- [ ] Exit criteria: each hotfix run produces a clear post-incident audit trail
+- [x] Task 25.4: Verification
+  - [x] Subtask 25.4.1: Add tests for mandatory guardrail enforcement
+  - [x] Subtask 25.4.2: Add tests for rollback and closure flow
+  - [x] Subtask 25.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with dirty-worktree guardrail blocking and rollback incident lifecycle assertions, and expanded install smoke to validate `/hotfix close` failure without follow-up metadata before successful closure.
+- [x] Exit criteria: hotfix mode is faster while preserving mandatory safety controls
+- [x] Exit criteria: each hotfix run produces a clear post-incident audit trail
 
 ---
 
