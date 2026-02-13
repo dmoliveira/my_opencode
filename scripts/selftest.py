@@ -1216,6 +1216,21 @@ def main() -> int:
             "hook audit log should not include raw command output",
         )
 
+        hooks_doctor = subprocess.run(
+            [sys.executable, str(HOOKS_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(hooks_doctor.returncode == 0, "hooks doctor should pass")
+        hooks_doctor_report = parse_json_output(hooks_doctor.stdout)
+        expect(
+            hooks_doctor_report.get("result") == "PASS",
+            "hooks doctor json should report PASS",
+        )
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )
