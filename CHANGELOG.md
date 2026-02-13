@@ -18,6 +18,8 @@ All notable changes to this project are documented in this file.
 - Added `instructions/background_task_model.md` defining lifecycle, storage schema, retention, concurrency, and stale-timeout defaults for Epic 2 background orchestration.
 - Added `scripts/background_task_manager.py` with enqueue/run/read/list/cancel/cleanup operations, log+metadata capture, and stale/retention cleanup controls.
 - Added `/bg` command suite (`start|status|list|read|cancel|cleanup|doctor`) and autocomplete shortcuts (`/bg-help`, `/bg-list`, `/bg-running`, `/bg-doctor-json`).
+- Added optional background completion/error notifications that honor existing `/notify` event/channel settings, with `MY_OPENCODE_BG_NOTIFICATIONS_ENABLED` override support.
+- Added `/bg-status-json` shortcut and richer background diagnostics payloads (`/bg status --json`, `/bg doctor --json`).
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -31,6 +33,7 @@ All notable changes to this project are documented in this file.
 - Expanded selftest coverage to validate layered command-state writes for telemetry/policy/post-session flows.
 - Expanded selftest and installer smoke coverage for the background task manager backend.
 - Integrated background task diagnostics into `/doctor` summary output.
+- Expanded README async workflow examples for `/bg` including failure/recovery troubleshooting.
 
 ## v0.2.0 - 2026-02-12
 

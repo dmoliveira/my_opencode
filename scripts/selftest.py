@@ -714,6 +714,31 @@ def main() -> int:
         bg_env = os.environ.copy()
         bg_env["HOME"] = str(home)
         bg_env["MY_OPENCODE_BG_DIR"] = str(bg_dir)
+        bg_env["OPENCODE_NOTIFICATIONS_PATH"] = str(tmp / "bg-notify.json")
+
+        (tmp / "bg-notify.json").write_text(
+            json.dumps(
+                {
+                    "enabled": True,
+                    "sound": {"enabled": False},
+                    "visual": {"enabled": True},
+                    "events": {
+                        "complete": True,
+                        "error": True,
+                        "permission": True,
+                        "question": True,
+                    },
+                    "channels": {
+                        "complete": {"sound": False, "visual": True},
+                        "error": {"sound": False, "visual": True},
+                        "permission": {"sound": False, "visual": True},
+                        "question": {"sound": False, "visual": True},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
         def run_bg(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -745,6 +770,10 @@ def main() -> int:
         result = run_bg("run", "--id", bg_job_id)
         expect(result.returncode == 0, f"bg run failed: {result.stderr}")
         expect(bg_job_id in result.stdout, "bg run output should include job id")
+        expect(
+            "[bg notify][complete]" in result.stderr,
+            "bg run should emit completion notification when notify stack allows it",
+        )
 
         result = run_bg("read", bg_job_id, "--json")
         expect(result.returncode == 0, f"bg read json failed: {result.stderr}")
@@ -776,6 +805,10 @@ def main() -> int:
 
         result = run_bg("run", "--id", timeout_job_id)
         expect(result.returncode == 1, "bg timeout run should fail with non-zero")
+        expect(
+            "[bg notify][error]" in result.stderr,
+            "bg timeout run should emit error notification",
+        )
 
         result = run_bg("read", timeout_job_id, "--json")
         expect(result.returncode == 0, f"bg read timeout json failed: {result.stderr}")
@@ -825,6 +858,14 @@ def main() -> int:
             "jobs_total:" in result.stdout, "bg status should print aggregate counts"
         )
 
+        result = run_bg("status", "--json")
+        expect(result.returncode == 0, f"bg status json failed: {result.stderr}")
+        bg_status_report = parse_json_output(result.stdout)
+        expect(
+            isinstance(bg_status_report.get("counts"), dict),
+            "bg status --json should return counts object",
+        )
+
         result = run_bg("start", "--", sys.executable, "-c", 'print("bg-start")')
         expect(result.returncode == 0, f"bg start failed: {result.stderr}")
         start_job_id = ""
@@ -853,6 +894,10 @@ def main() -> int:
         expect(result.returncode == 0, f"bg doctor json failed: {result.stderr}")
         bg_doctor_report = parse_json_output(result.stdout)
         expect(bg_doctor_report.get("result") == "PASS", "bg doctor should pass")
+        expect(
+            isinstance(bg_doctor_report.get("notify"), dict),
+            "bg doctor should include notify diagnostics",
+        )
 
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"

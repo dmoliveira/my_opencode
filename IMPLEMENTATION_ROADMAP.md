@@ -38,7 +38,7 @@ Use this map to avoid overlapping implementations.
 | Epic | Title | Status | Priority | Depends On | br Issue | Notes |
 |---|---|---|---|---|---|---|
 | E1 | Config Layering + JSONC Support | done | High | - | bd-1g0, bd-208, bd-4j1 | Foundation for most later epics |
-| E2 | Background Task Orchestration | in_progress | High | E1 | bd-1ob | Keep minimal and stable first |
+| E2 | Background Task Orchestration | done | High | E1 | bd-1ob, bd-3lf, bd-2xo, bd-mb2 | Keep minimal and stable first |
 | E3 | Refactor Workflow Command | planned | High | E1 | TBD | Safer rollout after config layering |
 | E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | TBD | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
@@ -200,7 +200,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 2 - Background Task Orchestration (Minimal Safe Version)
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Add lightweight background job workflows for async research and result retrieval.
 **Depends on:** Epic 1
@@ -220,12 +220,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 2.3.2: Add autocomplete shortcuts for high-frequency operations
   - [x] Subtask 2.3.3: Integrate with `/doctor` summary checks
   - [x] Notes: Added `/bg` command + shortcuts in `opencode.json` and wired `bg` diagnostics into `scripts/doctor_command.py`.
-- [ ] Task 2.4: Notifications and diagnostics
-  - [ ] Subtask 2.4.1: Add optional completion notification via existing notify stack
-  - [ ] Subtask 2.4.2: Add JSON diagnostics output for background subsystem
-  - [ ] Subtask 2.4.3: Add docs and examples for async workflows
-- [ ] Exit criteria: background workflows are deterministic, inspectable, and cancel-safe
-- [ ] Exit criteria: doctor + docs cover baseline troubleshooting
+- [x] Task 2.4: Notifications and diagnostics
+  - [x] Subtask 2.4.1: Add optional completion notification via existing notify stack
+  - [x] Subtask 2.4.2: Add JSON diagnostics output for background subsystem
+  - [x] Subtask 2.4.3: Add docs and examples for async workflows
+  - [x] Notes: `scripts/background_task_manager.py` now emits optional notify-aligned alerts and exposes richer `status --json`/`doctor --json` diagnostics.
+- [x] Exit criteria: background workflows are deterministic, inspectable, and cancel-safe
+- [x] Exit criteria: doctor + docs cover baseline troubleshooting
 
 ---
 

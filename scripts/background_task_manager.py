@@ -14,6 +14,12 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import load_layered_config  # type: ignore
+
 try:
     import fcntl
 except ImportError as exc:  # pragma: no cover
@@ -26,6 +32,12 @@ BG_ROOT = Path(
 JOBS_PATH = BG_ROOT / "jobs.json"
 LOCK_PATH = BG_ROOT / "jobs.lock"
 RUNS_DIR = BG_ROOT / "runs"
+LEGACY_NOTIFY_PATH = Path(
+    os.environ.get(
+        "OPENCODE_NOTIFICATIONS_PATH", "~/.config/opencode/opencode-notifications.json"
+    )
+).expanduser()
+BG_NOTIFY_ENV = "MY_OPENCODE_BG_NOTIFICATIONS_ENABLED"
 
 DEFAULT_MAX_CONCURRENCY = 2
 DEFAULT_TIMEOUT_SECONDS = 1800
@@ -34,6 +46,18 @@ DEFAULT_RETENTION_DAYS = 14
 DEFAULT_MAX_TERMINAL = 200
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    return default
 
 
 def now_utc() -> datetime:
@@ -67,6 +91,117 @@ def ensure_store() -> None:
     if not JOBS_PATH.exists():
         initial = {"version": 1, "updated_at": to_iso(now_utc()), "jobs": []}
         _atomic_write_json(JOBS_PATH, initial)
+
+
+def default_notify_state() -> dict:
+    return {
+        "enabled": True,
+        "sound": {"enabled": True},
+        "visual": {"enabled": True},
+        "events": {
+            "complete": True,
+            "error": True,
+            "permission": True,
+            "question": True,
+        },
+        "channels": {
+            "complete": {"sound": True, "visual": True},
+            "error": {"sound": True, "visual": True},
+            "permission": {"sound": True, "visual": True},
+            "question": {"sound": True, "visual": True},
+        },
+    }
+
+
+def normalize_notify_state(raw: dict) -> dict:
+    state = default_notify_state()
+    if isinstance(raw.get("enabled"), bool):
+        state["enabled"] = raw["enabled"]
+    if isinstance(raw.get("sound"), dict) and isinstance(
+        raw["sound"].get("enabled"), bool
+    ):
+        state["sound"]["enabled"] = raw["sound"]["enabled"]
+    if isinstance(raw.get("visual"), dict) and isinstance(
+        raw["visual"].get("enabled"), bool
+    ):
+        state["visual"]["enabled"] = raw["visual"]["enabled"]
+
+    if isinstance(raw.get("events"), dict):
+        for event in ("complete", "error", "permission", "question"):
+            if isinstance(raw["events"].get(event), bool):
+                state["events"][event] = raw["events"][event]
+
+    if isinstance(raw.get("channels"), dict):
+        for event in ("complete", "error", "permission", "question"):
+            entry = raw["channels"].get(event)
+            if not isinstance(entry, dict):
+                continue
+            if isinstance(entry.get("sound"), bool):
+                state["channels"][event]["sound"] = entry["sound"]
+            if isinstance(entry.get("visual"), bool):
+                state["channels"][event]["visual"] = entry["visual"]
+    return state
+
+
+def load_notify_state() -> dict:
+    if "OPENCODE_NOTIFICATIONS_PATH" in os.environ and LEGACY_NOTIFY_PATH.exists():
+        return normalize_notify_state(
+            json.loads(LEGACY_NOTIFY_PATH.read_text(encoding="utf-8"))
+        )
+
+    try:
+        layered, _ = load_layered_config()
+        section = layered.get("notify")
+        if isinstance(section, dict):
+            return normalize_notify_state(section)
+    except Exception:
+        pass
+
+    if LEGACY_NOTIFY_PATH.exists():
+        return normalize_notify_state(
+            json.loads(LEGACY_NOTIFY_PATH.read_text(encoding="utf-8"))
+        )
+    return default_notify_state()
+
+
+def notify_event_for_status(status: str) -> str:
+    if status == "completed":
+        return "complete"
+    return "error"
+
+
+def emit_terminal_notification(job: dict) -> None:
+    if not env_bool(BG_NOTIFY_ENV, True):
+        return
+
+    status = str(job.get("status") or "")
+    if status not in TERMINAL_STATUSES:
+        return
+
+    state = load_notify_state()
+    if not state.get("enabled", True):
+        return
+
+    event = notify_event_for_status(status)
+    if not state.get("events", {}).get(event, True):
+        return
+
+    channels = state.get("channels", {}).get(event, {})
+    sound_on = bool(state.get("sound", {}).get("enabled", True)) and bool(
+        channels.get("sound", True)
+    )
+    visual_on = bool(state.get("visual", {}).get("enabled", True)) and bool(
+        channels.get("visual", True)
+    )
+
+    if sound_on:
+        sys.stderr.write("\a")
+    if visual_on:
+        sys.stderr.write(
+            f"[bg notify][{event}] {job.get('id')}: {status} - {job.get('summary') or ''}\n"
+        )
+    if sound_on or visual_on:
+        sys.stderr.flush()
 
 
 def _atomic_write_json(path: Path, payload: dict) -> None:
@@ -393,6 +528,7 @@ def _run_single_job(job: dict) -> tuple[str, int | None]:
         snapshot = dict(current)
 
     _write_meta(snapshot, timed_out=timed_out, duration_seconds=duration)
+    emit_terminal_notification(snapshot)
     return status, exit_code
 
 
@@ -555,7 +691,7 @@ def command_cleanup(args: argparse.Namespace) -> int:
 
 def command_status(args: argparse.Namespace) -> int:
     if args.id:
-        return command_read(argparse.Namespace(id=args.id, tail=40, json=False))
+        return command_read(argparse.Namespace(id=args.id, tail=40, json=args.json))
 
     with locked_jobs(writeback=False) as data:
         jobs = list(data.get("jobs", []))
@@ -565,6 +701,19 @@ def command_status(args: argparse.Namespace) -> int:
         status = str(job.get("status"))
         if status in counts:
             counts[status] += 1
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "root": str(BG_ROOT),
+                    "jobs_total": len(jobs),
+                    "counts": counts,
+                },
+                indent=2,
+            )
+        )
+        return 0
 
     print(f"root: {BG_ROOT}")
     print(f"jobs_total: {len(jobs)}")
@@ -603,6 +752,23 @@ def command_doctor(args: argparse.Namespace) -> int:
                     f"job {job.get('id')} exceeds stale threshold ({stale_after}s)"
                 )
 
+    notify_state = load_notify_state()
+    if not notify_state.get("enabled", True):
+        warnings.append(
+            "notify stack is globally disabled; bg completion notifications are muted"
+        )
+
+    latest_terminal = [
+        {
+            "id": job.get("id"),
+            "status": job.get("status"),
+            "ended_at": job.get("ended_at"),
+            "summary": job.get("summary"),
+        }
+        for job in sorted(jobs, key=job_sort_key, reverse=True)
+        if str(job.get("status")) in TERMINAL_STATUSES
+    ][:5]
+
     report = {
         "result": "PASS" if not problems else "FAIL",
         "root": str(BG_ROOT),
@@ -613,12 +779,23 @@ def command_doctor(args: argparse.Namespace) -> int:
         + statuses["failed"]
         + statuses["cancelled"],
         "counts": statuses,
+        "notify": {
+            "enabled": notify_state.get("enabled", True),
+            "sound_enabled": notify_state.get("sound", {}).get("enabled", True),
+            "visual_enabled": notify_state.get("visual", {}).get("enabled", True),
+            "event_complete_enabled": notify_state.get("events", {}).get(
+                "complete", True
+            ),
+            "event_error_enabled": notify_state.get("events", {}).get("error", True),
+        },
+        "latest_terminal_jobs": latest_terminal,
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
             "/bg cleanup",
             "/bg list --status running",
             "/bg status <job-id>",
+            "run /notify profile focus to keep bg alerts high-signal",
         ],
     }
 
@@ -693,6 +870,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = sub.add_parser("status", help="show background task summary")
     status.add_argument("id", nargs="?")
+    status.add_argument("--json", action="store_true")
 
     doctor = sub.add_parser("doctor", help="run background task diagnostics")
     doctor.add_argument("--json", action="store_true")
@@ -728,7 +906,13 @@ def main(argv: list[str]) -> int:
     if args.subcommand == "read":
         return command_read(args)
     if args.subcommand == "cancel":
-        return command_cancel(args)
+        code = command_cancel(args)
+        if code == 0:
+            with locked_jobs(writeback=False) as data:
+                snapshot = find_job(data, args.id)
+                if snapshot is not None:
+                    emit_terminal_notification(snapshot)
+        return code
     if args.subcommand == "cleanup":
         return command_cleanup(args)
     if args.subcommand == "doctor":

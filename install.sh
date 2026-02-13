@@ -97,6 +97,7 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/config_command.py" status
   python3 "$INSTALL_DIR/scripts/config_command.py" layers
   python3 "$INSTALL_DIR/scripts/background_task_manager.py" status
+  python3 "$INSTALL_DIR/scripts/background_task_manager.py" doctor --json
   python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
@@ -137,6 +138,7 @@ printf "  /config status\n"
 printf "  /config layers\n"
 printf "  /config backup\n"
 printf "  /bg status\n"
+printf "  /bg doctor --json\n"
 printf "  /stack apply focus\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
