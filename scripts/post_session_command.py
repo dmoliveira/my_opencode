@@ -5,12 +5,25 @@ import os
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import (  # type: ignore
+    load_layered_config,
+    resolve_write_path,
+    save_config as save_config_file,
+)
+
 
 CONFIG_PATH = Path(
     os.environ.get(
         "MY_OPENCODE_SESSION_CONFIG_PATH", "~/.config/opencode/opencode-session.json"
     )
 ).expanduser()
+LEGACY_ENV_SET = "MY_OPENCODE_SESSION_CONFIG_PATH" in os.environ
+LAYERED_WRITE_PATH = resolve_write_path()
+SECTION = "post_session"
 
 VALID_RUN_ON = ("exit", "manual", "idle")
 
@@ -27,12 +40,36 @@ def default_config() -> dict:
 
 
 def load_config() -> dict:
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if LEGACY_ENV_SET:
+        return load_config_legacy(CONFIG_PATH)
+
+    data, _ = load_layered_config()
+    post = data.get(SECTION)
+    if isinstance(post, dict):
+        return load_config_from_post_section(post)
+
+    if CONFIG_PATH.exists():
+        return load_config_legacy(CONFIG_PATH)
+    return default_config()
+
+
+def load_config_legacy(path: Path) -> dict:
     config = default_config()
-    if not CONFIG_PATH.exists():
+    if not path.exists():
         return config
 
-    data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
     post = data.get("post_session")
+    if isinstance(post, dict):
+        return load_config_from_post_section(post)
+    return config
+
+
+def load_config_from_post_section(post: dict) -> dict:
+    config = default_config()
     if isinstance(post, dict):
         cfg = config["post_session"]
         if isinstance(post.get("enabled"), bool):
@@ -51,8 +88,17 @@ def load_config() -> dict:
 
 
 def save_config(config: dict) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if LEGACY_ENV_SET:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        return
+
+    data, _ = load_layered_config()
+    data[SECTION] = config[SECTION]
+    save_config_file(data, LAYERED_WRITE_PATH)
 
 
 def usage() -> int:
@@ -68,7 +114,7 @@ def print_status(config: dict) -> int:
     print(f"command: {post['command'] or '(unset)'}")
     print(f"timeout_ms: {post['timeout_ms']}")
     print(f"run_on: {','.join(post['run_on'])}")
-    print(f"config: {CONFIG_PATH}")
+    print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
     return 0
 
 
@@ -96,14 +142,14 @@ def main(argv: list[str]) -> int:
         post["enabled"] = True
         save_config(config)
         print("post-session: enabled")
-        print(f"config: {CONFIG_PATH}")
+        print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] == "disable":
         post["enabled"] = False
         save_config(config)
         print("post-session: disabled")
-        print(f"config: {CONFIG_PATH}")
+        print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] == "set":
@@ -116,7 +162,7 @@ def main(argv: list[str]) -> int:
             post["command"] = command
             save_config(config)
             print("command: updated")
-            print(f"config: {CONFIG_PATH}")
+            print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
             return 0
 
         if key == "timeout":
@@ -131,7 +177,7 @@ def main(argv: list[str]) -> int:
             post["timeout_ms"] = timeout
             save_config(config)
             print(f"timeout_ms: {timeout}")
-            print(f"config: {CONFIG_PATH}")
+            print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
             return 0
 
         if key == "run-on":
@@ -143,7 +189,7 @@ def main(argv: list[str]) -> int:
             post["run_on"] = run_on
             save_config(config)
             print(f"run_on: {','.join(run_on)}")
-            print(f"config: {CONFIG_PATH}")
+            print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
             return 0
 
         return usage()

@@ -7,12 +7,25 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import (  # type: ignore
+    load_layered_config,
+    resolve_write_path,
+    save_config as save_config_file,
+)
+
 
 CONFIG_PATH = Path(
     os.environ.get(
         "OPENCODE_TELEMETRY_PATH", "~/.config/opencode/opencode-telemetry.json"
     )
 ).expanduser()
+LEGACY_ENV_SET = "OPENCODE_TELEMETRY_PATH" in os.environ
+LAYERED_WRITE_PATH = resolve_write_path()
+SECTION = "telemetry"
 
 EVENTS = ("complete", "error", "permission", "question")
 
@@ -53,11 +66,33 @@ def to_bool(value, fallback: bool) -> bool:
 
 
 def load_state() -> dict:
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if LEGACY_ENV_SET:
+        return load_state_legacy(CONFIG_PATH)
+
+    data, _ = load_layered_config()
+    section = data.get(SECTION)
+    if isinstance(section, dict):
+        return load_state_from_dict(section)
+
+    if CONFIG_PATH.exists():
+        return load_state_legacy(CONFIG_PATH)
+    return default_state()
+
+
+def load_state_legacy(path: Path) -> dict:
     state = default_state()
-    if not CONFIG_PATH.exists():
+    if not path.exists():
         return state
 
-    data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return load_state_from_dict(data)
+
+
+def load_state_from_dict(data: dict) -> dict:
+    state = default_state()
     state["enabled"] = to_bool(data.get("enabled"), state["enabled"])
 
     if isinstance(data.get("endpoint"), str) and data["endpoint"].strip():
@@ -77,8 +112,17 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    global LAYERED_WRITE_PATH
+    LAYERED_WRITE_PATH = resolve_write_path()
+
+    if LEGACY_ENV_SET:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        return
+
+    data, _ = load_layered_config()
+    data[SECTION] = state
+    save_config_file(data, LAYERED_WRITE_PATH)
 
 
 def usage() -> int:
@@ -95,7 +139,7 @@ def print_status(state: dict) -> int:
     print("events:")
     for name in EVENTS:
         print(f"- {name}: {'enabled' if state['events'][name] else 'disabled'}")
-    print(f"config: {CONFIG_PATH}")
+    print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
     return 0
 
 
@@ -149,7 +193,7 @@ def collect_doctor(state: dict) -> dict:
 
     return {
         "result": "PASS" if not problems else "FAIL",
-        "config": str(CONFIG_PATH),
+        "config": str(CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH),
         "enabled": state["enabled"],
         "endpoint": state["endpoint"],
         "timeout_ms": state["timeout_ms"],
@@ -283,7 +327,7 @@ def main(argv: list[str]) -> int:
         if code != 0:
             return code
         save_state(state)
-        print(f"config: {CONFIG_PATH}")
+        print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] in ("enable", "disable"):
@@ -293,7 +337,7 @@ def main(argv: list[str]) -> int:
         if code != 0:
             return code
         save_state(state)
-        print(f"config: {CONFIG_PATH}")
+        print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] == "set":
@@ -303,7 +347,7 @@ def main(argv: list[str]) -> int:
         if code != 0:
             return code
         save_state(state)
-        print(f"config: {CONFIG_PATH}")
+        print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     return usage()

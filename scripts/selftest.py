@@ -349,9 +349,14 @@ def main() -> int:
         report = parse_json_output(result.stdout)
         expect(report.get("result") == "PASS", "digest doctor should pass")
 
+        layered_cfg_path = tmp / "layered-commands.json"
+        shutil.copy2(BASE_CONFIG, layered_cfg_path)
         telemetry_path = home / ".config" / "opencode" / "opencode-telemetry.json"
+        session_cfg_path = home / ".config" / "opencode" / "opencode-session.json"
+        policy_path = home / ".config" / "opencode" / "opencode-policy.json"
         telemetry_env = os.environ.copy()
-        telemetry_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
+        telemetry_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
+        telemetry_env["HOME"] = str(home)
 
         def run_telemetry(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -391,11 +396,18 @@ def main() -> int:
                 f"telemetry disable question failed: {result.stderr}",
             )
 
-            cfg = load_json_file(telemetry_path)
-            expect(cfg.get("enabled") is True, "telemetry should remain enabled")
-            expect(cfg.get("timeout_ms") == 800, "telemetry timeout should be updated")
+            cfg = load_json_file(layered_cfg_path)
+            telemetry_cfg = cfg.get("telemetry", {})
             expect(
-                cfg.get("events", {}).get("question") is False,
+                telemetry_cfg.get("enabled") is True,
+                "telemetry should remain enabled",
+            )
+            expect(
+                telemetry_cfg.get("timeout_ms") == 800,
+                "telemetry timeout should be updated",
+            )
+            expect(
+                telemetry_cfg.get("events", {}).get("question") is False,
                 "telemetry question event should be disabled",
             )
 
@@ -413,9 +425,9 @@ def main() -> int:
         finally:
             server.close()
 
-        session_cfg_path = home / ".config" / "opencode" / "opencode-session.json"
         post_env = os.environ.copy()
-        post_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
+        post_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
+        post_env["HOME"] = str(home)
         post_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
 
         def run_post_session(*args: str) -> subprocess.CompletedProcess[str]:
@@ -484,13 +496,9 @@ def main() -> int:
             post_info.get("exit_code") == 0, "post-session command should exit cleanly"
         )
 
-        policy_path = home / ".config" / "opencode" / "opencode-policy.json"
-        notify_policy_path = (
-            home / ".config" / "opencode" / "opencode-notifications.json"
-        )
         policy_env = os.environ.copy()
-        policy_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
-        policy_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_policy_path)
+        policy_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
+        policy_env["HOME"] = str(home)
 
         def run_policy(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
@@ -504,7 +512,8 @@ def main() -> int:
         result = run_policy("profile", "strict")
         expect(result.returncode == 0, f"policy profile strict failed: {result.stderr}")
 
-        notify_cfg = load_json_file(notify_policy_path)
+        layered_cfg = load_json_file(layered_cfg_path)
+        notify_cfg = layered_cfg.get("notify", {})
         expect(
             notify_cfg.get("events", {}).get("complete") is False,
             "strict policy should disable complete event",
@@ -517,6 +526,21 @@ def main() -> int:
         result = run_policy("status")
         expect(result.returncode == 0, f"policy status failed: {result.stderr}")
         expect("profile: strict" in result.stdout, "policy status should report strict")
+
+        notify_policy_path = (
+            home / ".config" / "opencode" / "opencode-notifications.json"
+        )
+        notify_policy_path.parent.mkdir(parents=True, exist_ok=True)
+        notify_policy_path.write_text(
+            json.dumps(
+                {
+                    "events": {"complete": False},
+                    "channels": {"permission": {"visual": True}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
         config_env = os.environ.copy()
         config_env["OPENCODE_CONFIG_DIR"] = str(home / ".config" / "opencode")
@@ -628,8 +652,9 @@ def main() -> int:
         stack_env["MY_OPENCODE_STACK_PROFILE_PATH"] = str(stack_state_path)
         stack_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
         stack_env["OPENCODE_NOTIFICATIONS_PATH"] = str(notify_policy_path)
-        stack_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
+        stack_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
         stack_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
+        stack_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
 
         def run_stack(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(

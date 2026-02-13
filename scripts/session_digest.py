@@ -7,6 +7,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from config_layering import load_layered_config  # type: ignore
+
 
 DEFAULT_DIGEST_PATH = Path(
     os.environ.get(
@@ -19,6 +25,7 @@ SESSION_CONFIG_PATH = Path(
         "MY_OPENCODE_SESSION_CONFIG_PATH", "~/.config/opencode/opencode-session.json"
     )
 ).expanduser()
+SESSION_ENV_SET = "MY_OPENCODE_SESSION_CONFIG_PATH" in os.environ
 
 
 def now_iso() -> str:
@@ -83,11 +90,21 @@ def load_post_session_config() -> dict:
         "run_on": ["exit"],
     }
 
-    if not SESSION_CONFIG_PATH.exists():
-        return config
+    post = None
 
-    data = json.loads(SESSION_CONFIG_PATH.read_text(encoding="utf-8"))
-    post = data.get("post_session")
+    if SESSION_ENV_SET:
+        if not SESSION_CONFIG_PATH.exists():
+            return config
+        data = json.loads(SESSION_CONFIG_PATH.read_text(encoding="utf-8"))
+        post = data.get("post_session")
+    else:
+        data, _ = load_layered_config()
+        if isinstance(data.get("post_session"), dict):
+            post = data.get("post_session")
+        elif SESSION_CONFIG_PATH.exists():
+            legacy_data = json.loads(SESSION_CONFIG_PATH.read_text(encoding="utf-8"))
+            post = legacy_data.get("post_session")
+
     if not isinstance(post, dict):
         return config
 
