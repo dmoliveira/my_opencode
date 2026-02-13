@@ -192,6 +192,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "todo",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("todo_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("todo_command.py")),
+            "enforce",
+            "--json",
+        ],
+    },
 ]
 
 

@@ -290,6 +290,18 @@
       "description": "Run plan execution health diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" doctor --json`\nShow only the command output."
     },
+    "todo": {
+      "description": "Inspect todo compliance state (status|enforce)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "todo-status": {
+      "description": "Show latest todo compliance status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" status --json`\nShow only the command output."
+    },
+    "todo-enforce": {
+      "description": "Run todo compliance enforcement checks in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" enforce --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."

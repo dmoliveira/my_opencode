@@ -51,7 +51,7 @@ Use this map to avoid overlapping implementations.
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | done | Medium | E1 | bd-3rs, bd-2qy, bd-f6g, bd-393 | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | done | Medium | E2, E3 | bd-1z6, bd-2te, bd-3sg, bd-2bv | Execute validated plans with progress tracking |
-| E15 | Todo Enforcer and Plan Compliance | in_progress | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
+| E15 | Todo Enforcer and Plan Compliance | done | High | E14 | bd-l9c | Keep execution aligned with approved checklists |
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
@@ -595,7 +595,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 15 - Todo Enforcer and Plan Compliance
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Enforce explicit checklist progress during execution so outcomes stay aligned with approved plans.
 **Depends on:** Epic 14
@@ -605,20 +605,23 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 15.1.2: Define rules for one-active-item-at-a-time enforcement
   - [x] Subtask 15.1.3: Define acceptable bypass annotations and audit format
   - [x] Notes: Added `instructions/todo_compliance_model.md` with state model, transition constraints, bypass metadata requirements, and audit event contract.
-- [ ] Task 15.2: Implement enforcement engine
-  - [ ] Subtask 15.2.1: Validate state transitions before major actions
-  - [ ] Subtask 15.2.2: Block completion when required tasks remain unchecked
-  - [ ] Subtask 15.2.3: Emit actionable remediation prompts on violations
-- [ ] Task 15.3: Integrate command workflows
-  - [ ] Subtask 15.3.1: Integrate with plan execution command and background runs
-  - [ ] Subtask 15.3.2: Add `/todo status` and `/todo enforce` diagnostics
-  - [ ] Subtask 15.3.3: Add docs for compliant workflow patterns
-- [ ] Task 15.4: Verification
-  - [ ] Subtask 15.4.1: Add tests for transition validity and blocking behavior
-  - [ ] Subtask 15.4.2: Add tests for bypass annotations and logs
-  - [ ] Subtask 15.4.3: Add install-test smoke scenarios
-- [ ] Exit criteria: plan completion cannot be marked done with unchecked required items
-- [ ] Exit criteria: bypass behavior is explicit, logged, and reviewable
+- [x] Task 15.2: Implement enforcement engine
+  - [x] Subtask 15.2.1: Validate state transitions before major actions
+  - [x] Subtask 15.2.2: Block completion when required tasks remain unchecked
+  - [x] Subtask 15.2.3: Emit actionable remediation prompts on violations
+  - [x] Notes: Added `scripts/todo_enforcement.py` and wired `/start-work` to enforce deterministic todo transitions, completion gating, and remediation/audit outputs in runtime state.
+- [x] Task 15.3: Integrate command workflows
+  - [x] Subtask 15.3.1: Integrate with plan execution command and background runs
+  - [x] Subtask 15.3.2: Add `/todo status` and `/todo enforce` diagnostics
+  - [x] Subtask 15.3.3: Add docs for compliant workflow patterns
+  - [x] Notes: Added `scripts/todo_command.py`, command aliases, doctor integration, and README/install workflow guidance for explicit todo compliance checks.
+- [x] Task 15.4: Verification
+  - [x] Subtask 15.4.1: Add tests for transition validity and blocking behavior
+  - [x] Subtask 15.4.2: Add tests for bypass annotations and logs
+  - [x] Subtask 15.4.3: Add install-test smoke scenarios
+  - [x] Notes: Expanded `scripts/selftest.py` and install smoke checks for transition gating, completion blocking, bypass metadata validation, and deterministic bypass audit payloads.
+- [x] Exit criteria: plan completion cannot be marked done with unchecked required items
+- [x] Exit criteria: bypass behavior is explicit, logged, and reviewable
 
 ---
 
