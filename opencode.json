@@ -158,6 +158,18 @@
       "description": "Show latest routing trace in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" trace --json`\nShow only the command output."
     },
+    "routing": {
+      "description": "Explain routing outcomes (status|explain)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "routing-status": {
+      "description": "Show compact routing status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" status`\nShow only the command output."
+    },
+    "routing-explain": {
+      "description": "Explain routing selection in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" explain $ARGUMENTS --json`\nShow only the command output."
+    },
     "keyword-mode": {
       "description": "Detect and apply keyword-triggered execution modes",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."

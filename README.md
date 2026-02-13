@@ -460,6 +460,17 @@ Use:
 
 `/model-routing resolve` now emits a structured fallback trace (`requested -> attempted -> selected`) and persists the latest trace for `/model-routing trace` debug introspection.
 
+Routing command surface (Epic 12 Task 12.3):
+```text
+/routing status
+/routing explain --category deep --available-models openai/gpt-5-mini --json
+```
+
+Troubleshooting unexpected model selection:
+- run `/routing explain --json` and inspect `fallback_reason`
+- confirm `attempted_count` is non-zero and review `resolution_trace.attempted`
+- verify available model set passed to resolve commands matches runtime availability
+
 Model-profile aliases:
 ```text
 /model-profile status

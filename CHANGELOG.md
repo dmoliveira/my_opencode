@@ -38,6 +38,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/context_resilience_tuning.md` with practical tuning guidance and operating playbook.
 - Added `instructions/model_fallback_explanation_model.md` defining provider/model fallback trace structure, output levels, and redaction rules for Epic 12 Task 12.1.
 - Added persistent model-routing trace runtime support with `/model-routing trace --json` for latest requested/attempted/selected fallback diagnostics.
+- Added `/routing` command surface (`status`, `explain`) via `scripts/routing_command.py` for compact fallback visibility workflows.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -73,6 +74,7 @@ All notable changes to this project are documented in this file.
 - Expanded selftest coverage for context recovery outcomes, including resume hints and fallback-path diagnostics.
 - Expanded doctor summary coverage to include context resilience subsystem health checks.
 - Expanded selftest coverage for model-routing trace persistence and runtime fallback-chain reporting.
+- Expanded README guidance with category-driven routing examples and troubleshooting steps for unexpected model selection.
 
 ## v0.2.0 - 2026-02-12
 

@@ -53,6 +53,7 @@ BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
+ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
@@ -1412,6 +1413,51 @@ def main() -> int:
             model_routing_trace_report.get("trace", {}).get("selected", {}).get("model")
             == "openai/gpt-5.3-codex",
             "model-routing trace should expose selected model from latest resolve",
+        )
+
+        routing_status = subprocess.run(
+            [sys.executable, str(ROUTING_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(routing_status.returncode == 0, "routing status should succeed")
+        routing_status_report = parse_json_output(routing_status.stdout)
+        expect(
+            routing_status_report.get("active_category") == "visual",
+            "routing status should reflect active category from model routing state",
+        )
+
+        routing_explain = subprocess.run(
+            [
+                sys.executable,
+                str(ROUTING_SCRIPT),
+                "explain",
+                "--category",
+                "deep",
+                "--override-model",
+                "openai/nonexistent",
+                "--available-models",
+                "openai/gpt-5-mini,openai/gpt-5.3-codex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(routing_explain.returncode == 0, "routing explain should succeed")
+        routing_explain_report = parse_json_output(routing_explain.stdout)
+        expect(
+            routing_explain_report.get("selected_model") == "openai/gpt-5.3-codex",
+            "routing explain should expose selected model",
+        )
+        expect(
+            isinstance(routing_explain_report.get("resolution_trace"), dict),
+            "routing explain should include structured resolution trace",
         )
 
         keyword_report = resolve_prompt_modes(
