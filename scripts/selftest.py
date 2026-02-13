@@ -54,6 +54,7 @@ from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
     show_snapshot,
+    write_snapshot,
 )
 
 
@@ -2719,6 +2720,139 @@ version: 1
         expect(
             checkpoint_doctor_report.get("result") == "PASS",
             "checkpoint doctor should report PASS when snapshots are readable",
+        )
+
+        direct_write = write_snapshot(
+            recover_config_path,
+            {
+                "plan": {
+                    "path": str(recover_plan_path),
+                    "metadata": {"id": "selftest-direct-write"},
+                },
+                "status": "failed",
+                "steps": [
+                    {"ordinal": 1, "state": "done", "idempotent": True},
+                    {"ordinal": 2, "state": "pending", "idempotent": False},
+                ],
+                "todo_compliance": {"result": "PASS", "violations": []},
+                "started_at": "2026-02-13T00:00:00Z",
+            },
+            source="error_boundary",
+            command_outcomes=[
+                {
+                    "kind": "tool_use",
+                    "name": "selftest",
+                    "result": "FAIL",
+                    "duration_ms": 1,
+                    "reason_code": "selftest_error_boundary",
+                    "summary": "direct checkpoint write fixture",
+                }
+            ],
+        )
+        expect(
+            direct_write.get("result") == "PASS",
+            "checkpoint manager should atomically persist direct snapshot writes",
+        )
+        direct_paths = direct_write.get("paths", {})
+        expect(
+            isinstance(direct_paths, dict)
+            and Path(str(direct_paths.get("latest", ""))).exists()
+            and Path(str(direct_paths.get("history", ""))).exists(),
+            "checkpoint manager should create latest and history files for direct writes",
+        )
+
+        direct_snapshot = direct_write.get("snapshot", {})
+        direct_run_id = str(direct_snapshot.get("run_id") or "")
+        latest_path = Path(str(direct_paths.get("latest", "")))
+        if latest_path.exists() and direct_run_id:
+            latest_path.write_text("{", encoding="utf-8")
+            corrupted_report = show_snapshot(
+                recover_config_path, direct_run_id, "latest"
+            )
+            expect(
+                corrupted_report.get("result") == "FAIL"
+                and corrupted_report.get("reason_code") == "checkpoint_schema_invalid",
+                "checkpoint manager should fail deterministically on corrupted snapshot payloads",
+            )
+
+            latest_path.write_text(
+                json.dumps(direct_snapshot, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            tampered_latest = dict(direct_snapshot)
+            tampered_latest["status"] = "completed"
+            latest_path.write_text(
+                json.dumps(tampered_latest, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            mismatch_report = show_snapshot(
+                recover_config_path, direct_run_id, "latest"
+            )
+            expect(
+                mismatch_report.get("result") == "FAIL"
+                and mismatch_report.get("reason_code")
+                == "checkpoint_integrity_mismatch",
+                "checkpoint manager should detect integrity mismatches for tampered snapshots",
+            )
+
+        retention_run = "selftest-retention"
+        retention_history = (
+            recover_config_path.parent / "checkpoints" / retention_run / "history"
+        )
+        retention_history.mkdir(parents=True, exist_ok=True)
+        for idx in range(3):
+            payload = {
+                "snapshot_id": f"cp_retention_{idx}",
+                "created_at": f"2026-02-13T00:00:0{idx}Z",
+                "run_id": retention_run,
+                "status": "in_progress",
+            }
+            (retention_history / f"cp_retention_{idx}.json").write_text(
+                json.dumps(payload, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        retention_prune = prune_snapshots(
+            recover_config_path,
+            max_per_run=1,
+            max_age_days=36500,
+            compress_after_hours=100000,
+        )
+        expect(
+            retention_prune.get("result") == "PASS"
+            and int(retention_prune.get("removed", 0)) >= 2,
+            "checkpoint retention prune should enforce bounded history per run",
+        )
+
+        compression_run = "selftest-compression"
+        compression_history = (
+            recover_config_path.parent / "checkpoints" / compression_run / "history"
+        )
+        compression_history.mkdir(parents=True, exist_ok=True)
+        compression_json = compression_history / "cp_compress_0.json"
+        compression_json.write_text(
+            json.dumps(
+                {
+                    "snapshot_id": "cp_compress_0",
+                    "created_at": "2020-01-01T00:00:00Z",
+                    "run_id": compression_run,
+                    "status": "failed",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        compression_prune = prune_snapshots(
+            recover_config_path,
+            max_per_run=50,
+            max_age_days=36500,
+            compress_after_hours=0,
+        )
+        expect(
+            compression_prune.get("result") == "PASS"
+            and int(compression_prune.get("compressed", 0)) >= 1
+            and (compression_history / "cp_compress_0.json.gz").exists(),
+            "checkpoint prune should rotate old snapshots into compressed history artifacts",
         )
 
         recover_cfg_after_allowed = load_json_file(recover_config_path)

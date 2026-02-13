@@ -114,6 +114,12 @@ Examples:
 /checkpoint doctor --json
 ```
 
+Task 19.4 verification notes:
+
+- selftest verifies atomic checkpoint writes and deterministic corruption/integrity-failure reason codes.
+- retention tests verify bounded per-run history and gzip rotation for older snapshots.
+- install smoke now exercises `/checkpoint list|show|prune|doctor` alongside `/start-work` recovery flows.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

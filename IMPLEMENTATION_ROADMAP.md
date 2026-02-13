@@ -55,7 +55,7 @@ Use this map to avoid overlapping implementations.
 | E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | done | High | E3 | bd-3cg, bd-2ln, bd-10l, bd-lds | Prefer semantic edits over plain text replacements |
-| E19 | Session Checkpoint Snapshots | in_progress | Medium | E2, E17 | bd-553 | Durable state for rollback and restart safety |
+| E19 | Session Checkpoint Snapshots | done | Medium | E2, E17 | bd-553, bd-3tb, bd-3um, bd-3gm | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
@@ -702,7 +702,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 19 - Session Checkpoint Snapshots
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Persist periodic snapshots of execution state to improve rollback, restart, and auditability.
 **Depends on:** Epic 2, Epic 17
@@ -722,12 +722,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 19.3.2: Add doctor diagnostics for snapshot health
   - [x] Subtask 19.3.3: Document rollback/restart examples
   - [x] Notes: Added `scripts/checkpoint_command.py` and `/checkpoint*` aliases, integrated checkpoint doctor checks into unified `/doctor`, and documented checkpoint list/show/prune usage in README.
-- [ ] Task 19.4: Verification
-  - [ ] Subtask 19.4.1: Add tests for atomic write and corruption handling
-  - [ ] Subtask 19.4.2: Add retention/rotation tests
-  - [ ] Subtask 19.4.3: Add install-test checkpoint smoke flows
-- [ ] Exit criteria: checkpoints support reliable restart and recovery workflows
-- [ ] Exit criteria: snapshot retention stays bounded by policy
+- [x] Task 19.4: Verification
+  - [x] Subtask 19.4.1: Add tests for atomic write and corruption handling
+  - [x] Subtask 19.4.2: Add retention/rotation tests
+  - [x] Subtask 19.4.3: Add install-test checkpoint smoke flows
+  - [x] Notes: Expanded `scripts/selftest.py` with direct atomic-write, corruption/integrity mismatch, retention bound, and compression rotation assertions; added installer smoke coverage for `/checkpoint list|show|prune|doctor`.
+- [x] Exit criteria: checkpoints support reliable restart and recovery workflows
+- [x] Exit criteria: snapshot retention stays bounded by policy
 
 ---
 

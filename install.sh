@@ -149,6 +149,12 @@ data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encodin
     python3 "$INSTALL_DIR/scripts/safe_edit_command.py" plan --operation rename --scope "scripts/*.py" --allow-text-fallback --json
     python3 "$INSTALL_DIR/scripts/safe_edit_command.py" doctor --json || true
   fi
+  if [ -f "$INSTALL_DIR/scripts/checkpoint_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/checkpoint_command.py" list --json
+    python3 "$INSTALL_DIR/scripts/checkpoint_command.py" show --snapshot latest --json || true
+    python3 "$INSTALL_DIR/scripts/checkpoint_command.py" prune --max-per-run 50 --max-age-days 14 --json
+    python3 "$INSTALL_DIR/scripts/checkpoint_command.py" doctor --json || true
+  fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -220,6 +226,10 @@ printf "  /resume disable --json\n"
 printf "  /safe-edit status --json\n"
 printf "  /safe-edit plan --operation rename --scope scripts/*.py --json\n"
 printf "  /safe-edit doctor --json\n"
+printf "  /checkpoint list --json\n"
+printf "  /checkpoint show --snapshot latest --json\n"
+printf "  /checkpoint prune --max-per-run 50 --max-age-days 14 --json\n"
+printf "  /checkpoint doctor --json\n"
 printf "  /nvim status\n"
 printf "  /devtools status\n"
 printf "  /devtools install all\n"
