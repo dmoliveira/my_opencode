@@ -39,7 +39,7 @@ Use this map to avoid overlapping implementations.
 |---|---|---|---|---|---|---|
 | E1 | Config Layering + JSONC Support | done | High | - | bd-1g0, bd-208, bd-4j1 | Foundation for most later epics |
 | E2 | Background Task Orchestration | done | High | E1 | bd-1ob, bd-3lf, bd-2xo, bd-mb2 | Keep minimal and stable first |
-| E3 | Refactor Workflow Command | in_progress | High | E1 | bd-zfx | Safer rollout after config layering |
+| E3 | Refactor Workflow Command | done | High | E1 | bd-zfx, bd-vc3, bd-2ps, bd-3fr | Safer rollout after config layering |
 | E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | TBD | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
@@ -232,7 +232,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 3 - Refactor Workflow Command (`/refactor-lite`)
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Add a safe, repeatable refactor workflow command using existing tools and verification gates.
 **Depends on:** Epic 1
@@ -252,12 +252,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 3.3.2: Add installer self-check hints
   - [x] Subtask 3.3.3: Add `/doctor` optional check when command is configured
   - [x] Notes: Added `/refactor-lite` templates, installer hints, and optional `refactor-lite` doctor check.
-- [ ] Task 3.4: Tests and docs
-  - [ ] Subtask 3.4.1: Add selftest scenarios for argument parsing and safe-mode behavior
-  - [ ] Subtask 3.4.2: Add docs for safe vs aggressive strategies
-  - [ ] Subtask 3.4.3: Add install-test smoke checks
-- [ ] Exit criteria: safe mode is default and validates before completion
-- [ ] Exit criteria: failure output gives actionable remediation
+- [x] Task 3.4: Tests and docs
+  - [x] Subtask 3.4.1: Add selftest scenarios for argument parsing and safe-mode behavior
+  - [x] Subtask 3.4.2: Add docs for safe vs aggressive strategies
+  - [x] Subtask 3.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `/refactor-lite` selftests for missing-target and safe-mode ambiguity handling, plus install smoke coverage.
+- [x] Exit criteria: safe mode is default and validates before completion
+- [x] Exit criteria: failure output gives actionable remediation
 
 ---
 

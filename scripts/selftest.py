@@ -961,6 +961,81 @@ def main() -> int:
             "refactor-lite should report verification_failed when make validate is unavailable",
         )
 
+        result = subprocess.run(
+            [sys.executable, str(REFACTOR_LITE_SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "refactor-lite should fail when target argument is missing",
+        )
+        missing_target_report = parse_json_output(result.stdout)
+        expect(
+            missing_target_report.get("error_code") == "target_required",
+            "refactor-lite should report target_required when target is absent",
+        )
+
+        ambiguous_dir = tmp / "refactor_ambiguous"
+        ambiguous_dir.mkdir(parents=True, exist_ok=True)
+        for idx in range(30):
+            (ambiguous_dir / f"file_{idx}.py").write_text(
+                'def profile_value():\n    return "profile"\n', encoding="utf-8"
+            )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REFACTOR_LITE_SCRIPT),
+                "profile",
+                "--json",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=ambiguous_dir,
+        )
+        expect(
+            result.returncode == 1,
+            "refactor-lite safe mode should fail for ambiguous broad target",
+        )
+        ambiguous_report = parse_json_output(result.stdout)
+        expect(
+            ambiguous_report.get("error_code") == "ambiguous_target",
+            "refactor-lite should report ambiguous_target in safe mode",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REFACTOR_LITE_SCRIPT),
+                "profile",
+                "--strategy",
+                "aggressive",
+                "--json",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=ambiguous_dir,
+        )
+        expect(
+            result.returncode == 0,
+            "refactor-lite aggressive mode should allow broad target analysis",
+        )
+        aggressive_report = parse_json_output(result.stdout)
+        expect(
+            aggressive_report.get("result") == "PASS",
+            "refactor-lite aggressive mode should pass dry-run preflight",
+        )
+
         wizard_state_path = (
             home / ".config" / "opencode" / "my_opencode-install-state.json"
         )
