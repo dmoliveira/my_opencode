@@ -1386,6 +1386,33 @@ def main() -> int:
             == "openai/gpt-5.3-codex",
             "model-routing resolve should keep active category and apply model fallback",
         )
+        expect(
+            isinstance(model_routing_report.get("resolution_trace"), dict),
+            "model-routing resolve should emit requested/attempted/selected trace payload",
+        )
+
+        model_routing_trace = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "trace", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_trace.returncode == 0,
+            "model-routing trace should succeed",
+        )
+        model_routing_trace_report = parse_json_output(model_routing_trace.stdout)
+        expect(
+            model_routing_trace_report.get("has_trace") is True,
+            "model-routing trace should persist latest resolution trace",
+        )
+        expect(
+            model_routing_trace_report.get("trace", {}).get("selected", {}).get("model")
+            == "openai/gpt-5.3-codex",
+            "model-routing trace should expose selected model from latest resolve",
+        )
 
         keyword_report = resolve_prompt_modes(
             "Please safe-apply and deep-analyze this migration; ulw can wait.",

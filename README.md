@@ -455,7 +455,10 @@ Use:
 /model-routing status
 /model-routing set-category deep
 /model-routing resolve --category deep --override-model openai/gpt-5.3-codex --json
+/model-routing trace --json
 ```
+
+`/model-routing resolve` now emits a structured fallback trace (`requested -> attempted -> selected`) and persists the latest trace for `/model-routing trace` debug introspection.
 
 Model-profile aliases:
 ```text
