@@ -468,6 +468,27 @@ Integration points:
 - `/stack apply <profile>` now sets a routing category (`focus/research -> deep`, `quiet-ci -> quick`).
 - install wizard supports `--model-profile <quick|deep|visual|writing>`.
 
+## Keyword-triggered execution modes
+
+Epic 8 Task 8.2 adds a deterministic keyword detector engine:
+
+- schema + precedence rules: `scripts/keyword_mode_schema.py`
+- command wrapper: `scripts/keyword_mode_command.py`
+- dictionary contract: `instructions/keyword_execution_modes.md`
+
+Use:
+```text
+/keyword-mode status
+/keyword-mode detect --prompt "safe-apply deep-analyze review this migration" --json
+/keyword-mode apply --prompt "parallel-research deep-analyze inspect API usage" --json
+```
+
+Detector behavior:
+- case-insensitive keyword token matching (`ulw`, `deep-analyze`, `parallel-research`, `safe-apply`)
+- deterministic precedence for conflicts (`safe-apply` > `deep-analyze` > `parallel-research` > `ulw`)
+- prompt-level opt-out support (`no-keyword-mode` and `no-<keyword>` tokens)
+- persisted runtime context via `keyword_modes` config section (`active_modes`, `effective_flags`)
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:
