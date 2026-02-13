@@ -120,6 +120,18 @@ CHECKS = [
             "--json",
         ],
     },
+    {
+        "name": "model-routing",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("model_routing_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("model_routing_command.py")),
+            "resolve",
+            "--json",
+        ],
+    },
 ]
 
 

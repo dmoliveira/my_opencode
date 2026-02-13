@@ -1556,6 +1556,20 @@ def main() -> int:
             "doctor refactor-lite check should pass when backend exists",
         )
 
+        model_routing_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "model-routing"
+        ]
+        expect(
+            bool(model_routing_checks),
+            "doctor summary should include model-routing check",
+        )
+        expect(
+            model_routing_checks[0].get("ok") is True,
+            "doctor model-routing check should pass",
+        )
+
     print("selftest: PASS")
     return 0
 
