@@ -910,6 +910,8 @@ def main() -> int:
 
         refactor_env = os.environ.copy()
         refactor_env["HOME"] = str(home)
+        hook_audit_path = home / ".config" / "opencode" / "hooks" / "actions.jsonl"
+        refactor_env["MY_OPENCODE_HOOK_AUDIT_PATH"] = str(hook_audit_path)
 
         result = subprocess.run(
             [
@@ -1116,6 +1118,64 @@ def main() -> int:
             "error hints should detect git context failures",
         )
 
+        hook_enable = subprocess.run(
+            [sys.executable, str(HOOKS_SCRIPT), "enable"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(hook_enable.returncode == 0, "hooks enable should succeed")
+
+        hook_disable_id = subprocess.run(
+            [sys.executable, str(HOOKS_SCRIPT), "disable-hook", "error-hints"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(hook_disable_id.returncode == 0, "hooks disable-hook should succeed")
+
+        hook_skipped = subprocess.run(
+            [
+                sys.executable,
+                str(HOOKS_SCRIPT),
+                "run",
+                "error-hints",
+                "--json",
+                json.dumps(
+                    {
+                        "command": "python3 missing.py",
+                        "exit_code": 2,
+                        "stderr": "No such file or directory",
+                    }
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(hook_skipped.returncode == 0, "hooks command run should succeed")
+        skipped_report = parse_json_output(hook_skipped.stdout)
+        expect(
+            skipped_report.get("reason") == "hook_disabled",
+            "disabled hook should return hook_disabled skip reason",
+        )
+
+        hook_enable_id = subprocess.run(
+            [sys.executable, str(HOOKS_SCRIPT), "enable-hook", "error-hints"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(hook_enable_id.returncode == 0, "hooks enable-hook should succeed")
+
         hook_run = subprocess.run(
             [
                 sys.executable,
@@ -1142,6 +1202,18 @@ def main() -> int:
         expect(
             hook_report.get("category") == "path_missing",
             "hooks command should return path_missing category",
+        )
+        expect(hook_audit_path.exists(), "hook audit log should be created")
+        audit_lines = [
+            line.strip()
+            for line in hook_audit_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        expect(len(audit_lines) >= 2, "hook audit log should capture hook events")
+        audit_last = json.loads(audit_lines[-1])
+        expect(
+            "stderr" not in audit_last and "stdout" not in audit_last,
+            "hook audit log should not include raw command output",
         )
 
         wizard_state_path = (

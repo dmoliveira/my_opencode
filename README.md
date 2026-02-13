@@ -389,6 +389,10 @@ Use these directly in OpenCode:
 
 ```text
 /hooks status
+/hooks enable
+/hooks disable
+/hooks disable-hook truncate-safety
+/hooks enable-hook truncate-safety
 /hooks run continuation-reminder --json '{"checklist":["update docs","run tests"]}'
 /hooks run truncate-safety --json '{"text":"...large output...","max_lines":120,"max_chars":8000}'
 /hooks run error-hints --json '{"command":"git status","exit_code":128,"stderr":"fatal: not a git repository"}'
@@ -398,12 +402,21 @@ Autocomplete-friendly shortcut:
 
 ```text
 /hooks-help
+/hooks-enable
+/hooks-disable
+/hooks-status
 ```
 
 Hook behavior:
 - `continuation-reminder` triggers when checklist items remain unfinished.
 - `truncate-safety` clips oversized output and returns warnings with limits used.
 - `error-hints` maps common failures (missing command/path, permission, git context, timeout) to actionable hints.
+
+Governance controls:
+- global toggle in config: `hooks.enabled`
+- per-hook opt-out list: `hooks.disabled`
+- telemetry-safe audit log: `~/.config/opencode/hooks/actions.jsonl`
+- audit log records only metadata (hook id, category, triggered, exit status), not raw command output
 
 ## Background jobs inside OpenCode 🧵
 

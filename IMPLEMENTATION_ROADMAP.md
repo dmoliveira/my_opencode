@@ -40,7 +40,7 @@ Use this map to avoid overlapping implementations.
 | E1 | Config Layering + JSONC Support | done | High | - | bd-1g0, bd-208, bd-4j1 | Foundation for most later epics |
 | E2 | Background Task Orchestration | done | High | E1 | bd-1ob, bd-3lf, bd-2xo, bd-mb2 | Keep minimal and stable first |
 | E3 | Refactor Workflow Command | done | High | E1 | bd-zfx, bd-vc3, bd-2ps, bd-3fr | Safer rollout after config layering |
-| E4 | Continuation and Safety Hooks | in_progress | Medium | E1, E2 | bd-1h0, bd-1ex | Start with minimal hooks only |
+| E4 | Continuation and Safety Hooks | in_progress | Medium | E1, E2 | bd-1h0, bd-1ex, bd-1dr | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
@@ -279,10 +279,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 4.2.2: Add output truncation safety hook for large tool outputs
   - [x] Subtask 4.2.3: Add basic error recovery hint hook for common command failures
   - [x] Notes: Added `scripts/hook_actions.py` and `/hooks` command for continuation reminders, truncation safety, and common failure recovery hints.
-- [ ] Task 4.3: Governance and controls
-  - [ ] Subtask 4.3.1: Add opt-out per hook via config
-  - [ ] Subtask 4.3.2: Add telemetry-safe logging for hook actions
-  - [ ] Subtask 4.3.3: Add docs for enabling/disabling hooks
+- [x] Task 4.3: Governance and controls
+  - [x] Subtask 4.3.1: Add opt-out per hook via config
+  - [x] Subtask 4.3.2: Add telemetry-safe logging for hook actions
+  - [x] Subtask 4.3.3: Add docs for enabling/disabling hooks
+  - [x] Notes: Added `/hooks` config controls (`enable`, `disable`, per-hook toggle), telemetry-safe hook audit logging, and governance docs.
 - [ ] Task 4.4: Verification
   - [ ] Subtask 4.4.1: Add selftests for hook order and disable behavior
   - [ ] Subtask 4.4.2: Add install-test smoke checks

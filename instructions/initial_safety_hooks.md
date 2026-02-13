@@ -29,3 +29,6 @@ Epic 4 Task 4.2 adds three low-noise hooks focused on continuation and resilienc
 - `generic_failure`
 
 The implementation is intentionally deterministic and dependency-free.
+
+Governance controls and telemetry-safe logging are documented in
+`instructions/hook_governance_controls.md`.
