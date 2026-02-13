@@ -5,7 +5,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 ## How to use this file
 
 - Task completion: use `[ ]` and `[x]`.
-- Epic status values: `planned`, `in_progress`, `paused`, `done`, `postponed`.
+- Epic status values: `planned`, `in_progress`, `paused`, `merged`, `done`, `postponed`.
 - Recommendation: move only one epic to `in_progress` at a time.
 
 ## Status Playbook
@@ -13,6 +13,7 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 - `planned`: scoped and ready, not started.
 - `in_progress`: actively being implemented now.
 - `paused`: started but intentionally stopped; can resume any time.
+- `merged`: scope absorbed into another epic to avoid duplication.
 - `postponed`: intentionally deferred; not expected this cycle.
 - `done`: fully implemented, documented, and validated.
 
@@ -29,7 +30,7 @@ Use this map to avoid overlapping implementations.
 - `/start-work` (E14): executes a prepared plan artifact step-by-step.
 - `/autoflow` (E22): unified orchestration wrapper for plan/todo/recovery/report primitives.
 - `/autopilot` (E28): bounded objective runner on top of `/autoflow` with strict budget control.
-- `/loop` (E21): explicit iterative preset executor for repeated research/apply/verify cycles.
+- `/loop` (merged into E22/E28): optional loop controls, not a standalone roadmap epic.
 - `/hotfix` (E25): constrained emergency path with mandatory minimum safeguards.
 
 ## Epic Dashboard
@@ -51,18 +52,18 @@ Use this map to avoid overlapping implementations.
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
-| E16 | Comment and Output Quality Checker Loop | paused | Medium | E3, E14 | TBD | Fold into E23 first; keep separate only if gap remains |
+| E16 | Comment and Output Quality Checker Loop | merged | Medium | E23 | TBD | Merged into E23 (PR Review Copilot) |
 | E17 | Auto-Resume and Recovery Loop | planned | High | E11, E14 | TBD | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | planned | High | E3 | TBD | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | planned | Medium | E2, E17 | TBD | Durable state for rollback and restart safety |
 | E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
-| E21 | Bounded Loop Mode Presets | postponed | Medium | E8, E20 | TBD | Defer until E22 proves stable and useful |
-| E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20, E21 | TBD | One command for plan-run-resume-report lifecycle |
-| E23 | PR Review Copilot | planned | High | E3, E16 | TBD | Pre-PR quality and risk review automation |
-| E24 | Release Train Assistant | planned | High | E14, E16 | TBD | Validate, draft, and gate releases reliably |
+| E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
+| E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
+| E23 | PR Review Copilot | planned | High | E3 | TBD | Pre-PR quality, output, and risk review automation |
+| E24 | Release Train Assistant | planned | High | E14, E23 | TBD | Validate, draft, and gate releases reliably |
 | E25 | Incident Hotfix Mode | planned | Medium | E20, E22 | TBD | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
-| E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E16 | TBD | Convert delivered work into reusable team memory |
+| E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
 | E28 | Autopilot Objective Runner Command | paused | High | E20, E22 | TBD | Start only after real-world Autoflow stability evidence |
 
 ## Scope Guardrails
@@ -155,12 +156,10 @@ Every command-oriented epic must ship all of the following:
 | Browser profile setup drift (E13) | Medium | Add doctor checks and install verification scripts |
 | Plan execution diverges from approved plan (E14) | Medium | Lock plan snapshot and require explicit deviation notes |
 | Todo enforcer blocks valid edge workflows (E15) | Medium | Add bypass with explicit annotation + audit trail |
-| Quality checker creates noisy false positives (E16) | Medium | Add severity thresholds and focused rule scopes |
 | Auto-resume repeats harmful action (E17) | High | Require idempotency checks and last-step verification |
 | LSP/AST mode unavailable in some repos (E18) | Medium | Provide graceful fallback to safe text-mode edits |
 | Checkpoint snapshots grow too quickly (E19) | Low | Add retention cap and compression/rotation |
 | Budget guardrails too strict for complex tasks (E20) | Medium | Provide profile-based limits and controlled override |
-| Loop presets run away despite caps (E21) | High | Enforce hard-stop counters and mandatory summary checkpoints |
 | Autoflow hides too much control and confuses users (E22) | Medium | Keep subcommands explicit and expose dry-run plus explain mode |
 | PR copilot misses critical regressions (E23) | Medium | Blend deterministic checks with configurable risk heuristics |
 | Release assistant automates wrong tag/version (E24) | High | Enforce explicit version confirmation and dry-run output |
@@ -584,29 +583,12 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 16 - Comment and Output Quality Checker Loop
 
-**Status:** `planned`
+**Status:** `merged`
 **Priority:** Medium
-**Goal:** Add a review loop that catches weak comments/docs and improves rationale quality in outputs.
-**Depends on:** Epic 3, Epic 14
+**Goal:** Scope merged into Epic 23 to keep PR quality logic in one place.
+**Merged into:** Epic 23
 
-- [ ] Task 16.1: Define quality ruleset
-  - [ ] Subtask 16.1.1: Define anti-patterns (vague comments, stale TODOs, missing rationale)
-  - [ ] Subtask 16.1.2: Define severity levels and blocking thresholds
-  - [ ] Subtask 16.1.3: Define scope controls (code-only, docs-only, full)
-- [ ] Task 16.2: Implement checker loop
-  - [ ] Subtask 16.2.1: Add scan pass for comments/docs/output summaries
-  - [ ] Subtask 16.2.2: Generate fix suggestions with file references
-  - [ ] Subtask 16.2.3: Add optional auto-fix for low-risk cases
-- [ ] Task 16.3: Workflow integration
-  - [ ] Subtask 16.3.1: Integrate as optional gate before commit/PR steps
-  - [ ] Subtask 16.3.2: Add `/quality-check` command and JSON output
-  - [ ] Subtask 16.3.3: Document tuning guidance per repo style
-- [ ] Task 16.4: Verification
-  - [ ] Subtask 16.4.1: Add tests for detection precision and false positives
-  - [ ] Subtask 16.4.2: Add tests for threshold-based block/pass behavior
-  - [ ] Subtask 16.4.3: Add install-test smoke checks
-- [ ] Exit criteria: checker improves clarity without high false-positive noise
-- [ ] Exit criteria: teams can tune strictness without code changes
+- [ ] Merged note: keep quality-check rules and output clarity checks under `/pr-review` instead of separate command.
 
 ---
 
@@ -724,29 +706,12 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 21 - Bounded Loop Mode Presets
 
-**Status:** `planned`
+**Status:** `merged`
 **Priority:** Medium
-**Goal:** Add structured loop presets (research-plan-apply-verify) with strict caps and checkpoint summaries.
-**Depends on:** Epic 8, Epic 20
+**Goal:** Loop-control scope merged into Epic 22 and Epic 28.
+**Merged into:** Epic 22, Epic 28
 
-- [ ] Task 21.1: Define loop preset catalog
-  - [ ] Subtask 21.1.1: Define baseline presets (`ralph-lite`, `ulw-lite`, `verify-first`)
-  - [ ] Subtask 21.1.2: Define per-preset caps (iterations, tool calls, time)
-  - [ ] Subtask 21.1.3: Define entry/exit conditions and abort signals
-- [ ] Task 21.2: Implement loop orchestrator
-  - [ ] Subtask 21.2.1: Execute deterministic loop phases with counters
-  - [ ] Subtask 21.2.2: Enforce hard-stop when cap reached
-  - [ ] Subtask 21.2.3: Emit phase summary after each iteration
-- [ ] Task 21.3: Integration and controls
-  - [ ] Subtask 21.3.1: Add `/loop start|status|stop` command family
-  - [ ] Subtask 21.3.2: Integrate with budget and checkpoint subsystems
-  - [ ] Subtask 21.3.3: Document when to use each preset
-- [ ] Task 21.4: Verification
-  - [ ] Subtask 21.4.1: Add tests for cap enforcement and stop guarantees
-  - [ ] Subtask 21.4.2: Add tests for preset phase transitions
-  - [ ] Subtask 21.4.3: Add install-test smoke checks
-- [ ] Exit criteria: loop presets increase throughput while staying strictly bounded
-- [ ] Exit criteria: loop stop reasons and summaries are clear and reproducible
+- [ ] Merged note: expose loop controls as `/autoflow` and `/autopilot` options, not a separate top-level epic.
 
 ---
 
@@ -755,7 +720,7 @@ Every command-oriented epic must ship all of the following:
 **Status:** `planned`
 **Priority:** High
 **Goal:** Provide a single command (`/autoflow`) that orchestrates plan execution, enforcement, recovery, and reporting with safe defaults.
-**Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20, Epic 21
+**Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20
 
 - [ ] Task 22.1: Define `/autoflow` command contract
   - [ ] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `stop`, `report`, `dry-run`)
@@ -783,7 +748,7 @@ Every command-oriented epic must ship all of the following:
 **Status:** `planned`
 **Priority:** High
 **Goal:** Add a command that reviews pending PR changes for risk, quality, and release readiness before merge.
-**Depends on:** Epic 3, Epic 16
+**Depends on:** Epic 3
 
 - [ ] Task 23.1: Define review rubric and risk scoring
   - [ ] Subtask 23.1.1: Define risk categories (security, data loss, migration impact, test coverage)
@@ -811,7 +776,7 @@ Every command-oriented epic must ship all of the following:
 **Status:** `planned`
 **Priority:** High
 **Goal:** Automate release preparation checks, release-note drafting, and tag gating.
-**Depends on:** Epic 14, Epic 16
+**Depends on:** Epic 14, Epic 23
 
 - [ ] Task 24.1: Define release policy contract
   - [ ] Subtask 24.1.1: Define required preconditions (clean tree, tests passing, changelog updated)
@@ -895,7 +860,7 @@ Every command-oriented epic must ship all of the following:
 **Status:** `planned`
 **Priority:** Medium
 **Goal:** Turn completed work into reusable patterns, checklists, and guidance for future runs.
-**Depends on:** Epic 9, Epic 14, Epic 16
+**Depends on:** Epic 9, Epic 14, Epic 23
 
 - [ ] Task 27.1: Define capture schema and quality gates
   - [ ] Subtask 27.1.1: Define entry types (pattern, pitfall, checklist, rule candidate)
@@ -961,9 +926,9 @@ Every command-oriented epic must ship all of the following:
   - [ ] Subtask C1.4: Phase D (control layer): Epic 8 + Epic 9 + Epic 10
   - [ ] Subtask C1.5: Phase E (resilience and observability): Epic 11 + Epic 12
   - [ ] Subtask C1.6: Phase F (workflow expansion): Epic 13 + Epic 14
-  - [ ] Subtask C1.7: Phase G (quality and control): Epic 15 + Epic 16
+  - [ ] Subtask C1.7: Phase G (quality and control): Epic 15 + Epic 23
   - [ ] Subtask C1.8: Phase H (recovery and semantic safety): Epic 17 + Epic 18 + Epic 19
-  - [ ] Subtask C1.9: Phase I (bounded autonomy): Epic 20 + Epic 21
+  - [ ] Subtask C1.9: Phase I (bounded autonomy): Epic 20 + Epic 22
   - [ ] Subtask C1.10: Phase J (unified orchestration): Epic 22
   - [ ] Subtask C1.11: Phase K (delivery acceleration): Epic 23 + Epic 24 + Epic 25
   - [ ] Subtask C1.12: Phase L (operational intelligence): Epic 26 + Epic 27
@@ -1012,7 +977,7 @@ Use this log to track what changed week by week.
 - `Now`: E1 -> E2 -> E3 -> E20
 - `Next`: E14 -> E15 -> E22
 - `Later`: E23 -> E24 -> E26 -> E27
-- `Deferred`: E6 (paused), E7 (postponed), E10 (paused), E16 (paused), E21 (postponed), E28 (paused)
+- `Deferred`: E6 (paused), E7 (postponed), E10 (paused), E28 (paused), E16/E21 (merged)
 
 ## Decision Log
 
@@ -1023,7 +988,8 @@ Use this log to track what changed week by week.
 - [x] 2026-02-12: Add E15-E21 for enforcement, quality, recovery, semantic editing, checkpointing, budgets, and bounded loops.
 - [x] 2026-02-12: Add E22-E27 to unify orchestration and accelerate delivery quality and release reliability.
 - [x] 2026-02-13: Add E28 `/autopilot` as a non-duplicated high-value command on top of `/autoflow`.
-- [x] 2026-02-13: Pause/postpone lower-confidence epics (E10, E16, E21, E28) until measurable value is proven.
+- [x] 2026-02-13: Pause/postpone lower-confidence epics (E10, E28) until measurable value is proven.
+- [x] 2026-02-13: Merge duplicate epic scopes E16 -> E23 and E21 -> E22/E28.
 - [x] 2026-02-13: Require command UX baseline (autocomplete, assistant tips, hovers/explanations, QoL aliases) for all new command features.
 
 ---
@@ -1031,10 +997,10 @@ Use this log to track what changed week by week.
 ## Current Recommendation
 
 - Start with **Epic 1** next (lowest risk, highest leverage).
-- Prioritize **E8-E10** after E1-E5 for fast workflow gains.
+- Prioritize **E8-E9** after E1-E5 for fast workflow gains.
 - Prioritize **E11-E12** before E13-E14 when stability concerns are high.
-- Prioritize **E15 + E20** before E21 to keep autonomy controlled and auditable.
+- Prioritize **E15 + E20** before E22 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
 - Keep **E28** paused until E22 proves stable in production-like workflows.
-- Keep **E10/E16/E21** paused or postponed unless explicit user-value metrics justify implementation.
+- Keep **E10** paused unless explicit user-value metrics justify implementation.
 - Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
