@@ -67,6 +67,55 @@ def build_digest(reason: str, cwd: Path) -> dict:
         "reason": reason,
         "cwd": str(cwd),
         "git": collect_git_snapshot(cwd),
+        "plan_execution": collect_plan_execution_snapshot(),
+    }
+
+
+def collect_plan_execution_snapshot() -> dict:
+    try:
+        layered, _ = load_layered_config()
+    except Exception:
+        return {"status": "unknown", "available": False}
+
+    section = layered.get("plan_execution")
+    if not isinstance(section, dict) or not section:
+        return {"status": "idle", "available": False}
+
+    raw_steps = section.get("steps")
+    steps = raw_steps if isinstance(raw_steps, list) else []
+    counts = {
+        "total": len(steps),
+        "completed": sum(
+            1
+            for step in steps
+            if isinstance(step, dict) and step.get("state") == "completed"
+        ),
+        "failed": sum(
+            1
+            for step in steps
+            if isinstance(step, dict) and step.get("state") == "failed"
+        ),
+        "in_progress": sum(
+            1
+            for step in steps
+            if isinstance(step, dict) and step.get("state") == "in_progress"
+        ),
+    }
+    raw_plan = section.get("plan")
+    plan: dict = raw_plan if isinstance(raw_plan, dict) else {}
+    raw_metadata = plan.get("metadata")
+    metadata: dict = raw_metadata if isinstance(raw_metadata, dict) else {}
+    raw_deviations = section.get("deviations")
+    deviations: list = raw_deviations if isinstance(raw_deviations, list) else []
+
+    return {
+        "status": str(section.get("status") or "idle"),
+        "available": True,
+        "plan_id": metadata.get("id"),
+        "plan_path": plan.get("path"),
+        "finished_at": section.get("finished_at"),
+        "step_counts": counts,
+        "deviation_count": len(deviations),
     }
 
 
@@ -179,6 +228,15 @@ def print_summary(path: Path, digest: dict) -> None:
     if isinstance(post, dict) and post.get("attempted"):
         status = "timeout" if post.get("timed_out") else f"exit {post.get('exit_code')}"
         print(f"post_session: {status}")
+    plan_exec = (
+        digest.get("plan_execution")
+        if isinstance(digest.get("plan_execution"), dict)
+        else {}
+    )
+    if plan_exec:
+        print(f"plan_execution: {plan_exec.get('status', 'idle')}")
+        if plan_exec.get("plan_id"):
+            print(f"plan_id: {plan_exec.get('plan_id')}")
 
 
 def usage() -> int:
@@ -281,6 +339,10 @@ def collect_doctor(path: Path) -> dict:
     for field in ("timestamp", "reason", "cwd", "git"):
         if field not in digest:
             warnings.append(f"missing digest field: {field}")
+
+    plan_exec = digest.get("plan_execution")
+    if plan_exec is not None and not isinstance(plan_exec, dict):
+        warnings.append("plan_execution block is invalid")
 
     git_block = digest.get("git")
     if not isinstance(git_block, dict):

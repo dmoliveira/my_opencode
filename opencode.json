@@ -282,6 +282,14 @@
       "description": "Show captured plan execution deviations",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" deviations --json`\nShow only the command output."
     },
+    "start-work-bg": {
+      "description": "Queue plan execution through background task manager",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS --background --json`\nShow only the command output."
+    },
+    "start-work-doctor-json": {
+      "description": "Run plan execution health diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" doctor --json`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."

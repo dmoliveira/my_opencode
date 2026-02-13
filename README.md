@@ -592,9 +592,17 @@ Epic 14 Task 14.1 defines the baseline plan format and execution-state rules for
 Use:
 ```text
 /start-work path/to/plan.md --json
+/start-work-bg path/to/plan.md
+/bg run --id <job-id>
 /start-work status --json
 /start-work deviations --json
+/start-work-doctor-json
 ```
+
+Integration notes:
+- use `/start-work-bg` when you want queued, reviewable execution via the background subsystem before running `/bg run`
+- `/digest run` now includes a `plan_execution` recap block (status, plan id, step counts, deviation count)
+- `/doctor run` includes `start-work` health diagnostics for execution-state visibility
 
 ## Context resilience policy
 
