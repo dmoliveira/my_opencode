@@ -16,6 +16,12 @@ This roadmap tracks phased delivery of advanced orchestration features inspired 
 - `postponed`: intentionally deferred; not expected this cycle.
 - `done`: fully implemented, documented, and validated.
 
+## Priority Playbook
+
+- `High`: foundational or high-risk controls; implement in near-term phases.
+- `Medium`: meaningful acceleration; schedule after foundations stabilize.
+- `Low`: optional power-user capability; defer when capacity is constrained.
+
 ## Command Boundary Map
 
 Use this map to avoid overlapping implementations.
