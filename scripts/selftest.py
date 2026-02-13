@@ -1459,6 +1459,70 @@ def main() -> int:
             isinstance(routing_explain_report.get("resolution_trace"), dict),
             "routing explain should include structured resolution trace",
         )
+        expect(
+            routing_explain_report.get("fallback_reason")
+            == "fallback_unavailable_model_to_category",
+            "routing explain should report fallback reason for unavailable model scenario",
+        )
+
+        routing_explain_no_fallback = subprocess.run(
+            [
+                sys.executable,
+                str(ROUTING_SCRIPT),
+                "explain",
+                "--category",
+                "quick",
+                "--available-models",
+                "openai/gpt-5-mini,openai/gpt-5.3-codex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            routing_explain_no_fallback.returncode == 0,
+            "routing explain should succeed for no-fallback scenario",
+        )
+        routing_explain_no_fallback_report = parse_json_output(
+            routing_explain_no_fallback.stdout
+        )
+        expect(
+            routing_explain_no_fallback_report.get("fallback_reason") == "none",
+            "routing explain should report explicit no-fallback reason when first candidate is accepted",
+        )
+
+        deterministic_trace_a = resolve_model_settings(
+            schema=routing_schema,
+            requested_category="deep",
+            user_overrides={"model": "openai/nonexistent"},
+            system_defaults={
+                "model": "openai/gpt-5.3-codex",
+                "temperature": 0.2,
+                "reasoning": "medium",
+                "verbosity": "medium",
+            },
+            available_models={"openai/gpt-5-mini", "openai/gpt-5.3-codex"},
+        )
+        deterministic_trace_b = resolve_model_settings(
+            schema=routing_schema,
+            requested_category="deep",
+            user_overrides={"model": "openai/nonexistent"},
+            system_defaults={
+                "model": "openai/gpt-5.3-codex",
+                "temperature": 0.2,
+                "reasoning": "medium",
+                "verbosity": "medium",
+            },
+            available_models={"openai/gpt-5-mini", "openai/gpt-5.3-codex"},
+        )
+        expect(
+            deterministic_trace_a.get("resolution_trace")
+            == deterministic_trace_b.get("resolution_trace"),
+            "model routing resolution trace should remain deterministic for identical inputs",
+        )
 
         keyword_report = resolve_prompt_modes(
             "Please safe-apply and deep-analyze this migration; ulw can wait.",

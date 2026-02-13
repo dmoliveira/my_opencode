@@ -48,7 +48,7 @@ Use this map to avoid overlapping implementations.
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
-| E12 | Provider/Model Fallback Visibility | in_progress | Medium | E5 | bd-1jq, bd-298, bd-194 | Explain why model routing decisions happen |
+| E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
@@ -172,7 +172,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 1 - Config Layering + JSONC Support
 
-**Status:** `done`
+**Status:** `paused`
 **Priority:** High
 **Goal:** Add user/project layered config and JSONC parsing so behavior can be customized per repo without mutating global defaults.
 **Depends on:** None
@@ -439,7 +439,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 10 - Auto Slash Command Detector
 
-**Status:** `in_progress`
+**Status:** `paused`
 **Priority:** Medium
 **Goal:** Detect natural-language intent that maps to existing slash commands and optionally execute with guardrails.
 **Depends on:** Epic 1, Epic 8
@@ -499,7 +499,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 12 - Provider/Model Fallback Visibility
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Make model routing and provider fallback decisions observable and explainable.
 **Depends on:** Epic 5
@@ -519,12 +519,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 12.3.2: Add examples for category-driven routing outcomes
   - [x] Subtask 12.3.3: Add docs for troubleshooting unexpected model selection
   - [x] Notes: Added `scripts/routing_command.py`, routed aliases in `opencode.json`, and README examples/troubleshooting for compact explainability workflows.
-- [ ] Task 12.4: Verification
-  - [ ] Subtask 12.4.1: Add tests for deterministic trace output
-  - [ ] Subtask 12.4.2: Add tests for fallback and no-fallback scenarios
-  - [ ] Subtask 12.4.3: Add install-test smoke checks
-- [ ] Exit criteria: users can explain model/provider selection for every routed task
-- [ ] Exit criteria: trace output remains readable in default mode
+- [x] Task 12.4: Verification
+  - [x] Subtask 12.4.1: Add tests for deterministic trace output
+  - [x] Subtask 12.4.2: Add tests for fallback and no-fallback scenarios
+  - [x] Subtask 12.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with deterministic resolution-trace assertions plus fallback/no-fallback routing explain scenarios and added `/routing` smoke hints in `install.sh`.
+- [x] Exit criteria: users can explain model/provider selection for every routed task
+- [x] Exit criteria: trace output remains readable in default mode
 
 ---
 
