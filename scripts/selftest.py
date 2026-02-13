@@ -23,6 +23,7 @@ from model_routing_schema import (  # type: ignore
     resolve_model_settings,
     validate_schema,
 )
+from keyword_mode_schema import resolve_prompt_modes  # type: ignore
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +43,7 @@ BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
+KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1371,6 +1373,97 @@ def main() -> int:
             and model_routing_report.get("settings", {}).get("model")
             == "openai/gpt-5.3-codex",
             "model-routing resolve should keep active category and apply model fallback",
+        )
+
+        keyword_report = resolve_prompt_modes(
+            "Please safe-apply and deep-analyze this migration; ulw can wait.",
+            enabled=True,
+            disabled_keywords=set(),
+        )
+        expect(
+            keyword_report.get("matched_keywords")
+            == ["safe-apply", "deep-analyze", "ulw"],
+            "keyword detector should resolve matched keywords in precedence order",
+        )
+        expect(
+            keyword_report.get("effective_flags", {}).get("analysis_depth") == "high",
+            "keyword detector should keep higher-precedence conflicting flag values",
+        )
+        expect(
+            len(keyword_report.get("conflicts", [])) >= 1,
+            "keyword detector should report conflicts when lower-precedence flags are discarded",
+        )
+
+        keyword_opt_out = resolve_prompt_modes(
+            "no-keyword-mode safe-apply deep-analyze",
+            enabled=True,
+            disabled_keywords=set(),
+        )
+        expect(
+            keyword_opt_out.get("matched_keywords") == []
+            and keyword_opt_out.get("request_opt_out") == "no-keyword-mode",
+            "keyword detector should support prompt-level global opt-out",
+        )
+
+        keyword_detect = subprocess.run(
+            [
+                sys.executable,
+                str(KEYWORD_MODE_SCRIPT),
+                "detect",
+                "--prompt",
+                "safe-apply deep-analyze ulw refactor this module",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(keyword_detect.returncode == 0, "keyword-mode detect should succeed")
+        keyword_detect_report = parse_json_output(keyword_detect.stdout)
+        expect(
+            keyword_detect_report.get("matched_keywords")
+            == ["safe-apply", "deep-analyze", "ulw"],
+            "keyword-mode detect should emit deterministic keyword ordering",
+        )
+
+        keyword_apply = subprocess.run(
+            [
+                sys.executable,
+                str(KEYWORD_MODE_SCRIPT),
+                "apply",
+                "--prompt",
+                "parallel-research deep-analyze check call graph",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(keyword_apply.returncode == 0, "keyword-mode apply should succeed")
+        keyword_state = parse_json_output(keyword_apply.stdout)
+        expect(
+            keyword_state.get("matched_keywords")
+            == ["deep-analyze", "parallel-research"],
+            "keyword-mode apply should persist precedence-ordered active modes",
+        )
+        keyword_status = subprocess.run(
+            [sys.executable, str(KEYWORD_MODE_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(keyword_status.returncode == 0, "keyword-mode status should succeed")
+        keyword_status_report = parse_json_output(keyword_status.stdout)
+        expect(
+            keyword_status_report.get("active_modes")
+            == ["deep-analyze", "parallel-research"],
+            "keyword-mode status should expose persisted runtime context",
         )
 
         wizard_state_path = (

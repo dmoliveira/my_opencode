@@ -44,7 +44,7 @@ Use this map to avoid overlapping implementations.
 | E5 | Category-Based Model Routing | done | Medium | E1 | bd-2z6, bd-m48, bd-15y, bd-222 | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
-| E8 | Keyword-Triggered Execution Modes | in_progress | High | E1, E4 | bd-302 | Fast power-mode activation from prompt text |
+| E8 | Keyword-Triggered Execution Modes | in_progress | High | E1, E4 | bd-302, bd-2fb | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | planned | High | E1 | TBD | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | planned | High | E4 | TBD | Improve long-session stability and recovery |
@@ -385,10 +385,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 8.1.2: Define mode side-effects and precedence rules
   - [x] Subtask 8.1.3: Define explicit opt-out syntax and defaults
   - [x] Notes: Added `instructions/keyword_execution_modes.md` with deterministic keyword matching, precedence, conflict handling, and opt-out syntax.
-- [ ] Task 8.2: Implement keyword detector engine
-  - [ ] Subtask 8.2.1: Parse user prompts and resolve keyword intents
-  - [ ] Subtask 8.2.2: Apply mode flags to runtime execution context
-  - [ ] Subtask 8.2.3: Add conflict handling when multiple keywords appear
+- [x] Task 8.2: Implement keyword detector engine
+  - [x] Subtask 8.2.1: Parse user prompts and resolve keyword intents
+  - [x] Subtask 8.2.2: Apply mode flags to runtime execution context
+  - [x] Subtask 8.2.3: Add conflict handling when multiple keywords appear
+  - [x] Notes: Added `scripts/keyword_mode_schema.py` + `scripts/keyword_mode_command.py` for deterministic token matching, precedence-aware conflict handling, and persisted keyword mode runtime context.
 - [ ] Task 8.3: User visibility and control
   - [ ] Subtask 8.3.1: Add status command for active mode stack
   - [ ] Subtask 8.3.2: Add config toggles to disable selected keywords

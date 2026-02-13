@@ -24,6 +24,8 @@ All notable changes to this project are documented in this file.
 - Added `scripts/refactor_lite_command.py` backend with preflight target analysis, structured plan output, and verification hooks (`make validate`, optional `make selftest`).
 - Added `/refactor-lite` command templates and shortcuts in `opencode.json`, plus installer hints for dry-run/self-check usage.
 - Added `instructions/keyword_execution_modes.md` defining reserved keywords, deterministic precedence rules, and request-level opt-out syntax for Epic 8 Task 8.1.
+- Added `scripts/keyword_mode_schema.py` and `scripts/keyword_mode_command.py` to parse prompt keywords, resolve precedence-aware mode flags, and persist keyword mode runtime context.
+- Added `/keyword-mode` aliases (`status|detect|apply`) to inspect and apply keyword-triggered execution modes.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.

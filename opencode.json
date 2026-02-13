@@ -154,6 +154,22 @@
       "description": "Resolve effective model settings in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" resolve $ARGUMENTS --json`\nShow only the command output."
     },
+    "keyword-mode": {
+      "description": "Detect and apply keyword-triggered execution modes",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "keyword-mode-status": {
+      "description": "Show keyword mode status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" status`\nShow only the command output."
+    },
+    "keyword-mode-detect": {
+      "description": "Detect keyword modes for a prompt",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" detect $ARGUMENTS --json`\nShow only the command output."
+    },
+    "keyword-mode-apply": {
+      "description": "Apply keyword modes for a prompt",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" apply $ARGUMENTS --json`\nShow only the command output."
+    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
