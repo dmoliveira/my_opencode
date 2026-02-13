@@ -370,6 +370,19 @@ Recommended flow:
 2. Narrow with `--scope` until safe mode is deterministic.
 3. Run without `--dry-run` to enforce verification hooks.
 
+## Hook framework baseline
+
+Epic 4 starts with a minimal hook framework in `scripts/hook_framework.py`.
+
+- Supported events: `PreToolUse`, `PostToolUse`, `Stop`
+- Config section: `hooks.enabled`, `hooks.disabled`, `hooks.order`
+- Deterministic ordering for each event:
+  1. explicit `hooks.order`
+  2. numeric `priority` (ascending)
+  3. hook id (lexicographic)
+
+This baseline intentionally ships without default active hooks. Epic 4.2 adds concrete hook implementations.
+
 ## Background jobs inside OpenCode 🧵
 
 Use these directly in OpenCode:

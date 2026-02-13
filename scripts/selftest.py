@@ -11,6 +11,8 @@ import threading
 import time
 from pathlib import Path
 
+from hook_framework import HookRegistration, resolve_event_plan  # type: ignore
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
@@ -1034,6 +1036,39 @@ def main() -> int:
         expect(
             aggressive_report.get("result") == "PASS",
             "refactor-lite aggressive mode should pass dry-run preflight",
+        )
+
+        hook_plan = resolve_event_plan(
+            "PostToolUse",
+            [
+                HookRegistration("continuation-reminder", "PostToolUse", priority=50),
+                HookRegistration("truncate-safety", "PostToolUse", priority=80),
+                HookRegistration("error-hints", "PostToolUse", priority=70),
+                HookRegistration("stop-audit", "Stop", priority=10),
+            ],
+            {
+                "enabled": True,
+                "disabled": ["truncate-safety"],
+                "order": ["error-hints", "continuation-reminder"],
+            },
+        )
+        expect(
+            [hook.hook_id for hook in hook_plan]
+            == ["error-hints", "continuation-reminder"],
+            "hook framework should apply deterministic order and disabled list",
+        )
+
+        hook_tie_break = resolve_event_plan(
+            "PostToolUse",
+            [
+                HookRegistration("bbb", "PostToolUse", priority=100),
+                HookRegistration("aaa", "PostToolUse", priority=100),
+            ],
+            {"enabled": True},
+        )
+        expect(
+            [hook.hook_id for hook in hook_tie_break] == ["aaa", "bbb"],
+            "hook framework should use stable id ordering as deterministic fallback",
         )
 
         wizard_state_path = (

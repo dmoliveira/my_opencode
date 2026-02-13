@@ -40,7 +40,7 @@ Use this map to avoid overlapping implementations.
 | E1 | Config Layering + JSONC Support | done | High | - | bd-1g0, bd-208, bd-4j1 | Foundation for most later epics |
 | E2 | Background Task Orchestration | done | High | E1 | bd-1ob, bd-3lf, bd-2xo, bd-mb2 | Keep minimal and stable first |
 | E3 | Refactor Workflow Command | done | High | E1 | bd-zfx, bd-vc3, bd-2ps, bd-3fr | Safer rollout after config layering |
-| E4 | Continuation and Safety Hooks | planned | Medium | E1, E2 | TBD | Start with minimal hooks only |
+| E4 | Continuation and Safety Hooks | in_progress | Medium | E1, E2 | bd-1h0 | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | planned | Medium | E1 | TBD | Can partially overlap with E2/E3 |
 | E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
@@ -264,15 +264,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 4 - Continuation and Safety Hooks (Targeted)
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Add minimal lifecycle automation hooks for continuation and resilience without introducing heavy complexity.
 **Depends on:** Epic 1, Epic 2
 
-- [ ] Task 4.1: Hook framework baseline
-  - [ ] Subtask 4.1.1: Define hook events (`PreToolUse`, `PostToolUse`, `Stop`) for our scope
-  - [ ] Subtask 4.1.2: Define hook config and disable list
-  - [ ] Subtask 4.1.3: Implement deterministic execution order
+- [x] Task 4.1: Hook framework baseline
+  - [x] Subtask 4.1.1: Define hook events (`PreToolUse`, `PostToolUse`, `Stop`) for our scope
+  - [x] Subtask 4.1.2: Define hook config and disable list
+  - [x] Subtask 4.1.3: Implement deterministic execution order
+  - [x] Notes: Added `scripts/hook_framework.py` baseline planner and selftest coverage for deterministic ordering + disabled hook filtering.
 - [ ] Task 4.2: Initial hooks
   - [ ] Subtask 4.2.1: Add continuation reminder hook for unfinished explicit checklists
   - [ ] Subtask 4.2.2: Add output truncation safety hook for large tool outputs
