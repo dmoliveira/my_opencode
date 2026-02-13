@@ -87,6 +87,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/budget_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/budget_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/autoflow_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/autoflow_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -164,6 +167,13 @@ data['plan_execution']=pe; p.write_text(json.dumps(data, indent=2)+'\n', encodin
     python3 "$INSTALL_DIR/scripts/budget_command.py" doctor --json
     python3 "$INSTALL_DIR/scripts/budget_command.py" override --clear --json
   fi
+  if [ -f "$INSTALL_DIR/scripts/autoflow_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/autoflow_command.py" dry-run "$SELF_CHECK_PLAN" --json
+    python3 "$INSTALL_DIR/scripts/autoflow_command.py" status --json
+    python3 "$INSTALL_DIR/scripts/autoflow_command.py" report --json
+    python3 "$INSTALL_DIR/scripts/autoflow_command.py" stop --reason install-self-check --json
+    python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --deviation "install self-check" --json
+  fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -231,6 +241,10 @@ printf "  /budget status --json\n"
 printf "  /budget profile conservative\n"
 printf "  /budget override --tool-call-count 120 --reason install-self-check --json\n"
 printf "  /budget-doctor-json\n"
+printf "  /autoflow dry-run ~/.config/opencode/my_opencode/plan.md --json\n"
+printf "  /autoflow status --json\n"
+printf "  /autoflow report --json\n"
+printf "  /autoflow stop --reason manual --json\n"
 printf "  /todo status --json\n"
 printf "  /todo enforce --json\n"
 printf "  /resume status --json\n"
