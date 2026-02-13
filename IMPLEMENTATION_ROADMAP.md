@@ -648,10 +648,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 17.1.2: Define resume eligibility and cool-down rules
   - [x] Subtask 17.1.3: Define max resume attempts and escalation path
   - [x] Notes: Added `instructions/resume_policy_model.md` with interruption classes, deterministic eligibility/cool-down/attempt-limit rules, reason codes, and audit event contract.
-- [ ] Task 17.2: Implement recovery engine
-  - [ ] Subtask 17.2.1: Load last safe checkpoint and reconstruct state
-  - [ ] Subtask 17.2.2: Re-run only idempotent or explicitly approved steps
-  - [ ] Subtask 17.2.3: Persist resume trail for audit/debugging
+- [x] Task 17.2: Implement recovery engine
+  - [x] Subtask 17.2.1: Load last safe checkpoint and reconstruct state
+  - [x] Subtask 17.2.2: Re-run only idempotent or explicitly approved steps
+  - [x] Subtask 17.2.3: Persist resume trail for audit/debugging
+  - [x] Notes: Added `scripts/recovery_engine.py` and `/start-work recover` backend path for checkpoint eligibility checks, approval-gated replay, and persisted resume audit trail events.
 - [ ] Task 17.3: User control surfaces
   - [ ] Subtask 17.3.1: Add `/resume status`, `/resume now`, `/resume disable` commands
   - [ ] Subtask 17.3.2: Add clear output explaining why resume did/did not trigger
