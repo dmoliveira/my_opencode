@@ -888,10 +888,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 25.2.2: Add expedited patch flow with rollback checkpoint
   - [x] Subtask 25.2.3: Add incident timeline capture for auditability
   - [x] Notes: Added `scripts/hotfix_runtime.py` runtime backend with incident activation gating, constrained budget/permission profile defaults, rollback checkpoint capture, patch and validation event tracking, closure guardrails, and append-only incident timeline persistence under `~/.config/opencode/my_opencode/runtime/hotfix_mode.json`.
-- [ ] Task 25.3: Command integration and docs
-  - [ ] Subtask 25.3.1: Add `/hotfix start|status|close`
-  - [ ] Subtask 25.3.2: Add automatic reminder for post-incident hardening tasks
-  - [ ] Subtask 25.3.3: Document incident playbooks and escalation notes
+- [x] Task 25.3: Command integration and docs
+  - [x] Subtask 25.3.1: Add `/hotfix start|status|close`
+  - [x] Subtask 25.3.2: Add automatic reminder for post-incident hardening tasks
+  - [x] Subtask 25.3.3: Document incident playbooks and escalation notes
+  - [x] Notes: Added `scripts/hotfix_command.py` command surface with start/status/close passthrough plus `remind` and `doctor`, wired `/hotfix*` aliases in `opencode.json`, integrated hotfix checks into installer self-check and install smoke workflows, and documented incident playbook usage in README.
 - [ ] Task 25.4: Verification
   - [ ] Subtask 25.4.1: Add tests for mandatory guardrail enforcement
   - [ ] Subtask 25.4.2: Add tests for rollback and closure flow

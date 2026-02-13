@@ -346,6 +346,34 @@
       "description": "Run release-train diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" doctor --json`\nShow only the command output."
     },
+    "hotfix": {
+      "description": "Run incident hotfix controls (start|status|close|remind|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "hotfix-json": {
+      "description": "Run hotfix command path in JSON mode",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS --json`\nShow only the command output."
+    },
+    "hotfix-start": {
+      "description": "Start hotfix incident mode in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" start $ARGUMENTS --json`\nShow only the command output."
+    },
+    "hotfix-status": {
+      "description": "Show hotfix incident status in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" status --json`\nShow only the command output."
+    },
+    "hotfix-close": {
+      "description": "Close hotfix incident with follow-up metadata",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" close $ARGUMENTS --json`\nShow only the command output."
+    },
+    "hotfix-remind": {
+      "description": "Show post-incident hardening reminders",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" remind --json`\nShow only the command output."
+    },
+    "hotfix-doctor": {
+      "description": "Run hotfix command diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" doctor --json`\nShow only the command output."
+    },
     "budget": {
       "description": "Manage execution budget controls (status|profile|override|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."
