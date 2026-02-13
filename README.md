@@ -29,6 +29,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
+- 🧭 Built-in `/autoflow` command for unified orchestration (`start|status|resume|stop|report|dry-run`).
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
@@ -183,6 +184,17 @@ Task 22.2 adapter baseline:
 - primitive composition: `plan`, `todo_compliance`, `budget`, `checkpoint`, `resume`, and `loop_guard`
 - deterministic transition matrix for `start|status|resume|stop|report|dry-run`
 - explain path that returns trace entries plus fallback intent/reason when transitions are illegal or resume gating fails
+
+Task 22.3 safety and usability controls:
+
+- command module: `scripts/autoflow_command.py`
+- kill-switch control: `/autoflow stop --reason <text> --json` sets runtime status to `stopped` with audit metadata
+- dry-run control: `/autoflow dry-run <plan.md> --json` previews transition decisions without mutating runtime state
+- migration path from low-level commands to `/autoflow`:
+  - `/start-work <plan.md>` -> `/autoflow start <plan.md>`
+  - `/start-work status --json` -> `/autoflow status --json`
+  - `/start-work deviations --json` -> `/autoflow report --json`
+  - `/resume now --interruption-class <class> --json` -> `/autoflow resume --interruption-class <class> --json`
 
 ## Installed plugin stack 🔌
 
@@ -1167,6 +1179,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/browser_command.py` - backend script for `/browser`
 - `scripts/start_work_command.py` - backend script for `/start-work`
 - `scripts/autoflow_adapter.py` - orchestration adapter for `/autoflow` transition and explain planning
+- `scripts/autoflow_command.py` - unified `/autoflow` command surface with dry-run and kill-switch controls
 - `scripts/budget_command.py` - backend script for `/budget`
 - `scripts/todo_command.py` - backend script for `/todo`
 - `scripts/resume_command.py` - backend script for `/resume`

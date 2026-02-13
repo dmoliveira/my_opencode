@@ -92,6 +92,7 @@ SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
+AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -2369,6 +2370,93 @@ version: 1
             "autoflow adapter explain should preserve resume eligibility reason codes",
         )
 
+        autoflow_dry_run = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_COMMAND_SCRIPT),
+                "dry-run",
+                str(plan_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(autoflow_dry_run.returncode == 0, "autoflow dry-run should succeed")
+        autoflow_dry_run_report = parse_json_output(autoflow_dry_run.stdout)
+        expect(
+            autoflow_dry_run_report.get("result") == "PASS"
+            and autoflow_dry_run_report.get("mutating") is False,
+            "autoflow dry-run should report non-mutating PASS decision",
+        )
+
+        autoflow_stop = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_COMMAND_SCRIPT),
+                "stop",
+                "--reason",
+                "selftest",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(autoflow_stop.returncode == 0, "autoflow stop should succeed")
+        autoflow_stop_report = parse_json_output(autoflow_stop.stdout)
+        expect(
+            autoflow_stop_report.get("status") == "stopped"
+            and autoflow_stop_report.get("reason_code")
+            == "autoflow_kill_switch_triggered",
+            "autoflow stop should trigger deterministic kill-switch status",
+        )
+
+        autoflow_status_after_stop = subprocess.run(
+            [sys.executable, str(AUTOFLOW_COMMAND_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_status_after_stop.returncode == 0,
+            "autoflow status should succeed after kill-switch",
+        )
+        autoflow_status_after_stop_report = parse_json_output(
+            autoflow_status_after_stop.stdout
+        )
+        expect(
+            autoflow_status_after_stop_report.get("status") == "stopped",
+            "autoflow status should persist stopped state after kill-switch",
+        )
+
+        autoflow_start_recover = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOFLOW_COMMAND_SCRIPT),
+                "start",
+                str(plan_path),
+                "--deviation",
+                "manual verification note",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_start_recover.returncode == 0,
+            "autoflow start should recover after kill-switch stop",
+        )
+
         todo_status = subprocess.run(
             [sys.executable, str(TODO_SCRIPT), "status", "--json"],
             capture_output=True,
@@ -4178,6 +4266,17 @@ version: 1
         expect(
             budget_checks[0].get("ok") is True,
             "doctor budget check should pass",
+        )
+
+        autoflow_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "autoflow"
+        ]
+        expect(bool(autoflow_checks), "doctor summary should include autoflow check")
+        expect(
+            autoflow_checks[0].get("ok") is True,
+            "doctor autoflow check should pass",
         )
 
         todo_checks = [

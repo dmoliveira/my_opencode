@@ -792,10 +792,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 22.2.2: Add deterministic state machine transitions
   - [x] Subtask 22.2.3: Add explain mode showing decisions and fallbacks
   - [x] Notes: Added `scripts/autoflow_adapter.py` to compose runtime primitives (`plan`, `todo`, `budget`, `checkpoint`, `resume`, `loop_guard`) and resolve deterministic intent transitions with explain traces and fallback reason codes.
-- [ ] Task 22.3: Add safety and usability controls
-  - [ ] Subtask 22.3.1: Add `dry-run` to preview actions without mutating state
-  - [ ] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states
-  - [ ] Subtask 22.3.3: Add docs and migration guidance from low-level commands
+- [x] Task 22.3: Add safety and usability controls
+  - [x] Subtask 22.3.1: Add `dry-run` to preview actions without mutating state
+  - [x] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states
+  - [x] Subtask 22.3.3: Add docs and migration guidance from low-level commands
+  - [x] Notes: Added `scripts/autoflow_command.py` plus `/autoflow*` aliases with non-mutating `dry-run`, explicit `stop` kill-switch semantics, doctor integration, installer smoke coverage, and README migration mappings from low-level commands.
 - [ ] Task 22.4: Verification
   - [ ] Subtask 22.4.1: Add integration tests for full lifecycle (`start -> status -> report`)
   - [ ] Subtask 22.4.2: Add recovery tests (`resume` after interruption)

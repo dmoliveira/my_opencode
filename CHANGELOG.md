@@ -71,6 +71,8 @@ All notable changes to this project are documented in this file.
 - Added `/budget`, `/budget-status`, `/budget-profile`, `/budget-override`, and `/budget-doctor-json` aliases in `opencode.json`.
 - Added `instructions/autoflow_command_contract.md` defining Epic 22 Task 22.1 `/autoflow` subcommands, validation/error contract, output schema modes, lifecycle states, and safety defaults.
 - Added `scripts/autoflow_adapter.py` implementing Epic 22 Task 22.2 primitive composition and deterministic transition/explain logic for unified orchestration.
+- Added `scripts/autoflow_command.py` with `/autoflow start|status|resume|stop|report|dry-run` command controls, including non-mutating dry-run and explicit kill-switch stop behavior.
+- Added `/autoflow`, `/autoflow-status`, `/autoflow-report`, `/autoflow-dry-run`, and `/autoflow-stop` aliases in `opencode.json`.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
@@ -138,6 +140,7 @@ All notable changes to this project are documented in this file.
 - Marked Epic 20 Task 20.4 complete and promoted Epic 20 status to done in the roadmap.
 - Marked Epic 22 as in progress and completed Task 22.1 contract definition notes in the roadmap.
 - Expanded selftest coverage with `/autoflow` adapter status and explain-path checks for illegal transitions and resume-gating fallback reason codes.
+- Integrated `/autoflow` diagnostics into unified `/doctor`, expanded install smoke with `/autoflow` dry-run/status/report/stop checks, and documented migration guidance from `/start-work` and `/resume` flows.
 
 ## v0.2.0 - 2026-02-12
 
