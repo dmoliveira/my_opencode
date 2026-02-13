@@ -255,6 +255,12 @@ Examples:
 /pr-review doctor --json
 ```
 
+Task 23.4 verification notes:
+
+- selftest validates blocker detection for hard-evidence security findings and missing-evidence recommendation behavior.
+- selftest validates false-positive control for docs-only diffs (`recommendation=approve`, no findings).
+- install smoke validates `/pr-review`, `/pr-review checklist`, and `/pr-review doctor` command paths.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

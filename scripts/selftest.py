@@ -1160,6 +1160,92 @@ index 3333333..4444444 100644
             "pr-review doctor should confirm analyzer readiness",
         )
 
+        analyzer_docs_only_diff = tmp / "pr_review_docs_only.diff"
+        analyzer_docs_only_diff.write_text(
+            """diff --git a/README.md b/README.md
+index 1111111..2222222 100644
+--- a/README.md
++++ b/README.md
+@@ -10,0 +11,2 @@
++## Notes
++Updated documentation only.
+""",
+            encoding="utf-8",
+        )
+        analyzer_docs_only = subprocess.run(
+            [
+                sys.executable,
+                str(PR_REVIEW_ANALYZER_SCRIPT),
+                "analyze",
+                "--diff-file",
+                str(analyzer_docs_only_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            analyzer_docs_only.returncode == 0,
+            "pr-review analyzer should parse docs-only diff",
+        )
+        analyzer_docs_only_report = parse_json_output(analyzer_docs_only.stdout)
+        expect(
+            analyzer_docs_only_report.get("recommendation") == "approve",
+            "pr-review analyzer should avoid false positives for docs-only changes",
+        )
+        expect(
+            not analyzer_docs_only_report.get("findings"),
+            "pr-review analyzer should keep docs-only default output low-noise",
+        )
+
+        analyzer_tested_change_diff = tmp / "pr_review_tested_change.diff"
+        analyzer_tested_change_diff.write_text(
+            """diff --git a/scripts/calc.py b/scripts/calc.py
+index 1111111..2222222 100644
+--- a/scripts/calc.py
++++ b/scripts/calc.py
+@@ -1,0 +1,2 @@
++def calc_total(values):
++    return sum(values)
+diff --git a/tests/test_calc.py b/tests/test_calc.py
+index 3333333..4444444 100644
+--- a/tests/test_calc.py
++++ b/tests/test_calc.py
+@@ -1,0 +1,2 @@
++def test_calc_total():
++    assert True
+""",
+            encoding="utf-8",
+        )
+        analyzer_tested_change = subprocess.run(
+            [
+                sys.executable,
+                str(PR_REVIEW_ANALYZER_SCRIPT),
+                "analyze",
+                "--diff-file",
+                str(analyzer_tested_change_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            analyzer_tested_change.returncode == 0,
+            "pr-review analyzer should parse tested source-change diff",
+        )
+        analyzer_tested_change_report = parse_json_output(analyzer_tested_change.stdout)
+        expect(
+            "tests"
+            not in set(analyzer_tested_change_report.get("missing_evidence", [])),
+            "pr-review analyzer should not report missing tests when test files changed",
+        )
+
         result = subprocess.run(
             [
                 sys.executable,
