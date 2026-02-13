@@ -56,7 +56,7 @@ Use this map to avoid overlapping implementations.
 | E17 | Auto-Resume and Recovery Loop | done | High | E11, E14 | bd-1ho, bd-2vc, bd-1yz, bd-2xk | Resume interrupted work from checkpoints safely |
 | E18 | LSP/AST-Assisted Safe Edit Mode | done | High | E3 | bd-3cg, bd-2ln, bd-10l, bd-lds | Prefer semantic edits over plain text replacements |
 | E19 | Session Checkpoint Snapshots | done | Medium | E2, E17 | bd-553, bd-3tb, bd-3um, bd-3gm | Durable state for rollback and restart safety |
-| E20 | Execution Budget Guardrails | planned | High | E2, E11 | TBD | Bound time/tool/token usage for autonomous runs |
+| E20 | Execution Budget Guardrails | in_progress | High | E2, E11 | bd-63f | Bound time/tool/token usage for autonomous runs |
 | E21 | Bounded Loop Mode Presets | merged | Medium | E22, E28 | TBD | Merged into E22/E28 loop controls |
 | E22 | Autoflow Unified Orchestration Command | planned | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | planned | High | E3 | TBD | Pre-PR quality, output, and risk review automation |
@@ -734,15 +734,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 20 - Execution Budget Guardrails
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Prevent runaway autonomous runs by enforcing configurable limits for time, tool calls, and token usage.
 **Depends on:** Epic 2, Epic 11
 
-- [ ] Task 20.1: Define budget model
-  - [ ] Subtask 20.1.1: Define limit dimensions (wall-clock, tool-call count, token estimate)
-  - [ ] Subtask 20.1.2: Define profiles (`conservative`, `balanced`, `extended`)
-  - [ ] Subtask 20.1.3: Define override and emergency-stop semantics
+- [x] Task 20.1: Define budget model
+  - [x] Subtask 20.1.1: Define limit dimensions (wall-clock, tool-call count, token estimate)
+  - [x] Subtask 20.1.2: Define profiles (`conservative`, `balanced`, `extended`)
+  - [x] Subtask 20.1.3: Define override and emergency-stop semantics
+  - [x] Notes: Added `instructions/execution_budget_model.md` defining budget dimensions, profile defaults, threshold semantics, and auditable override/emergency-stop rules.
 - [ ] Task 20.2: Implement budget enforcement runtime
   - [ ] Subtask 20.2.1: Track usage counters in real time
   - [ ] Subtask 20.2.2: Block/soft-stop execution at threshold boundaries

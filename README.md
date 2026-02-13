@@ -120,6 +120,19 @@ Task 19.4 verification notes:
 - retention tests verify bounded per-run history and gzip rotation for older snapshots.
 - install smoke now exercises `/checkpoint list|show|prune|doctor` alongside `/start-work` recovery flows.
 
+## Execution budget baseline
+
+Epic 20 Task 20.1 defines execution budget guardrail policy in:
+
+- `instructions/execution_budget_model.md`
+
+Current baseline includes:
+
+- budget dimensions for wall-clock duration, tool-call count, and token estimates.
+- profile defaults for `conservative`, `balanced`, and `extended` execution envelopes.
+- deterministic soft/hard threshold semantics and reason-code contract.
+- auditable override and emergency-stop behavior with bounded escalation limits.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
