@@ -310,6 +310,23 @@ Task 25.2 hotfix runtime notes:
 - rollback checkpoint and patch/validation events are captured in append-only timeline records.
 - closure now enforces follow-up issue linkage and deferred validation ownership metadata.
 
+Task 25.3 hotfix command integration notes:
+
+- command module: `scripts/hotfix_command.py`
+- command surface: `/hotfix`, `/hotfix-json`, `/hotfix-start`, `/hotfix-status`, `/hotfix-close`, `/hotfix-remind`, `/hotfix-doctor`
+- doctor integration: unified `/doctor run --json` now includes `hotfix` subsystem readiness checks.
+- install/self-check integration: installer smoke now exercises hotfix start, checkpoint, validate, status, remind, close, and doctor paths.
+
+Examples:
+
+```text
+/hotfix start --incident-id INC-42 --scope patch --impact sev2 --json
+/hotfix status --json
+/hotfix close --outcome resolved --followup-issue bd-123 --deferred-validation-owner oncall --deferred-validation-due 2026-03-01 --json
+/hotfix remind --json
+/hotfix doctor --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

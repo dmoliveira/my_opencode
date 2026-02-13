@@ -98,6 +98,7 @@ PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
+HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -1713,6 +1714,143 @@ index 3333333..4444444 100644
         expect(
             hotfix_close_payload.get("result") == "PASS",
             "hotfix runtime close should report pass result",
+        )
+
+        hotfix_command_status = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_status.returncode == 0,
+            "hotfix command status should pass after runtime close",
+        )
+        hotfix_command_status_payload = parse_json_output(hotfix_command_status.stdout)
+        expect(
+            hotfix_command_status_payload.get("incident_id") == "INC-123",
+            "hotfix command status should proxy runtime incident id",
+        )
+
+        hotfix_command_remind = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "remind", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_remind.returncode == 0,
+            "hotfix command remind should return actionable reminders",
+        )
+        hotfix_command_remind_payload = parse_json_output(hotfix_command_remind.stdout)
+        expect(
+            hotfix_command_remind_payload.get("followup_issue") == "bd-xyz",
+            "hotfix command remind should surface close metadata",
+        )
+        expect(
+            isinstance(hotfix_command_remind_payload.get("reminders"), list)
+            and len(hotfix_command_remind_payload.get("reminders", [])) >= 2,
+            "hotfix command remind should emit reminder list",
+        )
+
+        hotfix_command_doctor = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_doctor.returncode == 0,
+            "hotfix command doctor should pass when runtime and policy are present",
+        )
+        hotfix_command_doctor_payload = parse_json_output(hotfix_command_doctor.stdout)
+        expect(
+            hotfix_command_doctor_payload.get("result") == "PASS",
+            "hotfix command doctor should report pass",
+        )
+
+        hotfix_command_restart = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_COMMAND_SCRIPT),
+                "start",
+                "--incident-id",
+                "INC-124",
+                "--scope",
+                "config_only",
+                "--impact",
+                "sev3",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_restart.returncode == 0,
+            "hotfix command start should allow reopening a new incident",
+        )
+
+        subprocess.run(
+            [sys.executable, str(HOTFIX_RUNTIME_SCRIPT), "checkpoint", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "validate",
+                "--target",
+                "validate",
+                "--result",
+                "pass",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+
+        hotfix_command_close_missing = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_COMMAND_SCRIPT),
+                "close",
+                "--outcome",
+                "resolved",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_close_missing.returncode == 1,
+            "hotfix command close should enforce follow-up requirements",
+        )
+        hotfix_command_close_missing_payload = parse_json_output(
+            hotfix_command_close_missing.stdout
+        )
+        expect(
+            "followup_issue_required"
+            in set(hotfix_command_close_missing_payload.get("reason_codes", [])),
+            "hotfix command close should emit followup_issue_required reason code",
         )
 
         result = subprocess.run(
