@@ -48,7 +48,7 @@ Use this map to avoid overlapping implementations.
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
 | E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
-| E12 | Provider/Model Fallback Visibility | in_progress | Medium | E5 | bd-1jq, bd-298 | Explain why model routing decisions happen |
+| E12 | Provider/Model Fallback Visibility | in_progress | Medium | E5 | bd-1jq, bd-298, bd-194 | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | planned | Medium | E1 | TBD | Toggle Playwright/agent-browser with checks |
 | E14 | Plan-to-Execution Bridge Command | planned | Medium | E2, E3 | TBD | Execute validated plans with progress tracking |
 | E15 | Todo Enforcer and Plan Compliance | planned | High | E14 | TBD | Keep execution aligned with approved checklists |
@@ -514,10 +514,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 12.2.2: Store latest trace per command/session
   - [x] Subtask 12.2.3: Expose trace to doctor and debug commands
   - [x] Notes: Extended `scripts/model_routing_schema.py` with requested/attempted/selected runtime trace payloads and added persisted latest-trace support plus `/model-routing trace` in `scripts/model_routing_command.py`.
-- [ ] Task 12.3: User-facing command surface
-  - [ ] Subtask 12.3.1: Add `/routing status` and `/routing explain` commands
-  - [ ] Subtask 12.3.2: Add examples for category-driven routing outcomes
-  - [ ] Subtask 12.3.3: Add docs for troubleshooting unexpected model selection
+- [x] Task 12.3: User-facing command surface
+  - [x] Subtask 12.3.1: Add `/routing status` and `/routing explain` commands
+  - [x] Subtask 12.3.2: Add examples for category-driven routing outcomes
+  - [x] Subtask 12.3.3: Add docs for troubleshooting unexpected model selection
+  - [x] Notes: Added `scripts/routing_command.py`, routed aliases in `opencode.json`, and README examples/troubleshooting for compact explainability workflows.
 - [ ] Task 12.4: Verification
   - [ ] Subtask 12.4.1: Add tests for deterministic trace output
   - [ ] Subtask 12.4.2: Add tests for fallback and no-fallback scenarios
