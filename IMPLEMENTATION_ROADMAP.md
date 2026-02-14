@@ -1056,11 +1056,17 @@ Every command-oriented epic must ship all of the following:
     - [x] Evidence: PR URL, commit SHA, and concise test result summary are recorded in issue/PR body.
     - [x] Docs quality: include at least one workflow example and one troubleshooting/remediation path for new command surfaces.
     - [x] Thresholds: zero failing required checks, explicit risk notes for non-trivial behavior changes, and clear rollback path.
-- [ ] Task C3: Add tracking cadence
-  - [ ] Subtask C3.1: Weekly status update section in this file
-  - [ ] Subtask C3.2: Keep one epic `in_progress`
-  - [ ] Subtask C3.3: Move deferred work to `postponed` explicitly
-  - [ ] Subtask C3.4: Revisit paused/postponed epics at least once per month
+- [x] Task C3: Add tracking cadence
+  - [x] Subtask C3.1: Weekly status update section in this file
+  - [x] Subtask C3.2: Keep one epic `in_progress`
+  - [x] Subtask C3.3: Move deferred work to `postponed` explicitly
+  - [x] Subtask C3.4: Revisit paused/postponed epics at least once per month
+  - [x] Notes: Added explicit cadence policy so roadmap updates always record one active epic focus, a weekly status entry, and a monthly paused/postponed review checkpoint.
+  - [x] Cadence policy:
+    - [x] Weekly: append one dated status bullet in `Weekly Status Updates` with completed cards and next focus.
+    - [x] Active scope: keep exactly one epic marked `in_progress` unless emergency/hotfix overlap is explicitly documented.
+    - [x] Deferred hygiene: represent non-active backlog epics as `paused` or `postponed`, not `in_progress`.
+    - [x] Monthly: review paused/postponed epics at least once every 30 days and capture decisions in `Decision Log`.
 - [ ] Task C4: Command UX baseline (quality-of-life required)
   - [ ] Subtask C4.1: Add command autocomplete shortcuts in `opencode.json`
   - [ ] Subtask C4.2: Add command help and doctor JSON outputs
@@ -1084,7 +1090,7 @@ Run this checklist for every roadmap refinement pass:
 
 Use this log to track what changed week by week.
 
-- [ ] YYYY-MM-DD: update epic statuses, completed checkboxes, and next focus epic
+- [x] 2026-02-14: Completed C1-C3 cross-cutting roadmap governance tasks; next focus is Task C4 command UX baseline while keeping only Epic 6 as `in_progress`.
 
 ## Execution Queue (Simplified)
 
@@ -1106,6 +1112,8 @@ Use this log to track what changed week by week.
 - [x] 2026-02-13: Merge duplicate epic scopes E16 -> E23 and E21 -> E22/E28.
 - [x] 2026-02-13: Require command UX baseline (autocomplete, assistant tips, hovers/explanations, QoL aliases) for all new command features.
 - [x] 2026-02-14: Complete C1 release slicing plan with deterministic phase gates across A-N and keep deferred queue aligned with current epic statuses.
+- [x] 2026-02-14: Complete C3 tracking cadence rules (weekly update, single active epic policy, and monthly paused/postponed review requirement).
+- [x] 2026-02-14: Monthly paused/postponed review checkpoint: keep E10 `paused` and E7 `postponed`; no promotion due to current value/risk profile.
 
 ---
 
@@ -1116,6 +1124,5 @@ Use this log to track what changed week by week.
 - Prioritize **E11-E12** before E13-E14 when stability concerns are high.
 - Prioritize **E15 + E20** before E22 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
-- Keep **E28** paused until E22 proves stable in production-like workflows.
 - Keep **E10** paused unless explicit user-value metrics justify implementation.
-- Keep **Epic 6** paused and **Epic 7** postponed until core and control epics stabilize.
+- Keep **Epic 6** as the single active `in_progress` backlog epic and **Epic 7** postponed until clear demand emerges.
