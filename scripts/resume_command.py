@@ -92,14 +92,24 @@ def command_status(args: list[str]) -> int:
     _ = config
     if not runtime:
         report = {
-            "result": "FAIL",
+            "result": "PASS",
+            "enabled": True,
+            "status": "idle",
+            "interruption_class": DEFAULT_INTERRUPTION_CLASS,
             "reason_code": "resume_missing_checkpoint",
             "reason": explain_resume_reason("resume_missing_checkpoint"),
+            "cooldown_remaining": 0,
+            "attempt_count": 0,
+            "max_attempts": 3,
+            "checkpoint": None,
             "resume_hints": build_resume_hints(
                 "resume_missing_checkpoint",
                 interruption_class=DEFAULT_INTERRUPTION_CLASS,
             ),
             "eligible": False,
+            "warnings": [
+                "no checkpoint found yet; create one by running /start-work first"
+            ],
             "config": str(write_path),
         }
         print(json.dumps(report, indent=2) if json_output else report["reason"])
