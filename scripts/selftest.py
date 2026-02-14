@@ -89,6 +89,7 @@ PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
 MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
 DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
+SESSION_SCRIPT = REPO_ROOT / "scripts" / "session_command.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
@@ -1205,6 +1206,70 @@ def main() -> int:
                 for item in index_sessions
             ),
             "session index should prune stale sessions using retention policy",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "list", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"session list --json failed: {result.stderr}")
+        session_list_payload = parse_json_output(result.stdout)
+        expect(
+            session_list_payload.get("result") == "PASS"
+            and session_list_payload.get("count", 0) >= 1,
+            "session list should return at least one indexed session",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "show", "selftest-session", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"session show --json failed: {result.stderr}")
+        session_show_payload = parse_json_output(result.stdout)
+        expect(
+            session_show_payload.get("result") == "PASS"
+            and session_show_payload.get("session", {}).get("session_id")
+            == "selftest-session",
+            "session show should resolve indexed session by id",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "search", "selftest", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"session search --json failed: {result.stderr}")
+        session_search_payload = parse_json_output(result.stdout)
+        expect(
+            session_search_payload.get("result") == "PASS"
+            and session_search_payload.get("count", 0) >= 1,
+            "session search should match indexed selftest session",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"session doctor --json failed: {result.stderr}")
+        session_doctor_payload = parse_json_output(result.stdout)
+        expect(
+            session_doctor_payload.get("result") == "PASS",
+            "session doctor should pass when index is readable",
         )
 
         result = subprocess.run(

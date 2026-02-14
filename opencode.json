@@ -674,6 +674,26 @@
       "description": "Switch notifications to visual only",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile visual-only`\nShow only the command output."
     },
+    "session": {
+      "description": "Inspect indexed sessions (list|show|search|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "session-list": {
+      "description": "List recent indexed sessions",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" list --json`\nShow only the command output."
+    },
+    "session-search": {
+      "description": "Search sessions by id/path/reason",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" search $ARGUMENTS --json`\nShow only the command output."
+    },
+    "session-show": {
+      "description": "Show one indexed session by id",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" show $ARGUMENTS --json`\nShow only the command output."
+    },
+    "session-doctor": {
+      "description": "Run session index diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" doctor --json`\nShow only the command output."
+    },
     "digest": {
       "description": "Generate or show session digests (run|show)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" $ARGUMENTS`\nShow only the command output."

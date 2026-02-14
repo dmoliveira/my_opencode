@@ -45,6 +45,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - Tracking cadence baseline (Task C3) now requires weekly roadmap status entries, a single active `in_progress` epic, and monthly review of paused/postponed epics.
 - Command UX baseline (Task C4) now standardizes shortcut aliases, help/doctor discoverability, and troubleshooting-first quick paths across command families.
 - Session intelligence baseline (E6-T1) now records digest-linked session metadata in `~/.config/opencode/sessions/index.json` with retention pruning for stale or oversized histories.
+- Session command baseline (E6-T2) now exposes `/session list|show|search` plus `/session doctor` for indexed-session visibility and diagnostics.
 
 Release slicing gate checklist (per phase):
 
@@ -668,7 +669,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -677,7 +678,7 @@ git clone https://github.com/dmoliveira/my_opencode.git ~/.config/opencode/my_op
 ln -sfn ~/.config/opencode/my_opencode/opencode.json ~/.config/opencode/opencode.json
 chmod +x ~/.config/opencode/my_opencode/install.sh ~/.config/opencode/my_opencode/scripts/mcp_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
-chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/start_work_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/session_command.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/start_work_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
 chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py
@@ -1457,6 +1458,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/plugin_command.py` - backend script for `/plugin`
 - `scripts/notify_command.py` - backend script for `/notify`
 - `scripts/session_digest.py` - backend script for `/digest`
+- `scripts/session_command.py` - backend script for `/session`
 - `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
 - `scripts/telemetry_command.py` - backend script for `/telemetry`
 - `scripts/post_session_command.py` - backend script for `/post-session`

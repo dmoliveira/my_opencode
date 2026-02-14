@@ -338,10 +338,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 6.1.2: Record key events and timestamps
   - [x] Subtask 6.1.3: Add retention and cleanup strategy
   - [x] Notes: Added `scripts/session_metadata_index.py` with deterministic index schema (`~/.config/opencode/sessions/index.json`), digest-event ingestion, and retention controls (`max_sessions`, `max_age_days`, `max_events_per_session`) sourced from layered config.
-- [ ] Task 6.2: Session commands
-  - [ ] Subtask 6.2.1: Add `/session list`
-  - [ ] Subtask 6.2.2: Add `/session show <id>`
-  - [ ] Subtask 6.2.3: Add `/session search <query>`
+- [x] Task 6.2: Session commands
+  - [x] Subtask 6.2.1: Add `/session list`
+  - [x] Subtask 6.2.2: Add `/session show <id>`
+  - [x] Subtask 6.2.3: Add `/session search <query>`
+  - [x] Notes: Added `scripts/session_command.py` with `list|show|search|doctor` surfaces, wired `/session*` aliases in `opencode.json`, and integrated session command checks into installer self-check and unified doctor coverage.
 - [ ] Task 6.3: Resume support
   - [ ] Subtask 6.3.1: Add `resume-hints` output after interrupted workflows
   - [ ] Subtask 6.3.2: Add docs for common recovery playbooks
@@ -1125,6 +1126,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Monthly paused/postponed review checkpoint: keep E10 `paused` and E7 `postponed`; no promotion due to current value/risk profile.
 - [x] 2026-02-14: Complete C4 command UX baseline and standardize alias/help/doctor usability expectations across command families.
 - [x] 2026-02-14: Complete E6-T1 session metadata index backend with digest-linked event capture and retention pruning defaults.
+- [x] 2026-02-14: Complete E6-T2 session command surface (`/session list|show|search`) with index diagnostics and install/selftest coverage.
 
 ---
 
