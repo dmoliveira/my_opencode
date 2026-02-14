@@ -206,6 +206,34 @@
       "description": "Run keyword mode diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" doctor --json`\nShow only the command output."
     },
+    "auto-slash": {
+      "description": "Detect and preview natural-language slash intents",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "auto-slash-status": {
+      "description": "Show auto-slash detector status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" status --json`\nShow only the command output."
+    },
+    "auto-slash-detect": {
+      "description": "Detect best slash command for a prompt",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" detect $ARGUMENTS --json`\nShow only the command output."
+    },
+    "auto-slash-preview": {
+      "description": "Preview slash command mapping and guardrails",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" preview $ARGUMENTS --json`\nShow only the command output."
+    },
+    "auto-slash-execute": {
+      "description": "Execute mapped slash command with force gate",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" execute $ARGUMENTS --json`\nShow only the command output."
+    },
+    "auto-slash-doctor": {
+      "description": "Run auto-slash diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" doctor --json`\nShow only the command output."
+    },
+    "auto-slash-audit": {
+      "description": "Show recent auto-slash execution audit entries",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" audit --json`\nShow only the command output."
+    },
     "rules": {
       "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" $ARGUMENTS`\nShow only the command output."

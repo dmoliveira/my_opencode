@@ -46,7 +46,7 @@ Use this map to avoid overlapping implementations.
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
-| E10 | Auto Slash Command Detector | paused | Medium | E1, E8 | TBD | Resume only if intent precision stays high in prototypes |
+| E10 | Auto Slash Command Detector | done | Medium | E1, E8 | bd-wbo, bd-3nv | Shipped preview-first intent mapping for doctor/stack/nvim/devtools with audit logging |
 | E11 | Context-Window Resilience Toolkit | done | High | E4 | bd-2tj, bd-n9y, bd-2t0, bd-18e | Improve long-session stability and recovery |
 | E12 | Provider/Model Fallback Visibility | done | Medium | E5 | bd-1jq, bd-298, bd-194, bd-2gq | Explain why model routing decisions happen |
 | E13 | Browser Automation Profile Switching | done | Medium | E1 | bd-3rs, bd-2qy, bd-f6g, bd-393 | Toggle Playwright/agent-browser with checks |
@@ -83,7 +83,7 @@ Start an epic only when all are true:
 
 If any condition is missing, keep the epic `paused` or `postponed`.
 
-## Pause Exit Criteria (E7, E10)
+## Pause Exit Criteria (E7 and future paused epics)
 
 Promotion from `paused`/`postponed` to active planning requires all of the following:
 
@@ -92,9 +92,8 @@ Promotion from `paused`/`postponed` to active planning requires all of the follo
 - Validation impact estimate (`make validate`, `make selftest`, `make install-test`) documented before implementation.
 - A no-surprise execution mode (preview-first or opt-in) for any automation that can trigger commands.
 
-Epic-specific triggers:
+Epic-specific trigger:
 
-- **E10 (Auto Slash Detector):** offline intent-mapping prototype demonstrates >=95% precision on a representative prompt set with zero unsafe auto-execution cases.
 - **E7 (Tmux Visual Mode):** confirmed demand from at least two active workflows and a fallback UX that leaves non-tmux users unaffected.
 
 ## Complexity Budget
@@ -456,29 +455,33 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 10 - Auto Slash Command Detector
 
-**Status:** `paused`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Detect natural-language intent that maps to existing slash commands and optionally execute with guardrails.
 **Depends on:** Epic 1, Epic 8
 
-- [ ] Task 10.1: Define intent-to-command mappings
-  - [ ] Subtask 10.1.1: Map common intents to existing commands (`/doctor`, `/stack`, `/nvim`, `/devtools`)
-  - [ ] Subtask 10.1.2: Define confidence scoring and ambiguity thresholds
-  - [ ] Subtask 10.1.3: Define no-op behavior when confidence is low
-- [ ] Task 10.2: Implement detection and dispatch
-  - [ ] Subtask 10.2.1: Parse prompt intent candidates
-  - [ ] Subtask 10.2.2: Resolve best command + argument template
-  - [ ] Subtask 10.2.3: Execute with safe preview mode option
-- [ ] Task 10.3: Controls and safety
-  - [ ] Subtask 10.3.1: Add config toggles (global and per-command)
-  - [ ] Subtask 10.3.2: Add audit log for auto-executed commands
-  - [ ] Subtask 10.3.3: Add fast cancel/undo guidance in output
-- [ ] Task 10.4: Validation
-  - [ ] Subtask 10.4.1: Add tests for mapping precision and ambiguity handling
-  - [ ] Subtask 10.4.2: Add smoke tests for preview + execute modes
-  - [ ] Subtask 10.4.3: Add docs with examples and limitations
-- [ ] Exit criteria: detector reduces manual command typing without unsafe surprises
-- [ ] Exit criteria: low-confidence intents never auto-execute
+- [x] Task 10.1: Define intent-to-command mappings
+  - [x] Subtask 10.1.1: Map common intents to existing commands (`/doctor`, `/stack`, `/nvim`, `/devtools`)
+  - [x] Subtask 10.1.2: Define confidence scoring and ambiguity thresholds
+  - [x] Subtask 10.1.3: Define no-op behavior when confidence is low
+  - [x] Notes: Added `scripts/auto_slash_schema.py` with deterministic tokenization, phrase/keyword scoring, confidence gate, ambiguity delta, and explicit no-op reason codes.
+- [x] Task 10.2: Implement detection and dispatch
+  - [x] Subtask 10.2.1: Parse prompt intent candidates
+  - [x] Subtask 10.2.2: Resolve best command + argument template
+  - [x] Subtask 10.2.3: Execute with safe preview mode option
+  - [x] Notes: Added `scripts/auto_slash_command.py` with `detect|preview|execute` workflow and preview-first `--force` execution guard.
+- [x] Task 10.3: Controls and safety
+  - [x] Subtask 10.3.1: Add config toggles (global and per-command)
+  - [x] Subtask 10.3.2: Add audit log for auto-executed commands
+  - [x] Subtask 10.3.3: Add fast cancel/undo guidance in output
+  - [x] Notes: Added layered config section `auto_slash_detector`, per-command enablement controls, and JSONL audit trail at `~/.config/opencode/my_opencode/runtime/auto_slash_audit.jsonl`.
+- [x] Task 10.4: Validation
+  - [x] Subtask 10.4.1: Add tests for mapping precision and ambiguity handling
+  - [x] Subtask 10.4.2: Add smoke tests for preview + execute modes
+  - [x] Subtask 10.4.3: Add docs with examples and limitations
+  - [x] Notes: Expanded selftest/install smoke, added `/doctor` subsystem check, and documented behavior in `README.md` + `instructions/auto_slash_detector.md`.
+- [x] Exit criteria: detector reduces manual command typing without unsafe surprises
+- [x] Exit criteria: low-confidence intents never auto-execute
 
 ---
 
@@ -1122,7 +1125,7 @@ Use this log to track what changed week by week.
 - `Now`: E1 -> E2 -> E3 -> E20
 - `Next`: E14 -> E15 -> E22
 - `Later`: E23 -> E24 -> E26 -> E27
-- `Deferred`: E7 (postponed), E10 (paused), E16/E21 (merged)
+- `Deferred`: E7 (postponed), E16/E21 (merged)
 
 ## Decision Log
 
@@ -1138,7 +1141,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-13: Require command UX baseline (autocomplete, assistant tips, hovers/explanations, QoL aliases) for all new command features.
 - [x] 2026-02-14: Complete C1 release slicing plan with deterministic phase gates across A-N and keep deferred queue aligned with current epic statuses.
 - [x] 2026-02-14: Complete C3 tracking cadence rules (weekly update, single active epic policy, and monthly paused/postponed review requirement).
-- [x] 2026-02-14: Monthly paused/postponed review checkpoint: keep E10 `paused` and E7 `postponed`; no promotion due to current value/risk profile.
+- [x] 2026-02-14: Monthly paused/postponed review checkpoint: keep E7 `postponed`; no promotion due to current value/risk profile.
 - [x] 2026-02-14: Complete C4 command UX baseline and standardize alias/help/doctor usability expectations across command families.
 - [x] 2026-02-14: Complete E6-T1 session metadata index backend with digest-linked event capture and retention pruning defaults.
 - [x] 2026-02-14: Complete E6-T2 session command surface (`/session list|show|search`) with index diagnostics and install/selftest coverage.
@@ -1147,6 +1150,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Reconcile roadmap dashboard drift for E25-E27 and mark cross-cutting delivery status done for consistency with completed tasks.
 - [x] 2026-02-14: Reconcile Epic 18 checkbox state so Task 18.2/18.3 match completed subtasks and notes.
 - [x] 2026-02-14: Define measurable pause-exit criteria for E7/E10 so promotion decisions are evidence-based and reversible.
+- [x] 2026-02-14: Complete E10 implementation with preview-first intent routing, audit logging, and representative precision validation.
 
 ---
 
@@ -1157,5 +1161,4 @@ Use this log to track what changed week by week.
 - Prioritize **E11-E12** before E13-E14 when stability concerns are high.
 - Prioritize **E15 + E20** before E22 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
-- Keep **E10** paused unless explicit user-value metrics justify implementation.
-- Keep **Epic 7** postponed and **Epic 10** paused until clear demand and value evidence justify promotion.
+- Keep **Epic 7** postponed until clear demand and value evidence justify promotion.
