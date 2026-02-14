@@ -80,6 +80,7 @@ All notable changes to this project are documented in this file.
 - Added `instructions/knowledge_capture_policy_contract.md` defining Epic 27 Task 27.1 entry taxonomy, confidence model, approval quality gates, and tagging/search metadata requirements.
 - Added `scripts/knowledge_capture_pipeline.py` implementing Epic 27 Task 27.2 merged-PR/task-digest signal extraction, grouped draft generation with source links, and deterministic review/publish/archive lifecycle gating.
 - Added `scripts/learn_command.py` implementing Epic 27 Task 27.3 `/learn capture|review|publish|search|doctor` flows with rules-injector candidates, `/autoflow` guidance payloads, and stale-entry maintenance support.
+- Added `instructions/autopilot_command_contract.md` defining Epic 28 Task 28.1 `/autopilot` subcommands, required objective schema, lifecycle transitions, and dry-run-first safety defaults.
 - Expanded learn verification coverage for low-confidence review rejection, high-risk two-approval publish gating, and install-smoke enforcement of knowledge publish guardrails (Epic 27 Task 27.4).
 
 ### Changes

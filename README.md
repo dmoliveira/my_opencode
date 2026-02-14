@@ -406,6 +406,13 @@ Task 27.4 learn verification notes:
 - selftest now validates publish permissions by enforcing high-risk dual-approval gates before `/learn publish` can succeed.
 - install smoke now validates the same high-risk publish guardrail by expecting single-approval failure and second-approval success.
 
+Task 28.1 autopilot contract notes:
+
+- policy contract: `instructions/autopilot_command_contract.md`
+- command surface now defines `/autopilot start|status|pause|resume|stop|report` with JSON output requirements.
+- objective schema now requires `goal`, `scope`, `done-criteria`, and `max-budget` before execution can start.
+- safety defaults now require dry-run preview before first stateful cycle and enforce budget/scope guardrails with explicit reason codes.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -426,6 +433,7 @@ These two can fail to auto-resolve on some setups and are disabled by default. E
 - `instructions/hotfix_mode_policy_contract.md` - incident hotfix activation, mandatory safety checks, reduced validation limits, and follow-up audit contract.
 - `instructions/health_score_policy_contract.md` - repo health indicator model, weighted thresholds, and drift suppression-window contract.
 - `instructions/knowledge_capture_policy_contract.md` - reusable-learning entry schema, confidence scoring, approval quality gates, and search metadata contract.
+- `instructions/autopilot_command_contract.md` - objective runner command surface, lifecycle transitions, required fields, and dry-run-first safety contract.
 
 ## Ecosystem extensions (optional) 🧰
 
