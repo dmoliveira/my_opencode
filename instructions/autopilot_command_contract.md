@@ -30,6 +30,8 @@ Objective fields:
 - `scope` - allowed files/modules/workflows; out-of-scope work is blocked.
 - `done-criteria` - measurable completion conditions.
 - `max-budget` - bounded budget profile or explicit limits.
+- `completion-mode` - `promise` (default) or `objective`.
+- `completion-promise` - token text used when `completion-mode=promise` (default: `DONE`).
 
 Optional fields:
 
@@ -39,6 +41,11 @@ Optional fields:
 
 When objective fields are omitted in `start`/`go`, command-layer defaults may be inferred (`goal`, `scope="**"`, `done-criteria=goal`) and surfaced via `inferred_defaults` + warning metadata.
 Runtime schema validation still applies after inference; unresolved omissions must fail with `objective_schema_invalid`.
+
+Completion modes:
+
+- `promise` (default): run remains active until completion signal is detected (`<promise>{{completion-promise}}</promise>`), even if cycles are exhausted.
+- `objective`: run completes when objective done-criteria cycles are exhausted.
 
 ## Lifecycle States
 

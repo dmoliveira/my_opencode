@@ -20,10 +20,10 @@ from config_layering import load_layered_config, resolve_write_path  # type: ign
 def usage() -> int:
     print(
         "usage: /autopilot [start|go|status|pause|resume|stop|report|doctor] [--json] "
-        "| /autopilot start --goal <text> --scope <text> --done-criteria <text> --max-budget <profile> [--json] "
-        "| /autopilot go [--goal <text>] [--scope <text>] [--done-criteria <text>] [--max-budget <profile>] "
+        "| /autopilot start --goal <text> --scope <text> [--done-criteria <text>] [--completion-mode <promise|objective>] [--completion-promise <text>] --max-budget <profile> [--json] "
+        "| /autopilot go [--goal <text>] [--scope <text>] [--done-criteria <text>] [--completion-mode <promise|objective>] [--completion-promise <text>] [--max-budget <profile>] "
         "[--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--max-cycles <n>] [--json] "
-        "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--json]"
+        "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--completion-signal] [--assistant-text <text>] [--json]"
     )
     return 2
 
@@ -137,6 +137,12 @@ def command_start(args: list[str]) -> int:
         goal = pop_value(args, "--goal")
         scope = pop_value(args, "--scope")
         done_criteria = pop_value(args, "--done-criteria")
+        completion_mode = (
+            (pop_value(args, "--completion-mode", "promise") or "promise")
+            .strip()
+            .lower()
+        )
+        completion_promise = pop_value(args, "--completion-promise", "DONE") or "DONE"
         max_budget = pop_value(args, "--max-budget", "balanced")
     except ValueError:
         return usage()
@@ -144,7 +150,9 @@ def command_start(args: list[str]) -> int:
         return usage()
 
     inferred_defaults: list[str] = []
-    inferred_continuous = False
+    if completion_mode not in {"promise", "objective"}:
+        return usage()
+    inferred_continuous = completion_mode == "promise"
     if not goal:
         goal = (
             "continue the active user request from current session context until done"
@@ -154,13 +162,15 @@ def command_start(args: list[str]) -> int:
         scope = "**"
         inferred_defaults.append("scope")
     if not done_criteria:
-        done_criteria = [
-            "advance the highest-priority remaining subtask",
-            "apply and validate concrete changes for that subtask",
-            "repeat until the objective is fully complete",
-        ]
+        if completion_mode == "objective":
+            done_criteria = [
+                "advance the highest-priority remaining subtask",
+                "apply and validate concrete changes for that subtask",
+                "repeat until the objective is fully complete",
+            ]
+        else:
+            done_criteria = [goal]
         inferred_defaults.append("done-criteria")
-        inferred_continuous = True
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
@@ -170,6 +180,8 @@ def command_start(args: list[str]) -> int:
         "done-criteria": done_criteria or "",
         "max-budget": max_budget or "balanced",
         "continuous_mode": inferred_continuous,
+        "completion_mode": completion_mode,
+        "completion_promise": completion_promise,
     }
     initialized = initialize_run(
         config=config,
@@ -190,15 +202,23 @@ def command_start(args: list[str]) -> int:
 
 def command_go(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
+    completion_signal = pop_flag(args, "--completion-signal")
     try:
         goal = pop_value(args, "--goal")
         scope = pop_value(args, "--scope")
         done_criteria = pop_value(args, "--done-criteria")
+        completion_mode = (
+            (pop_value(args, "--completion-mode", "promise") or "promise")
+            .strip()
+            .lower()
+        )
+        completion_promise = pop_value(args, "--completion-promise", "DONE") or "DONE"
         max_budget = pop_value(args, "--max-budget", "balanced") or "balanced"
         confidence_raw = pop_value(args, "--confidence", "0.8") or "0.8"
         tool_calls_raw = pop_value(args, "--tool-calls", "1") or "1"
         token_raw = pop_value(args, "--token-estimate", "100") or "100"
         touched_paths_raw = pop_value(args, "--touched-paths", "") or ""
+        assistant_text = pop_value(args, "--assistant-text", "") or ""
         max_cycles_raw = pop_value(args, "--max-cycles", "20") or "20"
     except ValueError:
         return usage()
@@ -233,7 +253,9 @@ def command_go(args: list[str]) -> int:
     runtime = load_runtime(write_path)
     started_new_run = False
     inferred_defaults: list[str] = []
-    inferred_continuous = False
+    if completion_mode not in {"promise", "objective"}:
+        return usage()
+    inferred_continuous = completion_mode == "promise"
     terminal_states = {
         "completed",
         "budget_stopped",
@@ -289,19 +311,23 @@ def command_go(args: list[str]) -> int:
             scope = "**"
             inferred_defaults.append("scope")
         if not done_criteria:
-            done_criteria = [
-                "advance the highest-priority remaining subtask",
-                "apply and validate concrete changes for that subtask",
-                "repeat until the objective is fully complete",
-            ]
+            if completion_mode == "objective":
+                done_criteria = [
+                    "advance the highest-priority remaining subtask",
+                    "apply and validate concrete changes for that subtask",
+                    "repeat until the objective is fully complete",
+                ]
+            else:
+                done_criteria = [goal]
             inferred_defaults.append("done-criteria")
-            inferred_continuous = True
         objective = {
             "goal": goal or "",
             "scope": scope or "",
             "done-criteria": done_criteria or "",
             "max-budget": max_budget,
             "continuous_mode": inferred_continuous,
+            "completion_mode": completion_mode,
+            "completion_promise": completion_promise,
         }
         initialized = initialize_run(
             config=config,
@@ -361,6 +387,8 @@ def command_go(args: list[str]) -> int:
             tool_call_increment=tool_calls,
             token_increment=token_estimate,
             touched_paths=touched_paths,
+            completion_signal=completion_signal,
+            assistant_text=assistant_text,
         )
         run_any = resumed.get("run")
         current = run_any if isinstance(run_any, dict) else current
@@ -494,11 +522,13 @@ def command_pause(args: list[str]) -> int:
 
 def command_resume(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
+    completion_signal = pop_flag(args, "--completion-signal")
     try:
         confidence_raw = pop_value(args, "--confidence", "0.8") or "0.8"
         tool_calls_raw = pop_value(args, "--tool-calls", "1") or "1"
         token_raw = pop_value(args, "--token-estimate", "100") or "100"
         touched_paths_raw = pop_value(args, "--touched-paths", "") or ""
+        assistant_text = pop_value(args, "--assistant-text", "") or ""
     except ValueError:
         return usage()
     if args:
@@ -544,6 +574,8 @@ def command_resume(args: list[str]) -> int:
         tool_call_increment=tool_calls,
         token_increment=token_estimate,
         touched_paths=touched_paths,
+        completion_signal=completion_signal,
+        assistant_text=assistant_text,
     )
     if inferred_touched_paths:
         resumed["inferred_touched_paths"] = inferred_touched_paths

@@ -4076,6 +4076,53 @@ version: 1
             "autopilot execute cycle should emit actionable next_actions",
         )
 
+        autopilot_promise_objective = {
+            "goal": "Ship continuously until promise token is emitted",
+            "scope": "scripts/autopilot_runtime.py",
+            "max-budget": "balanced",
+            "completion-mode": "promise",
+            "completion-promise": "DONE",
+        }
+        autopilot_promise_init = initialize_run(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            objective=autopilot_promise_objective,
+            actor="selftest",
+        )
+        expect(
+            autopilot_promise_init.get("result") == "PASS",
+            "autopilot should allow promise-mode objective without explicit done-criteria",
+        )
+        autopilot_promise_cycle = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_promise_init.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            now_ts="2026-02-13T00:00:01Z",
+        )
+        expect(
+            autopilot_promise_cycle.get("run", {}).get("status") == "running",
+            "autopilot promise mode should remain running when completion promise is not signaled",
+        )
+        autopilot_promise_complete = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_promise_cycle.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            now_ts="2026-02-13T00:00:02Z",
+        )
+        expect(
+            autopilot_promise_complete.get("run", {}).get("status") == "completed"
+            and autopilot_promise_complete.get("run", {}).get("reason_code")
+            == "autopilot_completion_promise_detected",
+            "autopilot promise mode should complete when completion signal is provided",
+        )
+
         autopilot_cycle_scope_stop = execute_cycle(
             config={"budget_runtime": {"profile": "balanced"}},
             write_path=config_path,
