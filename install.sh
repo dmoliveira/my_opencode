@@ -69,6 +69,9 @@ if [ -n "$REPO_REF" ]; then
 fi
 
 chmod +x "$INSTALL_DIR/scripts/mcp_command.py" "$INSTALL_DIR/scripts/plugin_command.py" "$INSTALL_DIR/scripts/notify_command.py" "$INSTALL_DIR/scripts/session_digest.py" "$INSTALL_DIR/scripts/opencode_session.sh" "$INSTALL_DIR/scripts/telemetry_command.py" "$INSTALL_DIR/scripts/post_session_command.py" "$INSTALL_DIR/scripts/policy_command.py" "$INSTALL_DIR/scripts/doctor_command.py" "$INSTALL_DIR/scripts/config_command.py" "$INSTALL_DIR/scripts/stack_profile_command.py" "$INSTALL_DIR/scripts/install_wizard.py" "$INSTALL_DIR/scripts/nvim_integration_command.py" "$INSTALL_DIR/scripts/devtools_command.py" "$INSTALL_DIR/scripts/background_task_manager.py" "$INSTALL_DIR/scripts/refactor_lite_command.py"
+if [ -f "$INSTALL_DIR/scripts/session_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/session_command.py"
+fi
 if [ -f "$INSTALL_DIR/scripts/browser_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/browser_command.py"
 fi
@@ -142,6 +145,11 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
   python3 "$INSTALL_DIR/scripts/notify_command.py" doctor
   python3 "$INSTALL_DIR/scripts/session_digest.py" show || true
   python3 "$INSTALL_DIR/scripts/session_digest.py" doctor
+  if [ -f "$INSTALL_DIR/scripts/session_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/session_command.py" list --json
+    python3 "$INSTALL_DIR/scripts/session_command.py" search selfcheck --json
+    python3 "$INSTALL_DIR/scripts/session_command.py" doctor --json
+  fi
   python3 "$INSTALL_DIR/scripts/telemetry_command.py" status
   python3 "$INSTALL_DIR/scripts/post_session_command.py" status
   python3 "$INSTALL_DIR/scripts/policy_command.py" status
@@ -297,6 +305,9 @@ printf "  /digest run --reason manual\n"
 printf "  /digest-run-post\n"
 printf "  /digest show\n"
 printf "  /digest doctor\n"
+printf "  /session list --json\n"
+printf "  /session search selftest --json\n"
+printf "  /session doctor --json\n"
 printf "  /telemetry status\n"
 printf "  /telemetry profile local\n"
 printf "  /post-session status\n"
