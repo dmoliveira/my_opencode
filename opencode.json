@@ -42,6 +42,22 @@
       "description": "Run all diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
     },
+    "complete": {
+      "description": "Suggest slash commands by prefix (autocomplete helper)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
+    },
+    "ac": {
+      "description": "Short alias for /complete",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
+    },
+    "complete-families": {
+      "description": "List command families and counts",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" families`\nShow only the command output."
+    },
+    "complete-doctor": {
+      "description": "Diagnose autocomplete helper wiring",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" doctor --json`\nShow only the command output."
+    },
     "config": {
       "description": "Backup and restore OpenCode config files",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" $ARGUMENTS`\nShow only the command output."

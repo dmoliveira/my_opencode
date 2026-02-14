@@ -1305,6 +1305,20 @@ Autocomplete-friendly shortcuts:
 /plugin-doctor-json
 ```
 
+Global command helper shortcuts:
+
+```text
+/complete
+/complete auto
+/complete autopilot
+/ac resume
+/complete-families
+/complete-doctor
+```
+
+`/complete <prefix>` returns ranked slash command suggestions with descriptions.
+`/ac` is a short alias for `/complete`.
+
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
 
 `all` applies only to the stable set: `notifier`, `supermemory`, `wakatime`.
