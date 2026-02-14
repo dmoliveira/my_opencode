@@ -139,6 +139,7 @@ All notable changes to this project are documented in this file.
 - Updated roadmap/dashboard status alignment to mark Epic 6 and Epic 28 complete, including Task 28.5 verification closure notes.
 - Reconciled roadmap dashboard status drift for Epic 25-E27 and marked cross-cutting delivery section complete to match shipped scope.
 - Reconciled Epic 18 roadmap task checkbox state so Task 18.2/18.3 align with completed implementation notes and subtasks.
+- Added measurable pause-exit criteria for E7/E10 in roadmap governance, including demand, prototype precision, and safety gating requirements.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
