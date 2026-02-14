@@ -61,9 +61,9 @@ Use this map to avoid overlapping implementations.
 | E22 | Autoflow Unified Orchestration Command | done | High | E14, E15, E17, E19, E20 | TBD | One command for plan-run-resume-report lifecycle |
 | E23 | PR Review Copilot | done | High | E3 | bd-u6t | Pre-PR quality, output, and risk review automation |
 | E24 | Release Train Assistant | done | High | E14, E23 | bd-nk3 | Validate, draft, and gate releases reliably |
-| E25 | Incident Hotfix Mode | in_progress | Medium | E20, E22 | bd-kow | Constrained emergency workflow with strict safety |
-| E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
-| E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
+| E25 | Incident Hotfix Mode | done | Medium | E20, E22 | bd-kow | Constrained emergency workflow with strict safety |
+| E26 | Repo Health Score and Drift Monitor | done | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
+| E27 | Knowledge Capture from Completed Tasks | done | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
 | E28 | Autopilot Objective Runner Command | done | High | E20, E22 | TBD | Completed bounded objective lifecycle with verification and install smoke coverage |
 
 ## Scope Guardrails
@@ -1009,7 +1009,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Cross-Cutting Delivery Tasks
 
-**Status:** `in_progress`
+**Status:** `done`
 
 - [x] Task C1: Add release slicing plan by phase
   - [x] Subtask C1.1: Phase A (low-risk foundation): Epic 1
@@ -1130,6 +1130,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Complete E6-T2 session command surface (`/session list|show|search`) with index diagnostics and install/selftest coverage.
 - [x] 2026-02-14: Complete E6-T3 resume support with actionable `resume_hints` outputs and digest-integrated recovery cues.
 - [x] 2026-02-14: Close E28-T5 verification task and mark Epic 28 done after validating lifecycle and install smoke coverage.
+- [x] 2026-02-14: Reconcile roadmap dashboard drift for E25-E27 and mark cross-cutting delivery status done for consistency with completed tasks.
 
 ---
 
