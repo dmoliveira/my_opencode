@@ -317,8 +317,8 @@ def evaluate_request(
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
-            "/start-work status --json",
-            "/start-work doctor --json",
+            "/autopilot --json",
+            "/autopilot status --json",
             "/resume status --json",
         ],
         "config": str(write_path),

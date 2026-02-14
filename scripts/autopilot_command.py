@@ -163,6 +163,11 @@ def command_go(args: list[str]) -> int:
     touched_paths = [
         path.strip() for path in touched_paths_raw.split(",") if path.strip()
     ]
+    no_touched_paths = len(touched_paths) == 0
+    cycle_cap_warning = False
+    if no_touched_paths and max_cycles > 1:
+        max_cycles = 1
+        cycle_cap_warning = True
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
@@ -310,6 +315,12 @@ def command_go(args: list[str]) -> int:
         if isinstance(payload["warnings"], list):
             payload["warnings"].append(
                 "max cycles reached before terminal status; run /autopilot go again to continue"
+            )
+    if cycle_cap_warning:
+        payload.setdefault("warnings", [])
+        if isinstance(payload["warnings"], list):
+            payload["warnings"].append(
+                "autopilot received no touched paths; executed one guarded cycle only"
             )
     emit(payload, as_json=as_json)
     return 0 if result == "PASS" else 1
