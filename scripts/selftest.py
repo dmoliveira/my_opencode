@@ -1119,8 +1119,44 @@ def main() -> int:
         expect(report.get("result") == "PASS", "notify doctor should pass")
 
         digest_path = home / ".config" / "opencode" / "digests" / "selftest.json"
+        session_index_path = home / ".config" / "opencode" / "sessions" / "index.json"
+        session_index_path.parent.mkdir(parents=True, exist_ok=True)
+        session_index_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "generated_at": "2025-01-01T00:00:00+00:00",
+                    "sessions": [
+                        {
+                            "session_id": "stale-session",
+                            "cwd": "/tmp/stale",
+                            "started_at": "2025-01-01T00:00:00+00:00",
+                            "last_event_at": "2025-01-01T00:00:00+00:00",
+                            "event_count": 1,
+                            "last_reason": "manual",
+                            "reasons": ["manual"],
+                            "plan_ids": [],
+                            "events": [
+                                {
+                                    "timestamp": "2025-01-01T00:00:00+00:00",
+                                    "reason": "manual",
+                                    "changes": 0,
+                                    "branch": "main",
+                                    "plan_status": "idle",
+                                    "plan_id": None,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
+        digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
+        digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
 
         result = subprocess.run(
             [sys.executable, str(DIGEST_SCRIPT), "run", "--reason", "selftest"],
@@ -1134,6 +1170,42 @@ def main() -> int:
         expect(digest_path.exists(), "digest run should create digest file")
         digest = load_json_file(digest_path)
         expect(digest.get("reason") == "selftest", "digest reason should match")
+        raw_session_index_result = digest.get("session_index")
+        session_index_result: dict = (
+            raw_session_index_result
+            if isinstance(raw_session_index_result, dict)
+            else {}
+        )
+        expect(
+            session_index_result.get("result") == "PASS",
+            "digest run should persist session metadata index",
+        )
+
+        raw_session_index = load_json_file(session_index_path)
+        session_index: dict = (
+            raw_session_index if isinstance(raw_session_index, dict) else {}
+        )
+        raw_index_sessions = session_index.get("sessions")
+        index_sessions: list[dict] = (
+            raw_index_sessions if isinstance(raw_index_sessions, list) else []
+        )
+        expect(
+            isinstance(index_sessions, list)
+            and any(
+                isinstance(item, dict)
+                and item.get("session_id") == "selftest-session"
+                and int(item.get("event_count", 0)) >= 1
+                for item in index_sessions
+            ),
+            "session index should include active selftest session entry",
+        )
+        expect(
+            not any(
+                isinstance(item, dict) and item.get("session_id") == "stale-session"
+                for item in index_sessions
+            ),
+            "session index should prune stale sessions using retention policy",
+        )
 
         result = subprocess.run(
             [sys.executable, str(DIGEST_SCRIPT), "show", "--path", str(digest_path)],

@@ -44,6 +44,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - Epic acceptance baseline (Task C2) now defines reusable completion criteria for functional behavior, reliability, docs quality, validation gates, and rollback evidence.
 - Tracking cadence baseline (Task C3) now requires weekly roadmap status entries, a single active `in_progress` epic, and monthly review of paused/postponed epics.
 - Command UX baseline (Task C4) now standardizes shortcut aliases, help/doctor discoverability, and troubleshooting-first quick paths across command families.
+- Session intelligence baseline (E6-T1) now records digest-linked session metadata in `~/.config/opencode/sessions/index.json` with retention pruning for stale or oversized histories.
 
 Release slicing gate checklist (per phase):
 
