@@ -413,6 +413,13 @@ Task 28.1 autopilot contract notes:
 - objective schema now requires `goal`, `scope`, `done-criteria`, and `max-budget` before execution can start.
 - safety defaults now require dry-run preview before first stateful cycle and enforce budget/scope guardrails with explicit reason codes.
 
+Task 28.2 autopilot loop backend notes:
+
+- backend module: `scripts/autopilot_runtime.py`
+- runtime now validates objective schema and materializes bounded execution cycles from `done-criteria`.
+- cycle execution now applies budget guardrails per cycle and writes mandatory checkpoint snapshots for initialization and each cycle evaluation.
+- loop payloads now emit deterministic progress counts, blocker reason codes, and next-action recommendations (including budget hard-stop guidance).
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

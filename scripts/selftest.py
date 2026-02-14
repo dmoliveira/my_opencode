@@ -76,6 +76,11 @@ from knowledge_capture_pipeline import (  # type: ignore
     generate_draft_entries,
     transition_entry,
 )
+from autopilot_runtime import (  # type: ignore
+    execute_cycle,
+    initialize_run,
+    validate_objective,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -3779,8 +3784,93 @@ version: 1
             budget_eval_ok.get("result") == "PASS",
             "budget runtime should stay PASS when counters are below thresholds",
         )
-
         config_path = Path(str(start_work_report.get("config") or ""))
+
+        invalid_autopilot_objective = validate_objective(
+            {
+                "goal": "Ship automation objective",
+                "done-criteria": "all checks pass",
+                "max-budget": "balanced",
+            }
+        )
+        expect(
+            invalid_autopilot_objective.get("result") == "FAIL"
+            and "scope" in invalid_autopilot_objective.get("missing_fields", []),
+            "autopilot objective validation should fail when required scope is missing",
+        )
+
+        autopilot_objective = {
+            "goal": "Ship E28 objective",
+            "scope": "scripts/autopilot_runtime.py, scripts/selftest.py",
+            "done-criteria": [
+                "define objective orchestration loop",
+                "enforce budget and checkpoints",
+                "emit progress and next actions",
+            ],
+            "max-budget": "conservative",
+        }
+        autopilot_init = initialize_run(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            objective=autopilot_objective,
+            actor="selftest",
+        )
+        expect(
+            autopilot_init.get("result") == "PASS"
+            and autopilot_init.get("run", {}).get("status") == "draft",
+            "autopilot runtime should initialize in draft state with dry-run requirement",
+        )
+        init_checkpoint_paths = autopilot_init.get("checkpoint", {}).get("paths", {})
+        expect(
+            Path(str(init_checkpoint_paths.get("latest", ""))).exists()
+            and Path(str(init_checkpoint_paths.get("history", ""))).exists(),
+            "autopilot initialization should write checkpoint latest/history files",
+        )
+
+        autopilot_run = dict(autopilot_init.get("run", {}))
+        autopilot_cycle_1 = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=autopilot_run,
+            tool_call_increment=1,
+            token_increment=50,
+            now_ts="2026-02-13T00:00:01Z",
+        )
+        expect(
+            autopilot_cycle_1.get("result") == "PASS"
+            and autopilot_cycle_1.get("run", {})
+            .get("progress", {})
+            .get("completed_cycles")
+            == 1,
+            "autopilot execute cycle should progress bounded cycle completion",
+        )
+        expect(
+            isinstance(autopilot_cycle_1.get("run", {}).get("next_actions", []), list)
+            and autopilot_cycle_1.get("run", {}).get("next_actions"),
+            "autopilot execute cycle should emit actionable next_actions",
+        )
+
+        autopilot_cycle_budget_stop = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_cycle_1.get("run", {})),
+            tool_call_increment=500,
+            token_increment=500_000,
+            now_ts="2026-02-13T00:00:02Z",
+        )
+        expect(
+            autopilot_cycle_budget_stop.get("result") == "FAIL"
+            and autopilot_cycle_budget_stop.get("run", {}).get("status")
+            == "budget_stopped",
+            "autopilot execute cycle should hard-stop on budget threshold exceedance",
+        )
+        expect(
+            str(
+                autopilot_cycle_budget_stop.get("run", {}).get("reason_code", "")
+            ).startswith("budget_"),
+            "autopilot budget stop should expose deterministic budget reason codes",
+        )
+
         forced_budget_config = load_json_file(config_path)
         forced_budget_config["budget_runtime"] = {
             "profile": "conservative",
