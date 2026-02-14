@@ -905,15 +905,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 26 - Repo Health Score and Drift Monitor
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Aggregate repository operational signals into a health score with drift alerts.
 **Depends on:** Epic 9, Epic 12, Epic 20
 
-- [ ] Task 26.1: Define health model and scoring weights
-  - [ ] Subtask 26.1.1: Define high-signal indicators (tests, hooks, stale branches, config drift)
-  - [ ] Subtask 26.1.2: Define weighted scoring and status thresholds
-  - [ ] Subtask 26.1.3: Define suppression window for repeated alerts
+- [x] Task 26.1: Define health model and scoring weights
+  - [x] Subtask 26.1.1: Define high-signal indicators (tests, hooks, stale branches, config drift)
+  - [x] Subtask 26.1.2: Define weighted scoring and status thresholds
+  - [x] Subtask 26.1.3: Define suppression window for repeated alerts
+  - [x] Notes: Added `instructions/health_score_policy_contract.md` defining indicator schema, default weights/penalties, deterministic health thresholds, drift suppression-window behavior, and reason-code/remediation output requirements for upcoming `/health` commands.
 - [ ] Task 26.2: Implement health collector
   - [ ] Subtask 26.2.1: Collect diagnostics from existing command subsystems
   - [ ] Subtask 26.2.2: Detect drift from expected profile/policy baselines
