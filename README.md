@@ -333,6 +333,13 @@ Task 25.4 hotfix verification notes:
 - selftest now validates rollback incident flow end-to-end (`scope=rollback`) including `rollback_applied` timeline events and closure with `outcome=rolled_back`.
 - install smoke now validates both failure and success closure paths for `/hotfix close` to ensure follow-up metadata remains mandatory.
 
+Task 26.1 health model contract notes:
+
+- policy contract: `instructions/health_score_policy_contract.md`
+- indicator model covers validation health, git/release hygiene, policy drift, automation reliability, and operational freshness.
+- weighted scoring now defines deterministic penalties and status thresholds (`healthy`, `degraded`, `critical`).
+- drift alert suppression now defines per-reason suppression keys, 24h default windows, and critical bypass behavior.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -351,6 +358,7 @@ These two can fail to auto-resolve on some setups and are disabled by default. E
 - `instructions/shell_strategy.md` - non-interactive shell strategy rules to avoid hangs and improve autonomous execution.
 - `instructions/release_train_policy_contract.md` - release preflight, semver gating, reason-code, and rollback contract for upcoming `/release-train` flows.
 - `instructions/hotfix_mode_policy_contract.md` - incident hotfix activation, mandatory safety checks, reduced validation limits, and follow-up audit contract.
+- `instructions/health_score_policy_contract.md` - repo health indicator model, weighted thresholds, and drift suppression-window contract.
 
 ## Ecosystem extensions (optional) 🧰
 
