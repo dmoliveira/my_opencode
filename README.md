@@ -347,6 +347,22 @@ Task 26.2 health collector backend notes:
 - scoring now applies weighted penalties with forced-status escalation rules from the Epic 26 contract.
 - runtime persistence now writes latest and append-only history snapshots plus suppression-window state for repeated drift alerts.
 
+Task 26.3 health command integration notes:
+
+- command module: `scripts/health_command.py`
+- command surface: `/health status|trend|drift|doctor`
+- JSON export paths: trend and drift output are CLI-friendly JSON payloads for dashboards/CI ingestion.
+- remediation guidance now includes score-bucket defaults (`healthy`, `degraded`, `critical`) when indicator-specific actions are missing.
+
+Examples:
+
+```text
+/health status --force-refresh --json
+/health trend --limit 10 --json
+/health drift --json
+/health doctor --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
