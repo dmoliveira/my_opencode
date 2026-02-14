@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,51 @@ def normalize_args(args: list[str]) -> list[str]:
             value = "--" + value.lstrip("–")
         normalized.append(value)
     return normalized
+
+
+def infer_touched_paths(cwd: Path) -> list[str]:
+    inside = subprocess.run(
+        ["git", "-C", str(cwd), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if inside.returncode != 0:
+        return []
+
+    commands = [
+        ["git", "-C", str(cwd), "diff", "--name-only", "--diff-filter=ACMR"],
+        [
+            "git",
+            "-C",
+            str(cwd),
+            "diff",
+            "--name-only",
+            "--cached",
+            "--diff-filter=ACMR",
+        ],
+        ["git", "-C", str(cwd), "ls-files", "--others", "--exclude-standard"],
+    ]
+    discovered: list[str] = []
+    for cmd in commands:
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except Exception:
+            continue
+        if result.returncode != 0:
+            continue
+        for line in result.stdout.splitlines():
+            path = line.strip()
+            if path and path not in discovered:
+                discovered.append(path)
+    return discovered
 
 
 def _runtime_or_fail(
@@ -163,6 +209,11 @@ def command_go(args: list[str]) -> int:
     touched_paths = [
         path.strip() for path in touched_paths_raw.split(",") if path.strip()
     ]
+    inferred_touched_paths: list[str] = []
+    if not touched_paths:
+        inferred_touched_paths = infer_touched_paths(Path.cwd())
+        touched_paths = list(inferred_touched_paths)
+
     no_touched_paths = len(touched_paths) == 0
     cycle_cap_warning = False
     if no_touched_paths and max_cycles > 1:
@@ -322,6 +373,8 @@ def command_go(args: list[str]) -> int:
             payload["warnings"].append(
                 "autopilot received no touched paths; executed one guarded cycle only"
             )
+    if inferred_touched_paths:
+        payload["inferred_touched_paths"] = inferred_touched_paths
     emit(payload, as_json=as_json)
     return 0 if result == "PASS" else 1
 
@@ -423,6 +476,10 @@ def command_resume(args: list[str]) -> int:
     touched_paths = [
         path.strip() for path in touched_paths_raw.split(",") if path.strip()
     ]
+    inferred_touched_paths: list[str] = []
+    if not touched_paths:
+        inferred_touched_paths = infer_touched_paths(Path.cwd())
+        touched_paths = list(inferred_touched_paths)
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
@@ -452,6 +509,8 @@ def command_resume(args: list[str]) -> int:
         token_increment=token_estimate,
         touched_paths=touched_paths,
     )
+    if inferred_touched_paths:
+        resumed["inferred_touched_paths"] = inferred_touched_paths
     emit(resumed, as_json=as_json)
     return 0 if resumed.get("result") == "PASS" else 1
 

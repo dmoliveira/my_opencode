@@ -205,18 +205,6 @@ CHECKS = [
         ],
     },
     {
-        "name": "autoflow",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("autoflow_command.py")),
-        "command": [
-            sys.executable,
-            str(script_path("autoflow_command.py")),
-            "status",
-            "--json",
-        ],
-    },
-    {
         "name": "autopilot",
         "kind": "doctor-json",
         "optional": True,
