@@ -1,7 +1,6 @@
 ---
 description: >-
-  Read-only internal codebase scout. Use for fast discovery of where logic lives,
-  which files implement a behavior, and what local patterns already exist.
+  Read-only internal codebase scout for fast discovery of implementation locations and local patterns.
 mode: subagent
 tools:
   bash: false

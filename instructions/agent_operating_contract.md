@@ -72,6 +72,7 @@ When blocked, output must include:
 
 ## Installation contract 🔧
 
-- Source of truth for agent definitions: `agent/*.md`
+- Source of truth for agent definitions: `agent/specs/*.json`
+- Generated artifacts: `agent/*.md` via `python3 scripts/build_agents.py --profile balanced`
 - Installer sync target: `~/.config/opencode/agent/`
 - Installer should copy all agent markdown files during setup/update.

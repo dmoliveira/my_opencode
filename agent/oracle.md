@@ -1,7 +1,6 @@
 ---
 description: >-
-  Read-only technical advisor for hard architecture and debugging decisions. Use
-  when tradeoffs are complex, risk is high, or repeated fixes failed.
+  Read-only technical advisor for hard architecture and debugging decisions under uncertainty.
 mode: subagent
 tools:
   bash: false

@@ -124,6 +124,7 @@ HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
 LEARN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "learn_command.py"
+BUILD_AGENTS_SCRIPT = REPO_ROOT / "scripts" / "build_agents.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 AGENT_DIR = REPO_ROOT / "agent"
 
@@ -281,6 +282,24 @@ def main() -> int:
             and 'cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/"'
             in install_script,
             "installer should sync custom agent definitions to global agent directory",
+        )
+
+        build_agents_check = subprocess.run(
+            [
+                sys.executable,
+                str(BUILD_AGENTS_SCRIPT),
+                "--profile",
+                "balanced",
+                "--check",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            build_agents_check.returncode == 0,
+            "build_agents check should pass when generated agent markdown is up-to-date",
         )
 
         healthy_signals = {

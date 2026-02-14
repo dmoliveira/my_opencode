@@ -1,7 +1,6 @@
 ---
 description: >-
-  Read-only external research specialist. Use for official docs lookup, upstream
-  implementation references, and evidence-backed guidance from external sources.
+  Read-only external research specialist for official docs, upstream implementations, and evidence-backed guidance.
 mode: subagent
 tools:
   bash: false

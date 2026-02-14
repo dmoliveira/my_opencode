@@ -1,7 +1,6 @@
 ---
 description: >-
-  Read-only implementation reviewer focused on correctness, maintainability,
-  safety, and hidden regressions before final delivery.
+  Read-only implementation reviewer focused on correctness, maintainability, safety, and regressions.
 mode: subagent
 tools:
   bash: false
