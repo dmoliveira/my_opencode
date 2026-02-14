@@ -137,6 +137,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/session_command.py` and `/session*` aliases for Epic 6 Task 6.2, including list/show/search workflows and doctor diagnostics over indexed sessions.
 - Added shared `resume_hints` guidance for Epic 6 Task 6.3 across `/resume status|now`, `/start-work recover`, and digest `plan_execution` snapshots.
 - Updated roadmap/dashboard status alignment to mark Epic 6 and Epic 28 complete, including Task 28.5 verification closure notes.
+- Reconciled roadmap dashboard status drift for Epic 25-E27 and marked cross-cutting delivery section complete to match shipped scope.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
