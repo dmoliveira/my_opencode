@@ -363,6 +363,12 @@ Examples:
 /health doctor --json
 ```
 
+Task 26.4 health verification notes:
+
+- selftest now validates score determinism by repeating `/health status --force-refresh --json` on unchanged repository signals.
+- selftest now validates drift precision by injecting budget profile drift and asserting `policy_drift_detected` attribution under `runtime_policy_drift`.
+- install smoke now validates drift force-refresh behavior under controlled profile drift in temporary config state.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

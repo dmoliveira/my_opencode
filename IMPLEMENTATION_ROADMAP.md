@@ -905,7 +905,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 26 - Repo Health Score and Drift Monitor
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Aggregate repository operational signals into a health score with drift alerts.
 **Depends on:** Epic 9, Epic 12, Epic 20
@@ -925,12 +925,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 26.3.2: Add JSON export for dashboards/CI
   - [x] Subtask 26.3.3: Document remediation recommendations by score bucket
   - [x] Notes: Added `scripts/health_command.py` with `status|trend|drift|doctor` command flows, wired `/health*` aliases in `opencode.json`, integrated health diagnostics into unified doctor plus installer/install-smoke coverage, and exposed score-bucket remediation guidance from backend recommendations.
-- [ ] Task 26.4: Verification
-  - [ ] Subtask 26.4.1: Add tests for score determinism and threshold behavior
-  - [ ] Subtask 26.4.2: Add tests for drift detection precision
-  - [ ] Subtask 26.4.3: Add install-test smoke checks
-- [ ] Exit criteria: health score reflects real operational risk with actionable guidance
-- [ ] Exit criteria: drift signals are precise enough to avoid alert fatigue
+- [x] Task 26.4: Verification
+  - [x] Subtask 26.4.1: Add tests for score determinism and threshold behavior
+  - [x] Subtask 26.4.2: Add tests for drift detection precision
+  - [x] Subtask 26.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded `scripts/selftest.py` with repeated status determinism checks and precise policy-drift attribution assertions, and expanded install smoke to exercise drift force-refresh behavior after controlled budget-profile drift injection.
+- [x] Exit criteria: health score reflects real operational risk with actionable guidance
+- [x] Exit criteria: drift signals are precise enough to avoid alert fatigue
 
 ---
 
