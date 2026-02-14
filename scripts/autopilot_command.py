@@ -144,6 +144,7 @@ def command_start(args: list[str]) -> int:
         return usage()
 
     inferred_defaults: list[str] = []
+    inferred_continuous = False
     if not goal:
         goal = (
             "continue the active user request from current session context until done"
@@ -153,8 +154,13 @@ def command_start(args: list[str]) -> int:
         scope = "**"
         inferred_defaults.append("scope")
     if not done_criteria:
-        done_criteria = goal
+        done_criteria = [
+            "advance the highest-priority remaining subtask",
+            "apply and validate concrete changes for that subtask",
+            "repeat until the objective is fully complete",
+        ]
         inferred_defaults.append("done-criteria")
+        inferred_continuous = True
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
@@ -163,6 +169,7 @@ def command_start(args: list[str]) -> int:
         "scope": scope or "",
         "done-criteria": done_criteria or "",
         "max-budget": max_budget or "balanced",
+        "continuous_mode": inferred_continuous,
     }
     initialized = initialize_run(
         config=config,
@@ -226,6 +233,7 @@ def command_go(args: list[str]) -> int:
     runtime = load_runtime(write_path)
     started_new_run = False
     inferred_defaults: list[str] = []
+    inferred_continuous = False
     terminal_states = {
         "completed",
         "budget_stopped",
@@ -233,8 +241,27 @@ def command_go(args: list[str]) -> int:
         "stopped",
     }
     runtime_status = str(runtime.get("status") or "") if runtime else ""
+    runtime_legacy_inferred = False
     runtime_budget_exhausted = False
     if runtime:
+        objective_any = runtime.get("objective")
+        objective = objective_any if isinstance(objective_any, dict) else {}
+        objective_goal = str(objective.get("goal") or "").strip()
+        objective_criteria_any = objective.get("done_criteria")
+        objective_criteria = (
+            objective_criteria_any if isinstance(objective_criteria_any, list) else []
+        )
+        objective_continuous = bool(objective.get("continuous_mode", False))
+        runtime_legacy_inferred = (
+            (not goal)
+            and (not scope)
+            and (not done_criteria)
+            and (not objective_continuous)
+            and objective_goal
+            == "continue the active user request from current session context until done"
+            and len(objective_criteria) == 1
+        )
+
         budget_any = runtime.get("budget")
         budget = budget_any if isinstance(budget_any, dict) else {}
         counters_any = budget.get("counters")
@@ -248,7 +275,10 @@ def command_go(args: list[str]) -> int:
         runtime_budget_exhausted = wall_limit > 0 and wall >= wall_limit
 
     should_initialize = (
-        not runtime or runtime_status in terminal_states or runtime_budget_exhausted
+        not runtime
+        or runtime_status in terminal_states
+        or runtime_budget_exhausted
+        or runtime_legacy_inferred
     )
 
     if should_initialize:
@@ -259,13 +289,19 @@ def command_go(args: list[str]) -> int:
             scope = "**"
             inferred_defaults.append("scope")
         if not done_criteria:
-            done_criteria = goal
+            done_criteria = [
+                "advance the highest-priority remaining subtask",
+                "apply and validate concrete changes for that subtask",
+                "repeat until the objective is fully complete",
+            ]
             inferred_defaults.append("done-criteria")
+            inferred_continuous = True
         objective = {
             "goal": goal or "",
             "scope": scope or "",
             "done-criteria": done_criteria or "",
             "max-budget": max_budget,
+            "continuous_mode": inferred_continuous,
         }
         initialized = initialize_run(
             config=config,

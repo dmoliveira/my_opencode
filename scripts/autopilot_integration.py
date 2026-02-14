@@ -5,7 +5,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from autoflow_adapter import evaluate_request
 from checkpoint_snapshot_manager import list_snapshots
 from recovery_engine import evaluate_resume_eligibility
 from todo_enforcement import (
@@ -15,7 +14,7 @@ from todo_enforcement import (
 )
 
 
-STATUS_TO_AUTOFLOW_INTENT = {
+STATUS_TO_ORCHESTRATION_INTENT = {
     "draft": "dry-run",
     "running": "status",
     "paused": "resume",
@@ -23,6 +22,13 @@ STATUS_TO_AUTOFLOW_INTENT = {
     "failed": "resume",
     "budget_stopped": "report",
     "stopped": "report",
+}
+
+INTENT_TO_PHASE = {
+    "dry-run": "planning",
+    "status": "execution",
+    "resume": "recovery",
+    "report": "reporting",
 }
 
 
@@ -63,21 +69,19 @@ def _resume_controls(run: dict[str, Any], interruption_class: str) -> dict[str, 
     return evaluate_resume_eligibility(runtime, interruption_class)
 
 
-def _autoflow_bridge(run: dict[str, Any], interruption_class: str) -> dict[str, Any]:
+def _orchestration_bridge(
+    run: dict[str, Any], interruption_class: str
+) -> dict[str, Any]:
     status = str(run.get("status") or "draft")
-    intent = STATUS_TO_AUTOFLOW_INTENT.get(status, "status")
-    status_override = "paused" if status == "paused" else "running"
-    bridge = evaluate_request(
-        intent,
-        status_override=status_override,
-        interruption_class=interruption_class,
-    )
+    intent = STATUS_TO_ORCHESTRATION_INTENT.get(status, "status")
+    phase = INTENT_TO_PHASE.get(intent, "execution")
     return {
         "intent": intent,
-        "result": bridge.get("result"),
-        "reason_code": bridge.get("reason_code"),
-        "phase": bridge.get("phase"),
-        "warnings": bridge.get("warnings", []),
+        "result": "PASS",
+        "reason_code": "autopilot_orchestration_bridge_ready",
+        "phase": phase,
+        "warnings": [],
+        "interruption_class": interruption_class,
     }
 
 
@@ -92,7 +96,7 @@ def integrate_controls(
 
     todo = _todo_controls(updated)
     resume = _resume_controls(updated, interruption_class)
-    autoflow = _autoflow_bridge(updated, interruption_class)
+    orchestration = _orchestration_bridge(updated, interruption_class)
     checkpoint_count = len(list_snapshots(write_path))
 
     handoff_mode = "auto"
@@ -112,7 +116,7 @@ def integrate_controls(
         "result": "PASS",
         "run": updated,
         "control_integrations": {
-            "autoflow_bridge": autoflow,
+            "orchestration_bridge": orchestration,
             "todo_controls": todo,
             "resume_controls": resume,
             "checkpoint_count": checkpoint_count,
