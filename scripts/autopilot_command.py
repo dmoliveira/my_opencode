@@ -51,6 +51,18 @@ def emit(payload: dict[str, Any], *, as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
+def normalize_args(args: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for token in args:
+        value = token.strip()
+        if value.startswith("—"):
+            value = "--" + value.lstrip("—")
+        elif value.startswith("–"):
+            value = "--" + value.lstrip("–")
+        normalized.append(value)
+    return normalized
+
+
 def _runtime_or_fail(
     write_path: Path, *, as_json: bool
 ) -> tuple[dict[str, Any] | None, int]:
@@ -357,6 +369,7 @@ def command_doctor(args: list[str]) -> int:
 
 
 def main(argv: list[str]) -> int:
+    argv = normalize_args(list(argv))
     if not argv:
         return command_status(["--json"])
     cmd, *rest = argv
