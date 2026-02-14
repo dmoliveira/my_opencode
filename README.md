@@ -432,6 +432,7 @@ Task 28.4 autopilot command UX/workflow notes:
 - command module: `scripts/autopilot_command.py`
 - alias set in `opencode.json`: `/autopilot`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
 - unified workflow controls now expose `start|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
+- resume path now supports `--touched-paths <csv>` to enforce objective scope boundaries before cycle execution.
 
 ```bash
 # Quick-fix objective (single-script scope)
@@ -457,7 +458,14 @@ Task 28.4 autopilot command UX/workflow notes:
   - `autopilot_runtime_missing`: initialize objective with `/autopilot start ...`.
   - `confidence_drop_requires_handoff`: operator review required before calling `/autopilot resume`.
   - `budget_*`: reduce scope or lower cycle load, then resume with conservative increments.
+  - `scope_violation_detected`: remove out-of-scope targets or tighten `--touched-paths` to declared objective scope.
   - `autopilot_stop_requested`: inspect `/autopilot report` and start a fresh run when ready.
+
+Task 28.5 autopilot verification notes:
+
+- selftest now validates scope-bounded cycle execution (`scope_violation_detected`) and budget hard-stop behavior for `/autopilot resume`.
+- selftest now validates pause/resume/stop transitions through repeated `/autopilot status` checks after each lifecycle control action.
+- install smoke now exercises `/autopilot` objective lifecycle with both in-scope resume and explicit out-of-scope failure scenario (`|| true` guard) before stop/doctor checks.
 
 ## Installed plugin stack 🔌
 

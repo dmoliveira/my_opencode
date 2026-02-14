@@ -210,7 +210,8 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
     python3 "$INSTALL_DIR/scripts/autopilot_command.py" status --confidence 0.9 --json
     python3 "$INSTALL_DIR/scripts/autopilot_command.py" report --json
     python3 "$INSTALL_DIR/scripts/autopilot_command.py" pause --json
-    python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths scripts/autopilot_command.py --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths README.md --json || true
     python3 "$INSTALL_DIR/scripts/autopilot_command.py" stop --reason install-self-check --json
     python3 "$INSTALL_DIR/scripts/autopilot_command.py" doctor --json
   fi
@@ -340,7 +341,7 @@ printf "  /autopilot start --goal 'Ship objective' --scope 'scripts/**' --done-c
 printf "  /autopilot status --json\n"
 printf "  /autopilot report --json\n"
 printf "  /autopilot pause --json\n"
-printf "  /autopilot resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --json\n"
+printf "  /autopilot resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths scripts/autopilot_command.py --json\n"
 printf "  /autopilot stop --reason manual --json\n"
 printf "  /autopilot doctor --json\n"
 printf "  /pr-review --base main --head HEAD --json\n"

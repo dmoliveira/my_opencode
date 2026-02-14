@@ -85,6 +85,8 @@ All notable changes to this project are documented in this file.
 - Added `scripts/autopilot_integration.py` implementing Epic 28 Task 28.3 control-subsystem integration across autoflow transition reuse, todo/resume/checkpoint diagnostics, and confidence-triggered manual handoff mode.
 - Added `scripts/autopilot_command.py` implementing Epic 28 Task 28.4 command UX controls for `/autopilot start|status|pause|resume|stop|report|doctor`.
 - Added `/autopilot`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, and `/autopilot-doctor` aliases in `opencode.json`.
+- Added objective scope guardrails in `scripts/autopilot_runtime.py` with deterministic `scope_violation_detected` hard-stop handling for out-of-scope cycle targets.
+- Added `/autopilot resume --touched-paths <csv>` support in `scripts/autopilot_command.py` to validate cycle targets against declared objective scope.
 - Expanded learn verification coverage for low-confidence review rejection, high-risk two-approval publish gating, and install-smoke enforcement of knowledge publish guardrails (Epic 27 Task 27.4).
 
 ### Changes
@@ -126,6 +128,7 @@ All notable changes to this project are documented in this file.
 - Expanded installer self-check coverage with `/autopilot` objective lifecycle smoke commands and executable wiring.
 - Expanded unified `/doctor` integration checks to include the `/autopilot` subsystem.
 - Expanded README with `/autopilot` quick-fix/feature/release workflows and paused/stopped troubleshooting guidance.
+- Expanded autopilot verification coverage for scope bounding, budget-cap hard stops, and pause/resume/stop lifecycle transitions in selftest and install smoke paths.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
