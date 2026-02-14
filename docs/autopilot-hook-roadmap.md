@@ -34,9 +34,10 @@ Command aliases now available:
 - `/ralph-loop "task"` -> promise-mode `/autopilot` run
 - `/cancel-ralph` -> stop active run
 
-Config wiring target:
+Config wiring target (optional, requires bun runtime):
 
 - plugin spec entry in `opencode.json`: `file:{env:HOME}/.config/opencode/my_opencode/plugin/autopilot-loop`
+- keep disabled by default until host can install `file:` plugins via bun.
 
 ## Migration phases
 

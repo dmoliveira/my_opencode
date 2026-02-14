@@ -808,7 +808,6 @@
     }
   },
   "plugin": [
-    "file:{env:HOME}/.config/opencode/my_opencode/plugin/autopilot-loop",
     "@mohak34/opencode-notifier@latest",
     "opencode-supermemory",
     "opencode-wakatime"
