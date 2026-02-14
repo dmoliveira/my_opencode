@@ -314,26 +314,6 @@
       "description": "Run browser provider diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
     },
-    "start-work": {
-      "description": "Execute an approved plan artifact and persist checkpoints",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "start-work-status": {
-      "description": "Show latest plan execution status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" status --json`\nShow only the command output."
-    },
-    "start-work-deviations": {
-      "description": "Show captured plan execution deviations",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" deviations --json`\nShow only the command output."
-    },
-    "start-work-bg": {
-      "description": "Queue plan execution through background task manager",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS --background --json`\nShow only the command output."
-    },
-    "start-work-doctor-json": {
-      "description": "Run plan execution health diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" doctor --json`\nShow only the command output."
-    },
     "autoflow": {
       "description": "Run unified orchestration controls (start|status|resume|stop|report|dry-run)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
