@@ -362,6 +362,14 @@
       "description": "Run /autopilot subsystem diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" doctor --json`\nShow only the command output."
     },
+    "ralph-loop": {
+      "description": "Start hook-compatible promise loop using /autopilot semantics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode promise --goal \"$ARGUMENTS\" --json`\nDefault completion promise is <promise>DONE</promise>. Continue execution until completion token is emitted."
+    },
+    "cancel-ralph": {
+      "description": "Cancel active autopilot/ralph loop run",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" stop --reason cancel-ralph --json`\nShow only the command output."
+    },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -800,6 +808,7 @@
     }
   },
   "plugin": [
+    "file:{env:HOME}/.config/opencode/my_opencode/plugin/autopilot-loop",
     "@mohak34/opencode-notifier@latest",
     "opencode-supermemory",
     "opencode-wakatime"

@@ -29,6 +29,15 @@ TypeScript scaffold is added at `plugin/autopilot-loop/`:
 - `plugin/autopilot-loop/src/constants.ts` - stable defaults
 - `plugin/autopilot-loop/package.json` + lint/format/build tooling
 
+Command aliases now available:
+
+- `/ralph-loop "task"` -> promise-mode `/autopilot` run
+- `/cancel-ralph` -> stop active run
+
+Config wiring target:
+
+- plugin spec entry in `opencode.json`: `file:{env:HOME}/.config/opencode/my_opencode/plugin/autopilot-loop`
+
 ## Migration phases
 
 1. **Scaffold (done)**

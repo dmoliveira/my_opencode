@@ -651,6 +651,9 @@ def command_doctor(args: list[str]) -> int:
     if any(arg not in ("--json",) for arg in args):
         return usage()
     as_json = "--json" in args
+    plugin_root = SCRIPT_DIR.parent / "plugin" / "autopilot-loop"
+    plugin_scaffold_exists = (plugin_root / "src" / "index.ts").exists()
+    plugin_dist_exists = (plugin_root / "dist" / "index.js").exists()
     report = {
         "result": "PASS"
         if (SCRIPT_DIR / "autopilot_runtime.py").exists()
@@ -664,6 +667,8 @@ def command_doctor(args: list[str]) -> int:
         "contract_exists": (
             SCRIPT_DIR.parent / "instructions" / "autopilot_command_contract.md"
         ).exists(),
+        "hook_plugin_scaffold_exists": plugin_scaffold_exists,
+        "hook_plugin_dist_exists": plugin_dist_exists,
         "warnings": [],
         "problems": [],
         "quick_fixes": [
@@ -679,6 +684,14 @@ def command_doctor(args: list[str]) -> int:
         report["problems"].append("missing scripts/autopilot_integration.py")
     if not report["contract_exists"]:
         report["warnings"].append("missing instructions/autopilot_command_contract.md")
+    if not report["hook_plugin_scaffold_exists"]:
+        report["warnings"].append(
+            "autopilot-loop hook plugin scaffold missing (plugin/autopilot-loop/src/index.ts)"
+        )
+    if report["hook_plugin_scaffold_exists"] and not report["hook_plugin_dist_exists"]:
+        report["warnings"].append(
+            "autopilot-loop plugin not built yet (run install.sh or npm run build in plugin/autopilot-loop)"
+        )
     emit(report, as_json=as_json)
     return 0 if report["result"] == "PASS" else 1
 

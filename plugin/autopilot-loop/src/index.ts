@@ -22,6 +22,98 @@ export interface AutopilotLoopHook {
   getState(): AutopilotLoopState | null
 }
 
+// Declares minimal hook input for slashcommand interception.
+interface ToolBeforeInput {
+  tool: string
+  sessionID?: string
+}
+
+// Declares minimal mutable hook output shape for slashcommand args.
+interface ToolBeforeOutput {
+  args?: { command?: string }
+}
+
+// Declares minimal chat message input shape for session tracking.
+interface ChatMessageInput {
+  sessionID: string
+}
+
+// Declares minimal plugin shape expected by OpenCode runtime.
+interface PluginShape {
+  event(input: HookEventPayload): Promise<void>
+  "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>
+  "chat.message"(input: ChatMessageInput): Promise<void>
+}
+
+// Parses slashcommand name and argument suffix.
+function parseCommand(raw: string): { name: string; rest: string } {
+  const trimmed = raw.trim().replace(/^\//, "")
+  if (!trimmed) {
+    return { name: "", rest: "" }
+  }
+  const [first, ...tail] = trimmed.split(/\s+/)
+  return { name: first.toLowerCase(), rest: tail.join(" ").trim() }
+}
+
+// Extracts completion mode from slashcommand argument string.
+function parseCompletionMode(rest: string): "promise" | "objective" {
+  const match = rest.match(/--completion-mode\s+(promise|objective)/i)
+  if (!match) {
+    return "promise"
+  }
+  return match[1].toLowerCase() === "objective" ? "objective" : "promise"
+}
+
+// Extracts completion promise token from slashcommand argument string.
+function parseCompletionPromise(rest: string): string {
+  const quoted = rest.match(/--completion-promise\s+"([^"]+)"/i)
+  if (quoted?.[1]) {
+    return quoted[1].trim() || DEFAULT_COMPLETION_PROMISE
+  }
+  const simple = rest.match(/--completion-promise\s+([^\s]+)/i)
+  if (simple?.[1]) {
+    return simple[1].trim() || DEFAULT_COMPLETION_PROMISE
+  }
+  return DEFAULT_COMPLETION_PROMISE
+}
+
+// Extracts max-iterations option from slashcommand argument string.
+function parseMaxIterations(rest: string): number {
+  const match = rest.match(/--max-iterations\s+(\d+)/i)
+  if (!match) {
+    return DEFAULT_MAX_ITERATIONS
+  }
+  const parsed = Number.parseInt(match[1], 10)
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_MAX_ITERATIONS
+  }
+  return parsed
+}
+
+// Extracts goal text from slashcommand argument string.
+function parseGoal(rest: string): string {
+  const goalFlag = rest.match(/--goal\s+"([^"]+)"/i)
+  if (goalFlag?.[1]) {
+    return goalFlag[1].trim()
+  }
+  const quoted = rest.match(/^"([^"]+)"/)
+  if (quoted?.[1]) {
+    return quoted[1].trim()
+  }
+  const strippedFlags = rest.replace(/--[a-z-]+\s+"[^"]+"/gi, "").replace(/--[a-z-]+\s+[^\s]+/gi, "")
+  return strippedFlags.trim() || "continue current objective until done"
+}
+
+// Determines whether slashcommand should start autopilot loop handling.
+function isAutopilotStartCommand(command: string): boolean {
+  return command === "autopilot" || command === "autopilot-go" || command === "continue-work" || command === "autopilot-objective" || command === "ralph-loop"
+}
+
+// Determines whether slashcommand should cancel autopilot loop handling.
+function isAutopilotStopCommand(command: string): boolean {
+  return command === "autopilot-stop" || command === "cancel-ralph"
+}
+
 // Resolves session id from event properties.
 function eventSessionId(input: HookEventPayload): string | null {
   const props = input.event.properties
@@ -144,4 +236,62 @@ export function createAutopilotLoopHook(
   }
 
   return { event, startLoop, cancelLoop, getState }
+}
+
+// Creates plugin runtime bridge that wires slash commands and lifecycle events to autopilot-loop.
+export default function AutopilotLoopPlugin(ctx: HookContext): PluginShape {
+  const loop = createAutopilotLoopHook(ctx)
+
+  // Tracks session lifecycle events to auto-inject continuation prompts.
+  async function event(input: HookEventPayload): Promise<void> {
+    await loop.event(input)
+  }
+
+  // Intercepts slash commands to start or stop loop state.
+  async function toolExecuteBefore(
+    input: ToolBeforeInput,
+    output: ToolBeforeOutput,
+  ): Promise<void> {
+    if (input.tool !== "slashcommand") {
+      return
+    }
+    const commandRaw = output.args?.command
+    if (!commandRaw || !input.sessionID) {
+      return
+    }
+
+    const parsed = parseCommand(commandRaw)
+    if (isAutopilotStopCommand(parsed.name)) {
+      loop.cancelLoop(input.sessionID)
+      return
+    }
+    if (!isAutopilotStartCommand(parsed.name)) {
+      return
+    }
+
+    const completionMode =
+      parsed.name === "autopilot-objective" ? "objective" : parseCompletionMode(parsed.rest)
+    const completionPromise = parseCompletionPromise(parsed.rest)
+    const maxIterations = parseMaxIterations(parsed.rest)
+    const goal = parseGoal(parsed.rest)
+
+    loop.startLoop({
+      sessionId: input.sessionID,
+      prompt: goal,
+      completionMode,
+      completionPromise,
+      maxIterations,
+    })
+  }
+
+  // Keeps plugin contract for chat.message hook compatibility.
+  async function chatMessage(_input: ChatMessageInput): Promise<void> {
+    return
+  }
+
+  return {
+    event,
+    "tool.execute.before": toolExecuteBefore,
+    "chat.message": chatMessage,
+  }
 }
