@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from hook_framework import HookRegistration, resolve_event_plan  # type: ignore
@@ -60,6 +61,14 @@ from execution_budget_runtime import (  # type: ignore
     build_budget_state,
     evaluate_budget,
     resolve_budget_policy,
+)
+from health_score_collector import (  # type: ignore
+    apply_suppression_window,
+    build_indicators,
+    evaluate_health,
+    load_health_state,
+    persist_health_snapshot,
+    save_health_state,
 )
 
 
@@ -208,6 +217,131 @@ def main() -> int:
         home.mkdir(parents=True, exist_ok=True)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
+
+        healthy_signals = {
+            "observed_at": "2026-02-14T00:00:00Z",
+            "validation_targets": {
+                "validate": True,
+                "selftest": True,
+                "install_test": True,
+            },
+            "git": {"clean_worktree": True, "behind_remote": False},
+            "runtime_policy": {
+                "budget_profile": "balanced",
+                "hooks_enabled": False,
+                "disabled_hooks": [],
+            },
+            "automation": {"bg_failed_jobs": 0, "doctor_failed_count": 0},
+            "freshness": {
+                "stale_checkpoints": 0,
+                "overdue_followups": 0,
+                "stale_branches": 0,
+            },
+        }
+        healthy_indicators = build_indicators(healthy_signals)
+        healthy_report = evaluate_health(healthy_indicators)
+        expect(
+            healthy_report.get("status") == "healthy"
+            and float(healthy_report.get("score") or 0.0) == 100.0,
+            "health score should be healthy for all-pass indicators",
+        )
+
+        critical_signals = {
+            "observed_at": "2026-02-14T00:00:00Z",
+            "validation_targets": {
+                "validate": False,
+                "selftest": True,
+                "install_test": True,
+            },
+            "git": {"clean_worktree": False, "behind_remote": False},
+            "runtime_policy": {
+                "budget_profile": "balanced",
+                "hooks_enabled": False,
+                "disabled_hooks": [],
+            },
+            "automation": {"bg_failed_jobs": 1, "doctor_failed_count": 0},
+            "freshness": {
+                "stale_checkpoints": 0,
+                "overdue_followups": 0,
+                "stale_branches": 0,
+            },
+        }
+        critical_indicators = build_indicators(critical_signals)
+        critical_report = evaluate_health(critical_indicators)
+        expect(
+            critical_report.get("status") == "critical",
+            "health score should become critical when multiple fail indicators are present",
+        )
+        expect(
+            "validation_suite_failed" in set(critical_report.get("reason_codes", [])),
+            "health score should surface validation_suite_failed reason code",
+        )
+
+        warning_signals = {
+            "observed_at": "2026-02-14T00:00:00Z",
+            "validation_targets": {
+                "validate": True,
+                "selftest": True,
+                "install_test": True,
+            },
+            "git": {"clean_worktree": True, "behind_remote": False},
+            "runtime_policy": {
+                "budget_profile": "extended",
+                "hooks_enabled": False,
+                "disabled_hooks": [],
+            },
+            "automation": {"bg_failed_jobs": 0, "doctor_failed_count": 0},
+            "freshness": {
+                "stale_checkpoints": 0,
+                "overdue_followups": 0,
+                "stale_branches": 0,
+            },
+        }
+        warning_indicators = build_indicators(warning_signals)
+        suppression_start = datetime(2026, 2, 14, 0, 0, tzinfo=UTC)
+        suppression_summary_1, suppression_state_1 = apply_suppression_window(
+            warning_indicators,
+            {"suppression": {}, "updated_at": None},
+            now=suppression_start,
+        )
+        expect(
+            suppression_summary_1.get("emitted_count", 0) >= 1,
+            "suppression should emit first warning observation",
+        )
+        suppression_summary_2, _ = apply_suppression_window(
+            warning_indicators,
+            suppression_state_1,
+            now=suppression_start + timedelta(hours=1),
+        )
+        expect(
+            suppression_summary_2.get("suppressed_count", 0) >= 1,
+            "suppression should suppress repeated warning signals inside window",
+        )
+
+        save_health_state(cfg, suppression_state_1)
+        loaded_state = load_health_state(cfg)
+        expect(
+            isinstance(loaded_state.get("suppression"), dict),
+            "health state should persist suppression map",
+        )
+        snapshot_paths = persist_health_snapshot(
+            cfg,
+            {
+                "observed_at": "2026-02-14T00:00:00Z",
+                "score": 82.5,
+                "status": "degraded",
+                "indicators": warning_indicators,
+                "reason_codes": ["policy_drift_detected"],
+                "next_actions": ["restore expected budget profile baseline"],
+                "suppression": suppression_summary_2,
+                "weight_normalized": False,
+            },
+        )
+        expect(
+            Path(str(snapshot_paths.get("latest", ""))).exists()
+            and Path(str(snapshot_paths.get("history", ""))).exists(),
+            "health snapshot persistence should write latest and history files",
+        )
 
         # Plugin profile lean should pass doctor.
         result = run_script(
