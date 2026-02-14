@@ -32,6 +32,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧭 Built-in `/autoflow` command for unified orchestration (`start|status|resume|stop|report|dry-run`).
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
+- 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -51,6 +52,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - Dashboard reconciliation now aligns Epic 25-E27 summary statuses with completed implementation sections.
 - Epic 18 roadmap task checkboxes now align with previously shipped safe-edit adapter and command-integration completion notes.
 - Paused-epic governance now defines measurable exit criteria for E7/E10 promotion, including demand/prototype/safety gates.
+- Auto-slash detector now ships with preview-first dispatch, per-command toggles, and execution audit logging for E10 intent routing.
 
 Release slicing gate checklist (per phase):
 
@@ -1002,6 +1004,42 @@ Anti-patterns:
 - avoid mixing contradictory intent keywords casually (`ulw` + `deep-analyze`) unless you expect precedence conflict resolution.
 - avoid relying on partial words (`deep` or `safe`) because matching is exact-token only.
 - avoid forgetting local opt-outs in copied prompts; `no-keyword-mode` intentionally disables all activation for that request.
+
+## Auto slash command detector
+
+Epic 10 introduces an intent-mapping detector for common command families:
+
+- schema + scoring engine: `scripts/auto_slash_schema.py`
+- command wrapper: `scripts/auto_slash_command.py`
+- contract guide: `instructions/auto_slash_detector.md`
+
+Use:
+```text
+/auto-slash status --json
+/auto-slash preview --prompt "run doctor diagnostics" --json
+/auto-slash execute --prompt "run doctor diagnostics" --json
+/auto-slash execute --prompt "run doctor diagnostics" --force --json
+/auto-slash disable-command devtools
+/auto-slash audit --limit 10 --json
+/auto-slash doctor --json
+```
+
+Detector behavior:
+- maps natural-language prompts to `/doctor`, `/stack`, `/nvim`, or `/devtools`
+- enforces confidence + ambiguity thresholds before selecting a command
+- defaults to preview-first execution (`execute` requires `--force`)
+- keeps per-command enable/disable controls in layered config
+- appends forced execution events to runtime audit log for traceability
+
+Examples:
+- basic: `/auto-slash preview --prompt "please run doctor diagnostics" --json`
+- intermediate: `/auto-slash preview --prompt "switch to focus mode" --json`
+- safety path: `/auto-slash execute --prompt "run doctor diagnostics" --json` then rerun with `--force`
+
+Limitations:
+- intentionally limited command set to reduce misfire risk
+- does not auto-dispatch when prompts already include explicit slash commands
+- low-confidence or ambiguous prompts return explicit no-op reasons
 
 ## Conditional rules injector
 

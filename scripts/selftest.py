@@ -25,6 +25,7 @@ from model_routing_schema import (  # type: ignore
     validate_schema,
 )
 from keyword_mode_schema import resolve_prompt_modes  # type: ignore
+from auto_slash_schema import detect_intent, evaluate_precision  # type: ignore
 from context_resilience import (  # type: ignore
     build_recovery_plan,
     prune_context,
@@ -104,6 +105,7 @@ HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
+AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
@@ -5931,6 +5933,153 @@ version: 1
             "keyword-mode doctor should report PASS",
         )
 
+        auto_slash_detect = detect_intent(
+            "can you run doctor diagnostics on this setup?",
+            enabled=True,
+            enabled_commands={"doctor", "stack", "nvim", "devtools"},
+            min_confidence=0.75,
+            ambiguity_delta=0.15,
+        )
+        expect(
+            (auto_slash_detect.get("selected") or {}).get("command") == "doctor",
+            "auto-slash schema should map clear diagnostic intent to doctor",
+        )
+
+        auto_slash_dataset = [
+            {"prompt": "run doctor diagnostics", "expected": "doctor"},
+            {"prompt": "switch to focus mode", "expected": "stack"},
+            {
+                "prompt": "install nvim integration minimal and link init",
+                "expected": "nvim",
+            },
+            {"prompt": "install devtools and setup hooks", "expected": "devtools"},
+            {"prompt": "write release notes", "expected": None},
+        ]
+        auto_slash_precision = evaluate_precision(
+            auto_slash_dataset,
+            enabled=True,
+            enabled_commands={"doctor", "stack", "nvim", "devtools"},
+            min_confidence=0.75,
+            ambiguity_delta=0.15,
+        )
+        expect(
+            auto_slash_precision.get("precision", 0.0) >= 0.95,
+            "auto-slash schema precision should remain above target threshold",
+        )
+        expect(
+            auto_slash_precision.get("unsafe_predictions") == 0,
+            "auto-slash schema should avoid unsafe predictions on no-command prompts",
+        )
+
+        auto_slash_preview = subprocess.run(
+            [
+                sys.executable,
+                str(AUTO_SLASH_SCRIPT),
+                "preview",
+                "--prompt",
+                "run doctor diagnostics in json",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(auto_slash_preview.returncode == 0, "auto-slash preview should succeed")
+        auto_slash_preview_report = parse_json_output(auto_slash_preview.stdout)
+        expect(
+            (auto_slash_preview_report.get("selected") or {}).get("command")
+            == "doctor",
+            "auto-slash preview should choose doctor for diagnostics prompt",
+        )
+
+        auto_slash_execute_preview = subprocess.run(
+            [
+                sys.executable,
+                str(AUTO_SLASH_SCRIPT),
+                "execute",
+                "--prompt",
+                "run doctor diagnostics",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            auto_slash_execute_preview.returncode == 0,
+            "auto-slash execute preview should succeed without force",
+        )
+        auto_slash_execute_preview_report = parse_json_output(
+            auto_slash_execute_preview.stdout
+        )
+        expect(
+            auto_slash_execute_preview_report.get("result") == "PREVIEW_ONLY",
+            "auto-slash execute should require force in preview-first mode",
+        )
+
+        auto_slash_execute_forced = subprocess.run(
+            [
+                sys.executable,
+                str(AUTO_SLASH_SCRIPT),
+                "execute",
+                "--prompt",
+                "run doctor diagnostics",
+                "--force",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            auto_slash_execute_forced.returncode == 0,
+            "auto-slash execute with force should succeed",
+        )
+        auto_slash_execute_forced_report = parse_json_output(
+            auto_slash_execute_forced.stdout
+        )
+        expect(
+            auto_slash_execute_forced_report.get("executed") is True
+            and auto_slash_execute_forced_report.get("command_returncode") == 0,
+            "auto-slash forced execution should dispatch successfully",
+        )
+
+        auto_slash_audit = subprocess.run(
+            [sys.executable, str(AUTO_SLASH_SCRIPT), "audit", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(auto_slash_audit.returncode == 0, "auto-slash audit should succeed")
+        auto_slash_audit_report = parse_json_output(auto_slash_audit.stdout)
+        expect(
+            len(auto_slash_audit_report.get("entries", [])) >= 1,
+            "auto-slash audit should record forced executions",
+        )
+
+        auto_slash_doctor = subprocess.run(
+            [sys.executable, str(AUTO_SLASH_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(auto_slash_doctor.returncode == 0, "auto-slash doctor should succeed")
+        auto_slash_doctor_report = parse_json_output(auto_slash_doctor.stdout)
+        expect(
+            auto_slash_doctor_report.get("result") == "PASS",
+            "auto-slash doctor should report PASS",
+        )
+
         frontmatter, body = parse_frontmatter(
             """---\ndescription: Rule example\npriority: 60\nglobs:\n  - scripts/*.py\n---\nUse safe edits.\n"""
         )
@@ -6576,6 +6725,20 @@ version: 1
         expect(
             keyword_mode_checks[0].get("ok") is True,
             "doctor keyword-mode check should pass",
+        )
+
+        auto_slash_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "auto-slash"
+        ]
+        expect(
+            bool(auto_slash_checks),
+            "doctor summary should include auto-slash check",
+        )
+        expect(
+            auto_slash_checks[0].get("ok") is True,
+            "doctor auto-slash check should pass",
         )
 
         rules_checks = [

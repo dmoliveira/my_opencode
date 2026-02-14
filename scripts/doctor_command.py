@@ -145,6 +145,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "auto-slash",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("auto_slash_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("auto_slash_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "rules",
         "kind": "doctor-json",
         "optional": True,
