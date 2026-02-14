@@ -947,10 +947,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 27.1.2: Define confidence score and approval workflow
   - [x] Subtask 27.1.3: Define tagging and search metadata
   - [x] Notes: Added `instructions/knowledge_capture_policy_contract.md` defining entry taxonomy, deterministic confidence scoring, approval quality gates, and required tagging/search metadata for reusable task learnings.
-- [ ] Task 27.2: Implement knowledge extraction pipeline
-  - [ ] Subtask 27.2.1: Extract signals from merged PRs and task digests
-  - [ ] Subtask 27.2.2: Generate draft entries with source links
-  - [ ] Subtask 27.2.3: Support review/edit/publish lifecycle
+- [x] Task 27.2: Implement knowledge extraction pipeline
+  - [x] Subtask 27.2.1: Extract signals from merged PRs and task digests
+  - [x] Subtask 27.2.2: Generate draft entries with source links
+  - [x] Subtask 27.2.3: Support review/edit/publish lifecycle
+  - [x] Notes: Added `scripts/knowledge_capture_pipeline.py` with merged-PR + digest signal extraction, grouped draft generation with evidence links, and deterministic review/publish/archive quality-gate transitions.
 - [ ] Task 27.3: Command and integration surface
   - [ ] Subtask 27.3.1: Add `/learn capture|review|publish|search`
   - [ ] Subtask 27.3.2: Integrate published patterns with rules injector and `/autoflow` workflow docs

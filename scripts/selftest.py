@@ -70,6 +70,12 @@ from health_score_collector import (  # type: ignore
     persist_health_snapshot,
     save_health_state,
 )
+from knowledge_capture_pipeline import (  # type: ignore
+    collect_pr_signals,
+    collect_task_digest_signals,
+    generate_draft_entries,
+    transition_entry,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -546,6 +552,159 @@ def main() -> int:
         expect(
             health_doctor_payload.get("result") == "PASS",
             "health doctor should report pass",
+        )
+
+        knowledge_repo = tmp / "knowledge_repo"
+        knowledge_repo.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "selftest@example.com"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Selftest"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        (knowledge_repo / "README.md").write_text(
+            "knowledge fixture\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "add", "README.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "seed knowledge fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature/e27-t2"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        (knowledge_repo / "notes.txt").write_text("task signal\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "notes.txt"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "Add E27-T2 capture notes"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            ["git", "checkout", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        subprocess.run(
+            [
+                "git",
+                "merge",
+                "--no-ff",
+                "feature/e27-t2",
+                "-m",
+                "Merge pull request #999 from selftest/feature/e27-t2 E27-T2",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=knowledge_repo,
+        )
+
+        digest_dir = home / ".config" / "opencode" / "digests"
+        digest_dir.mkdir(parents=True, exist_ok=True)
+        (digest_dir / "e27-t2.json").write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-02-14T00:00:00Z",
+                    "reason": "E27-T2 lifecycle verification",
+                    "cwd": str(knowledge_repo),
+                    "branch": "main",
+                    "changes": 3,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        pr_signals = collect_pr_signals(knowledge_repo, limit=5)
+        expect(
+            any(
+                int(item.get("metadata", {}).get("pr_number") or 0) == 999
+                for item in pr_signals
+            ),
+            "knowledge pipeline should extract merged PR signals with PR number",
+        )
+
+        digest_signals = collect_task_digest_signals(digest_dir, limit=5)
+        expect(
+            any(
+                str(item.get("source_link", "")).startswith("digest:")
+                for item in digest_signals
+            ),
+            "knowledge pipeline should extract task digest signals",
+        )
+
+        knowledge_drafts = generate_draft_entries(pr_signals + digest_signals)
+        e27_draft = next(
+            (
+                entry
+                for entry in knowledge_drafts
+                if str(entry.get("entry_id", "")).startswith("kc-e27-t2")
+            ),
+            None,
+        )
+        expect(
+            isinstance(e27_draft, dict)
+            and len(e27_draft.get("evidence_sources", [])) >= 2,
+            "knowledge pipeline should generate grouped draft entries with source links",
+        )
+
+        reviewed_entry, review_failures = transition_entry(
+            e27_draft,
+            target_status="review",
+        )
+        expect(
+            not review_failures and reviewed_entry.get("status") == "review",
+            "knowledge pipeline should allow draft-to-review transition when quality gates pass",
+        )
+
+        published_entry, publish_failures = transition_entry(
+            reviewed_entry,
+            target_status="published",
+            approved_by="selftest-reviewer",
+        )
+        expect(
+            not publish_failures and published_entry.get("status") == "published",
+            "knowledge pipeline should allow review-to-published transition with approval metadata",
         )
 
         # Plugin profile lean should pass doctor.
