@@ -415,6 +415,33 @@ def main() -> int:
             "health status should return a valid status payload",
         )
 
+        health_status_repeat = subprocess.run(
+            [
+                sys.executable,
+                str(HEALTH_COMMAND_SCRIPT),
+                "status",
+                "--force-refresh",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=health_env,
+            check=False,
+            cwd=health_repo,
+        )
+        expect(
+            health_status_repeat.returncode == 0,
+            "health status repeat run should succeed",
+        )
+        health_status_repeat_payload = parse_json_output(health_status_repeat.stdout)
+        expect(
+            health_status_repeat_payload.get("score")
+            == health_status_payload.get("score")
+            and health_status_repeat_payload.get("status")
+            == health_status_payload.get("status"),
+            "health scoring should be deterministic across repeated runs with unchanged signals",
+        )
+
         health_trend = subprocess.run(
             [
                 sys.executable,
@@ -457,6 +484,50 @@ def main() -> int:
             health_drift_payload.get("result") == "PASS"
             and "drift_count" in health_drift_payload,
             "health drift should return drift summary fields",
+        )
+
+        cfg_payload = json.loads(cfg.read_text(encoding="utf-8"))
+        budget_runtime = (
+            cfg_payload.get("budget_runtime")
+            if isinstance(cfg_payload.get("budget_runtime"), dict)
+            else {}
+        )
+        budget_runtime["profile"] = "extended"
+        cfg_payload["budget_runtime"] = budget_runtime
+        cfg.write_text(json.dumps(cfg_payload, indent=2) + "\n", encoding="utf-8")
+
+        health_drift_precise = subprocess.run(
+            [
+                sys.executable,
+                str(HEALTH_COMMAND_SCRIPT),
+                "drift",
+                "--force-refresh",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=health_env,
+            check=False,
+            cwd=health_repo,
+        )
+        expect(
+            health_drift_precise.returncode == 0,
+            "health drift force-refresh should succeed",
+        )
+        health_drift_precise_payload = parse_json_output(health_drift_precise.stdout)
+        expect(
+            "policy_drift_detected"
+            in set(health_drift_precise_payload.get("reason_codes", [])),
+            "health drift should surface policy_drift_detected for budget profile drift",
+        )
+        precise_indicators = {
+            str(item.get("indicator_id"))
+            for item in health_drift_precise_payload.get("drift", [])
+            if isinstance(item, dict)
+        }
+        expect(
+            "runtime_policy_drift" in precise_indicators,
+            "health drift should attribute profile mismatch to runtime_policy_drift indicator",
         )
 
         health_doctor = subprocess.run(

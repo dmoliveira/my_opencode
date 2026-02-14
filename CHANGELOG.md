@@ -163,6 +163,7 @@ All notable changes to this project are documented in this file.
 - Added health-score policy contract defining indicator schema, weighted threshold model, and drift suppression-window behavior for Epic 26 Task 26.1.
 - Added `health_score_collector.py` backend for health signal collection, weighted score computation, drift suppression-state tracking, and runtime snapshot history persistence; marked Epic 26 Task 26.2 complete in the roadmap.
 - Added `/health` command integration with status/trend/drift reporting, JSON export outputs, doctor/install smoke wiring, and score-bucket remediation guidance; marked Epic 26 Task 26.3 complete in the roadmap.
+- Expanded health verification coverage for deterministic score stability, precise policy-drift attribution, and install-smoke drift refresh checks; marked Epic 26 Task 26.4 and exit criteria complete in the roadmap.
 
 ## v0.2.0 - 2026-02-12
 
