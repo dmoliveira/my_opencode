@@ -83,6 +83,19 @@ def command_start(args: list[str]) -> int:
     if args:
         return usage()
 
+    inferred_defaults: list[str] = []
+    if not goal:
+        goal = (
+            "continue the active user request from current session context until done"
+        )
+        inferred_defaults.append("goal")
+    if not scope:
+        scope = "**"
+        inferred_defaults.append("scope")
+    if not done_criteria:
+        done_criteria = goal
+        inferred_defaults.append("done-criteria")
+
     config, _ = load_layered_config()
     write_path = resolve_write_path()
     objective = {
@@ -97,6 +110,13 @@ def command_start(args: list[str]) -> int:
         objective=objective,
         actor="autopilot",
     )
+    if inferred_defaults:
+        initialized["inferred_defaults"] = inferred_defaults
+        initialized["warnings"] = initialized.get("warnings", [])
+        if isinstance(initialized["warnings"], list):
+            initialized["warnings"].append(
+                "autopilot inferred missing objective fields; use explicit fields for tighter control"
+            )
     emit(initialized, as_json=as_json)
     return 0 if initialized.get("result") == "PASS" else 1
 
