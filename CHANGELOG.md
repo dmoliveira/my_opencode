@@ -77,6 +77,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/pr_review_analyzer.py` implementing Epic 23 Task 23.2 diff parsing, changed-area classification, missing evidence detection, and deterministic rubric-aligned findings/recommendation output for PR risk triage.
 - Added `scripts/pr_review_command.py` implementing Epic 23 Task 23.3 `/pr-review` command integration with concise/JSON review output, pre-merge checklist generation, and subsystem doctor diagnostics.
 - Added `/pr-review`, `/pr-review-json`, `/pr-review-checklist`, and `/pr-review-doctor` aliases in `opencode.json`.
+- Added `instructions/knowledge_capture_policy_contract.md` defining Epic 27 Task 27.1 entry taxonomy, confidence model, approval quality gates, and tagging/search metadata requirements.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.

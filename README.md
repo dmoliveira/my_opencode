@@ -369,6 +369,13 @@ Task 26.4 health verification notes:
 - selftest now validates drift precision by injecting budget profile drift and asserting `policy_drift_detected` attribution under `runtime_policy_drift`.
 - install smoke now validates drift force-refresh behavior under controlled profile drift in temporary config state.
 
+Task 27.1 knowledge capture contract notes:
+
+- policy contract: `instructions/knowledge_capture_policy_contract.md`
+- entry taxonomy now defines `pattern`, `pitfall`, `checklist`, and `rule_candidate` capture types.
+- confidence scoring now uses deterministic factor weights (`evidence_quality`, `repeatability`, `scope_clarity`, `freshness`) for publish eligibility.
+- approval quality gates now require evidence links, confidence thresholds, and reviewer metadata before publication.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
@@ -388,6 +395,7 @@ These two can fail to auto-resolve on some setups and are disabled by default. E
 - `instructions/release_train_policy_contract.md` - release preflight, semver gating, reason-code, and rollback contract for upcoming `/release-train` flows.
 - `instructions/hotfix_mode_policy_contract.md` - incident hotfix activation, mandatory safety checks, reduced validation limits, and follow-up audit contract.
 - `instructions/health_score_policy_contract.md` - repo health indicator model, weighted thresholds, and drift suppression-window contract.
+- `instructions/knowledge_capture_policy_contract.md` - reusable-learning entry schema, confidence scoring, approval quality gates, and search metadata contract.
 
 ## Ecosystem extensions (optional) 🧰
 
