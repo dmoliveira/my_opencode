@@ -1006,23 +1006,39 @@ Every command-oriented epic must ship all of the following:
 
 ## Cross-Cutting Delivery Tasks
 
-**Status:** `planned`
+**Status:** `in_progress`
 
-- [ ] Task C1: Add release slicing plan by phase
-  - [ ] Subtask C1.1: Phase A (low-risk foundation): Epic 1
-  - [ ] Subtask C1.2: Phase B (workflow power): Epic 2 + Epic 3
-  - [ ] Subtask C1.3: Phase C (advanced automation): Epic 4 + Epic 5
-  - [ ] Subtask C1.4: Phase D (control layer): Epic 8 + Epic 9 + Epic 10
-  - [ ] Subtask C1.5: Phase E (resilience and observability): Epic 11 + Epic 12
-  - [ ] Subtask C1.6: Phase F (workflow expansion): Epic 13 + Epic 14
-  - [ ] Subtask C1.7: Phase G (quality and control): Epic 15 + Epic 23
-  - [ ] Subtask C1.8: Phase H (recovery and semantic safety): Epic 17 + Epic 18 + Epic 19
-  - [ ] Subtask C1.9: Phase I (bounded autonomy): Epic 20 + Epic 22
-  - [ ] Subtask C1.10: Phase J (unified orchestration): Epic 22
-  - [ ] Subtask C1.11: Phase K (delivery acceleration): Epic 23 + Epic 24 + Epic 25
-  - [ ] Subtask C1.12: Phase L (operational intelligence): Epic 26 + Epic 27
-  - [ ] Subtask C1.13: Phase M (objective autonomy): Epic 28
-  - [ ] Subtask C1.14: Phase N (optional power-user): Epic 6 + Epic 7
+- [x] Task C1: Add release slicing plan by phase
+  - [x] Subtask C1.1: Phase A (low-risk foundation): Epic 1
+  - [x] Subtask C1.2: Phase B (workflow power): Epic 2 + Epic 3
+  - [x] Subtask C1.3: Phase C (advanced automation): Epic 4 + Epic 5
+  - [x] Subtask C1.4: Phase D (control layer): Epic 8 + Epic 9 + Epic 10
+  - [x] Subtask C1.5: Phase E (resilience and observability): Epic 11 + Epic 12
+  - [x] Subtask C1.6: Phase F (workflow expansion): Epic 13 + Epic 14
+  - [x] Subtask C1.7: Phase G (quality and control): Epic 15 + Epic 23
+  - [x] Subtask C1.8: Phase H (recovery and semantic safety): Epic 17 + Epic 18 + Epic 19
+  - [x] Subtask C1.9: Phase I (bounded autonomy): Epic 20 + Epic 22
+  - [x] Subtask C1.10: Phase J (unified orchestration): Epic 22
+  - [x] Subtask C1.11: Phase K (delivery acceleration): Epic 23 + Epic 24 + Epic 25
+  - [x] Subtask C1.12: Phase L (operational intelligence): Epic 26 + Epic 27
+  - [x] Subtask C1.13: Phase M (objective autonomy): Epic 28
+  - [x] Subtask C1.14: Phase N (optional power-user): Epic 6 + Epic 7
+  - [x] Notes: Release slicing now uses deterministic gates per phase so each slice ships only when command contract/docs, validation suite (`make validate`, `make selftest`, `make install-test`), and rollback notes are complete.
+  - [x] Phase gate baseline:
+    - [x] Phase A: Foundation config readiness (`E1`) with layered writes and fallback-safe migration.
+    - [x] Phase B: Async workflow operability (`E2-E3`) with queued execution plus safe-refactor preflight.
+    - [x] Phase C: Policy/control baseline (`E4-E5`) with hooks and routing fallback explainability.
+    - [x] Phase D: Rule-driven command control (`E8-E10`) with keyword/rule determinism and intent-mapping safety.
+    - [x] Phase E: Runtime resilience visibility (`E11-E12`) with context recovery and fallback trace outputs.
+    - [x] Phase F: Workflow expansion (`E13-E14`) with browser profile switching and plan execution bridge.
+    - [x] Phase G: Quality and review control (`E15-E23`) with todo compliance and PR risk triage.
+    - [x] Phase H: Recovery-safe execution (`E17-E19`) with resume governance, safe-edit, and checkpoint continuity.
+    - [x] Phase I: Bounded autonomy (`E20-E22`) with budgets and unified orchestration controls.
+    - [x] Phase J: Unified orchestration consolidation (`E22`) as migration gate for command surface consistency.
+    - [x] Phase K: Delivery acceleration (`E23-E25`) with review, release-train, and incident-mode readiness.
+    - [x] Phase L: Operational intelligence (`E26-E27`) with health drift telemetry and reusable knowledge capture.
+    - [x] Phase M: Objective autonomy (`E28`) with scoped/budgeted autopilot lifecycle controls.
+    - [x] Phase N: Optional power-user capabilities (`E6-E7`) behind demand-driven adoption gates.
 - [ ] Task C2: Add acceptance criteria template per epic
   - [ ] Subtask C2.1: Functional criteria
   - [ ] Subtask C2.2: Reliability criteria
@@ -1066,7 +1082,7 @@ Use this log to track what changed week by week.
 - `Now`: E1 -> E2 -> E3 -> E20
 - `Next`: E14 -> E15 -> E22
 - `Later`: E23 -> E24 -> E26 -> E27
-- `Deferred`: E6 (paused), E7 (postponed), E10 (paused), E28 (paused), E16/E21 (merged)
+- `Deferred`: E7 (postponed), E10 (paused), E16/E21 (merged)
 
 ## Decision Log
 
@@ -1080,6 +1096,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-13: Pause/postpone lower-confidence epics (E10, E28) until measurable value is proven.
 - [x] 2026-02-13: Merge duplicate epic scopes E16 -> E23 and E21 -> E22/E28.
 - [x] 2026-02-13: Require command UX baseline (autocomplete, assistant tips, hovers/explanations, QoL aliases) for all new command features.
+- [x] 2026-02-14: Complete C1 release slicing plan with deterministic phase gates across A-N and keep deferred queue aligned with current epic statuses.
 
 ---
 
