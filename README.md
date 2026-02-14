@@ -46,6 +46,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - Command UX baseline (Task C4) now standardizes shortcut aliases, help/doctor discoverability, and troubleshooting-first quick paths across command families.
 - Session intelligence baseline (E6-T1) now records digest-linked session metadata in `~/.config/opencode/sessions/index.json` with retention pruning for stale or oversized histories.
 - Session command baseline (E6-T2) now exposes `/session list|show|search` plus `/session doctor` for indexed-session visibility and diagnostics.
+- Resume support baseline (E6-T3) now emits actionable `resume_hints` in `/resume` and `/start-work recover` JSON output, and includes resume eligibility hints in digest `plan_execution` snapshots.
 
 Release slicing gate checklist (per phase):
 
@@ -1101,6 +1102,7 @@ Epic 17 Task 17.3 adds operator-facing resume controls:
 - status surface: `/resume status --json` with explicit `reason_code` + human-readable `reason`
 - execution control: `/resume now --interruption-class <class> --json`
 - safety toggle: `/resume disable --json` to block resume attempts until re-enabled in runtime state
+- actionable guidance: `resume_hints.next_actions` describes the next safe recovery command for the current reason code
 
 Use:
 ```text
@@ -1115,6 +1117,10 @@ Recovery playbooks:
 - `resume_non_idempotent_step`: explicitly approve only the needed step with `--approve-step <ordinal>`.
 - `resume_attempt_limit_reached`: escalate to manual review and restart from `/start-work <plan.md>` after inspection.
 - `resume_disabled`: keep disabled during high-risk runs; re-enable by updating runtime `plan_execution.resume.enabled` to `true`.
+
+Digest integration:
+- `plan_execution.resume_hints` includes the latest resume eligibility state, reason code, and suggested next actions.
+- use `/digest show` after interrupted runs to get lightweight recovery cues without loading full runtime state.
 
 Verification notes:
 - selftest now covers all interruption classes (`tool_failure`, `timeout`, `context_reset`, `process_crash`) plus cooldown and disable safeguards.

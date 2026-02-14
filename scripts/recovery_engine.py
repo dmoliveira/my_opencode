@@ -58,6 +58,64 @@ def explain_resume_reason(reason_code: str, *, cooldown_remaining: int = 0) -> s
     return message
 
 
+def build_resume_hints(
+    reason_code: str,
+    *,
+    interruption_class: str,
+    checkpoint: dict[str, Any] | None = None,
+    cooldown_remaining: int = 0,
+) -> dict[str, Any]:
+    safe_class = (
+        interruption_class
+        if interruption_class in INTERRUPTION_COOLDOWNS
+        else "tool_failure"
+    )
+    hints: list[str] = []
+    next_step_ordinal = (
+        checkpoint.get("next_step_ordinal") if isinstance(checkpoint, dict) else None
+    )
+
+    if reason_code == "resume_allowed":
+        if isinstance(next_step_ordinal, int):
+            hints.append(f"/resume now --interruption-class {safe_class} --json")
+        else:
+            hints.append("/start-work status --json")
+    elif reason_code == "resume_non_idempotent_step":
+        if isinstance(next_step_ordinal, int):
+            hints.append(
+                f"/resume now --interruption-class {safe_class} --approve-step {next_step_ordinal} --json"
+            )
+        hints.append("/resume status --json")
+    elif reason_code == "resume_blocked_cooldown":
+        if cooldown_remaining > 0:
+            hints.append(
+                f"wait about {cooldown_remaining}s and rerun /resume status --json"
+            )
+        else:
+            hints.append("rerun /resume status --json")
+    elif reason_code == "resume_disabled":
+        hints.append("set runtime plan_execution.resume.enabled to true")
+        hints.append(f"/resume status --interruption-class {safe_class} --json")
+    elif reason_code == "resume_attempt_limit_reached":
+        hints.append(
+            "inspect runtime trail and restart with /start-work <plan.md> --json"
+        )
+        hints.append("/resume disable --json")
+    elif reason_code == "resume_missing_checkpoint":
+        hints.append("/start-work <plan.md> --json")
+    else:
+        hints.append("/resume status --json")
+
+    return {
+        "reason_code": reason_code,
+        "summary": explain_resume_reason(
+            reason_code,
+            cooldown_remaining=cooldown_remaining,
+        ),
+        "next_actions": hints,
+    }
+
+
 def load_last_safe_checkpoint(runtime: dict[str, Any]) -> dict[str, Any]:
     steps = _normalize_steps(runtime)
     if not steps:

@@ -13,6 +13,11 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
 from plan_execution_runtime import load_plan_execution_state  # type: ignore
+from recovery_engine import (  # type: ignore
+    build_resume_hints,
+    evaluate_resume_eligibility,
+    explain_resume_reason,
+)
 from session_metadata_index import update_session_index  # type: ignore
 from todo_enforcement import normalize_todo_state  # type: ignore
 
@@ -125,6 +130,36 @@ def collect_plan_execution_snapshot() -> dict:
     metadata: dict = raw_metadata if isinstance(raw_metadata, dict) else {}
     raw_deviations = section.get("deviations")
     deviations: list = raw_deviations if isinstance(raw_deviations, list) else []
+    raw_resume = section.get("resume")
+    resume: dict = raw_resume if isinstance(raw_resume, dict) else {}
+    interruption_class = str(resume.get("last_interruption_class") or "tool_failure")
+    eligibility = evaluate_resume_eligibility(section, interruption_class)
+    reason_code = str(
+        eligibility.get("reason_code") or "resume_missing_runtime_artifacts"
+    )
+    cooldown_remaining = int(eligibility.get("cooldown_remaining", 0) or 0)
+    checkpoint = (
+        eligibility.get("checkpoint")
+        if isinstance(eligibility.get("checkpoint"), dict)
+        else None
+    )
+    resume_hints = {
+        "enabled": bool(resume.get("enabled", True)),
+        "interruption_class": interruption_class,
+        "eligible": bool(eligibility.get("eligible")),
+        "reason_code": reason_code,
+        "reason": explain_resume_reason(
+            reason_code,
+            cooldown_remaining=cooldown_remaining,
+        ),
+        "cooldown_remaining": cooldown_remaining,
+        "hints": build_resume_hints(
+            reason_code,
+            interruption_class=interruption_class,
+            checkpoint=checkpoint,
+            cooldown_remaining=cooldown_remaining,
+        ),
+    }
 
     return {
         "status": str(section.get("status") or "idle"),
@@ -134,6 +169,7 @@ def collect_plan_execution_snapshot() -> dict:
         "finished_at": section.get("finished_at"),
         "step_counts": counts,
         "deviation_count": len(deviations),
+        "resume_hints": resume_hints,
     }
 
 
@@ -255,6 +291,14 @@ def print_summary(path: Path, digest: dict) -> None:
         print(f"plan_execution: {plan_exec.get('status', 'idle')}")
         if plan_exec.get("plan_id"):
             print(f"plan_id: {plan_exec.get('plan_id')}")
+        resume_hints = (
+            plan_exec.get("resume_hints")
+            if isinstance(plan_exec.get("resume_hints"), dict)
+            else {}
+        )
+        if resume_hints:
+            print(f"resume_eligible: {'yes' if resume_hints.get('eligible') else 'no'}")
+            print(f"resume_reason: {resume_hints.get('reason_code')}")
     session_index = (
         digest.get("session_index")
         if isinstance(digest.get("session_index"), dict)

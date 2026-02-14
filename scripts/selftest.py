@@ -4926,6 +4926,12 @@ version: 1
             and plan_digest_block.get("status") == "completed",
             "digest should include completed plan execution recap",
         )
+        resume_hints_block = plan_digest_block.get("resume_hints", {})
+        expect(
+            isinstance(resume_hints_block, dict)
+            and resume_hints_block.get("reason_code") == "resume_allowed",
+            "digest plan execution recap should include resume hint diagnostics",
+        )
         expect(
             plan_digest_block.get("plan_id") == "selftest-plan-001",
             "digest plan execution recap should include plan id",
@@ -5293,6 +5299,15 @@ version: 1
             "start-work recover should surface deterministic reason code",
         )
         expect(
+            any(
+                "--approve-step 2" in str(action)
+                for action in (
+                    recover_blocked_report.get("resume_hints", {}) or {}
+                ).get("next_actions", [])
+            ),
+            "start-work recover should include resume hints for explicit approval replay",
+        )
+        expect(
             "requires explicit approval"
             in str(recover_blocked_report.get("reason", "")),
             "start-work recover should provide a human-readable reason",
@@ -5604,6 +5619,15 @@ version: 1
             resume_status_ok_report.get("reason_code") == "resume_allowed",
             "resume status should report resume_allowed when checkpoint is resumable",
         )
+        expect(
+            any(
+                "resume now" in str(action) or "start-work status" in str(action)
+                for action in (
+                    resume_status_ok_report.get("resume_hints", {}) or {}
+                ).get("next_actions", [])
+            ),
+            "resume status should expose actionable resume hints when eligible",
+        )
 
         resume_disable = subprocess.run(
             [sys.executable, str(RESUME_SCRIPT), "disable", "--json"],
@@ -5631,6 +5655,15 @@ version: 1
         expect(
             resume_status_disabled_report.get("reason_code") == "resume_disabled",
             "resume status should expose resume_disabled reason code",
+        )
+        expect(
+            any(
+                "plan_execution.resume.enabled" in str(action)
+                for action in (
+                    resume_status_disabled_report.get("resume_hints", {}) or {}
+                ).get("next_actions", [])
+            ),
+            "resume status should expose enablement playbook when automation is disabled",
         )
 
         resume_now_disabled = subprocess.run(

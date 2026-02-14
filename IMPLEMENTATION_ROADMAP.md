@@ -343,11 +343,12 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 6.2.2: Add `/session show <id>`
   - [x] Subtask 6.2.3: Add `/session search <query>`
   - [x] Notes: Added `scripts/session_command.py` with `list|show|search|doctor` surfaces, wired `/session*` aliases in `opencode.json`, and integrated session command checks into installer self-check and unified doctor coverage.
-- [ ] Task 6.3: Resume support
-  - [ ] Subtask 6.3.1: Add `resume-hints` output after interrupted workflows
-  - [ ] Subtask 6.3.2: Add docs for common recovery playbooks
-  - [ ] Subtask 6.3.3: Add optional integration with digest summaries
-- [ ] Exit criteria: sessions are searchable and resume hints are practical
+- [x] Task 6.3: Resume support
+  - [x] Subtask 6.3.1: Add `resume-hints` output after interrupted workflows
+  - [x] Subtask 6.3.2: Add docs for common recovery playbooks
+  - [x] Subtask 6.3.3: Add optional integration with digest summaries
+  - [x] Notes: Added shared `resume_hints` generation in recovery engine and surfaced it in `/resume status|now` and `/start-work recover` responses; digest `plan_execution` snapshots now include resume eligibility/hints for lightweight recovery cues.
+- [x] Exit criteria: sessions are searchable and resume hints are practical
 
 ---
 
@@ -1127,6 +1128,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Complete C4 command UX baseline and standardize alias/help/doctor usability expectations across command families.
 - [x] 2026-02-14: Complete E6-T1 session metadata index backend with digest-linked event capture and retention pruning defaults.
 - [x] 2026-02-14: Complete E6-T2 session command surface (`/session list|show|search`) with index diagnostics and install/selftest coverage.
+- [x] 2026-02-14: Complete E6-T3 resume support with actionable `resume_hints` outputs and digest-integrated recovery cues.
 
 ---
 

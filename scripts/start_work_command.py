@@ -31,6 +31,7 @@ from todo_enforcement import (  # type: ignore
     validate_todo_transition,
 )
 from recovery_engine import (  # type: ignore
+    build_resume_hints,
     execute_resume,
     evaluate_resume_eligibility,
     explain_resume_reason,
@@ -1022,6 +1023,16 @@ def command_recover(args: list[str]) -> int:
         "cooldown_remaining": int(result.get("cooldown_remaining", 0) or 0),
         "checkpoint": result.get("checkpoint"),
         "resumed_steps": result.get("resumed_steps", []),
+        "resume_hints": build_resume_hints(
+            str(result.get("reason_code") or "resume_missing_runtime_artifacts"),
+            interruption_class=interruption_class,
+            checkpoint=(
+                result.get("checkpoint")
+                if isinstance(result.get("checkpoint"), dict)
+                else None
+            ),
+            cooldown_remaining=int(result.get("cooldown_remaining", 0) or 0),
+        ),
         "budget": next_runtime.get("budget", {})
         if isinstance(next_runtime, dict)
         else {},
@@ -1035,6 +1046,12 @@ def command_recover(args: list[str]) -> int:
         print(f"status: {report['status']}")
         print(f"reason: {report['reason']}")
         print(f"resumed_steps: {len(report['resumed_steps'])}")
+        hints = report.get("resume_hints", {})
+        actions = hints.get("next_actions", []) if isinstance(hints, dict) else []
+        if actions:
+            print("resume_hints:")
+            for action in actions:
+                print(f"- {action}")
         print(f"config: {write_path}")
     return 0 if report["result"] == "PASS" else 1
 
