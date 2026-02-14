@@ -937,15 +937,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 27 - Knowledge Capture from Completed Tasks
 
-**Status:** `planned`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Turn completed work into reusable patterns, checklists, and guidance for future runs.
 **Depends on:** Epic 9, Epic 14, Epic 23
 
-- [ ] Task 27.1: Define capture schema and quality gates
-  - [ ] Subtask 27.1.1: Define entry types (pattern, pitfall, checklist, rule candidate)
-  - [ ] Subtask 27.1.2: Define confidence score and approval workflow
-  - [ ] Subtask 27.1.3: Define tagging and search metadata
+- [x] Task 27.1: Define capture schema and quality gates
+  - [x] Subtask 27.1.1: Define entry types (pattern, pitfall, checklist, rule candidate)
+  - [x] Subtask 27.1.2: Define confidence score and approval workflow
+  - [x] Subtask 27.1.3: Define tagging and search metadata
+  - [x] Notes: Added `instructions/knowledge_capture_policy_contract.md` defining entry taxonomy, deterministic confidence scoring, approval quality gates, and required tagging/search metadata for reusable task learnings.
 - [ ] Task 27.2: Implement knowledge extraction pipeline
   - [ ] Subtask 27.2.1: Extract signals from merged PRs and task digests
   - [ ] Subtask 27.2.2: Generate draft entries with source links
