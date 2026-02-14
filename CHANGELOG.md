@@ -83,6 +83,8 @@ All notable changes to this project are documented in this file.
 - Added `instructions/autopilot_command_contract.md` defining Epic 28 Task 28.1 `/autopilot` subcommands, required objective schema, lifecycle transitions, and dry-run-first safety defaults.
 - Added `scripts/autopilot_runtime.py` implementing Epic 28 Task 28.2 bounded objective-cycle orchestration with per-cycle budget gating, checkpoint persistence, and deterministic progress/blocker recommendation payloads.
 - Added `scripts/autopilot_integration.py` implementing Epic 28 Task 28.3 control-subsystem integration across autoflow transition reuse, todo/resume/checkpoint diagnostics, and confidence-triggered manual handoff mode.
+- Added `scripts/autopilot_command.py` implementing Epic 28 Task 28.4 command UX controls for `/autopilot start|status|pause|resume|stop|report|doctor`.
+- Added `/autopilot`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, and `/autopilot-doctor` aliases in `opencode.json`.
 - Expanded learn verification coverage for low-confidence review rejection, high-risk two-approval publish gating, and install-smoke enforcement of knowledge publish guardrails (Epic 27 Task 27.4).
 
 ### Changes
@@ -121,6 +123,9 @@ All notable changes to this project are documented in this file.
 - Expanded selftest coverage for model-routing trace persistence and runtime fallback-chain reporting.
 - Expanded README guidance with category-driven routing examples and troubleshooting steps for unexpected model selection.
 - Expanded routing verification coverage for deterministic trace stability and explicit fallback/no-fallback explain outcomes, and added `/routing` smoke hints in install output.
+- Expanded installer self-check coverage with `/autopilot` objective lifecycle smoke commands and executable wiring.
+- Expanded unified `/doctor` integration checks to include the `/autopilot` subsystem.
+- Expanded README with `/autopilot` quick-fix/feature/release workflows and paused/stopped troubleshooting guidance.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.

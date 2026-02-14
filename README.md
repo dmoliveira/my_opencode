@@ -427,6 +427,38 @@ Task 28.3 autopilot control-integration notes:
 - control diagnostics now combine todo-enforcement, resume eligibility, and checkpoint-count signals for operator visibility.
 - confidence-drop behavior now enforces explicit manual handoff mode (`reason_code=confidence_drop_requires_handoff`) before autonomous progression resumes.
 
+Task 28.4 autopilot command UX/workflow notes:
+
+- command module: `scripts/autopilot_command.py`
+- alias set in `opencode.json`: `/autopilot`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
+- unified workflow controls now expose `start|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
+
+```bash
+# Quick-fix objective (single-script scope)
+/autopilot start --goal "patch failing smoke check" --scope "scripts/install.sh" --done-criteria "install-test passes" --max-budget conservative --json
+/autopilot status --json
+/autopilot report --json
+
+# Feature objective (multi-step implementation)
+/autopilot start --goal "ship command UX polish" --scope "scripts/*.py, README.md" --done-criteria "code complete;docs updated;validation green" --max-budget balanced --json
+/autopilot pause --json
+/autopilot resume --confidence 0.9 --tool-calls 1 --token-estimate 120 --json
+
+# Release objective (high signal, high control)
+/autopilot start --goal "prepare release candidate" --scope "CHANGELOG.md, README.md, scripts/**" --done-criteria "release checks pass;notes updated" --max-budget conservative --json
+/autopilot stop --reason "manual release hold" --json
+
+# Troubleshooting for paused/stopped runs
+/autopilot doctor --json
+/autopilot report --json
+```
+
+- troubleshooting guide:
+  - `autopilot_runtime_missing`: initialize objective with `/autopilot start ...`.
+  - `confidence_drop_requires_handoff`: operator review required before calling `/autopilot resume`.
+  - `budget_*`: reduce scope or lower cycle load, then resume with conservative increments.
+  - `autopilot_stop_requested`: inspect `/autopilot report` and start a fresh run when ready.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

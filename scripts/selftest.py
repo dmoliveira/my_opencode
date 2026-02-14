@@ -114,6 +114,7 @@ CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
 AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
+AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
@@ -3907,6 +3908,184 @@ version: 1
                 int,
             ),
             "autopilot integration should include checkpoint count from checkpoint subsystem",
+        )
+
+        autopilot_doctor = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(autopilot_doctor.returncode == 0, "autopilot doctor should succeed")
+        autopilot_doctor_report = parse_json_output(autopilot_doctor.stdout)
+        expect(
+            autopilot_doctor_report.get("result") == "PASS",
+            "autopilot doctor should report PASS when required modules exist",
+        )
+
+        autopilot_command_start = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "start",
+                "--goal",
+                "Deliver selftest autopilot flow",
+                "--scope",
+                "scripts/autopilot_command.py",
+                "--done-criteria",
+                "verify start output;verify status/report controls",
+                "--max-budget",
+                "balanced",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_start.returncode == 0,
+            "autopilot start should initialize objective runtime",
+        )
+        autopilot_command_start_report = parse_json_output(
+            autopilot_command_start.stdout
+        )
+        expect(
+            autopilot_command_start_report.get("result") == "PASS"
+            and autopilot_command_start_report.get("run", {}).get("status") == "draft",
+            "autopilot start should persist dry-run-required draft state",
+        )
+
+        autopilot_command_status = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "status",
+                "--confidence",
+                "0.9",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_status.returncode == 0,
+            "autopilot status should return integration payload",
+        )
+        autopilot_command_status_report = parse_json_output(
+            autopilot_command_status.stdout
+        )
+        expect(
+            autopilot_command_status_report.get("result") == "PASS"
+            and isinstance(
+                autopilot_command_status_report.get("control_integrations", {}), dict
+            ),
+            "autopilot status should include control integration diagnostics",
+        )
+
+        autopilot_command_pause = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "pause", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_pause.returncode == 0, "autopilot pause should succeed"
+        )
+        autopilot_command_pause_report = parse_json_output(
+            autopilot_command_pause.stdout
+        )
+        expect(
+            autopilot_command_pause_report.get("status") == "paused",
+            "autopilot pause should persist paused status",
+        )
+
+        autopilot_command_resume = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "resume",
+                "--confidence",
+                "0.9",
+                "--tool-calls",
+                "1",
+                "--token-estimate",
+                "50",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_resume.returncode == 0,
+            "autopilot resume should execute the next bounded cycle",
+        )
+        autopilot_command_resume_report = parse_json_output(
+            autopilot_command_resume.stdout
+        )
+        expect(
+            autopilot_command_resume_report.get("result") == "PASS"
+            and autopilot_command_resume_report.get("run", {})
+            .get("progress", {})
+            .get("completed_cycles", 0)
+            >= 1,
+            "autopilot resume should increment cycle progress after resume",
+        )
+
+        autopilot_command_report = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "report", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_report.returncode == 0,
+            "autopilot report should summarize run progress",
+        )
+        autopilot_command_report_payload = parse_json_output(
+            autopilot_command_report.stdout
+        )
+        expect(
+            autopilot_command_report_payload.get("result") == "PASS"
+            and isinstance(autopilot_command_report_payload.get("summary", {}), dict),
+            "autopilot report should include summary payload",
+        )
+
+        autopilot_command_stop = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "stop",
+                "--reason",
+                "selftest",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(autopilot_command_stop.returncode == 0, "autopilot stop should succeed")
+        autopilot_command_stop_report = parse_json_output(autopilot_command_stop.stdout)
+        expect(
+            autopilot_command_stop_report.get("status") == "stopped"
+            and autopilot_command_stop_report.get("reason_code")
+            == "autopilot_stop_requested",
+            "autopilot stop should persist deterministic stop state",
         )
 
         forced_budget_config = load_json_file(config_path)

@@ -969,7 +969,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 28 - Autopilot Objective Runner Command
 
-**Status:** `paused`
+**Status:** `in_progress`
 **Priority:** High
 **Goal:** Add `/autopilot` as a high-level objective runner that executes bounded autonomous cycles with explicit controls.
 **Depends on:** Epic 20, Epic 22
@@ -989,10 +989,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 28.3.2: Integrate with todo enforcement and resume/checkpoint systems
   - [x] Subtask 28.3.3: Add explicit manual handoff mode when confidence drops
   - [x] Notes: Added `scripts/autopilot_integration.py` bridging autopilot run-state to autoflow transition evaluation, todo/resume/checkpoint control diagnostics, and confidence-based manual handoff safeguards.
-- [ ] Task 28.4: Command UX, docs, and workflows
-  - [ ] Subtask 28.4.1: Add `/autopilot` examples in `README.md`
-  - [ ] Subtask 28.4.2: Add workflow guides (quick-fix objective, feature objective, release objective)
-  - [ ] Subtask 28.4.3: Add troubleshooting guide for stopped/paused runs
+- [x] Task 28.4: Command UX, docs, and workflows
+  - [x] Subtask 28.4.1: Add `/autopilot` examples in `README.md`
+  - [x] Subtask 28.4.2: Add workflow guides (quick-fix objective, feature objective, release objective)
+  - [x] Subtask 28.4.3: Add troubleshooting guide for stopped/paused runs
+  - [x] Notes: Added `scripts/autopilot_command.py` command surface (`start|status|pause|resume|stop|report|doctor`), wired `/autopilot*` aliases in `opencode.json`, integrated `/autopilot` checks into install self-check + unified doctor diagnostics, and documented lifecycle workflows/troubleshooting in `README.md`.
 - [ ] Task 28.5: Verification
   - [ ] Subtask 28.5.1: Add tests for scope bounding and budget cap enforcement
   - [ ] Subtask 28.5.2: Add tests for pause/resume/stop transitions
