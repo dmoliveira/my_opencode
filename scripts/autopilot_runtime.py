@@ -253,13 +253,6 @@ def execute_cycle(
     updated["updated_at"] = now_ts or now_iso()
 
     if not paths:
-        updated["status"] = "running"
-        updated["reason_code"] = "autopilot_waiting_for_execution_evidence"
-        updated["blockers"] = ["execution_evidence_missing"]
-        updated["next_actions"] = [
-            "run work cycle and include --touched-paths with concrete changed files",
-            "resume autopilot after at least one in-scope artifact change",
-        ]
         cycles_any = updated.get("cycles")
         cycles = cycles_any if isinstance(cycles_any, list) else []
         pending = sum(
@@ -274,6 +267,60 @@ def execute_cycle(
             if isinstance(cycle, dict)
             and str(cycle.get("state") or "pending") == "done"
         )
+
+        if pending == 0 and len(cycles) > 0:
+            updated["status"] = "completed"
+            updated["reason_code"] = "autopilot_objective_completed"
+            updated["blockers"] = []
+            updated["next_actions"] = [
+                "review report and confirm objective done-criteria",
+                "archive final run summary for future objectives",
+            ]
+            updated["progress"] = {
+                "total_cycles": len(cycles),
+                "completed_cycles": done,
+                "pending_cycles": pending,
+            }
+            runtime_file = save_runtime(write_path, updated)
+            snapshot = write_snapshot(
+                write_path,
+                {
+                    "status": updated["status"],
+                    "plan": {
+                        "metadata": {"id": updated.get("run_id")},
+                        "path": str(runtime_file),
+                    },
+                    "steps": [
+                        {"ordinal": cycle.get("ordinal"), "state": cycle.get("state")}
+                        for cycle in cycles
+                        if isinstance(cycle, dict)
+                    ],
+                },
+                source="autopilot_cycle_completed",
+                command_outcomes=[
+                    {
+                        "kind": "slash_command",
+                        "name": "/autopilot resume",
+                        "result": "PASS",
+                        "reason_code": updated["reason_code"],
+                        "summary": "autopilot run already completed; no further touched paths required",
+                    }
+                ],
+            )
+            return {
+                "result": "PASS",
+                "run": updated,
+                "runtime_path": str(runtime_file),
+                "checkpoint": snapshot,
+            }
+
+        updated["status"] = "running"
+        updated["reason_code"] = "autopilot_waiting_for_execution_evidence"
+        updated["blockers"] = ["execution_evidence_missing"]
+        updated["next_actions"] = [
+            "run work cycle and include --touched-paths with concrete changed files",
+            "resume autopilot after at least one in-scope artifact change",
+        ]
         updated["progress"] = {
             "total_cycles": len(cycles),
             "completed_cycles": done,
