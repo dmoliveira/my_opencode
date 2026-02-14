@@ -152,7 +152,7 @@ def command_start(args: list[str]) -> int:
     inferred_defaults: list[str] = []
     if completion_mode not in {"promise", "objective"}:
         return usage()
-    inferred_continuous = completion_mode == "promise"
+    inferred_continuous = completion_mode == "objective"
     if not goal:
         goal = (
             "continue the active user request from current session context until done"
@@ -162,14 +162,11 @@ def command_start(args: list[str]) -> int:
         scope = "**"
         inferred_defaults.append("scope")
     if not done_criteria:
-        if completion_mode == "objective":
-            done_criteria = [
-                "advance the highest-priority remaining subtask",
-                "apply and validate concrete changes for that subtask",
-                "repeat until the objective is fully complete",
-            ]
-        else:
-            done_criteria = [goal]
+        done_criteria = [
+            "advance the highest-priority remaining subtask",
+            "apply and validate concrete changes for that subtask",
+            "repeat until the objective is fully complete",
+        ]
         inferred_defaults.append("done-criteria")
 
     config, _ = load_layered_config()
@@ -255,7 +252,7 @@ def command_go(args: list[str]) -> int:
     inferred_defaults: list[str] = []
     if completion_mode not in {"promise", "objective"}:
         return usage()
-    inferred_continuous = completion_mode == "promise"
+    inferred_continuous = completion_mode == "objective"
     terminal_states = {
         "completed",
         "budget_stopped",
@@ -311,14 +308,11 @@ def command_go(args: list[str]) -> int:
             scope = "**"
             inferred_defaults.append("scope")
         if not done_criteria:
-            if completion_mode == "objective":
-                done_criteria = [
-                    "advance the highest-priority remaining subtask",
-                    "apply and validate concrete changes for that subtask",
-                    "repeat until the objective is fully complete",
-                ]
-            else:
-                done_criteria = [goal]
+            done_criteria = [
+                "advance the highest-priority remaining subtask",
+                "apply and validate concrete changes for that subtask",
+                "repeat until the objective is fully complete",
+            ]
             inferred_defaults.append("done-criteria")
         objective = {
             "goal": goal or "",
