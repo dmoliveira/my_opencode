@@ -242,8 +242,12 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
       python3 "$INSTALL_DIR/scripts/learn_command.py" capture --limit 5 --json
       LEARN_ENTRY_ID=$(python3 "$INSTALL_DIR/scripts/learn_command.py" search --limit 1 --json | python3 -c 'import json,sys; payload=json.load(sys.stdin); entries=payload.get("entries", []); print(entries[0].get("entry_id", "") if entries else "")')
       if [ -n "$LEARN_ENTRY_ID" ]; then
-        python3 "$INSTALL_DIR/scripts/learn_command.py" review --entry-id "$LEARN_ENTRY_ID" --summary "install-self-check review" --confidence 88 --risk medium --json
-        python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer --json
+        python3 "$INSTALL_DIR/scripts/learn_command.py" review --entry-id "$LEARN_ENTRY_ID" --summary "install-self-check review" --confidence 88 --risk high --json
+        if python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer --json; then
+          printf "learn publish high-risk single approval unexpectedly passed\n" >&2
+          exit 1
+        fi
+        python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer-2 --json
       fi
       python3 "$INSTALL_DIR/scripts/learn_command.py" search --query release --json
       python3 "$INSTALL_DIR/scripts/learn_command.py" doctor --json

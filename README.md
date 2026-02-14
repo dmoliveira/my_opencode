@@ -400,6 +400,12 @@ Examples:
 /learn doctor --json
 ```
 
+Task 27.4 learn verification notes:
+
+- selftest now validates extraction quality thresholds by asserting `/learn review` rejects low-confidence drafts.
+- selftest now validates publish permissions by enforcing high-risk dual-approval gates before `/learn publish` can succeed.
+- install smoke now validates the same high-risk publish guardrail by expecting single-approval failure and second-approval success.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

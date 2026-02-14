@@ -778,6 +778,28 @@ def main() -> int:
                     encoding="utf-8",
                 )
 
+        learn_review_low_confidence = subprocess.run(
+            [
+                sys.executable,
+                str(LEARN_COMMAND_SCRIPT),
+                "review",
+                "--entry-id",
+                capture_entry_id,
+                "--confidence",
+                "40",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
+            learn_review_low_confidence.returncode != 0,
+            "learn review should fail when confidence is below threshold",
+        )
+
         learn_review = subprocess.run(
             [
                 sys.executable,
@@ -790,7 +812,7 @@ def main() -> int:
                 "--confidence",
                 "88",
                 "--risk",
-                "medium",
+                "high",
                 "--json",
             ],
             capture_output=True,
@@ -809,7 +831,7 @@ def main() -> int:
             "learn review should promote entry to review status",
         )
 
-        learn_publish = subprocess.run(
+        learn_publish_requires_second_approval = subprocess.run(
             [
                 sys.executable,
                 str(LEARN_COMMAND_SCRIPT),
@@ -827,8 +849,30 @@ def main() -> int:
             cwd=knowledge_repo,
         )
         expect(
+            learn_publish_requires_second_approval.returncode != 0,
+            "learn publish should fail for high-risk entries without second approval",
+        )
+
+        learn_publish = subprocess.run(
+            [
+                sys.executable,
+                str(LEARN_COMMAND_SCRIPT),
+                "publish",
+                "--entry-id",
+                capture_entry_id,
+                "--approved-by",
+                "selftest-reviewer-2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
             learn_publish.returncode == 0,
-            "learn publish should succeed",
+            "learn publish should succeed after second approval",
         )
         learn_publish_payload = parse_json_output(learn_publish.stdout)
         expect(
