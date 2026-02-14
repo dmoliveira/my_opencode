@@ -129,6 +129,7 @@ All notable changes to this project are documented in this file.
 - Expanded unified `/doctor` integration checks to include the `/autopilot` subsystem.
 - Expanded README with `/autopilot` quick-fix/feature/release workflows and paused/stopped troubleshooting guidance.
 - Expanded autopilot verification coverage for scope bounding, budget-cap hard stops, and pause/resume/stop lifecycle transitions in selftest and install smoke paths.
+- Added cross-cutting release slicing plan gates in `IMPLEMENTATION_ROADMAP.md` (Task C1) and documented phase readiness criteria in `README.md`.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.

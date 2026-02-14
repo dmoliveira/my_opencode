@@ -40,6 +40,14 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 ## Roadmap plan 🗺️
 
 - Track upcoming orchestration features in `IMPLEMENTATION_ROADMAP.md`.
+- Release slicing baseline (Task C1) now groups delivery into deterministic phases (A-N) with explicit readiness gates per slice.
+
+Release slicing gate checklist (per phase):
+
+- command contracts and user workflows are documented (`README` + relevant `instructions/*`)
+- validation bundle passes: `make validate`, `make selftest`, `make install-test`
+- rollback/remediation notes are explicit for newly introduced runtime controls
+- roadmap/checklist/changelog entries are updated before merge
 
 ## Safe-edit capability baseline
 
