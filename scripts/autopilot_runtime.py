@@ -252,6 +252,66 @@ def execute_cycle(
     updated = dict(run)
     updated["updated_at"] = now_ts or now_iso()
 
+    if not paths:
+        updated["status"] = "running"
+        updated["reason_code"] = "autopilot_waiting_for_execution_evidence"
+        updated["blockers"] = ["execution_evidence_missing"]
+        updated["next_actions"] = [
+            "run work cycle and include --touched-paths with concrete changed files",
+            "resume autopilot after at least one in-scope artifact change",
+        ]
+        cycles_any = updated.get("cycles")
+        cycles = cycles_any if isinstance(cycles_any, list) else []
+        pending = sum(
+            1
+            for cycle in cycles
+            if isinstance(cycle, dict)
+            and str(cycle.get("state") or "pending") == "pending"
+        )
+        done = sum(
+            1
+            for cycle in cycles
+            if isinstance(cycle, dict)
+            and str(cycle.get("state") or "pending") == "done"
+        )
+        updated["progress"] = {
+            "total_cycles": len(cycles),
+            "completed_cycles": done,
+            "pending_cycles": pending,
+        }
+        runtime_file = save_runtime(write_path, updated)
+        snapshot = write_snapshot(
+            write_path,
+            {
+                "status": updated["status"],
+                "plan": {
+                    "metadata": {"id": updated.get("run_id")},
+                    "path": str(runtime_file),
+                },
+                "steps": [
+                    {"ordinal": cycle.get("ordinal"), "state": cycle.get("state")}
+                    for cycle in cycles
+                    if isinstance(cycle, dict)
+                ],
+            },
+            source="autopilot_cycle_waiting_for_evidence",
+            command_outcomes=[
+                {
+                    "kind": "slash_command",
+                    "name": "/autopilot resume",
+                    "result": "PASS",
+                    "reason_code": updated["reason_code"],
+                    "summary": "autopilot cycle held until concrete touched paths are provided",
+                }
+            ],
+        )
+        return {
+            "result": "PASS",
+            "run": updated,
+            "runtime_path": str(runtime_file),
+            "checkpoint": snapshot,
+        }
+
     if scope_violations:
         updated["status"] = "scope_stopped"
         updated["reason_code"] = "scope_violation_detected"

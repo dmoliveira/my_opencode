@@ -75,9 +75,6 @@ fi
 if [ -f "$INSTALL_DIR/scripts/browser_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/browser_command.py"
 fi
-if [ -f "$INSTALL_DIR/scripts/start_work_command.py" ]; then
-	chmod +x "$INSTALL_DIR/scripts/start_work_command.py"
-fi
 if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/todo_command.py"
 fi
@@ -163,16 +160,8 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
 	python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
 	python3 "$INSTALL_DIR/scripts/browser_command.py" status
 	python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
-	if [ -f "$INSTALL_DIR/scripts/start_work_command.py" ]; then
-		SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
-		python3 -c "from pathlib import Path; Path('$SELF_CHECK_PLAN').write_text('---\nid: install-selfcheck-plan\ntitle: Install Selfcheck Plan\nowner: installer\ncreated_at: 2026-02-13T00:00:00Z\nversion: 1\n---\n\n# Plan\n\n- [ ] 1. Confirm command wiring\n- [ ] 2. Confirm checkpoint persistence\n', encoding='utf-8')"
-		python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --deviation "install self-check" --json
-		python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --background --json
-		python3 "$INSTALL_DIR/scripts/background_task_manager.py" run --max-jobs 1
-		python3 "$INSTALL_DIR/scripts/start_work_command.py" status --json
-		python3 "$INSTALL_DIR/scripts/start_work_command.py" deviations --json
-		python3 "$INSTALL_DIR/scripts/start_work_command.py" doctor --json
-	fi
+	SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
+	python3 -c "from pathlib import Path; Path('$SELF_CHECK_PLAN').write_text('---\nid: install-selfcheck-plan\ntitle: Install Selfcheck Plan\nowner: installer\ncreated_at: 2026-02-13T00:00:00Z\nversion: 1\n---\n\n# Plan\n\n- [ ] 1. Confirm command wiring\n- [ ] 2. Confirm checkpoint persistence\n', encoding='utf-8')"
 	if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/todo_command.py" status --json
 		python3 "$INSTALL_DIR/scripts/todo_command.py" enforce --json
@@ -214,7 +203,6 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
 		python3 "$INSTALL_DIR/scripts/autoflow_command.py" status --json
 		python3 "$INSTALL_DIR/scripts/autoflow_command.py" report --json
 		python3 "$INSTALL_DIR/scripts/autoflow_command.py" stop --reason install-self-check --json
-		python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --deviation "install self-check" --json
 	fi
 	if [ -f "$INSTALL_DIR/scripts/autopilot_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/autopilot_command.py" start --goal "Install self-check objective" --scope "scripts/autopilot_command.py" --done-criteria "verify command wiring;verify runtime status" --max-budget balanced --json

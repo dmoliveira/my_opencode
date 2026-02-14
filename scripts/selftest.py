@@ -3975,6 +3975,7 @@ version: 1
             run=autopilot_run,
             tool_call_increment=1,
             token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
             now_ts="2026-02-13T00:00:01Z",
         )
         expect(
@@ -4020,6 +4021,7 @@ version: 1
             run=dict(autopilot_cycle_1.get("run", {})),
             tool_call_increment=500,
             token_increment=500_000,
+            touched_paths=["scripts/autopilot_runtime.py"],
             now_ts="2026-02-13T00:00:02Z",
         )
         expect(
@@ -4209,6 +4211,8 @@ version: 1
                 "1",
                 "--token-estimate",
                 "50",
+                "--touched-paths",
+                "scripts/autopilot_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -4270,6 +4274,8 @@ version: 1
                 "999",
                 "--token-estimate",
                 "999999",
+                "--touched-paths",
+                "scripts/autopilot_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -5623,7 +5629,7 @@ version: 1
         )
         expect(
             any(
-                "resume now" in str(action) or "start-work status" in str(action)
+                "resume now" in str(action) or "autopilot status" in str(action)
                 for action in (
                     resume_status_ok_report.get("resume_hints", {}) or {}
                 ).get("next_actions", [])
@@ -6776,20 +6782,6 @@ version: 1
         expect(
             browser_checks[0].get("ok") is True,
             "doctor browser check should pass",
-        )
-
-        start_work_checks = [
-            check
-            for check in report.get("checks", [])
-            if check.get("name") == "start-work"
-        ]
-        expect(
-            bool(start_work_checks),
-            "doctor summary should include start-work check",
-        )
-        expect(
-            start_work_checks[0].get("ok") is True,
-            "doctor start-work check should pass",
         )
 
         budget_checks = [
