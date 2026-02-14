@@ -328,7 +328,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 6 - Session Intelligence and Resume Tooling
 
-**Status:** `paused`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Add lightweight session listing/search and structured resume cues.
 **Depends on:** Epic 2
@@ -974,10 +974,11 @@ Every command-oriented epic must ship all of the following:
 **Goal:** Add `/autopilot` as a high-level objective runner that executes bounded autonomous cycles with explicit controls.
 **Depends on:** Epic 20, Epic 22
 
-- [ ] Task 28.1: Define command contract and safety defaults
-  - [ ] Subtask 28.1.1: Define subcommands (`start`, `status`, `pause`, `resume`, `stop`, `report`)
-  - [ ] Subtask 28.1.2: Define required objective fields (`goal`, `scope`, `done-criteria`, `max-budget`)
-  - [ ] Subtask 28.1.3: Define safe default behavior (`dry-run` preview before first execution)
+- [x] Task 28.1: Define command contract and safety defaults
+  - [x] Subtask 28.1.1: Define subcommands (`start`, `status`, `pause`, `resume`, `stop`, `report`)
+  - [x] Subtask 28.1.2: Define required objective fields (`goal`, `scope`, `done-criteria`, `max-budget`)
+  - [x] Subtask 28.1.3: Define safe default behavior (`dry-run` preview before first execution)
+  - [x] Notes: Added `instructions/autopilot_command_contract.md` defining command surface, required objective schema, deterministic lifecycle transitions, dry-run-first safety defaults, and output reason-code invariants.
 - [ ] Task 28.2: Implement objective orchestration loop
   - [ ] Subtask 28.2.1: Break objective into bounded execution cycles
   - [ ] Subtask 28.2.2: Apply budget guardrails and mandatory checkpoints per cycle
