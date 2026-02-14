@@ -83,6 +83,20 @@ Start an epic only when all are true:
 
 If any condition is missing, keep the epic `paused` or `postponed`.
 
+## Pause Exit Criteria (E7, E10)
+
+Promotion from `paused`/`postponed` to active planning requires all of the following:
+
+- At least two recent operator pain reports linked to the epic scope.
+- A bounded prototype plan with explicit success metrics and rollback steps.
+- Validation impact estimate (`make validate`, `make selftest`, `make install-test`) documented before implementation.
+- A no-surprise execution mode (preview-first or opt-in) for any automation that can trigger commands.
+
+Epic-specific triggers:
+
+- **E10 (Auto Slash Detector):** offline intent-mapping prototype demonstrates >=95% precision on a representative prompt set with zero unsafe auto-execution cases.
+- **E7 (Tmux Visual Mode):** confirmed demand from at least two active workflows and a fallback UX that leaves non-tmux users unaffected.
+
 ## Complexity Budget
 
 - Prefer extending existing commands over introducing new top-level commands.
@@ -1132,6 +1146,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Close E28-T5 verification task and mark Epic 28 done after validating lifecycle and install smoke coverage.
 - [x] 2026-02-14: Reconcile roadmap dashboard drift for E25-E27 and mark cross-cutting delivery status done for consistency with completed tasks.
 - [x] 2026-02-14: Reconcile Epic 18 checkbox state so Task 18.2/18.3 match completed subtasks and notes.
+- [x] 2026-02-14: Define measurable pause-exit criteria for E7/E10 so promotion decisions are evidence-based and reversible.
 
 ---
 
