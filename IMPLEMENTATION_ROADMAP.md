@@ -979,10 +979,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 28.1.2: Define required objective fields (`goal`, `scope`, `done-criteria`, `max-budget`)
   - [x] Subtask 28.1.3: Define safe default behavior (`dry-run` preview before first execution)
   - [x] Notes: Added `instructions/autopilot_command_contract.md` defining command surface, required objective schema, deterministic lifecycle transitions, dry-run-first safety defaults, and output reason-code invariants.
-- [ ] Task 28.2: Implement objective orchestration loop
-  - [ ] Subtask 28.2.1: Break objective into bounded execution cycles
-  - [ ] Subtask 28.2.2: Apply budget guardrails and mandatory checkpoints per cycle
-  - [ ] Subtask 28.2.3: Emit progress, blockers, and next-step recommendations
+- [x] Task 28.2: Implement objective orchestration loop
+  - [x] Subtask 28.2.1: Break objective into bounded execution cycles
+  - [x] Subtask 28.2.2: Apply budget guardrails and mandatory checkpoints per cycle
+  - [x] Subtask 28.2.3: Emit progress, blockers, and next-step recommendations
+  - [x] Notes: Added `scripts/autopilot_runtime.py` with objective schema validation, bounded cycle execution, per-cycle budget hard-stop evaluation, mandatory checkpoint persistence, and deterministic progress/blocker recommendation payloads.
 - [ ] Task 28.3: Integrate with existing control subsystems
   - [ ] Subtask 28.3.1: Reuse `/autoflow` primitives for plan and state transitions
   - [ ] Subtask 28.3.2: Integrate with todo enforcement and resume/checkpoint systems
