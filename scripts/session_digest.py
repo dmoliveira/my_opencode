@@ -13,6 +13,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
 from plan_execution_runtime import load_plan_execution_state  # type: ignore
+from session_metadata_index import update_session_index  # type: ignore
 from todo_enforcement import normalize_todo_state  # type: ignore
 
 
@@ -254,6 +255,14 @@ def print_summary(path: Path, digest: dict) -> None:
         print(f"plan_execution: {plan_exec.get('status', 'idle')}")
         if plan_exec.get("plan_id"):
             print(f"plan_id: {plan_exec.get('plan_id')}")
+    session_index = (
+        digest.get("session_index")
+        if isinstance(digest.get("session_index"), dict)
+        else {}
+    )
+    if session_index:
+        print(f"session_id: {session_index.get('session_id')}")
+        print(f"session_index: {session_index.get('path')}")
 
 
 def usage() -> int:
@@ -290,6 +299,12 @@ def command_run(argv: list[str]) -> int:
         digest["post_session"] = post_result
 
     write_digest(path, digest)
+    try:
+        digest["session_index"] = update_session_index(digest)
+        write_digest(path, digest)
+    except Exception as exc:
+        digest["session_index"] = {"result": "FAIL", "error": str(exc)}
+        write_digest(path, digest)
     print_summary(path, digest)
 
     post_exit = 0

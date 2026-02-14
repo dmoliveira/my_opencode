@@ -328,15 +328,16 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 6 - Session Intelligence and Resume Tooling
 
-**Status:** `done`
+**Status:** `in_progress`
 **Priority:** Medium
 **Goal:** Add lightweight session listing/search and structured resume cues.
 **Depends on:** Epic 2
 
-- [ ] Task 6.1: Session metadata index
-  - [ ] Subtask 6.1.1: Define session metadata store format
-  - [ ] Subtask 6.1.2: Record key events and timestamps
-  - [ ] Subtask 6.1.3: Add retention and cleanup strategy
+- [x] Task 6.1: Session metadata index
+  - [x] Subtask 6.1.1: Define session metadata store format
+  - [x] Subtask 6.1.2: Record key events and timestamps
+  - [x] Subtask 6.1.3: Add retention and cleanup strategy
+  - [x] Notes: Added `scripts/session_metadata_index.py` with deterministic index schema (`~/.config/opencode/sessions/index.json`), digest-event ingestion, and retention controls (`max_sessions`, `max_age_days`, `max_events_per_session`) sourced from layered config.
 - [ ] Task 6.2: Session commands
   - [ ] Subtask 6.2.1: Add `/session list`
   - [ ] Subtask 6.2.2: Add `/session show <id>`
@@ -1123,6 +1124,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Complete C3 tracking cadence rules (weekly update, single active epic policy, and monthly paused/postponed review requirement).
 - [x] 2026-02-14: Monthly paused/postponed review checkpoint: keep E10 `paused` and E7 `postponed`; no promotion due to current value/risk profile.
 - [x] 2026-02-14: Complete C4 command UX baseline and standardize alias/help/doctor usability expectations across command families.
+- [x] 2026-02-14: Complete E6-T1 session metadata index backend with digest-linked event capture and retention pruning defaults.
 
 ---
 

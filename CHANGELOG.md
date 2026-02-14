@@ -133,6 +133,7 @@ All notable changes to this project are documented in this file.
 - Added cross-cutting epic acceptance criteria template in `IMPLEMENTATION_ROADMAP.md` (Task C2) with measurable gates for functionality, reliability, docs, validation, evidence, and rollback.
 - Added cross-cutting roadmap tracking cadence policy in `IMPLEMENTATION_ROADMAP.md` (Task C3) with weekly status logging, single-active-epic guidance, and monthly paused/postponed review checkpoints.
 - Added cross-cutting command UX baseline completion notes in `IMPLEMENTATION_ROADMAP.md` (Task C4), including standardized shortcut/help/doctor discoverability and troubleshooting-friendly quick paths.
+- Added `scripts/session_metadata_index.py` and integrated `/digest run` session index updates with deterministic event capture and retention pruning for Epic 6 Task 6.1.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
