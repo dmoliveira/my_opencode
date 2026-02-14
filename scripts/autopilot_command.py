@@ -538,13 +538,19 @@ def command_doctor(args: list[str]) -> int:
 def main(argv: list[str]) -> int:
     argv = normalize_args(list(argv))
     if not argv:
-        return command_status(["--json"])
+        return command_go(["--json"])
     cmd, *rest = argv
     if cmd in {"help", "--help", "-h"}:
         return usage()
     if cmd == "start":
         return command_start(rest)
-    if cmd in {"go", "continue"}:
+    if cmd == "go":
+        if rest and not any(token.startswith("-") for token in rest):
+            return command_go(["--goal", " ".join(rest), "--json"])
+        return command_go(rest)
+    if cmd == "continue":
+        if rest and not any(token.startswith("-") for token in rest):
+            return command_go(["--goal", " ".join(rest), "--json"])
         return command_go(rest)
     if cmd == "status":
         return command_status(rest)
@@ -558,7 +564,9 @@ def main(argv: list[str]) -> int:
         return command_report(rest)
     if cmd == "doctor":
         return command_doctor(rest)
-    return usage()
+    if cmd.startswith("-"):
+        return command_go(argv)
+    return command_go(["--goal", " ".join(argv), "--json"])
 
 
 if __name__ == "__main__":
