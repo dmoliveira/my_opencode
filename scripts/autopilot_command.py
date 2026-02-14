@@ -177,7 +177,23 @@ def command_go(args: list[str]) -> int:
         "stopped",
     }
     runtime_status = str(runtime.get("status") or "") if runtime else ""
-    should_initialize = not runtime or runtime_status in terminal_states
+    runtime_budget_exhausted = False
+    if runtime:
+        budget_any = runtime.get("budget")
+        budget = budget_any if isinstance(budget_any, dict) else {}
+        counters_any = budget.get("counters")
+        counters = counters_any if isinstance(counters_any, dict) else {}
+        policy_any = budget.get("policy")
+        policy = policy_any if isinstance(policy_any, dict) else {}
+        limits_any = policy.get("limits")
+        limits = limits_any if isinstance(limits_any, dict) else {}
+        wall = int(counters.get("wall_clock_seconds", 0) or 0)
+        wall_limit = int(limits.get("wall_clock_seconds", 0) or 0)
+        runtime_budget_exhausted = wall_limit > 0 and wall >= wall_limit
+
+    should_initialize = (
+        not runtime or runtime_status in terminal_states or runtime_budget_exhausted
+    )
 
     if should_initialize:
         if not goal:
