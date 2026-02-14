@@ -314,26 +314,6 @@
       "description": "Run browser provider diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
     },
-    "autoflow": {
-      "description": "Run unified orchestration controls (start|status|resume|stop|report|dry-run)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "autoflow-status": {
-      "description": "Show current /autoflow orchestration status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" status --json`\nShow only the command output."
-    },
-    "autoflow-report": {
-      "description": "Show current /autoflow report payload in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" report --json`\nShow only the command output."
-    },
-    "autoflow-dry-run": {
-      "description": "Preview /autoflow actions without state mutation",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" dry-run $ARGUMENTS --json`\nShow only the command output."
-    },
-    "autoflow-stop": {
-      "description": "Trigger /autoflow kill-switch stop in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" stop $ARGUMENTS --json`\nShow only the command output."
-    },
     "autopilot": {
       "description": "Run objective autopilot controls (start|go|status|pause|resume|stop|report|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" $ARGUMENTS`\nShow only the command output."
