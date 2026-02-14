@@ -119,6 +119,11 @@ if [ -f "$INSTALL_DIR/scripts/learn_command.py" ]; then
 fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
+if [ -d "$INSTALL_DIR/agent" ]; then
+	mkdir -p "$CONFIG_DIR/agent"
+	cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/" 2>/dev/null || true
+fi
+
 if [ "$RUN_WIZARD" = true ]; then
 	printf "\nRunning install wizard...\n"
 	WIZARD_ARGS=()

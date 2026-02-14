@@ -29,7 +29,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
-- 🧭 Built-in `/autoflow` command for unified orchestration (`start|status|resume|stop|report|dry-run`).
+- 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
@@ -37,6 +37,24 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
 - 🧩 Clear, versioned config for experiments and rollbacks.
+
+## Agent roles (Tab menu)
+
+This setup keeps `build` as the default agent, and adds focused specialists for manual selection via `Tab`:
+
+- `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
+- `explore` (subagent): read-only internal codebase scout.
+- `librarian` (subagent): read-only external docs and OSS evidence researcher.
+- `oracle` (subagent): read-only architecture/debug advisor for hard tradeoffs.
+- `verifier` (subagent): read-only validation runner for test/lint/build checks.
+- `reviewer` (subagent): read-only quality/risk review pass before final delivery.
+- `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
+
+Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
+
+Detailed guide: `docs/agents-playbook.md` 📘
+
+Operating contract: `instructions/agent_operating_contract.md` 🛡️
 
 ## Roadmap plan 🗺️
 

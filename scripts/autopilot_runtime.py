@@ -489,6 +489,9 @@ def execute_cycle(
         updated["status"] = "running"
         updated["reason_code"] = "autopilot_cycle_progressed"
         updated["blockers"] = []
+        objective_any = updated.get("objective")
+        objective = objective_any if isinstance(objective_any, dict) else {}
+        continuous_mode = bool(objective.get("continuous_mode", False))
         progressed = False
         for cycle in cycles:
             if not isinstance(cycle, dict):
@@ -497,10 +500,21 @@ def execute_cycle(
                 cycle["state"] = "done"
                 progressed = True
                 break
+
+        if progressed and continuous_mode:
+            pending_after_progress = sum(
+                1
+                for cycle in cycles
+                if isinstance(cycle, dict)
+                and str(cycle.get("state") or "pending") == "pending"
+            )
+            if pending_after_progress == 0:
+                updated = _append_continuous_cycle(updated)
+                cycles_any = updated.get("cycles")
+                cycles = cycles_any if isinstance(cycles_any, list) else []
+                updated["reason_code"] = "autopilot_cycle_progressed_and_queued"
+
         if not progressed:
-            objective_any = updated.get("objective")
-            objective = objective_any if isinstance(objective_any, dict) else {}
-            continuous_mode = bool(objective.get("continuous_mode", False))
             if continuous_mode:
                 updated = _append_continuous_cycle(updated)
                 cycles_any = updated.get("cycles")

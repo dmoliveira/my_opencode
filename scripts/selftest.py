@@ -125,6 +125,7 @@ HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
 LEARN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "learn_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
+AGENT_DIR = REPO_ROOT / "agent"
 
 
 def run_script(
@@ -233,6 +234,54 @@ def main() -> int:
         home.mkdir(parents=True, exist_ok=True)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
+
+        # Agent operating contract sanity checks
+        expect(AGENT_DIR.exists(), "agent directory should exist")
+        required_agents = {
+            "orchestrator.md": {
+                "must": [
+                    "mode: primary",
+                    "Use `verifier` before claiming done",
+                    "Use `reviewer` for final quality/safety pass",
+                    "Anti-loop guard",
+                ]
+            },
+            "explore.md": {
+                "must": ["mode: subagent", "bash: false", "write: false", "edit: false"]
+            },
+            "librarian.md": {
+                "must": ["mode: subagent", "bash: false", "write: false", "edit: false"]
+            },
+            "oracle.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
+            "verifier.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
+            "reviewer.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
+            "release-scribe.md": {
+                "must": ["mode: subagent", "write: false", "edit: false"]
+            },
+        }
+        for filename, rules in required_agents.items():
+            path = AGENT_DIR / filename
+            expect(path.exists(), f"required agent file should exist: {filename}")
+            content = path.read_text(encoding="utf-8")
+            for marker in rules["must"]:
+                expect(
+                    marker in content,
+                    f"agent file {filename} should include marker: {marker}",
+                )
+
+        base_config_payload = load_json_file(cfg)
+        expect(
+            str(base_config_payload.get("default_agent") or "") == "build",
+            "default_agent should remain build",
+        )
+
+        install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
+        expect(
+            'mkdir -p "$CONFIG_DIR/agent"' in install_script
+            and 'cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/"'
+            in install_script,
+            "installer should sync custom agent definitions to global agent directory",
+        )
 
         healthy_signals = {
             "observed_at": "2026-02-14T00:00:00Z",
