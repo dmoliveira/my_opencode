@@ -108,7 +108,7 @@ def command_status(args: list[str]) -> int:
             ),
             "eligible": False,
             "warnings": [
-                "no checkpoint found yet; create one by running /start-work first"
+                "no checkpoint found yet; create one by running /autopilot or /autopilot go first"
             ],
             "config": str(write_path),
         }
