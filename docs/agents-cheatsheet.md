@@ -97,6 +97,8 @@ opencode agent list
 
 ```text
 Tab -> choose agent
+/agent-doctor
+/agent-doctor-json
 ```
 
 ---

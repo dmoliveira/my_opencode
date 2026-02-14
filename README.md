@@ -25,6 +25,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
+- 🤖 Built-in `/agent-doctor` command for custom agent contract and runtime checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
@@ -51,6 +52,13 @@ This setup keeps `build` as the default agent, and adds focused specialists for 
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
+
+Quick validation:
+
+```text
+/agent-doctor
+/agent-doctor-json
+```
 
 Detailed guide: `docs/agents-playbook.md` 📘
 
