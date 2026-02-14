@@ -81,6 +81,7 @@ from autopilot_runtime import (  # type: ignore
     initialize_run,
     validate_objective,
 )
+from autopilot_integration import integrate_controls  # type: ignore
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -3869,6 +3870,43 @@ version: 1
                 autopilot_cycle_budget_stop.get("run", {}).get("reason_code", "")
             ).startswith("budget_"),
             "autopilot budget stop should expose deterministic budget reason codes",
+        )
+
+        autopilot_integration_report = integrate_controls(
+            run={
+                **dict(autopilot_cycle_1.get("run", {})),
+                "todos": [
+                    {"id": "todo-1", "state": "in_progress"},
+                    {"id": "todo-2", "state": "in_progress"},
+                ],
+            },
+            write_path=config_path,
+            confidence_score=0.42,
+            interruption_class="tool_failure",
+        )
+        expect(
+            autopilot_integration_report.get("control_integrations", {})
+            .get("manual_handoff", {})
+            .get("mode")
+            == "manual"
+            and autopilot_integration_report.get("run", {}).get("status") == "paused",
+            "autopilot integration should trigger manual handoff when confidence drops",
+        )
+        expect(
+            autopilot_integration_report.get("control_integrations", {})
+            .get("todo_controls", {})
+            .get("result")
+            == "FAIL",
+            "autopilot integration should surface todo compliance violations",
+        )
+        expect(
+            isinstance(
+                autopilot_integration_report.get("control_integrations", {}).get(
+                    "checkpoint_count"
+                ),
+                int,
+            ),
+            "autopilot integration should include checkpoint count from checkpoint subsystem",
         )
 
         forced_budget_config = load_json_file(config_path)

@@ -420,6 +420,13 @@ Task 28.2 autopilot loop backend notes:
 - cycle execution now applies budget guardrails per cycle and writes mandatory checkpoint snapshots for initialization and each cycle evaluation.
 - loop payloads now emit deterministic progress counts, blocker reason codes, and next-action recommendations (including budget hard-stop guidance).
 
+Task 28.3 autopilot control-integration notes:
+
+- integration module: `scripts/autopilot_integration.py`
+- `/autoflow` bridge reuse now maps autopilot run states into deterministic autoflow transition evaluations.
+- control diagnostics now combine todo-enforcement, resume eligibility, and checkpoint-count signals for operator visibility.
+- confidence-drop behavior now enforces explicit manual handoff mode (`reason_code=confidence_drop_requires_handoff`) before autonomous progression resumes.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

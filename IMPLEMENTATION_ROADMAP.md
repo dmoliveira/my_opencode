@@ -984,10 +984,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 28.2.2: Apply budget guardrails and mandatory checkpoints per cycle
   - [x] Subtask 28.2.3: Emit progress, blockers, and next-step recommendations
   - [x] Notes: Added `scripts/autopilot_runtime.py` with objective schema validation, bounded cycle execution, per-cycle budget hard-stop evaluation, mandatory checkpoint persistence, and deterministic progress/blocker recommendation payloads.
-- [ ] Task 28.3: Integrate with existing control subsystems
-  - [ ] Subtask 28.3.1: Reuse `/autoflow` primitives for plan and state transitions
-  - [ ] Subtask 28.3.2: Integrate with todo enforcement and resume/checkpoint systems
-  - [ ] Subtask 28.3.3: Add explicit manual handoff mode when confidence drops
+- [x] Task 28.3: Integrate with existing control subsystems
+  - [x] Subtask 28.3.1: Reuse `/autoflow` primitives for plan and state transitions
+  - [x] Subtask 28.3.2: Integrate with todo enforcement and resume/checkpoint systems
+  - [x] Subtask 28.3.3: Add explicit manual handoff mode when confidence drops
+  - [x] Notes: Added `scripts/autopilot_integration.py` bridging autopilot run-state to autoflow transition evaluation, todo/resume/checkpoint control diagnostics, and confidence-based manual handoff safeguards.
 - [ ] Task 28.4: Command UX, docs, and workflows
   - [ ] Subtask 28.4.1: Add `/autopilot` examples in `README.md`
   - [ ] Subtask 28.4.2: Add workflow guides (quick-fix objective, feature objective, release objective)
