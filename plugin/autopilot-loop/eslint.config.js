@@ -9,6 +9,8 @@ export default [
       parserOptions: {
         sourceType: "module",
         ecmaVersion: "latest",
+        project: "./tsconfig.json",
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     plugins: {

@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .DS_Store
+.beads/
+plugin/autopilot-loop/node_modules/
