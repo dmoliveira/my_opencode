@@ -131,6 +131,7 @@ All notable changes to this project are documented in this file.
 - Expanded autopilot verification coverage for scope bounding, budget-cap hard stops, and pause/resume/stop lifecycle transitions in selftest and install smoke paths.
 - Added cross-cutting release slicing plan gates in `IMPLEMENTATION_ROADMAP.md` (Task C1) and documented phase readiness criteria in `README.md`.
 - Added cross-cutting epic acceptance criteria template in `IMPLEMENTATION_ROADMAP.md` (Task C2) with measurable gates for functionality, reliability, docs, validation, evidence, and rollback.
+- Added cross-cutting roadmap tracking cadence policy in `IMPLEMENTATION_ROADMAP.md` (Task C3) with weekly status logging, single-active-epic guidance, and monthly paused/postponed review checkpoints.
 - Marked Epic 13 as in progress in the roadmap and completed Task 13.1 definition notes.
 - Expanded install and selftest coverage for browser provider profile switching and missing dependency guidance.
 - Expanded README wizard/browser guidance with provider trade-offs, stable-first defaults, and `/browser` usage examples.
