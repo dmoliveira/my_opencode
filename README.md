@@ -47,6 +47,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - Session intelligence baseline (E6-T1) now records digest-linked session metadata in `~/.config/opencode/sessions/index.json` with retention pruning for stale or oversized histories.
 - Session command baseline (E6-T2) now exposes `/session list|show|search` plus `/session doctor` for indexed-session visibility and diagnostics.
 - Resume support baseline (E6-T3) now emits actionable `resume_hints` in `/resume` and `/start-work recover` JSON output, and includes resume eligibility hints in digest `plan_execution` snapshots.
+- Roadmap status sync marks Epic 6 and Epic 28 complete after verification and aligns dashboard/task state with shipped functionality.
 
 Release slicing gate checklist (per phase):
 

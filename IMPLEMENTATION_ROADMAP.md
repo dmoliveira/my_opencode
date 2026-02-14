@@ -42,7 +42,7 @@ Use this map to avoid overlapping implementations.
 | E3 | Refactor Workflow Command | done | High | E1 | bd-zfx, bd-vc3, bd-2ps, bd-3fr | Safer rollout after config layering |
 | E4 | Continuation and Safety Hooks | done | Medium | E1, E2 | bd-1h0, bd-1ex, bd-1dr, bd-3uq | Start with minimal hooks only |
 | E5 | Category-Based Model Routing | done | Medium | E1 | bd-2z6, bd-m48, bd-15y, bd-222 | Can partially overlap with E2/E3 |
-| E6 | Session Intelligence and Resume Tooling | paused | Medium | E2 | TBD | Resume when core orchestration stabilizes |
+| E6 | Session Intelligence and Resume Tooling | done | Medium | E2 | bd-23l, bd-e5q, bd-3ju | Completed session indexing, command surface, and resume-hint workflows |
 | E7 | Tmux Visual Multi-Agent Mode | postponed | Low | E2 | TBD | Optional power-user feature |
 | E8 | Keyword-Triggered Execution Modes | done | High | E1, E4 | bd-302, bd-2fb, bd-2zq, bd-3dp | Fast power-mode activation from prompt text |
 | E9 | Conditional Rules Injector | done | High | E1 | bd-1q8, bd-3rj, bd-fo8, bd-2ik | Enforce project conventions with scoped rules |
@@ -64,7 +64,7 @@ Use this map to avoid overlapping implementations.
 | E25 | Incident Hotfix Mode | in_progress | Medium | E20, E22 | bd-kow | Constrained emergency workflow with strict safety |
 | E26 | Repo Health Score and Drift Monitor | planned | Medium | E9, E12, E20 | TBD | Operational visibility and continuous diagnostics |
 | E27 | Knowledge Capture from Completed Tasks | planned | Medium | E9, E14, E23 | TBD | Convert delivered work into reusable team memory |
-| E28 | Autopilot Objective Runner Command | paused | High | E20, E22 | TBD | Start only after real-world Autoflow stability evidence |
+| E28 | Autopilot Objective Runner Command | done | High | E20, E22 | TBD | Completed bounded objective lifecycle with verification and install smoke coverage |
 
 ## Scope Guardrails
 
@@ -328,7 +328,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 6 - Session Intelligence and Resume Tooling
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Add lightweight session listing/search and structured resume cues.
 **Depends on:** Epic 2
@@ -972,7 +972,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 28 - Autopilot Objective Runner Command
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** High
 **Goal:** Add `/autopilot` as a high-level objective runner that executes bounded autonomous cycles with explicit controls.
 **Depends on:** Epic 20, Epic 22
@@ -997,7 +997,7 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 28.4.2: Add workflow guides (quick-fix objective, feature objective, release objective)
   - [x] Subtask 28.4.3: Add troubleshooting guide for stopped/paused runs
   - [x] Notes: Added `scripts/autopilot_command.py` command surface (`start|status|pause|resume|stop|report|doctor`), wired `/autopilot*` aliases in `opencode.json`, integrated `/autopilot` checks into install self-check + unified doctor diagnostics, and documented lifecycle workflows/troubleshooting in `README.md`.
-- [ ] Task 28.5: Verification
+- [x] Task 28.5: Verification
   - [x] Subtask 28.5.1: Add tests for scope bounding and budget cap enforcement
   - [x] Subtask 28.5.2: Add tests for pause/resume/stop transitions
   - [x] Subtask 28.5.3: Add install-test smoke scenarios for objective lifecycle
@@ -1129,6 +1129,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Complete E6-T1 session metadata index backend with digest-linked event capture and retention pruning defaults.
 - [x] 2026-02-14: Complete E6-T2 session command surface (`/session list|show|search`) with index diagnostics and install/selftest coverage.
 - [x] 2026-02-14: Complete E6-T3 resume support with actionable `resume_hints` outputs and digest-integrated recovery cues.
+- [x] 2026-02-14: Close E28-T5 verification task and mark Epic 28 done after validating lifecycle and install smoke coverage.
 
 ---
 
@@ -1140,4 +1141,4 @@ Use this log to track what changed week by week.
 - Prioritize **E15 + E20** before E22 to keep autonomy controlled and auditable.
 - Prioritize **E22** before E23-E27 so higher-level automation builds on stable primitives.
 - Keep **E10** paused unless explicit user-value metrics justify implementation.
-- Keep **Epic 6** as the single active `in_progress` backlog epic and **Epic 7** postponed until clear demand emerges.
+- Keep **Epic 7** postponed and **Epic 10** paused until clear demand and value evidence justify promotion.
