@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from fnmatch import fnmatch
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -129,6 +130,22 @@ def _budget_profile_from_objective(max_budget: Any) -> str:
     return "balanced"
 
 
+def _scope_patterns(raw_scope: Any) -> list[str]:
+    if not isinstance(raw_scope, str):
+        return []
+    return [part.strip() for part in re.split(r"[,;\n]+", raw_scope) if part.strip()]
+
+
+def _in_scope(path: str, patterns: list[str]) -> bool:
+    for pattern in patterns:
+        if fnmatch(path, pattern):
+            return True
+        normalized = pattern.rstrip("/")
+        if normalized and path.startswith(normalized + "/"):
+            return True
+    return False
+
+
 def initialize_run(
     *,
     config: dict[str, Any],
@@ -220,12 +237,68 @@ def execute_cycle(
     run: dict[str, Any],
     tool_call_increment: int,
     token_increment: int,
+    touched_paths: list[str] | None = None,
     now_ts: str | None = None,
 ) -> dict[str, Any]:
     objective = (
         run.get("objective", {}) if isinstance(run.get("objective"), dict) else {}
     )
     profile = _budget_profile_from_objective(objective.get("max_budget"))
+
+    scope_patterns = _scope_patterns(objective.get("scope"))
+    paths = [str(item).strip() for item in (touched_paths or []) if str(item).strip()]
+    scope_violations = [path for path in paths if not _in_scope(path, scope_patterns)]
+
+    updated = dict(run)
+    updated["updated_at"] = now_ts or now_iso()
+
+    if scope_violations:
+        updated["status"] = "scope_stopped"
+        updated["reason_code"] = "scope_violation_detected"
+        updated["blockers"] = ["scope_violation_detected", *scope_violations]
+        updated["scope_violations"] = scope_violations
+        updated["next_actions"] = [
+            "review objective scope and remove out-of-scope paths",
+            "restart or resume only with in-scope execution targets",
+        ]
+        runtime_file = save_runtime(write_path, updated)
+        snapshot = write_snapshot(
+            write_path,
+            {
+                "status": updated["status"],
+                "plan": {
+                    "metadata": {"id": updated.get("run_id")},
+                    "path": str(runtime_file),
+                },
+                "steps": [
+                    {"ordinal": cycle.get("ordinal"), "state": cycle.get("state")}
+                    for cycle in updated.get("cycles", [])
+                    if isinstance(cycle, dict)
+                ],
+                "resume_hints": {
+                    "eligible": False,
+                    "reason_code": updated["reason_code"],
+                    "next_actions": updated["next_actions"],
+                },
+            },
+            source="autopilot_cycle_scope_guard",
+            command_outcomes=[
+                {
+                    "kind": "slash_command",
+                    "name": "/autopilot resume",
+                    "result": "FAIL",
+                    "reason_code": updated["reason_code"],
+                    "summary": "autopilot cycle blocked due to out-of-scope execution targets",
+                }
+            ],
+        )
+        return {
+            "result": "FAIL",
+            "run": updated,
+            "runtime_path": str(runtime_file),
+            "checkpoint": snapshot,
+        }
+
     policy_config = dict(config)
     policy_config["budget_runtime"] = {"profile": profile}
     policy = resolve_budget_policy(policy_config)
@@ -243,8 +316,6 @@ def execute_cycle(
     )
     budget_eval = evaluate_budget(policy, counters)
 
-    updated = dict(run)
-    updated["updated_at"] = now_ts or now_iso()
     updated.setdefault("budget", {})
     updated["budget"] = {
         "policy": policy,

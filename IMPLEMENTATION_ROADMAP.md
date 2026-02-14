@@ -995,11 +995,12 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 28.4.3: Add troubleshooting guide for stopped/paused runs
   - [x] Notes: Added `scripts/autopilot_command.py` command surface (`start|status|pause|resume|stop|report|doctor`), wired `/autopilot*` aliases in `opencode.json`, integrated `/autopilot` checks into install self-check + unified doctor diagnostics, and documented lifecycle workflows/troubleshooting in `README.md`.
 - [ ] Task 28.5: Verification
-  - [ ] Subtask 28.5.1: Add tests for scope bounding and budget cap enforcement
-  - [ ] Subtask 28.5.2: Add tests for pause/resume/stop transitions
-  - [ ] Subtask 28.5.3: Add install-test smoke scenarios for objective lifecycle
-- [ ] Exit criteria: `/autopilot` never exceeds declared objective scope and budget limits
-- [ ] Exit criteria: users can inspect and control every run stage with clear status output
+  - [x] Subtask 28.5.1: Add tests for scope bounding and budget cap enforcement
+  - [x] Subtask 28.5.2: Add tests for pause/resume/stop transitions
+  - [x] Subtask 28.5.3: Add install-test smoke scenarios for objective lifecycle
+  - [x] Notes: Expanded `scripts/selftest.py` with autopilot scope-violation and budget hard-stop assertions plus pause/resume/stop transition checks, and expanded install smoke to run in-scope and out-of-scope `/autopilot resume` scenarios.
+- [x] Exit criteria: `/autopilot` never exceeds declared objective scope and budget limits
+- [x] Exit criteria: users can inspect and control every run stage with clear status output
 
 ---
 

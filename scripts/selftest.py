@@ -3852,6 +3852,29 @@ version: 1
             "autopilot execute cycle should emit actionable next_actions",
         )
 
+        autopilot_cycle_scope_stop = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_cycle_1.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["README.md"],
+            now_ts="2026-02-13T00:00:01Z",
+        )
+        expect(
+            autopilot_cycle_scope_stop.get("result") == "FAIL"
+            and autopilot_cycle_scope_stop.get("run", {}).get("status")
+            == "scope_stopped",
+            "autopilot execute cycle should hard-stop on out-of-scope paths",
+        )
+        expect(
+            autopilot_cycle_scope_stop.get("run", {}).get("reason_code")
+            == "scope_violation_detected"
+            and "README.md"
+            in autopilot_cycle_scope_stop.get("run", {}).get("scope_violations", []),
+            "autopilot scope stop should preserve deterministic scope violation details",
+        )
+
         autopilot_cycle_budget_stop = execute_cycle(
             config={"budget_runtime": {"profile": "balanced"}},
             write_path=config_path,
@@ -4008,6 +4031,34 @@ version: 1
             "autopilot pause should persist paused status",
         )
 
+        autopilot_command_status_after_pause = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "status",
+                "--confidence",
+                "0.9",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_status_after_pause.returncode == 0,
+            "autopilot status should succeed after pause",
+        )
+        autopilot_command_status_after_pause_report = parse_json_output(
+            autopilot_command_status_after_pause.stdout
+        )
+        expect(
+            autopilot_command_status_after_pause_report.get("run", {}).get("status")
+            == "paused",
+            "autopilot status should retain paused state after pause transition",
+        )
+
         autopilot_command_resume = subprocess.run(
             [
                 sys.executable,
@@ -4041,6 +4092,69 @@ version: 1
             .get("completed_cycles", 0)
             >= 1,
             "autopilot resume should increment cycle progress after resume",
+        )
+
+        autopilot_command_start_budget = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "start",
+                "--goal",
+                "Exercise budget hard stop",
+                "--scope",
+                "scripts/autopilot_command.py",
+                "--done-criteria",
+                "force budget threshold",
+                "--max-budget",
+                "conservative",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_start_budget.returncode == 0,
+            "autopilot start should initialize budget-stop verification run",
+        )
+
+        autopilot_command_resume_budget_stop = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "resume",
+                "--confidence",
+                "0.9",
+                "--tool-calls",
+                "999",
+                "--token-estimate",
+                "999999",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_resume_budget_stop.returncode == 1,
+            "autopilot resume should fail when budget hard-stop thresholds are exceeded",
+        )
+        autopilot_command_resume_budget_stop_report = parse_json_output(
+            autopilot_command_resume_budget_stop.stdout
+        )
+        expect(
+            autopilot_command_resume_budget_stop_report.get("run", {}).get("status")
+            == "budget_stopped"
+            and str(
+                autopilot_command_resume_budget_stop_report.get("run", {}).get(
+                    "reason_code", ""
+                )
+            ).startswith("budget_"),
+            "autopilot resume budget stop should expose deterministic budget reason codes",
         )
 
         autopilot_command_report = subprocess.run(
@@ -4086,6 +4200,27 @@ version: 1
             and autopilot_command_stop_report.get("reason_code")
             == "autopilot_stop_requested",
             "autopilot stop should persist deterministic stop state",
+        )
+
+        autopilot_command_status_after_stop = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_status_after_stop.returncode == 0,
+            "autopilot status should succeed after stop",
+        )
+        autopilot_command_status_after_stop_report = parse_json_output(
+            autopilot_command_status_after_stop.stdout
+        )
+        expect(
+            autopilot_command_status_after_stop_report.get("run", {}).get("status")
+            == "stopped",
+            "autopilot status should retain stopped state after stop transition",
         )
 
         forced_budget_config = load_json_file(config_path)

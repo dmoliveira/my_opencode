@@ -20,7 +20,7 @@ def usage() -> int:
     print(
         "usage: /autopilot [start|status|pause|resume|stop|report|doctor] [--json] "
         "| /autopilot start --goal <text> --scope <text> --done-criteria <text> --max-budget <profile> [--json] "
-        "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--json]"
+        "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--json]"
     )
     return 2
 
@@ -169,6 +169,7 @@ def command_resume(args: list[str]) -> int:
         confidence_raw = pop_value(args, "--confidence", "0.8") or "0.8"
         tool_calls_raw = pop_value(args, "--tool-calls", "1") or "1"
         token_raw = pop_value(args, "--token-estimate", "100") or "100"
+        touched_paths_raw = pop_value(args, "--touched-paths", "") or ""
     except ValueError:
         return usage()
     if args:
@@ -179,6 +180,9 @@ def command_resume(args: list[str]) -> int:
         token_estimate = max(0, int(token_raw))
     except ValueError:
         return usage()
+    touched_paths = [
+        path.strip() for path in touched_paths_raw.split(",") if path.strip()
+    ]
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
@@ -206,6 +210,7 @@ def command_resume(args: list[str]) -> int:
         run=integrated.get("run", runtime),
         tool_call_increment=tool_calls,
         token_increment=token_estimate,
+        touched_paths=touched_paths,
     )
     emit(resumed, as_json=as_json)
     return 0 if resumed.get("result") == "PASS" else 1
