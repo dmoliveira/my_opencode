@@ -18,8 +18,10 @@ from config_layering import load_layered_config, resolve_write_path  # type: ign
 
 def usage() -> int:
     print(
-        "usage: /autopilot [start|status|pause|resume|stop|report|doctor] [--json] "
+        "usage: /autopilot [start|go|status|pause|resume|stop|report|doctor] [--json] "
         "| /autopilot start --goal <text> --scope <text> --done-criteria <text> --max-budget <profile> [--json] "
+        "| /autopilot go [--goal <text>] [--scope <text>] [--done-criteria <text>] [--max-budget <profile>] "
+        "[--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--max-cycles <n>] [--json] "
         "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--json]"
     )
     return 2
@@ -131,6 +133,170 @@ def command_start(args: list[str]) -> int:
             )
     emit(initialized, as_json=as_json)
     return 0 if initialized.get("result") == "PASS" else 1
+
+
+def command_go(args: list[str]) -> int:
+    as_json = pop_flag(args, "--json")
+    try:
+        goal = pop_value(args, "--goal")
+        scope = pop_value(args, "--scope")
+        done_criteria = pop_value(args, "--done-criteria")
+        max_budget = pop_value(args, "--max-budget", "balanced") or "balanced"
+        confidence_raw = pop_value(args, "--confidence", "0.8") or "0.8"
+        tool_calls_raw = pop_value(args, "--tool-calls", "1") or "1"
+        token_raw = pop_value(args, "--token-estimate", "100") or "100"
+        touched_paths_raw = pop_value(args, "--touched-paths", "") or ""
+        max_cycles_raw = pop_value(args, "--max-cycles", "20") or "20"
+    except ValueError:
+        return usage()
+    if args:
+        return usage()
+
+    try:
+        confidence = float(confidence_raw)
+        tool_calls = max(0, int(tool_calls_raw))
+        token_estimate = max(0, int(token_raw))
+        max_cycles = max(1, int(max_cycles_raw))
+    except ValueError:
+        return usage()
+
+    touched_paths = [
+        path.strip() for path in touched_paths_raw.split(",") if path.strip()
+    ]
+
+    config, _ = load_layered_config()
+    write_path = resolve_write_path()
+
+    runtime = load_runtime(write_path)
+    started_new_run = False
+    inferred_defaults: list[str] = []
+    terminal_states = {
+        "completed",
+        "budget_stopped",
+        "scope_stopped",
+        "stopped",
+    }
+    runtime_status = str(runtime.get("status") or "") if runtime else ""
+    should_initialize = not runtime or runtime_status in terminal_states
+
+    if should_initialize:
+        if not goal:
+            goal = "continue the active user request from current session context until done"
+            inferred_defaults.append("goal")
+        if not scope:
+            scope = "**"
+            inferred_defaults.append("scope")
+        if not done_criteria:
+            done_criteria = goal
+            inferred_defaults.append("done-criteria")
+        objective = {
+            "goal": goal or "",
+            "scope": scope or "",
+            "done-criteria": done_criteria or "",
+            "max-budget": max_budget,
+        }
+        initialized = initialize_run(
+            config=config,
+            write_path=write_path,
+            objective=objective,
+            actor="autopilot",
+        )
+        if initialized.get("result") != "PASS":
+            emit(initialized, as_json=as_json)
+            return 1
+        run_any = initialized.get("run")
+        runtime = run_any if isinstance(run_any, dict) else {}
+        started_new_run = True
+
+    if not runtime:
+        emit(
+            {
+                "result": "FAIL",
+                "reason_code": "autopilot_runtime_missing",
+                "remediation": [
+                    "run /autopilot start with objective fields",
+                    "run /autopilot go --goal '<objective>'",
+                ],
+            },
+            as_json=as_json,
+        )
+        return 1
+
+    history: list[dict[str, Any]] = []
+    current = runtime
+    for _ in range(max_cycles):
+        integrated = integrate_controls(
+            run=current,
+            write_path=write_path,
+            confidence_score=confidence,
+        )
+        handoff_mode = (
+            integrated.get("control_integrations", {})
+            .get("manual_handoff", {})
+            .get("mode", "auto")
+        )
+        if handoff_mode == "manual":
+            run_any = integrated.get("run")
+            current = run_any if isinstance(run_any, dict) else current
+            history.append(
+                {
+                    "status": current.get("status"),
+                    "reason_code": current.get("reason_code"),
+                }
+            )
+            break
+
+        resumed = execute_cycle(
+            config=config,
+            write_path=write_path,
+            run=integrated.get("run", current),
+            tool_call_increment=tool_calls,
+            token_increment=token_estimate,
+            touched_paths=touched_paths,
+        )
+        run_any = resumed.get("run")
+        current = run_any if isinstance(run_any, dict) else current
+        history.append(
+            {
+                "status": current.get("status"),
+                "reason_code": current.get("reason_code"),
+            }
+        )
+        status = str(current.get("status") or "")
+        if status in terminal_states:
+            break
+
+    status = str(current.get("status") or "")
+    reason_code = str(current.get("reason_code") or "")
+    result = "PASS"
+    if status in {"budget_stopped", "scope_stopped"}:
+        result = "FAIL"
+    if history and history[-1].get("reason_code") == "confidence_drop_requires_handoff":
+        result = "FAIL"
+
+    payload: dict[str, Any] = {
+        "result": result,
+        "started_new_run": started_new_run,
+        "iterations": len(history),
+        "final_status": status,
+        "reason_code": reason_code,
+        "run": current,
+        "history": history,
+        "next_actions": current.get("next_actions", []),
+    }
+    if inferred_defaults:
+        payload["inferred_defaults"] = inferred_defaults
+        payload["warnings"] = [
+            "autopilot inferred missing objective fields; use explicit fields for tighter control"
+        ]
+    if len(history) >= max_cycles and status not in terminal_states:
+        payload.setdefault("warnings", [])
+        if isinstance(payload["warnings"], list):
+            payload["warnings"].append(
+                "max cycles reached before terminal status; run /autopilot go again to continue"
+            )
+    emit(payload, as_json=as_json)
+    return 0 if result == "PASS" else 1
 
 
 def command_status(args: list[str]) -> int:
@@ -354,6 +520,7 @@ def command_doctor(args: list[str]) -> int:
         "problems": [],
         "quick_fixes": [
             "/autopilot start --goal 'Ship objective' --scope 'scripts/**' --done-criteria 'all checks pass' --max-budget balanced --json",
+            "/autopilot go --goal 'Ship objective' --json",
             "/autopilot status --json",
             "/autopilot report --json",
         ],
@@ -377,6 +544,8 @@ def main(argv: list[str]) -> int:
         return usage()
     if cmd == "start":
         return command_start(rest)
+    if cmd in {"go", "continue"}:
+        return command_go(rest)
     if cmd == "status":
         return command_status(rest)
     if cmd == "pause":
