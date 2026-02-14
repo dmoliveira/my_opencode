@@ -383,6 +383,23 @@ Task 27.2 knowledge pipeline backend notes:
 - draft generation now groups signals by objective key (`E##-T##`) and emits evidence-linked draft entries with deterministic confidence scoring.
 - lifecycle transitions now enforce review/publish/archive quality gates with explicit failure reason codes and approval metadata.
 
+Task 27.3 learn command and integration notes:
+
+- command module: `scripts/learn_command.py`
+- command surface: `/learn capture|review|publish|search|doctor` with JSON-friendly outputs for automation.
+- publish/search outputs now include `rule_injector_candidates` and `autoflow_guidance` so published patterns can be reused by rule workflows and `/autoflow` planning docs.
+- maintenance workflow: use `/learn search --status published --json` to inspect stale or low-confidence entries, then archive or refresh entries before they drive automation.
+
+Examples:
+
+```text
+/learn capture --limit 20 --json
+/learn review --entry-id kc-e27-t2 --summary "reviewed guidance" --confidence 90 --risk medium --json
+/learn publish --entry-id kc-e27-t2 --approved-by oncall --json
+/learn search --query release --json
+/learn doctor --json
+```
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
