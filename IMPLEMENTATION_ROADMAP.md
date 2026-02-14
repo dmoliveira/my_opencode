@@ -1039,14 +1039,23 @@ Every command-oriented epic must ship all of the following:
     - [x] Phase L: Operational intelligence (`E26-E27`) with health drift telemetry and reusable knowledge capture.
     - [x] Phase M: Objective autonomy (`E28`) with scoped/budgeted autopilot lifecycle controls.
     - [x] Phase N: Optional power-user capabilities (`E6-E7`) behind demand-driven adoption gates.
-- [ ] Task C2: Add acceptance criteria template per epic
-  - [ ] Subtask C2.1: Functional criteria
-  - [ ] Subtask C2.2: Reliability criteria
-  - [ ] Subtask C2.3: Documentation criteria
-  - [ ] Subtask C2.4: Validation criteria (`make validate`, `make selftest`, `make install-test`)
-  - [ ] Subtask C2.5: Evidence links (PR, commit, test output summary)
-  - [ ] Subtask C2.6: Docs quality criteria (`README` updates + command examples + end-to-end workflow guides)
-  - [ ] Subtask C2.7: Measurable thresholds (0 failing checks, explicit risk notes, clear rollback path)
+- [x] Task C2: Add acceptance criteria template per epic
+  - [x] Subtask C2.1: Functional criteria
+  - [x] Subtask C2.2: Reliability criteria
+  - [x] Subtask C2.3: Documentation criteria
+  - [x] Subtask C2.4: Validation criteria (`make validate`, `make selftest`, `make install-test`)
+  - [x] Subtask C2.5: Evidence links (PR, commit, test output summary)
+  - [x] Subtask C2.6: Docs quality criteria (`README` updates + command examples + end-to-end workflow guides)
+  - [x] Subtask C2.7: Measurable thresholds (0 failing checks, explicit risk notes, clear rollback path)
+  - [x] Notes: Added reusable acceptance template and quality gates for every epic so completion criteria are measurable and reviewable.
+  - [x] Epic acceptance criteria template:
+    - [x] Functional: command/feature paths behave as defined in contract docs and reject invalid input with deterministic reason codes.
+    - [x] Reliability: runtime state writes are atomic/idempotent where required, with explicit recovery and rollback guidance.
+    - [x] Documentation: `README.md`, roadmap notes, and `CHANGELOG.md` are updated with usage examples and operator-facing caveats.
+    - [x] Validation: `make validate`, `make selftest`, and `make install-test` pass on the task branch before merge.
+    - [x] Evidence: PR URL, commit SHA, and concise test result summary are recorded in issue/PR body.
+    - [x] Docs quality: include at least one workflow example and one troubleshooting/remediation path for new command surfaces.
+    - [x] Thresholds: zero failing required checks, explicit risk notes for non-trivial behavior changes, and clear rollback path.
 - [ ] Task C3: Add tracking cadence
   - [ ] Subtask C3.1: Weekly status update section in this file
   - [ ] Subtask C3.2: Keep one epic `in_progress`

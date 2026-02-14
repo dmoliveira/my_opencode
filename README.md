@@ -41,6 +41,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - Track upcoming orchestration features in `IMPLEMENTATION_ROADMAP.md`.
 - Release slicing baseline (Task C1) now groups delivery into deterministic phases (A-N) with explicit readiness gates per slice.
+- Epic acceptance baseline (Task C2) now defines reusable completion criteria for functional behavior, reliability, docs quality, validation gates, and rollback evidence.
 
 Release slicing gate checklist (per phase):
 
