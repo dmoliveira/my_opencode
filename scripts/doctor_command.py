@@ -253,6 +253,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "learn",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("learn_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("learn_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "budget",
         "kind": "doctor-json",
         "optional": True,

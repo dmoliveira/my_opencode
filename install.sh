@@ -114,6 +114,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/health_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/health_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/learn_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/learn_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -233,6 +236,19 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
       python3 "$INSTALL_DIR/scripts/health_command.py" doctor --json
     )
   fi
+  if [ -f "$INSTALL_DIR/scripts/learn_command.py" ]; then
+    (
+      cd "$INSTALL_DIR"
+      python3 "$INSTALL_DIR/scripts/learn_command.py" capture --limit 5 --json
+      LEARN_ENTRY_ID=$(python3 "$INSTALL_DIR/scripts/learn_command.py" search --limit 1 --json | python3 -c 'import json,sys; payload=json.load(sys.stdin); entries=payload.get("entries", []); print(entries[0].get("entry_id", "") if entries else "")')
+      if [ -n "$LEARN_ENTRY_ID" ]; then
+        python3 "$INSTALL_DIR/scripts/learn_command.py" review --entry-id "$LEARN_ENTRY_ID" --summary "install-self-check review" --confidence 88 --risk medium --json
+        python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer --json
+      fi
+      python3 "$INSTALL_DIR/scripts/learn_command.py" search --query release --json
+      python3 "$INSTALL_DIR/scripts/learn_command.py" doctor --json
+    )
+  fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -320,6 +336,11 @@ printf "  /health status --force-refresh --json\n"
 printf "  /health trend --limit 10 --json\n"
 printf "  /health drift --json\n"
 printf "  /health doctor --json\n"
+printf "  /learn capture --limit 20 --json\n"
+printf "  /learn review --entry-id kc-e27-t2 --summary 'reviewed guidance' --confidence 90 --risk medium --json\n"
+printf "  /learn publish --entry-id kc-e27-t2 --approved-by oncall --json\n"
+printf "  /learn search --query release --json\n"
+printf "  /learn doctor --json\n"
 printf "  /todo status --json\n"
 printf "  /todo enforce --json\n"
 printf "  /resume status --json\n"

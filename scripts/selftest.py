@@ -115,6 +115,7 @@ RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
+LEARN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "learn_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -705,6 +706,181 @@ def main() -> int:
         expect(
             not publish_failures and published_entry.get("status") == "published",
             "knowledge pipeline should allow review-to-published transition with approval metadata",
+        )
+
+        learn_env = os.environ.copy()
+        learn_env["OPENCODE_CONFIG_PATH"] = str(cfg)
+        learn_env["HOME"] = str(home)
+        learn_env.pop("SUPERMEMORY_API_KEY", None)
+        learn_env.pop("MORPH_API_KEY", None)
+
+        learn_capture = subprocess.run(
+            [
+                sys.executable,
+                str(LEARN_COMMAND_SCRIPT),
+                "capture",
+                "--limit",
+                "5",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
+            learn_capture.returncode == 0,
+            "learn capture should succeed",
+        )
+        learn_capture_payload = parse_json_output(learn_capture.stdout)
+        expect(
+            int(learn_capture_payload.get("total_entries", 0)) >= 1,
+            "learn capture should persist at least one entry",
+        )
+        captured_entries = learn_capture_payload.get("entries", [])
+        capture_entry_id = ""
+        if isinstance(captured_entries, list):
+            for entry in captured_entries:
+                if not isinstance(entry, dict):
+                    continue
+                if len(entry.get("evidence_sources", [])) >= 2:
+                    capture_entry_id = str(entry.get("entry_id", ""))
+                    break
+            if (
+                not capture_entry_id
+                and captured_entries
+                and isinstance(captured_entries[0], dict)
+            ):
+                capture_entry_id = str(captured_entries[0].get("entry_id", ""))
+        expect(bool(capture_entry_id), "learn capture should return an entry id")
+
+        learn_entries_path = Path(str(learn_capture_payload.get("entries_path", "")))
+        if learn_entries_path.exists():
+            learn_entries_payload = json.loads(
+                learn_entries_path.read_text(encoding="utf-8")
+            )
+            if isinstance(learn_entries_payload, list):
+                mutated_entries = []
+                for entry in learn_entries_payload:
+                    if not isinstance(entry, dict):
+                        continue
+                    if str(entry.get("entry_id", "")) == capture_entry_id:
+                        sources = [
+                            str(item) for item in entry.get("evidence_sources", [])
+                        ]
+                        if len(sources) < 2:
+                            sources.append("digest:selftest-extra-source.json")
+                        entry["evidence_sources"] = sorted(set(sources))
+                    mutated_entries.append(entry)
+                learn_entries_path.write_text(
+                    json.dumps(mutated_entries, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+
+        learn_review = subprocess.run(
+            [
+                sys.executable,
+                str(LEARN_COMMAND_SCRIPT),
+                "review",
+                "--entry-id",
+                capture_entry_id,
+                "--summary",
+                "E27-T2 reviewed guidance",
+                "--confidence",
+                "88",
+                "--risk",
+                "medium",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
+            learn_review.returncode == 0,
+            "learn review should succeed",
+        )
+        learn_review_payload = parse_json_output(learn_review.stdout)
+        expect(
+            str(learn_review_payload.get("status", "")) == "review",
+            "learn review should promote entry to review status",
+        )
+
+        learn_publish = subprocess.run(
+            [
+                sys.executable,
+                str(LEARN_COMMAND_SCRIPT),
+                "publish",
+                "--entry-id",
+                capture_entry_id,
+                "--approved-by",
+                "selftest-reviewer",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
+            learn_publish.returncode == 0,
+            "learn publish should succeed",
+        )
+        learn_publish_payload = parse_json_output(learn_publish.stdout)
+        expect(
+            str(learn_publish_payload.get("status", "")) == "published",
+            "learn publish should promote entry to published status",
+        )
+        expect(
+            isinstance(learn_publish_payload.get("integrations", {}), dict),
+            "learn publish should return integration payload",
+        )
+
+        learn_search = subprocess.run(
+            [
+                sys.executable,
+                str(LEARN_COMMAND_SCRIPT),
+                "search",
+                "--query",
+                "e27-t2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
+            learn_search.returncode == 0,
+            "learn search should succeed",
+        )
+        learn_search_payload = parse_json_output(learn_search.stdout)
+        expect(
+            int(learn_search_payload.get("count", 0)) >= 1,
+            "learn search should return matching entries",
+        )
+
+        learn_doctor = subprocess.run(
+            [sys.executable, str(LEARN_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=learn_env,
+            check=False,
+            cwd=knowledge_repo,
+        )
+        expect(
+            learn_doctor.returncode == 0,
+            "learn doctor should pass when command and contract are present",
+        )
+        learn_doctor_payload = parse_json_output(learn_doctor.stdout)
+        expect(
+            learn_doctor_payload.get("result") == "PASS",
+            "learn doctor should report pass",
         )
 
         # Plugin profile lean should pass doctor.

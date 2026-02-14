@@ -394,6 +394,30 @@
       "description": "Run health subsystem diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" doctor --json`\nShow only the command output."
     },
+    "learn": {
+      "description": "Capture and manage reusable task knowledge (capture|review|publish|search|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "learn-capture": {
+      "description": "Capture draft knowledge entries from merged PRs and digests",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" capture $ARGUMENTS --json`\nShow only the command output."
+    },
+    "learn-review": {
+      "description": "Review/edit draft knowledge entries and apply quality gates",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" review $ARGUMENTS --json`\nShow only the command output."
+    },
+    "learn-publish": {
+      "description": "Publish reviewed knowledge entries with approval metadata",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" publish $ARGUMENTS --json`\nShow only the command output."
+    },
+    "learn-search": {
+      "description": "Search published/review knowledge entries and integration hints",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" search $ARGUMENTS --json`\nShow only the command output."
+    },
+    "learn-doctor": {
+      "description": "Run knowledge capture diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" doctor --json`\nShow only the command output."
+    },
     "budget": {
       "description": "Manage execution budget controls (status|profile|override|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."
