@@ -937,7 +937,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 27 - Knowledge Capture from Completed Tasks
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Turn completed work into reusable patterns, checklists, and guidance for future runs.
 **Depends on:** Epic 9, Epic 14, Epic 23
@@ -957,12 +957,13 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 27.3.2: Integrate published patterns with rules injector and `/autoflow` workflow docs
   - [x] Subtask 27.3.3: Document maintenance process for stale entries
   - [x] Notes: Added `scripts/learn_command.py`, wired `/learn*` aliases plus doctor/install coverage, and documented knowledge-assisted `/autoflow` workflow guidance with stale-entry maintenance loops.
-- [ ] Task 27.4: Verification
-  - [ ] Subtask 27.4.1: Add tests for extraction quality thresholds
-  - [ ] Subtask 27.4.2: Add tests for approval/publish permissions
-  - [ ] Subtask 27.4.3: Add install-test smoke checks
-- [ ] Exit criteria: completed work reliably yields reusable, reviewed guidance
-- [ ] Exit criteria: stale/low-confidence knowledge can be pruned safely
+- [x] Task 27.4: Verification
+  - [x] Subtask 27.4.1: Add tests for extraction quality thresholds
+  - [x] Subtask 27.4.2: Add tests for approval/publish permissions
+  - [x] Subtask 27.4.3: Add install-test smoke checks
+  - [x] Notes: Expanded learn selftest with low-confidence review rejection and high-risk double-approval publish gating, and expanded install-smoke checks to enforce the same high-risk approval behavior.
+- [x] Exit criteria: completed work reliably yields reusable, reviewed guidance
+- [x] Exit criteria: stale/low-confidence knowledge can be pruned safely
 
 ---
 

@@ -337,6 +337,10 @@ def command_publish(args: list[str]) -> int:
             approved_by=approved_by,
         )
     if failures:
+        rewritten = []
+        for item in entries:
+            rewritten.append(working if str(item.get("entry_id")) == entry_id else item)
+        save_entries(entries_path, rewritten)
         emit(
             {
                 "result": "FAIL",
