@@ -119,9 +119,24 @@ def command_status(args: list[str]) -> int:
 
     _, _ = load_layered_config()
     write_path = resolve_write_path()
-    runtime, code = _runtime_or_fail(write_path, as_json=as_json)
-    if runtime is None:
-        return code
+    runtime = load_runtime(write_path)
+    if not runtime:
+        emit(
+            {
+                "result": "PASS",
+                "status": "idle",
+                "reason_code": "autopilot_runtime_missing",
+                "warnings": [
+                    "autopilot has no active runtime yet; start a run to track status"
+                ],
+                "next_actions": [
+                    "run /autopilot start with required objective fields",
+                    "use /autopilot doctor --json to inspect subsystem readiness",
+                ],
+            },
+            as_json=as_json,
+        )
+        return 0
 
     integrated = integrate_controls(
         run=runtime,
