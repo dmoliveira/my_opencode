@@ -376,6 +376,13 @@ Task 27.1 knowledge capture contract notes:
 - confidence scoring now uses deterministic factor weights (`evidence_quality`, `repeatability`, `scope_clarity`, `freshness`) for publish eligibility.
 - approval quality gates now require evidence links, confidence thresholds, and reviewer metadata before publication.
 
+Task 27.2 knowledge pipeline backend notes:
+
+- backend module: `scripts/knowledge_capture_pipeline.py`
+- extraction pipeline now collects merged-PR signals from git history and task digest signals from JSON digest artifacts.
+- draft generation now groups signals by objective key (`E##-T##`) and emits evidence-linked draft entries with deterministic confidence scoring.
+- lifecycle transitions now enforce review/publish/archive quality gates with explicit failure reason codes and approval metadata.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.

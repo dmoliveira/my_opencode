@@ -78,6 +78,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/pr_review_command.py` implementing Epic 23 Task 23.3 `/pr-review` command integration with concise/JSON review output, pre-merge checklist generation, and subsystem doctor diagnostics.
 - Added `/pr-review`, `/pr-review-json`, `/pr-review-checklist`, and `/pr-review-doctor` aliases in `opencode.json`.
 - Added `instructions/knowledge_capture_policy_contract.md` defining Epic 27 Task 27.1 entry taxonomy, confidence model, approval quality gates, and tagging/search metadata requirements.
+- Added `scripts/knowledge_capture_pipeline.py` implementing Epic 27 Task 27.2 merged-PR/task-digest signal extraction, grouped draft generation with source links, and deterministic review/publish/archive lifecycle gating.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
