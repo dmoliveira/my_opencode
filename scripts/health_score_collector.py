@@ -461,6 +461,83 @@ def persist_health_snapshot(
     return {"latest": str(latest_path), "history": str(history_path)}
 
 
+def load_health_history(write_path: Path, limit: int = 30) -> list[dict[str, Any]]:
+    history_path = _history_path(write_path)
+    if not history_path.exists() or limit <= 0:
+        return []
+    rows: list[dict[str, Any]] = []
+    try:
+        lines = history_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in reversed(lines):
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def load_latest_health_snapshot(write_path: Path) -> dict[str, Any]:
+    return _read_json(_latest_snapshot_path(write_path))
+
+
+def drift_report(snapshot: dict[str, Any]) -> dict[str, Any]:
+    indicators = as_list(snapshot.get("indicators"))
+    drift_items: list[dict[str, Any]] = []
+    reason_codes: set[str] = set()
+    recommendations: list[str] = []
+    for item in indicators:
+        indicator = as_dict(item)
+        status = str(indicator.get("status") or "pass")
+        if status == "pass":
+            continue
+        codes = [str(code) for code in as_list(indicator.get("reason_codes"))]
+        recs = [str(rec) for rec in as_list(indicator.get("recommendations"))]
+        reason_codes.update(codes)
+        for rec in recs:
+            if rec and rec not in recommendations:
+                recommendations.append(rec)
+        drift_items.append(
+            {
+                "indicator_id": str(indicator.get("indicator_id") or "unknown"),
+                "status": status,
+                "reason_codes": codes,
+                "recommendations": recs,
+            }
+        )
+    return {
+        "result": "PASS",
+        "drift_count": len(drift_items),
+        "drift": drift_items,
+        "reason_codes": sorted(reason_codes),
+        "next_actions": recommendations,
+    }
+
+
+def score_bucket_recommendations(status: str) -> list[str]:
+    if status == "healthy":
+        return [
+            "maintain baseline policies and continue routine checks",
+            "review trend weekly to catch early drift",
+        ]
+    if status == "degraded":
+        return [
+            "address failing and warning indicators before next release",
+            "resolve drift findings and rerun health status",
+        ]
+    return [
+        "halt non-essential changes until critical indicators are remediated",
+        "run full validate/selftest/install-test and clear automation failures",
+    ]
+
+
 def run_health_collection(
     repo_root: Path,
     config: dict[str, Any],
@@ -497,5 +574,9 @@ def run_health_collection(
         "suppression": suppression,
         "weight_normalized": normalize_weights(custom_weights)[1],
     }
+    if not snapshot.get("next_actions"):
+        snapshot["next_actions"] = score_bucket_recommendations(
+            str(snapshot.get("status") or "degraded")
+        )
     snapshot["paths"] = persist_health_snapshot(write_path, snapshot)
     return snapshot

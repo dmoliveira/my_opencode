@@ -374,6 +374,26 @@
       "description": "Run hotfix command diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" doctor --json`\nShow only the command output."
     },
+    "health": {
+      "description": "Show repo health score and drift insights",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "health-status": {
+      "description": "Show latest health status in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" status --json`\nShow only the command output."
+    },
+    "health-trend": {
+      "description": "Show recent health score trend in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" trend $ARGUMENTS --json`\nShow only the command output."
+    },
+    "health-drift": {
+      "description": "Show current drift findings in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" drift $ARGUMENTS --json`\nShow only the command output."
+    },
+    "health-doctor": {
+      "description": "Run health subsystem diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" doctor --json`\nShow only the command output."
+    },
     "budget": {
       "description": "Manage execution budget controls (status|profile|override|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."

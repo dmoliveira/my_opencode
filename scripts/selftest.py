@@ -108,6 +108,7 @@ RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
+HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 
 
@@ -341,6 +342,139 @@ def main() -> int:
             Path(str(snapshot_paths.get("latest", ""))).exists()
             and Path(str(snapshot_paths.get("history", ""))).exists(),
             "health snapshot persistence should write latest and history files",
+        )
+
+        health_repo = tmp / "health_repo"
+        health_repo.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=health_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "selftest@example.com"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=health_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Selftest"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=health_repo,
+        )
+        (health_repo / "README.md").write_text("health fixture\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "README.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=health_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "seed health fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=health_repo,
+        )
+
+        health_env = os.environ.copy()
+        health_env["OPENCODE_CONFIG_PATH"] = str(cfg)
+        health_env["HOME"] = str(home)
+        health_env.pop("SUPERMEMORY_API_KEY", None)
+        health_env.pop("MORPH_API_KEY", None)
+
+        health_status = subprocess.run(
+            [
+                sys.executable,
+                str(HEALTH_COMMAND_SCRIPT),
+                "status",
+                "--force-refresh",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=health_env,
+            check=False,
+            cwd=health_repo,
+        )
+        expect(
+            health_status.returncode == 0,
+            "health command status should succeed with force-refresh",
+        )
+        health_status_payload = parse_json_output(health_status.stdout)
+        expect(
+            health_status_payload.get("result") == "PASS"
+            and health_status_payload.get("status")
+            in {"healthy", "degraded", "critical"},
+            "health status should return a valid status payload",
+        )
+
+        health_trend = subprocess.run(
+            [
+                sys.executable,
+                str(HEALTH_COMMAND_SCRIPT),
+                "trend",
+                "--limit",
+                "5",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=health_env,
+            check=False,
+            cwd=health_repo,
+        )
+        expect(
+            health_trend.returncode == 0,
+            "health command trend should succeed",
+        )
+        health_trend_payload = parse_json_output(health_trend.stdout)
+        expect(
+            int(health_trend_payload.get("count", 0)) >= 1,
+            "health trend should include at least one snapshot entry",
+        )
+
+        health_drift = subprocess.run(
+            [sys.executable, str(HEALTH_COMMAND_SCRIPT), "drift", "--json"],
+            capture_output=True,
+            text=True,
+            env=health_env,
+            check=False,
+            cwd=health_repo,
+        )
+        expect(
+            health_drift.returncode == 0,
+            "health command drift should succeed",
+        )
+        health_drift_payload = parse_json_output(health_drift.stdout)
+        expect(
+            health_drift_payload.get("result") == "PASS"
+            and "drift_count" in health_drift_payload,
+            "health drift should return drift summary fields",
+        )
+
+        health_doctor = subprocess.run(
+            [sys.executable, str(HEALTH_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=health_env,
+            check=False,
+            cwd=health_repo,
+        )
+        expect(
+            health_doctor.returncode == 0,
+            "health command doctor should pass when collector and policy exist",
+        )
+        health_doctor_payload = parse_json_output(health_doctor.stdout)
+        expect(
+            health_doctor_payload.get("result") == "PASS",
+            "health doctor should report pass",
         )
 
         # Plugin profile lean should pass doctor.

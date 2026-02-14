@@ -108,6 +108,12 @@ fi
 if [ -f "$INSTALL_DIR/scripts/hotfix_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/hotfix_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/health_score_collector.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/health_score_collector.py"
+fi
+if [ -f "$INSTALL_DIR/scripts/health_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/health_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -218,6 +224,15 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
       python3 "$INSTALL_DIR/scripts/hotfix_command.py" doctor --json
     )
   fi
+  if [ -f "$INSTALL_DIR/scripts/health_command.py" ]; then
+    (
+      cd "$INSTALL_DIR"
+      python3 "$INSTALL_DIR/scripts/health_command.py" status --force-refresh --json
+      python3 "$INSTALL_DIR/scripts/health_command.py" trend --limit 5 --json
+      python3 "$INSTALL_DIR/scripts/health_command.py" drift --json
+      python3 "$INSTALL_DIR/scripts/health_command.py" doctor --json
+    )
+  fi
   python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
   python3 "$INSTALL_DIR/scripts/devtools_command.py" status
   python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
@@ -301,6 +316,10 @@ printf "  /hotfix status --json\n"
 printf "  /hotfix close --outcome resolved --followup-issue bd-123 --deferred-validation-owner oncall --deferred-validation-due 2026-03-01 --json\n"
 printf "  /hotfix remind --json\n"
 printf "  /hotfix doctor --json\n"
+printf "  /health status --force-refresh --json\n"
+printf "  /health trend --limit 10 --json\n"
+printf "  /health drift --json\n"
+printf "  /health doctor --json\n"
 printf "  /todo status --json\n"
 printf "  /todo enforce --json\n"
 printf "  /resume status --json\n"

@@ -920,10 +920,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 26.2.2: Detect drift from expected profile/policy baselines
   - [x] Subtask 26.2.3: Persist score history and trend snapshots
   - [x] Notes: Added `scripts/health_score_collector.py` backend to collect repo/runtime signals (validation target readiness, git hygiene, budget/hooks drift, background failures, freshness debt), compute weighted health status, apply suppression-window semantics, and persist latest+history snapshots under runtime state files.
-- [ ] Task 26.3: Command and reporting integration
-  - [ ] Subtask 26.3.1: Add `/health status|trend|drift`
-  - [ ] Subtask 26.3.2: Add JSON export for dashboards/CI
-  - [ ] Subtask 26.3.3: Document remediation recommendations by score bucket
+- [x] Task 26.3: Command and reporting integration
+  - [x] Subtask 26.3.1: Add `/health status|trend|drift`
+  - [x] Subtask 26.3.2: Add JSON export for dashboards/CI
+  - [x] Subtask 26.3.3: Document remediation recommendations by score bucket
+  - [x] Notes: Added `scripts/health_command.py` with `status|trend|drift|doctor` command flows, wired `/health*` aliases in `opencode.json`, integrated health diagnostics into unified doctor plus installer/install-smoke coverage, and exposed score-bucket remediation guidance from backend recommendations.
 - [ ] Task 26.4: Verification
   - [ ] Subtask 26.4.1: Add tests for score determinism and threshold behavior
   - [ ] Subtask 26.4.2: Add tests for drift detection precision
