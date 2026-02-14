@@ -65,6 +65,8 @@ Detailed guide: `docs/agents-playbook.md` 📘
 
 Operating contract: `instructions/agent_operating_contract.md` 🛡️
 
+Autopilot hook migration plan: `docs/autopilot-hook-roadmap.md` 🔁
+
 ## Roadmap plan 🗺️
 
 - Track upcoming orchestration features in `IMPLEMENTATION_ROADMAP.md`.
