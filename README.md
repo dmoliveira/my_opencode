@@ -49,6 +49,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - Resume support baseline (E6-T3) now emits actionable `resume_hints` in `/resume` and `/start-work recover` JSON output, and includes resume eligibility hints in digest `plan_execution` snapshots.
 - Roadmap status sync marks Epic 6 and Epic 28 complete after verification and aligns dashboard/task state with shipped functionality.
 - Dashboard reconciliation now aligns Epic 25-E27 summary statuses with completed implementation sections.
+- Epic 18 roadmap task checkboxes now align with previously shipped safe-edit adapter and command-integration completion notes.
 
 Release slicing gate checklist (per phase):
 
