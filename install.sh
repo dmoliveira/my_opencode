@@ -90,6 +90,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/autoflow_command.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/autoflow_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/autopilot_command.py" ]; then
+  chmod +x "$INSTALL_DIR/scripts/autopilot_command.py"
+fi
 if [ -f "$INSTALL_DIR/scripts/pr_review_analyzer.py" ]; then
   chmod +x "$INSTALL_DIR/scripts/pr_review_analyzer.py"
 fi
@@ -201,6 +204,15 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
     python3 "$INSTALL_DIR/scripts/autoflow_command.py" report --json
     python3 "$INSTALL_DIR/scripts/autoflow_command.py" stop --reason install-self-check --json
     python3 "$INSTALL_DIR/scripts/start_work_command.py" "$SELF_CHECK_PLAN" --deviation "install self-check" --json
+  fi
+  if [ -f "$INSTALL_DIR/scripts/autopilot_command.py" ]; then
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" start --goal "Install self-check objective" --scope "scripts/autopilot_command.py" --done-criteria "verify command wiring;verify runtime status" --max-budget balanced --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" status --confidence 0.9 --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" report --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" pause --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" stop --reason install-self-check --json
+    python3 "$INSTALL_DIR/scripts/autopilot_command.py" doctor --json
   fi
   if [ -f "$INSTALL_DIR/scripts/pr_review_command.py" ]; then
     SELF_CHECK_DIFF="$HOME/.config/opencode/my_opencode/.install-selfcheck-pr.diff"
@@ -324,6 +336,13 @@ printf "  /autoflow dry-run ~/.config/opencode/my_opencode/plan.md --json\n"
 printf "  /autoflow status --json\n"
 printf "  /autoflow report --json\n"
 printf "  /autoflow stop --reason manual --json\n"
+printf "  /autopilot start --goal 'Ship objective' --scope 'scripts/**' --done-criteria 'all checks pass' --max-budget balanced --json\n"
+printf "  /autopilot status --json\n"
+printf "  /autopilot report --json\n"
+printf "  /autopilot pause --json\n"
+printf "  /autopilot resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --json\n"
+printf "  /autopilot stop --reason manual --json\n"
+printf "  /autopilot doctor --json\n"
 printf "  /pr-review --base main --head HEAD --json\n"
 printf "  /pr-review-checklist --base main --head HEAD\n"
 printf "  /pr-review-doctor\n"

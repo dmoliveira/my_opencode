@@ -205,6 +205,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "autopilot",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("autopilot_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("autopilot_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "pr-review",
         "kind": "doctor-json",
         "optional": True,

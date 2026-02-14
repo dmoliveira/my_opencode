@@ -310,6 +310,34 @@
       "description": "Trigger /autoflow kill-switch stop in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" stop $ARGUMENTS --json`\nShow only the command output."
     },
+    "autopilot": {
+      "description": "Run objective autopilot controls (start|status|pause|resume|stop|report|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "autopilot-status": {
+      "description": "Show current /autopilot runtime status in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" status --json`\nShow only the command output."
+    },
+    "autopilot-report": {
+      "description": "Show /autopilot progress and blockers report in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" report --json`\nShow only the command output."
+    },
+    "autopilot-pause": {
+      "description": "Pause /autopilot execution in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" pause --json`\nShow only the command output."
+    },
+    "autopilot-resume": {
+      "description": "Resume /autopilot execution in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" resume $ARGUMENTS --json`\nShow only the command output."
+    },
+    "autopilot-stop": {
+      "description": "Stop /autopilot execution in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" stop $ARGUMENTS --json`\nShow only the command output."
+    },
+    "autopilot-doctor": {
+      "description": "Run /autopilot subsystem diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" doctor --json`\nShow only the command output."
+    },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
