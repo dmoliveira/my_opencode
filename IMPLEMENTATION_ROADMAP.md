@@ -915,10 +915,11 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 26.1.2: Define weighted scoring and status thresholds
   - [x] Subtask 26.1.3: Define suppression window for repeated alerts
   - [x] Notes: Added `instructions/health_score_policy_contract.md` defining indicator schema, default weights/penalties, deterministic health thresholds, drift suppression-window behavior, and reason-code/remediation output requirements for upcoming `/health` commands.
-- [ ] Task 26.2: Implement health collector
-  - [ ] Subtask 26.2.1: Collect diagnostics from existing command subsystems
-  - [ ] Subtask 26.2.2: Detect drift from expected profile/policy baselines
-  - [ ] Subtask 26.2.3: Persist score history and trend snapshots
+- [x] Task 26.2: Implement health collector
+  - [x] Subtask 26.2.1: Collect diagnostics from existing command subsystems
+  - [x] Subtask 26.2.2: Detect drift from expected profile/policy baselines
+  - [x] Subtask 26.2.3: Persist score history and trend snapshots
+  - [x] Notes: Added `scripts/health_score_collector.py` backend to collect repo/runtime signals (validation target readiness, git hygiene, budget/hooks drift, background failures, freshness debt), compute weighted health status, apply suppression-window semantics, and persist latest+history snapshots under runtime state files.
 - [ ] Task 26.3: Command and reporting integration
   - [ ] Subtask 26.3.1: Add `/health status|trend|drift`
   - [ ] Subtask 26.3.2: Add JSON export for dashboards/CI

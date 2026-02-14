@@ -340,6 +340,13 @@ Task 26.1 health model contract notes:
 - weighted scoring now defines deterministic penalties and status thresholds (`healthy`, `degraded`, `critical`).
 - drift alert suppression now defines per-reason suppression keys, 24h default windows, and critical bypass behavior.
 
+Task 26.2 health collector backend notes:
+
+- backend module: `scripts/health_score_collector.py`
+- collector now aggregates repo/runtime health signals across validation targets, git hygiene, policy drift, automation reliability, and freshness debt.
+- scoring now applies weighted penalties with forced-status escalation rules from the Epic 26 contract.
+- runtime persistence now writes latest and append-only history snapshots plus suppression-window state for repeated drift alerts.
+
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
