@@ -42,6 +42,14 @@
       "description": "Run all diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
     },
+    "agent-doctor": {
+      "description": "Validate custom agent contracts and runtime discovery",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run $ARGUMENTS`\nShow only the command output."
+    },
+    "agent-doctor-json": {
+      "description": "Validate custom agent contracts in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run --json`\nShow only the command output."
+    },
     "complete": {
       "description": "Suggest slash commands by prefix (autocomplete helper)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."

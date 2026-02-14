@@ -124,6 +124,7 @@ HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
 LEARN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "learn_command.py"
+AGENT_DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "agent_doctor.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 AGENT_DIR = REPO_ROOT / "agent"
 
@@ -281,6 +282,23 @@ def main() -> int:
             and 'cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/"'
             in install_script,
             "installer should sync custom agent definitions to global agent directory",
+        )
+
+        agent_doctor_run = subprocess.run(
+            [sys.executable, str(AGENT_DOCTOR_SCRIPT), "run", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            agent_doctor_run.returncode == 0,
+            f"agent doctor should pass for required local agent roster: {agent_doctor_run.stderr}",
+        )
+        agent_doctor_report = parse_json_output(agent_doctor_run.stdout)
+        expect(
+            agent_doctor_report.get("result") == "PASS",
+            "agent doctor should report PASS for expected contracts",
         )
 
         healthy_signals = {

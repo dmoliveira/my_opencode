@@ -48,6 +48,13 @@ You can verify available agents with:
 opencode agent list
 ```
 
+Validate agent contract + runtime wiring with:
+
+```text
+/agent-doctor
+/agent-doctor-json
+```
+
 ---
 
 ## Real usage examples 🛠️
