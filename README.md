@@ -52,6 +52,7 @@ This setup keeps `build` as the default agent, and adds focused specialists for 
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
+Agent source-of-truth specs live in `agent/specs/*.json` and generate markdown via `scripts/build_agents.py`.
 
 Quick validation:
 

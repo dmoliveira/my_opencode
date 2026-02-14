@@ -200,8 +200,16 @@ Escalate to `oracle` when:
 ## Installation and sync notes 🔧
 
 - Agent files are stored in this repo under `agent/*.md`.
+- Source-of-truth specs live in `agent/specs/*.json` and generate `agent/*.md` via `scripts/build_agents.py`.
 - Installer copies them to `~/.config/opencode/agent/`.
 - `build` remains default via `opencode.json` (`default_agent: build`).
+
+Generation commands:
+
+```bash
+python3 scripts/build_agents.py --profile balanced
+python3 scripts/build_agents.py --profile balanced --check
+```
 
 If agents are not visible, run:
 

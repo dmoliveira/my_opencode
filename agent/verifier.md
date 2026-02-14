@@ -1,7 +1,6 @@
 ---
 description: >-
-  Read-only validation specialist for test/lint/build execution and failure
-  triage. Use after implementation chunks and before done claims.
+  Read-only validation specialist for test/lint/build execution and failure triage.
 mode: subagent
 tools:
   bash: true

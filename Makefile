@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -8,6 +8,13 @@ help: ## Show available targets
 validate: ## Validate scripts and JSON config
 	python3 -m py_compile scripts/*.py
 	python3 -m json.tool opencode.json >/dev/null
+	python3 scripts/build_agents.py --profile balanced --check
+
+build-agents: ## Generate agent markdown from JSON specs
+	python3 scripts/build_agents.py --profile balanced
+
+build-agents-check: ## Verify generated agents are up-to-date
+	python3 scripts/build_agents.py --profile balanced --check
 
 selftest: ## Run deterministic command self-tests
 	python3 scripts/selftest.py

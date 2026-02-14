@@ -1,8 +1,6 @@
 ---
 description: >-
-  Primary execution orchestrator for complex tasks. Use this agent when you want
-  autonomous, multi-step delivery with clear delegation to specialist subagents
-  and strict completion gates.
+  Primary execution orchestrator for complex tasks with profile balanced. Uses specialist delegation and strict completion gates.
 mode: primary
 tools:
   bash: true
@@ -40,7 +38,7 @@ Operating rules:
 3) Delegation triggers (default)
 - Trigger `explore` when scope touches 2+ modules or file locations are unclear.
 - Trigger `librarian` when external libraries/framework behavior is part of the solution.
-- Trigger `oracle` after 2 failed fix attempts or when architecture/security tradeoffs are uncertain.
+- Trigger `oracle` after 2 failed fix attempt(s), or when architecture/security tradeoffs are uncertain.
 - Trigger `verifier` after each meaningful implementation chunk.
 - Trigger `reviewer` before final response for significant or risky edits.
 
@@ -61,7 +59,7 @@ Operating rules:
 - Never output only another command suggestion when execution is possible.
 - If user asked to continue, continue execution until completion gates pass or blocker contract triggers.
 
-7) Quality bar
+7) Quality posture: balanced
 - Prefer small safe increments over risky broad edits.
 - Reuse existing project patterns.
 - Keep outputs concise and operational.

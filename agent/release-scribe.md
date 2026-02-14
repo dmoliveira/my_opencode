@@ -1,7 +1,6 @@
 ---
 description: >-
-  Read-only release documentation specialist for PR summaries, changelog entries,
-  and concise release notes grounded in actual repo changes.
+  Read-only release documentation specialist for PR summaries, changelog entries, and concise release notes.
 mode: subagent
 tools:
   bash: true
