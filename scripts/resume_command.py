@@ -20,6 +20,7 @@ from plan_execution_runtime import (  # type: ignore
     save_plan_execution_state,
 )
 from recovery_engine import (  # type: ignore
+    build_resume_hints,
     execute_resume,
     evaluate_resume_eligibility,
     explain_resume_reason,
@@ -94,6 +95,10 @@ def command_status(args: list[str]) -> int:
             "result": "FAIL",
             "reason_code": "resume_missing_checkpoint",
             "reason": explain_resume_reason("resume_missing_checkpoint"),
+            "resume_hints": build_resume_hints(
+                "resume_missing_checkpoint",
+                interruption_class=DEFAULT_INTERRUPTION_CLASS,
+            ),
             "eligible": False,
             "config": str(write_path),
         }
@@ -122,6 +127,16 @@ def command_status(args: list[str]) -> int:
         "attempt_count": int(eligibility.get("attempt_count", 0) or 0),
         "max_attempts": int(eligibility.get("max_attempts", 0) or 0),
         "checkpoint": eligibility.get("checkpoint"),
+        "resume_hints": build_resume_hints(
+            reason_code,
+            interruption_class=interruption,
+            checkpoint=(
+                eligibility.get("checkpoint")
+                if isinstance(eligibility.get("checkpoint"), dict)
+                else None
+            ),
+            cooldown_remaining=int(eligibility.get("cooldown_remaining", 0) or 0),
+        ),
         "config": str(write_path),
     }
     if json_output:
@@ -133,6 +148,12 @@ def command_status(args: list[str]) -> int:
         print(f"eligible: {'yes' if report['eligible'] else 'no'}")
         print(f"reason: {report['reason']}")
         print(f"attempts: {report['attempt_count']}/{report['max_attempts']}")
+        hints = report.get("resume_hints", {})
+        actions = hints.get("next_actions", []) if isinstance(hints, dict) else []
+        if actions:
+            print("resume_hints:")
+            for action in actions:
+                print(f"- {action}")
         print(f"config: {report['config']}")
     return 0
 
@@ -171,6 +192,10 @@ def command_now(args: list[str]) -> int:
             "result": "FAIL",
             "reason_code": "resume_missing_checkpoint",
             "reason": explain_resume_reason("resume_missing_checkpoint"),
+            "resume_hints": build_resume_hints(
+                "resume_missing_checkpoint",
+                interruption_class=DEFAULT_INTERRUPTION_CLASS,
+            ),
             "config": str(write_path),
         }
         print(json.dumps(report, indent=2) if json_output else report["reason"])
@@ -205,6 +230,16 @@ def command_now(args: list[str]) -> int:
         "cooldown_remaining": int(resume_result.get("cooldown_remaining", 0) or 0),
         "checkpoint": resume_result.get("checkpoint"),
         "resumed_steps": resume_result.get("resumed_steps", []),
+        "resume_hints": build_resume_hints(
+            reason_code,
+            interruption_class=interruption,
+            checkpoint=(
+                resume_result.get("checkpoint")
+                if isinstance(resume_result.get("checkpoint"), dict)
+                else None
+            ),
+            cooldown_remaining=int(resume_result.get("cooldown_remaining", 0) or 0),
+        ),
         "config": str(write_path),
     }
     if json_output:
@@ -214,6 +249,12 @@ def command_now(args: list[str]) -> int:
         print(f"status: {report['status']}")
         print(f"reason: {report['reason']}")
         print(f"resumed_steps: {len(report['resumed_steps'])}")
+        hints = report.get("resume_hints", {})
+        actions = hints.get("next_actions", []) if isinstance(hints, dict) else []
+        if actions:
+            print("resume_hints:")
+            for action in actions:
+                print(f"- {action}")
         print(f"config: {report['config']}")
     return 0 if report["result"] == "PASS" else 1
 
