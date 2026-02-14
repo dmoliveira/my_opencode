@@ -599,6 +599,14 @@ def execute_cycle(
             if completion_mode == "promise" and completion_signal:
                 updated["status"] = "completed"
                 updated["reason_code"] = "autopilot_completion_promise_detected"
+            elif completion_mode == "promise":
+                updated["status"] = "running"
+                updated["reason_code"] = "autopilot_waiting_for_completion_promise"
+                updated["blockers"] = ["completion_promise_missing"]
+                updated["next_actions"] = [
+                    f"emit <promise>{completion_promise}</promise> only when objective is truly complete",
+                    "continue execution until completion criteria are satisfied",
+                ]
             elif continuous_mode:
                 updated = _append_continuous_cycle(updated)
                 cycles_any = updated.get("cycles")
@@ -631,7 +639,9 @@ def execute_cycle(
                 "review report and confirm completion criteria",
                 "archive final run summary for future objectives",
             ]
-        else:
+        elif updated["reason_code"] not in {
+            "autopilot_waiting_for_completion_promise",
+        }:
             updated["next_actions"] = [
                 "continue next bounded cycle",
                 "pause run if confidence drops or scope uncertainty increases",
