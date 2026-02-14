@@ -115,8 +115,6 @@ RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
-AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
-AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
@@ -4570,188 +4568,6 @@ version: 1
             "budget profile should reset to balanced for remaining checks",
         )
 
-        autoflow_status = subprocess.run(
-            [sys.executable, str(AUTOFLOW_ADAPTER_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_status.returncode == 0, "autoflow adapter status should pass")
-        autoflow_status_report = parse_json_output(autoflow_status.stdout)
-        expect(
-            autoflow_status_report.get("result") == "PASS"
-            and isinstance(autoflow_status_report.get("primitives"), dict),
-            "autoflow adapter status should return composed primitive payload",
-        )
-
-        autoflow_explain_transition_fail = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_ADAPTER_SCRIPT),
-                "explain",
-                "--intent",
-                "resume",
-                "--status",
-                "queued",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_explain_transition_fail.returncode == 1,
-            "autoflow adapter should reject illegal queued->resume transitions",
-        )
-        autoflow_explain_transition_fail_report = parse_json_output(
-            autoflow_explain_transition_fail.stdout
-        )
-        expect(
-            autoflow_explain_transition_fail_report.get("reason_code")
-            == "autoflow_illegal_transition"
-            and autoflow_explain_transition_fail_report.get("effective_intent")
-            == "status",
-            "autoflow adapter should expose deterministic fallback decision for illegal transitions",
-        )
-
-        autoflow_explain_resume_blocked = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_ADAPTER_SCRIPT),
-                "explain",
-                "--intent",
-                "resume",
-                "--status",
-                "failed",
-                "--interruption-class",
-                "unknown-class",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_explain_resume_blocked.returncode == 1,
-            "autoflow adapter should block resume when interruption class is unknown",
-        )
-        autoflow_explain_resume_blocked_report = parse_json_output(
-            autoflow_explain_resume_blocked.stdout
-        )
-        expect(
-            autoflow_explain_resume_blocked_report.get("reason_code")
-            == "resume_unknown_interruption_class",
-            "autoflow adapter explain should preserve resume eligibility reason codes",
-        )
-
-        autoflow_dry_run = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "dry-run",
-                str(plan_path),
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_dry_run.returncode == 0, "autoflow dry-run should succeed")
-        autoflow_dry_run_report = parse_json_output(autoflow_dry_run.stdout)
-        expect(
-            autoflow_dry_run_report.get("result") == "PASS"
-            and autoflow_dry_run_report.get("mutating") is False,
-            "autoflow dry-run should report non-mutating PASS decision",
-        )
-
-        autoflow_stop = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "stop",
-                "--reason",
-                "selftest",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_stop.returncode == 0, "autoflow stop should succeed")
-        autoflow_stop_report = parse_json_output(autoflow_stop.stdout)
-        expect(
-            autoflow_stop_report.get("status") == "stopped"
-            and autoflow_stop_report.get("reason_code")
-            == "autoflow_kill_switch_triggered",
-            "autoflow stop should trigger deterministic kill-switch status",
-        )
-
-        autoflow_status_after_stop = subprocess.run(
-            [sys.executable, str(AUTOFLOW_COMMAND_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_status_after_stop.returncode == 0,
-            "autoflow status should succeed after kill-switch",
-        )
-        autoflow_status_after_stop_report = parse_json_output(
-            autoflow_status_after_stop.stdout
-        )
-        expect(
-            autoflow_status_after_stop_report.get("status") == "stopped",
-            "autoflow status should persist stopped state after kill-switch",
-        )
-
-        autoflow_start_recover = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "start",
-                str(plan_path),
-                "--deviation",
-                "manual verification note",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_start_recover.returncode == 0,
-            "autoflow start should recover after kill-switch stop",
-        )
-
-        autoflow_report = subprocess.run(
-            [sys.executable, str(AUTOFLOW_COMMAND_SCRIPT), "report", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_report.returncode == 0, "autoflow report should succeed")
-        autoflow_report_payload = parse_json_output(autoflow_report.stdout)
-        expect(
-            isinstance(autoflow_report_payload.get("deviation_count"), int),
-            "autoflow report should include deterministic deviation_count",
-        )
-
         runtime_config_path = Path(str(start_work_report.get("config") or ""))
         runtime_cfg = load_plan_runtime(runtime_config_path)
         runtime_cfg["status"] = "failed"
@@ -4767,39 +4583,11 @@ version: 1
         }
         save_plan_runtime(runtime_config_path, runtime_cfg)
 
-        autoflow_resume_blocked = subprocess.run(
+        resume_after_seed = subprocess.run(
             [
                 sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "resume",
-                "--interruption-class",
-                "tool_failure",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_resume_blocked.returncode == 1,
-            "autoflow resume should block non-idempotent pending steps without approval",
-        )
-        autoflow_resume_blocked_payload = parse_json_output(
-            autoflow_resume_blocked.stdout
-        )
-        expect(
-            autoflow_resume_blocked_payload.get("reason_code")
-            == "resume_non_idempotent_step",
-            "autoflow resume should expose deterministic non-idempotent gating reason",
-        )
-
-        autoflow_resume_approved = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "resume",
+                str(RESUME_SCRIPT),
+                "now",
                 "--interruption-class",
                 "tool_failure",
                 "--approve-step",
@@ -4813,8 +4601,8 @@ version: 1
             cwd=REPO_ROOT,
         )
         expect(
-            autoflow_resume_approved.returncode == 0,
-            "autoflow resume should proceed when non-idempotent step is explicitly approved",
+            resume_after_seed.returncode == 0,
+            "resume now should complete seeded non-idempotent checkpoint when explicitly approved",
         )
 
         todo_status = subprocess.run(

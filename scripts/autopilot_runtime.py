@@ -69,6 +69,7 @@ def _normalized_objective(objective: dict[str, Any]) -> dict[str, Any]:
         ),
         "max_budget": objective.get("max_budget") or objective.get("max-budget"),
         "risk_level": str(objective.get("risk_level") or "medium"),
+        "continuous_mode": bool(objective.get("continuous_mode", False)),
     }
 
 
@@ -118,6 +119,27 @@ def build_cycles(objective: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return cycles
+
+
+def _append_continuous_cycle(run: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(run)
+    cycles_any = updated.get("cycles")
+    cycles = cycles_any if isinstance(cycles_any, list) else []
+    next_ordinal = len(cycles) + 1
+    objective_any = updated.get("objective")
+    objective = objective_any if isinstance(objective_any, dict) else {}
+    goal = str(objective.get("goal") or "continue objective").strip()
+    title = f"{goal} (cycle {next_ordinal})"
+    cycles.append(
+        {
+            "cycle_id": f"cycle-{next_ordinal}",
+            "ordinal": next_ordinal,
+            "title": title,
+            "state": "pending",
+        }
+    )
+    updated["cycles"] = cycles
+    return updated
 
 
 def _budget_profile_from_objective(max_budget: Any) -> str:
@@ -268,7 +290,11 @@ def execute_cycle(
             and str(cycle.get("state") or "pending") == "done"
         )
 
-        if pending == 0 and len(cycles) > 0:
+        objective_any = updated.get("objective")
+        objective = objective_any if isinstance(objective_any, dict) else {}
+        continuous_mode = bool(objective.get("continuous_mode", False))
+
+        if pending == 0 and len(cycles) > 0 and not continuous_mode:
             updated["status"] = "completed"
             updated["reason_code"] = "autopilot_objective_completed"
             updated["blockers"] = []
@@ -313,6 +339,23 @@ def execute_cycle(
                 "runtime_path": str(runtime_file),
                 "checkpoint": snapshot,
             }
+
+        if pending == 0 and continuous_mode:
+            updated = _append_continuous_cycle(updated)
+            cycles_any = updated.get("cycles")
+            cycles = cycles_any if isinstance(cycles_any, list) else []
+            pending = sum(
+                1
+                for cycle in cycles
+                if isinstance(cycle, dict)
+                and str(cycle.get("state") or "pending") == "pending"
+            )
+            done = sum(
+                1
+                for cycle in cycles
+                if isinstance(cycle, dict)
+                and str(cycle.get("state") or "pending") == "done"
+            )
 
         updated["status"] = "running"
         updated["reason_code"] = "autopilot_waiting_for_execution_evidence"
@@ -455,8 +498,18 @@ def execute_cycle(
                 progressed = True
                 break
         if not progressed:
-            updated["status"] = "completed"
-            updated["reason_code"] = "autopilot_objective_completed"
+            objective_any = updated.get("objective")
+            objective = objective_any if isinstance(objective_any, dict) else {}
+            continuous_mode = bool(objective.get("continuous_mode", False))
+            if continuous_mode:
+                updated = _append_continuous_cycle(updated)
+                cycles_any = updated.get("cycles")
+                cycles = cycles_any if isinstance(cycles_any, list) else []
+                updated["status"] = "running"
+                updated["reason_code"] = "autopilot_cycle_queued"
+            else:
+                updated["status"] = "completed"
+                updated["reason_code"] = "autopilot_objective_completed"
 
         pending = sum(
             1
