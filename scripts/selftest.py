@@ -115,8 +115,6 @@ RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
-AUTOFLOW_ADAPTER_SCRIPT = REPO_ROOT / "scripts" / "autoflow_adapter.py"
-AUTOFLOW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
@@ -126,7 +124,10 @@ HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
 LEARN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "learn_command.py"
+AGENT_DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "agent_doctor.py"
+BUILD_AGENTS_SCRIPT = REPO_ROOT / "scripts" / "build_agents.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
+AGENT_DIR = REPO_ROOT / "agent"
 
 
 def run_script(
@@ -235,6 +236,89 @@ def main() -> int:
         home.mkdir(parents=True, exist_ok=True)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
+
+        # Agent operating contract sanity checks
+        expect(AGENT_DIR.exists(), "agent directory should exist")
+        required_agents = {
+            "orchestrator.md": {
+                "must": [
+                    "mode: primary",
+                    "Use `verifier` before claiming done",
+                    "Use `reviewer` for final quality/safety pass",
+                    "Anti-loop guard",
+                ]
+            },
+            "explore.md": {
+                "must": ["mode: subagent", "bash: false", "write: false", "edit: false"]
+            },
+            "librarian.md": {
+                "must": ["mode: subagent", "bash: false", "write: false", "edit: false"]
+            },
+            "oracle.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
+            "verifier.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
+            "reviewer.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
+            "release-scribe.md": {
+                "must": ["mode: subagent", "write: false", "edit: false"]
+            },
+        }
+        for filename, rules in required_agents.items():
+            path = AGENT_DIR / filename
+            expect(path.exists(), f"required agent file should exist: {filename}")
+            content = path.read_text(encoding="utf-8")
+            for marker in rules["must"]:
+                expect(
+                    marker in content,
+                    f"agent file {filename} should include marker: {marker}",
+                )
+
+        base_config_payload = load_json_file(cfg)
+        expect(
+            str(base_config_payload.get("default_agent") or "") == "build",
+            "default_agent should remain build",
+        )
+
+        install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
+        expect(
+            'mkdir -p "$CONFIG_DIR/agent"' in install_script
+            and 'cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/"'
+            in install_script,
+            "installer should sync custom agent definitions to global agent directory",
+        )
+
+        build_agents_check = subprocess.run(
+            [
+                sys.executable,
+                str(BUILD_AGENTS_SCRIPT),
+                "--profile",
+                "balanced",
+                "--check",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            build_agents_check.returncode == 0,
+            "build_agents check should pass when generated agent markdown is up-to-date",
+        )
+
+        agent_doctor_run = subprocess.run(
+            [sys.executable, str(AGENT_DOCTOR_SCRIPT), "run", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            agent_doctor_run.returncode == 0,
+            f"agent doctor should pass for required local agent roster: {agent_doctor_run.stderr}",
+        )
+        agent_doctor_report = parse_json_output(agent_doctor_run.stdout)
+        expect(
+            agent_doctor_report.get("result") == "PASS",
+            "agent doctor should report PASS for expected contracts",
+        )
 
         healthy_signals = {
             "observed_at": "2026-02-14T00:00:00Z",
@@ -3975,6 +4059,7 @@ version: 1
             run=autopilot_run,
             tool_call_increment=1,
             token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
             now_ts="2026-02-13T00:00:01Z",
         )
         expect(
@@ -3989,6 +4074,53 @@ version: 1
             isinstance(autopilot_cycle_1.get("run", {}).get("next_actions", []), list)
             and autopilot_cycle_1.get("run", {}).get("next_actions"),
             "autopilot execute cycle should emit actionable next_actions",
+        )
+
+        autopilot_promise_objective = {
+            "goal": "Ship continuously until promise token is emitted",
+            "scope": "scripts/autopilot_runtime.py",
+            "max-budget": "balanced",
+            "completion-mode": "promise",
+            "completion-promise": "DONE",
+        }
+        autopilot_promise_init = initialize_run(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            objective=autopilot_promise_objective,
+            actor="selftest",
+        )
+        expect(
+            autopilot_promise_init.get("result") == "PASS",
+            "autopilot should allow promise-mode objective without explicit done-criteria",
+        )
+        autopilot_promise_cycle = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_promise_init.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            now_ts="2026-02-13T00:00:01Z",
+        )
+        expect(
+            autopilot_promise_cycle.get("run", {}).get("status") == "running",
+            "autopilot promise mode should remain running when completion promise is not signaled",
+        )
+        autopilot_promise_complete = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_promise_cycle.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            now_ts="2026-02-13T00:00:02Z",
+        )
+        expect(
+            autopilot_promise_complete.get("run", {}).get("status") == "completed"
+            and autopilot_promise_complete.get("run", {}).get("reason_code")
+            == "autopilot_completion_promise_detected",
+            "autopilot promise mode should complete when completion signal is provided",
         )
 
         autopilot_cycle_scope_stop = execute_cycle(
@@ -4020,6 +4152,7 @@ version: 1
             run=dict(autopilot_cycle_1.get("run", {})),
             tool_call_increment=500,
             token_increment=500_000,
+            touched_paths=["scripts/autopilot_runtime.py"],
             now_ts="2026-02-13T00:00:02Z",
         )
         expect(
@@ -4209,6 +4342,8 @@ version: 1
                 "1",
                 "--token-estimate",
                 "50",
+                "--touched-paths",
+                "scripts/autopilot_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -4270,6 +4405,8 @@ version: 1
                 "999",
                 "--token-estimate",
                 "999999",
+                "--touched-paths",
+                "scripts/autopilot_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -4564,188 +4701,6 @@ version: 1
             "budget profile should reset to balanced for remaining checks",
         )
 
-        autoflow_status = subprocess.run(
-            [sys.executable, str(AUTOFLOW_ADAPTER_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_status.returncode == 0, "autoflow adapter status should pass")
-        autoflow_status_report = parse_json_output(autoflow_status.stdout)
-        expect(
-            autoflow_status_report.get("result") == "PASS"
-            and isinstance(autoflow_status_report.get("primitives"), dict),
-            "autoflow adapter status should return composed primitive payload",
-        )
-
-        autoflow_explain_transition_fail = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_ADAPTER_SCRIPT),
-                "explain",
-                "--intent",
-                "resume",
-                "--status",
-                "queued",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_explain_transition_fail.returncode == 1,
-            "autoflow adapter should reject illegal queued->resume transitions",
-        )
-        autoflow_explain_transition_fail_report = parse_json_output(
-            autoflow_explain_transition_fail.stdout
-        )
-        expect(
-            autoflow_explain_transition_fail_report.get("reason_code")
-            == "autoflow_illegal_transition"
-            and autoflow_explain_transition_fail_report.get("effective_intent")
-            == "status",
-            "autoflow adapter should expose deterministic fallback decision for illegal transitions",
-        )
-
-        autoflow_explain_resume_blocked = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_ADAPTER_SCRIPT),
-                "explain",
-                "--intent",
-                "resume",
-                "--status",
-                "failed",
-                "--interruption-class",
-                "unknown-class",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_explain_resume_blocked.returncode == 1,
-            "autoflow adapter should block resume when interruption class is unknown",
-        )
-        autoflow_explain_resume_blocked_report = parse_json_output(
-            autoflow_explain_resume_blocked.stdout
-        )
-        expect(
-            autoflow_explain_resume_blocked_report.get("reason_code")
-            == "resume_unknown_interruption_class",
-            "autoflow adapter explain should preserve resume eligibility reason codes",
-        )
-
-        autoflow_dry_run = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "dry-run",
-                str(plan_path),
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_dry_run.returncode == 0, "autoflow dry-run should succeed")
-        autoflow_dry_run_report = parse_json_output(autoflow_dry_run.stdout)
-        expect(
-            autoflow_dry_run_report.get("result") == "PASS"
-            and autoflow_dry_run_report.get("mutating") is False,
-            "autoflow dry-run should report non-mutating PASS decision",
-        )
-
-        autoflow_stop = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "stop",
-                "--reason",
-                "selftest",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_stop.returncode == 0, "autoflow stop should succeed")
-        autoflow_stop_report = parse_json_output(autoflow_stop.stdout)
-        expect(
-            autoflow_stop_report.get("status") == "stopped"
-            and autoflow_stop_report.get("reason_code")
-            == "autoflow_kill_switch_triggered",
-            "autoflow stop should trigger deterministic kill-switch status",
-        )
-
-        autoflow_status_after_stop = subprocess.run(
-            [sys.executable, str(AUTOFLOW_COMMAND_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_status_after_stop.returncode == 0,
-            "autoflow status should succeed after kill-switch",
-        )
-        autoflow_status_after_stop_report = parse_json_output(
-            autoflow_status_after_stop.stdout
-        )
-        expect(
-            autoflow_status_after_stop_report.get("status") == "stopped",
-            "autoflow status should persist stopped state after kill-switch",
-        )
-
-        autoflow_start_recover = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "start",
-                str(plan_path),
-                "--deviation",
-                "manual verification note",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_start_recover.returncode == 0,
-            "autoflow start should recover after kill-switch stop",
-        )
-
-        autoflow_report = subprocess.run(
-            [sys.executable, str(AUTOFLOW_COMMAND_SCRIPT), "report", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(autoflow_report.returncode == 0, "autoflow report should succeed")
-        autoflow_report_payload = parse_json_output(autoflow_report.stdout)
-        expect(
-            isinstance(autoflow_report_payload.get("deviation_count"), int),
-            "autoflow report should include deterministic deviation_count",
-        )
-
         runtime_config_path = Path(str(start_work_report.get("config") or ""))
         runtime_cfg = load_plan_runtime(runtime_config_path)
         runtime_cfg["status"] = "failed"
@@ -4761,39 +4716,11 @@ version: 1
         }
         save_plan_runtime(runtime_config_path, runtime_cfg)
 
-        autoflow_resume_blocked = subprocess.run(
+        resume_after_seed = subprocess.run(
             [
                 sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "resume",
-                "--interruption-class",
-                "tool_failure",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autoflow_resume_blocked.returncode == 1,
-            "autoflow resume should block non-idempotent pending steps without approval",
-        )
-        autoflow_resume_blocked_payload = parse_json_output(
-            autoflow_resume_blocked.stdout
-        )
-        expect(
-            autoflow_resume_blocked_payload.get("reason_code")
-            == "resume_non_idempotent_step",
-            "autoflow resume should expose deterministic non-idempotent gating reason",
-        )
-
-        autoflow_resume_approved = subprocess.run(
-            [
-                sys.executable,
-                str(AUTOFLOW_COMMAND_SCRIPT),
-                "resume",
+                str(RESUME_SCRIPT),
+                "now",
                 "--interruption-class",
                 "tool_failure",
                 "--approve-step",
@@ -4807,8 +4734,8 @@ version: 1
             cwd=REPO_ROOT,
         )
         expect(
-            autoflow_resume_approved.returncode == 0,
-            "autoflow resume should proceed when non-idempotent step is explicitly approved",
+            resume_after_seed.returncode == 0,
+            "resume now should complete seeded non-idempotent checkpoint when explicitly approved",
         )
 
         todo_status = subprocess.run(
@@ -5623,7 +5550,7 @@ version: 1
         )
         expect(
             any(
-                "resume now" in str(action) or "start-work status" in str(action)
+                "resume now" in str(action) or "autopilot status" in str(action)
                 for action in (
                     resume_status_ok_report.get("resume_hints", {}) or {}
                 ).get("next_actions", [])
@@ -6778,20 +6705,6 @@ version: 1
             "doctor browser check should pass",
         )
 
-        start_work_checks = [
-            check
-            for check in report.get("checks", [])
-            if check.get("name") == "start-work"
-        ]
-        expect(
-            bool(start_work_checks),
-            "doctor summary should include start-work check",
-        )
-        expect(
-            start_work_checks[0].get("ok") is True,
-            "doctor start-work check should pass",
-        )
-
         budget_checks = [
             check for check in report.get("checks", []) if check.get("name") == "budget"
         ]
@@ -6799,17 +6712,6 @@ version: 1
         expect(
             budget_checks[0].get("ok") is True,
             "doctor budget check should pass",
-        )
-
-        autoflow_checks = [
-            check
-            for check in report.get("checks", [])
-            if check.get("name") == "autoflow"
-        ]
-        expect(bool(autoflow_checks), "doctor summary should include autoflow check")
-        expect(
-            autoflow_checks[0].get("ok") is True,
-            "doctor autoflow check should pass",
         )
 
         todo_checks = [

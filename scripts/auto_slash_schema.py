@@ -297,7 +297,7 @@ def evaluate_precision(
         predicted_command = selected.get("command")
         if predicted_command:
             predicted += 1
-        if predicted_command == expected:
+        if predicted_command is not None and predicted_command == expected:
             correct += 1
         if expected is None and predicted_command is not None:
             unsafe += 1

@@ -17,7 +17,7 @@ MAX_RESUME_ATTEMPTS_DEFAULT = 3
 
 REASON_MESSAGES = {
     "resume_allowed": "resume is allowed from the latest safe checkpoint",
-    "resume_missing_checkpoint": "no checkpoint is available yet; run /start-work first",
+    "resume_missing_checkpoint": "no checkpoint is available yet; run /autopilot first",
     "resume_unknown_interruption_class": "the interruption class is not recognized",
     "resume_missing_runtime_artifacts": "runtime state is incomplete for recovery",
     "resume_attempt_limit_reached": "max resume attempts reached; manual escalation required",
@@ -79,7 +79,7 @@ def build_resume_hints(
         if isinstance(next_step_ordinal, int):
             hints.append(f"/resume now --interruption-class {safe_class} --json")
         else:
-            hints.append("/start-work status --json")
+            hints.append("/autopilot status --json")
     elif reason_code == "resume_non_idempotent_step":
         if isinstance(next_step_ordinal, int):
             hints.append(
@@ -98,11 +98,11 @@ def build_resume_hints(
         hints.append(f"/resume status --interruption-class {safe_class} --json")
     elif reason_code == "resume_attempt_limit_reached":
         hints.append(
-            "inspect runtime trail and restart with /start-work <plan.md> --json"
+            "inspect runtime trail and restart with /autopilot go --goal '<objective>' --json"
         )
         hints.append("/resume disable --json")
     elif reason_code == "resume_missing_checkpoint":
-        hints.append("/start-work <plan.md> --json")
+        hints.append("/autopilot go --goal '<objective>' --json")
     else:
         hints.append("/resume status --json")
 

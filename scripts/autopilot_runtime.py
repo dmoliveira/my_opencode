@@ -61,6 +61,12 @@ def _normalize_done_criteria(raw: Any) -> list[str]:
 
 
 def _normalized_objective(objective: dict[str, Any]) -> dict[str, Any]:
+    completion_mode = str(objective.get("completion_mode") or "promise").strip().lower()
+    if completion_mode not in {"promise", "objective"}:
+        completion_mode = "promise"
+    completion_promise = str(objective.get("completion_promise") or "DONE").strip()
+    if not completion_promise:
+        completion_promise = "DONE"
     return {
         "goal": str(objective.get("goal", "")).strip(),
         "scope": str(objective.get("scope", "")).strip(),
@@ -69,6 +75,9 @@ def _normalized_objective(objective: dict[str, Any]) -> dict[str, Any]:
         ),
         "max_budget": objective.get("max_budget") or objective.get("max-budget"),
         "risk_level": str(objective.get("risk_level") or "medium"),
+        "continuous_mode": bool(objective.get("continuous_mode", False)),
+        "completion_mode": completion_mode,
+        "completion_promise": completion_promise,
     }
 
 
@@ -79,7 +88,7 @@ def validate_objective(objective: dict[str, Any]) -> dict[str, Any]:
         missing.append("goal")
     if not norm["scope"]:
         missing.append("scope")
-    if not norm["done_criteria"]:
+    if norm["completion_mode"] == "objective" and not norm["done_criteria"]:
         missing.append("done-criteria")
     if not norm["max_budget"]:
         missing.append("max-budget")
@@ -108,6 +117,9 @@ def build_cycles(objective: dict[str, Any]) -> list[dict[str, Any]]:
         objective.get("done_criteria") or objective.get("done-criteria")
     )
     cycles: list[dict[str, Any]] = []
+    if not criteria:
+        fallback = str(objective.get("goal") or "advance objective").strip()
+        criteria = [fallback]
     for idx, item in enumerate(criteria, start=1):
         cycles.append(
             {
@@ -118,6 +130,27 @@ def build_cycles(objective: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return cycles
+
+
+def _append_continuous_cycle(run: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(run)
+    cycles_any = updated.get("cycles")
+    cycles = cycles_any if isinstance(cycles_any, list) else []
+    next_ordinal = len(cycles) + 1
+    objective_any = updated.get("objective")
+    objective = objective_any if isinstance(objective_any, dict) else {}
+    goal = str(objective.get("goal") or "continue objective").strip()
+    title = f"{goal} (cycle {next_ordinal})"
+    cycles.append(
+        {
+            "cycle_id": f"cycle-{next_ordinal}",
+            "ordinal": next_ordinal,
+            "title": title,
+            "state": "pending",
+        }
+    )
+    updated["cycles"] = cycles
+    return updated
 
 
 def _budget_profile_from_objective(max_budget: Any) -> str:
@@ -238,12 +271,22 @@ def execute_cycle(
     tool_call_increment: int,
     token_increment: int,
     touched_paths: list[str] | None = None,
+    completion_signal: bool = False,
+    assistant_text: str | None = None,
     now_ts: str | None = None,
 ) -> dict[str, Any]:
     objective = (
         run.get("objective", {}) if isinstance(run.get("objective"), dict) else {}
     )
     profile = _budget_profile_from_objective(objective.get("max_budget"))
+    completion_mode = str(objective.get("completion_mode") or "promise").strip().lower()
+    completion_promise = (
+        str(objective.get("completion_promise") or "DONE").strip() or "DONE"
+    )
+    normalized_assistant = str(assistant_text or "")
+    promise_tag = f"<promise>{completion_promise}</promise>"
+    if not completion_signal and normalized_assistant:
+        completion_signal = promise_tag.lower() in normalized_assistant.lower()
 
     scope_patterns = _scope_patterns(objective.get("scope"))
     paths = [str(item).strip() for item in (touched_paths or []) if str(item).strip()]
@@ -251,6 +294,189 @@ def execute_cycle(
 
     updated = dict(run)
     updated["updated_at"] = now_ts or now_iso()
+
+    if not paths:
+        cycles_any = updated.get("cycles")
+        cycles = cycles_any if isinstance(cycles_any, list) else []
+        pending = sum(
+            1
+            for cycle in cycles
+            if isinstance(cycle, dict)
+            and str(cycle.get("state") or "pending") == "pending"
+        )
+        done = sum(
+            1
+            for cycle in cycles
+            if isinstance(cycle, dict)
+            and str(cycle.get("state") or "pending") == "done"
+        )
+
+        objective_any = updated.get("objective")
+        objective = objective_any if isinstance(objective_any, dict) else {}
+        continuous_mode = bool(objective.get("continuous_mode", False))
+
+        if pending == 0 and completion_mode == "promise" and completion_signal:
+            updated["status"] = "completed"
+            updated["reason_code"] = "autopilot_completion_promise_detected"
+            updated["blockers"] = []
+            updated["next_actions"] = [
+                "review report and confirm completion promise output",
+                "archive final run summary for future objectives",
+            ]
+            updated["progress"] = {
+                "total_cycles": len(cycles),
+                "completed_cycles": done,
+                "pending_cycles": pending,
+            }
+            runtime_file = save_runtime(write_path, updated)
+            snapshot = write_snapshot(
+                write_path,
+                {
+                    "status": updated["status"],
+                    "plan": {
+                        "metadata": {"id": updated.get("run_id")},
+                        "path": str(runtime_file),
+                    },
+                    "steps": [
+                        {"ordinal": cycle.get("ordinal"), "state": cycle.get("state")}
+                        for cycle in cycles
+                        if isinstance(cycle, dict)
+                    ],
+                },
+                source="autopilot_cycle_promise_complete",
+                command_outcomes=[
+                    {
+                        "kind": "slash_command",
+                        "name": "/autopilot resume",
+                        "result": "PASS",
+                        "reason_code": updated["reason_code"],
+                        "summary": "autopilot completion promise detected and run finalized",
+                    }
+                ],
+            )
+            return {
+                "result": "PASS",
+                "run": updated,
+                "runtime_path": str(runtime_file),
+                "checkpoint": snapshot,
+            }
+
+        if (
+            pending == 0
+            and len(cycles) > 0
+            and completion_mode == "objective"
+            and not continuous_mode
+        ):
+            updated["status"] = "completed"
+            updated["reason_code"] = "autopilot_objective_completed"
+            updated["blockers"] = []
+            updated["next_actions"] = [
+                "review report and confirm objective done-criteria",
+                "archive final run summary for future objectives",
+            ]
+            updated["progress"] = {
+                "total_cycles": len(cycles),
+                "completed_cycles": done,
+                "pending_cycles": pending,
+            }
+            runtime_file = save_runtime(write_path, updated)
+            snapshot = write_snapshot(
+                write_path,
+                {
+                    "status": updated["status"],
+                    "plan": {
+                        "metadata": {"id": updated.get("run_id")},
+                        "path": str(runtime_file),
+                    },
+                    "steps": [
+                        {"ordinal": cycle.get("ordinal"), "state": cycle.get("state")}
+                        for cycle in cycles
+                        if isinstance(cycle, dict)
+                    ],
+                },
+                source="autopilot_cycle_completed",
+                command_outcomes=[
+                    {
+                        "kind": "slash_command",
+                        "name": "/autopilot resume",
+                        "result": "PASS",
+                        "reason_code": updated["reason_code"],
+                        "summary": "autopilot run already completed; no further touched paths required",
+                    }
+                ],
+            )
+            return {
+                "result": "PASS",
+                "run": updated,
+                "runtime_path": str(runtime_file),
+                "checkpoint": snapshot,
+            }
+
+        if pending == 0 and continuous_mode:
+            updated = _append_continuous_cycle(updated)
+            cycles_any = updated.get("cycles")
+            cycles = cycles_any if isinstance(cycles_any, list) else []
+            pending = sum(
+                1
+                for cycle in cycles
+                if isinstance(cycle, dict)
+                and str(cycle.get("state") or "pending") == "pending"
+            )
+            done = sum(
+                1
+                for cycle in cycles
+                if isinstance(cycle, dict)
+                and str(cycle.get("state") or "pending") == "done"
+            )
+
+        updated["status"] = "running"
+        updated["reason_code"] = "autopilot_waiting_for_execution_evidence"
+        updated["blockers"] = ["execution_evidence_missing"]
+        updated["next_actions"] = [
+            "run work cycle and include --touched-paths with concrete changed files",
+            "resume autopilot after at least one in-scope artifact change",
+        ]
+        if completion_mode == "promise":
+            updated["next_actions"].append(
+                f"output {promise_tag} once the objective is fully complete"
+            )
+        updated["progress"] = {
+            "total_cycles": len(cycles),
+            "completed_cycles": done,
+            "pending_cycles": pending,
+        }
+        runtime_file = save_runtime(write_path, updated)
+        snapshot = write_snapshot(
+            write_path,
+            {
+                "status": updated["status"],
+                "plan": {
+                    "metadata": {"id": updated.get("run_id")},
+                    "path": str(runtime_file),
+                },
+                "steps": [
+                    {"ordinal": cycle.get("ordinal"), "state": cycle.get("state")}
+                    for cycle in cycles
+                    if isinstance(cycle, dict)
+                ],
+            },
+            source="autopilot_cycle_waiting_for_evidence",
+            command_outcomes=[
+                {
+                    "kind": "slash_command",
+                    "name": "/autopilot resume",
+                    "result": "PASS",
+                    "reason_code": updated["reason_code"],
+                    "summary": "autopilot cycle held until concrete touched paths are provided",
+                }
+            ],
+        )
+        return {
+            "result": "PASS",
+            "run": updated,
+            "runtime_path": str(runtime_file),
+            "checkpoint": snapshot,
+        }
 
     if scope_violations:
         updated["status"] = "scope_stopped"
@@ -339,6 +565,9 @@ def execute_cycle(
         updated["status"] = "running"
         updated["reason_code"] = "autopilot_cycle_progressed"
         updated["blockers"] = []
+        objective_any = updated.get("objective")
+        objective = objective_any if isinstance(objective_any, dict) else {}
+        continuous_mode = bool(objective.get("continuous_mode", False))
         progressed = False
         for cycle in cycles:
             if not isinstance(cycle, dict):
@@ -347,9 +576,38 @@ def execute_cycle(
                 cycle["state"] = "done"
                 progressed = True
                 break
-        if not progressed:
+
+        if progressed and continuous_mode:
+            pending_after_progress = sum(
+                1
+                for cycle in cycles
+                if isinstance(cycle, dict)
+                and str(cycle.get("state") or "pending") == "pending"
+            )
+            if pending_after_progress == 0:
+                updated = _append_continuous_cycle(updated)
+                cycles_any = updated.get("cycles")
+                cycles = cycles_any if isinstance(cycles_any, list) else []
+                updated["reason_code"] = "autopilot_cycle_progressed_and_queued"
+
+        if completion_mode == "promise" and completion_signal:
             updated["status"] = "completed"
-            updated["reason_code"] = "autopilot_objective_completed"
+            updated["reason_code"] = "autopilot_completion_promise_detected"
+            updated["blockers"] = []
+
+        if not progressed:
+            if completion_mode == "promise" and completion_signal:
+                updated["status"] = "completed"
+                updated["reason_code"] = "autopilot_completion_promise_detected"
+            elif continuous_mode:
+                updated = _append_continuous_cycle(updated)
+                cycles_any = updated.get("cycles")
+                cycles = cycles_any if isinstance(cycles_any, list) else []
+                updated["status"] = "running"
+                updated["reason_code"] = "autopilot_cycle_queued"
+            else:
+                updated["status"] = "completed"
+                updated["reason_code"] = "autopilot_objective_completed"
 
         pending = sum(
             1
@@ -370,7 +628,7 @@ def execute_cycle(
         }
         if updated["status"] == "completed":
             updated["next_actions"] = [
-                "review report and confirm objective done-criteria",
+                "review report and confirm completion criteria",
                 "archive final run summary for future objectives",
             ]
         else:

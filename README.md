@@ -25,11 +25,12 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
+- 🤖 Built-in `/agent-doctor` command for custom agent contract and runtime checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
-- 🧭 Built-in `/autoflow` command for unified orchestration (`start|status|resume|stop|report|dry-run`).
+- 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
@@ -37,6 +38,32 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
 - 🧩 Clear, versioned config for experiments and rollbacks.
+
+## Agent roles (Tab menu)
+
+This setup keeps `build` as the default agent, and adds focused specialists for manual selection via `Tab`:
+
+- `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
+- `explore` (subagent): read-only internal codebase scout.
+- `librarian` (subagent): read-only external docs and OSS evidence researcher.
+- `oracle` (subagent): read-only architecture/debug advisor for hard tradeoffs.
+- `verifier` (subagent): read-only validation runner for test/lint/build checks.
+- `reviewer` (subagent): read-only quality/risk review pass before final delivery.
+- `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
+
+Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
+Agent source-of-truth specs live in `agent/specs/*.json` and generate markdown via `scripts/build_agents.py`.
+
+Quick validation:
+
+```text
+/agent-doctor
+/agent-doctor-json
+```
+
+Detailed guide: `docs/agents-playbook.md` 📘
+
+Operating contract: `instructions/agent_operating_contract.md` 🛡️
 
 ## Roadmap plan 🗺️
 
@@ -429,8 +456,9 @@ Task 27.4 learn verification notes:
 Task 28.1 autopilot contract notes:
 
 - policy contract: `instructions/autopilot_command_contract.md`
-- command surface now defines `/autopilot start|status|pause|resume|stop|report` with JSON output requirements.
-- objective schema now requires `goal`, `scope`, `done-criteria`, and `max-budget` before execution can start.
+- command surface now defines `/autopilot start|go|status|pause|resume|stop|report` with JSON output requirements.
+- objective schema now supports dual completion modes: `completion-mode=promise` (default, requires `<promise>DONE</promise>`) and `completion-mode=objective` (done-criteria gates).
+- `/autopilot start` and `/autopilot go` infer missing fields for context-first usage and default to promise-based continuous operation.
 - safety defaults now require dry-run preview before first stateful cycle and enforce budget/scope guardrails with explicit reason codes.
 
 Task 28.2 autopilot loop backend notes:
@@ -450,8 +478,10 @@ Task 28.3 autopilot control-integration notes:
 Task 28.4 autopilot command UX/workflow notes:
 
 - command module: `scripts/autopilot_command.py`
-- alias set in `opencode.json`: `/autopilot`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
-- unified workflow controls now expose `start|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
+- alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
+- objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
+- unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
+- legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
 - resume path now supports `--touched-paths <csv>` to enforce objective scope boundaries before cycle execution.
 
 ```bash
@@ -459,6 +489,13 @@ Task 28.4 autopilot command UX/workflow notes:
 /autopilot start --goal "patch failing smoke check" --scope "scripts/install.sh" --done-criteria "install-test passes" --max-budget conservative --json
 /autopilot status --json
 /autopilot report --json
+
+# Context-first one-shot iteration (start-or-resume and run bounded cycles)
+/autopilot go --goal "continue active docs request" --max-cycles 10 --json
+/continue-work "finish cheatsheet updates and validations"
+
+# Objective-gate completion mode (alternative to promise mode)
+/autopilot-objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
 
 # Feature objective (multi-step implementation)
 /autopilot start --goal "ship command UX polish" --scope "scripts/*.py, README.md" --done-criteria "code complete;docs updated;validation green" --max-budget balanced --json
@@ -1304,6 +1341,20 @@ Autocomplete-friendly shortcuts:
 /plugin-profile-experimental
 /plugin-doctor-json
 ```
+
+Global command helper shortcuts:
+
+```text
+/complete
+/complete auto
+/complete autopilot
+/ac resume
+/complete-families
+/complete-doctor
+```
+
+`/complete <prefix>` returns ranked slash command suggestions with descriptions.
+`/ac` is a short alias for `/complete`.
 
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
 

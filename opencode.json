@@ -42,6 +42,30 @@
       "description": "Run all diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
     },
+    "agent-doctor": {
+      "description": "Validate custom agent contracts and runtime discovery",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run $ARGUMENTS`\nShow only the command output."
+    },
+    "agent-doctor-json": {
+      "description": "Validate custom agent contracts in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run --json`\nShow only the command output."
+    },
+    "complete": {
+      "description": "Suggest slash commands by prefix (autocomplete helper)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
+    },
+    "ac": {
+      "description": "Short alias for /complete",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
+    },
+    "complete-families": {
+      "description": "List command families and counts",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" families`\nShow only the command output."
+    },
+    "complete-doctor": {
+      "description": "Diagnose autocomplete helper wiring",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" doctor --json`\nShow only the command output."
+    },
     "config": {
       "description": "Backup and restore OpenCode config files",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -298,49 +322,21 @@
       "description": "Run browser provider diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
     },
-    "start-work": {
-      "description": "Execute an approved plan artifact and persist checkpoints",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "start-work-status": {
-      "description": "Show latest plan execution status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" status --json`\nShow only the command output."
-    },
-    "start-work-deviations": {
-      "description": "Show captured plan execution deviations",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" deviations --json`\nShow only the command output."
-    },
-    "start-work-bg": {
-      "description": "Queue plan execution through background task manager",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS --background --json`\nShow only the command output."
-    },
-    "start-work-doctor-json": {
-      "description": "Run plan execution health diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" doctor --json`\nShow only the command output."
-    },
-    "autoflow": {
-      "description": "Run unified orchestration controls (start|status|resume|stop|report|dry-run)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "autoflow-status": {
-      "description": "Show current /autoflow orchestration status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" status --json`\nShow only the command output."
-    },
-    "autoflow-report": {
-      "description": "Show current /autoflow report payload in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" report --json`\nShow only the command output."
-    },
-    "autoflow-dry-run": {
-      "description": "Preview /autoflow actions without state mutation",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" dry-run $ARGUMENTS --json`\nShow only the command output."
-    },
-    "autoflow-stop": {
-      "description": "Trigger /autoflow kill-switch stop in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" stop $ARGUMENTS --json`\nShow only the command output."
-    },
     "autopilot": {
-      "description": "Run objective autopilot controls (start|status|pause|resume|stop|report|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" $ARGUMENTS`\nShow only the command output."
+      "description": "Continue current task autonomously with autopilot guardrails",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+    },
+    "autopilot-go": {
+      "description": "One-shot start-or-resume and iterate until terminal state or cycle cap",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go $ARGUMENTS --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+    },
+    "autopilot-objective": {
+      "description": "Run /autopilot with objective-gate completion mode",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode objective $ARGUMENTS --json`\nUse objective done-criteria gates to complete the run. Execute concrete work from current repo context and continue until objective gates pass or a concrete blocker is hit."
+    },
+    "continue-work": {
+      "description": "Continue current request with inferred autopilot objective and immediate execution",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
     "autopilot-status": {
       "description": "Show current /autopilot runtime status in JSON",

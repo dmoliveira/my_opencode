@@ -193,18 +193,6 @@ CHECKS = [
         ],
     },
     {
-        "name": "start-work",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("start_work_command.py")),
-        "command": [
-            sys.executable,
-            str(script_path("start_work_command.py")),
-            "doctor",
-            "--json",
-        ],
-    },
-    {
         "name": "session",
         "kind": "doctor-json",
         "optional": True,
@@ -213,18 +201,6 @@ CHECKS = [
             sys.executable,
             str(script_path("session_command.py")),
             "doctor",
-            "--json",
-        ],
-    },
-    {
-        "name": "autoflow",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("autoflow_command.py")),
-        "command": [
-            sys.executable,
-            str(script_path("autoflow_command.py")),
-            "status",
             "--json",
         ],
     },

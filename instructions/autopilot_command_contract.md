@@ -10,25 +10,28 @@ This contract defines `/autopilot` objective-runner behavior so autonomous execu
 
 ## Subcommand Surface
 
-`/autopilot` exposes six primary subcommands:
+`/autopilot` exposes lifecycle subcommands:
 
 1. `start` - register and begin a new objective run.
-2. `status` - show current lifecycle state, budget usage, and checkpoint position.
-3. `pause` - stop autonomous progression while preserving resumable state.
-4. `resume` - continue a paused run after re-validation of gates.
-5. `stop` - hard-stop execution with explicit reason and final status.
-6. `report` - emit structured summary of progress, blockers, and next actions.
+2. `go` - start-or-resume and execute bounded cycles until a terminal state or cycle cap.
+3. `status` - show current lifecycle state, budget usage, and checkpoint position.
+4. `pause` - stop autonomous progression while preserving resumable state.
+5. `resume` - continue a paused run after re-validation of gates.
+6. `stop` - hard-stop execution with explicit reason and final status.
+7. `report` - emit structured summary of progress, blockers, and next actions.
 
 All subcommands must support `--json` output.
 
 ## Objective Schema
 
-`/autopilot start` requires objective fields:
+Objective fields:
 
 - `goal` - outcome-oriented statement of intent.
 - `scope` - allowed files/modules/workflows; out-of-scope work is blocked.
 - `done-criteria` - measurable completion conditions.
 - `max-budget` - bounded budget profile or explicit limits.
+- `completion-mode` - `promise` (default) or `objective`.
+- `completion-promise` - token text used when `completion-mode=promise` (default: `DONE`).
 
 Optional fields:
 
@@ -36,7 +39,13 @@ Optional fields:
 - `handoff-mode` (`auto|manual`)
 - `approval-policy` (`none|required-before-execute|required-before-merge`)
 
-Missing required fields must fail with `objective_schema_invalid`.
+When objective fields are omitted in `start`/`go`, command-layer defaults may be inferred (`goal`, `scope="**"`, `done-criteria=goal`) and surfaced via `inferred_defaults` + warning metadata.
+Runtime schema validation still applies after inference; unresolved omissions must fail with `objective_schema_invalid`.
+
+Completion modes:
+
+- `promise` (default): run remains active until completion signal is detected (`<promise>{{completion-promise}}</promise>`), even if cycles are exhausted.
+- `objective`: run completes when objective done-criteria cycles are exhausted.
 
 ## Lifecycle States
 
