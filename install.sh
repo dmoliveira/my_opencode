@@ -187,7 +187,10 @@ if isinstance(steps, list) and len(steps) >= 2:
   steps[1]['idempotent']=False;
 p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"
     python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --json || true
-    python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
+    if ! python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json; then
+      sleep 31
+      python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
+    fi
   fi
   if [ -f "$INSTALL_DIR/scripts/safe_edit_command.py" ]; then
     python3 "$INSTALL_DIR/scripts/safe_edit_command.py" status --json
