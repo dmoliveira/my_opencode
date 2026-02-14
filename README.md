@@ -457,7 +457,8 @@ Task 28.1 autopilot contract notes:
 
 - policy contract: `instructions/autopilot_command_contract.md`
 - command surface now defines `/autopilot start|go|status|pause|resume|stop|report` with JSON output requirements.
-- objective schema still validates `goal`, `scope`, `done-criteria`, and `max-budget`; `/autopilot start` and `/autopilot go` now infer missing fields for context-first usage.
+- objective schema now supports dual completion modes: `completion-mode=promise` (default, requires `<promise>DONE</promise>`) and `completion-mode=objective` (done-criteria gates).
+- `/autopilot start` and `/autopilot go` infer missing fields for context-first usage and default to promise-based continuous operation.
 - safety defaults now require dry-run preview before first stateful cycle and enforce budget/scope guardrails with explicit reason codes.
 
 Task 28.2 autopilot loop backend notes:
@@ -478,6 +479,7 @@ Task 28.4 autopilot command UX/workflow notes:
 
 - command module: `scripts/autopilot_command.py`
 - alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
+- objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
 - resume path now supports `--touched-paths <csv>` to enforce objective scope boundaries before cycle execution.
@@ -491,6 +493,9 @@ Task 28.4 autopilot command UX/workflow notes:
 # Context-first one-shot iteration (start-or-resume and run bounded cycles)
 /autopilot go --goal "continue active docs request" --max-cycles 10 --json
 /continue-work "finish cheatsheet updates and validations"
+
+# Objective-gate completion mode (alternative to promise mode)
+/autopilot-objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
 
 # Feature objective (multi-step implementation)
 /autopilot start --goal "ship command UX polish" --scope "scripts/*.py, README.md" --done-criteria "code complete;docs updated;validation green" --max-budget balanced --json
