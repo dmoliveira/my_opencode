@@ -683,12 +683,12 @@ Every command-oriented epic must ship all of the following:
   - [x] Subtask 18.1.2: Define language/tool availability checks
   - [x] Subtask 18.1.3: Define text-mode fallback when semantic tooling is missing
   - [x] Notes: Added `instructions/safe_edit_capability_matrix.md` with operation/backend matrix, deterministic availability checks, guarded text-fallback rules, and reason-code contract.
-- [ ] Task 18.2: Implement semantic edit adapters
+- [x] Task 18.2: Implement semantic edit adapters
   - [x] Subtask 18.2.1: Add LSP adapter for symbol-aware operations
   - [x] Subtask 18.2.2: Add AST adapter for deterministic structural edits
   - [x] Subtask 18.2.3: Add diff validation for changed references
   - [x] Notes: Added `scripts/safe_edit_adapters.py` with deterministic operation/backend selection (`lsp`, `ast`, guarded `text`) and changed-reference validation helpers, plus selftest coverage for fallback/ambiguity/validation outcomes.
-- [ ] Task 18.3: Command integration
+- [x] Task 18.3: Command integration
   - [x] Subtask 18.3.1: Add `/safe-edit` or mode flag integration with `/refactor-lite`
   - [x] Subtask 18.3.2: Add status/doctor checks for available semantic tools
   - [x] Subtask 18.3.3: Document safe-edit best practices and limitations
@@ -1131,6 +1131,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Complete E6-T3 resume support with actionable `resume_hints` outputs and digest-integrated recovery cues.
 - [x] 2026-02-14: Close E28-T5 verification task and mark Epic 28 done after validating lifecycle and install smoke coverage.
 - [x] 2026-02-14: Reconcile roadmap dashboard drift for E25-E27 and mark cross-cutting delivery status done for consistency with completed tasks.
+- [x] 2026-02-14: Reconcile Epic 18 checkbox state so Task 18.2/18.3 match completed subtasks and notes.
 
 ---
 
