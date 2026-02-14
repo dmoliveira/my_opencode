@@ -328,7 +328,7 @@ Every command-oriented epic must ship all of the following:
 
 ## Epic 6 - Session Intelligence and Resume Tooling
 
-**Status:** `in_progress`
+**Status:** `done`
 **Priority:** Medium
 **Goal:** Add lightweight session listing/search and structured resume cues.
 **Depends on:** Epic 2
@@ -1067,13 +1067,20 @@ Every command-oriented epic must ship all of the following:
     - [x] Active scope: keep exactly one epic marked `in_progress` unless emergency/hotfix overlap is explicitly documented.
     - [x] Deferred hygiene: represent non-active backlog epics as `paused` or `postponed`, not `in_progress`.
     - [x] Monthly: review paused/postponed epics at least once every 30 days and capture decisions in `Decision Log`.
-- [ ] Task C4: Command UX baseline (quality-of-life required)
-  - [ ] Subtask C4.1: Add command autocomplete shortcuts in `opencode.json`
-  - [ ] Subtask C4.2: Add command help and doctor JSON outputs
-  - [ ] Subtask C4.3: Add code-assistant guidance snippets (inputs, expected outputs, safe defaults)
-  - [ ] Subtask C4.4: Add tips/troubleshooting output for common failures
-  - [ ] Subtask C4.5: Add hover-like inline explanation docs (what it does, when to use, limits)
-  - [ ] Subtask C4.6: Add at least one easy-path command alias for frequent workflows
+- [x] Task C4: Command UX baseline (quality-of-life required)
+  - [x] Subtask C4.1: Add command autocomplete shortcuts in `opencode.json`
+  - [x] Subtask C4.2: Add command help and doctor JSON outputs
+  - [x] Subtask C4.3: Add code-assistant guidance snippets (inputs, expected outputs, safe defaults)
+  - [x] Subtask C4.4: Add tips/troubleshooting output for common failures
+  - [x] Subtask C4.5: Add hover-like inline explanation docs (what it does, when to use, limits)
+  - [x] Subtask C4.6: Add at least one easy-path command alias for frequent workflows
+  - [x] Notes: Baseline is now standardized across command families using alias shortcuts in `opencode.json`, `*-help` and `*-doctor-json` pathways, installer hints, and README quick-reference snippets.
+  - [x] UX baseline checklist:
+    - [x] Autocomplete/shortcut aliases exist for core command families (`/doctor*`, `/config*`, `/bg*`, `/stack*`, `/autoflow*`, `/autopilot*`, `/release-train*`, `/hotfix*`, `/health*`, `/learn*`).
+    - [x] Help/doctor paths are consistently available either as explicit aliases or command-level `help`/`doctor --json` subcommands.
+    - [x] README contains command snippets with safe defaults and operator-focused examples.
+    - [x] Installer output includes fast-path hints and troubleshooting-oriented follow-up commands.
+    - [x] Frequent workflows expose easy-path shortcuts (status/report/doctor variants) to reduce argument overhead.
 
 ## Roadmap QA Checklist
 
@@ -1091,6 +1098,7 @@ Run this checklist for every roadmap refinement pass:
 Use this log to track what changed week by week.
 
 - [x] 2026-02-14: Completed C1-C3 cross-cutting roadmap governance tasks; next focus is Task C4 command UX baseline while keeping only Epic 6 as `in_progress`.
+- [x] 2026-02-14: Completed C4 command UX baseline governance task; next focus returns to Epic 6 scoped delivery work.
 
 ## Execution Queue (Simplified)
 
@@ -1114,6 +1122,7 @@ Use this log to track what changed week by week.
 - [x] 2026-02-14: Complete C1 release slicing plan with deterministic phase gates across A-N and keep deferred queue aligned with current epic statuses.
 - [x] 2026-02-14: Complete C3 tracking cadence rules (weekly update, single active epic policy, and monthly paused/postponed review requirement).
 - [x] 2026-02-14: Monthly paused/postponed review checkpoint: keep E10 `paused` and E7 `postponed`; no promotion due to current value/risk profile.
+- [x] 2026-02-14: Complete C4 command UX baseline and standardize alias/help/doctor usability expectations across command families.
 
 ---
 
