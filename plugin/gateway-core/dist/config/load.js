@@ -82,6 +82,9 @@ export function loadGatewayConfig(raw) {
     const tasksTodowriteSource = source.tasksTodowriteDisabler && typeof source.tasksTodowriteDisabler === "object"
         ? source.tasksTodowriteDisabler
         : {};
+    const taskResumeInfoSource = source.taskResumeInfo && typeof source.taskResumeInfo === "object"
+        ? source.taskResumeInfo
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -195,6 +198,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof tasksTodowriteSource.enabled === "boolean"
                 ? tasksTodowriteSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.tasksTodowriteDisabler.enabled,
+        },
+        taskResumeInfo: {
+            enabled: typeof taskResumeInfoSource.enabled === "boolean"
+                ? taskResumeInfoSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.taskResumeInfo.enabled,
         },
         quality: {
             profile: qualityProfile,

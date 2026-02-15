@@ -103,6 +103,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.tasksTodowriteDisabler && typeof source.tasksTodowriteDisabler === "object"
       ? (source.tasksTodowriteDisabler as Record<string, unknown>)
       : {}
+  const taskResumeInfoSource =
+    source.taskResumeInfo && typeof source.taskResumeInfo === "object"
+      ? (source.taskResumeInfo as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -264,6 +268,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof tasksTodowriteSource.enabled === "boolean"
           ? tasksTodowriteSource.enabled
           : DEFAULT_GATEWAY_CONFIG.tasksTodowriteDisabler.enabled,
+    },
+    taskResumeInfo: {
+      enabled:
+        typeof taskResumeInfoSource.enabled === "boolean"
+          ? taskResumeInfoSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.taskResumeInfo.enabled,
     },
     quality: {
       profile: qualityProfile,

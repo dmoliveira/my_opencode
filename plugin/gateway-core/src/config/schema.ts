@@ -103,6 +103,11 @@ export interface TasksTodowriteDisablerConfig {
   enabled: boolean
 }
 
+// Declares resume hint injection settings for task outputs.
+export interface TaskResumeInfoConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -125,6 +130,7 @@ export interface GatewayConfig {
   writeExistingFileGuard: WriteExistingFileGuardConfig
   subagentQuestionBlocker: SubagentQuestionBlockerConfig
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig
+  taskResumeInfo: TaskResumeInfoConfig
   quality: QualityConfig
 }
 
@@ -150,6 +156,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "write-existing-file-guard",
       "subagent-question-blocker",
       "tasks-todowrite-disabler",
+      "task-resume-info",
       "safety",
     ],
   },
@@ -207,6 +214,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     sessionPatterns: ["task-", "subagent"],
   },
   tasksTodowriteDisabler: {
+    enabled: true,
+  },
+  taskResumeInfo: {
     enabled: true,
   },
   quality: {

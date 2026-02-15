@@ -20,6 +20,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "write-existing-file-guard",
             "subagent-question-blocker",
             "tasks-todowrite-disabler",
+            "task-resume-info",
             "safety",
         ],
     },
@@ -77,6 +78,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         sessionPatterns: ["task-", "subagent"],
     },
     tasksTodowriteDisabler: {
+        enabled: true,
+    },
+    taskResumeInfo: {
         enabled: true,
     },
     quality: {
