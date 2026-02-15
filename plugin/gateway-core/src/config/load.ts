@@ -20,6 +20,18 @@ function nonNegativeInt(value: unknown, fallback: number): number {
   return parsed
 }
 
+// Coerces unknown value into bounded float fallback.
+function boundedFloat(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number.parseFloat(String(value ?? ""))
+  if (!Number.isFinite(parsed)) {
+    return fallback
+  }
+  if (parsed < min || parsed > max) {
+    return fallback
+  }
+  return parsed
+}
+
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}
@@ -34,6 +46,34 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const qualitySource =
     source.quality && typeof source.quality === "object"
       ? (source.quality as Record<string, unknown>)
+      : {}
+  const truncatorSource =
+    source.toolOutputTruncator && typeof source.toolOutputTruncator === "object"
+      ? (source.toolOutputTruncator as Record<string, unknown>)
+      : {}
+  const contextWindowSource =
+    source.contextWindowMonitor && typeof source.contextWindowMonitor === "object"
+      ? (source.contextWindowMonitor as Record<string, unknown>)
+      : {}
+  const preemptiveCompactionSource =
+    source.preemptiveCompaction && typeof source.preemptiveCompaction === "object"
+      ? (source.preemptiveCompaction as Record<string, unknown>)
+      : {}
+  const sessionRecoverySource =
+    source.sessionRecovery && typeof source.sessionRecovery === "object"
+      ? (source.sessionRecovery as Record<string, unknown>)
+      : {}
+  const delegateTaskRetrySource =
+    source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
+      ? (source.delegateTaskRetry as Record<string, unknown>)
+      : {}
+  const stopGuardSource =
+    source.stopContinuationGuard && typeof source.stopContinuationGuard === "object"
+      ? (source.stopContinuationGuard as Record<string, unknown>)
+      : {}
+  const keywordDetectorSource =
+    source.keywordDetector && typeof source.keywordDetector === "object"
+      ? (source.keywordDetector as Record<string, unknown>)
       : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
@@ -50,6 +90,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     qualitySource.profile === "off" || qualitySource.profile === "strict"
       ? qualitySource.profile
       : "fast"
+  const truncatorTools =
+    truncatorSource.tools === undefined
+      ? DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.tools
+      : stringList(truncatorSource.tools)
 
   return {
     hooks: {
@@ -79,6 +123,73 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         autopilotSource.completionPromise.trim().length > 0
           ? autopilotSource.completionPromise.trim()
           : DEFAULT_GATEWAY_CONFIG.autopilotLoop.completionPromise,
+    },
+    toolOutputTruncator: {
+      enabled:
+        typeof truncatorSource.enabled === "boolean"
+          ? truncatorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.enabled,
+      maxChars: nonNegativeInt(
+        truncatorSource.maxChars,
+        DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.maxChars,
+      ),
+      maxLines: nonNegativeInt(
+        truncatorSource.maxLines,
+        DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.maxLines,
+      ),
+      tools: truncatorTools,
+    },
+    contextWindowMonitor: {
+      enabled:
+        typeof contextWindowSource.enabled === "boolean"
+          ? contextWindowSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.enabled,
+      warningThreshold: boundedFloat(
+        contextWindowSource.warningThreshold,
+        0.5,
+        0.95,
+        DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.warningThreshold,
+      ),
+    },
+    preemptiveCompaction: {
+      enabled:
+        typeof preemptiveCompactionSource.enabled === "boolean"
+          ? preemptiveCompactionSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.enabled,
+      warningThreshold: boundedFloat(
+        preemptiveCompactionSource.warningThreshold,
+        0.6,
+        0.95,
+        DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.warningThreshold,
+      ),
+    },
+    sessionRecovery: {
+      enabled:
+        typeof sessionRecoverySource.enabled === "boolean"
+          ? sessionRecoverySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.sessionRecovery.enabled,
+      autoResume:
+        typeof sessionRecoverySource.autoResume === "boolean"
+          ? sessionRecoverySource.autoResume
+          : DEFAULT_GATEWAY_CONFIG.sessionRecovery.autoResume,
+    },
+    delegateTaskRetry: {
+      enabled:
+        typeof delegateTaskRetrySource.enabled === "boolean"
+          ? delegateTaskRetrySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.delegateTaskRetry.enabled,
+    },
+    stopContinuationGuard: {
+      enabled:
+        typeof stopGuardSource.enabled === "boolean"
+          ? stopGuardSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.stopContinuationGuard.enabled,
+    },
+    keywordDetector: {
+      enabled:
+        typeof keywordDetectorSource.enabled === "boolean"
+          ? keywordDetectorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.keywordDetector.enabled,
     },
     quality: {
       profile: qualityProfile,

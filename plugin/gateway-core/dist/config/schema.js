@@ -3,7 +3,18 @@ export const DEFAULT_GATEWAY_CONFIG = {
     hooks: {
         enabled: true,
         disabled: [],
-        order: ["autopilot-loop", "continuation", "safety"],
+        order: [
+            "autopilot-loop",
+            "continuation",
+            "tool-output-truncator",
+            "context-window-monitor",
+            "preemptive-compaction",
+            "session-recovery",
+            "delegate-task-retry",
+            "stop-continuation-guard",
+            "keyword-detector",
+            "safety",
+        ],
     },
     autopilotLoop: {
         enabled: true,
@@ -11,6 +22,33 @@ export const DEFAULT_GATEWAY_CONFIG = {
         orphanMaxAgeHours: 12,
         completionMode: "promise",
         completionPromise: "DONE",
+    },
+    toolOutputTruncator: {
+        enabled: true,
+        maxChars: 12000,
+        maxLines: 220,
+        tools: ["bash", "Bash", "read", "Read", "grep", "Grep", "webfetch", "WebFetch", "glob", "Glob"],
+    },
+    contextWindowMonitor: {
+        enabled: true,
+        warningThreshold: 0.7,
+    },
+    preemptiveCompaction: {
+        enabled: true,
+        warningThreshold: 0.78,
+    },
+    sessionRecovery: {
+        enabled: true,
+        autoResume: true,
+    },
+    delegateTaskRetry: {
+        enabled: true,
+    },
+    stopContinuationGuard: {
+        enabled: true,
+    },
+    keywordDetector: {
+        enabled: true,
     },
     quality: {
         profile: "fast",

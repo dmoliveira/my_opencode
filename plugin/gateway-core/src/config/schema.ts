@@ -26,6 +26,47 @@ export interface QualityConfig {
   }
 }
 
+// Declares output truncation guardrail settings for large tool output.
+export interface ToolOutputTruncatorConfig {
+  enabled: boolean
+  maxChars: number
+  maxLines: number
+  tools: string[]
+}
+
+// Declares context window monitor settings for token pressure warnings.
+export interface ContextWindowMonitorConfig {
+  enabled: boolean
+  warningThreshold: number
+}
+
+// Declares preemptive compaction settings for high token pressure sessions.
+export interface PreemptiveCompactionConfig {
+  enabled: boolean
+  warningThreshold: number
+}
+
+// Declares session recovery settings for event-driven auto-resume attempts.
+export interface SessionRecoveryConfig {
+  enabled: boolean
+  autoResume: boolean
+}
+
+// Declares retry guidance settings for failed delegated task calls.
+export interface DelegateTaskRetryConfig {
+  enabled: boolean
+}
+
+// Declares continuation stop guard settings for loop stop persistence.
+export interface StopContinuationGuardConfig {
+  enabled: boolean
+}
+
+// Declares keyword mode detection settings for chat-intent hints.
+export interface KeywordDetectorConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -34,6 +75,13 @@ export interface GatewayConfig {
     order: string[]
   }
   autopilotLoop: AutopilotLoopConfig
+  toolOutputTruncator: ToolOutputTruncatorConfig
+  contextWindowMonitor: ContextWindowMonitorConfig
+  preemptiveCompaction: PreemptiveCompactionConfig
+  sessionRecovery: SessionRecoveryConfig
+  delegateTaskRetry: DelegateTaskRetryConfig
+  stopContinuationGuard: StopContinuationGuardConfig
+  keywordDetector: KeywordDetectorConfig
   quality: QualityConfig
 }
 
@@ -42,7 +90,18 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   hooks: {
     enabled: true,
     disabled: [],
-    order: ["autopilot-loop", "continuation", "safety"],
+    order: [
+      "autopilot-loop",
+      "continuation",
+      "tool-output-truncator",
+      "context-window-monitor",
+      "preemptive-compaction",
+      "session-recovery",
+      "delegate-task-retry",
+      "stop-continuation-guard",
+      "keyword-detector",
+      "safety",
+    ],
   },
   autopilotLoop: {
     enabled: true,
@@ -50,6 +109,33 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     orphanMaxAgeHours: 12,
     completionMode: "promise",
     completionPromise: "DONE",
+  },
+  toolOutputTruncator: {
+    enabled: true,
+    maxChars: 12000,
+    maxLines: 220,
+    tools: ["bash", "Bash", "read", "Read", "grep", "Grep", "webfetch", "WebFetch", "glob", "Glob"],
+  },
+  contextWindowMonitor: {
+    enabled: true,
+    warningThreshold: 0.7,
+  },
+  preemptiveCompaction: {
+    enabled: true,
+    warningThreshold: 0.78,
+  },
+  sessionRecovery: {
+    enabled: true,
+    autoResume: true,
+  },
+  delegateTaskRetry: {
+    enabled: true,
+  },
+  stopContinuationGuard: {
+    enabled: true,
+  },
+  keywordDetector: {
+    enabled: true,
   },
   quality: {
     profile: "fast",
