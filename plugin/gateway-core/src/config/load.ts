@@ -135,6 +135,30 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.secretLeakGuard && typeof source.secretLeakGuard === "object"
       ? (source.secretLeakGuard as Record<string, unknown>)
       : {}
+  const workflowConformanceSource =
+    source.workflowConformanceGuard && typeof source.workflowConformanceGuard === "object"
+      ? (source.workflowConformanceGuard as Record<string, unknown>)
+      : {}
+  const scopeDriftSource =
+    source.scopeDriftGuard && typeof source.scopeDriftGuard === "object"
+      ? (source.scopeDriftGuard as Record<string, unknown>)
+      : {}
+  const doneProofSource =
+    source.doneProofEnforcer && typeof source.doneProofEnforcer === "object"
+      ? (source.doneProofEnforcer as Record<string, unknown>)
+      : {}
+  const dependencyRiskSource =
+    source.dependencyRiskGuard && typeof source.dependencyRiskGuard === "object"
+      ? (source.dependencyRiskGuard as Record<string, unknown>)
+      : {}
+  const retryBudgetSource =
+    source.retryBudgetGuard && typeof source.retryBudgetGuard === "object"
+      ? (source.retryBudgetGuard as Record<string, unknown>)
+      : {}
+  const staleLoopExpirySource =
+    source.staleLoopExpiryGuard && typeof source.staleLoopExpiryGuard === "object"
+      ? (source.staleLoopExpiryGuard as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -364,6 +388,70 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         secretLeakSource.patterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
           : stringList(secretLeakSource.patterns),
+    },
+    workflowConformanceGuard: {
+      enabled:
+        typeof workflowConformanceSource.enabled === "boolean"
+          ? workflowConformanceSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.enabled,
+      protectedBranches:
+        workflowConformanceSource.protectedBranches === undefined
+          ? DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.protectedBranches
+          : stringList(workflowConformanceSource.protectedBranches),
+    },
+    scopeDriftGuard: {
+      enabled:
+        typeof scopeDriftSource.enabled === "boolean"
+          ? scopeDriftSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.scopeDriftGuard.enabled,
+      allowedPaths:
+        scopeDriftSource.allowedPaths === undefined
+          ? DEFAULT_GATEWAY_CONFIG.scopeDriftGuard.allowedPaths
+          : stringList(scopeDriftSource.allowedPaths),
+      blockOnDrift:
+        typeof scopeDriftSource.blockOnDrift === "boolean"
+          ? scopeDriftSource.blockOnDrift
+          : DEFAULT_GATEWAY_CONFIG.scopeDriftGuard.blockOnDrift,
+    },
+    doneProofEnforcer: {
+      enabled:
+        typeof doneProofSource.enabled === "boolean"
+          ? doneProofSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.doneProofEnforcer.enabled,
+      requiredMarkers:
+        doneProofSource.requiredMarkers === undefined
+          ? DEFAULT_GATEWAY_CONFIG.doneProofEnforcer.requiredMarkers
+          : stringList(doneProofSource.requiredMarkers),
+    },
+    dependencyRiskGuard: {
+      enabled:
+        typeof dependencyRiskSource.enabled === "boolean"
+          ? dependencyRiskSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.dependencyRiskGuard.enabled,
+      lockfilePatterns:
+        dependencyRiskSource.lockfilePatterns === undefined
+          ? DEFAULT_GATEWAY_CONFIG.dependencyRiskGuard.lockfilePatterns
+          : stringList(dependencyRiskSource.lockfilePatterns),
+    },
+    retryBudgetGuard: {
+      enabled:
+        typeof retryBudgetSource.enabled === "boolean"
+          ? retryBudgetSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.retryBudgetGuard.enabled,
+      maxRetries: nonNegativeInt(
+        retryBudgetSource.maxRetries,
+        DEFAULT_GATEWAY_CONFIG.retryBudgetGuard.maxRetries,
+      ),
+    },
+    staleLoopExpiryGuard: {
+      enabled:
+        typeof staleLoopExpirySource.enabled === "boolean"
+          ? staleLoopExpirySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.staleLoopExpiryGuard.enabled,
+      maxAgeMinutes: nonNegativeInt(
+        staleLoopExpirySource.maxAgeMinutes,
+        DEFAULT_GATEWAY_CONFIG.staleLoopExpiryGuard.maxAgeMinutes,
+      ),
     },
     quality: {
       profile: qualityProfile,

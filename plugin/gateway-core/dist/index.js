@@ -7,6 +7,8 @@ import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
+import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
+import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
 import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js";
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
@@ -15,6 +17,8 @@ import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
 import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js";
 import { createRulesInjectorHook } from "./hooks/rules-injector/index.js";
+import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js";
+import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
 import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
@@ -24,7 +28,9 @@ import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabl
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
 import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
+import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
+import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx) {
@@ -147,6 +153,35 @@ function configuredHooks(ctx) {
             enabled: cfg.secretLeakGuard.enabled,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
+        }),
+        createWorkflowConformanceGuardHook({
+            directory,
+            enabled: cfg.workflowConformanceGuard.enabled,
+            protectedBranches: cfg.workflowConformanceGuard.protectedBranches,
+        }),
+        createScopeDriftGuardHook({
+            directory,
+            enabled: cfg.scopeDriftGuard.enabled,
+            allowedPaths: cfg.scopeDriftGuard.allowedPaths,
+            blockOnDrift: cfg.scopeDriftGuard.blockOnDrift,
+        }),
+        createDoneProofEnforcerHook({
+            enabled: cfg.doneProofEnforcer.enabled,
+            requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+        }),
+        createDependencyRiskGuardHook({
+            directory,
+            enabled: cfg.dependencyRiskGuard.enabled,
+            lockfilePatterns: cfg.dependencyRiskGuard.lockfilePatterns,
+        }),
+        createRetryBudgetGuardHook({
+            enabled: cfg.retryBudgetGuard.enabled,
+            maxRetries: cfg.retryBudgetGuard.maxRetries,
+        }),
+        createStaleLoopExpiryGuardHook({
+            directory,
+            enabled: cfg.staleLoopExpiryGuard.enabled,
+            maxAgeMinutes: cfg.staleLoopExpiryGuard.maxAgeMinutes,
         }),
     ];
     if (!cfg.hooks.enabled) {

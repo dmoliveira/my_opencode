@@ -28,6 +28,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "question-label-truncator",
             "dangerous-command-guard",
             "secret-leak-guard",
+            "workflow-conformance-guard",
+            "scope-drift-guard",
+            "done-proof-enforcer",
+            "dependency-risk-guard",
+            "retry-budget-guard",
+            "stale-loop-expiry-guard",
             "safety",
         ],
     },
@@ -128,6 +134,31 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) KEY-----",
             "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
         ],
+    },
+    workflowConformanceGuard: {
+        enabled: true,
+        protectedBranches: ["main", "master"],
+    },
+    scopeDriftGuard: {
+        enabled: false,
+        allowedPaths: [],
+        blockOnDrift: true,
+    },
+    doneProofEnforcer: {
+        enabled: true,
+        requiredMarkers: ["validation", "test", "lint"],
+    },
+    dependencyRiskGuard: {
+        enabled: true,
+        lockfilePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock", "uv.lock", "Cargo.lock"],
+    },
+    retryBudgetGuard: {
+        enabled: true,
+        maxRetries: 3,
+    },
+    staleLoopExpiryGuard: {
+        enabled: true,
+        maxAgeMinutes: 120,
     },
     quality: {
         profile: "fast",
