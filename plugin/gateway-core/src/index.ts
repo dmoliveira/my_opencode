@@ -15,6 +15,7 @@ import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js"
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js"
 import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js"
 import { createRulesInjectorHook } from "./hooks/rules-injector/index.js"
+import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js"
 import { createSafetyHook } from "./hooks/safety/index.js"
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js"
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js"
@@ -212,6 +213,12 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: cfg.dangerousCommandGuard.enabled,
       blockedPatterns: cfg.dangerousCommandGuard.blockedPatterns,
+    }),
+    createSecretLeakGuardHook({
+      directory,
+      enabled: cfg.secretLeakGuard.enabled,
+      redactionToken: cfg.secretLeakGuard.redactionToken,
+      patterns: cfg.secretLeakGuard.patterns,
     }),
   ]
   if (!cfg.hooks.enabled) {

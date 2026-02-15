@@ -131,6 +131,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
       ? (source.dangerousCommandGuard as Record<string, unknown>)
       : {}
+  const secretLeakSource =
+    source.secretLeakGuard && typeof source.secretLeakGuard === "object"
+      ? (source.secretLeakGuard as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -346,6 +350,20 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         dangerousCommandSource.blockedPatterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.dangerousCommandGuard.blockedPatterns
           : stringList(dangerousCommandSource.blockedPatterns),
+    },
+    secretLeakGuard: {
+      enabled:
+        typeof secretLeakSource.enabled === "boolean"
+          ? secretLeakSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.enabled,
+      redactionToken:
+        typeof secretLeakSource.redactionToken === "string" && secretLeakSource.redactionToken.trim().length > 0
+          ? secretLeakSource.redactionToken
+          : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken,
+      patterns:
+        secretLeakSource.patterns === undefined
+          ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
+          : stringList(secretLeakSource.patterns),
     },
     quality: {
       profile: qualityProfile,
