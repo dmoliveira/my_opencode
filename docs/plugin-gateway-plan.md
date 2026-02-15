@@ -221,3 +221,7 @@ Recent progress:
 - `compaction-context-injector`: intentionally not adopted.
   - Rationale: preemptive compaction already runs with deterministic triggers and audit logging.
   - Risk: injecting extra context immediately before compaction can increase token pressure and reduce compaction effectiveness.
+
+- `compaction-todo-preserver`: intentionally not adopted.
+  - Rationale: this gateway profile disables task/todowrite tooling in favor of br issue tracking.
+  - Risk: preserving todo snapshots adds stale state complexity without benefit in the current workflow.
