@@ -15,6 +15,11 @@ if str(SCRIPT_DIR) not in sys.path:
 from autopilot_integration import integrate_controls  # type: ignore
 from autopilot_runtime import execute_cycle, initialize_run, load_runtime, save_runtime  # type: ignore
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from gateway_plugin_bridge import (  # type: ignore
+    bridge_start_loop,
+    bridge_stop_loop,
+    load_gateway_loop_state,
+)
 
 
 def usage() -> int:
@@ -193,6 +198,11 @@ def command_start(args: list[str]) -> int:
             initialized["warnings"].append(
                 "autopilot inferred missing objective fields; use explicit fields for tighter control"
             )
+    run_any = initialized.get("run")
+    if isinstance(run_any, dict):
+        initialized["gateway_loop_state_path"] = str(
+            bridge_start_loop(Path.cwd(), run_any)
+        )
     emit(initialized, as_json=as_json)
     return 0 if initialized.get("result") == "PASS" else 1
 
@@ -335,6 +345,8 @@ def command_go(args: list[str]) -> int:
         run_any = initialized.get("run")
         runtime = run_any if isinstance(run_any, dict) else {}
         started_new_run = True
+        if runtime:
+            bridge_start_loop(Path.cwd(), runtime)
 
     if not runtime:
         emit(
@@ -413,6 +425,7 @@ def command_go(args: list[str]) -> int:
         "run": current,
         "history": history,
         "next_actions": current.get("next_actions", []),
+        "gateway_loop_state": load_gateway_loop_state(Path.cwd()) or None,
     }
     if inferred_defaults:
         payload["inferred_defaults"] = inferred_defaults
@@ -502,12 +515,16 @@ def command_pause(args: list[str]) -> int:
         "run /autopilot resume when safe to continue",
     ]
     path = save_runtime(write_path, runtime)
+    bridge_state_path = bridge_stop_loop(Path.cwd())
     emit(
         {
             "result": "PASS",
             "status": runtime["status"],
             "reason_code": runtime["reason_code"],
             "runtime_path": str(path),
+            "gateway_loop_state_path": str(bridge_state_path)
+            if bridge_state_path
+            else None,
         },
         as_json=as_json,
     )
@@ -601,6 +618,7 @@ def command_stop(args: list[str]) -> int:
         "use /autopilot start to begin a new objective run",
     ]
     path = save_runtime(write_path, runtime)
+    bridge_state_path = bridge_stop_loop(Path.cwd())
     emit(
         {
             "result": "PASS",
@@ -608,6 +626,9 @@ def command_stop(args: list[str]) -> int:
             "reason_code": runtime["reason_code"],
             "stop_reason": runtime["stop_reason"],
             "runtime_path": str(path),
+            "gateway_loop_state_path": str(bridge_state_path)
+            if bridge_state_path
+            else None,
         },
         as_json=as_json,
     )

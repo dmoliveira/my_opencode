@@ -4,3 +4,4 @@ __pycache__/
 .beads/
 plugin/autopilot-loop/node_modules/
 plugin/gateway-core/node_modules/
+.opencode/
