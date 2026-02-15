@@ -1636,6 +1636,15 @@ def main() -> int:
             isinstance(gateway_status.get("orphan_cleanup"), dict),
             "gateway status should report orphan cleanup telemetry",
         )
+        expect(
+            isinstance(gateway_status.get("hook_diagnostics"), dict),
+            "gateway status should report gateway-core hook diagnostics",
+        )
+        expect(
+            "dist_exposes_tool_execute_before"
+            in gateway_status.get("hook_diagnostics", {}),
+            "gateway status hook diagnostics should include dist tool hook marker",
+        )
 
         stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
         stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1705,6 +1714,10 @@ def main() -> int:
         expect(
             isinstance(gateway_doctor.get("status", {}).get("orphan_cleanup"), dict),
             "gateway doctor should include orphan cleanup telemetry in status",
+        )
+        expect(
+            isinstance(gateway_doctor.get("status", {}).get("hook_diagnostics"), dict),
+            "gateway doctor should include hook diagnostics in status",
         )
 
         notify_policy_path = (
