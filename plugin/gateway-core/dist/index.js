@@ -15,6 +15,7 @@ import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
+import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
@@ -108,6 +109,9 @@ function configuredHooks(ctx) {
         createTasksTodowriteDisablerHook({
             directory,
             enabled: cfg.tasksTodowriteDisabler.enabled,
+        }),
+        createTaskResumeInfoHook({
+            enabled: cfg.taskResumeInfo.enabled,
         }),
     ];
     if (!cfg.hooks.enabled) {

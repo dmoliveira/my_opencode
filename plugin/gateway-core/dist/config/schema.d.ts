@@ -67,6 +67,9 @@ export interface SubagentQuestionBlockerConfig {
 export interface TasksTodowriteDisablerConfig {
     enabled: boolean;
 }
+export interface TaskResumeInfoConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -88,6 +91,7 @@ export interface GatewayConfig {
     writeExistingFileGuard: WriteExistingFileGuardConfig;
     subagentQuestionBlocker: SubagentQuestionBlockerConfig;
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
+    taskResumeInfo: TaskResumeInfoConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
