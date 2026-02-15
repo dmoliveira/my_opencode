@@ -13,6 +13,7 @@ function resolveSessionId(payload) {
 // Creates AGENTS.md injector hook for local directory context hints.
 export function createDirectoryAgentsInjectorHook(options) {
     const agentsPathBySession = new Map();
+    const lastInjectedPathBySession = new Map();
     return {
         id: "directory-agents-injector",
         priority: 299,
@@ -24,7 +25,9 @@ export function createDirectoryAgentsInjectorHook(options) {
                 const eventPayload = (payload ?? {});
                 const sessionId = eventPayload.properties?.info?.id;
                 if (typeof sessionId === "string" && sessionId.trim()) {
-                    agentsPathBySession.delete(sessionId.trim());
+                    const key = sessionId.trim();
+                    agentsPathBySession.delete(key);
+                    lastInjectedPathBySession.delete(key);
                 }
                 return;
             }
@@ -41,6 +44,9 @@ export function createDirectoryAgentsInjectorHook(options) {
                 if (path) {
                     agentsPathBySession.set(sessionId, path);
                 }
+                else {
+                    agentsPathBySession.delete(sessionId);
+                }
                 return;
             }
             if (type !== "tool.execute.after") {
@@ -55,7 +61,11 @@ export function createDirectoryAgentsInjectorHook(options) {
             if (!path || typeof eventPayload.output?.output !== "string") {
                 return;
             }
+            if (lastInjectedPathBySession.get(sessionId) === path) {
+                return;
+            }
             eventPayload.output.output = `${eventPayload.output.output}\n\nLocal instructions loaded from: ${path}`;
+            lastInjectedPathBySession.set(sessionId, path);
             writeGatewayEventAudit(directory, {
                 hook: "directory-agents-injector",
                 stage: "state",

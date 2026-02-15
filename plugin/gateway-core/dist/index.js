@@ -8,18 +8,26 @@ import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
 import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
+import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
 import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js";
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js";
+import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
+import { createMergeReadinessGuardHook } from "./hooks/merge-readiness-guard/index.js";
+import { createNoninteractiveShellGuardHook } from "./hooks/noninteractive-shell-guard/index.js";
+import { createParallelOpportunityDetectorHook } from "./hooks/parallel-opportunity-detector/index.js";
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
+import { createPrReadinessGuardHook } from "./hooks/pr-readiness-guard/index.js";
 import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js";
+import { createReadBudgetOptimizerHook } from "./hooks/read-budget-optimizer/index.js";
 import { createRulesInjectorHook } from "./hooks/rules-injector/index.js";
 import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js";
 import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
 import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
+import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
@@ -28,6 +36,9 @@ import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabl
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
 import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
+import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
+import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
+import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
@@ -71,6 +82,13 @@ function configuredHooks(ctx) {
             maxLines: cfg.toolOutputTruncator.maxLines,
             tools: cfg.toolOutputTruncator.tools,
         }),
+        createSemanticOutputSummarizerHook({
+            directory,
+            enabled: cfg.semanticOutputSummarizer.enabled,
+            minChars: cfg.semanticOutputSummarizer.minChars,
+            minLines: cfg.semanticOutputSummarizer.minLines,
+            maxSummaryLines: cfg.semanticOutputSummarizer.maxSummaryLines,
+        }),
         createContextWindowMonitorHook({
             directory,
             client: ctx.client,
@@ -92,6 +110,25 @@ function configuredHooks(ctx) {
         createDelegateTaskRetryHook({
             enabled: cfg.delegateTaskRetry.enabled,
         }),
+        createValidationEvidenceLedgerHook({
+            directory,
+            enabled: cfg.validationEvidenceLedger.enabled,
+        }),
+        createParallelOpportunityDetectorHook({
+            directory,
+            enabled: cfg.parallelOpportunityDetector.enabled,
+        }),
+        createReadBudgetOptimizerHook({
+            directory,
+            enabled: cfg.readBudgetOptimizer.enabled,
+            smallReadLimit: cfg.readBudgetOptimizer.smallReadLimit,
+            maxConsecutiveSmallReads: cfg.readBudgetOptimizer.maxConsecutiveSmallReads,
+        }),
+        createAdaptiveValidationSchedulerHook({
+            directory,
+            enabled: cfg.adaptiveValidationScheduler.enabled,
+            reminderEditThreshold: cfg.adaptiveValidationScheduler.reminderEditThreshold,
+        }),
         stopGuard,
         keywordDetector,
         createAutoSlashCommandHook({
@@ -110,9 +147,20 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.directoryReadmeInjector.enabled,
         }),
+        createNoninteractiveShellGuardHook({
+            directory,
+            enabled: cfg.noninteractiveShellGuard.enabled,
+            blockedPatterns: cfg.noninteractiveShellGuard.blockedPatterns,
+        }),
         createWriteExistingFileGuardHook({
             directory,
             enabled: cfg.writeExistingFileGuard.enabled,
+        }),
+        createAgentReservationGuardHook({
+            directory,
+            enabled: cfg.agentReservationGuard.enabled,
+            enforce: cfg.agentReservationGuard.enforce,
+            reservationEnvKeys: cfg.agentReservationGuard.reservationEnvKeys,
         }),
         createSubagentQuestionBlockerHook({
             directory,
@@ -158,6 +206,7 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.workflowConformanceGuard.enabled,
             protectedBranches: cfg.workflowConformanceGuard.protectedBranches,
+            blockEditsOnProtectedBranches: cfg.workflowConformanceGuard.blockEditsOnProtectedBranches,
         }),
         createScopeDriftGuardHook({
             directory,
@@ -168,11 +217,28 @@ function configuredHooks(ctx) {
         createDoneProofEnforcerHook({
             enabled: cfg.doneProofEnforcer.enabled,
             requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+            requireLedgerEvidence: cfg.doneProofEnforcer.requireLedgerEvidence,
+            allowTextFallback: cfg.doneProofEnforcer.allowTextFallback,
         }),
         createDependencyRiskGuardHook({
             directory,
             enabled: cfg.dependencyRiskGuard.enabled,
             lockfilePatterns: cfg.dependencyRiskGuard.lockfilePatterns,
+            commandPatterns: cfg.dependencyRiskGuard.commandPatterns,
+        }),
+        createDocsDriftGuardHook({
+            directory,
+            enabled: cfg.docsDriftGuard.enabled,
+            sourcePatterns: cfg.docsDriftGuard.sourcePatterns,
+            docsPatterns: cfg.docsDriftGuard.docsPatterns,
+            blockOnDrift: cfg.docsDriftGuard.blockOnDrift,
+        }),
+        createHookTestParityGuardHook({
+            directory,
+            enabled: cfg.hookTestParityGuard.enabled,
+            sourcePatterns: cfg.hookTestParityGuard.sourcePatterns,
+            testPatterns: cfg.hookTestParityGuard.testPatterns,
+            blockOnMismatch: cfg.hookTestParityGuard.blockOnMismatch,
         }),
         createRetryBudgetGuardHook({
             enabled: cfg.retryBudgetGuard.enabled,
@@ -182,6 +248,20 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.staleLoopExpiryGuard.enabled,
             maxAgeMinutes: cfg.staleLoopExpiryGuard.maxAgeMinutes,
+        }),
+        createPrReadinessGuardHook({
+            directory,
+            enabled: cfg.prReadinessGuard.enabled,
+            requireCleanWorktree: cfg.prReadinessGuard.requireCleanWorktree,
+            requireValidationEvidence: cfg.prReadinessGuard.requireValidationEvidence,
+            requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+        }),
+        createMergeReadinessGuardHook({
+            directory,
+            enabled: cfg.mergeReadinessGuard.enabled,
+            requireDeleteBranch: cfg.mergeReadinessGuard.requireDeleteBranch,
+            requireStrategy: cfg.mergeReadinessGuard.requireStrategy,
+            disallowAdminBypass: cfg.mergeReadinessGuard.disallowAdminBypass,
         }),
     ];
     if (!cfg.hooks.enabled) {

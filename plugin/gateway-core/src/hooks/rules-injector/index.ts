@@ -48,6 +48,7 @@ function resolveSessionId(payload: ToolBeforePayload | ToolAfterPayload): string
 // Creates rules injector hook that appends conditional runtime guidance.
 export function createRulesInjectorHook(options: { directory: string; enabled: boolean }): GatewayHook {
   const pendingRuleBySession = new Map<string, string>()
+  const lastInjectedRuleBySession = new Map<string, string>()
   return {
     id: "rules-injector",
     priority: 298,
@@ -59,7 +60,9 @@ export function createRulesInjectorHook(options: { directory: string; enabled: b
         const eventPayload = (payload ?? {}) as EventPayload
         const sessionId = eventPayload.properties?.info?.id
         if (typeof sessionId === "string" && sessionId.trim()) {
-          pendingRuleBySession.delete(sessionId.trim())
+          const key = sessionId.trim()
+          pendingRuleBySession.delete(key)
+          lastInjectedRuleBySession.delete(key)
         }
         return
       }
@@ -89,8 +92,12 @@ export function createRulesInjectorHook(options: { directory: string; enabled: b
       if (!rule) {
         return
       }
-      eventPayload.output.output = `${eventPayload.output.output}\n\n${rule}`
       pendingRuleBySession.delete(sessionId)
+      if (lastInjectedRuleBySession.get(sessionId) === rule) {
+        return
+      }
+      eventPayload.output.output = `${eventPayload.output.output}\n\n${rule}`
+      lastInjectedRuleBySession.set(sessionId, rule)
       writeGatewayEventAudit(directory, {
         hook: "rules-injector",
         stage: "state",

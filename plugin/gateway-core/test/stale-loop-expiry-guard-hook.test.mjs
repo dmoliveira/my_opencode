@@ -27,7 +27,11 @@ test("stale-loop-expiry-guard deactivates stale active loop", async () => {
     const plugin = GatewayCorePlugin({
       directory,
       config: {
-        hooks: { enabled: true, order: ["stale-loop-expiry-guard"], disabled: [] },
+        hooks: {
+          enabled: true,
+          order: ["stale-loop-expiry-guard"],
+          disabled: ["continuation"],
+        },
         staleLoopExpiryGuard: {
           enabled: true,
           maxAgeMinutes: 60,

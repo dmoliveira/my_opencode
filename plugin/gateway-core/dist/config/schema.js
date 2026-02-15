@@ -7,17 +7,24 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "autopilot-loop",
             "continuation",
             "tool-output-truncator",
+            "semantic-output-summarizer",
             "context-window-monitor",
             "preemptive-compaction",
             "session-recovery",
             "delegate-task-retry",
+            "validation-evidence-ledger",
+            "parallel-opportunity-detector",
+            "read-budget-optimizer",
+            "adaptive-validation-scheduler",
             "stop-continuation-guard",
             "keyword-detector",
             "auto-slash-command",
             "rules-injector",
             "directory-agents-injector",
             "directory-readme-injector",
+            "noninteractive-shell-guard",
             "write-existing-file-guard",
+            "agent-reservation-guard",
             "subagent-question-blocker",
             "tasks-todowrite-disabler",
             "task-resume-info",
@@ -32,8 +39,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "scope-drift-guard",
             "done-proof-enforcer",
             "dependency-risk-guard",
+            "docs-drift-guard",
+            "hook-test-parity-guard",
             "retry-budget-guard",
             "stale-loop-expiry-guard",
+            "pr-readiness-guard",
+            "merge-readiness-guard",
             "safety",
         ],
     },
@@ -65,6 +76,21 @@ export const DEFAULT_GATEWAY_CONFIG = {
     delegateTaskRetry: {
         enabled: true,
     },
+    validationEvidenceLedger: {
+        enabled: true,
+    },
+    parallelOpportunityDetector: {
+        enabled: true,
+    },
+    readBudgetOptimizer: {
+        enabled: true,
+        smallReadLimit: 80,
+        maxConsecutiveSmallReads: 3,
+    },
+    adaptiveValidationScheduler: {
+        enabled: true,
+        reminderEditThreshold: 3,
+    },
     stopContinuationGuard: {
         enabled: true,
     },
@@ -83,8 +109,21 @@ export const DEFAULT_GATEWAY_CONFIG = {
     directoryReadmeInjector: {
         enabled: true,
     },
+    noninteractiveShellGuard: {
+        enabled: true,
+        blockedPatterns: [
+            "\\b(vim|vi|nano|emacs|less|more|man)\\b",
+            "\\bgit\\s+add\\s+-p\\b",
+            "\\bgit\\s+rebase\\s+-i\\b",
+        ],
+    },
     writeExistingFileGuard: {
         enabled: true,
+    },
+    agentReservationGuard: {
+        enabled: true,
+        enforce: false,
+        reservationEnvKeys: ["AGENTMAIL_RESERVATION_ACTIVE", "MY_OPENCODE_FILE_RESERVATION_ACTIVE"],
     },
     subagentQuestionBlocker: {
         enabled: true,
@@ -113,6 +152,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         maxLength: 30,
     },
+    semanticOutputSummarizer: {
+        enabled: true,
+        minChars: 20000,
+        minLines: 400,
+        maxSummaryLines: 8,
+    },
     dangerousCommandGuard: {
         enabled: true,
         blockedPatterns: [
@@ -138,6 +183,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
     workflowConformanceGuard: {
         enabled: true,
         protectedBranches: ["main", "master"],
+        blockEditsOnProtectedBranches: true,
     },
     scopeDriftGuard: {
         enabled: false,
@@ -147,10 +193,32 @@ export const DEFAULT_GATEWAY_CONFIG = {
     doneProofEnforcer: {
         enabled: true,
         requiredMarkers: ["validation", "test", "lint"],
+        requireLedgerEvidence: true,
+        allowTextFallback: true,
     },
     dependencyRiskGuard: {
         enabled: true,
         lockfilePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock", "uv.lock", "Cargo.lock"],
+        commandPatterns: [
+            "\\bnpm\\s+(install|update|uninstall|audit\\s+fix)\\b",
+            "\\bpnpm\\s+(install|update|remove|audit)\\b",
+            "\\byarn\\s+(add|remove|upgrade|install)\\b",
+            "\\bbun\\s+add\\b",
+            "\\buv\\s+(add|remove|sync)\\b",
+            "\\bcargo\\s+(add|remove|update)\\b",
+        ],
+    },
+    docsDriftGuard: {
+        enabled: true,
+        sourcePatterns: ["plugin/gateway-core/src/**", "plugin/gateway-core/package.json"],
+        docsPatterns: ["README.md", "docs/**", "plugin/gateway-core/**/*.md"],
+        blockOnDrift: false,
+    },
+    hookTestParityGuard: {
+        enabled: true,
+        sourcePatterns: ["plugin/gateway-core/src/hooks/**/*.ts"],
+        testPatterns: ["plugin/gateway-core/test/*-hook.test.mjs"],
+        blockOnMismatch: true,
     },
     retryBudgetGuard: {
         enabled: true,
@@ -159,6 +227,17 @@ export const DEFAULT_GATEWAY_CONFIG = {
     staleLoopExpiryGuard: {
         enabled: true,
         maxAgeMinutes: 120,
+    },
+    prReadinessGuard: {
+        enabled: true,
+        requireCleanWorktree: true,
+        requireValidationEvidence: true,
+    },
+    mergeReadinessGuard: {
+        enabled: true,
+        requireDeleteBranch: true,
+        requireStrategy: true,
+        disallowAdminBypass: true,
     },
     quality: {
         profile: "fast",

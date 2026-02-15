@@ -3,7 +3,7 @@ import type { GatewayHook } from "../registry.js"
 
 interface ToolBeforePayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
-  output?: { args?: { filePath?: string; path?: string; file_path?: string } }
+  output?: { args?: { filePath?: string; path?: string; file_path?: string; command?: string } }
   directory?: string
 }
 
@@ -18,8 +18,18 @@ export function createDependencyRiskGuardHook(options: {
   directory: string
   enabled: boolean
   lockfilePatterns: string[]
+  commandPatterns: string[]
 }): GatewayHook {
   const patterns = options.lockfilePatterns.map((item) => item.trim()).filter(Boolean)
+  const commandPatterns = options.commandPatterns
+    .map((item) => {
+      try {
+        return new RegExp(item, "i")
+      } catch {
+        return null
+      }
+    })
+    .filter((value): value is RegExp => value !== null)
   return {
     id: "dependency-risk-guard",
     priority: 415,
@@ -29,16 +39,27 @@ export function createDependencyRiskGuardHook(options: {
       }
       const eventPayload = (payload ?? {}) as ToolBeforePayload
       const tool = String(eventPayload.input?.tool ?? "").toLowerCase()
-      if (tool !== "write" && tool !== "edit") {
-        return
-      }
-      const filePath = targetPath(eventPayload)
-      if (!filePath) {
-        return
-      }
-      const hit = patterns.some((pattern) => filePath.endsWith(pattern))
-      if (!hit) {
-        return
+      if (tool === "bash") {
+        const command = String(eventPayload.output?.args?.command ?? "").trim()
+        if (!command) {
+          return
+        }
+        const commandHit = commandPatterns.some((pattern) => pattern.test(command))
+        if (!commandHit) {
+          return
+        }
+      } else {
+        if (tool !== "write" && tool !== "edit") {
+          return
+        }
+        const filePath = targetPath(eventPayload)
+        if (!filePath) {
+          return
+        }
+        const hit = patterns.some((pattern) => filePath.endsWith(pattern))
+        if (!hit) {
+          return
+        }
       }
       const directory =
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()

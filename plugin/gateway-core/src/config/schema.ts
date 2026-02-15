@@ -152,6 +152,7 @@ export interface SecretLeakGuardConfig {
 export interface WorkflowConformanceGuardConfig {
   enabled: boolean
   protectedBranches: string[]
+  blockEditsOnProtectedBranches: boolean
 }
 
 // Declares scope drift guard settings for file edit boundaries.
@@ -165,12 +166,15 @@ export interface ScopeDriftGuardConfig {
 export interface DoneProofEnforcerConfig {
   enabled: boolean
   requiredMarkers: string[]
+  requireLedgerEvidence: boolean
+  allowTextFallback: boolean
 }
 
 // Declares dependency risk guard settings.
 export interface DependencyRiskGuardConfig {
   enabled: boolean
   lockfilePatterns: string[]
+  commandPatterns: string[]
 }
 
 // Declares retry budget guard settings.
@@ -183,6 +187,81 @@ export interface RetryBudgetGuardConfig {
 export interface StaleLoopExpiryGuardConfig {
   enabled: boolean
   maxAgeMinutes: number
+}
+
+// Declares validation evidence ledger settings.
+export interface ValidationEvidenceLedgerConfig {
+  enabled: boolean
+}
+
+// Declares non-interactive shell guard settings.
+export interface NoninteractiveShellGuardConfig {
+  enabled: boolean
+  blockedPatterns: string[]
+}
+
+// Declares docs drift guard settings.
+export interface DocsDriftGuardConfig {
+  enabled: boolean
+  sourcePatterns: string[]
+  docsPatterns: string[]
+  blockOnDrift: boolean
+}
+
+// Declares hook-test parity guard settings.
+export interface HookTestParityGuardConfig {
+  enabled: boolean
+  sourcePatterns: string[]
+  testPatterns: string[]
+  blockOnMismatch: boolean
+}
+
+// Declares parallel opportunity detector settings.
+export interface ParallelOpportunityDetectorConfig {
+  enabled: boolean
+}
+
+// Declares agent reservation guard settings.
+export interface AgentReservationGuardConfig {
+  enabled: boolean
+  enforce: boolean
+  reservationEnvKeys: string[]
+}
+
+// Declares PR readiness guard settings.
+export interface PrReadinessGuardConfig {
+  enabled: boolean
+  requireCleanWorktree: boolean
+  requireValidationEvidence: boolean
+}
+
+// Declares merge readiness guard settings.
+export interface MergeReadinessGuardConfig {
+  enabled: boolean
+  requireDeleteBranch: boolean
+  requireStrategy: boolean
+  disallowAdminBypass: boolean
+}
+
+// Declares read budget optimizer settings.
+export interface ReadBudgetOptimizerConfig {
+  enabled: boolean
+  smallReadLimit: number
+  maxConsecutiveSmallReads: number
+}
+
+// Declares semantic output summarizer settings.
+export interface SemanticOutputSummarizerConfig {
+  enabled: boolean
+  minChars: number
+  minLines: number
+  maxSummaryLines: number
+}
+
+// Declares adaptive validation scheduler settings.
+export interface AdaptiveValidationSchedulerConfig {
+  enabled: boolean
+  reminderEditThreshold: number
 }
 
 // Declares top-level gateway plugin configuration.
@@ -198,13 +277,19 @@ export interface GatewayConfig {
   preemptiveCompaction: PreemptiveCompactionConfig
   sessionRecovery: SessionRecoveryConfig
   delegateTaskRetry: DelegateTaskRetryConfig
+  validationEvidenceLedger: ValidationEvidenceLedgerConfig
+  parallelOpportunityDetector: ParallelOpportunityDetectorConfig
+  readBudgetOptimizer: ReadBudgetOptimizerConfig
+  adaptiveValidationScheduler: AdaptiveValidationSchedulerConfig
   stopContinuationGuard: StopContinuationGuardConfig
   keywordDetector: KeywordDetectorConfig
   autoSlashCommand: AutoSlashCommandConfig
   rulesInjector: RulesInjectorConfig
   directoryAgentsInjector: DirectoryAgentsInjectorConfig
   directoryReadmeInjector: DirectoryReadmeInjectorConfig
+  noninteractiveShellGuard: NoninteractiveShellGuardConfig
   writeExistingFileGuard: WriteExistingFileGuardConfig
+  agentReservationGuard: AgentReservationGuardConfig
   subagentQuestionBlocker: SubagentQuestionBlockerConfig
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig
   taskResumeInfo: TaskResumeInfoConfig
@@ -213,14 +298,19 @@ export interface GatewayConfig {
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
   questionLabelTruncator: QuestionLabelTruncatorConfig
+  semanticOutputSummarizer: SemanticOutputSummarizerConfig
   dangerousCommandGuard: DangerousCommandGuardConfig
   secretLeakGuard: SecretLeakGuardConfig
   workflowConformanceGuard: WorkflowConformanceGuardConfig
   scopeDriftGuard: ScopeDriftGuardConfig
   doneProofEnforcer: DoneProofEnforcerConfig
   dependencyRiskGuard: DependencyRiskGuardConfig
+  docsDriftGuard: DocsDriftGuardConfig
+  hookTestParityGuard: HookTestParityGuardConfig
   retryBudgetGuard: RetryBudgetGuardConfig
   staleLoopExpiryGuard: StaleLoopExpiryGuardConfig
+  prReadinessGuard: PrReadinessGuardConfig
+  mergeReadinessGuard: MergeReadinessGuardConfig
   quality: QualityConfig
 }
 
@@ -233,17 +323,24 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "autopilot-loop",
       "continuation",
       "tool-output-truncator",
+      "semantic-output-summarizer",
       "context-window-monitor",
       "preemptive-compaction",
       "session-recovery",
       "delegate-task-retry",
+      "validation-evidence-ledger",
+      "parallel-opportunity-detector",
+      "read-budget-optimizer",
+      "adaptive-validation-scheduler",
       "stop-continuation-guard",
       "keyword-detector",
       "auto-slash-command",
       "rules-injector",
       "directory-agents-injector",
       "directory-readme-injector",
+      "noninteractive-shell-guard",
       "write-existing-file-guard",
+      "agent-reservation-guard",
       "subagent-question-blocker",
       "tasks-todowrite-disabler",
       "task-resume-info",
@@ -258,8 +355,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "scope-drift-guard",
       "done-proof-enforcer",
       "dependency-risk-guard",
+      "docs-drift-guard",
+      "hook-test-parity-guard",
       "retry-budget-guard",
       "stale-loop-expiry-guard",
+      "pr-readiness-guard",
+      "merge-readiness-guard",
       "safety",
     ],
   },
@@ -291,6 +392,21 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   delegateTaskRetry: {
     enabled: true,
   },
+  validationEvidenceLedger: {
+    enabled: true,
+  },
+  parallelOpportunityDetector: {
+    enabled: true,
+  },
+  readBudgetOptimizer: {
+    enabled: true,
+    smallReadLimit: 80,
+    maxConsecutiveSmallReads: 3,
+  },
+  adaptiveValidationScheduler: {
+    enabled: true,
+    reminderEditThreshold: 3,
+  },
   stopContinuationGuard: {
     enabled: true,
   },
@@ -309,8 +425,21 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   directoryReadmeInjector: {
     enabled: true,
   },
+  noninteractiveShellGuard: {
+    enabled: true,
+    blockedPatterns: [
+      "\\b(vim|vi|nano|emacs|less|more|man)\\b",
+      "\\bgit\\s+add\\s+-p\\b",
+      "\\bgit\\s+rebase\\s+-i\\b",
+    ],
+  },
   writeExistingFileGuard: {
     enabled: true,
+  },
+  agentReservationGuard: {
+    enabled: true,
+    enforce: false,
+    reservationEnvKeys: ["AGENTMAIL_RESERVATION_ACTIVE", "MY_OPENCODE_FILE_RESERVATION_ACTIVE"],
   },
   subagentQuestionBlocker: {
     enabled: true,
@@ -339,6 +468,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     maxLength: 30,
   },
+  semanticOutputSummarizer: {
+    enabled: true,
+    minChars: 20000,
+    minLines: 400,
+    maxSummaryLines: 8,
+  },
   dangerousCommandGuard: {
     enabled: true,
     blockedPatterns: [
@@ -364,6 +499,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   workflowConformanceGuard: {
     enabled: true,
     protectedBranches: ["main", "master"],
+    blockEditsOnProtectedBranches: true,
   },
   scopeDriftGuard: {
     enabled: false,
@@ -373,10 +509,32 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   doneProofEnforcer: {
     enabled: true,
     requiredMarkers: ["validation", "test", "lint"],
+    requireLedgerEvidence: true,
+    allowTextFallback: true,
   },
   dependencyRiskGuard: {
     enabled: true,
     lockfilePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock", "uv.lock", "Cargo.lock"],
+    commandPatterns: [
+      "\\bnpm\\s+(install|update|uninstall|audit\\s+fix)\\b",
+      "\\bpnpm\\s+(install|update|remove|audit)\\b",
+      "\\byarn\\s+(add|remove|upgrade|install)\\b",
+      "\\bbun\\s+add\\b",
+      "\\buv\\s+(add|remove|sync)\\b",
+      "\\bcargo\\s+(add|remove|update)\\b",
+    ],
+  },
+  docsDriftGuard: {
+    enabled: true,
+    sourcePatterns: ["plugin/gateway-core/src/**", "plugin/gateway-core/package.json"],
+    docsPatterns: ["README.md", "docs/**", "plugin/gateway-core/**/*.md"],
+    blockOnDrift: false,
+  },
+  hookTestParityGuard: {
+    enabled: true,
+    sourcePatterns: ["plugin/gateway-core/src/hooks/**/*.ts"],
+    testPatterns: ["plugin/gateway-core/test/*-hook.test.mjs"],
+    blockOnMismatch: true,
   },
   retryBudgetGuard: {
     enabled: true,
@@ -385,6 +543,17 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   staleLoopExpiryGuard: {
     enabled: true,
     maxAgeMinutes: 120,
+  },
+  prReadinessGuard: {
+    enabled: true,
+    requireCleanWorktree: true,
+    requireValidationEvidence: true,
+  },
+  mergeReadinessGuard: {
+    enabled: true,
+    requireDeleteBranch: true,
+    requireStrategy: true,
+    disallowAdminBypass: true,
   },
   quality: {
     profile: "fast",

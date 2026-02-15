@@ -13,6 +13,7 @@ function resolveSessionId(payload) {
 // Creates README injector hook for local docs context hints.
 export function createDirectoryReadmeInjectorHook(options) {
     const readmePathBySession = new Map();
+    const lastInjectedPathBySession = new Map();
     return {
         id: "directory-readme-injector",
         priority: 300,
@@ -24,7 +25,9 @@ export function createDirectoryReadmeInjectorHook(options) {
                 const eventPayload = (payload ?? {});
                 const sessionId = eventPayload.properties?.info?.id;
                 if (typeof sessionId === "string" && sessionId.trim()) {
-                    readmePathBySession.delete(sessionId.trim());
+                    const key = sessionId.trim();
+                    readmePathBySession.delete(key);
+                    lastInjectedPathBySession.delete(key);
                 }
                 return;
             }
@@ -41,6 +44,9 @@ export function createDirectoryReadmeInjectorHook(options) {
                 if (path) {
                     readmePathBySession.set(sessionId, path);
                 }
+                else {
+                    readmePathBySession.delete(sessionId);
+                }
                 return;
             }
             if (type !== "tool.execute.after") {
@@ -55,7 +61,11 @@ export function createDirectoryReadmeInjectorHook(options) {
             if (!path || typeof eventPayload.output?.output !== "string") {
                 return;
             }
+            if (lastInjectedPathBySession.get(sessionId) === path) {
+                return;
+            }
             eventPayload.output.output = `${eventPayload.output.output}\n\nLocal README context loaded from: ${path}`;
+            lastInjectedPathBySession.set(sessionId, path);
             writeGatewayEventAudit(directory, {
                 hook: "directory-readme-injector",
                 stage: "state",
