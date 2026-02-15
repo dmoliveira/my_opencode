@@ -1,6 +1,6 @@
 # Autopilot Hook Roadmap 🚀
 
-This document defines the migration from script-driven `/autopilot` to a plugin hook loop with idle-time auto-injection (ralph-loop style).
+This document defines the migration from script-driven `/autopilot` to a plugin hook loop with idle-time auto-injection.
 
 ## Why this migration matters
 
@@ -29,10 +29,11 @@ TypeScript scaffold is added at `plugin/autopilot-loop/`:
 - `plugin/autopilot-loop/src/constants.ts` - stable defaults
 - `plugin/autopilot-loop/package.json` + lint/format/build tooling
 
-Command aliases now available:
+Compatibility aliases now available:
 
 - `/ralph-loop "task"` -> promise-mode `/autopilot` run
 - `/cancel-ralph` -> stop active run
+- Canonical command surface remains `/autopilot*`; `ralph-*` names are compatibility-only.
 
 Config wiring target (optional, requires bun runtime):
 

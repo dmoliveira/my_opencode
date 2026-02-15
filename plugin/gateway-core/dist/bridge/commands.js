@@ -10,15 +10,35 @@ export function parseSlashCommand(raw) {
         args: tail.join(" ").trim(),
     };
 }
+const AUTOPILOT_START_COMMANDS = new Set([
+    "autopilot",
+    "autopilot-go",
+    "continue-work",
+    "autopilot-objective",
+]);
+const AUTOPILOT_STOP_COMMANDS = new Set(["autopilot-stop"]);
+const AUTOPILOT_COMPAT_START_ALIASES = new Set(["ralph-loop"]);
+const AUTOPILOT_COMPAT_STOP_ALIASES = new Set(["cancel-ralph"]);
+// Normalizes compatibility aliases to canonical autopilot command names.
+export function canonicalAutopilotCommandName(name) {
+    if (AUTOPILOT_COMPAT_START_ALIASES.has(name)) {
+        return "autopilot-go";
+    }
+    if (AUTOPILOT_COMPAT_STOP_ALIASES.has(name)) {
+        return "autopilot-stop";
+    }
+    return name;
+}
 // Resolves action semantics for autopilot command names and argument forms.
 export function resolveAutopilotAction(name, args) {
-    if (isAutopilotStopCommand(name)) {
+    const command = canonicalAutopilotCommandName(name);
+    if (isAutopilotStopCommand(command)) {
         return "stop";
     }
-    if (!isAutopilotCommand(name)) {
+    if (!isAutopilotCommand(command)) {
         return "none";
     }
-    if (name === "autopilot") {
+    if (command === "autopilot") {
         const head = args.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
         if (head === "stop" || head === "pause") {
             return "stop";
@@ -28,15 +48,11 @@ export function resolveAutopilotAction(name, args) {
 }
 // Returns true when command should start or continue autopilot loop.
 export function isAutopilotCommand(name) {
-    return (name === "autopilot" ||
-        name === "autopilot-go" ||
-        name === "ralph-loop" ||
-        name === "continue-work" ||
-        name === "autopilot-objective");
+    return AUTOPILOT_START_COMMANDS.has(name) || AUTOPILOT_COMPAT_START_ALIASES.has(name);
 }
 // Returns true when command should stop active autopilot loop.
 export function isAutopilotStopCommand(name) {
-    return name === "autopilot-stop" || name === "cancel-ralph";
+    return AUTOPILOT_STOP_COMMANDS.has(name) || AUTOPILOT_COMPAT_STOP_ALIASES.has(name);
 }
 // Parses completion mode from command argument string.
 export function parseCompletionMode(args) {

@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 import {
+  canonicalAutopilotCommandName,
   parseCompletionMode,
   parseCompletionPromise,
   parseGoal,
@@ -21,6 +22,12 @@ test("resolveAutopilotAction handles start and stop forms", () => {
   assert.equal(resolveAutopilotAction("autopilot", "stop --reason hold"), "stop")
   assert.equal(resolveAutopilotAction("cancel-ralph", ""), "stop")
   assert.equal(resolveAutopilotAction("help", ""), "none")
+})
+
+test("compatibility aliases normalize to canonical autopilot names", () => {
+  assert.equal(canonicalAutopilotCommandName("ralph-loop"), "autopilot-go")
+  assert.equal(canonicalAutopilotCommandName("cancel-ralph"), "autopilot-stop")
+  assert.equal(canonicalAutopilotCommandName("autopilot"), "autopilot")
 })
 
 test("command parsers resolve completion and goal defaults", () => {
