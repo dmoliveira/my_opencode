@@ -267,6 +267,7 @@ export function createContinuationHook(options: {
   client?: GatewayClient
   stopGuard?: StopContinuationGuard
   keywordDetector?: KeywordDetector
+  bootstrapFromRuntime?: boolean
 }): GatewayHook {
   return {
     id: "continuation",
@@ -292,7 +293,7 @@ export function createContinuationHook(options: {
 
       let state = loadGatewayState(directory)
       let active = state?.activeLoop
-      if (!state || !active || active.active !== true) {
+      if (options.bootstrapFromRuntime && (!state || !active || active.active !== true)) {
         const bootstrapped = bootstrapLoopFromRuntime(directory, sessionId)
         if (bootstrapped?.activeLoop?.active) {
           state = bootstrapped

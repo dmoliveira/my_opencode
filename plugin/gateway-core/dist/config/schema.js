@@ -52,6 +52,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         maxIterations: 0,
         orphanMaxAgeHours: 12,
+        bootstrapFromRuntimeOnIdle: false,
         completionMode: "promise",
         completionPromise: "DONE",
     },

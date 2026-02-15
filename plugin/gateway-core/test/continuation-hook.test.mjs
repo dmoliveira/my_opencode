@@ -61,6 +61,62 @@ test("continuation hook keeps looping when maxIterations is zero", async () => {
   }
 })
 
+test("continuation hook does not bootstrap from runtime by default", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
+  const runtimePath = join(directory, "autopilot_runtime.json")
+  const previousRuntimePath = process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH
+  process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH = runtimePath
+  try {
+    writeFileSync(
+      runtimePath,
+      `${JSON.stringify(
+        {
+          status: "running",
+          objective: {
+            goal: "should not bootstrap by default",
+            completion_mode: "promise",
+            completion_promise: "DONE",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    )
+
+    let promptCalls = 0
+    const hook = createContinuationHook({
+      directory,
+      client: {
+        session: {
+          async messages() {
+            return { data: [] }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-default-no-bootstrap" },
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state, null)
+    assert.equal(promptCalls, 0)
+  } finally {
+    if (previousRuntimePath === undefined) {
+      delete process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH
+    } else {
+      process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH = previousRuntimePath
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("continuation hook bootstraps loop from runtime when state is missing", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
   const runtimePath = join(directory, "autopilot_runtime.json")
@@ -90,6 +146,7 @@ test("continuation hook bootstraps loop from runtime when state is missing", asy
     let promptCalls = 0
     const hook = createContinuationHook({
       directory,
+      bootstrapFromRuntime: true,
       client: {
         session: {
           async messages() {
