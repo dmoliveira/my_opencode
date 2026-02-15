@@ -96,15 +96,6 @@ export function createAutopilotLoopHook(options: {
       const scopedDir = payloadDirectory(payload, options.directory)
       const eventPayload = (payload ?? {}) as ToolBeforePayload
       const input = eventPayload.input
-      const output = eventPayload.output
-      if (input?.tool !== "slashcommand") {
-        writeGatewayEventAudit(scopedDir, {
-          hook: "autopilot-loop",
-          stage: "skip",
-          reason_code: "non_slash_tool",
-        })
-        return
-      }
       const sessionId = resolveSessionId(eventPayload)
       const commandRaw = resolveCommand(eventPayload)
       if (!sessionId || !commandRaw) {
@@ -119,6 +110,16 @@ export function createAutopilotLoopHook(options: {
       }
 
       const parsed = parseSlashCommand(commandRaw)
+      const toolName = String(input?.tool || "")
+      if (!commandRaw.trim().startsWith("/") && toolName !== "slashcommand") {
+        writeGatewayEventAudit(scopedDir, {
+          hook: "autopilot-loop",
+          stage: "skip",
+          reason_code: "non_slash_tool",
+          tool: toolName,
+        })
+        return
+      }
       const action = resolveAutopilotAction(parsed.name, parsed.args)
       if (action === "none") {
         writeGatewayEventAudit(scopedDir, {

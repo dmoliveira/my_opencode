@@ -39,3 +39,37 @@ test("autopilot-loop hook accepts command from input args shape", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("autopilot-loop hook starts loop even when tool label differs", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
+  try {
+    const hook = createAutopilotLoopHook({
+      directory,
+      defaults: {
+        enabled: true,
+        maxIterations: 0,
+        completionMode: "promise",
+        completionPromise: "DONE",
+      },
+    })
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "command",
+        sessionID: "session-variant",
+      },
+      properties: {
+        command: "/ralph-loop",
+        sessionID: "session-variant",
+      },
+      directory,
+    })
+
+    const state = loadGatewayState(directory)
+    assert.ok(state?.activeLoop)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.sessionId, "session-variant")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
