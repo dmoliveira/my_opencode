@@ -2,6 +2,7 @@ import { loadGatewayConfig } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
+import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
@@ -116,6 +117,9 @@ function configuredHooks(ctx) {
         }),
         createEmptyTaskResponseDetectorHook({
             enabled: cfg.emptyTaskResponseDetector.enabled,
+        }),
+        createCommentCheckerHook({
+            enabled: cfg.commentChecker.enabled,
         }),
     ];
     if (!cfg.hooks.enabled) {

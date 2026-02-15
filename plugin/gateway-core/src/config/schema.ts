@@ -113,6 +113,11 @@ export interface EmptyTaskResponseDetectorConfig {
   enabled: boolean
 }
 
+// Declares comment quality checker settings.
+export interface CommentCheckerConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -137,6 +142,7 @@ export interface GatewayConfig {
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig
   taskResumeInfo: TaskResumeInfoConfig
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
+  commentChecker: CommentCheckerConfig
   quality: QualityConfig
 }
 
@@ -164,6 +170,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "tasks-todowrite-disabler",
       "task-resume-info",
       "empty-task-response-detector",
+      "comment-checker",
       "safety",
     ],
   },
@@ -227,6 +234,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   emptyTaskResponseDetector: {
+    enabled: true,
+  },
+  commentChecker: {
     enabled: true,
   },
   quality: {
