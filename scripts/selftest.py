@@ -4123,6 +4123,23 @@ version: 1
             "autopilot promise mode should complete when completion signal is provided",
         )
 
+        autopilot_promise_wallclock_run = dict(autopilot_promise_cycle.get("run", {}))
+        autopilot_promise_wallclock_run["started_at"] = "2026-01-01T00:00:00Z"
+        autopilot_promise_wallclock_resume = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=autopilot_promise_wallclock_run,
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            now_ts="2026-02-13T00:00:03Z",
+        )
+        expect(
+            autopilot_promise_wallclock_resume.get("run", {}).get("status")
+            != "budget_stopped",
+            "autopilot promise mode should use rolling wall-clock anchor and avoid stale-start hard stop",
+        )
+
         autopilot_cycle_scope_stop = execute_cycle(
             config={"budget_runtime": {"profile": "balanced"}},
             write_path=config_path,
