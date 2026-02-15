@@ -24,11 +24,49 @@ interface ToolBeforePayload {
   input?: {
     tool?: string
     sessionID?: string
+    sessionId?: string
+    args?: { command?: string }
   }
   output?: {
     args?: { command?: string }
   }
+  properties?: {
+    command?: string
+    sessionID?: string
+    sessionId?: string
+  }
   directory?: string
+}
+
+// Resolves session id across plugin host payload variants.
+function resolveSessionId(payload: ToolBeforePayload): string {
+  const candidates = [
+    payload.input?.sessionID,
+    payload.input?.sessionId,
+    payload.properties?.sessionID,
+    payload.properties?.sessionId,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return ""
+}
+
+// Resolves slash command text across plugin host payload variants.
+function resolveCommand(payload: ToolBeforePayload): string {
+  const candidates = [
+    payload.output?.args?.command,
+    payload.input?.args?.command,
+    payload.properties?.command,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return ""
 }
 
 // Resolves effective working directory from event payload.
@@ -61,8 +99,8 @@ export function createAutopilotLoopHook(options: {
       if (input?.tool !== "slashcommand") {
         return
       }
-      const sessionId = typeof input.sessionID === "string" ? input.sessionID.trim() : ""
-      const commandRaw = output?.args?.command
+      const sessionId = resolveSessionId(eventPayload)
+      const commandRaw = resolveCommand(eventPayload)
       if (!sessionId || !commandRaw) {
         return
       }

@@ -1,6 +1,35 @@
 import { parseCompletionMode, parseCompletionPromise, parseGoal, parseMaxIterations, parseSlashCommand, resolveAutopilotAction, } from "../../bridge/commands.js";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { nowIso, saveGatewayState } from "../../state/storage.js";
+// Resolves session id across plugin host payload variants.
+function resolveSessionId(payload) {
+    const candidates = [
+        payload.input?.sessionID,
+        payload.input?.sessionId,
+        payload.properties?.sessionID,
+        payload.properties?.sessionId,
+    ];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return "";
+}
+// Resolves slash command text across plugin host payload variants.
+function resolveCommand(payload) {
+    const candidates = [
+        payload.output?.args?.command,
+        payload.input?.args?.command,
+        payload.properties?.command,
+    ];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return "";
+}
 // Resolves effective working directory from event payload.
 function payloadDirectory(payload, fallback) {
     if (!payload || typeof payload !== "object") {
@@ -27,8 +56,8 @@ export function createAutopilotLoopHook(options) {
             if (input?.tool !== "slashcommand") {
                 return;
             }
-            const sessionId = typeof input.sessionID === "string" ? input.sessionID.trim() : "";
-            const commandRaw = output?.args?.command;
+            const sessionId = resolveSessionId(eventPayload);
+            const commandRaw = resolveCommand(eventPayload);
             if (!sessionId || !commandRaw) {
                 return;
             }
