@@ -8,6 +8,7 @@ export type QualityProfile = "off" | "fast" | "strict"
 export interface AutopilotLoopConfig {
   enabled: boolean
   maxIterations: number
+  orphanMaxAgeHours: number
   completionMode: CompletionMode
   completionPromise: string
 }
@@ -46,6 +47,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   autopilotLoop: {
     enabled: true,
     maxIterations: 100,
+    orphanMaxAgeHours: 12,
     completionMode: "promise",
     completionPromise: "DONE",
   },

@@ -69,6 +69,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         autopilotSource.maxIterations,
         DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIterations,
       ),
+      orphanMaxAgeHours: positiveInt(
+        autopilotSource.orphanMaxAgeHours,
+        DEFAULT_GATEWAY_CONFIG.autopilotLoop.orphanMaxAgeHours,
+      ),
       completionMode,
       completionPromise:
         typeof autopilotSource.completionPromise === "string" &&
