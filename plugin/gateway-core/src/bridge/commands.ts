@@ -14,11 +14,12 @@ export function parseSlashCommand(raw: string): { name: string; args: string } {
 const AUTOPILOT_START_COMMANDS = new Set([
   "autopilot",
   "autopilot-go",
+  "autopilot-resume",
   "continue-work",
   "autopilot-objective",
 ])
 
-const AUTOPILOT_STOP_COMMANDS = new Set(["autopilot-stop"])
+const AUTOPILOT_STOP_COMMANDS = new Set(["autopilot-stop", "autopilot-pause"])
 
 const AUTOPILOT_COMPAT_START_ALIASES = new Set(["ralph-loop"])
 

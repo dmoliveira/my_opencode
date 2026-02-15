@@ -20,6 +20,8 @@ test("parseSlashCommand normalizes command name and args", () => {
 test("resolveAutopilotAction handles start and stop forms", () => {
   assert.equal(resolveAutopilotAction("autopilot", "go --goal ship"), "start")
   assert.equal(resolveAutopilotAction("autopilot", "stop --reason hold"), "stop")
+  assert.equal(resolveAutopilotAction("autopilot-resume", ""), "start")
+  assert.equal(resolveAutopilotAction("autopilot-pause", ""), "stop")
   assert.equal(resolveAutopilotAction("cancel-ralph", ""), "stop")
   assert.equal(resolveAutopilotAction("help", ""), "none")
 })

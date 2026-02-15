@@ -13,10 +13,11 @@ export function parseSlashCommand(raw) {
 const AUTOPILOT_START_COMMANDS = new Set([
     "autopilot",
     "autopilot-go",
+    "autopilot-resume",
     "continue-work",
     "autopilot-objective",
 ]);
-const AUTOPILOT_STOP_COMMANDS = new Set(["autopilot-stop"]);
+const AUTOPILOT_STOP_COMMANDS = new Set(["autopilot-stop", "autopilot-pause"]);
 const AUTOPILOT_COMPAT_START_ALIASES = new Set(["ralph-loop"]);
 const AUTOPILOT_COMPAT_STOP_ALIASES = new Set(["cancel-ralph"]);
 // Normalizes compatibility aliases to canonical autopilot command names.
