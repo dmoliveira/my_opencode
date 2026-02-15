@@ -64,6 +64,9 @@ export interface SubagentQuestionBlockerConfig {
     enabled: boolean;
     sessionPatterns: string[];
 }
+export interface TasksTodowriteDisablerConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -84,6 +87,7 @@ export interface GatewayConfig {
     directoryReadmeInjector: DirectoryReadmeInjectorConfig;
     writeExistingFileGuard: WriteExistingFileGuardConfig;
     subagentQuestionBlocker: SubagentQuestionBlockerConfig;
+    tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

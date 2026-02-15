@@ -99,6 +99,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
       ? (source.subagentQuestionBlocker as Record<string, unknown>)
       : {}
+  const tasksTodowriteSource =
+    source.tasksTodowriteDisabler && typeof source.tasksTodowriteDisabler === "object"
+      ? (source.tasksTodowriteDisabler as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -254,6 +258,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         subagentQuestionSource.sessionPatterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.subagentQuestionBlocker.sessionPatterns
           : stringList(subagentQuestionSource.sessionPatterns),
+    },
+    tasksTodowriteDisabler: {
+      enabled:
+        typeof tasksTodowriteSource.enabled === "boolean"
+          ? tasksTodowriteSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.tasksTodowriteDisabler.enabled,
     },
     quality: {
       profile: qualityProfile,

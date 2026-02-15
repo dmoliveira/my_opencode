@@ -79,6 +79,9 @@ export function loadGatewayConfig(raw) {
     const subagentQuestionSource = source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
         ? source.subagentQuestionBlocker
         : {};
+    const tasksTodowriteSource = source.tasksTodowriteDisabler && typeof source.tasksTodowriteDisabler === "object"
+        ? source.tasksTodowriteDisabler
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -187,6 +190,11 @@ export function loadGatewayConfig(raw) {
             sessionPatterns: subagentQuestionSource.sessionPatterns === undefined
                 ? DEFAULT_GATEWAY_CONFIG.subagentQuestionBlocker.sessionPatterns
                 : stringList(subagentQuestionSource.sessionPatterns),
+        },
+        tasksTodowriteDisabler: {
+            enabled: typeof tasksTodowriteSource.enabled === "boolean"
+                ? tasksTodowriteSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.tasksTodowriteDisabler.enabled,
         },
         quality: {
             profile: qualityProfile,

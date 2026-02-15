@@ -14,6 +14,7 @@ import { createSafetyHook } from "./hooks/safety/index.js"
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js"
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js"
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js"
+import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js"
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js"
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js"
 import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js"
@@ -175,6 +176,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: cfg.subagentQuestionBlocker.enabled,
       sessionPatterns: cfg.subagentQuestionBlocker.sessionPatterns,
+    }),
+    createTasksTodowriteDisablerHook({
+      directory,
+      enabled: cfg.tasksTodowriteDisabler.enabled,
     }),
   ]
   if (!cfg.hooks.enabled) {

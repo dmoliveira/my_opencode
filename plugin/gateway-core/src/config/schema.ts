@@ -98,6 +98,11 @@ export interface SubagentQuestionBlockerConfig {
   sessionPatterns: string[]
 }
 
+// Declares task/todowrite disabler settings to avoid tracker conflicts.
+export interface TasksTodowriteDisablerConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -119,6 +124,7 @@ export interface GatewayConfig {
   directoryReadmeInjector: DirectoryReadmeInjectorConfig
   writeExistingFileGuard: WriteExistingFileGuardConfig
   subagentQuestionBlocker: SubagentQuestionBlockerConfig
+  tasksTodowriteDisabler: TasksTodowriteDisablerConfig
   quality: QualityConfig
 }
 
@@ -143,6 +149,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "directory-readme-injector",
       "write-existing-file-guard",
       "subagent-question-blocker",
+      "tasks-todowrite-disabler",
       "safety",
     ],
   },
@@ -198,6 +205,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   subagentQuestionBlocker: {
     enabled: true,
     sessionPatterns: ["task-", "subagent"],
+  },
+  tasksTodowriteDisabler: {
+    enabled: true,
   },
   quality: {
     profile: "fast",
