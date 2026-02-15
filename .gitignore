@@ -3,3 +3,4 @@ __pycache__/
 .DS_Store
 .beads/
 plugin/autopilot-loop/node_modules/
+plugin/gateway-core/node_modules/
