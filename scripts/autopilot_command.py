@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,14 +16,13 @@ if str(SCRIPT_DIR) not in sys.path:
 from autopilot_integration import integrate_controls  # type: ignore
 from autopilot_runtime import execute_cycle, initialize_run, load_runtime, save_runtime  # type: ignore
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
-from gateway_command import hook_diagnostics, plugin_dir  # type: ignore
+from gateway_command import hook_diagnostics, plugin_dir, status_payload  # type: ignore
 from gateway_plugin_bridge import (  # type: ignore
     bridge_start_loop,
     bridge_stop_loop,
     cleanup_orphan_loop,
     gateway_loop_state_path,
     load_gateway_loop_state,
-    plugin_enabled,
 )
 
 
@@ -77,53 +75,26 @@ def normalize_args(args: list[str]) -> list[str]:
     return normalized
 
 
-def gateway_runtime_mode(config: dict[str, Any]) -> dict[str, Any]:
+def gateway_runtime_status(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
-    enabled = plugin_enabled(config, home)
-    bun_available = shutil.which("bun") is not None
-    hooks = hook_diagnostics(plugin_dir(home))
-    required_gateway_flags = [
-        "dist_exposes_tool_execute_before",
-        "dist_exposes_chat_message",
-        "dist_autopilot_handles_slashcommand",
-        "dist_continuation_handles_session_idle",
-        "dist_safety_handles_session_deleted",
-        "dist_safety_handles_session_error",
-    ]
-    missing = [flag for flag in required_gateway_flags if hooks.get(flag) is not True]
-    plugin_ready = (
-        enabled
-        and bun_available
-        and hooks.get("dist_index_exists") is True
-        and not missing
-    )
-    mode = "plugin_gateway" if plugin_ready else "python_command_bridge"
-    reason_code = "gateway_plugin_ready"
-    if not enabled:
-        reason_code = "gateway_plugin_disabled"
-    elif not bun_available:
-        reason_code = "gateway_plugin_runtime_unavailable"
-    elif not plugin_ready:
-        reason_code = "gateway_plugin_not_ready"
-    return {
-        "mode": mode,
-        "reason_code": reason_code,
-        "plugin_enabled": enabled,
-        "bun_available": bun_available,
-        "missing_hook_capabilities": missing,
-    }
+    status = status_payload(config, home, cwd, cleanup_orphans=False)
+    return status if isinstance(status, dict) else {}
 
 
 def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
     cleanup_path, changed, reason = cleanup_orphan_loop(cwd)
-    runtime_mode = gateway_runtime_mode(config)
+    gateway_status = gateway_runtime_status(cwd, config)
     return {
-        "gateway_runtime_mode": runtime_mode["mode"],
-        "gateway_runtime_reason_code": runtime_mode["reason_code"],
-        "gateway_plugin_enabled": runtime_mode["plugin_enabled"],
-        "gateway_bun_available": runtime_mode["bun_available"],
-        "gateway_missing_hook_capabilities": runtime_mode["missing_hook_capabilities"],
-        "gateway_loop_state": load_gateway_loop_state(cwd) or None,
+        "gateway_runtime_mode": gateway_status.get("runtime_mode"),
+        "gateway_runtime_reason_code": gateway_status.get("runtime_reason_code"),
+        "gateway_plugin_enabled": gateway_status.get("enabled"),
+        "gateway_bun_available": gateway_status.get("bun_available"),
+        "gateway_missing_hook_capabilities": gateway_status.get(
+            "missing_hook_capabilities", []
+        ),
+        "gateway_loop_state": gateway_status.get("loop_state")
+        or load_gateway_loop_state(cwd)
+        or None,
         "gateway_orphan_cleanup": {
             "attempted": True,
             "changed": changed,
@@ -279,20 +250,25 @@ def command_start(args: list[str]) -> int:
             )
     run_any = initialized.get("run")
     if isinstance(run_any, dict):
-        runtime_mode = gateway_runtime_mode(config)
+        runtime_status = gateway_runtime_status(Path.cwd(), config)
+        runtime_mode = str(
+            runtime_status.get("runtime_mode") or "python_command_bridge"
+        )
         bridge_state_path: Path | None = None
-        if runtime_mode["mode"] == "python_command_bridge":
+        if runtime_mode == "python_command_bridge":
             bridge_state_path = bridge_start_loop(Path.cwd(), run_any)
         initialized["gateway_loop_state_path"] = str(
             bridge_state_path or gateway_loop_state_path(Path.cwd())
         )
-        initialized["gateway_runtime_mode"] = runtime_mode["mode"]
-        initialized["gateway_runtime_reason_code"] = runtime_mode["reason_code"]
-        initialized["gateway_plugin_enabled"] = runtime_mode["plugin_enabled"]
-        initialized["gateway_bun_available"] = runtime_mode["bun_available"]
-        initialized["gateway_missing_hook_capabilities"] = runtime_mode[
-            "missing_hook_capabilities"
-        ]
+        initialized["gateway_runtime_mode"] = runtime_status.get("runtime_mode")
+        initialized["gateway_runtime_reason_code"] = runtime_status.get(
+            "runtime_reason_code"
+        )
+        initialized["gateway_plugin_enabled"] = runtime_status.get("enabled")
+        initialized["gateway_bun_available"] = runtime_status.get("bun_available")
+        initialized["gateway_missing_hook_capabilities"] = runtime_status.get(
+            "missing_hook_capabilities", []
+        )
     emit(initialized, as_json=as_json)
     return 0 if initialized.get("result") == "PASS" else 1
 
@@ -454,8 +430,11 @@ def command_go(args: list[str]) -> int:
         runtime = run_any if isinstance(run_any, dict) else {}
         started_new_run = True
         if runtime:
-            runtime_mode = gateway_runtime_mode(config)
-            if runtime_mode["mode"] == "python_command_bridge":
+            runtime_status = gateway_runtime_status(Path.cwd(), config)
+            runtime_mode = str(
+                runtime_status.get("runtime_mode") or "python_command_bridge"
+            )
+            if runtime_mode == "python_command_bridge":
                 bridge_start_loop(Path.cwd(), runtime)
 
     if not runtime:

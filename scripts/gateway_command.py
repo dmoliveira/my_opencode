@@ -115,6 +115,40 @@ def hook_diagnostics(pdir: Path) -> dict[str, Any]:
     }
 
 
+# Resolves active gateway runtime mode and deterministic reason code.
+def gateway_runtime_mode(
+    *, enabled: bool, bun_available: bool, hooks: dict[str, Any]
+) -> dict[str, Any]:
+    required_dist_flags = [
+        "dist_exposes_tool_execute_before",
+        "dist_exposes_chat_message",
+        "dist_autopilot_handles_slashcommand",
+        "dist_continuation_handles_session_idle",
+        "dist_safety_handles_session_deleted",
+        "dist_safety_handles_session_error",
+    ]
+    missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
+    plugin_ready = (
+        enabled
+        and bun_available
+        and hooks.get("dist_index_exists") is True
+        and not missing
+    )
+    mode = "plugin_gateway" if plugin_ready else "python_command_bridge"
+    reason_code = "gateway_plugin_ready"
+    if not enabled:
+        reason_code = "gateway_plugin_disabled"
+    elif not bun_available:
+        reason_code = "gateway_plugin_runtime_unavailable"
+    elif not plugin_ready:
+        reason_code = "gateway_plugin_not_ready"
+    return {
+        "mode": mode,
+        "reason_code": reason_code,
+        "missing_hook_capabilities": missing,
+    }
+
+
 # Computes gateway runtime status payload.
 def status_payload(
     config: dict[str, Any],
@@ -137,16 +171,27 @@ def status_payload(
             "state_path": str(cleanup_path) if cleanup_path else None,
         }
     loop_state = load_gateway_loop_state(cwd)
+    enabled = plugin_enabled(config, home)
+    bun_available = shutil.which("bun") is not None
+    hooks = hook_diagnostics(pdir)
+    runtime_mode = gateway_runtime_mode(
+        enabled=enabled,
+        bun_available=bun_available,
+        hooks=hooks,
+    )
     payload = {
         "result": "PASS",
-        "enabled": plugin_enabled(config, home),
+        "enabled": enabled,
         "plugin_spec": gateway_plugin_spec(home),
         "plugin_dir": str(pdir),
         "plugin_dir_exists": pdir.exists(),
         "plugin_dist_exists": (pdir / "dist" / "index.js").exists(),
-        "bun_available": shutil.which("bun") is not None,
+        "bun_available": bun_available,
         "npm_available": shutil.which("npm") is not None,
-        "hook_diagnostics": hook_diagnostics(pdir),
+        "hook_diagnostics": hooks,
+        "runtime_mode": runtime_mode["mode"],
+        "runtime_reason_code": runtime_mode["reason_code"],
+        "missing_hook_capabilities": runtime_mode["missing_hook_capabilities"],
         "loop_state_path": str(gateway_loop_state_path(cwd)),
         "loop_state": loop_state if loop_state else None,
     }
