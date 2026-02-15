@@ -75,6 +75,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.keywordDetector && typeof source.keywordDetector === "object"
       ? (source.keywordDetector as Record<string, unknown>)
       : {}
+  const autoSlashSource =
+    source.autoSlashCommand && typeof source.autoSlashCommand === "object"
+      ? (source.autoSlashCommand as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -190,6 +194,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof keywordDetectorSource.enabled === "boolean"
           ? keywordDetectorSource.enabled
           : DEFAULT_GATEWAY_CONFIG.keywordDetector.enabled,
+    },
+    autoSlashCommand: {
+      enabled:
+        typeof autoSlashSource.enabled === "boolean"
+          ? autoSlashSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.autoSlashCommand.enabled,
     },
     quality: {
       profile: qualityProfile,

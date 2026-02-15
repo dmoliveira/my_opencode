@@ -84,10 +84,16 @@ interface ChatMessageInput {
         text?: string;
     }>;
 }
+interface ChatMessageOutput {
+    parts?: Array<{
+        type: string;
+        text?: string;
+    }>;
+}
 export default function GatewayCorePlugin(ctx: GatewayContext): {
     event(input: GatewayEventPayload): Promise<void>;
     "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>;
     "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>;
-    "chat.message"(input: ChatMessageInput): Promise<void>;
+    "chat.message"(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void>;
 };
 export {};
