@@ -127,6 +127,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
       ? (source.questionLabelTruncator as Record<string, unknown>)
       : {}
+  const dangerousCommandSource =
+    source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
+      ? (source.dangerousCommandGuard as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -332,6 +336,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         questionLabelSource.maxLength,
         DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.maxLength,
       ),
+    },
+    dangerousCommandGuard: {
+      enabled:
+        typeof dangerousCommandSource.enabled === "boolean"
+          ? dangerousCommandSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.dangerousCommandGuard.enabled,
+      blockedPatterns:
+        dangerousCommandSource.blockedPatterns === undefined
+          ? DEFAULT_GATEWAY_CONFIG.dangerousCommandGuard.blockedPatterns
+          : stringList(dangerousCommandSource.blockedPatterns),
     },
     quality: {
       profile: qualityProfile,

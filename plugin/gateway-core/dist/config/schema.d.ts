@@ -87,6 +87,10 @@ export interface QuestionLabelTruncatorConfig {
     enabled: boolean;
     maxLength: number;
 }
+export interface DangerousCommandGuardConfig {
+    enabled: boolean;
+    blockedPatterns: string[];
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -114,6 +118,7 @@ export interface GatewayConfig {
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
     questionLabelTruncator: QuestionLabelTruncatorConfig;
+    dangerousCommandGuard: DangerousCommandGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

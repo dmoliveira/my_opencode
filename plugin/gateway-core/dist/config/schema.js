@@ -26,6 +26,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "agent-user-reminder",
             "unstable-agent-babysitter",
             "question-label-truncator",
+            "dangerous-command-guard",
             "safety",
         ],
     },
@@ -104,6 +105,17 @@ export const DEFAULT_GATEWAY_CONFIG = {
     questionLabelTruncator: {
         enabled: true,
         maxLength: 30,
+    },
+    dangerousCommandGuard: {
+        enabled: true,
+        blockedPatterns: [
+            "\\brm\\s+-rf\\b",
+            "\\bgit\\s+reset\\s+--hard\\b",
+            "\\bgit\\s+checkout\\s+--\\b",
+            "\\bgit\\s+clean\\s+-fdx\\b",
+            "\\bgit\\s+push\\s+--force\\b",
+            "curl\\s+[^|]+\\|\\s*bash",
+        ],
     },
     quality: {
         profile: "fast",

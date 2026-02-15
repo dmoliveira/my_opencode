@@ -100,6 +100,9 @@ export function loadGatewayConfig(raw) {
     const questionLabelSource = source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
         ? source.questionLabelTruncator
         : {};
+    const dangerousCommandSource = source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
+        ? source.dangerousCommandGuard
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -247,6 +250,14 @@ export function loadGatewayConfig(raw) {
                 ? questionLabelSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.enabled,
             maxLength: nonNegativeInt(questionLabelSource.maxLength, DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.maxLength),
+        },
+        dangerousCommandGuard: {
+            enabled: typeof dangerousCommandSource.enabled === "boolean"
+                ? dangerousCommandSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.dangerousCommandGuard.enabled,
+            blockedPatterns: dangerousCommandSource.blockedPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.dangerousCommandGuard.blockedPatterns
+                : stringList(dangerousCommandSource.blockedPatterns),
         },
         quality: {
             profile: qualityProfile,
