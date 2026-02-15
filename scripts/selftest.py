@@ -4563,6 +4563,46 @@ version: 1
                 "autopilot status should hide bridge loop state when plugin mode is active",
             )
 
+        forced_bridge_mode_env = dict(refactor_env)
+        forced_bridge_mode_env["MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE"] = "0"
+        autopilot_command_status_forced_bridge_mode = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "status",
+                "--confidence",
+                "0.9",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=forced_bridge_mode_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_status_forced_bridge_mode.returncode == 0,
+            "autopilot status should run in forced bridge-mode diagnostics environment",
+        )
+        autopilot_command_status_forced_bridge_mode_report = parse_json_output(
+            autopilot_command_status_forced_bridge_mode.stdout
+        )
+        expect(
+            autopilot_command_status_forced_bridge_mode_report.get(
+                "gateway_runtime_mode"
+            )
+            == "python_command_bridge"
+            and autopilot_command_status_forced_bridge_mode_report.get(
+                "gateway_runtime_reason_code"
+            )
+            in {
+                "gateway_plugin_runtime_unavailable",
+                "gateway_plugin_disabled",
+                "gateway_plugin_not_ready",
+            },
+            "autopilot status should expose deterministic bridge fallback diagnostics when bun is unavailable",
+        )
+
         infer_repo = tmp / "autopilot_infer_repo"
         infer_repo.mkdir(parents=True, exist_ok=True)
         subprocess.run(
