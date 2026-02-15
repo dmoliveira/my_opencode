@@ -853,9 +853,7 @@
   },
   "plugin": [
     "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core",
-    "@mohak34/opencode-notifier@latest",
-    "opencode-supermemory",
-    "opencode-wakatime"
+    "@mohak34/opencode-notifier@latest"
   ],
   "instructions": [
     "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",
