@@ -52,6 +52,69 @@ def plugin_dir(home: Path) -> Path:
     return home / ".config" / "opencode" / "my_opencode" / "plugin" / "gateway-core"
 
 
+# Returns gateway-core hook diagnostics for source and dist artifacts.
+def hook_diagnostics(pdir: Path) -> dict[str, Any]:
+    src_index = pdir / "src" / "index.ts"
+    src_hook_files = [
+        pdir / "src" / "hooks" / "autopilot-loop" / "index.ts",
+        pdir / "src" / "hooks" / "continuation" / "index.ts",
+        pdir / "src" / "hooks" / "safety" / "index.ts",
+    ]
+    dist_index = pdir / "dist" / "index.js"
+    dist_hook_files = [
+        pdir / "dist" / "hooks" / "autopilot-loop" / "index.js",
+        pdir / "dist" / "hooks" / "continuation" / "index.js",
+        pdir / "dist" / "hooks" / "safety" / "index.js",
+    ]
+
+    content = ""
+    if dist_index.exists():
+        try:
+            content = dist_index.read_text(encoding="utf-8")
+        except OSError:
+            content = ""
+
+    autopilot_loop_content = ""
+    autopilot_loop_path = pdir / "dist" / "hooks" / "autopilot-loop" / "index.js"
+    if autopilot_loop_path.exists():
+        try:
+            autopilot_loop_content = autopilot_loop_path.read_text(encoding="utf-8")
+        except OSError:
+            autopilot_loop_content = ""
+
+    continuation_content = ""
+    continuation_path = pdir / "dist" / "hooks" / "continuation" / "index.js"
+    if continuation_path.exists():
+        try:
+            continuation_content = continuation_path.read_text(encoding="utf-8")
+        except OSError:
+            continuation_content = ""
+
+    safety_content = ""
+    safety_path = pdir / "dist" / "hooks" / "safety" / "index.js"
+    if safety_path.exists():
+        try:
+            safety_content = safety_path.read_text(encoding="utf-8")
+        except OSError:
+            safety_content = ""
+
+    return {
+        "source_index_exists": src_index.exists(),
+        "source_hooks_exist": all(path.exists() for path in src_hook_files),
+        "dist_index_exists": dist_index.exists(),
+        "dist_hooks_exist": all(path.exists() for path in dist_hook_files),
+        "dist_exposes_tool_execute_before": '"tool.execute.before"' in content,
+        "dist_exposes_chat_message": '"chat.message"' in content,
+        "dist_autopilot_handles_slashcommand": "tool.execute.before"
+        in autopilot_loop_content
+        and "slashcommand" in autopilot_loop_content,
+        "dist_continuation_handles_session_idle": "session.idle"
+        in continuation_content,
+        "dist_safety_handles_session_deleted": "session.deleted" in safety_content,
+        "dist_safety_handles_session_error": "session.error" in safety_content,
+    }
+
+
 # Computes gateway runtime status payload.
 def status_payload(
     config: dict[str, Any],
@@ -83,6 +146,7 @@ def status_payload(
         "plugin_dist_exists": (pdir / "dist" / "index.js").exists(),
         "bun_available": shutil.which("bun") is not None,
         "npm_available": shutil.which("npm") is not None,
+        "hook_diagnostics": hook_diagnostics(pdir),
         "loop_state_path": str(gateway_loop_state_path(cwd)),
         "loop_state": loop_state if loop_state else None,
     }
@@ -140,6 +204,24 @@ def command_doctor(as_json: bool) -> int:
         warnings.append("gateway plugin is not built (dist/index.js missing)")
     if status["enabled"] and not status["bun_available"]:
         warnings.append("gateway plugin is enabled but bun is not available")
+
+    hooks_any = status.get("hook_diagnostics")
+    hooks = hooks_any if isinstance(hooks_any, dict) else {}
+    if status["plugin_dist_exists"] and hooks:
+        required_dist_flags = [
+            "dist_exposes_tool_execute_before",
+            "dist_exposes_chat_message",
+            "dist_autopilot_handles_slashcommand",
+            "dist_continuation_handles_session_idle",
+            "dist_safety_handles_session_deleted",
+            "dist_safety_handles_session_error",
+        ]
+        missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
+        if missing:
+            problems.append(
+                "gateway-core dist is missing required hook capabilities: "
+                + ", ".join(missing)
+            )
 
     report = {
         "result": "PASS" if not problems else "FAIL",
