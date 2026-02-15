@@ -137,6 +137,16 @@ if [ -d "$INSTALL_DIR/plugin/autopilot-loop" ]; then
 	fi
 fi
 
+if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then
+	if command -v npm >/dev/null 2>&1; then
+		(
+			cd "$INSTALL_DIR/plugin/gateway-core" && npm install --silent && npm run build --silent
+		) || printf "warning: gateway-core plugin build failed (continuing)\n"
+	else
+		printf "warning: npm not found; skipping gateway-core plugin build\n"
+	fi
+fi
+
 if [ "$RUN_WIZARD" = true ]; then
 	printf "\nRunning install wizard...\n"
 	WIZARD_ARGS=()
