@@ -2,6 +2,7 @@ import { loadGatewayConfig } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
+import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
 import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
@@ -120,6 +121,9 @@ function configuredHooks(ctx) {
         }),
         createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,
+        }),
+        createAgentUserReminderHook({
+            enabled: cfg.agentUserReminder.enabled,
         }),
     ];
     if (!cfg.hooks.enabled) {

@@ -76,6 +76,9 @@ export interface EmptyTaskResponseDetectorConfig {
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
+export interface AgentUserReminderConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -100,6 +103,7 @@ export interface GatewayConfig {
     taskResumeInfo: TaskResumeInfoConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
     commentChecker: CommentCheckerConfig;
+    agentUserReminder: AgentUserReminderConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

@@ -91,6 +91,9 @@ export function loadGatewayConfig(raw) {
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
+    const agentUserReminderSource = source.agentUserReminder && typeof source.agentUserReminder === "object"
+        ? source.agentUserReminder
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -219,6 +222,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof commentCheckerSource.enabled === "boolean"
                 ? commentCheckerSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.commentChecker.enabled,
+        },
+        agentUserReminder: {
+            enabled: typeof agentUserReminderSource.enabled === "boolean"
+                ? agentUserReminderSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
         },
         quality: {
             profile: qualityProfile,

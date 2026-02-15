@@ -118,6 +118,11 @@ export interface CommentCheckerConfig {
   enabled: boolean
 }
 
+// Declares specialist-agent reminder settings.
+export interface AgentUserReminderConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -143,6 +148,7 @@ export interface GatewayConfig {
   taskResumeInfo: TaskResumeInfoConfig
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
   commentChecker: CommentCheckerConfig
+  agentUserReminder: AgentUserReminderConfig
   quality: QualityConfig
 }
 
@@ -171,6 +177,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "task-resume-info",
       "empty-task-response-detector",
       "comment-checker",
+      "agent-user-reminder",
       "safety",
     ],
   },
@@ -237,6 +244,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   commentChecker: {
+    enabled: true,
+  },
+  agentUserReminder: {
     enabled: true,
   },
   quality: {

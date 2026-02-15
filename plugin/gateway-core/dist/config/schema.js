@@ -23,6 +23,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "task-resume-info",
             "empty-task-response-detector",
             "comment-checker",
+            "agent-user-reminder",
             "safety",
         ],
     },
@@ -89,6 +90,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     commentChecker: {
+        enabled: true,
+    },
+    agentUserReminder: {
         enabled: true,
     },
     quality: {
