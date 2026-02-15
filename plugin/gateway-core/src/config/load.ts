@@ -123,6 +123,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.unstableAgentBabysitter && typeof source.unstableAgentBabysitter === "object"
       ? (source.unstableAgentBabysitter as Record<string, unknown>)
       : {}
+  const questionLabelSource =
+    source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
+      ? (source.questionLabelTruncator as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -318,6 +322,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         unstableBabysitterSource.riskyPatterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.unstableAgentBabysitter.riskyPatterns
           : stringList(unstableBabysitterSource.riskyPatterns),
+    },
+    questionLabelTruncator: {
+      enabled:
+        typeof questionLabelSource.enabled === "boolean"
+          ? questionLabelSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.enabled,
+      maxLength: nonNegativeInt(
+        questionLabelSource.maxLength,
+        DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.maxLength,
+      ),
     },
     quality: {
       profile: qualityProfile,

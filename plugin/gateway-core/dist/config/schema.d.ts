@@ -83,6 +83,10 @@ export interface UnstableAgentBabysitterConfig {
     enabled: boolean;
     riskyPatterns: string[];
 }
+export interface QuestionLabelTruncatorConfig {
+    enabled: boolean;
+    maxLength: number;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -109,6 +113,7 @@ export interface GatewayConfig {
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
+    questionLabelTruncator: QuestionLabelTruncatorConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

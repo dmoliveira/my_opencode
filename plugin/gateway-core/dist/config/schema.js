@@ -25,6 +25,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
+            "question-label-truncator",
             "safety",
         ],
     },
@@ -99,6 +100,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     unstableAgentBabysitter: {
         enabled: true,
         riskyPatterns: ["experimental", "preview", "unstable"],
+    },
+    questionLabelTruncator: {
+        enabled: true,
+        maxLength: 30,
     },
     quality: {
         profile: "fast",

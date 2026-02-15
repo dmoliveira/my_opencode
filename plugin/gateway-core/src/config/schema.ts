@@ -129,6 +129,12 @@ export interface UnstableAgentBabysitterConfig {
   riskyPatterns: string[]
 }
 
+// Declares question label truncation settings for safe option labels.
+export interface QuestionLabelTruncatorConfig {
+  enabled: boolean
+  maxLength: number
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -156,6 +162,7 @@ export interface GatewayConfig {
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
+  questionLabelTruncator: QuestionLabelTruncatorConfig
   quality: QualityConfig
 }
 
@@ -186,6 +193,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
+      "question-label-truncator",
       "safety",
     ],
   },
@@ -260,6 +268,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   unstableAgentBabysitter: {
     enabled: true,
     riskyPatterns: ["experimental", "preview", "unstable"],
+  },
+  questionLabelTruncator: {
+    enabled: true,
+    maxLength: 30,
   },
   quality: {
     profile: "fast",
