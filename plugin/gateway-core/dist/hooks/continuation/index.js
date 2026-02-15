@@ -149,7 +149,7 @@ function bootstrapLoopFromRuntime(directory, sessionId) {
     return state;
 }
 // Builds continuation prompt for active gateway loop iteration.
-function continuationPrompt(state) {
+function continuationPrompt(state, mode) {
     const active = state.activeLoop;
     if (!active) {
         return "Continue the current objective.";
@@ -165,15 +165,25 @@ function continuationPrompt(state) {
         ].join("\n")
         : "Done Criteria: use the objective and prior context; do not ask for additional checklist items unless no criteria exist.";
     const capLabel = active.maxIterations > 0 ? String(active.maxIterations) : "INF";
+    const modeGuidance = mode === "ultrawork"
+        ? "Mode: ultrawork. Use maximum rigor, validate each change, and delegate specialist tasks when beneficial."
+        : mode === "analyze"
+            ? "Mode: analyze. Prioritize diagnosis, root-cause reasoning, and explicit evidence before edits."
+            : mode === "search"
+                ? "Mode: search. Prioritize discovery, map candidate files first, then apply focused edits."
+                : "";
     return [
         `[GATEWAY LOOP ${active.iteration}/${capLabel}]`,
         "Continue execution from the current state and apply concrete validated changes.",
         "Do not ask the user for checklist items when done criteria are already present; execute them directly.",
+        modeGuidance,
         completionGuidance,
         "Objective:",
         active.objective,
         criteriaBlock,
-    ].join("\n\n");
+    ]
+        .filter(Boolean)
+        .join("\n\n");
 }
 // Creates continuation helper hook placeholder for gateway composition.
 export function createContinuationHook(options) {
@@ -217,6 +227,15 @@ export function createContinuationHook(options) {
                     hook: "continuation",
                     stage: "skip",
                     reason_code: "no_active_loop",
+                });
+                return;
+            }
+            if (options.stopGuard?.isStopped(sessionId)) {
+                writeGatewayEventAudit(directory, {
+                    hook: "continuation",
+                    stage: "skip",
+                    reason_code: "stop_guard_active",
+                    session_id: sessionId,
                 });
                 return;
             }
@@ -289,9 +308,10 @@ export function createContinuationHook(options) {
                 iteration: active.iteration,
             });
             if (client) {
+                const mode = options.keywordDetector?.modeForSession(sessionId) ?? null;
                 await client.promptAsync({
                     path: { id: sessionId },
-                    body: { parts: [{ type: "text", text: continuationPrompt(state) }] },
+                    body: { parts: [{ type: "text", text: continuationPrompt(state, mode) }] },
                     query: { directory },
                 });
                 writeGatewayEventAudit(directory, {

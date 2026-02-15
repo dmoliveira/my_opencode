@@ -41,6 +41,19 @@ interface GatewayContext {
                     directory?: string;
                 };
             }): Promise<void>;
+            summarize(args: {
+                path: {
+                    id: string;
+                };
+                body: {
+                    providerID: string;
+                    modelID: string;
+                    auto: boolean;
+                };
+                query?: {
+                    directory?: string;
+                };
+            }): Promise<void>;
         };
     };
 }
@@ -53,12 +66,28 @@ interface ToolBeforeOutput {
         command?: string;
     };
 }
+interface ToolAfterInput {
+    tool: string;
+    sessionID?: string;
+}
+interface ToolAfterOutput {
+    output?: unknown;
+    metadata?: unknown;
+}
 interface ChatMessageInput {
     sessionID?: string;
+    prompt?: string;
+    text?: string;
+    message?: string;
+    parts?: Array<{
+        type?: string;
+        text?: string;
+    }>;
 }
 export default function GatewayCorePlugin(ctx: GatewayContext): {
     event(input: GatewayEventPayload): Promise<void>;
     "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>;
+    "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>;
     "chat.message"(input: ChatMessageInput): Promise<void>;
 };
 export {};

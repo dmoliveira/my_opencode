@@ -6,6 +6,8 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
 import type { GatewayState } from "../../state/types.js"
 import type { GatewayHook } from "../registry.js"
+import type { KeywordDetector } from "../keyword-detector/index.js"
+import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
 // Declares minimal session message API used by continuation hook.
 interface GatewayClient {
@@ -208,7 +210,7 @@ function bootstrapLoopFromRuntime(directory: string, sessionId: string): Gateway
 }
 
 // Builds continuation prompt for active gateway loop iteration.
-function continuationPrompt(state: GatewayState): string {
+function continuationPrompt(state: GatewayState, mode: string | null): string {
   const active = state.activeLoop
   if (!active) {
     return "Continue the current objective."
@@ -225,19 +227,35 @@ function continuationPrompt(state: GatewayState): string {
       ].join("\n")
     : "Done Criteria: use the objective and prior context; do not ask for additional checklist items unless no criteria exist."
   const capLabel = active.maxIterations > 0 ? String(active.maxIterations) : "INF"
+  const modeGuidance =
+    mode === "ultrawork"
+      ? "Mode: ultrawork. Use maximum rigor, validate each change, and delegate specialist tasks when beneficial."
+      : mode === "analyze"
+        ? "Mode: analyze. Prioritize diagnosis, root-cause reasoning, and explicit evidence before edits."
+        : mode === "search"
+          ? "Mode: search. Prioritize discovery, map candidate files first, then apply focused edits."
+          : ""
   return [
     `[GATEWAY LOOP ${active.iteration}/${capLabel}]`,
     "Continue execution from the current state and apply concrete validated changes.",
     "Do not ask the user for checklist items when done criteria are already present; execute them directly.",
+    modeGuidance,
     completionGuidance,
     "Objective:",
     active.objective,
     criteriaBlock,
-  ].join("\n\n")
+  ]
+    .filter(Boolean)
+    .join("\n\n")
 }
 
 // Creates continuation helper hook placeholder for gateway composition.
-export function createContinuationHook(options: { directory: string; client?: GatewayClient }): GatewayHook {
+export function createContinuationHook(options: {
+  directory: string
+  client?: GatewayClient
+  stopGuard?: StopContinuationGuard
+  keywordDetector?: KeywordDetector
+}): GatewayHook {
   return {
     id: "continuation",
     priority: 200,
@@ -280,6 +298,15 @@ export function createContinuationHook(options: { directory: string; client?: Ga
           hook: "continuation",
           stage: "skip",
           reason_code: "no_active_loop",
+        })
+        return
+      }
+      if (options.stopGuard?.isStopped(sessionId)) {
+        writeGatewayEventAudit(directory, {
+          hook: "continuation",
+          stage: "skip",
+          reason_code: "stop_guard_active",
+          session_id: sessionId,
         })
         return
       }
@@ -355,9 +382,10 @@ export function createContinuationHook(options: { directory: string; client?: Ga
       })
 
       if (client) {
+        const mode = options.keywordDetector?.modeForSession(sessionId) ?? null
         await client.promptAsync({
           path: { id: sessionId },
-          body: { parts: [{ type: "text", text: continuationPrompt(state) }] },
+          body: { parts: [{ type: "text", text: continuationPrompt(state, mode) }] },
           query: { directory },
         })
         writeGatewayEventAudit(directory, {

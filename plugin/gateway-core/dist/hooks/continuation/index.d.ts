@@ -1,4 +1,6 @@
 import type { GatewayHook } from "../registry.js";
+import type { KeywordDetector } from "../keyword-detector/index.js";
+import type { StopContinuationGuard } from "../stop-continuation-guard/index.js";
 interface GatewayClient {
     session?: {
         messages(args: {
@@ -38,5 +40,7 @@ interface GatewayClient {
 export declare function createContinuationHook(options: {
     directory: string;
     client?: GatewayClient;
+    stopGuard?: StopContinuationGuard;
+    keywordDetector?: KeywordDetector;
 }): GatewayHook;
 export {};
