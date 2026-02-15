@@ -238,6 +238,29 @@ def main() -> int:
         home.mkdir(parents=True, exist_ok=True)
         test_env = os.environ.copy()
         test_env["HOME"] = str(home)
+        test_bin_dir = home / "bin"
+        test_bin_dir.mkdir(parents=True, exist_ok=True)
+        opencode_stub = test_bin_dir / "opencode"
+        opencode_stub.write_text(
+            """#!/bin/sh
+if [ \"$1\" = \"agent\" ] && [ \"$2\" = \"list\" ]; then
+  cat <<'EOF'
+orchestrator (primary)
+explore (subagent)
+librarian (subagent)
+oracle (subagent)
+verifier (subagent)
+reviewer (subagent)
+release-scribe (subagent)
+EOF
+  exit 0
+fi
+exit 0
+""",
+            encoding="utf-8",
+        )
+        opencode_stub.chmod(0o755)
+        test_env["PATH"] = f"{test_bin_dir}:{os.environ.get('PATH', '')}"
         installed_agent_dir = home / ".config" / "opencode" / "agent"
         installed_agent_dir.mkdir(parents=True, exist_ok=True)
         for agent_file in AGENT_DIR.glob("*.md"):
