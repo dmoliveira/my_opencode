@@ -5,5 +5,6 @@ export declare const REASON_CODES: {
     readonly LOOP_MAX_ITERATIONS: "gateway_loop_max_iterations_reached";
     readonly LOOP_COMPLETED_PROMISE: "gateway_loop_promise_detected";
     readonly LOOP_COMPLETED_OBJECTIVE: "gateway_loop_objective_completed";
+    readonly LOOP_ORPHAN_CLEANED: "gateway_loop_orphan_cleaned";
 };
 export type GatewayReasonCode = (typeof REASON_CODES)[keyof typeof REASON_CODES];
