@@ -7,6 +7,7 @@ export declare const REASON_CODES: {
     readonly LOOP_COMPLETED_OBJECTIVE: "gateway_loop_objective_completed";
     readonly LOOP_RUNTIME_BOOTSTRAPPED: "gateway_loop_runtime_bootstrapped";
     readonly LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME: "gateway_loop_completion_ignored_incomplete_runtime";
+    readonly LOOP_COMPLETION_STALLED_RUNTIME: "gateway_loop_completion_stalled_runtime";
     readonly LOOP_ORPHAN_CLEANED: "gateway_loop_orphan_cleaned";
     readonly RUNTIME_PLUGIN_READY: "gateway_plugin_ready";
     readonly RUNTIME_PLUGIN_DISABLED: "gateway_plugin_disabled";

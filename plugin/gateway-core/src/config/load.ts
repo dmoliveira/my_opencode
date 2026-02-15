@@ -20,6 +20,15 @@ function nonNegativeInt(value: unknown, fallback: number): number {
   return parsed
 }
 
+// Coerces unknown value into a safe positive integer fallback.
+function positiveInt(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value ?? ""), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback
+  }
+  return parsed
+}
+
 // Coerces unknown value into bounded float fallback.
 function boundedFloat(value: unknown, min: number, max: number, fallback: number): number {
   const parsed = Number.parseFloat(String(value ?? ""))
@@ -249,6 +258,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof autopilotSource.bootstrapFromRuntimeOnIdle === "boolean"
           ? autopilotSource.bootstrapFromRuntimeOnIdle
           : DEFAULT_GATEWAY_CONFIG.autopilotLoop.bootstrapFromRuntimeOnIdle,
+      maxIgnoredCompletionCycles: positiveInt(
+        autopilotSource.maxIgnoredCompletionCycles,
+        DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIgnoredCompletionCycles,
+      ),
       completionMode,
       completionPromise:
         typeof autopilotSource.completionPromise === "string" &&

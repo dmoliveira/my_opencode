@@ -10,6 +10,7 @@ export interface AutopilotLoopConfig {
   maxIterations: number
   orphanMaxAgeHours: number
   bootstrapFromRuntimeOnIdle: boolean
+  maxIgnoredCompletionCycles: number
   completionMode: CompletionMode
   completionPromise: string
 }
@@ -370,6 +371,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     maxIterations: 0,
     orphanMaxAgeHours: 12,
     bootstrapFromRuntimeOnIdle: false,
+    maxIgnoredCompletionCycles: 1,
     completionMode: "promise",
     completionPromise: "DONE",
   },

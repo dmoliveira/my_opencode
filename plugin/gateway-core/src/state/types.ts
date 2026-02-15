@@ -4,6 +4,7 @@ export interface GatewayLoopState {
   sessionId: string
   objective: string
   doneCriteria?: string[]
+  ignoredCompletionCycles?: number
   completionMode: "promise" | "objective"
   completionPromise: string
   iteration: number

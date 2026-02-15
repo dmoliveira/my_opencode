@@ -268,7 +268,13 @@ export function createContinuationHook(options: {
   stopGuard?: StopContinuationGuard
   keywordDetector?: KeywordDetector
   bootstrapFromRuntime?: boolean
+  maxIgnoredCompletionCycles?: number
 }): GatewayHook {
+  const maxIgnoredCompletionCycles =
+    Number.isFinite(options.maxIgnoredCompletionCycles) &&
+    Number.parseInt(String(options.maxIgnoredCompletionCycles), 10) > 0
+      ? Number.parseInt(String(options.maxIgnoredCompletionCycles), 10)
+      : 3
   return {
     id: "continuation",
     priority: 200,
@@ -342,12 +348,35 @@ export function createContinuationHook(options: {
         const text = lastAssistantText(Array.isArray(response.data) ? response.data : [])
         if (isLoopComplete(state, text)) {
           const runtime = loadAutopilotRuntime()
-            if (runtimeBlocksCompletion(runtime, state)) {
+          if (runtimeBlocksCompletion(runtime, state)) {
+            const ignoredCycles =
+              Number.isFinite(active.ignoredCompletionCycles) &&
+              Number.parseInt(String(active.ignoredCompletionCycles), 10) >= 0
+                ? Number.parseInt(String(active.ignoredCompletionCycles), 10) + 1
+                : 1
+            active.ignoredCompletionCycles = ignoredCycles
+            if (ignoredCycles >= maxIgnoredCompletionCycles) {
+              active.active = false
+              state.lastUpdatedAt = nowIso()
+              state.source = REASON_CODES.LOOP_COMPLETION_STALLED_RUNTIME
+              saveGatewayState(directory, state)
+              writeGatewayEventAudit(directory, {
+                hook: "continuation",
+                stage: "state",
+                reason_code: REASON_CODES.LOOP_COMPLETION_STALLED_RUNTIME,
+                session_id: sessionId,
+                ignored_completion_cycles: ignoredCycles,
+              })
+              return
+            }
+            state.lastUpdatedAt = nowIso()
+            saveGatewayState(directory, state)
             writeGatewayEventAudit(directory, {
               hook: "continuation",
               stage: "skip",
               reason_code: REASON_CODES.LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME,
               session_id: sessionId,
+              ignored_completion_cycles: ignoredCycles,
             })
           } else {
             active.active = false
@@ -364,6 +393,12 @@ export function createContinuationHook(options: {
               session_id: sessionId,
             })
             return
+          }
+        } else {
+          if ((active.ignoredCompletionCycles ?? 0) > 0) {
+            active.ignoredCompletionCycles = 0
+            state.lastUpdatedAt = nowIso()
+            saveGatewayState(directory, state)
           }
         }
       }
