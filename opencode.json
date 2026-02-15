@@ -806,6 +806,26 @@
       "description": "Run quality profile diagnostics",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" doctor --json`\nShow only the command output."
     },
+    "gateway": {
+      "description": "Manage plugin gateway mode (status|enable|disable|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "gateway-status": {
+      "description": "Show plugin gateway status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" status --json`\nShow only the command output."
+    },
+    "gateway-enable": {
+      "description": "Enable plugin gateway file plugin entry",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" enable --json`\nShow only the command output."
+    },
+    "gateway-disable": {
+      "description": "Disable plugin gateway file plugin entry",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" disable --json`\nShow only the command output."
+    },
+    "gateway-doctor": {
+      "description": "Run plugin gateway diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" doctor --json`\nShow only the command output."
+    },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."

@@ -1550,6 +1550,30 @@ Profiles:
 - `fast`: lint+typecheck+selftest, skip heavier test passes
 - `strict`: run full quality gates (including TS tests)
 
+## Plugin gateway controls 🔌
+
+Use these directly in OpenCode:
+
+```text
+/gateway status
+/gateway enable
+/gateway disable
+/gateway doctor
+```
+
+Shortcuts:
+
+```text
+/gateway-status
+/gateway-enable
+/gateway-disable
+/gateway-doctor
+```
+
+Notes:
+- `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
+- If `bun` is unavailable, keep gateway disabled and use Python command bridge mode.
+
 ## Telemetry forwarding inside OpenCode 📡
 
 Use these directly in OpenCode:

@@ -95,6 +95,7 @@ TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
 QUALITY_SCRIPT = REPO_ROOT / "scripts" / "quality_command.py"
+GATEWAY_SCRIPT = REPO_ROOT / "scripts" / "gateway_command.py"
 DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
@@ -1604,6 +1605,52 @@ def main() -> int:
         expect(
             quality_doctor.get("result") == "PASS",
             "quality doctor should pass for valid profile",
+        )
+
+        gateway_env = os.environ.copy()
+        gateway_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
+        gateway_env["HOME"] = str(home)
+
+        def run_gateway(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(GATEWAY_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=gateway_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+
+        result = run_gateway("status", "--json")
+        expect(result.returncode == 0, f"gateway status failed: {result.stderr}")
+        gateway_status = parse_json_output(result.stdout)
+        expect(
+            gateway_status.get("result") == "PASS",
+            "gateway status should return PASS",
+        )
+
+        result = run_gateway("enable", "--json")
+        expect(result.returncode == 0, f"gateway enable failed: {result.stderr}")
+        gateway_enabled = parse_json_output(result.stdout)
+        expect(
+            gateway_enabled.get("enabled") is True,
+            "gateway enable should set plugin entry enabled",
+        )
+
+        result = run_gateway("disable", "--json")
+        expect(result.returncode == 0, f"gateway disable failed: {result.stderr}")
+        gateway_disabled = parse_json_output(result.stdout)
+        expect(
+            gateway_disabled.get("enabled") is False,
+            "gateway disable should remove plugin entry",
+        )
+
+        result = run_gateway("doctor", "--json")
+        expect(result.returncode == 0, f"gateway doctor failed: {result.stderr}")
+        gateway_doctor = parse_json_output(result.stdout)
+        expect(
+            gateway_doctor.get("result") == "PASS",
+            "gateway doctor should pass in default disabled mode",
         )
 
         notify_policy_path = (
