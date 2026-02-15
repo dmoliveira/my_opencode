@@ -492,6 +492,10 @@ Autopilot gateway telemetry fields (`--json`):
 
 | Field | Type | Meaning |
 |---|---|---|
+| `gateway_runtime_mode` | `string` | Active routing mode for autopilot controls: `plugin_gateway` when gateway plugin is enabled and hook-complete, otherwise `python_command_bridge`. |
+| `gateway_runtime_reason_code` | `string` | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_not_ready`). |
+| `gateway_plugin_enabled` | `boolean` | Whether gateway-core file plugin is currently enabled in layered config. |
+| `gateway_missing_hook_capabilities` | `string[]` | Missing required dist hook capabilities when plugin mode cannot be selected. |
 | `gateway_loop_state` | `object|null` | Current gateway bridge state loaded from `.opencode/gateway-core.state.json` in current cwd. |
 | `gateway_orphan_cleanup.attempted` | `boolean` | Always `true` when status snapshot runs cleanup check. |
 | `gateway_orphan_cleanup.changed` | `boolean` | `true` when stale/invalid active loop was deactivated and state file was updated. |

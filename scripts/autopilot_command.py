@@ -21,7 +21,9 @@ from gateway_plugin_bridge import (  # type: ignore
     bridge_start_loop,
     bridge_stop_loop,
     cleanup_orphan_loop,
+    gateway_loop_state_path,
     load_gateway_loop_state,
+    plugin_enabled,
 )
 
 
@@ -74,9 +76,42 @@ def normalize_args(args: list[str]) -> list[str]:
     return normalized
 
 
-def gateway_state_snapshot(cwd: Path) -> dict[str, Any]:
-    cleanup_path, changed, reason = cleanup_orphan_loop(cwd)
+def gateway_runtime_mode(config: dict[str, Any]) -> dict[str, Any]:
+    home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
+    enabled = plugin_enabled(config, home)
+    hooks = hook_diagnostics(plugin_dir(home))
+    required_gateway_flags = [
+        "dist_exposes_tool_execute_before",
+        "dist_exposes_chat_message",
+        "dist_autopilot_handles_slashcommand",
+        "dist_continuation_handles_session_idle",
+        "dist_safety_handles_session_deleted",
+        "dist_safety_handles_session_error",
+    ]
+    missing = [flag for flag in required_gateway_flags if hooks.get(flag) is not True]
+    plugin_ready = enabled and hooks.get("dist_index_exists") is True and not missing
+    mode = "plugin_gateway" if plugin_ready else "python_command_bridge"
+    reason_code = "gateway_plugin_ready"
+    if not enabled:
+        reason_code = "gateway_plugin_disabled"
+    elif not plugin_ready:
+        reason_code = "gateway_plugin_not_ready"
     return {
+        "mode": mode,
+        "reason_code": reason_code,
+        "plugin_enabled": enabled,
+        "missing_hook_capabilities": missing,
+    }
+
+
+def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
+    cleanup_path, changed, reason = cleanup_orphan_loop(cwd)
+    runtime_mode = gateway_runtime_mode(config)
+    return {
+        "gateway_runtime_mode": runtime_mode["mode"],
+        "gateway_runtime_reason_code": runtime_mode["reason_code"],
+        "gateway_plugin_enabled": runtime_mode["plugin_enabled"],
+        "gateway_missing_hook_capabilities": runtime_mode["missing_hook_capabilities"],
         "gateway_loop_state": load_gateway_loop_state(cwd) or None,
         "gateway_orphan_cleanup": {
             "attempted": True,
@@ -233,9 +268,19 @@ def command_start(args: list[str]) -> int:
             )
     run_any = initialized.get("run")
     if isinstance(run_any, dict):
+        runtime_mode = gateway_runtime_mode(config)
+        bridge_state_path: Path | None = None
+        if runtime_mode["mode"] == "python_command_bridge":
+            bridge_state_path = bridge_start_loop(Path.cwd(), run_any)
         initialized["gateway_loop_state_path"] = str(
-            bridge_start_loop(Path.cwd(), run_any)
+            bridge_state_path or gateway_loop_state_path(Path.cwd())
         )
+        initialized["gateway_runtime_mode"] = runtime_mode["mode"]
+        initialized["gateway_runtime_reason_code"] = runtime_mode["reason_code"]
+        initialized["gateway_plugin_enabled"] = runtime_mode["plugin_enabled"]
+        initialized["gateway_missing_hook_capabilities"] = runtime_mode[
+            "missing_hook_capabilities"
+        ]
     emit(initialized, as_json=as_json)
     return 0 if initialized.get("result") == "PASS" else 1
 
@@ -397,7 +442,9 @@ def command_go(args: list[str]) -> int:
         runtime = run_any if isinstance(run_any, dict) else {}
         started_new_run = True
         if runtime:
-            bridge_start_loop(Path.cwd(), runtime)
+            runtime_mode = gateway_runtime_mode(config)
+            if runtime_mode["mode"] == "python_command_bridge":
+                bridge_start_loop(Path.cwd(), runtime)
 
     if not runtime:
         emit(
@@ -477,7 +524,7 @@ def command_go(args: list[str]) -> int:
         "history": history,
         "next_actions": current.get("next_actions", []),
     }
-    payload.update(gateway_state_snapshot(Path.cwd()))
+    payload.update(gateway_state_snapshot(Path.cwd(), config))
     if inferred_defaults:
         payload["inferred_defaults"] = inferred_defaults
         payload["warnings"] = [
@@ -517,7 +564,7 @@ def command_status(args: list[str]) -> int:
     except ValueError:
         return usage()
 
-    _, _ = load_layered_config()
+    config, _ = load_layered_config()
     write_path = resolve_write_path()
     runtime = load_runtime(write_path)
     if not runtime:
@@ -533,7 +580,7 @@ def command_status(args: list[str]) -> int:
                 "use /autopilot doctor --json to inspect subsystem readiness",
             ],
         }
-        idle_payload.update(gateway_state_snapshot(Path.cwd()))
+        idle_payload.update(gateway_state_snapshot(Path.cwd(), config))
         emit(
             idle_payload,
             as_json=as_json,
@@ -546,7 +593,7 @@ def command_status(args: list[str]) -> int:
         confidence_score=confidence,
         interruption_class=interruption_class,
     )
-    integrated.update(gateway_state_snapshot(Path.cwd()))
+    integrated.update(gateway_state_snapshot(Path.cwd(), config))
     emit(integrated, as_json=as_json)
     return 0
 
@@ -694,7 +741,7 @@ def command_report(args: list[str]) -> int:
     if args:
         return usage()
 
-    _, _ = load_layered_config()
+    config, _ = load_layered_config()
     write_path = resolve_write_path()
     runtime, code = _runtime_or_fail(write_path, as_json=as_json)
     if runtime is None:
@@ -718,7 +765,7 @@ def command_report(args: list[str]) -> int:
         "blockers": runtime.get("blockers", []),
         "next_actions": runtime.get("next_actions", []),
     }
-    payload.update(gateway_state_snapshot(Path.cwd()))
+    payload.update(gateway_state_snapshot(Path.cwd(), config))
     emit(payload, as_json=as_json)
     return 0
 
