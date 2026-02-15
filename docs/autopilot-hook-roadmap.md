@@ -55,6 +55,7 @@ Config wiring target (optional, requires bun runtime):
 4. **Guardrails parity**
    - Keep scope/budget/reason-code behavior aligned.
    - Add kill-switch and orphan-state cleanup.
+   - Current status: command bridge now auto-cleans stale orphan loop state during `/autopilot status`, `/autopilot report`, `/autopilot go`, `/gateway status`, and `/gateway doctor`.
 
 5. **Deprecation path**
    - Mark script loop execution path deprecated after hook stability window.

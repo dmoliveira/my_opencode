@@ -18,6 +18,7 @@ from config_layering import load_layered_config, resolve_write_path  # type: ign
 from gateway_plugin_bridge import (  # type: ignore
     bridge_start_loop,
     bridge_stop_loop,
+    cleanup_orphan_loop,
     load_gateway_loop_state,
 )
 
@@ -69,6 +70,19 @@ def normalize_args(args: list[str]) -> list[str]:
             value = "--" + value.lstrip("–")
         normalized.append(value)
     return normalized
+
+
+def gateway_state_snapshot(cwd: Path) -> dict[str, Any]:
+    cleanup_path, changed, reason = cleanup_orphan_loop(cwd)
+    return {
+        "gateway_loop_state": load_gateway_loop_state(cwd) or None,
+        "gateway_orphan_cleanup": {
+            "attempted": True,
+            "changed": changed,
+            "reason": reason,
+            "state_path": str(cleanup_path) if cleanup_path else None,
+        },
+    }
 
 
 def infer_touched_paths(cwd: Path) -> list[str]:
@@ -425,8 +439,8 @@ def command_go(args: list[str]) -> int:
         "run": current,
         "history": history,
         "next_actions": current.get("next_actions", []),
-        "gateway_loop_state": load_gateway_loop_state(Path.cwd()) or None,
     }
+    payload.update(gateway_state_snapshot(Path.cwd()))
     if inferred_defaults:
         payload["inferred_defaults"] = inferred_defaults
         payload["warnings"] = [
@@ -470,19 +484,21 @@ def command_status(args: list[str]) -> int:
     write_path = resolve_write_path()
     runtime = load_runtime(write_path)
     if not runtime:
+        idle_payload = {
+            "result": "PASS",
+            "status": "idle",
+            "reason_code": "autopilot_runtime_missing",
+            "warnings": [
+                "autopilot has no active runtime yet; start a run to track status"
+            ],
+            "next_actions": [
+                "run /autopilot start with required objective fields",
+                "use /autopilot doctor --json to inspect subsystem readiness",
+            ],
+        }
+        idle_payload.update(gateway_state_snapshot(Path.cwd()))
         emit(
-            {
-                "result": "PASS",
-                "status": "idle",
-                "reason_code": "autopilot_runtime_missing",
-                "warnings": [
-                    "autopilot has no active runtime yet; start a run to track status"
-                ],
-                "next_actions": [
-                    "run /autopilot start with required objective fields",
-                    "use /autopilot doctor --json to inspect subsystem readiness",
-                ],
-            },
+            idle_payload,
             as_json=as_json,
         )
         return 0
@@ -493,6 +509,7 @@ def command_status(args: list[str]) -> int:
         confidence_score=confidence,
         interruption_class=interruption_class,
     )
+    integrated.update(gateway_state_snapshot(Path.cwd()))
     emit(integrated, as_json=as_json)
     return 0
 
@@ -664,6 +681,7 @@ def command_report(args: list[str]) -> int:
         "blockers": runtime.get("blockers", []),
         "next_actions": runtime.get("next_actions", []),
     }
+    payload.update(gateway_state_snapshot(Path.cwd()))
     emit(payload, as_json=as_json)
     return 0
 
