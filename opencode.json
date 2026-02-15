@@ -782,6 +782,30 @@
       "description": "Apply fast permission-risk policy",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile fast`\nShow only the command output."
     },
+    "quality": {
+      "description": "Manage quality profiles and checks (status|profile|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "quality-status": {
+      "description": "Show active quality profile and toggles",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" status --json`\nShow only the command output."
+    },
+    "quality-profile-fast": {
+      "description": "Set quality profile to fast",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" profile fast --json`\nShow only the command output."
+    },
+    "quality-profile-strict": {
+      "description": "Set quality profile to strict",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" profile strict --json`\nShow only the command output."
+    },
+    "quality-profile-off": {
+      "description": "Set quality profile to off",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" profile off --json`\nShow only the command output."
+    },
+    "quality-doctor": {
+      "description": "Run quality profile diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" doctor --json`\nShow only the command output."
+    },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."

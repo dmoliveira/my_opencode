@@ -94,6 +94,7 @@ SESSION_SCRIPT = REPO_ROOT / "scripts" / "session_command.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
 POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
+QUALITY_SCRIPT = REPO_ROOT / "scripts" / "quality_command.py"
 DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
@@ -1565,6 +1566,45 @@ def main() -> int:
         result = run_policy("status")
         expect(result.returncode == 0, f"policy status failed: {result.stderr}")
         expect("profile: strict" in result.stdout, "policy status should report strict")
+
+        quality_env = os.environ.copy()
+        quality_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
+        quality_env["HOME"] = str(home)
+
+        def run_quality(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(QUALITY_SCRIPT), *args],
+                capture_output=True,
+                text=True,
+                env=quality_env,
+                check=False,
+            )
+
+        result = run_quality("profile", "strict", "--json")
+        expect(
+            result.returncode == 0, f"quality profile strict failed: {result.stderr}"
+        )
+        quality_report = parse_json_output(result.stdout)
+        expect(
+            quality_report.get("profile") == "strict",
+            "quality profile strict should persist strict profile",
+        )
+
+        result = run_quality("status", "--json")
+        expect(result.returncode == 0, f"quality status failed: {result.stderr}")
+        quality_status = parse_json_output(result.stdout)
+        expect(
+            quality_status.get("quality", {}).get("ts", {}).get("tests") is True,
+            "quality strict profile should enable ts tests",
+        )
+
+        result = run_quality("doctor", "--json")
+        expect(result.returncode == 0, f"quality doctor failed: {result.stderr}")
+        quality_doctor = parse_json_output(result.stdout)
+        expect(
+            quality_doctor.get("result") == "PASS",
+            "quality doctor should pass for valid profile",
+        )
 
         notify_policy_path = (
             home / ".config" / "opencode" / "opencode-notifications.json"
