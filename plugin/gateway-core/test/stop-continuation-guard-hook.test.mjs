@@ -32,7 +32,7 @@ test("stop-continuation-guard blocks idle continuation after stop command", asyn
         hooks: {
           enabled: true,
           order: ["stop-continuation-guard", "continuation"],
-          disabled: [],
+          disabled: ["autopilot-loop"],
         },
         stopContinuationGuard: { enabled: true },
       },
