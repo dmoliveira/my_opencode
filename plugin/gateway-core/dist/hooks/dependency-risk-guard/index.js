@@ -7,6 +7,16 @@ function targetPath(payload) {
 // Creates dependency risk guard requiring explicit handling for lockfile edits.
 export function createDependencyRiskGuardHook(options) {
     const patterns = options.lockfilePatterns.map((item) => item.trim()).filter(Boolean);
+    const commandPatterns = options.commandPatterns
+        .map((item) => {
+        try {
+            return new RegExp(item, "i");
+        }
+        catch {
+            return null;
+        }
+    })
+        .filter((value) => value !== null);
     return {
         id: "dependency-risk-guard",
         priority: 415,
@@ -16,16 +26,28 @@ export function createDependencyRiskGuardHook(options) {
             }
             const eventPayload = (payload ?? {});
             const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-            if (tool !== "write" && tool !== "edit") {
-                return;
+            if (tool === "bash") {
+                const command = String(eventPayload.output?.args?.command ?? "").trim();
+                if (!command) {
+                    return;
+                }
+                const commandHit = commandPatterns.some((pattern) => pattern.test(command));
+                if (!commandHit) {
+                    return;
+                }
             }
-            const filePath = targetPath(eventPayload);
-            if (!filePath) {
-                return;
-            }
-            const hit = patterns.some((pattern) => filePath.endsWith(pattern));
-            if (!hit) {
-                return;
+            else {
+                if (tool !== "write" && tool !== "edit") {
+                    return;
+                }
+                const filePath = targetPath(eventPayload);
+                if (!filePath) {
+                    return;
+                }
+                const hit = patterns.some((pattern) => filePath.endsWith(pattern));
+                if (!hit) {
+                    return;
+                }
             }
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory

@@ -18,6 +18,7 @@ test("workflow-conformance-guard blocks git commit on protected branch", async (
         workflowConformanceGuard: {
           enabled: true,
           protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
         },
       },
     })
@@ -28,6 +29,34 @@ test("workflow-conformance-guard blocks git commit on protected branch", async (
         { args: { command: "git commit -m \"msg\"" } },
       ),
       /protected branch/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("workflow-conformance-guard blocks file edits on protected branch", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["workflow-conformance-guard"], disabled: [] },
+        workflowConformanceGuard: {
+          enabled: true,
+          protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "write", sessionID: "session-workflow-edit" },
+        { args: { filePath: "src/new.ts" } },
+      ),
+      /File edits are blocked on protected branch/,
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

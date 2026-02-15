@@ -99,6 +99,7 @@ export interface SecretLeakGuardConfig {
 export interface WorkflowConformanceGuardConfig {
     enabled: boolean;
     protectedBranches: string[];
+    blockEditsOnProtectedBranches: boolean;
 }
 export interface ScopeDriftGuardConfig {
     enabled: boolean;
@@ -108,10 +109,13 @@ export interface ScopeDriftGuardConfig {
 export interface DoneProofEnforcerConfig {
     enabled: boolean;
     requiredMarkers: string[];
+    requireLedgerEvidence: boolean;
+    allowTextFallback: boolean;
 }
 export interface DependencyRiskGuardConfig {
     enabled: boolean;
     lockfilePatterns: string[];
+    commandPatterns: string[];
 }
 export interface RetryBudgetGuardConfig {
     enabled: boolean;
@@ -120,6 +124,59 @@ export interface RetryBudgetGuardConfig {
 export interface StaleLoopExpiryGuardConfig {
     enabled: boolean;
     maxAgeMinutes: number;
+}
+export interface ValidationEvidenceLedgerConfig {
+    enabled: boolean;
+}
+export interface NoninteractiveShellGuardConfig {
+    enabled: boolean;
+    blockedPatterns: string[];
+}
+export interface DocsDriftGuardConfig {
+    enabled: boolean;
+    sourcePatterns: string[];
+    docsPatterns: string[];
+    blockOnDrift: boolean;
+}
+export interface HookTestParityGuardConfig {
+    enabled: boolean;
+    sourcePatterns: string[];
+    testPatterns: string[];
+    blockOnMismatch: boolean;
+}
+export interface ParallelOpportunityDetectorConfig {
+    enabled: boolean;
+}
+export interface AgentReservationGuardConfig {
+    enabled: boolean;
+    enforce: boolean;
+    reservationEnvKeys: string[];
+}
+export interface PrReadinessGuardConfig {
+    enabled: boolean;
+    requireCleanWorktree: boolean;
+    requireValidationEvidence: boolean;
+}
+export interface MergeReadinessGuardConfig {
+    enabled: boolean;
+    requireDeleteBranch: boolean;
+    requireStrategy: boolean;
+    disallowAdminBypass: boolean;
+}
+export interface ReadBudgetOptimizerConfig {
+    enabled: boolean;
+    smallReadLimit: number;
+    maxConsecutiveSmallReads: number;
+}
+export interface SemanticOutputSummarizerConfig {
+    enabled: boolean;
+    minChars: number;
+    minLines: number;
+    maxSummaryLines: number;
+}
+export interface AdaptiveValidationSchedulerConfig {
+    enabled: boolean;
+    reminderEditThreshold: number;
 }
 export interface GatewayConfig {
     hooks: {
@@ -133,13 +190,19 @@ export interface GatewayConfig {
     preemptiveCompaction: PreemptiveCompactionConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
+    validationEvidenceLedger: ValidationEvidenceLedgerConfig;
+    parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
+    readBudgetOptimizer: ReadBudgetOptimizerConfig;
+    adaptiveValidationScheduler: AdaptiveValidationSchedulerConfig;
     stopContinuationGuard: StopContinuationGuardConfig;
     keywordDetector: KeywordDetectorConfig;
     autoSlashCommand: AutoSlashCommandConfig;
     rulesInjector: RulesInjectorConfig;
     directoryAgentsInjector: DirectoryAgentsInjectorConfig;
     directoryReadmeInjector: DirectoryReadmeInjectorConfig;
+    noninteractiveShellGuard: NoninteractiveShellGuardConfig;
     writeExistingFileGuard: WriteExistingFileGuardConfig;
+    agentReservationGuard: AgentReservationGuardConfig;
     subagentQuestionBlocker: SubagentQuestionBlockerConfig;
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     taskResumeInfo: TaskResumeInfoConfig;
@@ -148,14 +211,19 @@ export interface GatewayConfig {
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
     questionLabelTruncator: QuestionLabelTruncatorConfig;
+    semanticOutputSummarizer: SemanticOutputSummarizerConfig;
     dangerousCommandGuard: DangerousCommandGuardConfig;
     secretLeakGuard: SecretLeakGuardConfig;
     workflowConformanceGuard: WorkflowConformanceGuardConfig;
     scopeDriftGuard: ScopeDriftGuardConfig;
     doneProofEnforcer: DoneProofEnforcerConfig;
     dependencyRiskGuard: DependencyRiskGuardConfig;
+    docsDriftGuard: DocsDriftGuardConfig;
+    hookTestParityGuard: HookTestParityGuardConfig;
     retryBudgetGuard: RetryBudgetGuardConfig;
     staleLoopExpiryGuard: StaleLoopExpiryGuardConfig;
+    prReadinessGuard: PrReadinessGuardConfig;
+    mergeReadinessGuard: MergeReadinessGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

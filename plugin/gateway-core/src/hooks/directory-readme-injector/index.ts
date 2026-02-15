@@ -36,6 +36,7 @@ export function createDirectoryReadmeInjectorHook(options: {
   enabled: boolean
 }): GatewayHook {
   const readmePathBySession = new Map<string, string>()
+  const lastInjectedPathBySession = new Map<string, string>()
   return {
     id: "directory-readme-injector",
     priority: 300,
@@ -47,7 +48,9 @@ export function createDirectoryReadmeInjectorHook(options: {
         const eventPayload = (payload ?? {}) as EventPayload
         const sessionId = eventPayload.properties?.info?.id
         if (typeof sessionId === "string" && sessionId.trim()) {
-          readmePathBySession.delete(sessionId.trim())
+          const key = sessionId.trim()
+          readmePathBySession.delete(key)
+          lastInjectedPathBySession.delete(key)
         }
         return
       }
@@ -64,6 +67,8 @@ export function createDirectoryReadmeInjectorHook(options: {
         const path = findNearestFile(directory, "README.md")
         if (path) {
           readmePathBySession.set(sessionId, path)
+        } else {
+          readmePathBySession.delete(sessionId)
         }
         return
       }
@@ -80,7 +85,11 @@ export function createDirectoryReadmeInjectorHook(options: {
       if (!path || typeof eventPayload.output?.output !== "string") {
         return
       }
+      if (lastInjectedPathBySession.get(sessionId) === path) {
+        return
+      }
       eventPayload.output.output = `${eventPayload.output.output}\n\nLocal README context loaded from: ${path}`
+      lastInjectedPathBySession.set(sessionId, path)
       writeGatewayEventAudit(directory, {
         hook: "directory-readme-injector",
         stage: "state",

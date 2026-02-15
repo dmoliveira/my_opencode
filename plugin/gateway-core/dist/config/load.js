@@ -55,6 +55,18 @@ export function loadGatewayConfig(raw) {
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
         : {};
+    const validationEvidenceLedgerSource = source.validationEvidenceLedger && typeof source.validationEvidenceLedger === "object"
+        ? source.validationEvidenceLedger
+        : {};
+    const parallelOpportunitySource = source.parallelOpportunityDetector && typeof source.parallelOpportunityDetector === "object"
+        ? source.parallelOpportunityDetector
+        : {};
+    const readBudgetOptimizerSource = source.readBudgetOptimizer && typeof source.readBudgetOptimizer === "object"
+        ? source.readBudgetOptimizer
+        : {};
+    const adaptiveValidationSchedulerSource = source.adaptiveValidationScheduler && typeof source.adaptiveValidationScheduler === "object"
+        ? source.adaptiveValidationScheduler
+        : {};
     const stopGuardSource = source.stopContinuationGuard && typeof source.stopContinuationGuard === "object"
         ? source.stopContinuationGuard
         : {};
@@ -73,8 +85,14 @@ export function loadGatewayConfig(raw) {
     const directoryReadmeSource = source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
         ? source.directoryReadmeInjector
         : {};
+    const noninteractiveShellSource = source.noninteractiveShellGuard && typeof source.noninteractiveShellGuard === "object"
+        ? source.noninteractiveShellGuard
+        : {};
     const writeExistingGuardSource = source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
         ? source.writeExistingFileGuard
+        : {};
+    const agentReservationSource = source.agentReservationGuard && typeof source.agentReservationGuard === "object"
+        ? source.agentReservationGuard
         : {};
     const subagentQuestionSource = source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
         ? source.subagentQuestionBlocker
@@ -100,6 +118,9 @@ export function loadGatewayConfig(raw) {
     const questionLabelSource = source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
         ? source.questionLabelTruncator
         : {};
+    const semanticOutputSummarizerSource = source.semanticOutputSummarizer && typeof source.semanticOutputSummarizer === "object"
+        ? source.semanticOutputSummarizer
+        : {};
     const dangerousCommandSource = source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
         ? source.dangerousCommandGuard
         : {};
@@ -118,11 +139,23 @@ export function loadGatewayConfig(raw) {
     const dependencyRiskSource = source.dependencyRiskGuard && typeof source.dependencyRiskGuard === "object"
         ? source.dependencyRiskGuard
         : {};
+    const docsDriftSource = source.docsDriftGuard && typeof source.docsDriftGuard === "object"
+        ? source.docsDriftGuard
+        : {};
+    const hookTestParitySource = source.hookTestParityGuard && typeof source.hookTestParityGuard === "object"
+        ? source.hookTestParityGuard
+        : {};
     const retryBudgetSource = source.retryBudgetGuard && typeof source.retryBudgetGuard === "object"
         ? source.retryBudgetGuard
         : {};
     const staleLoopExpirySource = source.staleLoopExpiryGuard && typeof source.staleLoopExpiryGuard === "object"
         ? source.staleLoopExpiryGuard
+        : {};
+    const prReadinessSource = source.prReadinessGuard && typeof source.prReadinessGuard === "object"
+        ? source.prReadinessGuard
+        : {};
+    const mergeReadinessSource = source.mergeReadinessGuard && typeof source.mergeReadinessGuard === "object"
+        ? source.mergeReadinessGuard
         : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
@@ -190,6 +223,29 @@ export function loadGatewayConfig(raw) {
                 ? delegateTaskRetrySource.enabled
                 : DEFAULT_GATEWAY_CONFIG.delegateTaskRetry.enabled,
         },
+        validationEvidenceLedger: {
+            enabled: typeof validationEvidenceLedgerSource.enabled === "boolean"
+                ? validationEvidenceLedgerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.validationEvidenceLedger.enabled,
+        },
+        parallelOpportunityDetector: {
+            enabled: typeof parallelOpportunitySource.enabled === "boolean"
+                ? parallelOpportunitySource.enabled
+                : DEFAULT_GATEWAY_CONFIG.parallelOpportunityDetector.enabled,
+        },
+        readBudgetOptimizer: {
+            enabled: typeof readBudgetOptimizerSource.enabled === "boolean"
+                ? readBudgetOptimizerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.readBudgetOptimizer.enabled,
+            smallReadLimit: nonNegativeInt(readBudgetOptimizerSource.smallReadLimit, DEFAULT_GATEWAY_CONFIG.readBudgetOptimizer.smallReadLimit),
+            maxConsecutiveSmallReads: nonNegativeInt(readBudgetOptimizerSource.maxConsecutiveSmallReads, DEFAULT_GATEWAY_CONFIG.readBudgetOptimizer.maxConsecutiveSmallReads),
+        },
+        adaptiveValidationScheduler: {
+            enabled: typeof adaptiveValidationSchedulerSource.enabled === "boolean"
+                ? adaptiveValidationSchedulerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler.enabled,
+            reminderEditThreshold: nonNegativeInt(adaptiveValidationSchedulerSource.reminderEditThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler.reminderEditThreshold),
+        },
         stopContinuationGuard: {
             enabled: typeof stopGuardSource.enabled === "boolean"
                 ? stopGuardSource.enabled
@@ -220,10 +276,29 @@ export function loadGatewayConfig(raw) {
                 ? directoryReadmeSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.enabled,
         },
+        noninteractiveShellGuard: {
+            enabled: typeof noninteractiveShellSource.enabled === "boolean"
+                ? noninteractiveShellSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.enabled,
+            blockedPatterns: noninteractiveShellSource.blockedPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.blockedPatterns
+                : stringList(noninteractiveShellSource.blockedPatterns),
+        },
         writeExistingFileGuard: {
             enabled: typeof writeExistingGuardSource.enabled === "boolean"
                 ? writeExistingGuardSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.writeExistingFileGuard.enabled,
+        },
+        agentReservationGuard: {
+            enabled: typeof agentReservationSource.enabled === "boolean"
+                ? agentReservationSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.agentReservationGuard.enabled,
+            enforce: typeof agentReservationSource.enforce === "boolean"
+                ? agentReservationSource.enforce
+                : DEFAULT_GATEWAY_CONFIG.agentReservationGuard.enforce,
+            reservationEnvKeys: agentReservationSource.reservationEnvKeys === undefined
+                ? DEFAULT_GATEWAY_CONFIG.agentReservationGuard.reservationEnvKeys
+                : stringList(agentReservationSource.reservationEnvKeys),
         },
         subagentQuestionBlocker: {
             enabled: typeof subagentQuestionSource.enabled === "boolean"
@@ -272,6 +347,14 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.enabled,
             maxLength: nonNegativeInt(questionLabelSource.maxLength, DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.maxLength),
         },
+        semanticOutputSummarizer: {
+            enabled: typeof semanticOutputSummarizerSource.enabled === "boolean"
+                ? semanticOutputSummarizerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled,
+            minChars: nonNegativeInt(semanticOutputSummarizerSource.minChars, DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.minChars),
+            minLines: nonNegativeInt(semanticOutputSummarizerSource.minLines, DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.minLines),
+            maxSummaryLines: nonNegativeInt(semanticOutputSummarizerSource.maxSummaryLines, DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.maxSummaryLines),
+        },
         dangerousCommandGuard: {
             enabled: typeof dangerousCommandSource.enabled === "boolean"
                 ? dangerousCommandSource.enabled
@@ -298,6 +381,9 @@ export function loadGatewayConfig(raw) {
             protectedBranches: workflowConformanceSource.protectedBranches === undefined
                 ? DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.protectedBranches
                 : stringList(workflowConformanceSource.protectedBranches),
+            blockEditsOnProtectedBranches: typeof workflowConformanceSource.blockEditsOnProtectedBranches === "boolean"
+                ? workflowConformanceSource.blockEditsOnProtectedBranches
+                : DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.blockEditsOnProtectedBranches,
         },
         scopeDriftGuard: {
             enabled: typeof scopeDriftSource.enabled === "boolean"
@@ -317,6 +403,12 @@ export function loadGatewayConfig(raw) {
             requiredMarkers: doneProofSource.requiredMarkers === undefined
                 ? DEFAULT_GATEWAY_CONFIG.doneProofEnforcer.requiredMarkers
                 : stringList(doneProofSource.requiredMarkers),
+            requireLedgerEvidence: typeof doneProofSource.requireLedgerEvidence === "boolean"
+                ? doneProofSource.requireLedgerEvidence
+                : DEFAULT_GATEWAY_CONFIG.doneProofEnforcer.requireLedgerEvidence,
+            allowTextFallback: typeof doneProofSource.allowTextFallback === "boolean"
+                ? doneProofSource.allowTextFallback
+                : DEFAULT_GATEWAY_CONFIG.doneProofEnforcer.allowTextFallback,
         },
         dependencyRiskGuard: {
             enabled: typeof dependencyRiskSource.enabled === "boolean"
@@ -325,6 +417,37 @@ export function loadGatewayConfig(raw) {
             lockfilePatterns: dependencyRiskSource.lockfilePatterns === undefined
                 ? DEFAULT_GATEWAY_CONFIG.dependencyRiskGuard.lockfilePatterns
                 : stringList(dependencyRiskSource.lockfilePatterns),
+            commandPatterns: dependencyRiskSource.commandPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.dependencyRiskGuard.commandPatterns
+                : stringList(dependencyRiskSource.commandPatterns),
+        },
+        docsDriftGuard: {
+            enabled: typeof docsDriftSource.enabled === "boolean"
+                ? docsDriftSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.docsDriftGuard.enabled,
+            sourcePatterns: docsDriftSource.sourcePatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.docsDriftGuard.sourcePatterns
+                : stringList(docsDriftSource.sourcePatterns),
+            docsPatterns: docsDriftSource.docsPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.docsDriftGuard.docsPatterns
+                : stringList(docsDriftSource.docsPatterns),
+            blockOnDrift: typeof docsDriftSource.blockOnDrift === "boolean"
+                ? docsDriftSource.blockOnDrift
+                : DEFAULT_GATEWAY_CONFIG.docsDriftGuard.blockOnDrift,
+        },
+        hookTestParityGuard: {
+            enabled: typeof hookTestParitySource.enabled === "boolean"
+                ? hookTestParitySource.enabled
+                : DEFAULT_GATEWAY_CONFIG.hookTestParityGuard.enabled,
+            sourcePatterns: hookTestParitySource.sourcePatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.hookTestParityGuard.sourcePatterns
+                : stringList(hookTestParitySource.sourcePatterns),
+            testPatterns: hookTestParitySource.testPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.hookTestParityGuard.testPatterns
+                : stringList(hookTestParitySource.testPatterns),
+            blockOnMismatch: typeof hookTestParitySource.blockOnMismatch === "boolean"
+                ? hookTestParitySource.blockOnMismatch
+                : DEFAULT_GATEWAY_CONFIG.hookTestParityGuard.blockOnMismatch,
         },
         retryBudgetGuard: {
             enabled: typeof retryBudgetSource.enabled === "boolean"
@@ -337,6 +460,31 @@ export function loadGatewayConfig(raw) {
                 ? staleLoopExpirySource.enabled
                 : DEFAULT_GATEWAY_CONFIG.staleLoopExpiryGuard.enabled,
             maxAgeMinutes: nonNegativeInt(staleLoopExpirySource.maxAgeMinutes, DEFAULT_GATEWAY_CONFIG.staleLoopExpiryGuard.maxAgeMinutes),
+        },
+        prReadinessGuard: {
+            enabled: typeof prReadinessSource.enabled === "boolean"
+                ? prReadinessSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.prReadinessGuard.enabled,
+            requireCleanWorktree: typeof prReadinessSource.requireCleanWorktree === "boolean"
+                ? prReadinessSource.requireCleanWorktree
+                : DEFAULT_GATEWAY_CONFIG.prReadinessGuard.requireCleanWorktree,
+            requireValidationEvidence: typeof prReadinessSource.requireValidationEvidence === "boolean"
+                ? prReadinessSource.requireValidationEvidence
+                : DEFAULT_GATEWAY_CONFIG.prReadinessGuard.requireValidationEvidence,
+        },
+        mergeReadinessGuard: {
+            enabled: typeof mergeReadinessSource.enabled === "boolean"
+                ? mergeReadinessSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.mergeReadinessGuard.enabled,
+            requireDeleteBranch: typeof mergeReadinessSource.requireDeleteBranch === "boolean"
+                ? mergeReadinessSource.requireDeleteBranch
+                : DEFAULT_GATEWAY_CONFIG.mergeReadinessGuard.requireDeleteBranch,
+            requireStrategy: typeof mergeReadinessSource.requireStrategy === "boolean"
+                ? mergeReadinessSource.requireStrategy
+                : DEFAULT_GATEWAY_CONFIG.mergeReadinessGuard.requireStrategy,
+            disallowAdminBypass: typeof mergeReadinessSource.disallowAdminBypass === "boolean"
+                ? mergeReadinessSource.disallowAdminBypass
+                : DEFAULT_GATEWAY_CONFIG.mergeReadinessGuard.disallowAdminBypass,
         },
         quality: {
             profile: qualityProfile,

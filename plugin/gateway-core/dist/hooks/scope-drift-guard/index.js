@@ -1,12 +1,25 @@
+import { isAbsolute, relative, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 // Resolves target path from write/edit tool args.
 function targetPath(payload) {
     const args = payload.output?.args;
     return String(args?.filePath ?? args?.path ?? args?.file_path ?? "").trim();
 }
+// Normalizes incoming file path to repository-relative slash-separated path.
+function normalizePath(directory, value) {
+    const raw = value.trim();
+    if (!raw) {
+        return "";
+    }
+    const absolute = isAbsolute(raw) ? raw : resolve(directory, raw);
+    const rel = relative(directory, absolute);
+    return rel.replace(/\\/g, "/");
+}
 // Creates scope drift guard for file edits outside configured scope prefixes.
 export function createScopeDriftGuardHook(options) {
-    const normalized = options.allowedPaths.map((item) => item.trim()).filter(Boolean);
+    const normalized = options.allowedPaths
+        .map((item) => item.trim().replace(/\\/g, "/"))
+        .filter(Boolean);
     return {
         id: "scope-drift-guard",
         priority: 405,
@@ -22,7 +35,10 @@ export function createScopeDriftGuardHook(options) {
             if (normalized.length === 0) {
                 return;
             }
-            const path = targetPath(eventPayload);
+            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                ? eventPayload.directory
+                : options.directory;
+            const path = normalizePath(directory, targetPath(eventPayload));
             if (!path) {
                 return;
             }
@@ -30,9 +46,6 @@ export function createScopeDriftGuardHook(options) {
             if (inScope) {
                 return;
             }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "");
             writeGatewayEventAudit(directory, {
                 hook: "scope-drift-guard",

@@ -36,6 +36,7 @@ export function createDirectoryAgentsInjectorHook(options: {
   enabled: boolean
 }): GatewayHook {
   const agentsPathBySession = new Map<string, string>()
+  const lastInjectedPathBySession = new Map<string, string>()
   return {
     id: "directory-agents-injector",
     priority: 299,
@@ -47,7 +48,9 @@ export function createDirectoryAgentsInjectorHook(options: {
         const eventPayload = (payload ?? {}) as EventPayload
         const sessionId = eventPayload.properties?.info?.id
         if (typeof sessionId === "string" && sessionId.trim()) {
-          agentsPathBySession.delete(sessionId.trim())
+          const key = sessionId.trim()
+          agentsPathBySession.delete(key)
+          lastInjectedPathBySession.delete(key)
         }
         return
       }
@@ -64,6 +67,8 @@ export function createDirectoryAgentsInjectorHook(options: {
         const path = findNearestFile(directory, "AGENTS.md")
         if (path) {
           agentsPathBySession.set(sessionId, path)
+        } else {
+          agentsPathBySession.delete(sessionId)
         }
         return
       }
@@ -80,7 +85,11 @@ export function createDirectoryAgentsInjectorHook(options: {
       if (!path || typeof eventPayload.output?.output !== "string") {
         return
       }
+      if (lastInjectedPathBySession.get(sessionId) === path) {
+        return
+      }
       eventPayload.output.output = `${eventPayload.output.output}\n\nLocal instructions loaded from: ${path}`
+      lastInjectedPathBySession.set(sessionId, path)
       writeGatewayEventAudit(directory, {
         hook: "directory-agents-injector",
         stage: "state",
