@@ -484,8 +484,19 @@ Task 28.4 autopilot command UX/workflow notes:
 - objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
 - ralph-compatible aliases are available as `/ralph-loop` and `/cancel-ralph`.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
+- status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
 - resume path now supports `--touched-paths <csv>` to enforce objective scope boundaries before cycle execution.
+
+Autopilot gateway telemetry fields (`--json`):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `gateway_loop_state` | `object|null` | Current gateway bridge state loaded from `.opencode/gateway-core.state.json` in current cwd. |
+| `gateway_orphan_cleanup.attempted` | `boolean` | Always `true` when status snapshot runs cleanup check. |
+| `gateway_orphan_cleanup.changed` | `boolean` | `true` when stale/invalid active loop was deactivated and state file was updated. |
+| `gateway_orphan_cleanup.reason` | `string` | Cleanup outcome reason: `state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, or `stale_loop_deactivated`. |
+| `gateway_orphan_cleanup.state_path` | `string|null` | State file path only when cleanup mutated persisted bridge state. |
 
 ```bash
 # Quick-fix objective (single-script scope)
@@ -1573,6 +1584,16 @@ Shortcuts:
 Notes:
 - `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
 - If `bun` is unavailable, keep gateway disabled and use Python command bridge mode.
+- `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
+
+Gateway orphan cleanup report fields (`--json`):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `orphan_cleanup.attempted` | `boolean` | `true` when cleanup check was evaluated. |
+| `orphan_cleanup.changed` | `boolean` | `true` when active orphan loop was deactivated. |
+| `orphan_cleanup.reason` | `string` | Cleanup result reason (`state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, `stale_loop_deactivated`). |
+| `orphan_cleanup.state_path` | `string|null` | Updated state path when cleanup changes were persisted. |
 
 ## Telemetry forwarding inside OpenCode 📡
 

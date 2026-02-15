@@ -13,6 +13,16 @@ def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+# Parses ISO timestamp into UTC datetime when valid.
+def parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
+
+
 # Returns canonical local file plugin spec for gateway-core.
 def gateway_plugin_spec(home: Path) -> str:
     return f"file:{home / '.config' / 'opencode' / 'my_opencode' / 'plugin' / 'gateway-core'}"
@@ -99,3 +109,34 @@ def bridge_stop_loop(cwd: Path) -> Path | None:
         state["activeLoop"] = active
     state["lastUpdatedAt"] = now_iso()
     return save_gateway_loop_state(cwd, state)
+
+
+# Disables stale active loop state when it exceeds age threshold.
+def cleanup_orphan_loop(
+    cwd: Path, *, max_age_hours: int = 12
+) -> tuple[Path | None, bool, str]:
+    state = load_gateway_loop_state(cwd)
+    if not state:
+        return None, False, "state_missing"
+    active_any = state.get("activeLoop")
+    active = active_any if isinstance(active_any, dict) else {}
+    if not active or active.get("active") is not True:
+        return None, False, "not_active"
+
+    started = parse_iso(active.get("startedAt"))
+    if started is None:
+        active["active"] = False
+        state["activeLoop"] = active
+        state["lastUpdatedAt"] = now_iso()
+        path = save_gateway_loop_state(cwd, state)
+        return path, True, "invalid_started_at"
+
+    age_hours = (datetime.now(UTC) - started).total_seconds() / 3600.0
+    if age_hours <= max_age_hours:
+        return None, False, "within_age_limit"
+
+    active["active"] = False
+    state["activeLoop"] = active
+    state["lastUpdatedAt"] = now_iso()
+    path = save_gateway_loop_state(cwd, state)
+    return path, True, "stale_loop_deactivated"

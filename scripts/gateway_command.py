@@ -15,6 +15,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
 from gateway_plugin_bridge import (  # type: ignore
+    cleanup_orphan_loop,
     gateway_loop_state_path,
     gateway_plugin_spec,
     load_gateway_loop_state,
@@ -52,10 +53,28 @@ def plugin_dir(home: Path) -> Path:
 
 
 # Computes gateway runtime status payload.
-def status_payload(config: dict[str, Any], home: Path, cwd: Path) -> dict[str, Any]:
+def status_payload(
+    config: dict[str, Any],
+    home: Path,
+    cwd: Path,
+    *,
+    cleanup_orphans: bool = False,
+    orphan_max_age_hours: int = 12,
+) -> dict[str, Any]:
     pdir = plugin_dir(home)
+    cleanup: dict[str, Any] | None = None
+    if cleanup_orphans:
+        cleanup_path, changed, reason = cleanup_orphan_loop(
+            cwd, max_age_hours=orphan_max_age_hours
+        )
+        cleanup = {
+            "attempted": True,
+            "changed": changed,
+            "reason": reason,
+            "state_path": str(cleanup_path) if cleanup_path else None,
+        }
     loop_state = load_gateway_loop_state(cwd)
-    return {
+    payload = {
         "result": "PASS",
         "enabled": plugin_enabled(config, home),
         "plugin_spec": gateway_plugin_spec(home),
@@ -67,6 +86,9 @@ def status_payload(config: dict[str, Any], home: Path, cwd: Path) -> dict[str, A
         "loop_state_path": str(gateway_loop_state_path(cwd)),
         "loop_state": loop_state if loop_state else None,
     }
+    if cleanup is not None:
+        payload["orphan_cleanup"] = cleanup
+    return payload
 
 
 # Enables gateway plugin spec in opencode config.
@@ -97,7 +119,10 @@ def command_disable(as_json: bool) -> int:
 def command_status(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
-    emit(status_payload(config, home, Path.cwd()), as_json=as_json)
+    emit(
+        status_payload(config, home, Path.cwd(), cleanup_orphans=True),
+        as_json=as_json,
+    )
     return 0
 
 
@@ -105,7 +130,7 @@ def command_status(as_json: bool) -> int:
 def command_doctor(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
-    status = status_payload(config, home, Path.cwd())
+    status = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
 
     problems: list[str] = []
     warnings: list[str] = []

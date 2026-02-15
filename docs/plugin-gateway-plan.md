@@ -44,6 +44,7 @@ Final choice for this roadmap:
 - [x] Autopilot hook scaffold package (`plugin/autopilot-loop`) with lint/build setup.
 - [x] Agent system foundations (contracts, doctor, generated specs).
 - [x] Initial roadmap docs and migration notes.
+- [x] Command-bridge orphan cleanup telemetry (`orphan_cleanup` + `gateway_orphan_cleanup`) with stale-loop deactivation.
 
 ---
 
@@ -63,7 +64,7 @@ Final choice for this roadmap:
   - [ ] `src/bridge/reason-codes.ts`
 
 - [ ] Keep Python command layer as compatibility shell:
-  - [ ] `/autopilot*` commands read/write gateway state
+  - [x] `/autopilot*` commands read/write gateway state *(bridge parity layer complete)*
   - [ ] `/doctor*` commands include plugin-hook diagnostics
 
 Design constraints:
@@ -174,7 +175,9 @@ Keep default reasoning on `medium` but cap drift in long autopilot loops.
    - status: scaffold created; autopilot-loop move pending.
 2. [ ] Wire runtime event hooks (`session.idle`, `session.deleted`, `session.error`) to active plugin loading path.
 3. [ ] Bridge `/autopilot*` Python commands to plugin state operations (start/status/stop/doctor).
+   - status: gateway bridge state is now read/write across start/go/status/report/pause/stop; plugin-core runtime migration still pending.
 4. [ ] Add kill-switch + orphan cleanup in plugin state manager.
+   - status: command-bridge orphan cleanup shipped; plugin-core manager parity pending.
 5. [ ] Add quality profile toggles (`off|fast|strict`) with Make + slash commands.
 6. [ ] Run full E2E matrix and lock migration completion criteria.
 

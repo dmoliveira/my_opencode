@@ -1610,15 +1610,19 @@ def main() -> int:
         gateway_env = os.environ.copy()
         gateway_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
         gateway_env["HOME"] = str(home)
+        gateway_cwd = tmp / "gateway-cwd"
+        gateway_cwd.mkdir(parents=True, exist_ok=True)
 
-        def run_gateway(*args: str) -> subprocess.CompletedProcess[str]:
+        def run_gateway(
+            *args: str, cwd: Path | None = None
+        ) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
                 [sys.executable, str(GATEWAY_SCRIPT), *args],
                 capture_output=True,
                 text=True,
                 env=gateway_env,
                 check=False,
-                cwd=REPO_ROOT,
+                cwd=str(cwd or gateway_cwd),
             )
 
         result = run_gateway("status", "--json")
@@ -1627,6 +1631,52 @@ def main() -> int:
         expect(
             gateway_status.get("result") == "PASS",
             "gateway status should return PASS",
+        )
+        expect(
+            isinstance(gateway_status.get("orphan_cleanup"), dict),
+            "gateway status should report orphan cleanup telemetry",
+        )
+
+        stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
+        stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
+        stale_loop_state_path.write_text(
+            json.dumps(
+                {
+                    "activeLoop": {
+                        "active": True,
+                        "sessionId": "bridge-selftest",
+                        "startedAt": "2025-01-01T00:00:00Z",
+                    },
+                    "lastUpdatedAt": "2025-01-01T00:00:00Z",
+                    "source": "selftest-fixture",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = run_gateway("status", "--json")
+        expect(
+            result.returncode == 0,
+            f"gateway status stale cleanup failed: {result.stderr}",
+        )
+        gateway_status_stale = parse_json_output(result.stdout)
+        expect(
+            gateway_status_stale.get("orphan_cleanup", {}).get("changed") is True,
+            "gateway status should deactivate stale orphan loop",
+        )
+        expect(
+            gateway_status_stale.get("orphan_cleanup", {}).get("reason")
+            == "stale_loop_deactivated",
+            "gateway status should report stale orphan reason code",
+        )
+        expect(
+            gateway_status_stale.get("loop_state", {})
+            .get("activeLoop", {})
+            .get("active")
+            is False,
+            "gateway status should persist inactive loop after orphan cleanup",
         )
 
         result = run_gateway("enable", "--json")
@@ -1651,6 +1701,10 @@ def main() -> int:
         expect(
             gateway_doctor.get("result") == "PASS",
             "gateway doctor should pass in default disabled mode",
+        )
+        expect(
+            isinstance(gateway_doctor.get("status", {}).get("orphan_cleanup"), dict),
+            "gateway doctor should include orphan cleanup telemetry in status",
         )
 
         notify_policy_path = (
