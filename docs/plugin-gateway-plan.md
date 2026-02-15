@@ -217,3 +217,7 @@ Recent progress:
 - `think-mode`: intentionally not adopted as default behavior.
   - Rationale: forcing extra reasoning mode from keyword matches can increase latency/cost unexpectedly.
   - Risk: hidden mode escalation reduces predictability for users and can degrade conversational control.
+
+- `compaction-context-injector`: intentionally not adopted.
+  - Rationale: preemptive compaction already runs with deterministic triggers and audit logging.
+  - Risk: injecting extra context immediately before compaction can increase token pressure and reduce compaction effectiveness.
