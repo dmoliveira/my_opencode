@@ -307,6 +307,19 @@ exit 0
             str(base_config_payload.get("default_agent") or "") == "build",
             "default_agent should remain build",
         )
+        plugin_entries_any = base_config_payload.get("plugin", [])
+        plugin_entries = (
+            plugin_entries_any if isinstance(plugin_entries_any, list) else []
+        )
+        expect(
+            any(
+                isinstance(entry, str)
+                and "plugin/gateway-core" in entry
+                and entry.startswith("file:")
+                for entry in plugin_entries
+            ),
+            "base config should include gateway-core file plugin entry",
+        )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
         expect(
