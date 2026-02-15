@@ -537,8 +537,13 @@ def execute_cycle(
         0, token_increment
     )
     started_at = str(run.get("started_at") or now_iso())
+    budget_anchor = started_at
+    if completion_mode == "promise":
+        previous_capture = str(current_counters.get("captured_at") or "").strip()
+        if previous_capture:
+            budget_anchor = previous_capture
     counters = build_budget_state(
-        started_at, tool_call_count=tool_calls, token_estimate=tokens, now_ts=now_ts
+        budget_anchor, tool_call_count=tool_calls, token_estimate=tokens, now_ts=now_ts
     )
     budget_eval = evaluate_budget(policy, counters)
 
