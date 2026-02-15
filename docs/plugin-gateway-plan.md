@@ -225,3 +225,7 @@ Recent progress:
 - `compaction-todo-preserver`: intentionally not adopted.
   - Rationale: this gateway profile disables task/todowrite tooling in favor of br issue tracking.
   - Risk: preserving todo snapshots adds stale state complexity without benefit in the current workflow.
+
+- `thinking-block-validator`: intentionally not adopted.
+  - Rationale: gateway-core does not transform Anthropic thinking blocks directly in current lifecycle handlers.
+  - Risk: adding validator logic without transformer ownership can produce false positives and noisy failures.
