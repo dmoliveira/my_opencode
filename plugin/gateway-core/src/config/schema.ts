@@ -77,6 +77,16 @@ export interface RulesInjectorConfig {
   enabled: boolean
 }
 
+// Declares local AGENTS.md injector settings.
+export interface DirectoryAgentsInjectorConfig {
+  enabled: boolean
+}
+
+// Declares local README injector settings.
+export interface DirectoryReadmeInjectorConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -94,6 +104,8 @@ export interface GatewayConfig {
   keywordDetector: KeywordDetectorConfig
   autoSlashCommand: AutoSlashCommandConfig
   rulesInjector: RulesInjectorConfig
+  directoryAgentsInjector: DirectoryAgentsInjectorConfig
+  directoryReadmeInjector: DirectoryReadmeInjectorConfig
   quality: QualityConfig
 }
 
@@ -114,6 +126,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "keyword-detector",
       "auto-slash-command",
       "rules-injector",
+      "directory-agents-injector",
+      "directory-readme-injector",
       "safety",
     ],
   },
@@ -155,6 +169,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   rulesInjector: {
+    enabled: true,
+  },
+  directoryAgentsInjector: {
+    enabled: true,
+  },
+  directoryReadmeInjector: {
     enabled: true,
   },
   quality: {

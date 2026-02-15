@@ -51,6 +51,12 @@ export interface AutoSlashCommandConfig {
 export interface RulesInjectorConfig {
     enabled: boolean;
 }
+export interface DirectoryAgentsInjectorConfig {
+    enabled: boolean;
+}
+export interface DirectoryReadmeInjectorConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -67,6 +73,8 @@ export interface GatewayConfig {
     keywordDetector: KeywordDetectorConfig;
     autoSlashCommand: AutoSlashCommandConfig;
     rulesInjector: RulesInjectorConfig;
+    directoryAgentsInjector: DirectoryAgentsInjectorConfig;
+    directoryReadmeInjector: DirectoryReadmeInjectorConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
