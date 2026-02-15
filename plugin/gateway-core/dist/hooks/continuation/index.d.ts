@@ -42,5 +42,6 @@ export declare function createContinuationHook(options: {
     client?: GatewayClient;
     stopGuard?: StopContinuationGuard;
     keywordDetector?: KeywordDetector;
+    bootstrapFromRuntime?: boolean;
 }): GatewayHook;
 export {};

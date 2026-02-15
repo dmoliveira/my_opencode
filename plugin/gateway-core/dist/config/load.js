@@ -184,6 +184,9 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.autopilotLoop.enabled,
             maxIterations: nonNegativeInt(autopilotSource.maxIterations, DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIterations),
             orphanMaxAgeHours: nonNegativeInt(autopilotSource.orphanMaxAgeHours, DEFAULT_GATEWAY_CONFIG.autopilotLoop.orphanMaxAgeHours),
+            bootstrapFromRuntimeOnIdle: typeof autopilotSource.bootstrapFromRuntimeOnIdle === "boolean"
+                ? autopilotSource.bootstrapFromRuntimeOnIdle
+                : DEFAULT_GATEWAY_CONFIG.autopilotLoop.bootstrapFromRuntimeOnIdle,
             completionMode,
             completionPromise: typeof autopilotSource.completionPromise === "string" &&
                 autopilotSource.completionPromise.trim().length > 0

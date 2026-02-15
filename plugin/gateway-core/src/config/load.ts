@@ -245,6 +245,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         autopilotSource.orphanMaxAgeHours,
         DEFAULT_GATEWAY_CONFIG.autopilotLoop.orphanMaxAgeHours,
       ),
+      bootstrapFromRuntimeOnIdle:
+        typeof autopilotSource.bootstrapFromRuntimeOnIdle === "boolean"
+          ? autopilotSource.bootstrapFromRuntimeOnIdle
+          : DEFAULT_GATEWAY_CONFIG.autopilotLoop.bootstrapFromRuntimeOnIdle,
       completionMode,
       completionPromise:
         typeof autopilotSource.completionPromise === "string" &&
