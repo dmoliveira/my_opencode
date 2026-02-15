@@ -1657,13 +1657,18 @@ exit 0
         gateway_cwd.mkdir(parents=True, exist_ok=True)
 
         def run_gateway(
-            *args: str, cwd: Path | None = None
+            *args: str,
+            cwd: Path | None = None,
+            env_override: dict[str, str] | None = None,
         ) -> subprocess.CompletedProcess[str]:
+            env = dict(gateway_env)
+            if env_override:
+                env.update(env_override)
             return subprocess.run(
                 [sys.executable, str(GATEWAY_SCRIPT), *args],
                 capture_output=True,
                 text=True,
-                env=gateway_env,
+                env=env,
                 check=False,
                 cwd=str(cwd or gateway_cwd),
             )
@@ -1731,12 +1736,33 @@ exit 0
             "gateway status should persist inactive loop after orphan cleanup",
         )
 
-        result = run_gateway("enable", "--json")
+        result = run_gateway(
+            "enable",
+            "--force",
+            "--json",
+        )
         expect(result.returncode == 0, f"gateway enable failed: {result.stderr}")
         gateway_enabled = parse_json_output(result.stdout)
         expect(
             gateway_enabled.get("enabled") is True,
             "gateway enable should set plugin entry enabled",
+        )
+
+        result = run_gateway(
+            "enable",
+            "--json",
+            env_override={"MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE": "0"},
+        )
+        expect(
+            result.returncode == 1,
+            "gateway enable should fail safely when bun runtime is unavailable",
+        )
+        gateway_enable_blocked = parse_json_output(result.stdout)
+        expect(
+            gateway_enable_blocked.get("reason_code")
+            == "gateway_enable_blocked_for_safety"
+            and gateway_enable_blocked.get("enabled") is False,
+            "gateway enable safety fallback should keep plugin disabled after failed preflight",
         )
 
         result = run_gateway("disable", "--json")

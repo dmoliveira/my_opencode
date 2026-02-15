@@ -35,7 +35,7 @@ from gateway_plugin_bridge import (  # type: ignore
 # Prints usage for gateway command.
 def usage() -> int:
     print(
-        "usage: /gateway status [--json] | /gateway enable [--json] | /gateway disable [--json] | /gateway doctor [--json]"
+        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json]"
     )
     return 2
 
@@ -242,9 +242,15 @@ def ensure_file_plugin_compat(home: Path, pdir: Path) -> dict[str, Any]:
         return {"applied": False, "reason": "bun_unavailable"}
 
     alias_path = pdir.parent / "gateway-core@latest"
-    cache_home = Path(os.environ.get("XDG_CACHE_HOME", str(home / ".cache"))).expanduser()
+    cache_home = Path(
+        os.environ.get("XDG_CACHE_HOME", str(home / ".cache"))
+    ).expanduser()
     cache_plugin_path = (
-        cache_home / "opencode" / "node_modules" / f"file:{pdir.parent}" / "gateway-core"
+        cache_home
+        / "opencode"
+        / "node_modules"
+        / f"file:{pdir.parent}"
+        / "gateway-core"
     )
 
     alias_path.parent.mkdir(parents=True, exist_ok=True)
@@ -262,8 +268,36 @@ def ensure_file_plugin_compat(home: Path, pdir: Path) -> dict[str, Any]:
     }
 
 
+# Returns hard safety problems that should block non-forced enable.
+def enable_safety_problems(status: dict[str, Any]) -> list[str]:
+    problems: list[str] = []
+    if status.get("plugin_dir_exists") is not True:
+        problems.append("gateway plugin directory is missing")
+    if status.get("plugin_dist_exists") is not True:
+        problems.append("gateway plugin dist build is missing")
+    if status.get("bun_available") is not True:
+        problems.append("bun runtime is unavailable")
+    hooks_any = status.get("hook_diagnostics")
+    hooks = hooks_any if isinstance(hooks_any, dict) else {}
+    required_dist_flags = [
+        "dist_exposes_tool_execute_before",
+        "dist_exposes_chat_message",
+        "dist_autopilot_handles_slashcommand",
+        "dist_continuation_handles_session_idle",
+        "dist_safety_handles_session_deleted",
+        "dist_safety_handles_session_error",
+    ]
+    missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
+    if missing:
+        problems.append(
+            "gateway-core dist is missing required hook capabilities: "
+            + ", ".join(missing)
+        )
+    return problems
+
+
 # Enables gateway plugin spec in opencode config.
-def command_enable(as_json: bool) -> int:
+def command_enable(as_json: bool, *, force: bool = False) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, cfg_path = load_config()
     set_plugin_enabled(config, home, True)
@@ -271,6 +305,22 @@ def command_enable(as_json: bool) -> int:
     payload = status_payload(config, home, Path.cwd())
     payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
     payload["config"] = str(cfg_path)
+    problems = enable_safety_problems(payload)
+    if problems and not force:
+        set_plugin_enabled(config, home, False)
+        save_config(config, cfg_path)
+        fallback = status_payload(config, home, Path.cwd())
+        fallback["result"] = "FAIL"
+        fallback["reason_code"] = "gateway_enable_blocked_for_safety"
+        fallback["problems"] = problems
+        fallback["config"] = str(cfg_path)
+        fallback["quick_fixes"] = [
+            "install bun and run /gateway doctor",
+            "run npm run build in plugin/gateway-core",
+            "run /gateway enable --force to bypass safeguard",
+        ]
+        emit(fallback, as_json=as_json)
+        return 1
     emit(payload, as_json=as_json)
     return 0
 
@@ -361,9 +411,13 @@ def command_doctor(as_json: bool) -> int:
 def main(argv: list[str]) -> int:
     args = list(argv)
     as_json = False
+    force = False
     if "--json" in args:
         args.remove("--json")
         as_json = True
+    if "--force" in args:
+        args.remove("--force")
+        force = True
     if not args:
         return command_status(as_json)
     cmd = args.pop(0)
@@ -374,7 +428,7 @@ def main(argv: list[str]) -> int:
     if cmd == "status":
         return command_status(as_json)
     if cmd == "enable":
-        return command_enable(as_json)
+        return command_enable(as_json, force=force)
     if cmd == "disable":
         return command_disable(as_json)
     if cmd == "doctor":
