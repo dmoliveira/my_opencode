@@ -1,2 +1,12 @@
 import type { GatewayHook } from "../registry.js";
-export declare function createAutopilotLoopHook(): GatewayHook;
+interface AutopilotLoopDefaults {
+    enabled: boolean;
+    maxIterations: number;
+    completionMode: "promise" | "objective";
+    completionPromise: string;
+}
+export declare function createAutopilotLoopHook(options: {
+    directory: string;
+    defaults: AutopilotLoopDefaults;
+}): GatewayHook;
+export {};

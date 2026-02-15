@@ -6,4 +6,5 @@ export const REASON_CODES = {
     LOOP_MAX_ITERATIONS: "gateway_loop_max_iterations_reached",
     LOOP_COMPLETED_PROMISE: "gateway_loop_promise_detected",
     LOOP_COMPLETED_OBJECTIVE: "gateway_loop_objective_completed",
+    LOOP_ORPHAN_CLEANED: "gateway_loop_orphan_cleaned",
 };

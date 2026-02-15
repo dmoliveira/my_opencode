@@ -14,4 +14,5 @@ export interface GatewayLoopState {
 export interface GatewayState {
   activeLoop: GatewayLoopState | null
   lastUpdatedAt: string
+  source?: string
 }
