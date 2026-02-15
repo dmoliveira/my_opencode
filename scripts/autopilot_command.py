@@ -74,6 +74,20 @@ def normalize_args(args: list[str]) -> list[str]:
     return normalized
 
 
+def normalize_goal(goal: str | None) -> str:
+    value = str(goal or "").strip()
+    if not value:
+        return ""
+    lowered = value.lower()
+    if lowered in {"$arguments", "${arguments}"}:
+        return ""
+    if lowered.startswith("${arguments:-") and lowered.endswith("}"):
+        return ""
+    if lowered in {'"$arguments"', "'$arguments'"}:
+        return ""
+    return value
+
+
 def gateway_runtime_status(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     status = status_payload(config, home, cwd, cleanup_orphans=False)
@@ -203,6 +217,7 @@ def command_start(args: list[str]) -> int:
         return usage()
 
     inferred_defaults: list[str] = []
+    goal = normalize_goal(goal)
     if completion_mode not in {"promise", "objective"}:
         return usage()
     inferred_continuous = completion_mode == "objective"
@@ -326,6 +341,7 @@ def command_go(args: list[str]) -> int:
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
+    goal = normalize_goal(goal)
 
     runtime = load_runtime(write_path)
     started_new_run = False

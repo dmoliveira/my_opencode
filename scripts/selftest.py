@@ -327,8 +327,8 @@ exit 0
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )
             expect(
-                "${ARGUMENTS:-continue}" in template,
-                f"{command_name} command template should default goal when arguments are empty",
+                '--goal "$ARGUMENTS"' in template,
+                f"{command_name} command template should pass slash arguments as explicit goal",
             )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
@@ -4708,6 +4708,46 @@ version: 1
         expect(
             not any("node_modules/" in str(path) for path in inferred_paths),
             "autopilot inferred touched paths should exclude node_modules files",
+        )
+
+        autopilot_command_go_placeholder_goal = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "go",
+                "--goal",
+                "${ARGUMENTS:-continue}",
+                "--max-cycles",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=infer_repo,
+        )
+        expect(
+            autopilot_command_go_placeholder_goal.returncode == 0,
+            "autopilot go should tolerate template placeholder goal literals",
+        )
+        autopilot_command_go_placeholder_goal_report = parse_json_output(
+            autopilot_command_go_placeholder_goal.stdout
+        )
+        placeholder_run_any = autopilot_command_go_placeholder_goal_report.get("run")
+        placeholder_run = (
+            placeholder_run_any if isinstance(placeholder_run_any, dict) else {}
+        )
+        placeholder_objective_any = placeholder_run.get("objective")
+        placeholder_objective = (
+            placeholder_objective_any
+            if isinstance(placeholder_objective_any, dict)
+            else {}
+        )
+        expect(
+            str(placeholder_objective.get("goal") or "")
+            == "continue the active user request from current session context until done",
+            "autopilot go should normalize placeholder goal literals into inferred default goal",
         )
 
         autopilot_command_pause = subprocess.run(
