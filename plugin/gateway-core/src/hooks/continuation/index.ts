@@ -121,8 +121,20 @@ function normalizeDoneCriteria(raw: unknown): string[] {
 }
 
 // Returns true when runtime progress/blockers indicate completion token should be ignored.
-function runtimeBlocksCompletion(runtime: AutopilotRuntimePayload | null): boolean {
+function runtimeBlocksCompletion(runtime: AutopilotRuntimePayload | null, state: GatewayState): boolean {
   if (!runtime || typeof runtime !== "object") {
+    return false
+  }
+  const status = String(runtime.status ?? "")
+    .trim()
+    .toLowerCase()
+  if (status && status !== "running") {
+    return false
+  }
+  const runtimeObjective = runtime.objective && typeof runtime.objective === "object" ? runtime.objective : {}
+  const runtimeGoal = String(runtimeObjective.goal ?? "").trim()
+  const activeGoal = String(state.activeLoop?.objective ?? "").trim()
+  if (runtimeGoal && activeGoal && runtimeGoal !== activeGoal) {
     return false
   }
   const progress = runtime.progress && typeof runtime.progress === "object" ? runtime.progress : {}
@@ -329,7 +341,7 @@ export function createContinuationHook(options: {
         const text = lastAssistantText(Array.isArray(response.data) ? response.data : [])
         if (isLoopComplete(state, text)) {
           const runtime = loadAutopilotRuntime()
-          if (runtimeBlocksCompletion(runtime)) {
+            if (runtimeBlocksCompletion(runtime, state)) {
             writeGatewayEventAudit(directory, {
               hook: "continuation",
               stage: "skip",
