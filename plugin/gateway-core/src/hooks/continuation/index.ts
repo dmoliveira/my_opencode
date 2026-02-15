@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs"
+import { join } from "node:path"
+
 import { REASON_CODES } from "../../bridge/reason-codes.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
@@ -26,6 +29,22 @@ interface SessionIdlePayload {
     sessionID?: string
     info?: { id?: string }
   }
+}
+
+interface RuntimeObjective {
+  goal?: unknown
+  completion_mode?: unknown
+  completion_promise?: unknown
+}
+
+interface RuntimeProgress {
+  completed_cycles?: unknown
+}
+
+interface AutopilotRuntimePayload {
+  status?: unknown
+  objective?: RuntimeObjective
+  progress?: RuntimeProgress
 }
 
 // Resolves active session id from event payload.
@@ -81,6 +100,74 @@ function reachedIterationCap(state: GatewayState): boolean {
   return active.iteration >= active.maxIterations
 }
 
+// Resolves autopilot runtime file path for plugin bootstrap fallback.
+function autopilotRuntimePath(): string {
+  const explicit = String(process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH || "").trim()
+  if (explicit) {
+    return explicit
+  }
+  const home = String(process.env.HOME || "").trim()
+  if (!home) {
+    return ""
+  }
+  return join(home, ".config", "opencode", "my_opencode", "runtime", "autopilot_runtime.json")
+}
+
+// Loads autopilot runtime payload for loop bootstrap fallback.
+function loadAutopilotRuntime(): AutopilotRuntimePayload | null {
+  const path = autopilotRuntimePath()
+  if (!path || !existsSync(path)) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8"))
+    return parsed && typeof parsed === "object" ? (parsed as AutopilotRuntimePayload) : null
+  } catch {
+    return null
+  }
+}
+
+// Bootstraps gateway loop state from autopilot runtime when start-hook capture is missing.
+function bootstrapLoopFromRuntime(directory: string, sessionId: string): GatewayState | null {
+  const runtime = loadAutopilotRuntime()
+  if (!runtime) {
+    return null
+  }
+  const status = String(runtime.status || "").trim().toLowerCase()
+  if (status !== "running") {
+    return null
+  }
+  const objective = runtime.objective && typeof runtime.objective === "object" ? runtime.objective : {}
+  const goal = String(objective.goal || "").trim()
+  if (!goal) {
+    return null
+  }
+  const completionMode =
+    String(objective.completion_mode || "").trim().toLowerCase() === "objective"
+      ? "objective"
+      : "promise"
+  const completionPromise = String(objective.completion_promise || "DONE").trim() || "DONE"
+  const progress = runtime.progress && typeof runtime.progress === "object" ? runtime.progress : {}
+  const completedCycles = Number.parseInt(String(progress.completed_cycles ?? "0"), 10)
+  const iteration = Number.isFinite(completedCycles) && completedCycles >= 0 ? completedCycles + 1 : 1
+  const state: GatewayState = {
+    activeLoop: {
+      active: true,
+      sessionId,
+      objective: goal,
+      completionMode,
+      completionPromise,
+      iteration,
+      maxIterations: 0,
+      startedAt: nowIso(),
+    },
+    lastUpdatedAt: nowIso(),
+    source: REASON_CODES.LOOP_RUNTIME_BOOTSTRAPPED,
+  }
+  saveGatewayState(directory, state)
+  return state
+}
+
 // Builds continuation prompt for active gateway loop iteration.
 function continuationPrompt(state: GatewayState): string {
   const active = state.activeLoop
@@ -114,8 +201,31 @@ export function createContinuationHook(options: { directory: string; client?: Ga
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
-      const state = loadGatewayState(directory)
-      const active = state?.activeLoop
+      const sessionId = resolveSessionId(eventPayload)
+      if (!sessionId) {
+        writeGatewayEventAudit(directory, {
+          hook: "continuation",
+          stage: "skip",
+          reason_code: "missing_session_id",
+        })
+        return
+      }
+
+      let state = loadGatewayState(directory)
+      let active = state?.activeLoop
+      if (!state || !active || active.active !== true) {
+        const bootstrapped = bootstrapLoopFromRuntime(directory, sessionId)
+        if (bootstrapped?.activeLoop?.active) {
+          state = bootstrapped
+          active = bootstrapped.activeLoop
+          writeGatewayEventAudit(directory, {
+            hook: "continuation",
+            stage: "state",
+            reason_code: REASON_CODES.LOOP_RUNTIME_BOOTSTRAPPED,
+            session_id: sessionId,
+          })
+        }
+      }
       if (!state || !active || active.active !== true) {
         writeGatewayEventAudit(directory, {
           hook: "continuation",
@@ -124,7 +234,6 @@ export function createContinuationHook(options: { directory: string; client?: Ga
         })
         return
       }
-      const sessionId = resolveSessionId(eventPayload)
       if (!sessionId || sessionId !== active.sessionId) {
         writeGatewayEventAudit(directory, {
           hook: "continuation",

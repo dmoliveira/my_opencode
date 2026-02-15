@@ -5,6 +5,7 @@ export declare const REASON_CODES: {
     readonly LOOP_MAX_ITERATIONS: "gateway_loop_max_iterations_reached";
     readonly LOOP_COMPLETED_PROMISE: "gateway_loop_promise_detected";
     readonly LOOP_COMPLETED_OBJECTIVE: "gateway_loop_objective_completed";
+    readonly LOOP_RUNTIME_BOOTSTRAPPED: "gateway_loop_runtime_bootstrapped";
     readonly LOOP_ORPHAN_CLEANED: "gateway_loop_orphan_cleaned";
     readonly RUNTIME_PLUGIN_READY: "gateway_plugin_ready";
     readonly RUNTIME_PLUGIN_DISABLED: "gateway_plugin_disabled";
