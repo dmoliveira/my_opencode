@@ -115,6 +115,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
       : {}
+  const agentUserReminderSource =
+    source.agentUserReminder && typeof source.agentUserReminder === "object"
+      ? (source.agentUserReminder as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -294,6 +298,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof commentCheckerSource.enabled === "boolean"
           ? commentCheckerSource.enabled
           : DEFAULT_GATEWAY_CONFIG.commentChecker.enabled,
+    },
+    agentUserReminder: {
+      enabled:
+        typeof agentUserReminderSource.enabled === "boolean"
+          ? agentUserReminderSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
     },
     quality: {
       profile: qualityProfile,
