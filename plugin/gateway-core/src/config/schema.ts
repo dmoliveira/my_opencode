@@ -108,6 +108,11 @@ export interface TaskResumeInfoConfig {
   enabled: boolean
 }
 
+// Declares empty task response detector settings.
+export interface EmptyTaskResponseDetectorConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -131,6 +136,7 @@ export interface GatewayConfig {
   subagentQuestionBlocker: SubagentQuestionBlockerConfig
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig
   taskResumeInfo: TaskResumeInfoConfig
+  emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
   quality: QualityConfig
 }
 
@@ -157,6 +163,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "subagent-question-blocker",
       "tasks-todowrite-disabler",
       "task-resume-info",
+      "empty-task-response-detector",
       "safety",
     ],
   },
@@ -217,6 +224,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   taskResumeInfo: {
+    enabled: true,
+  },
+  emptyTaskResponseDetector: {
     enabled: true,
   },
   quality: {

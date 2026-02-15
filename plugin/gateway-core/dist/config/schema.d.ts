@@ -70,6 +70,9 @@ export interface TasksTodowriteDisablerConfig {
 export interface TaskResumeInfoConfig {
     enabled: boolean;
 }
+export interface EmptyTaskResponseDetectorConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -92,6 +95,7 @@ export interface GatewayConfig {
     subagentQuestionBlocker: SubagentQuestionBlockerConfig;
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     taskResumeInfo: TaskResumeInfoConfig;
+    emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
