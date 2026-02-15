@@ -24,6 +24,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "empty-task-response-detector",
             "comment-checker",
             "agent-user-reminder",
+            "unstable-agent-babysitter",
             "safety",
         ],
     },
@@ -94,6 +95,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     agentUserReminder: {
         enabled: true,
+    },
+    unstableAgentBabysitter: {
+        enabled: true,
+        riskyPatterns: ["experimental", "preview", "unstable"],
     },
     quality: {
         profile: "fast",

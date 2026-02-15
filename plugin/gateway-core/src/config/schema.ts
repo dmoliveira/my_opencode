@@ -123,6 +123,12 @@ export interface AgentUserReminderConfig {
   enabled: boolean
 }
 
+// Declares unstable agent babysitter settings.
+export interface UnstableAgentBabysitterConfig {
+  enabled: boolean
+  riskyPatterns: string[]
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -149,6 +155,7 @@ export interface GatewayConfig {
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
+  unstableAgentBabysitter: UnstableAgentBabysitterConfig
   quality: QualityConfig
 }
 
@@ -178,6 +185,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "empty-task-response-detector",
       "comment-checker",
       "agent-user-reminder",
+      "unstable-agent-babysitter",
       "safety",
     ],
   },
@@ -248,6 +256,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   agentUserReminder: {
     enabled: true,
+  },
+  unstableAgentBabysitter: {
+    enabled: true,
+    riskyPatterns: ["experimental", "preview", "unstable"],
   },
   quality: {
     profile: "fast",

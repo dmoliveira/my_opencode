@@ -94,6 +94,9 @@ export function loadGatewayConfig(raw) {
     const agentUserReminderSource = source.agentUserReminder && typeof source.agentUserReminder === "object"
         ? source.agentUserReminder
         : {};
+    const unstableBabysitterSource = source.unstableAgentBabysitter && typeof source.unstableAgentBabysitter === "object"
+        ? source.unstableAgentBabysitter
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -227,6 +230,14 @@ export function loadGatewayConfig(raw) {
             enabled: typeof agentUserReminderSource.enabled === "boolean"
                 ? agentUserReminderSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
+        },
+        unstableAgentBabysitter: {
+            enabled: typeof unstableBabysitterSource.enabled === "boolean"
+                ? unstableBabysitterSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.unstableAgentBabysitter.enabled,
+            riskyPatterns: unstableBabysitterSource.riskyPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.unstableAgentBabysitter.riskyPatterns
+                : stringList(unstableBabysitterSource.riskyPatterns),
         },
         quality: {
             profile: qualityProfile,

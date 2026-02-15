@@ -20,6 +20,7 @@ import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blo
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
+import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 // Creates ordered hook list using gateway config and default hooks.
@@ -124,6 +125,10 @@ function configuredHooks(ctx) {
         }),
         createAgentUserReminderHook({
             enabled: cfg.agentUserReminder.enabled,
+        }),
+        createUnstableAgentBabysitterHook({
+            enabled: cfg.unstableAgentBabysitter.enabled,
+            riskyPatterns: cfg.unstableAgentBabysitter.riskyPatterns,
         }),
     ];
     if (!cfg.hooks.enabled) {
