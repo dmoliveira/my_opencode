@@ -141,6 +141,13 @@ export interface DangerousCommandGuardConfig {
   blockedPatterns: string[]
 }
 
+// Declares secret leak guard settings for output redaction.
+export interface SecretLeakGuardConfig {
+  enabled: boolean
+  redactionToken: string
+  patterns: string[]
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -170,6 +177,7 @@ export interface GatewayConfig {
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
   questionLabelTruncator: QuestionLabelTruncatorConfig
   dangerousCommandGuard: DangerousCommandGuardConfig
+  secretLeakGuard: SecretLeakGuardConfig
   quality: QualityConfig
 }
 
@@ -202,6 +210,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "unstable-agent-babysitter",
       "question-label-truncator",
       "dangerous-command-guard",
+      "secret-leak-guard",
       "safety",
     ],
   },
@@ -290,6 +299,17 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "\\bgit\\s+clean\\s+-fdx\\b",
       "\\bgit\\s+push\\s+--force\\b",
       "curl\\s+[^|]+\\|\\s*bash",
+    ],
+  },
+  secretLeakGuard: {
+    enabled: true,
+    redactionToken: "[REDACTED_SECRET]",
+    patterns: [
+      "sk-[A-Za-z0-9]{20,}",
+      "ghp_[A-Za-z0-9]{20,}",
+      "AIza[0-9A-Za-z\\-_]{20,}",
+      "-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) KEY-----",
+      "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
     ],
   },
   quality: {

@@ -103,6 +103,9 @@ export function loadGatewayConfig(raw) {
     const dangerousCommandSource = source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
         ? source.dangerousCommandGuard
         : {};
+    const secretLeakSource = source.secretLeakGuard && typeof source.secretLeakGuard === "object"
+        ? source.secretLeakGuard
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -258,6 +261,17 @@ export function loadGatewayConfig(raw) {
             blockedPatterns: dangerousCommandSource.blockedPatterns === undefined
                 ? DEFAULT_GATEWAY_CONFIG.dangerousCommandGuard.blockedPatterns
                 : stringList(dangerousCommandSource.blockedPatterns),
+        },
+        secretLeakGuard: {
+            enabled: typeof secretLeakSource.enabled === "boolean"
+                ? secretLeakSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.enabled,
+            redactionToken: typeof secretLeakSource.redactionToken === "string" && secretLeakSource.redactionToken.trim().length > 0
+                ? secretLeakSource.redactionToken
+                : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken,
+            patterns: secretLeakSource.patterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
+                : stringList(secretLeakSource.patterns),
         },
         quality: {
             profile: qualityProfile,

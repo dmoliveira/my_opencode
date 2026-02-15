@@ -91,6 +91,11 @@ export interface DangerousCommandGuardConfig {
     enabled: boolean;
     blockedPatterns: string[];
 }
+export interface SecretLeakGuardConfig {
+    enabled: boolean;
+    redactionToken: string;
+    patterns: string[];
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -119,6 +124,7 @@ export interface GatewayConfig {
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
     questionLabelTruncator: QuestionLabelTruncatorConfig;
     dangerousCommandGuard: DangerousCommandGuardConfig;
+    secretLeakGuard: SecretLeakGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
