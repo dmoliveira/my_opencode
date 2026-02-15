@@ -1,4 +1,5 @@
 import { REASON_CODES } from "../../bridge/reason-codes.js"
+import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
 import type { GatewayState } from "../../state/types.js"
 import type { GatewayHook } from "../registry.js"
@@ -116,10 +117,21 @@ export function createContinuationHook(options: { directory: string; client?: Ga
       const state = loadGatewayState(directory)
       const active = state?.activeLoop
       if (!state || !active || active.active !== true) {
+        writeGatewayEventAudit(directory, {
+          hook: "continuation",
+          stage: "skip",
+          reason_code: "no_active_loop",
+        })
         return
       }
       const sessionId = resolveSessionId(eventPayload)
       if (!sessionId || sessionId !== active.sessionId) {
+        writeGatewayEventAudit(directory, {
+          hook: "continuation",
+          stage: "skip",
+          reason_code: "session_mismatch",
+          has_session_id: sessionId.length > 0,
+        })
         return
       }
 
@@ -138,6 +150,12 @@ export function createContinuationHook(options: { directory: string; client?: Ga
               ? REASON_CODES.LOOP_COMPLETED_OBJECTIVE
               : REASON_CODES.LOOP_COMPLETED_PROMISE
           saveGatewayState(directory, state)
+          writeGatewayEventAudit(directory, {
+            hook: "continuation",
+            stage: "state",
+            reason_code: state.source,
+            session_id: sessionId,
+          })
           return
         }
       }
@@ -147,6 +165,12 @@ export function createContinuationHook(options: { directory: string; client?: Ga
         state.lastUpdatedAt = nowIso()
         state.source = REASON_CODES.LOOP_MAX_ITERATIONS
         saveGatewayState(directory, state)
+        writeGatewayEventAudit(directory, {
+          hook: "continuation",
+          stage: "state",
+          reason_code: REASON_CODES.LOOP_MAX_ITERATIONS,
+          session_id: sessionId,
+        })
         return
       }
 
@@ -154,12 +178,26 @@ export function createContinuationHook(options: { directory: string; client?: Ga
       state.lastUpdatedAt = nowIso()
       state.source = REASON_CODES.LOOP_IDLE_CONTINUED
       saveGatewayState(directory, state)
+      writeGatewayEventAudit(directory, {
+        hook: "continuation",
+        stage: "state",
+        reason_code: REASON_CODES.LOOP_IDLE_CONTINUED,
+        session_id: sessionId,
+        iteration: active.iteration,
+      })
 
       if (client) {
         await client.promptAsync({
           path: { id: sessionId },
           body: { parts: [{ type: "text", text: continuationPrompt(state) }] },
           query: { directory },
+        })
+        writeGatewayEventAudit(directory, {
+          hook: "continuation",
+          stage: "inject",
+          reason_code: "idle_prompt_injected",
+          session_id: sessionId,
+          iteration: active.iteration,
         })
       }
       return

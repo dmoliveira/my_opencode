@@ -60,6 +60,18 @@ def plugin_dir(home: Path) -> Path:
     return home / ".config" / "opencode" / "my_opencode" / "plugin" / "gateway-core"
 
 
+def gateway_event_audit_enabled() -> bool:
+    raw = os.environ.get("MY_OPENCODE_GATEWAY_EVENT_AUDIT", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def gateway_event_audit_path(cwd: Path) -> Path:
+    raw = os.environ.get("MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return cwd / ".opencode" / "gateway-events.jsonl"
+
+
 # Returns gateway-core hook diagnostics for source and dist artifacts.
 def hook_diagnostics(pdir: Path) -> dict[str, Any]:
     src_index = pdir / "src" / "index.ts"
@@ -228,6 +240,9 @@ def status_payload(
         "loop_state_path": str(gateway_loop_state_path(cwd)),
         "loop_state": filtered_loop_state,
         "loop_state_reason_code": loop_state_reason,
+        "event_audit_enabled": gateway_event_audit_enabled(),
+        "event_audit_path": str(gateway_event_audit_path(cwd)),
+        "event_audit_exists": gateway_event_audit_path(cwd).exists(),
     }
     if cleanup is not None:
         payload["orphan_cleanup"] = cleanup

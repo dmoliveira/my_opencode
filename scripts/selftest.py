@@ -1703,6 +1703,12 @@ exit 0
             in gateway_status.get("hook_diagnostics", {}),
             "gateway status hook diagnostics should include dist tool hook marker",
         )
+        expect(
+            isinstance(gateway_status.get("event_audit_enabled"), bool)
+            and isinstance(gateway_status.get("event_audit_path"), str)
+            and isinstance(gateway_status.get("event_audit_exists"), bool),
+            "gateway status should expose event audit toggle and path telemetry",
+        )
 
         stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
         stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -4748,6 +4754,29 @@ version: 1
             str(placeholder_objective.get("goal") or "")
             == "continue the active user request from current session context until done",
             "autopilot go should normalize placeholder goal literals into inferred default goal",
+        )
+
+        autopilot_command_go_missing_goal_value = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "go",
+                "--goal",
+                "--completion-mode",
+                "promise",
+                "--max-cycles",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=infer_repo,
+        )
+        expect(
+            autopilot_command_go_missing_goal_value.returncode == 0,
+            "autopilot go should treat missing --goal value as inferred default",
         )
 
         autopilot_command_pause = subprocess.run(

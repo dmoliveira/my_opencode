@@ -54,6 +54,23 @@ def pop_value(args: list[str], flag: str, default: str | None = None) -> str | N
     return value
 
 
+def pop_optional_value(
+    args: list[str], flag: str, default: str | None = None
+) -> str | None:
+    if flag not in args:
+        return default
+    idx = args.index(flag)
+    if idx + 1 >= len(args):
+        del args[idx]
+        return default
+    next_token = args[idx + 1]
+    if next_token.startswith("--"):
+        del args[idx]
+        return default
+    del args[idx : idx + 2]
+    return next_token
+
+
 def emit(payload: dict[str, Any], *, as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, indent=2))
@@ -201,9 +218,9 @@ def _runtime_or_fail(
 def command_start(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
     try:
-        goal = pop_value(args, "--goal")
-        scope = pop_value(args, "--scope")
-        done_criteria = pop_value(args, "--done-criteria")
+        goal = pop_optional_value(args, "--goal", "")
+        scope = pop_optional_value(args, "--scope", "")
+        done_criteria = pop_optional_value(args, "--done-criteria", "")
         completion_mode = (
             (pop_value(args, "--completion-mode", "promise") or "promise")
             .strip()
@@ -296,9 +313,9 @@ def command_go(args: list[str]) -> int:
     explicit_completion_promise = "--completion-promise" in args
     explicit_max_budget = "--max-budget" in args
     try:
-        goal = pop_value(args, "--goal")
-        scope = pop_value(args, "--scope")
-        done_criteria = pop_value(args, "--done-criteria")
+        goal = pop_optional_value(args, "--goal", "")
+        scope = pop_optional_value(args, "--scope", "")
+        done_criteria = pop_optional_value(args, "--done-criteria", "")
         completion_mode = (
             (pop_value(args, "--completion-mode", "promise") or "promise")
             .strip()
