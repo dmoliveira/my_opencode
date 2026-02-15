@@ -1585,6 +1585,7 @@ Notes:
 - `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
 - If `bun` is unavailable, keep gateway disabled and use Python command bridge mode.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
+- `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
 
 Gateway orphan cleanup report fields (`--json`):
 
@@ -1594,6 +1595,16 @@ Gateway orphan cleanup report fields (`--json`):
 | `orphan_cleanup.changed` | `boolean` | `true` when active orphan loop was deactivated. |
 | `orphan_cleanup.reason` | `string` | Cleanup result reason (`state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, `stale_loop_deactivated`). |
 | `orphan_cleanup.state_path` | `string|null` | Updated state path when cleanup changes were persisted. |
+
+Gateway hook diagnostics fields (`--json`):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `hook_diagnostics.source_hooks_exist` | `boolean` | Source hook modules exist for autopilot-loop, continuation, and safety. |
+| `hook_diagnostics.dist_hooks_exist` | `boolean` | Built dist hook modules exist for autopilot-loop, continuation, and safety. |
+| `hook_diagnostics.dist_exposes_tool_execute_before` | `boolean` | Built plugin exports slash-command interception handler. |
+| `hook_diagnostics.dist_exposes_chat_message` | `boolean` | Built plugin exports chat-message lifecycle handler. |
+| `hook_diagnostics.dist_continuation_handles_session_idle` | `boolean` | Continuation hook handles idle-cycle progression logic. |
 
 ## Telemetry forwarding inside OpenCode 📡
 

@@ -150,6 +150,11 @@ Keep default reasoning on `medium` but cap drift in long autopilot loops.
 - [ ] Implement config schema + state storage
 - [ ] Implement hook registry with feature flags
 
+Recent progress:
+
+- [x] Added gateway-core focused unit tests for command parsing and orphan cleanup state behavior.
+- [x] Added command-layer hook diagnostics in `/gateway status|doctor --json`.
+
 ### Phase 2 — Autopilot hook parity
 - [ ] Move loop continuation logic to hook events (`session.idle`)
 - [ ] Keep `/autopilot*` Python commands as control facade
