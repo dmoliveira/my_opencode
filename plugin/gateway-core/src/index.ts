@@ -7,6 +7,7 @@ import { createCommentCheckerHook } from "./hooks/comment-checker/index.js"
 import { createContinuationHook } from "./hooks/continuation/index.js"
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js"
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js"
+import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js"
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js"
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js"
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js"
@@ -206,6 +207,11 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createQuestionLabelTruncatorHook({
       enabled: cfg.questionLabelTruncator.enabled,
       maxLength: cfg.questionLabelTruncator.maxLength,
+    }),
+    createDangerousCommandGuardHook({
+      directory,
+      enabled: cfg.dangerousCommandGuard.enabled,
+      blockedPatterns: cfg.dangerousCommandGuard.blockedPatterns,
     }),
   ]
   if (!cfg.hooks.enabled) {
