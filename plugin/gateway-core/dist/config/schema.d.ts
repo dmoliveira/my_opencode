@@ -57,6 +57,9 @@ export interface DirectoryAgentsInjectorConfig {
 export interface DirectoryReadmeInjectorConfig {
     enabled: boolean;
 }
+export interface WriteExistingFileGuardConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -75,6 +78,7 @@ export interface GatewayConfig {
     rulesInjector: RulesInjectorConfig;
     directoryAgentsInjector: DirectoryAgentsInjectorConfig;
     directoryReadmeInjector: DirectoryReadmeInjectorConfig;
+    writeExistingFileGuard: WriteExistingFileGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

@@ -73,6 +73,9 @@ export function loadGatewayConfig(raw) {
     const directoryReadmeSource = source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
         ? source.directoryReadmeInjector
         : {};
+    const writeExistingGuardSource = source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
+        ? source.writeExistingFileGuard
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -168,6 +171,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof directoryReadmeSource.enabled === "boolean"
                 ? directoryReadmeSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.enabled,
+        },
+        writeExistingFileGuard: {
+            enabled: typeof writeExistingGuardSource.enabled === "boolean"
+                ? writeExistingGuardSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.writeExistingFileGuard.enabled,
         },
         quality: {
             profile: qualityProfile,

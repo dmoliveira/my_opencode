@@ -87,6 +87,11 @@ export interface DirectoryReadmeInjectorConfig {
   enabled: boolean
 }
 
+// Declares write guard settings to prevent overwriting existing files.
+export interface WriteExistingFileGuardConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -106,6 +111,7 @@ export interface GatewayConfig {
   rulesInjector: RulesInjectorConfig
   directoryAgentsInjector: DirectoryAgentsInjectorConfig
   directoryReadmeInjector: DirectoryReadmeInjectorConfig
+  writeExistingFileGuard: WriteExistingFileGuardConfig
   quality: QualityConfig
 }
 
@@ -128,6 +134,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "rules-injector",
       "directory-agents-injector",
       "directory-readme-injector",
+      "write-existing-file-guard",
       "safety",
     ],
   },
@@ -175,6 +182,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   directoryReadmeInjector: {
+    enabled: true,
+  },
+  writeExistingFileGuard: {
     enabled: true,
   },
   quality: {
