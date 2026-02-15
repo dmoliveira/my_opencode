@@ -768,9 +768,11 @@ def command_doctor(args: list[str]) -> int:
     plugin_root = SCRIPT_DIR.parent / "plugin" / "autopilot-loop"
     plugin_scaffold_exists = (plugin_root / "src" / "index.ts").exists()
     plugin_dist_exists = (plugin_root / "dist" / "index.js").exists()
+    config, _ = load_layered_config()
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     gateway_root = plugin_dir(home)
     gateway_hooks = hook_diagnostics(gateway_root)
+    gateway_status = status_payload(config, home, Path.cwd(), cleanup_orphans=False)
     report = {
         "result": "PASS",
         "runtime_exists": (SCRIPT_DIR / "autopilot_runtime.py").exists(),
@@ -782,6 +784,13 @@ def command_doctor(args: list[str]) -> int:
         "hook_plugin_dist_exists": plugin_dist_exists,
         "gateway_plugin_dir": str(gateway_root),
         "gateway_hook_diagnostics": gateway_hooks,
+        "gateway_runtime_mode": gateway_status.get("runtime_mode"),
+        "gateway_runtime_reason_code": gateway_status.get("runtime_reason_code"),
+        "gateway_plugin_enabled": gateway_status.get("enabled"),
+        "gateway_bun_available": gateway_status.get("bun_available"),
+        "gateway_missing_hook_capabilities": gateway_status.get(
+            "missing_hook_capabilities", []
+        ),
         "warnings": [],
         "problems": [],
         "quick_fixes": [
@@ -808,6 +817,13 @@ def command_doctor(args: list[str]) -> int:
     if gateway_hooks.get("dist_index_exists") is not True:
         report["warnings"].append(
             "gateway-core dist plugin is missing (run npm run build in plugin/gateway-core)"
+        )
+    if (
+        report.get("gateway_bun_available") is True
+        and report.get("gateway_plugin_enabled") is not True
+    ):
+        report["warnings"].append(
+            "gateway plugin runtime is available but disabled; run /gateway enable for plugin-first mode"
         )
     required_gateway_flags = [
         "dist_exposes_tool_execute_before",

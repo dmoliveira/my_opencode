@@ -4424,6 +4424,18 @@ version: 1
             isinstance(autopilot_doctor_report.get("gateway_hook_diagnostics"), dict),
             "autopilot doctor should include gateway hook diagnostics",
         )
+        expect(
+            autopilot_doctor_report.get("gateway_runtime_mode")
+            in {"plugin_gateway", "python_command_bridge"}
+            and autopilot_doctor_report.get("gateway_runtime_reason_code")
+            in {
+                "gateway_plugin_ready",
+                "gateway_plugin_disabled",
+                "gateway_plugin_not_ready",
+                "gateway_plugin_runtime_unavailable",
+            },
+            "autopilot doctor should include deterministic gateway runtime mode diagnostics",
+        )
 
         autopilot_command_start = subprocess.run(
             [

@@ -251,6 +251,10 @@ def command_doctor(as_json: bool) -> int:
         problems.append("gateway plugin enabled without built dist assets")
     if status["enabled"] and not status["bun_available"]:
         warnings.append("gateway plugin is enabled but bun is not available")
+    if status.get("bun_available") is True and status.get("enabled") is not True:
+        warnings.append(
+            "gateway plugin runtime is available but disabled; enable for plugin-first mode"
+        )
 
     hooks_any = status.get("hook_diagnostics")
     hooks = hooks_any if isinstance(hooks_any, dict) else {}
