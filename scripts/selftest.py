@@ -4390,6 +4390,10 @@ version: 1
             autopilot_doctor_report.get("result") == "PASS",
             "autopilot doctor should report PASS when required modules exist",
         )
+        expect(
+            isinstance(autopilot_doctor_report.get("gateway_hook_diagnostics"), dict),
+            "autopilot doctor should include gateway hook diagnostics",
+        )
 
         autopilot_command_start = subprocess.run(
             [
@@ -4453,6 +4457,64 @@ version: 1
                 autopilot_command_status_report.get("control_integrations", {}), dict
             ),
             "autopilot status should include control integration diagnostics",
+        )
+
+        infer_repo = tmp / "autopilot_infer_repo"
+        infer_repo.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=infer_repo,
+        )
+        (infer_repo / "src").mkdir(parents=True, exist_ok=True)
+        (infer_repo / "src" / "feature.txt").write_text(
+            "tracked change\n", encoding="utf-8"
+        )
+        (infer_repo / "node_modules" / "pkg").mkdir(parents=True, exist_ok=True)
+        (infer_repo / "node_modules" / "pkg" / "index.js").write_text(
+            "module.exports = {}\n", encoding="utf-8"
+        )
+        autopilot_command_go_infer = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "go",
+                "--goal",
+                "validate inferred path filtering",
+                "--scope",
+                "**",
+                "--max-cycles",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=infer_repo,
+        )
+        expect(
+            autopilot_command_go_infer.returncode == 0,
+            "autopilot go should run with inferred touched paths in git workspace",
+        )
+        autopilot_command_go_infer_report = parse_json_output(
+            autopilot_command_go_infer.stdout
+        )
+        inferred_paths_any = autopilot_command_go_infer_report.get(
+            "inferred_touched_paths", []
+        )
+        inferred_paths = (
+            inferred_paths_any if isinstance(inferred_paths_any, list) else []
+        )
+        expect(
+            "src/feature.txt" in inferred_paths,
+            "autopilot inferred touched paths should include regular workspace files",
+        )
+        expect(
+            not any("node_modules/" in str(path) for path in inferred_paths),
+            "autopilot inferred touched paths should exclude node_modules files",
         )
 
         autopilot_command_pause = subprocess.run(

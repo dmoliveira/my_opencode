@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from autopilot_integration import integrate_controls  # type: ignore
 from autopilot_runtime import execute_cycle, initialize_run, load_runtime, save_runtime  # type: ignore
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from gateway_command import hook_diagnostics, plugin_dir  # type: ignore
 from gateway_plugin_bridge import (  # type: ignore
     bridge_start_loop,
     bridge_stop_loop,
@@ -109,6 +111,21 @@ def infer_touched_paths(cwd: Path) -> list[str]:
         ],
         ["git", "-C", str(cwd), "ls-files", "--others", "--exclude-standard"],
     ]
+    ignored_prefixes = (".beads/", ".opencode/")
+
+    def include_path(path: str) -> bool:
+        if path.startswith(ignored_prefixes):
+            return False
+        if path.startswith("node_modules/"):
+            return False
+        if path.startswith("plugin/autopilot-loop/node_modules/"):
+            return False
+        if path.startswith("plugin/gateway-core/node_modules/"):
+            return False
+        if "/node_modules/" in path:
+            return False
+        return True
+
     discovered: list[str] = []
     for cmd in commands:
         try:
@@ -125,8 +142,10 @@ def infer_touched_paths(cwd: Path) -> list[str]:
             continue
         for line in result.stdout.splitlines():
             path = line.strip()
-            if path and path not in discovered:
+            if path and include_path(path) and path not in discovered:
                 discovered.append(path)
+            if len(discovered) >= 200:
+                return discovered
     return discovered
 
 
@@ -224,6 +243,12 @@ def command_start(args: list[str]) -> int:
 def command_go(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
     completion_signal = pop_flag(args, "--completion-signal")
+    explicit_goal = "--goal" in args
+    explicit_scope = "--scope" in args
+    explicit_done_criteria = "--done-criteria" in args
+    explicit_completion_mode = "--completion-mode" in args
+    explicit_completion_promise = "--completion-promise" in args
+    explicit_max_budget = "--max-budget" in args
     try:
         goal = pop_value(args, "--goal")
         scope = pop_value(args, "--scope")
@@ -317,11 +342,23 @@ def command_go(args: list[str]) -> int:
         wall_limit = int(limits.get("wall_clock_seconds", 0) or 0)
         runtime_budget_exhausted = wall_limit > 0 and wall >= wall_limit
 
+    explicit_objective_override = any(
+        [
+            explicit_goal,
+            explicit_scope,
+            explicit_done_criteria,
+            explicit_completion_mode,
+            explicit_completion_promise,
+            explicit_max_budget,
+        ]
+    )
+
     should_initialize = (
         not runtime
         or runtime_status in terminal_states
         or runtime_budget_exhausted
         or runtime_legacy_inferred
+        or explicit_objective_override
     )
 
     if should_initialize:
@@ -693,14 +730,11 @@ def command_doctor(args: list[str]) -> int:
     plugin_root = SCRIPT_DIR.parent / "plugin" / "autopilot-loop"
     plugin_scaffold_exists = (plugin_root / "src" / "index.ts").exists()
     plugin_dist_exists = (plugin_root / "dist" / "index.js").exists()
+    home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
+    gateway_root = plugin_dir(home)
+    gateway_hooks = hook_diagnostics(gateway_root)
     report = {
-        "result": "PASS"
-        if (SCRIPT_DIR / "autopilot_runtime.py").exists()
-        and (SCRIPT_DIR / "autopilot_integration.py").exists()
-        and (
-            SCRIPT_DIR.parent / "instructions" / "autopilot_command_contract.md"
-        ).exists()
-        else "FAIL",
+        "result": "PASS",
         "runtime_exists": (SCRIPT_DIR / "autopilot_runtime.py").exists(),
         "integration_exists": (SCRIPT_DIR / "autopilot_integration.py").exists(),
         "contract_exists": (
@@ -708,6 +742,8 @@ def command_doctor(args: list[str]) -> int:
         ).exists(),
         "hook_plugin_scaffold_exists": plugin_scaffold_exists,
         "hook_plugin_dist_exists": plugin_dist_exists,
+        "gateway_plugin_dir": str(gateway_root),
+        "gateway_hook_diagnostics": gateway_hooks,
         "warnings": [],
         "problems": [],
         "quick_fixes": [
@@ -731,6 +767,30 @@ def command_doctor(args: list[str]) -> int:
         report["warnings"].append(
             "autopilot-loop plugin not built yet (run install.sh or npm run build in plugin/autopilot-loop)"
         )
+    if gateway_hooks.get("dist_index_exists") is not True:
+        report["warnings"].append(
+            "gateway-core dist plugin is missing (run npm run build in plugin/gateway-core)"
+        )
+    required_gateway_flags = [
+        "dist_exposes_tool_execute_before",
+        "dist_exposes_chat_message",
+        "dist_autopilot_handles_slashcommand",
+        "dist_continuation_handles_session_idle",
+        "dist_safety_handles_session_deleted",
+        "dist_safety_handles_session_error",
+    ]
+    if gateway_hooks.get("dist_index_exists") is True:
+        missing_gateway = [
+            flag
+            for flag in required_gateway_flags
+            if gateway_hooks.get(flag) is not True
+        ]
+        if missing_gateway:
+            report["problems"].append(
+                "gateway-core hook capabilities missing: " + ", ".join(missing_gateway)
+            )
+    if report["problems"]:
+        report["result"] = "FAIL"
     emit(report, as_json=as_json)
     return 0 if report["result"] == "PASS" else 1
 
