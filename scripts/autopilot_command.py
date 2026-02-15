@@ -594,7 +594,7 @@ def command_pause(args: list[str]) -> int:
     if args:
         return usage()
 
-    _, _ = load_layered_config()
+    config, _ = load_layered_config()
     write_path = resolve_write_path()
     runtime, code = _runtime_or_fail(write_path, as_json=as_json)
     if runtime is None:
@@ -607,19 +607,21 @@ def command_pause(args: list[str]) -> int:
         "run /autopilot resume when safe to continue",
     ]
     path = save_runtime(write_path, runtime)
-    bridge_state_path = bridge_stop_loop(Path.cwd())
-    emit(
-        {
-            "result": "PASS",
-            "status": runtime["status"],
-            "reason_code": runtime["reason_code"],
-            "runtime_path": str(path),
-            "gateway_loop_state_path": str(bridge_state_path)
-            if bridge_state_path
-            else None,
-        },
-        as_json=as_json,
-    )
+    runtime_status = gateway_runtime_status(Path.cwd(), config)
+    bridge_state_path = None
+    if runtime_status.get("runtime_mode") == "python_command_bridge":
+        bridge_state_path = bridge_stop_loop(Path.cwd())
+    payload = {
+        "result": "PASS",
+        "status": runtime["status"],
+        "reason_code": runtime["reason_code"],
+        "runtime_path": str(path),
+        "gateway_loop_state_path": str(
+            bridge_state_path or gateway_loop_state_path(Path.cwd())
+        ),
+    }
+    payload.update(gateway_state_snapshot(Path.cwd(), config))
+    emit(payload, as_json=as_json)
     return 0
 
 
@@ -680,8 +682,19 @@ def command_resume(args: list[str]) -> int:
         completion_signal=completion_signal,
         assistant_text=assistant_text,
     )
+    runtime_status = gateway_runtime_status(Path.cwd(), config)
+    if runtime_status.get("runtime_mode") == "python_command_bridge":
+        run_any = resumed.get("run")
+        run = run_any if isinstance(run_any, dict) else None
+        if isinstance(run, dict) and str(run.get("status") or "") in {
+            "draft",
+            "running",
+            "paused",
+        }:
+            resumed["gateway_loop_state_path"] = str(bridge_start_loop(Path.cwd(), run))
     if inferred_touched_paths:
         resumed["inferred_touched_paths"] = inferred_touched_paths
+    resumed.update(gateway_state_snapshot(Path.cwd(), config))
     emit(resumed, as_json=as_json)
     return 0 if resumed.get("result") == "PASS" else 1
 
@@ -696,7 +709,7 @@ def command_stop(args: list[str]) -> int:
     if args:
         return usage()
 
-    _, _ = load_layered_config()
+    config, _ = load_layered_config()
     write_path = resolve_write_path()
     runtime, code = _runtime_or_fail(write_path, as_json=as_json)
     if runtime is None:
@@ -710,20 +723,22 @@ def command_stop(args: list[str]) -> int:
         "use /autopilot start to begin a new objective run",
     ]
     path = save_runtime(write_path, runtime)
-    bridge_state_path = bridge_stop_loop(Path.cwd())
-    emit(
-        {
-            "result": "PASS",
-            "status": runtime["status"],
-            "reason_code": runtime["reason_code"],
-            "stop_reason": runtime["stop_reason"],
-            "runtime_path": str(path),
-            "gateway_loop_state_path": str(bridge_state_path)
-            if bridge_state_path
-            else None,
-        },
-        as_json=as_json,
-    )
+    runtime_status = gateway_runtime_status(Path.cwd(), config)
+    bridge_state_path = None
+    if runtime_status.get("runtime_mode") == "python_command_bridge":
+        bridge_state_path = bridge_stop_loop(Path.cwd())
+    payload = {
+        "result": "PASS",
+        "status": runtime["status"],
+        "reason_code": runtime["reason_code"],
+        "stop_reason": runtime["stop_reason"],
+        "runtime_path": str(path),
+        "gateway_loop_state_path": str(
+            bridge_state_path or gateway_loop_state_path(Path.cwd())
+        ),
+    }
+    payload.update(gateway_state_snapshot(Path.cwd(), config))
+    emit(payload, as_json=as_json)
     return 0
 
 
