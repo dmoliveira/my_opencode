@@ -213,3 +213,7 @@ Recent progress:
 - `todo-continuation-enforcer`: intentionally not adopted.
   - Rationale: this workflow already disables `task` and `todowrite` hooks and relies on `br` issue tracking.
   - Risk: auto-nudging unfinished todo flows can override explicit user stop intent and degrade AI/human control.
+
+- `think-mode`: intentionally not adopted as default behavior.
+  - Rationale: forcing extra reasoning mode from keyword matches can increase latency/cost unexpectedly.
+  - Risk: hidden mode escalation reduces predictability for users and can degrade conversational control.
