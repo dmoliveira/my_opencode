@@ -7,6 +7,7 @@ import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/i
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js"
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js"
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js"
+import { createRulesInjectorHook } from "./hooks/rules-injector/index.js"
 import { createSafetyHook } from "./hooks/safety/index.js"
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js"
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js"
@@ -149,6 +150,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAutoSlashCommandHook({
       directory,
       enabled: cfg.autoSlashCommand.enabled,
+    }),
+    createRulesInjectorHook({
+      directory,
+      enabled: cfg.rulesInjector.enabled,
     }),
   ]
   if (!cfg.hooks.enabled) {

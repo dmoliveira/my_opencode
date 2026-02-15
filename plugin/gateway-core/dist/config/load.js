@@ -64,6 +64,9 @@ export function loadGatewayConfig(raw) {
     const autoSlashSource = source.autoSlashCommand && typeof source.autoSlashCommand === "object"
         ? source.autoSlashCommand
         : {};
+    const rulesInjectorSource = source.rulesInjector && typeof source.rulesInjector === "object"
+        ? source.rulesInjector
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -144,6 +147,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof autoSlashSource.enabled === "boolean"
                 ? autoSlashSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.autoSlashCommand.enabled,
+        },
+        rulesInjector: {
+            enabled: typeof rulesInjectorSource.enabled === "boolean"
+                ? rulesInjectorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.rulesInjector.enabled,
         },
         quality: {
             profile: qualityProfile,
