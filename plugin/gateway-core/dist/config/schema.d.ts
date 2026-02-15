@@ -3,6 +3,7 @@ export type QualityProfile = "off" | "fast" | "strict";
 export interface AutopilotLoopConfig {
     enabled: boolean;
     maxIterations: number;
+    orphanMaxAgeHours: number;
     completionMode: CompletionMode;
     completionPromise: string;
 }

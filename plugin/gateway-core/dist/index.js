@@ -23,7 +23,7 @@ function configuredHooks(ctx) {
         }),
         createSafetyHook({
             directory,
-            orphanMaxAgeHours: 12,
+            orphanMaxAgeHours: cfg.autopilotLoop.orphanMaxAgeHours,
         }),
     ];
     if (!cfg.hooks.enabled) {
