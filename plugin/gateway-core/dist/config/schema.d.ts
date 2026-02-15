@@ -96,6 +96,31 @@ export interface SecretLeakGuardConfig {
     redactionToken: string;
     patterns: string[];
 }
+export interface WorkflowConformanceGuardConfig {
+    enabled: boolean;
+    protectedBranches: string[];
+}
+export interface ScopeDriftGuardConfig {
+    enabled: boolean;
+    allowedPaths: string[];
+    blockOnDrift: boolean;
+}
+export interface DoneProofEnforcerConfig {
+    enabled: boolean;
+    requiredMarkers: string[];
+}
+export interface DependencyRiskGuardConfig {
+    enabled: boolean;
+    lockfilePatterns: string[];
+}
+export interface RetryBudgetGuardConfig {
+    enabled: boolean;
+    maxRetries: number;
+}
+export interface StaleLoopExpiryGuardConfig {
+    enabled: boolean;
+    maxAgeMinutes: number;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -125,6 +150,12 @@ export interface GatewayConfig {
     questionLabelTruncator: QuestionLabelTruncatorConfig;
     dangerousCommandGuard: DangerousCommandGuardConfig;
     secretLeakGuard: SecretLeakGuardConfig;
+    workflowConformanceGuard: WorkflowConformanceGuardConfig;
+    scopeDriftGuard: ScopeDriftGuardConfig;
+    doneProofEnforcer: DoneProofEnforcerConfig;
+    dependencyRiskGuard: DependencyRiskGuardConfig;
+    retryBudgetGuard: RetryBudgetGuardConfig;
+    staleLoopExpiryGuard: StaleLoopExpiryGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

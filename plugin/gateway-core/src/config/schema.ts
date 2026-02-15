@@ -148,6 +148,43 @@ export interface SecretLeakGuardConfig {
   patterns: string[]
 }
 
+// Declares workflow conformance guard settings.
+export interface WorkflowConformanceGuardConfig {
+  enabled: boolean
+  protectedBranches: string[]
+}
+
+// Declares scope drift guard settings for file edit boundaries.
+export interface ScopeDriftGuardConfig {
+  enabled: boolean
+  allowedPaths: string[]
+  blockOnDrift: boolean
+}
+
+// Declares done proof enforcer settings for completion evidence checks.
+export interface DoneProofEnforcerConfig {
+  enabled: boolean
+  requiredMarkers: string[]
+}
+
+// Declares dependency risk guard settings.
+export interface DependencyRiskGuardConfig {
+  enabled: boolean
+  lockfilePatterns: string[]
+}
+
+// Declares retry budget guard settings.
+export interface RetryBudgetGuardConfig {
+  enabled: boolean
+  maxRetries: number
+}
+
+// Declares stale loop expiry guard settings.
+export interface StaleLoopExpiryGuardConfig {
+  enabled: boolean
+  maxAgeMinutes: number
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -178,6 +215,12 @@ export interface GatewayConfig {
   questionLabelTruncator: QuestionLabelTruncatorConfig
   dangerousCommandGuard: DangerousCommandGuardConfig
   secretLeakGuard: SecretLeakGuardConfig
+  workflowConformanceGuard: WorkflowConformanceGuardConfig
+  scopeDriftGuard: ScopeDriftGuardConfig
+  doneProofEnforcer: DoneProofEnforcerConfig
+  dependencyRiskGuard: DependencyRiskGuardConfig
+  retryBudgetGuard: RetryBudgetGuardConfig
+  staleLoopExpiryGuard: StaleLoopExpiryGuardConfig
   quality: QualityConfig
 }
 
@@ -211,6 +254,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "question-label-truncator",
       "dangerous-command-guard",
       "secret-leak-guard",
+      "workflow-conformance-guard",
+      "scope-drift-guard",
+      "done-proof-enforcer",
+      "dependency-risk-guard",
+      "retry-budget-guard",
+      "stale-loop-expiry-guard",
       "safety",
     ],
   },
@@ -311,6 +360,31 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) KEY-----",
       "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
     ],
+  },
+  workflowConformanceGuard: {
+    enabled: true,
+    protectedBranches: ["main", "master"],
+  },
+  scopeDriftGuard: {
+    enabled: false,
+    allowedPaths: [],
+    blockOnDrift: true,
+  },
+  doneProofEnforcer: {
+    enabled: true,
+    requiredMarkers: ["validation", "test", "lint"],
+  },
+  dependencyRiskGuard: {
+    enabled: true,
+    lockfilePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock", "uv.lock", "Cargo.lock"],
+  },
+  retryBudgetGuard: {
+    enabled: true,
+    maxRetries: 3,
+  },
+  staleLoopExpiryGuard: {
+    enabled: true,
+    maxAgeMinutes: 120,
   },
   quality: {
     profile: "fast",
