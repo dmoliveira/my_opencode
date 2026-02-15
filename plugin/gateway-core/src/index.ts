@@ -1,6 +1,7 @@
 import { loadGatewayConfig } from "./config/load.js"
 import { writeGatewayEventAudit } from "./audit/event-audit.js"
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js"
+import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js"
 import { createContinuationHook } from "./hooks/continuation/index.js"
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js"
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js"
@@ -78,6 +79,11 @@ interface ChatMessageInput {
   parts?: Array<{ type?: string; text?: string }>
 }
 
+// Declares mutable chat message payload shape for prompt rewriting hooks.
+interface ChatMessageOutput {
+  parts?: Array<{ type: string; text?: string }>
+}
+
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx: GatewayContext): GatewayHook[] {
   const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd()
@@ -140,6 +146,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     }),
     stopGuard,
     keywordDetector,
+    createAutoSlashCommandHook({
+      directory,
+      enabled: cfg.autoSlashCommand.enabled,
+    }),
   ]
   if (!cfg.hooks.enabled) {
     return []
@@ -152,7 +162,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
   event(input: GatewayEventPayload): Promise<void>
   "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>
   "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>
-  "chat.message"(input: ChatMessageInput): Promise<void>
+  "chat.message"(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void>
 } {
   const hooks = configuredHooks(ctx)
   const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd()
@@ -207,7 +217,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
   }
 
   // Dispatches chat message lifecycle signal to ordered hooks.
-  async function chatMessage(input: ChatMessageInput): Promise<void> {
+  async function chatMessage(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void> {
     writeGatewayEventAudit(directory, {
       hook: "gateway-core",
       stage: "dispatch",
@@ -221,6 +231,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         properties: {
           ...input,
         },
+        output,
         directory,
       })
     }

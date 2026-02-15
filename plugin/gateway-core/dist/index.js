@@ -1,6 +1,7 @@
 import { loadGatewayConfig } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
+import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
@@ -73,6 +74,10 @@ function configuredHooks(ctx) {
         }),
         stopGuard,
         keywordDetector,
+        createAutoSlashCommandHook({
+            directory,
+            enabled: cfg.autoSlashCommand.enabled,
+        }),
     ];
     if (!cfg.hooks.enabled) {
         return [];
@@ -130,7 +135,7 @@ export default function GatewayCorePlugin(ctx) {
         }
     }
     // Dispatches chat message lifecycle signal to ordered hooks.
-    async function chatMessage(input) {
+    async function chatMessage(input, output) {
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
             stage: "dispatch",
@@ -144,6 +149,7 @@ export default function GatewayCorePlugin(ctx) {
                 properties: {
                     ...input,
                 },
+                output,
                 directory,
             });
         }

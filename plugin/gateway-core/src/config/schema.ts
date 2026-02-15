@@ -67,6 +67,11 @@ export interface KeywordDetectorConfig {
   enabled: boolean
 }
 
+// Declares auto slash routing settings for command-like natural prompts.
+export interface AutoSlashCommandConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -82,6 +87,7 @@ export interface GatewayConfig {
   delegateTaskRetry: DelegateTaskRetryConfig
   stopContinuationGuard: StopContinuationGuardConfig
   keywordDetector: KeywordDetectorConfig
+  autoSlashCommand: AutoSlashCommandConfig
   quality: QualityConfig
 }
 
@@ -100,6 +106,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "delegate-task-retry",
       "stop-continuation-guard",
       "keyword-detector",
+      "auto-slash-command",
       "safety",
     ],
   },
@@ -135,6 +142,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   keywordDetector: {
+    enabled: true,
+  },
+  autoSlashCommand: {
     enabled: true,
   },
   quality: {

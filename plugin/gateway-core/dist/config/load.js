@@ -61,6 +61,9 @@ export function loadGatewayConfig(raw) {
     const keywordDetectorSource = source.keywordDetector && typeof source.keywordDetector === "object"
         ? source.keywordDetector
         : {};
+    const autoSlashSource = source.autoSlashCommand && typeof source.autoSlashCommand === "object"
+        ? source.autoSlashCommand
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -136,6 +139,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof keywordDetectorSource.enabled === "boolean"
                 ? keywordDetectorSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.keywordDetector.enabled,
+        },
+        autoSlashCommand: {
+            enabled: typeof autoSlashSource.enabled === "boolean"
+                ? autoSlashSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.autoSlashCommand.enabled,
         },
         quality: {
             profile: qualityProfile,

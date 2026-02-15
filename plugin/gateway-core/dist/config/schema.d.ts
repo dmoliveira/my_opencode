@@ -45,6 +45,9 @@ export interface StopContinuationGuardConfig {
 export interface KeywordDetectorConfig {
     enabled: boolean;
 }
+export interface AutoSlashCommandConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -59,6 +62,7 @@ export interface GatewayConfig {
     delegateTaskRetry: DelegateTaskRetryConfig;
     stopContinuationGuard: StopContinuationGuardConfig;
     keywordDetector: KeywordDetectorConfig;
+    autoSlashCommand: AutoSlashCommandConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

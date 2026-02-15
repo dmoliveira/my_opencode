@@ -13,6 +13,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "delegate-task-retry",
             "stop-continuation-guard",
             "keyword-detector",
+            "auto-slash-command",
             "safety",
         ],
     },
@@ -48,6 +49,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     keywordDetector: {
+        enabled: true,
+    },
+    autoSlashCommand: {
         enabled: true,
     },
     quality: {
