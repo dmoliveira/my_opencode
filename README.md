@@ -1521,6 +1521,35 @@ Profiles:
 - `balanced`: visual for all events, sound on risk-heavy events
 - `fast`: all channels and events enabled for immediate feedback
 
+## Quality profiles inside OpenCode 🧪
+
+Use these directly in OpenCode:
+
+```text
+/quality status
+/quality profile fast
+/quality profile strict
+/quality profile off
+/quality doctor
+```
+
+Autocomplete-friendly shortcuts:
+
+```text
+/quality-status
+/quality-profile-fast
+/quality-profile-strict
+/quality-profile-off
+/quality-doctor
+```
+
+`/quality` writes profile metadata to layered config under `quality` with toggles for TS lint/typecheck/tests and Python selftest.
+
+Profiles:
+- `off`: disable quality checks for local rapid iteration
+- `fast`: lint+typecheck+selftest, skip heavier test passes
+- `strict`: run full quality gates (including TS tests)
+
 ## Telemetry forwarding inside OpenCode 📡
 
 Use these directly in OpenCode:

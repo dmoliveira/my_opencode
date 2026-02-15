@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check quality-fast quality-strict quality-off quality-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -15,6 +15,18 @@ build-agents: ## Generate agent markdown from JSON specs
 
 build-agents-check: ## Verify generated agents are up-to-date
 	python3 scripts/build_agents.py --profile balanced --check
+
+quality-fast: ## Set quality profile to fast
+	python3 scripts/quality_command.py profile fast --json
+
+quality-strict: ## Set quality profile to strict
+	python3 scripts/quality_command.py profile strict --json
+
+quality-off: ## Set quality profile to off
+	python3 scripts/quality_command.py profile off --json
+
+quality-status: ## Show active quality profile
+	python3 scripts/quality_command.py status --json
 
 selftest: ## Run deterministic command self-tests
 	python3 scripts/selftest.py
@@ -48,6 +60,9 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason manual --run-post; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" profile strict; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/policy_command.py" status; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" profile fast --json; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" status --json; \
+	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" doctor --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" backup --name install-test; \

@@ -120,6 +120,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/agent_doctor.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/agent_doctor.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/quality_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/quality_command.py"
+fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
 
 if [ -d "$INSTALL_DIR/agent" ]; then
