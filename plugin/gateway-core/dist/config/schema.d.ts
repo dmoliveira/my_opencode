@@ -79,6 +79,10 @@ export interface CommentCheckerConfig {
 export interface AgentUserReminderConfig {
     enabled: boolean;
 }
+export interface UnstableAgentBabysitterConfig {
+    enabled: boolean;
+    riskyPatterns: string[];
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -104,6 +108,7 @@ export interface GatewayConfig {
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
+    unstableAgentBabysitter: UnstableAgentBabysitterConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

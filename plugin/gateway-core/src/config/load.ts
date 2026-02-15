@@ -119,6 +119,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.agentUserReminder && typeof source.agentUserReminder === "object"
       ? (source.agentUserReminder as Record<string, unknown>)
       : {}
+  const unstableBabysitterSource =
+    source.unstableAgentBabysitter && typeof source.unstableAgentBabysitter === "object"
+      ? (source.unstableAgentBabysitter as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -304,6 +308,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof agentUserReminderSource.enabled === "boolean"
           ? agentUserReminderSource.enabled
           : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
+    },
+    unstableAgentBabysitter: {
+      enabled:
+        typeof unstableBabysitterSource.enabled === "boolean"
+          ? unstableBabysitterSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.unstableAgentBabysitter.enabled,
+      riskyPatterns:
+        unstableBabysitterSource.riskyPatterns === undefined
+          ? DEFAULT_GATEWAY_CONFIG.unstableAgentBabysitter.riskyPatterns
+          : stringList(unstableBabysitterSource.riskyPatterns),
     },
     quality: {
       profile: qualityProfile,
