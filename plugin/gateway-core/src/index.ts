@@ -14,6 +14,7 @@ import { createSafetyHook } from "./hooks/safety/index.js"
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js"
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js"
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js"
+import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js"
 import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js"
 
 // Declares minimal plugin event payload shape for gateway dispatch.
@@ -164,6 +165,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createDirectoryReadmeInjectorHook({
       directory,
       enabled: cfg.directoryReadmeInjector.enabled,
+    }),
+    createWriteExistingFileGuardHook({
+      directory,
+      enabled: cfg.writeExistingFileGuard.enabled,
     }),
   ]
   if (!cfg.hooks.enabled) {

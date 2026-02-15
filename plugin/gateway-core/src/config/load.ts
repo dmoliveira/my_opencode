@@ -91,6 +91,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
       ? (source.directoryReadmeInjector as Record<string, unknown>)
       : {}
+  const writeExistingGuardSource =
+    source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
+      ? (source.writeExistingFileGuard as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -230,6 +234,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof directoryReadmeSource.enabled === "boolean"
           ? directoryReadmeSource.enabled
           : DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.enabled,
+    },
+    writeExistingFileGuard: {
+      enabled:
+        typeof writeExistingGuardSource.enabled === "boolean"
+          ? writeExistingGuardSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.writeExistingFileGuard.enabled,
     },
     quality: {
       profile: qualityProfile,

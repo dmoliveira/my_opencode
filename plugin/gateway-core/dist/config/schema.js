@@ -17,6 +17,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "rules-injector",
             "directory-agents-injector",
             "directory-readme-injector",
+            "write-existing-file-guard",
             "safety",
         ],
     },
@@ -64,6 +65,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     directoryReadmeInjector: {
+        enabled: true,
+    },
+    writeExistingFileGuard: {
         enabled: true,
     },
     quality: {

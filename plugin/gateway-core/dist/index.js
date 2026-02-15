@@ -14,6 +14,7 @@ import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
+import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx) {
@@ -92,6 +93,10 @@ function configuredHooks(ctx) {
         createDirectoryReadmeInjectorHook({
             directory,
             enabled: cfg.directoryReadmeInjector.enabled,
+        }),
+        createWriteExistingFileGuardHook({
+            directory,
+            enabled: cfg.writeExistingFileGuard.enabled,
         }),
     ];
     if (!cfg.hooks.enabled) {
