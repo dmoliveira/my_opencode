@@ -4569,7 +4569,11 @@ version: 1
         )
         expect(
             autopilot_command_status_report.get("gateway_loop_state_reason_code")
-            in {"loop_state_available", "bridge_state_ignored_in_plugin_mode"},
+            in {
+                "loop_state_available",
+                "bridge_state_ignored_in_plugin_mode",
+                "state_missing",
+            },
             "autopilot status should include deterministic gateway loop state reason code",
         )
 
@@ -4606,7 +4610,11 @@ version: 1
             )
             in {"plugin_gateway", "python_command_bridge"}
             and forced_reason
-            in {"bridge_state_ignored_in_plugin_mode", "loop_state_available"},
+            in {
+                "bridge_state_ignored_in_plugin_mode",
+                "loop_state_available",
+                "state_missing",
+            },
             "autopilot status should expose deterministic loop-state selection in plugin mode",
         )
         if forced_reason == "bridge_state_ignored_in_plugin_mode":

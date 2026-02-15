@@ -188,7 +188,9 @@ def mode_loop_state(
     source = str(loop_state.get("source") or "") if isinstance(loop_state, dict) else ""
     if runtime_mode == "plugin_gateway" and source == "python-command-bridge":
         return None, BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE
-    return (loop_state if loop_state else None), LOOP_STATE_AVAILABLE
+    if loop_state:
+        return loop_state, LOOP_STATE_AVAILABLE
+    return None, "state_missing"
 
 
 # Computes gateway runtime status payload.
