@@ -83,6 +83,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.rulesInjector && typeof source.rulesInjector === "object"
       ? (source.rulesInjector as Record<string, unknown>)
       : {}
+  const directoryAgentsSource =
+    source.directoryAgentsInjector && typeof source.directoryAgentsInjector === "object"
+      ? (source.directoryAgentsInjector as Record<string, unknown>)
+      : {}
+  const directoryReadmeSource =
+    source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
+      ? (source.directoryReadmeInjector as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -210,6 +218,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof rulesInjectorSource.enabled === "boolean"
           ? rulesInjectorSource.enabled
           : DEFAULT_GATEWAY_CONFIG.rulesInjector.enabled,
+    },
+    directoryAgentsInjector: {
+      enabled:
+        typeof directoryAgentsSource.enabled === "boolean"
+          ? directoryAgentsSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.directoryAgentsInjector.enabled,
+    },
+    directoryReadmeInjector: {
+      enabled:
+        typeof directoryReadmeSource.enabled === "boolean"
+          ? directoryReadmeSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.enabled,
     },
     quality: {
       profile: qualityProfile,

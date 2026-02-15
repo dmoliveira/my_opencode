@@ -5,6 +5,8 @@ import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js"
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
+import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
+import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
 import { createRulesInjectorHook } from "./hooks/rules-injector/index.js";
@@ -82,6 +84,14 @@ function configuredHooks(ctx) {
         createRulesInjectorHook({
             directory,
             enabled: cfg.rulesInjector.enabled,
+        }),
+        createDirectoryAgentsInjectorHook({
+            directory,
+            enabled: cfg.directoryAgentsInjector.enabled,
+        }),
+        createDirectoryReadmeInjectorHook({
+            directory,
+            enabled: cfg.directoryReadmeInjector.enabled,
         }),
     ];
     if (!cfg.hooks.enabled) {

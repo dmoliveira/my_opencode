@@ -67,6 +67,12 @@ export function loadGatewayConfig(raw) {
     const rulesInjectorSource = source.rulesInjector && typeof source.rulesInjector === "object"
         ? source.rulesInjector
         : {};
+    const directoryAgentsSource = source.directoryAgentsInjector && typeof source.directoryAgentsInjector === "object"
+        ? source.directoryAgentsInjector
+        : {};
+    const directoryReadmeSource = source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
+        ? source.directoryReadmeInjector
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -152,6 +158,16 @@ export function loadGatewayConfig(raw) {
             enabled: typeof rulesInjectorSource.enabled === "boolean"
                 ? rulesInjectorSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.rulesInjector.enabled,
+        },
+        directoryAgentsInjector: {
+            enabled: typeof directoryAgentsSource.enabled === "boolean"
+                ? directoryAgentsSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.directoryAgentsInjector.enabled,
+        },
+        directoryReadmeInjector: {
+            enabled: typeof directoryReadmeSource.enabled === "boolean"
+                ? directoryReadmeSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.enabled,
         },
         quality: {
             profile: qualityProfile,

@@ -15,6 +15,8 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "keyword-detector",
             "auto-slash-command",
             "rules-injector",
+            "directory-agents-injector",
+            "directory-readme-injector",
             "safety",
         ],
     },
@@ -56,6 +58,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     rulesInjector: {
+        enabled: true,
+    },
+    directoryAgentsInjector: {
+        enabled: true,
+    },
+    directoryReadmeInjector: {
         enabled: true,
     },
     quality: {
