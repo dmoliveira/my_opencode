@@ -72,6 +72,11 @@ export interface AutoSlashCommandConfig {
   enabled: boolean
 }
 
+// Declares runtime rule injection settings for tool lifecycle hooks.
+export interface RulesInjectorConfig {
+  enabled: boolean
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -88,6 +93,7 @@ export interface GatewayConfig {
   stopContinuationGuard: StopContinuationGuardConfig
   keywordDetector: KeywordDetectorConfig
   autoSlashCommand: AutoSlashCommandConfig
+  rulesInjector: RulesInjectorConfig
   quality: QualityConfig
 }
 
@@ -107,6 +113,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "stop-continuation-guard",
       "keyword-detector",
       "auto-slash-command",
+      "rules-injector",
       "safety",
     ],
   },
@@ -145,6 +152,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   autoSlashCommand: {
+    enabled: true,
+  },
+  rulesInjector: {
     enabled: true,
   },
   quality: {

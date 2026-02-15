@@ -48,6 +48,9 @@ export interface KeywordDetectorConfig {
 export interface AutoSlashCommandConfig {
     enabled: boolean;
 }
+export interface RulesInjectorConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -63,6 +66,7 @@ export interface GatewayConfig {
     stopContinuationGuard: StopContinuationGuardConfig;
     keywordDetector: KeywordDetectorConfig;
     autoSlashCommand: AutoSlashCommandConfig;
+    rulesInjector: RulesInjectorConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

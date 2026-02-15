@@ -14,6 +14,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "stop-continuation-guard",
             "keyword-detector",
             "auto-slash-command",
+            "rules-injector",
             "safety",
         ],
     },
@@ -52,6 +53,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     autoSlashCommand: {
+        enabled: true,
+    },
+    rulesInjector: {
         enabled: true,
     },
     quality: {
