@@ -10,6 +10,7 @@ import {
   parseSlashCommand,
   resolveAutopilotAction,
 } from "../dist/bridge/commands.js"
+import { REASON_CODES } from "../dist/bridge/reason-codes.js"
 
 test("parseSlashCommand normalizes command name and args", () => {
   const parsed = parseSlashCommand('/autopilot go --goal "Ship"')
@@ -30,6 +31,21 @@ test("compatibility aliases normalize to canonical autopilot names", () => {
   assert.equal(canonicalAutopilotCommandName("ralph-loop"), "autopilot-go")
   assert.equal(canonicalAutopilotCommandName("cancel-ralph"), "autopilot-stop")
   assert.equal(canonicalAutopilotCommandName("autopilot"), "autopilot")
+})
+
+test("reason code catalog includes runtime routing reasons", () => {
+  assert.equal(REASON_CODES.RUNTIME_PLUGIN_READY, "gateway_plugin_ready")
+  assert.equal(REASON_CODES.RUNTIME_PLUGIN_DISABLED, "gateway_plugin_disabled")
+  assert.equal(
+    REASON_CODES.RUNTIME_PLUGIN_RUNTIME_UNAVAILABLE,
+    "gateway_plugin_runtime_unavailable"
+  )
+  assert.equal(REASON_CODES.RUNTIME_PLUGIN_NOT_READY, "gateway_plugin_not_ready")
+  assert.equal(REASON_CODES.LOOP_STATE_AVAILABLE, "loop_state_available")
+  assert.equal(
+    REASON_CODES.LOOP_STATE_BRIDGE_IGNORED_IN_PLUGIN_MODE,
+    "bridge_state_ignored_in_plugin_mode"
+  )
 })
 
 test("command parsers resolve completion and goal defaults", () => {
