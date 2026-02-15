@@ -73,6 +73,9 @@ export interface TaskResumeInfoConfig {
 export interface EmptyTaskResponseDetectorConfig {
     enabled: boolean;
 }
+export interface CommentCheckerConfig {
+    enabled: boolean;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -96,6 +99,7 @@ export interface GatewayConfig {
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     taskResumeInfo: TaskResumeInfoConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
+    commentChecker: CommentCheckerConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

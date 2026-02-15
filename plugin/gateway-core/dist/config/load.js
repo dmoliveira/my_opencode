@@ -88,6 +88,9 @@ export function loadGatewayConfig(raw) {
     const emptyTaskResponseSource = source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
         ? source.emptyTaskResponseDetector
         : {};
+    const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
+        ? source.commentChecker
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -211,6 +214,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof emptyTaskResponseSource.enabled === "boolean"
                 ? emptyTaskResponseSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.emptyTaskResponseDetector.enabled,
+        },
+        commentChecker: {
+            enabled: typeof commentCheckerSource.enabled === "boolean"
+                ? commentCheckerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.commentChecker.enabled,
         },
         quality: {
             profile: qualityProfile,

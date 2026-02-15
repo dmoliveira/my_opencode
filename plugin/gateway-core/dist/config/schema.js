@@ -22,6 +22,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "tasks-todowrite-disabler",
             "task-resume-info",
             "empty-task-response-detector",
+            "comment-checker",
             "safety",
         ],
     },
@@ -85,6 +86,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     emptyTaskResponseDetector: {
+        enabled: true,
+    },
+    commentChecker: {
         enabled: true,
     },
     quality: {
