@@ -233,3 +233,7 @@ Recent progress:
 - `interactive-bash-session`: intentionally not adopted.
   - Rationale: this environment is strictly non-interactive and CI-like by default.
   - Risk: interactive shell lifecycle hooks can hang execution and degrade reliability.
+
+- `auto-update-checker`: intentionally not adopted.
+  - Rationale: update checks are already handled outside hook lifecycle (manual or CLI-level update strategy).
+  - Risk: startup/update notices can add noise and interrupt task-focused human/AI interaction.
