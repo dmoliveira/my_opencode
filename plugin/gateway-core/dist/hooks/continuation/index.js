@@ -50,6 +50,34 @@ function reachedIterationCap(state) {
     }
     return active.iteration >= active.maxIterations;
 }
+// Parses runtime done-criteria payload into normalized list.
+function normalizeDoneCriteria(raw) {
+    if (Array.isArray(raw)) {
+        return raw.map((item) => String(item || "").trim()).filter(Boolean);
+    }
+    if (typeof raw === "string" && raw.trim()) {
+        return raw
+            .split(/[;\n]+/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+    return [];
+}
+// Returns true when runtime progress/blockers indicate completion token should be ignored.
+function runtimeBlocksCompletion(runtime) {
+    if (!runtime || typeof runtime !== "object") {
+        return false;
+    }
+    const progress = runtime.progress && typeof runtime.progress === "object" ? runtime.progress : {};
+    const pendingCycles = Number.parseInt(String(progress.pending_cycles ?? "0"), 10);
+    if (Number.isFinite(pendingCycles) && pendingCycles > 0) {
+        return true;
+    }
+    const blockers = Array.isArray(runtime.blockers)
+        ? runtime.blockers.map((item) => String(item || "").trim()).filter(Boolean)
+        : [];
+    return blockers.length > 0;
+}
 // Resolves autopilot runtime file path for plugin bootstrap fallback.
 function autopilotRuntimePath() {
     const explicit = String(process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH || "").trim();
@@ -91,6 +119,10 @@ function bootstrapLoopFromRuntime(directory, sessionId) {
     if (!goal) {
         return null;
     }
+    const doneCriteria = [
+        ...normalizeDoneCriteria(objective.done_criteria),
+        ...normalizeDoneCriteria(objective["done-criteria"]),
+    ];
     const completionMode = String(objective.completion_mode || "").trim().toLowerCase() === "objective"
         ? "objective"
         : "promise";
@@ -103,6 +135,7 @@ function bootstrapLoopFromRuntime(directory, sessionId) {
             active: true,
             sessionId,
             objective: goal,
+            doneCriteria,
             completionMode,
             completionPromise,
             iteration,
@@ -124,12 +157,22 @@ function continuationPrompt(state) {
     const completionGuidance = active.completionMode === "objective"
         ? "When fully complete, emit <objective-complete>true</objective-complete>."
         : `When fully complete, emit <promise>${active.completionPromise}</promise>.`;
+    const criteria = Array.isArray(active.doneCriteria) ? active.doneCriteria : [];
+    const criteriaBlock = criteria.length
+        ? [
+            "Done Criteria (execute each item before completion):",
+            ...criteria.map((item, index) => `${index + 1}. ${item}`),
+        ].join("\n")
+        : "Done Criteria: use the objective and prior context; do not ask for additional checklist items unless no criteria exist.";
+    const capLabel = active.maxIterations > 0 ? String(active.maxIterations) : "INF";
     return [
-        `[GATEWAY LOOP ${active.iteration}/${active.maxIterations}]`,
+        `[GATEWAY LOOP ${active.iteration}/${capLabel}]`,
         "Continue execution from the current state and apply concrete validated changes.",
+        "Do not ask the user for checklist items when done criteria are already present; execute them directly.",
         completionGuidance,
         "Objective:",
         active.objective,
+        criteriaBlock,
     ].join("\n\n");
 }
 // Creates continuation helper hook placeholder for gateway composition.
@@ -194,20 +237,31 @@ export function createContinuationHook(options) {
                 });
                 const text = lastAssistantText(Array.isArray(response.data) ? response.data : []);
                 if (isLoopComplete(state, text)) {
-                    active.active = false;
-                    state.lastUpdatedAt = nowIso();
-                    state.source =
-                        active.completionMode === "objective"
-                            ? REASON_CODES.LOOP_COMPLETED_OBJECTIVE
-                            : REASON_CODES.LOOP_COMPLETED_PROMISE;
-                    saveGatewayState(directory, state);
-                    writeGatewayEventAudit(directory, {
-                        hook: "continuation",
-                        stage: "state",
-                        reason_code: state.source,
-                        session_id: sessionId,
-                    });
-                    return;
+                    const runtime = loadAutopilotRuntime();
+                    if (runtimeBlocksCompletion(runtime)) {
+                        writeGatewayEventAudit(directory, {
+                            hook: "continuation",
+                            stage: "skip",
+                            reason_code: REASON_CODES.LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME,
+                            session_id: sessionId,
+                        });
+                    }
+                    else {
+                        active.active = false;
+                        state.lastUpdatedAt = nowIso();
+                        state.source =
+                            active.completionMode === "objective"
+                                ? REASON_CODES.LOOP_COMPLETED_OBJECTIVE
+                                : REASON_CODES.LOOP_COMPLETED_PROMISE;
+                        saveGatewayState(directory, state);
+                        writeGatewayEventAudit(directory, {
+                            hook: "continuation",
+                            stage: "state",
+                            reason_code: state.source,
+                            session_id: sessionId,
+                        });
+                        return;
+                    }
                 }
             }
             if (reachedIterationCap(state)) {

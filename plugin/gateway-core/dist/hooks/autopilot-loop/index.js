@@ -1,4 +1,4 @@
-import { parseAutopilotTemplateCommand, parseCompletionMode, parseCompletionPromise, parseGoal, parseMaxIterations, parseSlashCommand, resolveAutopilotAction, } from "../../bridge/commands.js";
+import { parseAutopilotTemplateCommand, parseCompletionMode, parseCompletionPromise, parseDoneCriteria, parseGoal, parseMaxIterations, parseSlashCommand, resolveAutopilotAction, } from "../../bridge/commands.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { nowIso, saveGatewayState } from "../../state/storage.js";
@@ -134,6 +134,7 @@ export function createAutopilotLoopHook(options) {
                     active: true,
                     sessionId,
                     objective: parseGoal(parsed.args),
+                    doneCriteria: parseDoneCriteria(parsed.args),
                     completionMode,
                     completionPromise: parseCompletionPromise(parsed.args, options.defaults.completionPromise),
                     iteration: 1,

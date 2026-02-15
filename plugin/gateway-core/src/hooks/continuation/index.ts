@@ -35,16 +35,20 @@ interface RuntimeObjective {
   goal?: unknown
   completion_mode?: unknown
   completion_promise?: unknown
+  done_criteria?: unknown
+  "done-criteria"?: unknown
 }
 
 interface RuntimeProgress {
   completed_cycles?: unknown
+  pending_cycles?: unknown
 }
 
 interface AutopilotRuntimePayload {
   status?: unknown
   objective?: RuntimeObjective
   progress?: RuntimeProgress
+  blockers?: unknown
 }
 
 // Resolves active session id from event payload.
@@ -100,6 +104,36 @@ function reachedIterationCap(state: GatewayState): boolean {
   return active.iteration >= active.maxIterations
 }
 
+// Parses runtime done-criteria payload into normalized list.
+function normalizeDoneCriteria(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item || "").trim()).filter(Boolean)
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    return raw
+      .split(/[;\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+// Returns true when runtime progress/blockers indicate completion token should be ignored.
+function runtimeBlocksCompletion(runtime: AutopilotRuntimePayload | null): boolean {
+  if (!runtime || typeof runtime !== "object") {
+    return false
+  }
+  const progress = runtime.progress && typeof runtime.progress === "object" ? runtime.progress : {}
+  const pendingCycles = Number.parseInt(String(progress.pending_cycles ?? "0"), 10)
+  if (Number.isFinite(pendingCycles) && pendingCycles > 0) {
+    return true
+  }
+  const blockers = Array.isArray(runtime.blockers)
+    ? runtime.blockers.map((item) => String(item || "").trim()).filter(Boolean)
+    : []
+  return blockers.length > 0
+}
+
 // Resolves autopilot runtime file path for plugin bootstrap fallback.
 function autopilotRuntimePath(): string {
   const explicit = String(process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH || "").trim()
@@ -142,6 +176,10 @@ function bootstrapLoopFromRuntime(directory: string, sessionId: string): Gateway
   if (!goal) {
     return null
   }
+  const doneCriteria = [
+    ...normalizeDoneCriteria(objective.done_criteria),
+    ...normalizeDoneCriteria(objective["done-criteria"]),
+  ]
   const completionMode =
     String(objective.completion_mode || "").trim().toLowerCase() === "objective"
       ? "objective"
@@ -155,6 +193,7 @@ function bootstrapLoopFromRuntime(directory: string, sessionId: string): Gateway
       active: true,
       sessionId,
       objective: goal,
+      doneCriteria,
       completionMode,
       completionPromise,
       iteration,
@@ -178,12 +217,22 @@ function continuationPrompt(state: GatewayState): string {
     active.completionMode === "objective"
       ? "When fully complete, emit <objective-complete>true</objective-complete>."
       : `When fully complete, emit <promise>${active.completionPromise}</promise>.`
+  const criteria = Array.isArray(active.doneCriteria) ? active.doneCriteria : []
+  const criteriaBlock = criteria.length
+    ? [
+        "Done Criteria (execute each item before completion):",
+        ...criteria.map((item, index) => `${index + 1}. ${item}`),
+      ].join("\n")
+    : "Done Criteria: use the objective and prior context; do not ask for additional checklist items unless no criteria exist."
+  const capLabel = active.maxIterations > 0 ? String(active.maxIterations) : "INF"
   return [
-    `[GATEWAY LOOP ${active.iteration}/${active.maxIterations}]`,
+    `[GATEWAY LOOP ${active.iteration}/${capLabel}]`,
     "Continue execution from the current state and apply concrete validated changes.",
+    "Do not ask the user for checklist items when done criteria are already present; execute them directly.",
     completionGuidance,
     "Objective:",
     active.objective,
+    criteriaBlock,
   ].join("\n\n")
 }
 
@@ -252,20 +301,30 @@ export function createContinuationHook(options: { directory: string; client?: Ga
         })
         const text = lastAssistantText(Array.isArray(response.data) ? response.data : [])
         if (isLoopComplete(state, text)) {
-          active.active = false
-          state.lastUpdatedAt = nowIso()
-          state.source =
-            active.completionMode === "objective"
-              ? REASON_CODES.LOOP_COMPLETED_OBJECTIVE
-              : REASON_CODES.LOOP_COMPLETED_PROMISE
-          saveGatewayState(directory, state)
-          writeGatewayEventAudit(directory, {
-            hook: "continuation",
-            stage: "state",
-            reason_code: state.source,
-            session_id: sessionId,
-          })
-          return
+          const runtime = loadAutopilotRuntime()
+          if (runtimeBlocksCompletion(runtime)) {
+            writeGatewayEventAudit(directory, {
+              hook: "continuation",
+              stage: "skip",
+              reason_code: REASON_CODES.LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME,
+              session_id: sessionId,
+            })
+          } else {
+            active.active = false
+            state.lastUpdatedAt = nowIso()
+            state.source =
+              active.completionMode === "objective"
+                ? REASON_CODES.LOOP_COMPLETED_OBJECTIVE
+                : REASON_CODES.LOOP_COMPLETED_PROMISE
+            saveGatewayState(directory, state)
+            writeGatewayEventAudit(directory, {
+              hook: "continuation",
+              stage: "state",
+              reason_code: state.source,
+              session_id: sessionId,
+            })
+            return
+          }
         }
       }
 

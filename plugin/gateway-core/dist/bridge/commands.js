@@ -128,3 +128,36 @@ export function parseGoal(args) {
         .trim();
     return stripped || "continue current objective until done";
 }
+// Parses done-criteria values from command argument string.
+export function parseDoneCriteria(args) {
+    const marker = /--done-criteria\b/i;
+    const match = args.match(marker);
+    if (!match || typeof match.index !== "number") {
+        return [];
+    }
+    const start = match.index + match[0].length;
+    const tail = args.slice(start).trim();
+    if (!tail) {
+        return [];
+    }
+    let raw = "";
+    if (tail.startsWith('"')) {
+        const end = tail.indexOf('"', 1);
+        raw = end > 1 ? tail.slice(1, end) : "";
+    }
+    else if (tail.startsWith("'")) {
+        const end = tail.indexOf("'", 1);
+        raw = end > 1 ? tail.slice(1, end) : "";
+    }
+    else {
+        const nextFlag = tail.search(/\s+--[a-z-]+\b/i);
+        raw = (nextFlag >= 0 ? tail.slice(0, nextFlag) : tail).trim();
+    }
+    if (!raw) {
+        return [];
+    }
+    return raw
+        .split(/[;\n]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+}

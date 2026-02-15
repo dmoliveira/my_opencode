@@ -6,6 +6,7 @@ import {
   parseAutopilotTemplateCommand,
   parseCompletionMode,
   parseCompletionPromise,
+  parseDoneCriteria,
   parseGoal,
   parseMaxIterations,
   parseSlashCommand,
@@ -57,6 +58,10 @@ test("reason code catalog includes runtime routing reasons", () => {
     "gateway_loop_runtime_bootstrapped"
   )
   assert.equal(
+    REASON_CODES.LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME,
+    "gateway_loop_completion_ignored_incomplete_runtime"
+  )
+  assert.equal(
     REASON_CODES.LOOP_STATE_BRIDGE_IGNORED_IN_PLUGIN_MODE,
     "bridge_state_ignored_in_plugin_mode"
   )
@@ -70,4 +75,8 @@ test("command parsers resolve completion and goal defaults", () => {
   assert.equal(parseMaxIterations("--max-iterations 25", 100), 25)
   assert.equal(parseMaxIterations("--max-iterations 0", 100), 0)
   assert.equal(parseGoal('--goal "close checklist" --max-budget balanced'), "close checklist")
+  assert.deepEqual(
+    parseDoneCriteria('--done-criteria "item 1; item 2; item 3" --scope "**"'),
+    ["item 1", "item 2", "item 3"]
+  )
 })

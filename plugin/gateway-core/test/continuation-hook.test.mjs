@@ -129,3 +129,84 @@ test("continuation hook bootstraps loop from runtime when state is missing", asy
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("continuation hook ignores completion token when runtime is incomplete", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
+  const runtimePath = join(directory, "autopilot_runtime.json")
+  const previousRuntimePath = process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH
+  process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH = runtimePath
+  try {
+    writeFileSync(
+      runtimePath,
+      `${JSON.stringify(
+        {
+          status: "running",
+          objective: {
+            goal: "complete checklist",
+            completion_mode: "promise",
+            completion_promise: "DONE",
+          },
+          progress: {
+            pending_cycles: 2,
+          },
+          blockers: ["execution_evidence_missing"],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    )
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-incomplete",
+        objective: "complete checklist",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 0,
+        startedAt: new Date().toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test-fixture",
+    })
+
+    let promptCalls = 0
+    const hook = createContinuationHook({
+      directory,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "<promise>DONE</promise>" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-incomplete" },
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(promptCalls, 1)
+  } finally {
+    if (previousRuntimePath === undefined) {
+      delete process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH
+    } else {
+      process.env.MY_OPENCODE_AUTOPILOT_RUNTIME_PATH = previousRuntimePath
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

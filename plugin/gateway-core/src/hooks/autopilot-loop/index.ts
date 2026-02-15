@@ -2,6 +2,7 @@ import {
   parseAutopilotTemplateCommand,
   parseCompletionMode,
   parseCompletionPromise,
+  parseDoneCriteria,
   parseGoal,
   parseMaxIterations,
   parseSlashCommand,
@@ -182,6 +183,7 @@ export function createAutopilotLoopHook(options: {
           active: true,
           sessionId,
           objective: parseGoal(parsed.args),
+          doneCriteria: parseDoneCriteria(parsed.args),
           completionMode,
           completionPromise: parseCompletionPromise(
             parsed.args,

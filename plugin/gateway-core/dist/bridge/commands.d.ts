@@ -14,3 +14,4 @@ export declare function parseCompletionMode(args: string): "promise" | "objectiv
 export declare function parseCompletionPromise(args: string, fallback: string): string;
 export declare function parseMaxIterations(args: string, fallback: number): number;
 export declare function parseGoal(args: string): string;
+export declare function parseDoneCriteria(args: string): string[];
