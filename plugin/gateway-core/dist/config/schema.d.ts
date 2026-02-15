@@ -60,6 +60,10 @@ export interface DirectoryReadmeInjectorConfig {
 export interface WriteExistingFileGuardConfig {
     enabled: boolean;
 }
+export interface SubagentQuestionBlockerConfig {
+    enabled: boolean;
+    sessionPatterns: string[];
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
@@ -79,6 +83,7 @@ export interface GatewayConfig {
     directoryAgentsInjector: DirectoryAgentsInjectorConfig;
     directoryReadmeInjector: DirectoryReadmeInjectorConfig;
     writeExistingFileGuard: WriteExistingFileGuardConfig;
+    subagentQuestionBlocker: SubagentQuestionBlockerConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;

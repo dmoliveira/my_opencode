@@ -18,6 +18,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "directory-agents-injector",
             "directory-readme-injector",
             "write-existing-file-guard",
+            "subagent-question-blocker",
             "safety",
         ],
     },
@@ -69,6 +70,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     writeExistingFileGuard: {
         enabled: true,
+    },
+    subagentQuestionBlocker: {
+        enabled: true,
+        sessionPatterns: ["task-", "subagent"],
     },
     quality: {
         profile: "fast",
