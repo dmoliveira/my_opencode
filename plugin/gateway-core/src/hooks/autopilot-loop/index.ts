@@ -1,4 +1,5 @@
 import {
+  parseAutopilotTemplateCommand,
   parseCompletionMode,
   parseCompletionPromise,
   parseGoal,
@@ -109,16 +110,21 @@ export function createAutopilotLoopHook(options: {
         return
       }
 
-      const parsed = parseSlashCommand(commandRaw)
+      let parsed = parseSlashCommand(commandRaw)
       const toolName = String(input?.tool || "")
       if (!commandRaw.trim().startsWith("/") && toolName !== "slashcommand") {
-        writeGatewayEventAudit(scopedDir, {
-          hook: "autopilot-loop",
-          stage: "skip",
-          reason_code: "non_slash_tool",
-          tool: toolName,
-        })
-        return
+        const templateParsed = parseAutopilotTemplateCommand(commandRaw)
+        if (templateParsed) {
+          parsed = templateParsed
+        } else {
+          writeGatewayEventAudit(scopedDir, {
+            hook: "autopilot-loop",
+            stage: "skip",
+            reason_code: "non_slash_tool",
+            tool: toolName,
+          })
+          return
+        }
       }
       const action = resolveAutopilotAction(parsed.name, parsed.args)
       if (action === "none") {

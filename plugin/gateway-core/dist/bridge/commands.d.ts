@@ -2,6 +2,10 @@ export declare function parseSlashCommand(raw: string): {
     name: string;
     args: string;
 };
+export declare function parseAutopilotTemplateCommand(raw: string): {
+    name: string;
+    args: string;
+} | null;
 export declare function canonicalAutopilotCommandName(name: string): string;
 export declare function resolveAutopilotAction(name: string, args: string): "start" | "stop" | "none";
 export declare function isAutopilotCommand(name: string): boolean;

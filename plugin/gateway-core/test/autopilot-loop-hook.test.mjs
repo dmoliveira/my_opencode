@@ -73,3 +73,40 @@ test("autopilot-loop hook starts loop even when tool label differs", async () =>
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("autopilot-loop hook parses rendered command template invocations", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
+  try {
+    const hook = createAutopilotLoopHook({
+      directory,
+      defaults: {
+        enabled: true,
+        maxIterations: 0,
+        completionMode: "promise",
+        completionPromise: "DONE",
+      },
+    })
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "command",
+        sessionID: "session-template",
+      },
+      output: {
+        args: {
+          command:
+            'python3 "$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py" go --goal "ship" --json',
+        },
+      },
+      directory,
+    })
+
+    const state = loadGatewayState(directory)
+    assert.ok(state?.activeLoop)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.sessionId, "session-template")
+    assert.equal(state?.activeLoop?.objective, "ship")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

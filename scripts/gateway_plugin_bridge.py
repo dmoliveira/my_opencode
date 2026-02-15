@@ -77,22 +77,33 @@ def save_gateway_loop_state(cwd: Path, state: dict[str, Any]) -> Path:
 
 
 # Initializes or refreshes active gateway loop bridge state.
-def bridge_start_loop(cwd: Path, run: dict[str, Any]) -> Path:
+def bridge_start_loop(
+    cwd: Path,
+    run: dict[str, Any],
+    *,
+    session_id: str | None = None,
+    source: str = "python-command-bridge",
+    max_iterations: int = 100,
+) -> Path:
     objective_any = run.get("objective")
     objective = objective_any if isinstance(objective_any, dict) else {}
+    resolved_session = (
+        str(session_id or "").strip() or f"bridge-{run.get('run_id', 'unknown')}"
+    )
+    resolved_max_iterations = int(max_iterations) if int(max_iterations) >= 0 else 100
     state = {
         "activeLoop": {
             "active": True,
-            "sessionId": f"bridge-{run.get('run_id', 'unknown')}",
+            "sessionId": resolved_session,
             "objective": str(objective.get("goal") or "continue objective"),
             "completionMode": str(objective.get("completion_mode") or "promise"),
             "completionPromise": str(objective.get("completion_promise") or "DONE"),
             "iteration": 1,
-            "maxIterations": 100,
+            "maxIterations": resolved_max_iterations,
             "startedAt": str(run.get("started_at") or now_iso()),
         },
         "lastUpdatedAt": now_iso(),
-        "source": "python-command-bridge",
+        "source": source,
     }
     return save_gateway_loop_state(cwd, state)
 

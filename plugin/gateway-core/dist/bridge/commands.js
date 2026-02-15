@@ -10,6 +10,31 @@ export function parseSlashCommand(raw) {
         args: tail.join(" ").trim(),
     };
 }
+// Parses rendered autopilot command-template invocations into logical command semantics.
+export function parseAutopilotTemplateCommand(raw) {
+    const trimmed = raw.trim();
+    if (!trimmed || !/autopilot_command\.py/i.test(trimmed)) {
+        return null;
+    }
+    const match = trimmed.match(/autopilot_command\.py["']?\s+([a-z-]+)(.*)$/i);
+    if (!match) {
+        return null;
+    }
+    const subcommand = String(match[1] || "").trim().toLowerCase();
+    const args = String(match[2] || "").trim();
+    const map = {
+        go: "autopilot-go",
+        start: "autopilot",
+        resume: "autopilot-resume",
+        pause: "autopilot-pause",
+        stop: "autopilot-stop",
+    };
+    const name = map[subcommand];
+    if (!name) {
+        return null;
+    }
+    return { name, args };
+}
 const AUTOPILOT_START_COMMANDS = new Set([
     "autopilot",
     "autopilot-go",

@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 
 import {
   canonicalAutopilotCommandName,
+  parseAutopilotTemplateCommand,
   parseCompletionMode,
   parseCompletionPromise,
   parseGoal,
@@ -16,6 +17,15 @@ test("parseSlashCommand normalizes command name and args", () => {
   const parsed = parseSlashCommand('/autopilot go --goal "Ship"')
   assert.equal(parsed.name, "autopilot")
   assert.equal(parsed.args, 'go --goal "Ship"')
+})
+
+test("parseAutopilotTemplateCommand maps rendered template command", () => {
+  const parsed = parseAutopilotTemplateCommand(
+    'python3 "$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py" go --goal "ship" --json'
+  )
+  assert.ok(parsed)
+  assert.equal(parsed?.name, "autopilot-go")
+  assert.equal(parsed?.args, '--goal "ship" --json')
 })
 
 test("resolveAutopilotAction handles start and stop forms", () => {
