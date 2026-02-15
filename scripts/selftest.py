@@ -236,6 +236,12 @@ def main() -> int:
         tmp = Path(tmpdir)
         home = tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
+        test_env = os.environ.copy()
+        test_env["HOME"] = str(home)
+        installed_agent_dir = home / ".config" / "opencode" / "agent"
+        installed_agent_dir.mkdir(parents=True, exist_ok=True)
+        for agent_file in AGENT_DIR.glob("*.md"):
+            shutil.copy2(agent_file, installed_agent_dir / agent_file.name)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
 
@@ -309,6 +315,7 @@ def main() -> int:
             [sys.executable, str(AGENT_DOCTOR_SCRIPT), "run", "--json"],
             capture_output=True,
             text=True,
+            env=test_env,
             check=False,
             cwd=REPO_ROOT,
         )
