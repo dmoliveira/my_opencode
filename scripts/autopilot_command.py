@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -79,6 +80,7 @@ def normalize_args(args: list[str]) -> list[str]:
 def gateway_runtime_mode(config: dict[str, Any]) -> dict[str, Any]:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     enabled = plugin_enabled(config, home)
+    bun_available = shutil.which("bun") is not None
     hooks = hook_diagnostics(plugin_dir(home))
     required_gateway_flags = [
         "dist_exposes_tool_execute_before",
@@ -89,17 +91,25 @@ def gateway_runtime_mode(config: dict[str, Any]) -> dict[str, Any]:
         "dist_safety_handles_session_error",
     ]
     missing = [flag for flag in required_gateway_flags if hooks.get(flag) is not True]
-    plugin_ready = enabled and hooks.get("dist_index_exists") is True and not missing
+    plugin_ready = (
+        enabled
+        and bun_available
+        and hooks.get("dist_index_exists") is True
+        and not missing
+    )
     mode = "plugin_gateway" if plugin_ready else "python_command_bridge"
     reason_code = "gateway_plugin_ready"
     if not enabled:
         reason_code = "gateway_plugin_disabled"
+    elif not bun_available:
+        reason_code = "gateway_plugin_runtime_unavailable"
     elif not plugin_ready:
         reason_code = "gateway_plugin_not_ready"
     return {
         "mode": mode,
         "reason_code": reason_code,
         "plugin_enabled": enabled,
+        "bun_available": bun_available,
         "missing_hook_capabilities": missing,
     }
 
@@ -111,6 +121,7 @@ def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
         "gateway_runtime_mode": runtime_mode["mode"],
         "gateway_runtime_reason_code": runtime_mode["reason_code"],
         "gateway_plugin_enabled": runtime_mode["plugin_enabled"],
+        "gateway_bun_available": runtime_mode["bun_available"],
         "gateway_missing_hook_capabilities": runtime_mode["missing_hook_capabilities"],
         "gateway_loop_state": load_gateway_loop_state(cwd) or None,
         "gateway_orphan_cleanup": {
@@ -278,6 +289,7 @@ def command_start(args: list[str]) -> int:
         initialized["gateway_runtime_mode"] = runtime_mode["mode"]
         initialized["gateway_runtime_reason_code"] = runtime_mode["reason_code"]
         initialized["gateway_plugin_enabled"] = runtime_mode["plugin_enabled"]
+        initialized["gateway_bun_available"] = runtime_mode["bun_available"]
         initialized["gateway_missing_hook_capabilities"] = runtime_mode[
             "missing_hook_capabilities"
         ]

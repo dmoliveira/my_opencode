@@ -180,7 +180,7 @@ Recent progress:
    - status: scaffold created; autopilot-loop move pending.
 2. [ ] Wire runtime event hooks (`session.idle`, `session.deleted`, `session.error`) to active plugin loading path.
 3. [ ] Bridge `/autopilot*` Python commands to plugin state operations (start/status/stop/doctor).
-   - status: gateway bridge state is now read/write across start/go/status/report/pause/stop; plugin-core runtime migration still pending.
+   - status: gateway bridge state is now read/write across start/go/status/report/pause/stop and runtime routing emits deterministic mode selection (`plugin_gateway` vs `python_command_bridge`) with bun-aware fallback.
 4. [ ] Add kill-switch + orphan cleanup in plugin state manager.
    - status: command-bridge orphan cleanup shipped; plugin-core manager parity pending.
 5. [ ] Add quality profile toggles (`off|fast|strict`) with Make + slash commands.

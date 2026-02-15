@@ -493,8 +493,9 @@ Autopilot gateway telemetry fields (`--json`):
 | Field | Type | Meaning |
 |---|---|---|
 | `gateway_runtime_mode` | `string` | Active routing mode for autopilot controls: `plugin_gateway` when gateway plugin is enabled and hook-complete, otherwise `python_command_bridge`. |
-| `gateway_runtime_reason_code` | `string` | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_not_ready`). |
+| `gateway_runtime_reason_code` | `string` | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_runtime_unavailable`, `gateway_plugin_not_ready`). |
 | `gateway_plugin_enabled` | `boolean` | Whether gateway-core file plugin is currently enabled in layered config. |
+| `gateway_bun_available` | `boolean` | Whether `bun` is currently available for host-side file plugin runtime support. |
 | `gateway_missing_hook_capabilities` | `string[]` | Missing required dist hook capabilities when plugin mode cannot be selected. |
 | `gateway_loop_state` | `object|null` | Current gateway bridge state loaded from `.opencode/gateway-core.state.json` in current cwd. |
 | `gateway_orphan_cleanup.attempted` | `boolean` | Always `true` when status snapshot runs cleanup check. |
@@ -1587,7 +1588,7 @@ Shortcuts:
 
 Notes:
 - `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
-- If `bun` is unavailable, keep gateway disabled and use Python command bridge mode.
+- `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
 - `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
 

@@ -151,6 +151,15 @@ if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then
 	else
 		printf "warning: npm not found; skipping gateway-core plugin build\n"
 	fi
+	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
+		if command -v bun >/dev/null 2>&1; then
+			python3 "$INSTALL_DIR/scripts/gateway_command.py" enable --json >/dev/null 2>&1 || printf "warning: failed to enable gateway plugin mode; bridge fallback remains active\n"
+			printf "gateway mode: plugin_gateway preferred\n"
+		else
+			python3 "$INSTALL_DIR/scripts/gateway_command.py" disable --json >/dev/null 2>&1 || true
+			printf "gateway mode: python_command_bridge fallback (bun unavailable)\n"
+		fi
+	fi
 fi
 
 if [ "$RUN_WIZARD" = true ]; then
@@ -191,6 +200,10 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
 	python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
 	python3 "$INSTALL_DIR/scripts/browser_command.py" status
 	python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
+	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
+		python3 "$INSTALL_DIR/scripts/gateway_command.py" status --json
+		python3 "$INSTALL_DIR/scripts/gateway_command.py" doctor --json
+	fi
 	SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
 	python3 -c "from pathlib import Path; Path('$SELF_CHECK_PLAN').write_text('---\nid: install-selfcheck-plan\ntitle: Install Selfcheck Plan\nowner: installer\ncreated_at: 2026-02-13T00:00:00Z\nversion: 1\n---\n\n# Plan\n\n- [ ] 1. Confirm command wiring\n- [ ] 2. Confirm checkpoint persistence\n', encoding='utf-8')"
 	if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then

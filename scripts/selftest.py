@@ -4488,6 +4488,18 @@ version: 1
             ),
             "autopilot status should include control integration diagnostics",
         )
+        expect(
+            autopilot_command_status_report.get("gateway_runtime_mode")
+            in {"plugin_gateway", "python_command_bridge"}
+            and autopilot_command_status_report.get("gateway_runtime_reason_code")
+            in {
+                "gateway_plugin_ready",
+                "gateway_plugin_disabled",
+                "gateway_plugin_not_ready",
+                "gateway_plugin_runtime_unavailable",
+            },
+            "autopilot status should expose deterministic gateway runtime routing mode",
+        )
 
         infer_repo = tmp / "autopilot_infer_repo"
         infer_repo.mkdir(parents=True, exist_ok=True)
@@ -4715,6 +4727,11 @@ version: 1
             autopilot_command_report_payload.get("result") == "PASS"
             and isinstance(autopilot_command_report_payload.get("summary", {}), dict),
             "autopilot report should include summary payload",
+        )
+        expect(
+            autopilot_command_report_payload.get("gateway_runtime_mode")
+            in {"plugin_gateway", "python_command_bridge"},
+            "autopilot report should include gateway runtime mode telemetry",
         )
 
         autopilot_command_stop = subprocess.run(
