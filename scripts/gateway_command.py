@@ -14,6 +14,14 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
+from gateway_reason_codes import (  # type: ignore
+    BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE,
+    GATEWAY_PLUGIN_DISABLED,
+    GATEWAY_PLUGIN_NOT_READY,
+    GATEWAY_PLUGIN_READY,
+    GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE,
+    LOOP_STATE_AVAILABLE,
+)
 from gateway_plugin_bridge import (  # type: ignore
     cleanup_orphan_loop,
     gateway_loop_state_path,
@@ -147,13 +155,13 @@ def gateway_runtime_mode(
         and not missing
     )
     mode = "plugin_gateway" if plugin_ready else "python_command_bridge"
-    reason_code = "gateway_plugin_ready"
+    reason_code = GATEWAY_PLUGIN_READY
     if not enabled:
-        reason_code = "gateway_plugin_disabled"
+        reason_code = GATEWAY_PLUGIN_DISABLED
     elif not bun_available:
-        reason_code = "gateway_plugin_runtime_unavailable"
+        reason_code = GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE
     elif not plugin_ready:
-        reason_code = "gateway_plugin_not_ready"
+        reason_code = GATEWAY_PLUGIN_NOT_READY
     return {
         "mode": mode,
         "reason_code": reason_code,
@@ -167,8 +175,8 @@ def mode_loop_state(
 ) -> tuple[dict[str, Any] | None, str]:
     source = str(loop_state.get("source") or "") if isinstance(loop_state, dict) else ""
     if runtime_mode == "plugin_gateway" and source == "python-command-bridge":
-        return None, "bridge_state_ignored_in_plugin_mode"
-    return (loop_state if loop_state else None), "loop_state_available"
+        return None, BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE
+    return (loop_state if loop_state else None), LOOP_STATE_AVAILABLE
 
 
 # Computes gateway runtime status payload.
