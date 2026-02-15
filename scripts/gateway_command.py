@@ -234,6 +234,34 @@ def status_payload(
     return payload
 
 
+# Ensures Bun/OpenCode compatibility aliases for local file plugins.
+def ensure_file_plugin_compat(home: Path, pdir: Path) -> dict[str, Any]:
+    if not pdir.exists():
+        return {"applied": False, "reason": "plugin_dir_missing"}
+    if not bun_runtime_available():
+        return {"applied": False, "reason": "bun_unavailable"}
+
+    alias_path = pdir.parent / "gateway-core@latest"
+    cache_home = Path(os.environ.get("XDG_CACHE_HOME", str(home / ".cache"))).expanduser()
+    cache_plugin_path = (
+        cache_home / "opencode" / "node_modules" / f"file:{pdir.parent}" / "gateway-core"
+    )
+
+    alias_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_plugin_path.parent.mkdir(parents=True, exist_ok=True)
+    alias_path.unlink(missing_ok=True)
+    cache_plugin_path.unlink(missing_ok=True)
+    alias_path.symlink_to(pdir)
+    cache_plugin_path.symlink_to(pdir)
+
+    return {
+        "applied": True,
+        "reason": "ok",
+        "latest_alias_path": str(alias_path),
+        "cache_alias_path": str(cache_plugin_path),
+    }
+
+
 # Enables gateway plugin spec in opencode config.
 def command_enable(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
@@ -241,6 +269,7 @@ def command_enable(as_json: bool) -> int:
     set_plugin_enabled(config, home, True)
     save_config(config, cfg_path)
     payload = status_payload(config, home, Path.cwd())
+    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
     payload["config"] = str(cfg_path)
     emit(payload, as_json=as_json)
     return 0
