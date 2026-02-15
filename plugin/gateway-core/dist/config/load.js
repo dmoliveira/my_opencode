@@ -97,6 +97,9 @@ export function loadGatewayConfig(raw) {
     const unstableBabysitterSource = source.unstableAgentBabysitter && typeof source.unstableAgentBabysitter === "object"
         ? source.unstableAgentBabysitter
         : {};
+    const questionLabelSource = source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
+        ? source.questionLabelTruncator
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -238,6 +241,12 @@ export function loadGatewayConfig(raw) {
             riskyPatterns: unstableBabysitterSource.riskyPatterns === undefined
                 ? DEFAULT_GATEWAY_CONFIG.unstableAgentBabysitter.riskyPatterns
                 : stringList(unstableBabysitterSource.riskyPatterns),
+        },
+        questionLabelTruncator: {
+            enabled: typeof questionLabelSource.enabled === "boolean"
+                ? questionLabelSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.enabled,
+            maxLength: nonNegativeInt(questionLabelSource.maxLength, DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.maxLength),
         },
         quality: {
             profile: qualityProfile,

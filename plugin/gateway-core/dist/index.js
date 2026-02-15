@@ -12,6 +12,7 @@ import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-inje
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
+import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js";
 import { createRulesInjectorHook } from "./hooks/rules-injector/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
@@ -129,6 +130,10 @@ function configuredHooks(ctx) {
         createUnstableAgentBabysitterHook({
             enabled: cfg.unstableAgentBabysitter.enabled,
             riskyPatterns: cfg.unstableAgentBabysitter.riskyPatterns,
+        }),
+        createQuestionLabelTruncatorHook({
+            enabled: cfg.questionLabelTruncator.enabled,
+            maxLength: cfg.questionLabelTruncator.maxLength,
         }),
     ];
     if (!cfg.hooks.enabled) {
