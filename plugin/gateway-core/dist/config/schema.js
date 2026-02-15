@@ -21,6 +21,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "subagent-question-blocker",
             "tasks-todowrite-disabler",
             "task-resume-info",
+            "empty-task-response-detector",
             "safety",
         ],
     },
@@ -81,6 +82,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     taskResumeInfo: {
+        enabled: true,
+    },
+    emptyTaskResponseDetector: {
         enabled: true,
     },
     quality: {

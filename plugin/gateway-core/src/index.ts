@@ -5,6 +5,7 @@ import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js"
 import { createContinuationHook } from "./hooks/continuation/index.js"
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js"
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js"
+import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js"
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js"
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js"
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js"
@@ -184,6 +185,9 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     }),
     createTaskResumeInfoHook({
       enabled: cfg.taskResumeInfo.enabled,
+    }),
+    createEmptyTaskResponseDetectorHook({
+      enabled: cfg.emptyTaskResponseDetector.enabled,
     }),
   ]
   if (!cfg.hooks.enabled) {

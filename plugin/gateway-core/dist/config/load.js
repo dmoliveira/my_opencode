@@ -85,6 +85,9 @@ export function loadGatewayConfig(raw) {
     const taskResumeInfoSource = source.taskResumeInfo && typeof source.taskResumeInfo === "object"
         ? source.taskResumeInfo
         : {};
+    const emptyTaskResponseSource = source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
+        ? source.emptyTaskResponseDetector
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -203,6 +206,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof taskResumeInfoSource.enabled === "boolean"
                 ? taskResumeInfoSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.taskResumeInfo.enabled,
+        },
+        emptyTaskResponseDetector: {
+            enabled: typeof emptyTaskResponseSource.enabled === "boolean"
+                ? emptyTaskResponseSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.emptyTaskResponseDetector.enabled,
         },
         quality: {
             profile: qualityProfile,
