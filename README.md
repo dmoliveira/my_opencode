@@ -1589,6 +1589,8 @@ Shortcuts:
 
 Notes:
 - `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
+- `/gateway enable` now runs a safety preflight (bun + dist + required hook capabilities) and auto-reverts to disabled when preflight fails.
+- use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
 - `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
 - `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
