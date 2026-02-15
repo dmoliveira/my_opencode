@@ -229,3 +229,7 @@ Recent progress:
 - `thinking-block-validator`: intentionally not adopted.
   - Rationale: gateway-core does not transform Anthropic thinking blocks directly in current lifecycle handlers.
   - Risk: adding validator logic without transformer ownership can produce false positives and noisy failures.
+
+- `interactive-bash-session`: intentionally not adopted.
+  - Rationale: this environment is strictly non-interactive and CI-like by default.
+  - Risk: interactive shell lifecycle hooks can hang execution and degrade reliability.
