@@ -202,11 +202,17 @@ def command_doctor(as_json: bool) -> int:
         warnings.append("gateway plugin directory is missing")
     if not status["plugin_dist_exists"]:
         warnings.append("gateway plugin is not built (dist/index.js missing)")
+    if status["enabled"] and not status["plugin_dist_exists"]:
+        problems.append("gateway plugin enabled without built dist assets")
     if status["enabled"] and not status["bun_available"]:
         warnings.append("gateway plugin is enabled but bun is not available")
 
     hooks_any = status.get("hook_diagnostics")
     hooks = hooks_any if isinstance(hooks_any, dict) else {}
+    if hooks and hooks.get("source_index_exists") is not True:
+        warnings.append("gateway-core source index is missing")
+    if hooks and hooks.get("source_hooks_exist") is not True:
+        warnings.append("gateway-core source hook files are incomplete")
     if status["plugin_dist_exists"] and hooks:
         required_dist_flags = [
             "dist_exposes_tool_execute_before",
