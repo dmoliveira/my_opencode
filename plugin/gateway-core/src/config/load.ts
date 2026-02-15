@@ -95,6 +95,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
       ? (source.writeExistingFileGuard as Record<string, unknown>)
       : {}
+  const subagentQuestionSource =
+    source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
+      ? (source.subagentQuestionBlocker as Record<string, unknown>)
+      : {}
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
@@ -240,6 +244,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof writeExistingGuardSource.enabled === "boolean"
           ? writeExistingGuardSource.enabled
           : DEFAULT_GATEWAY_CONFIG.writeExistingFileGuard.enabled,
+    },
+    subagentQuestionBlocker: {
+      enabled:
+        typeof subagentQuestionSource.enabled === "boolean"
+          ? subagentQuestionSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.subagentQuestionBlocker.enabled,
+      sessionPatterns:
+        subagentQuestionSource.sessionPatterns === undefined
+          ? DEFAULT_GATEWAY_CONFIG.subagentQuestionBlocker.sessionPatterns
+          : stringList(subagentQuestionSource.sessionPatterns),
     },
     quality: {
       profile: qualityProfile,

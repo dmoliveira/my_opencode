@@ -76,6 +76,9 @@ export function loadGatewayConfig(raw) {
     const writeExistingGuardSource = source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
         ? source.writeExistingFileGuard
         : {};
+    const subagentQuestionSource = source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
+        ? source.subagentQuestionBlocker
+        : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
         : {};
@@ -176,6 +179,14 @@ export function loadGatewayConfig(raw) {
             enabled: typeof writeExistingGuardSource.enabled === "boolean"
                 ? writeExistingGuardSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.writeExistingFileGuard.enabled,
+        },
+        subagentQuestionBlocker: {
+            enabled: typeof subagentQuestionSource.enabled === "boolean"
+                ? subagentQuestionSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.subagentQuestionBlocker.enabled,
+            sessionPatterns: subagentQuestionSource.sessionPatterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.subagentQuestionBlocker.sessionPatterns
+                : stringList(subagentQuestionSource.sessionPatterns),
         },
         quality: {
             profile: qualityProfile,

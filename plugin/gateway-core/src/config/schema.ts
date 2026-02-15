@@ -92,6 +92,12 @@ export interface WriteExistingFileGuardConfig {
   enabled: boolean
 }
 
+// Declares subagent question blocking settings.
+export interface SubagentQuestionBlockerConfig {
+  enabled: boolean
+  sessionPatterns: string[]
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -112,6 +118,7 @@ export interface GatewayConfig {
   directoryAgentsInjector: DirectoryAgentsInjectorConfig
   directoryReadmeInjector: DirectoryReadmeInjectorConfig
   writeExistingFileGuard: WriteExistingFileGuardConfig
+  subagentQuestionBlocker: SubagentQuestionBlockerConfig
   quality: QualityConfig
 }
 
@@ -135,6 +142,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "directory-agents-injector",
       "directory-readme-injector",
       "write-existing-file-guard",
+      "subagent-question-blocker",
       "safety",
     ],
   },
@@ -186,6 +194,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   writeExistingFileGuard: {
     enabled: true,
+  },
+  subagentQuestionBlocker: {
+    enabled: true,
+    sessionPatterns: ["task-", "subagent"],
   },
   quality: {
     profile: "fast",
