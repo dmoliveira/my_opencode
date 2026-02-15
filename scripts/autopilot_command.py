@@ -22,7 +22,6 @@ from gateway_plugin_bridge import (  # type: ignore
     bridge_stop_loop,
     cleanup_orphan_loop,
     gateway_loop_state_path,
-    load_gateway_loop_state,
 )
 
 
@@ -92,9 +91,8 @@ def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
         "gateway_missing_hook_capabilities": gateway_status.get(
             "missing_hook_capabilities", []
         ),
-        "gateway_loop_state": gateway_status.get("loop_state")
-        or load_gateway_loop_state(cwd)
-        or None,
+        "gateway_loop_state": gateway_status.get("loop_state"),
+        "gateway_loop_state_reason_code": gateway_status.get("loop_state_reason_code"),
         "gateway_orphan_cleanup": {
             "attempted": True,
             "changed": changed,

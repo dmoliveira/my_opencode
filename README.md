@@ -497,7 +497,8 @@ Autopilot gateway telemetry fields (`--json`):
 | `gateway_plugin_enabled` | `boolean` | Whether gateway-core file plugin is currently enabled in layered config. |
 | `gateway_bun_available` | `boolean` | Whether `bun` is currently available for host-side file plugin runtime support. |
 | `gateway_missing_hook_capabilities` | `string[]` | Missing required dist hook capabilities when plugin mode cannot be selected. |
-| `gateway_loop_state` | `object|null` | Current gateway bridge state loaded from `.opencode/gateway-core.state.json` in current cwd. |
+| `gateway_loop_state` | `object|null` | Current loop state for the active runtime mode; bridge state is hidden when plugin mode is active. |
+| `gateway_loop_state_reason_code` | `string` | Loop state selection reason (`loop_state_available`, `bridge_state_ignored_in_plugin_mode`). |
 | `gateway_orphan_cleanup.attempted` | `boolean` | Always `true` when status snapshot runs cleanup check. |
 | `gateway_orphan_cleanup.changed` | `boolean` | `true` when stale/invalid active loop was deactivated and state file was updated. |
 | `gateway_orphan_cleanup.reason` | `string` | Cleanup outcome reason: `state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, or `stale_loop_deactivated`. |

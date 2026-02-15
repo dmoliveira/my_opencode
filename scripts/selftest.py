@@ -4512,6 +4512,56 @@ version: 1
             },
             "autopilot status should expose deterministic gateway runtime routing mode",
         )
+        expect(
+            autopilot_command_status_report.get("gateway_loop_state_reason_code")
+            in {"loop_state_available", "bridge_state_ignored_in_plugin_mode"},
+            "autopilot status should include deterministic gateway loop state reason code",
+        )
+
+        forced_plugin_mode_env = dict(refactor_env)
+        forced_plugin_mode_env["MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE"] = "1"
+        autopilot_command_status_forced_plugin_mode = subprocess.run(
+            [
+                sys.executable,
+                str(AUTOPILOT_COMMAND_SCRIPT),
+                "status",
+                "--confidence",
+                "0.9",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=forced_plugin_mode_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_status_forced_plugin_mode.returncode == 0,
+            "autopilot status should run in forced plugin-mode diagnostics environment",
+        )
+        autopilot_command_status_forced_plugin_mode_report = parse_json_output(
+            autopilot_command_status_forced_plugin_mode.stdout
+        )
+        forced_reason = autopilot_command_status_forced_plugin_mode_report.get(
+            "gateway_loop_state_reason_code"
+        )
+        expect(
+            autopilot_command_status_forced_plugin_mode_report.get(
+                "gateway_runtime_mode"
+            )
+            in {"plugin_gateway", "python_command_bridge"}
+            and forced_reason
+            in {"bridge_state_ignored_in_plugin_mode", "loop_state_available"},
+            "autopilot status should expose deterministic loop-state selection in plugin mode",
+        )
+        if forced_reason == "bridge_state_ignored_in_plugin_mode":
+            expect(
+                autopilot_command_status_forced_plugin_mode_report.get(
+                    "gateway_loop_state"
+                )
+                is None,
+                "autopilot status should hide bridge loop state when plugin mode is active",
+            )
 
         infer_repo = tmp / "autopilot_infer_repo"
         infer_repo.mkdir(parents=True, exist_ok=True)

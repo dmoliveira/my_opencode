@@ -115,6 +115,18 @@ def hook_diagnostics(pdir: Path) -> dict[str, Any]:
     }
 
 
+# Resolves effective bun availability with optional deterministic overrides.
+def bun_runtime_available() -> bool:
+    forced = (
+        os.environ.get("MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE", "").strip().lower()
+    )
+    if forced in {"1", "true", "yes", "on"}:
+        return True
+    if forced in {"0", "false", "no", "off"}:
+        return False
+    return shutil.which("bun") is not None
+
+
 # Resolves active gateway runtime mode and deterministic reason code.
 def gateway_runtime_mode(
     *, enabled: bool, bun_available: bool, hooks: dict[str, Any]
@@ -149,6 +161,16 @@ def gateway_runtime_mode(
     }
 
 
+# Returns loop state filtered for active runtime mode semantics.
+def mode_loop_state(
+    runtime_mode: str, loop_state: dict[str, Any]
+) -> tuple[dict[str, Any] | None, str]:
+    source = str(loop_state.get("source") or "") if isinstance(loop_state, dict) else ""
+    if runtime_mode == "plugin_gateway" and source == "python-command-bridge":
+        return None, "bridge_state_ignored_in_plugin_mode"
+    return (loop_state if loop_state else None), "loop_state_available"
+
+
 # Computes gateway runtime status payload.
 def status_payload(
     config: dict[str, Any],
@@ -172,12 +194,15 @@ def status_payload(
         }
     loop_state = load_gateway_loop_state(cwd)
     enabled = plugin_enabled(config, home)
-    bun_available = shutil.which("bun") is not None
+    bun_available = bun_runtime_available()
     hooks = hook_diagnostics(pdir)
     runtime_mode = gateway_runtime_mode(
         enabled=enabled,
         bun_available=bun_available,
         hooks=hooks,
+    )
+    filtered_loop_state, loop_state_reason = mode_loop_state(
+        runtime_mode["mode"], loop_state
     )
     payload = {
         "result": "PASS",
@@ -193,7 +218,8 @@ def status_payload(
         "runtime_reason_code": runtime_mode["reason_code"],
         "missing_hook_capabilities": runtime_mode["missing_hook_capabilities"],
         "loop_state_path": str(gateway_loop_state_path(cwd)),
-        "loop_state": loop_state if loop_state else None,
+        "loop_state": filtered_loop_state,
+        "loop_state_reason_code": loop_state_reason,
     }
     if cleanup is not None:
         payload["orphan_cleanup"] = cleanup
