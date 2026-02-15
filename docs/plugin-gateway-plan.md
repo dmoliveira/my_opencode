@@ -205,3 +205,11 @@ Recent progress:
 - Avoid large rewrites to command bridge language during gateway migration.
 - Prefer incremental, reversible steps with strong validation.
 - If behavior diverges from expected continuity, prefer reason-code observability over implicit retries.
+
+---
+
+## Hook adoption decisions (safety first)
+
+- `todo-continuation-enforcer`: intentionally not adopted.
+  - Rationale: this workflow already disables `task` and `todowrite` hooks and relies on `br` issue tracking.
+  - Risk: auto-nudging unfinished todo flows can override explicit user stop intent and degrade AI/human control.
