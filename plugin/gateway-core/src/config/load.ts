@@ -11,10 +11,10 @@ function stringList(value: unknown): string[] {
     .filter((item) => item.length > 0)
 }
 
-// Coerces unknown value into a safe positive integer fallback.
-function positiveInt(value: unknown, fallback: number): number {
+// Coerces unknown value into a safe non-negative integer fallback.
+function nonNegativeInt(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(String(value ?? ""), 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return fallback
   }
   return parsed
@@ -65,11 +65,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof autopilotSource.enabled === "boolean"
           ? autopilotSource.enabled
           : DEFAULT_GATEWAY_CONFIG.autopilotLoop.enabled,
-      maxIterations: positiveInt(
+      maxIterations: nonNegativeInt(
         autopilotSource.maxIterations,
         DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIterations,
       ),
-      orphanMaxAgeHours: positiveInt(
+      orphanMaxAgeHours: nonNegativeInt(
         autopilotSource.orphanMaxAgeHours,
         DEFAULT_GATEWAY_CONFIG.autopilotLoop.orphanMaxAgeHours,
       ),

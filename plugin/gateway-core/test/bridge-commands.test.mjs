@@ -54,6 +54,6 @@ test("command parsers resolve completion and goal defaults", () => {
   assert.equal(parseCompletionPromise('--completion-promise "DONE_NOW"', "DONE"), "DONE_NOW")
   assert.equal(parseCompletionPromise("", "DONE"), "DONE")
   assert.equal(parseMaxIterations("--max-iterations 25", 100), 25)
-  assert.equal(parseMaxIterations("--max-iterations 0", 100), 100)
+  assert.equal(parseMaxIterations("--max-iterations 0", 100), 0)
   assert.equal(parseGoal('--goal "close checklist" --max-budget balanced'), "close checklist")
 })

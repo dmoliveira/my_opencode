@@ -36,6 +36,17 @@ function isLoopComplete(state, text) {
     const token = active.completionPromise.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(`<promise>\\s*${token}\\s*<\\/promise>`, "i").test(text);
 }
+// Returns true when loop reached configured finite iteration cap.
+function reachedIterationCap(state) {
+    const active = state.activeLoop;
+    if (!active) {
+        return false;
+    }
+    if (active.maxIterations <= 0) {
+        return false;
+    }
+    return active.iteration >= active.maxIterations;
+}
 // Builds continuation prompt for active gateway loop iteration.
 function continuationPrompt(state) {
     const active = state.activeLoop;
@@ -93,7 +104,7 @@ export function createContinuationHook(options) {
                     return;
                 }
             }
-            if (active.iteration >= active.maxIterations) {
+            if (reachedIterationCap(state)) {
                 active.active = false;
                 state.lastUpdatedAt = nowIso();
                 state.source = REASON_CODES.LOOP_MAX_ITERATIONS;

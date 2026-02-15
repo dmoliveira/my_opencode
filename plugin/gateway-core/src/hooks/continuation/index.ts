@@ -68,6 +68,18 @@ function isLoopComplete(state: GatewayState, text: string): boolean {
   return new RegExp(`<promise>\\s*${token}\\s*<\\/promise>`, "i").test(text)
 }
 
+// Returns true when loop reached configured finite iteration cap.
+function reachedIterationCap(state: GatewayState): boolean {
+  const active = state.activeLoop
+  if (!active) {
+    return false
+  }
+  if (active.maxIterations <= 0) {
+    return false
+  }
+  return active.iteration >= active.maxIterations
+}
+
 // Builds continuation prompt for active gateway loop iteration.
 function continuationPrompt(state: GatewayState): string {
   const active = state.activeLoop
@@ -130,7 +142,7 @@ export function createContinuationHook(options: { directory: string; client?: Ga
         }
       }
 
-      if (active.iteration >= active.maxIterations) {
+      if (reachedIterationCap(state)) {
         active.active = false
         state.lastUpdatedAt = nowIso()
         state.source = REASON_CODES.LOOP_MAX_ITERATIONS

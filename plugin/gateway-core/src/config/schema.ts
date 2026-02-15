@@ -46,7 +46,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   autopilotLoop: {
     enabled: true,
-    maxIterations: 100,
+    maxIterations: 0,
     orphanMaxAgeHours: 12,
     completionMode: "promise",
     completionPromise: "DONE",

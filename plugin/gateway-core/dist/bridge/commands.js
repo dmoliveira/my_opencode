@@ -82,7 +82,7 @@ export function parseMaxIterations(args, fallback) {
         return fallback;
     }
     const parsed = Number.parseInt(match[1], 10);
-    if (!Number.isFinite(parsed) || parsed < 1) {
+    if (!Number.isFinite(parsed) || parsed < 0) {
         return fallback;
     }
     return parsed;

@@ -9,10 +9,10 @@ function stringList(value) {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
 }
-// Coerces unknown value into a safe positive integer fallback.
-function positiveInt(value, fallback) {
+// Coerces unknown value into a safe non-negative integer fallback.
+function nonNegativeInt(value, fallback) {
     const parsed = Number.parseInt(String(value ?? ""), 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (!Number.isFinite(parsed) || parsed < 0) {
         return fallback;
     }
     return parsed;
@@ -51,8 +51,8 @@ export function loadGatewayConfig(raw) {
             enabled: typeof autopilotSource.enabled === "boolean"
                 ? autopilotSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.autopilotLoop.enabled,
-            maxIterations: positiveInt(autopilotSource.maxIterations, DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIterations),
-            orphanMaxAgeHours: positiveInt(autopilotSource.orphanMaxAgeHours, DEFAULT_GATEWAY_CONFIG.autopilotLoop.orphanMaxAgeHours),
+            maxIterations: nonNegativeInt(autopilotSource.maxIterations, DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIterations),
+            orphanMaxAgeHours: nonNegativeInt(autopilotSource.orphanMaxAgeHours, DEFAULT_GATEWAY_CONFIG.autopilotLoop.orphanMaxAgeHours),
             completionMode,
             completionPromise: typeof autopilotSource.completionPromise === "string" &&
                 autopilotSource.completionPromise.trim().length > 0
