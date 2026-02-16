@@ -905,12 +905,18 @@ def main(argv: list[str]) -> int:
     if cmd == "start":
         return command_start(rest)
     if cmd == "go":
-        if rest and not any(token.startswith("-") for token in rest):
-            return command_go(["--goal", " ".join(rest), "--json"])
+        rest_without_json = [token for token in rest if token != "--json"]
+        if rest_without_json and not any(
+            token.startswith("-") for token in rest_without_json
+        ):
+            return command_go(["--goal", " ".join(rest_without_json), "--json"])
         return command_go(rest)
     if cmd == "continue":
-        if rest and not any(token.startswith("-") for token in rest):
-            return command_go(["--goal", " ".join(rest), "--json"])
+        rest_without_json = [token for token in rest if token != "--json"]
+        if rest_without_json and not any(
+            token.startswith("-") for token in rest_without_json
+        ):
+            return command_go(["--goal", " ".join(rest_without_json), "--json"])
         return command_go(rest)
     if cmd == "status":
         return command_status(rest)
@@ -926,7 +932,8 @@ def main(argv: list[str]) -> int:
         return command_doctor(rest)
     if cmd.startswith("-"):
         return command_go(argv)
-    return command_go(["--goal", " ".join(argv), "--json"])
+    goal_tokens = [token for token in argv if token != "--json"]
+    return command_go(["--goal", " ".join(goal_tokens), "--json"])
 
 
 if __name__ == "__main__":
