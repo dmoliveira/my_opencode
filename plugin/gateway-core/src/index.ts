@@ -149,6 +149,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       stopGuard,
       keywordDetector,
       bootstrapFromRuntime: cfg.autopilotLoop.bootstrapFromRuntimeOnIdle,
+      maxIgnoredCompletionCycles: cfg.autopilotLoop.maxIgnoredCompletionCycles,
     }),
     createSafetyHook({
       directory,
