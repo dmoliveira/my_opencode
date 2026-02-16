@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +32,7 @@ def usage() -> int:
         "usage: /autopilot [start|go|status|pause|resume|stop|report|doctor] [--json] "
         "| /autopilot start --goal <text> --scope <text> [--done-criteria <text>] [--completion-mode <promise|objective>] [--completion-promise <text>] --max-budget <profile> [--json] "
         "| /autopilot go [--goal <text>] [--scope <text>] [--done-criteria <text>] [--completion-mode <promise|objective>] [--completion-promise <text>] [--max-budget <profile>] "
-        "[--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--max-cycles <n>] [--json] "
+        "[--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--max-cycles <n>] [--compact] [--json] "
         "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--completion-signal] [--assistant-text <text>] [--json]"
     )
     return 2
@@ -79,6 +81,41 @@ def emit(payload: dict[str, Any], *, as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
+def compact_runtime_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    compact = deepcopy(payload)
+    run_any = compact.get("run")
+    if isinstance(run_any, dict):
+        cycles_any = run_any.get("cycles")
+        if isinstance(cycles_any, list) and len(cycles_any) > 5:
+            run_any["cycles_total"] = len(cycles_any)
+            run_any["cycles_tail"] = cycles_any[-3:]
+            run_any["cycles"] = []
+            run_any["cycles_truncated"] = True
+    history_any = compact.get("history")
+    if isinstance(history_any, list) and len(history_any) > 8:
+        compact["history_total"] = len(history_any)
+        compact["history_tail"] = history_any[-5:]
+        compact["history"] = []
+        compact["history_truncated"] = True
+    blockers_any = compact.get("blockers")
+    if isinstance(blockers_any, list) and len(blockers_any) > 5:
+        compact["blockers_total"] = len(blockers_any)
+        compact["blockers"] = blockers_any[:5]
+        compact["blockers_truncated"] = True
+    actions_any = compact.get("next_actions")
+    if isinstance(actions_any, list) and len(actions_any) > 5:
+        compact["next_actions_total"] = len(actions_any)
+        compact["next_actions"] = actions_any[:5]
+        compact["next_actions_truncated"] = True
+    touched_any = compact.get("inferred_touched_paths")
+    if isinstance(touched_any, list) and len(touched_any) > 15:
+        compact["inferred_touched_paths_total"] = len(touched_any)
+        compact["inferred_touched_paths"] = touched_any[:15]
+        compact["inferred_touched_paths_truncated"] = True
+    compact["output_mode"] = "compact"
+    return compact
+
+
 def normalize_args(args: list[str]) -> list[str]:
     normalized: list[str] = []
     for token in args:
@@ -103,6 +140,13 @@ def normalize_goal(goal: str | None) -> str:
     if lowered in {'"$arguments"', "'$arguments'"}:
         return ""
     return value
+
+
+def print_debug_command(argv: list[str]) -> None:
+    rendered = "/autopilot"
+    if argv:
+        rendered = f"{rendered} {' '.join(shlex.quote(token) for token in argv)}"
+    print(f"[autopilot debug] command: {rendered}", file=sys.stderr)
 
 
 def gateway_runtime_status(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
@@ -305,6 +349,7 @@ def command_start(args: list[str]) -> int:
 
 def command_go(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
+    compact = pop_flag(args, "--compact")
     completion_signal = pop_flag(args, "--completion-signal")
     explicit_goal = "--goal" in args
     explicit_scope = "--scope" in args
@@ -566,7 +611,7 @@ def command_go(args: list[str]) -> int:
             )
     if inferred_touched_paths:
         payload["inferred_touched_paths"] = inferred_touched_paths
-    emit(payload, as_json=as_json)
+    emit(compact_runtime_payload(payload) if compact else payload, as_json=as_json)
     return 0 if result == "PASS" else 1
 
 
@@ -897,6 +942,9 @@ def command_doctor(args: list[str]) -> int:
 
 def main(argv: list[str]) -> int:
     argv = normalize_args(list(argv))
+    debug_command = pop_flag(argv, "--debug-command")
+    if debug_command:
+        print_debug_command(argv)
     if not argv:
         return command_go(["--json"])
     cmd, *rest = argv

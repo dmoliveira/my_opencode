@@ -512,6 +512,7 @@ Autopilot gateway telemetry fields (`--json`):
 
 # Context-first one-shot iteration (start-or-resume and run bounded cycles)
 /autopilot go --goal "continue active docs request" --max-cycles 10 --json
+/autopilot-go-verbose --goal "continue active docs request" --max-cycles 10 --json
 /continue-work "finish cheatsheet updates and validations"
 
 # Compatibility aliases (canonical flow is /autopilot*)
@@ -536,6 +537,13 @@ Autopilot gateway telemetry fields (`--json`):
 ```
 
 - troubleshooting guide:
+  - quote multi-word flag values (`--goal`, `--scope`, `--done-criteria`, `--completion-promise`) using `"..."`.
+  - unquoted multi-word values are parsed as extra positional tokens and may fall back to usage output.
+  - `/autopilot start` initializes a dry-run-backed objective state; `/autopilot-go` executes bounded cycles.
+  - `/autopilot-go --max-cycles <n>` sets an upper bound, not a guaranteed count; runs may finish earlier when completion gates are met.
+  - compact output is enabled by default for `/autopilot-go`, `/autopilot-objective`, and `/continue-work`; use `/autopilot-go-verbose` for full cycle payloads.
+  - go-style aliases print a debug command line before JSON payloads for traceability.
+  - `/autopilot` without a subcommand defaults to go-style execution with inferred fields.
   - `autopilot_runtime_missing`: initialize objective with `/autopilot start ...`.
   - `confidence_drop_requires_handoff`: operator review required before calling `/autopilot resume`.
   - `budget_*`: reduce scope or lower cycle load, then resume with conservative increments.

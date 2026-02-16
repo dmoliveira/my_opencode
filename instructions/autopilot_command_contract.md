@@ -22,6 +22,11 @@ This contract defines `/autopilot` objective-runner behavior so autonomous execu
 
 All subcommands must support `--json` output.
 
+Subcommand dispatch note:
+
+- `/autopilot help|status|report|doctor|pause|resume|stop` dispatches directly to the requested subcommand.
+- `/autopilot` with no subcommand may default to `go` behavior.
+
 ## Objective Schema
 
 Objective fields:
@@ -32,6 +37,11 @@ Objective fields:
 - `max-budget` - bounded budget profile or explicit limits.
 - `completion-mode` - `promise` (default) or `objective`.
 - `completion-promise` - token text used when `completion-mode=promise` (default: `DONE`).
+
+CLI parsing note:
+
+- Multi-word values passed to `--goal`, `--scope`, `--done-criteria`, and `--completion-promise` should be quoted.
+- Example: `--goal "fix docs" --scope "docs/**,README.md"`.
 
 Optional fields:
 
@@ -46,6 +56,11 @@ Completion modes:
 
 - `promise` (default): run remains active until completion signal is detected (`<promise>{{completion-promise}}</promise>`), even if cycles are exhausted.
 - `objective`: run completes when objective done-criteria cycles are exhausted.
+
+Cycle cap semantics:
+
+- `--max-cycles` is an upper bound per invocation, not a guaranteed iteration count.
+- Runs can finish earlier when completion gates are met (objective done-criteria or completion promise).
 
 ## Lifecycle States
 
