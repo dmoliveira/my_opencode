@@ -236,12 +236,31 @@ export interface PrReadinessGuardConfig {
   requireValidationEvidence: boolean
 }
 
+// Declares branch freshness guard settings.
+export interface BranchFreshnessGuardConfig {
+  enabled: boolean
+  baseRef: string
+  maxBehind: number
+  enforceOnPrCreate: boolean
+  enforceOnPrMerge: boolean
+}
+
 // Declares merge readiness guard settings.
 export interface MergeReadinessGuardConfig {
   enabled: boolean
   requireDeleteBranch: boolean
   requireStrategy: boolean
   disallowAdminBypass: boolean
+}
+
+// Declares merge checks guard settings for PR review/status requirements.
+export interface GhChecksMergeGuardConfig {
+  enabled: boolean
+  blockDraft: boolean
+  requireApprovedReview: boolean
+  requirePassingChecks: boolean
+  blockedMergeStates: string[]
+  failOpenOnError: boolean
 }
 
 // Declares read budget optimizer settings.
@@ -310,8 +329,10 @@ export interface GatewayConfig {
   hookTestParityGuard: HookTestParityGuardConfig
   retryBudgetGuard: RetryBudgetGuardConfig
   staleLoopExpiryGuard: StaleLoopExpiryGuardConfig
+  branchFreshnessGuard: BranchFreshnessGuardConfig
   prReadinessGuard: PrReadinessGuardConfig
   mergeReadinessGuard: MergeReadinessGuardConfig
+  ghChecksMergeGuard: GhChecksMergeGuardConfig
   quality: QualityConfig
 }
 
@@ -360,8 +381,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "hook-test-parity-guard",
       "retry-budget-guard",
       "stale-loop-expiry-guard",
+      "branch-freshness-guard",
       "pr-readiness-guard",
       "merge-readiness-guard",
+      "gh-checks-merge-guard",
       "safety",
     ],
   },
@@ -546,6 +569,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     maxAgeMinutes: 120,
   },
+  branchFreshnessGuard: {
+    enabled: true,
+    baseRef: "origin/main",
+    maxBehind: 0,
+    enforceOnPrCreate: true,
+    enforceOnPrMerge: true,
+  },
   prReadinessGuard: {
     enabled: true,
     requireCleanWorktree: true,
@@ -556,6 +586,14 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     requireDeleteBranch: true,
     requireStrategy: true,
     disallowAdminBypass: true,
+  },
+  ghChecksMergeGuard: {
+    enabled: true,
+    blockDraft: true,
+    requireApprovedReview: true,
+    requirePassingChecks: true,
+    blockedMergeStates: ["BEHIND", "BLOCKED", "DIRTY"],
+    failOpenOnError: false,
   },
   quality: {
     profile: "fast",

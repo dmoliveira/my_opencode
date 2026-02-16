@@ -15,7 +15,7 @@ test("merge-readiness-guard enforces merge flags", async () => {
         hooks: {
           enabled: true,
           order: ["merge-readiness-guard"],
-          disabled: [],
+          disabled: ["gh-checks-merge-guard"],
         },
         mergeReadinessGuard: {
           enabled: true,

@@ -151,11 +151,17 @@ export function loadGatewayConfig(raw) {
     const staleLoopExpirySource = source.staleLoopExpiryGuard && typeof source.staleLoopExpiryGuard === "object"
         ? source.staleLoopExpiryGuard
         : {};
+    const branchFreshnessSource = source.branchFreshnessGuard && typeof source.branchFreshnessGuard === "object"
+        ? source.branchFreshnessGuard
+        : {};
     const prReadinessSource = source.prReadinessGuard && typeof source.prReadinessGuard === "object"
         ? source.prReadinessGuard
         : {};
     const mergeReadinessSource = source.mergeReadinessGuard && typeof source.mergeReadinessGuard === "object"
         ? source.mergeReadinessGuard
+        : {};
+    const ghChecksMergeSource = source.ghChecksMergeGuard && typeof source.ghChecksMergeGuard === "object"
+        ? source.ghChecksMergeGuard
         : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
@@ -464,6 +470,21 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.staleLoopExpiryGuard.enabled,
             maxAgeMinutes: nonNegativeInt(staleLoopExpirySource.maxAgeMinutes, DEFAULT_GATEWAY_CONFIG.staleLoopExpiryGuard.maxAgeMinutes),
         },
+        branchFreshnessGuard: {
+            enabled: typeof branchFreshnessSource.enabled === "boolean"
+                ? branchFreshnessSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.enabled,
+            baseRef: typeof branchFreshnessSource.baseRef === "string" && branchFreshnessSource.baseRef.trim().length > 0
+                ? branchFreshnessSource.baseRef.trim()
+                : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.baseRef,
+            maxBehind: nonNegativeInt(branchFreshnessSource.maxBehind, DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.maxBehind),
+            enforceOnPrCreate: typeof branchFreshnessSource.enforceOnPrCreate === "boolean"
+                ? branchFreshnessSource.enforceOnPrCreate
+                : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.enforceOnPrCreate,
+            enforceOnPrMerge: typeof branchFreshnessSource.enforceOnPrMerge === "boolean"
+                ? branchFreshnessSource.enforceOnPrMerge
+                : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.enforceOnPrMerge,
+        },
         prReadinessGuard: {
             enabled: typeof prReadinessSource.enabled === "boolean"
                 ? prReadinessSource.enabled
@@ -488,6 +509,26 @@ export function loadGatewayConfig(raw) {
             disallowAdminBypass: typeof mergeReadinessSource.disallowAdminBypass === "boolean"
                 ? mergeReadinessSource.disallowAdminBypass
                 : DEFAULT_GATEWAY_CONFIG.mergeReadinessGuard.disallowAdminBypass,
+        },
+        ghChecksMergeGuard: {
+            enabled: typeof ghChecksMergeSource.enabled === "boolean"
+                ? ghChecksMergeSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.enabled,
+            blockDraft: typeof ghChecksMergeSource.blockDraft === "boolean"
+                ? ghChecksMergeSource.blockDraft
+                : DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.blockDraft,
+            requireApprovedReview: typeof ghChecksMergeSource.requireApprovedReview === "boolean"
+                ? ghChecksMergeSource.requireApprovedReview
+                : DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.requireApprovedReview,
+            requirePassingChecks: typeof ghChecksMergeSource.requirePassingChecks === "boolean"
+                ? ghChecksMergeSource.requirePassingChecks
+                : DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.requirePassingChecks,
+            blockedMergeStates: ghChecksMergeSource.blockedMergeStates === undefined
+                ? DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.blockedMergeStates
+                : stringList(ghChecksMergeSource.blockedMergeStates),
+            failOpenOnError: typeof ghChecksMergeSource.failOpenOnError === "boolean"
+                ? ghChecksMergeSource.failOpenOnError
+                : DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.failOpenOnError,
         },
         quality: {
             profile: qualityProfile,

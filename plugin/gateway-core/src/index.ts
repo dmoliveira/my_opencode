@@ -3,6 +3,7 @@ import { writeGatewayEventAudit } from "./audit/event-audit.js"
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js"
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js"
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js"
+import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js"
 import { createCommentCheckerHook } from "./hooks/comment-checker/index.js"
 import { createContinuationHook } from "./hooks/continuation/index.js"
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js"
@@ -12,6 +13,7 @@ import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js"
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js"
 import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js"
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js"
+import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js"
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js"
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js"
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js"
@@ -322,6 +324,14 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       enabled: cfg.staleLoopExpiryGuard.enabled,
       maxAgeMinutes: cfg.staleLoopExpiryGuard.maxAgeMinutes,
     }),
+    createBranchFreshnessGuardHook({
+      directory,
+      enabled: cfg.branchFreshnessGuard.enabled,
+      baseRef: cfg.branchFreshnessGuard.baseRef,
+      maxBehind: cfg.branchFreshnessGuard.maxBehind,
+      enforceOnPrCreate: cfg.branchFreshnessGuard.enforceOnPrCreate,
+      enforceOnPrMerge: cfg.branchFreshnessGuard.enforceOnPrMerge,
+    }),
     createPrReadinessGuardHook({
       directory,
       enabled: cfg.prReadinessGuard.enabled,
@@ -335,6 +345,15 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       requireDeleteBranch: cfg.mergeReadinessGuard.requireDeleteBranch,
       requireStrategy: cfg.mergeReadinessGuard.requireStrategy,
       disallowAdminBypass: cfg.mergeReadinessGuard.disallowAdminBypass,
+    }),
+    createGhChecksMergeGuardHook({
+      directory,
+      enabled: cfg.ghChecksMergeGuard.enabled,
+      blockDraft: cfg.ghChecksMergeGuard.blockDraft,
+      requireApprovedReview: cfg.ghChecksMergeGuard.requireApprovedReview,
+      requirePassingChecks: cfg.ghChecksMergeGuard.requirePassingChecks,
+      blockedMergeStates: cfg.ghChecksMergeGuard.blockedMergeStates,
+      failOpenOnError: cfg.ghChecksMergeGuard.failOpenOnError,
     }),
   ]
   if (!cfg.hooks.enabled) {

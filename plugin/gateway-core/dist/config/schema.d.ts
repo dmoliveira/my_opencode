@@ -158,11 +158,26 @@ export interface PrReadinessGuardConfig {
     requireCleanWorktree: boolean;
     requireValidationEvidence: boolean;
 }
+export interface BranchFreshnessGuardConfig {
+    enabled: boolean;
+    baseRef: string;
+    maxBehind: number;
+    enforceOnPrCreate: boolean;
+    enforceOnPrMerge: boolean;
+}
 export interface MergeReadinessGuardConfig {
     enabled: boolean;
     requireDeleteBranch: boolean;
     requireStrategy: boolean;
     disallowAdminBypass: boolean;
+}
+export interface GhChecksMergeGuardConfig {
+    enabled: boolean;
+    blockDraft: boolean;
+    requireApprovedReview: boolean;
+    requirePassingChecks: boolean;
+    blockedMergeStates: string[];
+    failOpenOnError: boolean;
 }
 export interface ReadBudgetOptimizerConfig {
     enabled: boolean;
@@ -223,8 +238,10 @@ export interface GatewayConfig {
     hookTestParityGuard: HookTestParityGuardConfig;
     retryBudgetGuard: RetryBudgetGuardConfig;
     staleLoopExpiryGuard: StaleLoopExpiryGuardConfig;
+    branchFreshnessGuard: BranchFreshnessGuardConfig;
     prReadinessGuard: PrReadinessGuardConfig;
     mergeReadinessGuard: MergeReadinessGuardConfig;
+    ghChecksMergeGuard: GhChecksMergeGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
