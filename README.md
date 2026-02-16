@@ -43,7 +43,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 This setup keeps `build` as the default agent, and adds focused specialists for manual selection via `Tab`:
 
-- `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
+- `orchestrator` (primary): execution lead for complex tasks, with risk-based review budgets, explicit delegation, and completion gates.
 - `explore` (subagent): read-only internal codebase scout.
 - `librarian` (subagent): read-only external docs and OSS evidence researcher.
 - `oracle` (subagent): read-only architecture/debug advisor for hard tradeoffs.
