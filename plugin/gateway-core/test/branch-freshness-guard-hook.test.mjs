@@ -33,7 +33,7 @@ test("branch-freshness-guard blocks PR create when branch is behind base", async
         hooks: {
           enabled: true,
           order: ["branch-freshness-guard"],
-          disabled: ["pr-readiness-guard"],
+          disabled: ["pr-readiness-guard", "pr-body-evidence-guard"],
         },
         branchFreshnessGuard: {
           enabled: true,
@@ -75,7 +75,7 @@ test("branch-freshness-guard allows PR create within behind budget", async () =>
         hooks: {
           enabled: true,
           order: ["branch-freshness-guard"],
-          disabled: ["pr-readiness-guard"],
+          disabled: ["pr-readiness-guard", "pr-body-evidence-guard"],
         },
         branchFreshnessGuard: {
           enabled: true,
@@ -106,7 +106,7 @@ test("branch-freshness-guard skips when base ref is unavailable", async () => {
         hooks: {
           enabled: true,
           order: ["branch-freshness-guard"],
-          disabled: ["pr-readiness-guard"],
+          disabled: ["pr-readiness-guard", "pr-body-evidence-guard"],
         },
         branchFreshnessGuard: {
           enabled: true,

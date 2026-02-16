@@ -17,6 +17,14 @@ function nonNegativeInt(value, fallback) {
     }
     return parsed;
 }
+// Coerces unknown value into a safe positive integer fallback.
+function positiveInt(value, fallback) {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fallback;
+    }
+    return parsed;
+}
 // Coerces unknown value into bounded float fallback.
 function boundedFloat(value, min, max, fallback) {
     const parsed = Number.parseFloat(String(value ?? ""));
@@ -162,6 +170,18 @@ export function loadGatewayConfig(raw) {
         : {};
     const ghChecksMergeSource = source.ghChecksMergeGuard && typeof source.ghChecksMergeGuard === "object"
         ? source.ghChecksMergeGuard
+        : {};
+    const postMergeSyncSource = source.postMergeSyncGuard && typeof source.postMergeSyncGuard === "object"
+        ? source.postMergeSyncGuard
+        : {};
+    const parallelWriterConflictSource = source.parallelWriterConflictGuard && typeof source.parallelWriterConflictGuard === "object"
+        ? source.parallelWriterConflictGuard
+        : {};
+    const secretCommitSource = source.secretCommitGuard && typeof source.secretCommitGuard === "object"
+        ? source.secretCommitGuard
+        : {};
+    const prBodyEvidenceSource = source.prBodyEvidenceGuard && typeof source.prBodyEvidenceGuard === "object"
+        ? source.prBodyEvidenceGuard
         : {};
     const tsSource = qualitySource.ts && typeof qualitySource.ts === "object"
         ? qualitySource.ts
@@ -496,6 +516,23 @@ export function loadGatewayConfig(raw) {
                 ? prReadinessSource.requireValidationEvidence
                 : DEFAULT_GATEWAY_CONFIG.prReadinessGuard.requireValidationEvidence,
         },
+        prBodyEvidenceGuard: {
+            enabled: typeof prBodyEvidenceSource.enabled === "boolean"
+                ? prBodyEvidenceSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.enabled,
+            requireSummarySection: typeof prBodyEvidenceSource.requireSummarySection === "boolean"
+                ? prBodyEvidenceSource.requireSummarySection
+                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.requireSummarySection,
+            requireValidationSection: typeof prBodyEvidenceSource.requireValidationSection === "boolean"
+                ? prBodyEvidenceSource.requireValidationSection
+                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.requireValidationSection,
+            requireValidationEvidence: typeof prBodyEvidenceSource.requireValidationEvidence === "boolean"
+                ? prBodyEvidenceSource.requireValidationEvidence
+                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.requireValidationEvidence,
+            allowUninspectableBody: typeof prBodyEvidenceSource.allowUninspectableBody === "boolean"
+                ? prBodyEvidenceSource.allowUninspectableBody
+                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.allowUninspectableBody,
+        },
         mergeReadinessGuard: {
             enabled: typeof mergeReadinessSource.enabled === "boolean"
                 ? mergeReadinessSource.enabled
@@ -529,6 +566,46 @@ export function loadGatewayConfig(raw) {
             failOpenOnError: typeof ghChecksMergeSource.failOpenOnError === "boolean"
                 ? ghChecksMergeSource.failOpenOnError
                 : DEFAULT_GATEWAY_CONFIG.ghChecksMergeGuard.failOpenOnError,
+        },
+        postMergeSyncGuard: {
+            enabled: typeof postMergeSyncSource.enabled === "boolean"
+                ? postMergeSyncSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.postMergeSyncGuard.enabled,
+            requireDeleteBranch: typeof postMergeSyncSource.requireDeleteBranch === "boolean"
+                ? postMergeSyncSource.requireDeleteBranch
+                : DEFAULT_GATEWAY_CONFIG.postMergeSyncGuard.requireDeleteBranch,
+            enforceMainSyncInline: typeof postMergeSyncSource.enforceMainSyncInline === "boolean"
+                ? postMergeSyncSource.enforceMainSyncInline
+                : DEFAULT_GATEWAY_CONFIG.postMergeSyncGuard.enforceMainSyncInline,
+            reminderCommands: postMergeSyncSource.reminderCommands === undefined
+                ? DEFAULT_GATEWAY_CONFIG.postMergeSyncGuard.reminderCommands
+                : stringList(postMergeSyncSource.reminderCommands),
+        },
+        parallelWriterConflictGuard: {
+            enabled: typeof parallelWriterConflictSource.enabled === "boolean"
+                ? parallelWriterConflictSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.enabled,
+            maxConcurrentWriters: positiveInt(parallelWriterConflictSource.maxConcurrentWriters, DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.maxConcurrentWriters),
+            writerCountEnvKeys: parallelWriterConflictSource.writerCountEnvKeys === undefined
+                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.writerCountEnvKeys
+                : stringList(parallelWriterConflictSource.writerCountEnvKeys),
+            reservationPathsEnvKeys: parallelWriterConflictSource.reservationPathsEnvKeys === undefined
+                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.reservationPathsEnvKeys
+                : stringList(parallelWriterConflictSource.reservationPathsEnvKeys),
+            activeReservationPathsEnvKeys: parallelWriterConflictSource.activeReservationPathsEnvKeys === undefined
+                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.activeReservationPathsEnvKeys
+                : stringList(parallelWriterConflictSource.activeReservationPathsEnvKeys),
+            enforceReservationCoverage: typeof parallelWriterConflictSource.enforceReservationCoverage === "boolean"
+                ? parallelWriterConflictSource.enforceReservationCoverage
+                : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.enforceReservationCoverage,
+        },
+        secretCommitGuard: {
+            enabled: typeof secretCommitSource.enabled === "boolean"
+                ? secretCommitSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.secretCommitGuard.enabled,
+            patterns: secretCommitSource.patterns === undefined
+                ? DEFAULT_GATEWAY_CONFIG.secretCommitGuard.patterns
+                : stringList(secretCommitSource.patterns),
         },
         quality: {
             profile: qualityProfile,

@@ -263,6 +263,39 @@ export interface GhChecksMergeGuardConfig {
   failOpenOnError: boolean
 }
 
+// Declares secret commit guard settings for staged secret detection.
+export interface SecretCommitGuardConfig {
+  enabled: boolean
+  patterns: string[]
+}
+
+// Declares PR body evidence guard settings for structured summary and validation context.
+export interface PrBodyEvidenceGuardConfig {
+  enabled: boolean
+  requireSummarySection: boolean
+  requireValidationSection: boolean
+  requireValidationEvidence: boolean
+  allowUninspectableBody: boolean
+}
+
+// Declares parallel writer conflict guard settings for coordinated file ownership.
+export interface ParallelWriterConflictGuardConfig {
+  enabled: boolean
+  maxConcurrentWriters: number
+  writerCountEnvKeys: string[]
+  reservationPathsEnvKeys: string[]
+  activeReservationPathsEnvKeys: string[]
+  enforceReservationCoverage: boolean
+}
+
+// Declares post merge sync guard settings for cleanup and sync reminders.
+export interface PostMergeSyncGuardConfig {
+  enabled: boolean
+  requireDeleteBranch: boolean
+  enforceMainSyncInline: boolean
+  reminderCommands: string[]
+}
+
 // Declares read budget optimizer settings.
 export interface ReadBudgetOptimizerConfig {
   enabled: boolean
@@ -331,8 +364,12 @@ export interface GatewayConfig {
   staleLoopExpiryGuard: StaleLoopExpiryGuardConfig
   branchFreshnessGuard: BranchFreshnessGuardConfig
   prReadinessGuard: PrReadinessGuardConfig
+  prBodyEvidenceGuard: PrBodyEvidenceGuardConfig
   mergeReadinessGuard: MergeReadinessGuardConfig
   ghChecksMergeGuard: GhChecksMergeGuardConfig
+  postMergeSyncGuard: PostMergeSyncGuardConfig
+  parallelWriterConflictGuard: ParallelWriterConflictGuardConfig
+  secretCommitGuard: SecretCommitGuardConfig
   quality: QualityConfig
 }
 
@@ -373,6 +410,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "question-label-truncator",
       "dangerous-command-guard",
       "secret-leak-guard",
+      "secret-commit-guard",
       "workflow-conformance-guard",
       "scope-drift-guard",
       "done-proof-enforcer",
@@ -381,10 +419,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "hook-test-parity-guard",
       "retry-budget-guard",
       "stale-loop-expiry-guard",
+      "parallel-writer-conflict-guard",
       "branch-freshness-guard",
       "pr-readiness-guard",
+      "pr-body-evidence-guard",
       "merge-readiness-guard",
       "gh-checks-merge-guard",
+      "post-merge-sync-guard",
       "safety",
     ],
   },
@@ -581,6 +622,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     requireCleanWorktree: true,
     requireValidationEvidence: true,
   },
+  prBodyEvidenceGuard: {
+    enabled: true,
+    requireSummarySection: true,
+    requireValidationSection: true,
+    requireValidationEvidence: true,
+    allowUninspectableBody: true,
+  },
   mergeReadinessGuard: {
     enabled: true,
     requireDeleteBranch: true,
@@ -594,6 +642,30 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     requirePassingChecks: true,
     blockedMergeStates: ["BEHIND", "BLOCKED", "DIRTY"],
     failOpenOnError: false,
+  },
+  postMergeSyncGuard: {
+    enabled: true,
+    requireDeleteBranch: true,
+    enforceMainSyncInline: false,
+    reminderCommands: ["git checkout main", "git pull --rebase"],
+  },
+  parallelWriterConflictGuard: {
+    enabled: true,
+    maxConcurrentWriters: 2,
+    writerCountEnvKeys: ["MY_OPENCODE_ACTIVE_WRITERS", "AGENTMAIL_ACTIVE_WRITERS"],
+    reservationPathsEnvKeys: ["MY_OPENCODE_FILE_RESERVATION_PATHS", "AGENTMAIL_RESERVATION_PATHS"],
+    activeReservationPathsEnvKeys: ["MY_OPENCODE_ACTIVE_RESERVATION_PATHS", "AGENTMAIL_ACTIVE_RESERVATION_PATHS"],
+    enforceReservationCoverage: true,
+  },
+  secretCommitGuard: {
+    enabled: true,
+    patterns: [
+      "sk-[A-Za-z0-9]{20,}",
+      "ghp_[A-Za-z0-9]{20,}",
+      "AIza[0-9A-Za-z\\-_]{20,}",
+      "-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) KEY-----",
+      "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
+    ],
   },
   quality: {
     profile: "fast",

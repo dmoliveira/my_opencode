@@ -21,6 +21,9 @@ import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
 import { createMergeReadinessGuardHook } from "./hooks/merge-readiness-guard/index.js";
 import { createNoninteractiveShellGuardHook } from "./hooks/noninteractive-shell-guard/index.js";
 import { createParallelOpportunityDetectorHook } from "./hooks/parallel-opportunity-detector/index.js";
+import { createParallelWriterConflictGuardHook } from "./hooks/parallel-writer-conflict-guard/index.js";
+import { createPostMergeSyncGuardHook } from "./hooks/post-merge-sync-guard/index.js";
+import { createPrBodyEvidenceGuardHook } from "./hooks/pr-body-evidence-guard/index.js";
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
 import { createPrReadinessGuardHook } from "./hooks/pr-readiness-guard/index.js";
 import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js";
@@ -28,6 +31,7 @@ import { createReadBudgetOptimizerHook } from "./hooks/read-budget-optimizer/ind
 import { createRulesInjectorHook } from "./hooks/rules-injector/index.js";
 import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js";
 import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
+import { createSecretCommitGuardHook } from "./hooks/secret-commit-guard/index.js";
 import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
 import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
@@ -205,6 +209,11 @@ function configuredHooks(ctx) {
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
         }),
+        createSecretCommitGuardHook({
+            directory,
+            enabled: cfg.secretCommitGuard.enabled,
+            patterns: cfg.secretCommitGuard.patterns,
+        }),
         createWorkflowConformanceGuardHook({
             directory,
             enabled: cfg.workflowConformanceGuard.enabled,
@@ -252,6 +261,15 @@ function configuredHooks(ctx) {
             enabled: cfg.staleLoopExpiryGuard.enabled,
             maxAgeMinutes: cfg.staleLoopExpiryGuard.maxAgeMinutes,
         }),
+        createParallelWriterConflictGuardHook({
+            directory,
+            enabled: cfg.parallelWriterConflictGuard.enabled,
+            maxConcurrentWriters: cfg.parallelWriterConflictGuard.maxConcurrentWriters,
+            writerCountEnvKeys: cfg.parallelWriterConflictGuard.writerCountEnvKeys,
+            reservationPathsEnvKeys: cfg.parallelWriterConflictGuard.reservationPathsEnvKeys,
+            activeReservationPathsEnvKeys: cfg.parallelWriterConflictGuard.activeReservationPathsEnvKeys,
+            enforceReservationCoverage: cfg.parallelWriterConflictGuard.enforceReservationCoverage,
+        }),
         createBranchFreshnessGuardHook({
             directory,
             enabled: cfg.branchFreshnessGuard.enabled,
@@ -265,6 +283,15 @@ function configuredHooks(ctx) {
             enabled: cfg.prReadinessGuard.enabled,
             requireCleanWorktree: cfg.prReadinessGuard.requireCleanWorktree,
             requireValidationEvidence: cfg.prReadinessGuard.requireValidationEvidence,
+            requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+        }),
+        createPrBodyEvidenceGuardHook({
+            directory,
+            enabled: cfg.prBodyEvidenceGuard.enabled,
+            requireSummarySection: cfg.prBodyEvidenceGuard.requireSummarySection,
+            requireValidationSection: cfg.prBodyEvidenceGuard.requireValidationSection,
+            requireValidationEvidence: cfg.prBodyEvidenceGuard.requireValidationEvidence,
+            allowUninspectableBody: cfg.prBodyEvidenceGuard.allowUninspectableBody,
             requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
         }),
         createMergeReadinessGuardHook({
@@ -282,6 +309,13 @@ function configuredHooks(ctx) {
             requirePassingChecks: cfg.ghChecksMergeGuard.requirePassingChecks,
             blockedMergeStates: cfg.ghChecksMergeGuard.blockedMergeStates,
             failOpenOnError: cfg.ghChecksMergeGuard.failOpenOnError,
+        }),
+        createPostMergeSyncGuardHook({
+            directory,
+            enabled: cfg.postMergeSyncGuard.enabled,
+            requireDeleteBranch: cfg.postMergeSyncGuard.requireDeleteBranch,
+            enforceMainSyncInline: cfg.postMergeSyncGuard.enforceMainSyncInline,
+            reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
         }),
     ];
     if (!cfg.hooks.enabled) {
