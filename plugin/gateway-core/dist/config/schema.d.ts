@@ -179,6 +179,31 @@ export interface GhChecksMergeGuardConfig {
     blockedMergeStates: string[];
     failOpenOnError: boolean;
 }
+export interface SecretCommitGuardConfig {
+    enabled: boolean;
+    patterns: string[];
+}
+export interface PrBodyEvidenceGuardConfig {
+    enabled: boolean;
+    requireSummarySection: boolean;
+    requireValidationSection: boolean;
+    requireValidationEvidence: boolean;
+    allowUninspectableBody: boolean;
+}
+export interface ParallelWriterConflictGuardConfig {
+    enabled: boolean;
+    maxConcurrentWriters: number;
+    writerCountEnvKeys: string[];
+    reservationPathsEnvKeys: string[];
+    activeReservationPathsEnvKeys: string[];
+    enforceReservationCoverage: boolean;
+}
+export interface PostMergeSyncGuardConfig {
+    enabled: boolean;
+    requireDeleteBranch: boolean;
+    enforceMainSyncInline: boolean;
+    reminderCommands: string[];
+}
 export interface ReadBudgetOptimizerConfig {
     enabled: boolean;
     smallReadLimit: number;
@@ -240,8 +265,12 @@ export interface GatewayConfig {
     staleLoopExpiryGuard: StaleLoopExpiryGuardConfig;
     branchFreshnessGuard: BranchFreshnessGuardConfig;
     prReadinessGuard: PrReadinessGuardConfig;
+    prBodyEvidenceGuard: PrBodyEvidenceGuardConfig;
     mergeReadinessGuard: MergeReadinessGuardConfig;
     ghChecksMergeGuard: GhChecksMergeGuardConfig;
+    postMergeSyncGuard: PostMergeSyncGuardConfig;
+    parallelWriterConflictGuard: ParallelWriterConflictGuardConfig;
+    secretCommitGuard: SecretCommitGuardConfig;
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
