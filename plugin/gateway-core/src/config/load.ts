@@ -282,6 +282,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof autopilotSource.bootstrapFromRuntimeOnIdle === "boolean"
           ? autopilotSource.bootstrapFromRuntimeOnIdle
           : DEFAULT_GATEWAY_CONFIG.autopilotLoop.bootstrapFromRuntimeOnIdle,
+      maxIgnoredCompletionCycles: positiveInt(
+        autopilotSource.maxIgnoredCompletionCycles,
+        DEFAULT_GATEWAY_CONFIG.autopilotLoop.maxIgnoredCompletionCycles,
+      ),
       completionMode,
       completionPromise:
         typeof autopilotSource.completionPromise === "string" &&

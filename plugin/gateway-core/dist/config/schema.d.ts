@@ -5,6 +5,7 @@ export interface AutopilotLoopConfig {
     maxIterations: number;
     orphanMaxAgeHours: number;
     bootstrapFromRuntimeOnIdle: boolean;
+    maxIgnoredCompletionCycles: number;
     completionMode: CompletionMode;
     completionPromise: string;
 }

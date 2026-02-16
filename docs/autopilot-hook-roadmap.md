@@ -65,6 +65,8 @@ Config wiring target (optional, requires bun runtime):
 
 - Never auto-inject past max iteration limit.
 - Never auto-finish without completion signal for `promise` mode.
+- Deactivate loops when completion token is repeatedly emitted but runtime remains `running` with blockers, to avoid infinite idle reinjection.
+  - default behavior now stops on the first contradictory cycle (`maxIgnoredCompletionCycles=1`), configurable via gateway autopilot loop config.
 - Always allow manual `/autopilot stop`.
 - Emit clear reason codes for every terminal state.
 

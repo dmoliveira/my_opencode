@@ -77,6 +77,7 @@ function configuredHooks(ctx) {
             stopGuard,
             keywordDetector,
             bootstrapFromRuntime: cfg.autopilotLoop.bootstrapFromRuntimeOnIdle,
+            maxIgnoredCompletionCycles: cfg.autopilotLoop.maxIgnoredCompletionCycles,
         }),
         createSafetyHook({
             directory,

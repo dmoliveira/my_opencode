@@ -8,6 +8,7 @@ export const REASON_CODES = {
     LOOP_COMPLETED_OBJECTIVE: "gateway_loop_objective_completed",
     LOOP_RUNTIME_BOOTSTRAPPED: "gateway_loop_runtime_bootstrapped",
     LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME: "gateway_loop_completion_ignored_incomplete_runtime",
+    LOOP_COMPLETION_STALLED_RUNTIME: "gateway_loop_completion_stalled_runtime",
     LOOP_ORPHAN_CLEANED: "gateway_loop_orphan_cleaned",
     RUNTIME_PLUGIN_READY: "gateway_plugin_ready",
     RUNTIME_PLUGIN_DISABLED: "gateway_plugin_disabled",
