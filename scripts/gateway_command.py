@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
+import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +27,7 @@ from gateway_reason_codes import (  # type: ignore
 )
 from gateway_plugin_bridge import (  # type: ignore
     cleanup_orphan_loop,
+    gateway_plugin_entries,
     gateway_loop_state_path,
     gateway_plugin_spec,
     load_gateway_loop_state,
@@ -70,6 +74,140 @@ def gateway_event_audit_path(cwd: Path) -> Path:
     if raw:
         return Path(raw).expanduser()
     return cwd / ".opencode" / "gateway-events.jsonl"
+
+
+def parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return None
+
+
+def runtime_staleness(home: Path) -> dict[str, Any]:
+    runtime_path = (
+        home
+        / ".config"
+        / "opencode"
+        / "my_opencode"
+        / "runtime"
+        / "autopilot_runtime.json"
+    )
+    if not runtime_path.exists():
+        return {
+            "exists": False,
+            "path": str(runtime_path),
+            "status": None,
+            "is_stale_running": False,
+            "age_minutes": None,
+            "blockers": [],
+        }
+    try:
+        payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "exists": True,
+            "path": str(runtime_path),
+            "status": None,
+            "is_stale_running": False,
+            "age_minutes": None,
+            "blockers": [],
+            "read_error": True,
+        }
+    runtime = payload if isinstance(payload, dict) else {}
+    status = str(runtime.get("status") or "").strip().lower()
+    blockers_any = runtime.get("blockers")
+    blockers = blockers_any if isinstance(blockers_any, list) else []
+    updated_at = parse_iso(runtime.get("updated_at"))
+    age_minutes: int | None = None
+    if updated_at is not None:
+        age_minutes = int((datetime.now(UTC) - updated_at).total_seconds() / 60)
+    is_stale_running = (
+        status == "running" and age_minutes is not None and age_minutes >= 30
+    )
+    return {
+        "exists": True,
+        "path": str(runtime_path),
+        "status": status or None,
+        "is_stale_running": is_stale_running,
+        "age_minutes": age_minutes,
+        "blockers": [str(item) for item in blockers if isinstance(item, str)],
+    }
+
+
+def process_pressure() -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,rss=,command="],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except Exception:
+        return {
+            "sampled": False,
+            "opencode_process_count": 0,
+            "continue_process_count": 0,
+            "max_rss_mb": 0,
+            "high_rss": [],
+        }
+    if result.returncode != 0:
+        return {
+            "sampled": False,
+            "opencode_process_count": 0,
+            "continue_process_count": 0,
+            "max_rss_mb": 0,
+            "high_rss": [],
+        }
+
+    opencode_process_count = 0
+    continue_process_count = 0
+    max_rss_kb = 0
+    high_rss: list[dict[str, Any]] = []
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            pid_text, rss_text, command = line.split(maxsplit=2)
+        except ValueError:
+            continue
+        lowered = command.lower()
+        if "opencode" not in lowered:
+            continue
+        opencode_process_count += 1
+        if "--continue" in lowered:
+            continue_process_count += 1
+        try:
+            rss_kb = int(rss_text)
+        except ValueError:
+            rss_kb = 0
+        if rss_kb > max_rss_kb:
+            max_rss_kb = rss_kb
+        if rss_kb >= 1_000_000:
+            command_preview = command.strip()
+            if command_preview:
+                try:
+                    command_preview = shlex.join(shlex.split(command_preview)[:8])
+                except ValueError:
+                    command_preview = command_preview[:180]
+            high_rss.append(
+                {
+                    "pid": int(pid_text),
+                    "rss_mb": round(rss_kb / 1024, 1),
+                    "command": command_preview,
+                }
+            )
+
+    return {
+        "sampled": True,
+        "opencode_process_count": opencode_process_count,
+        "continue_process_count": continue_process_count,
+        "max_rss_mb": round(max_rss_kb / 1024, 1),
+        "high_rss": high_rss[:5],
+    }
 
 
 # Returns gateway-core hook diagnostics for source and dist artifacts.
@@ -231,10 +369,13 @@ def status_payload(
     filtered_loop_state, loop_state_reason = mode_loop_state(
         runtime_mode["mode"], loop_state
     )
+    gateway_entries = gateway_plugin_entries(config, home)
     payload = {
         "result": "PASS",
         "enabled": enabled,
         "plugin_spec": gateway_plugin_spec(home),
+        "plugin_entry_count": len(gateway_entries),
+        "plugin_entries": gateway_entries,
         "plugin_dir": str(pdir),
         "plugin_dir_exists": pdir.exists(),
         "plugin_dist_exists": (pdir / "dist" / "index.js").exists(),
@@ -250,6 +391,8 @@ def status_payload(
         "event_audit_enabled": gateway_event_audit_enabled(),
         "event_audit_path": str(gateway_event_audit_path(cwd)),
         "event_audit_exists": gateway_event_audit_path(cwd).exists(),
+        "runtime_staleness": runtime_staleness(home),
+        "process_pressure": process_pressure(),
     }
     if cleanup is not None:
         payload["orphan_cleanup"] = cleanup
@@ -392,6 +535,49 @@ def command_doctor(as_json: bool) -> int:
         warnings.append(
             "gateway plugin runtime is available but disabled; enable for plugin-first mode"
         )
+    plugin_entry_count = int(status.get("plugin_entry_count") or 0)
+    if plugin_entry_count > 1:
+        message = "gateway plugin is configured multiple times; keep one canonical file: entry to avoid duplicate hook registration"
+        if status.get("enabled") is True:
+            problems.append(message)
+        else:
+            warnings.append(message)
+
+    runtime_stale_any = status.get("runtime_staleness")
+    runtime_stale = runtime_stale_any if isinstance(runtime_stale_any, dict) else {}
+    if runtime_stale.get("is_stale_running") is True:
+        age_minutes = runtime_stale.get("age_minutes")
+        warnings.append(
+            f"autopilot runtime appears stale in running state ({age_minutes} minutes since update); consider /autopilot pause then /autopilot status"
+        )
+    blockers_any = runtime_stale.get("blockers")
+    blockers = blockers_any if isinstance(blockers_any, list) else []
+    if blockers and runtime_stale.get("status") == "running":
+        warnings.append(
+            "autopilot runtime is running with blockers present; inspect /autopilot report before continuing"
+        )
+
+    process_pressure_any = status.get("process_pressure")
+    process_pressure_status = (
+        process_pressure_any if isinstance(process_pressure_any, dict) else {}
+    )
+    continue_count = int(process_pressure_status.get("continue_process_count") or 0)
+    opencode_count = int(process_pressure_status.get("opencode_process_count") or 0)
+    max_rss_mb = float(process_pressure_status.get("max_rss_mb") or 0)
+    high_rss_any = process_pressure_status.get("high_rss")
+    high_rss = high_rss_any if isinstance(high_rss_any, list) else []
+    if continue_count >= 3:
+        warnings.append(
+            f"detected {continue_count} concurrent opencode --continue processes; this can accelerate memory pressure"
+        )
+    if opencode_count >= 8:
+        warnings.append(
+            f"detected {opencode_count} concurrent opencode-related processes; consider pruning stale sessions"
+        )
+    if max_rss_mb >= 1400 or high_rss:
+        warnings.append(
+            "detected high RSS opencode process(es); capture /gateway status --json baseline and reduce concurrent long-lived sessions"
+        )
 
     hooks_any = status.get("hook_diagnostics")
     hooks = hooks_any if isinstance(hooks_any, dict) else {}
@@ -427,6 +613,8 @@ def command_doctor(as_json: bool) -> int:
             "/gateway enable",
             "run npm run build in plugin/gateway-core",
             "install bun if file plugins must auto-install",
+            "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
+            "run /autopilot report to inspect blockers and stale runtime status",
         ],
     }
     emit(report, as_json=as_json)

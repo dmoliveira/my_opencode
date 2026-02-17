@@ -40,12 +40,16 @@ export interface ToolOutputTruncatorConfig {
 export interface ContextWindowMonitorConfig {
   enabled: boolean
   warningThreshold: number
+  reminderCooldownToolCalls: number
+  minTokenDeltaForReminder: number
 }
 
 // Declares preemptive compaction settings for high token pressure sessions.
 export interface PreemptiveCompactionConfig {
   enabled: boolean
   warningThreshold: number
+  compactionCooldownToolCalls: number
+  minTokenDeltaForCompaction: number
 }
 
 // Declares session recovery settings for event-driven auto-resume attempts.
@@ -449,10 +453,14 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   contextWindowMonitor: {
     enabled: true,
     warningThreshold: 0.7,
+    reminderCooldownToolCalls: 12,
+    minTokenDeltaForReminder: 25_000,
   },
   preemptiveCompaction: {
     enabled: true,
     warningThreshold: 0.78,
+    compactionCooldownToolCalls: 10,
+    minTokenDeltaForCompaction: 35_000,
   },
   sessionRecovery: {
     enabled: true,

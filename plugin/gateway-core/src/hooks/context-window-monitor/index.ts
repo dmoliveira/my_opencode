@@ -1,8 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 
-const ANTHROPIC_DISPLAY_LIMIT = 1_000_000
-
 // Declares minimal session message token shape for context monitor.
 interface AssistantMessageInfo {
   role?: string
@@ -48,6 +46,12 @@ interface EventPayload {
   }
 }
 
+interface SessionReminderState {
+  toolCalls: number
+  lastWarnedAtToolCall: number
+  lastWarnedTokens: number
+}
+
 // Resolves effective session id from tool after payload.
 function resolveSessionId(payload: ToolAfterPayload): string {
   const candidates = [payload.input?.sessionID, payload.input?.sessionId]
@@ -67,12 +71,13 @@ function anthropicActualLimit(): number {
 }
 
 // Builds warning suffix with context usage details.
-function warningSuffix(totalInputTokens: number): string {
-  const displayUsagePercentage = totalInputTokens / ANTHROPIC_DISPLAY_LIMIT
+function warningSuffix(totalInputTokens: number, contextLimit: number): string {
+  const safeLimit = contextLimit > 0 ? contextLimit : 1
+  const displayUsagePercentage = totalInputTokens / safeLimit
   const usedPct = (displayUsagePercentage * 100).toFixed(1)
-  const remainingPct = ((1 - displayUsagePercentage) * 100).toFixed(1)
+  const remainingPct = (Math.max(0, 1 - displayUsagePercentage) * 100).toFixed(1)
   const usedTokens = totalInputTokens.toLocaleString()
-  const limitTokens = ANTHROPIC_DISPLAY_LIMIT.toLocaleString()
+  const limitTokens = safeLimit.toLocaleString()
   return `[Context Status: ${usedPct}% used (${usedTokens}/${limitTokens} tokens), ${remainingPct}% remaining]`
 }
 
@@ -82,8 +87,10 @@ export function createContextWindowMonitorHook(options: {
   client?: GatewayClient
   enabled: boolean
   warningThreshold: number
+  reminderCooldownToolCalls: number
+  minTokenDeltaForReminder: number
 }): GatewayHook {
-  const remindedSessions = new Set<string>()
+  const sessionStates = new Map<string, SessionReminderState>()
   return {
     id: "context-window-monitor",
     priority: 260,
@@ -95,7 +102,7 @@ export function createContextWindowMonitorHook(options: {
         const eventPayload = (payload ?? {}) as EventPayload
         const sessionId = eventPayload.properties?.info?.id
         if (typeof sessionId === "string" && sessionId.trim()) {
-          remindedSessions.delete(sessionId.trim())
+          sessionStates.delete(sessionId.trim())
         }
         return
       }
@@ -116,15 +123,16 @@ export function createContextWindowMonitorHook(options: {
         })
         return
       }
-      if (remindedSessions.has(sessionId)) {
-        writeGatewayEventAudit(directory, {
-          hook: "context-window-monitor",
-          stage: "skip",
-          reason_code: "already_warned",
-          session_id: sessionId,
-        })
-        return
+      const priorState = sessionStates.get(sessionId) ?? {
+        toolCalls: 0,
+        lastWarnedAtToolCall: 0,
+        lastWarnedTokens: 0,
       }
+      const nextState: SessionReminderState = {
+        ...priorState,
+        toolCalls: priorState.toolCalls + 1,
+      }
+      sessionStates.set(sessionId, nextState)
       if (typeof eventPayload.output?.output !== "string") {
         writeGatewayEventAudit(directory, {
           hook: "context-window-monitor",
@@ -164,7 +172,8 @@ export function createContextWindowMonitorHook(options: {
           return
         }
         const totalInputTokens = (last.tokens?.input ?? 0) + (last.tokens?.cache?.read ?? 0)
-        const actualUsage = totalInputTokens / anthropicActualLimit()
+        const actualLimit = anthropicActualLimit()
+        const actualUsage = totalInputTokens / actualLimit
         if (actualUsage < options.warningThreshold) {
           writeGatewayEventAudit(directory, {
             hook: "context-window-monitor",
@@ -174,8 +183,37 @@ export function createContextWindowMonitorHook(options: {
           })
           return
         }
-        remindedSessions.add(sessionId)
-        eventPayload.output.output = `${eventPayload.output.output}\n\nUse remaining context carefully and keep responses focused.\n${warningSuffix(totalInputTokens)}`
+        const hasPriorReminder = nextState.lastWarnedAtToolCall > 0
+        if (hasPriorReminder) {
+          const cooldownElapsed =
+            nextState.toolCalls - nextState.lastWarnedAtToolCall >= options.reminderCooldownToolCalls
+          const tokenDeltaEnough =
+            totalInputTokens - nextState.lastWarnedTokens >= options.minTokenDeltaForReminder
+          if (!cooldownElapsed) {
+            writeGatewayEventAudit(directory, {
+              hook: "context-window-monitor",
+              stage: "skip",
+              reason_code: "reminder_cooldown_not_elapsed",
+              session_id: sessionId,
+            })
+            return
+          }
+          if (!tokenDeltaEnough) {
+            writeGatewayEventAudit(directory, {
+              hook: "context-window-monitor",
+              stage: "skip",
+              reason_code: "reminder_token_delta_too_small",
+              session_id: sessionId,
+            })
+            return
+          }
+        }
+        sessionStates.set(sessionId, {
+          ...nextState,
+          lastWarnedAtToolCall: nextState.toolCalls,
+          lastWarnedTokens: totalInputTokens,
+        })
+        eventPayload.output.output = `${eventPayload.output.output}\n\nUse remaining context carefully and keep responses focused.\n${warningSuffix(totalInputTokens, actualLimit)}`
         writeGatewayEventAudit(directory, {
           hook: "context-window-monitor",
           stage: "state",

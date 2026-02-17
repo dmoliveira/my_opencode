@@ -59,11 +59,12 @@ test("context-window-monitor appends warning when Anthropic usage is high", asyn
   }
 })
 
-test("context-window-monitor warns only once until session deletion", async () => {
+test("context-window-monitor warns again after cooldown and token growth", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-context-window-"))
   const previousFlag = process.env.ANTHROPIC_1M_CONTEXT
   delete process.env.ANTHROPIC_1M_CONTEXT
   try {
+    let messageCalls = 0
     const plugin = GatewayCorePlugin({
       directory,
       config: {
@@ -75,11 +76,16 @@ test("context-window-monitor warns only once until session deletion", async () =
         contextWindowMonitor: {
           enabled: true,
           warningThreshold: 0.7,
+          reminderCooldownToolCalls: 2,
+          minTokenDeltaForReminder: 5000,
         },
       },
       client: {
         session: {
           async messages() {
+            messageCalls += 1
+            const tokensByCall = [190000, 193000, 196000, 197000, 203000]
+            const input = tokensByCall[Math.min(messageCalls - 1, tokensByCall.length - 1)]
             return {
               data: [
                 {
@@ -87,7 +93,7 @@ test("context-window-monitor warns only once until session deletion", async () =
                     role: "assistant",
                     providerID: "anthropic",
                     tokens: {
-                      input: 190000,
+                      input,
                       cache: { read: 0 },
                     },
                   },
@@ -107,6 +113,10 @@ test("context-window-monitor warns only once until session deletion", async () =
     await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-2" }, second)
     assert.equal(second.output, "second")
 
+    const third = { output: "third" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-2" }, third)
+    assert.ok(third.output.includes("Context Status"))
+
     await plugin.event({
       event: {
         type: "session.deleted",
@@ -114,9 +124,72 @@ test("context-window-monitor warns only once until session deletion", async () =
       },
     })
 
-    const third = { output: "third" }
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-2" }, third)
-    assert.ok(third.output.includes("Context Status"))
+    const fourth = { output: "fourth" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-2" }, fourth)
+    assert.ok(fourth.output.includes("Context Status"))
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ANTHROPIC_1M_CONTEXT
+    } else {
+      process.env.ANTHROPIC_1M_CONTEXT = previousFlag
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-window-monitor skips reminder when token delta stays below threshold", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-window-"))
+  const previousFlag = process.env.ANTHROPIC_1M_CONTEXT
+  delete process.env.ANTHROPIC_1M_CONTEXT
+  try {
+    let messageCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["context-window-monitor"],
+          disabled: [],
+        },
+        contextWindowMonitor: {
+          enabled: true,
+          warningThreshold: 0.7,
+          reminderCooldownToolCalls: 1,
+          minTokenDeltaForReminder: 20000,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            const tokensByCall = [190000, 195000]
+            const input = tokensByCall[Math.min(messageCalls - 1, tokensByCall.length - 1)]
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    providerID: "anthropic",
+                    tokens: {
+                      input,
+                      cache: { read: 0 },
+                    },
+                  },
+                },
+              ],
+            }
+          },
+        },
+      },
+    })
+
+    const first = { output: "first" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-3" }, first)
+    assert.ok(first.output.includes("Context Status"))
+
+    const second = { output: "second" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-3" }, second)
+    assert.equal(second.output, "second")
   } finally {
     if (previousFlag === undefined) {
       delete process.env.ANTHROPIC_1M_CONTEXT
