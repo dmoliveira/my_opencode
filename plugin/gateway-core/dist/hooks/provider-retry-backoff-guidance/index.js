@@ -1,6 +1,14 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage } from "../hook-message-injector/index.js";
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js";
+const RETRY_INITIAL_DELAY_MS = 2000;
+const RETRY_BACKOFF_FACTOR = 2;
+const RETRY_MAX_DELAY_NO_HEADERS_MS = 30000;
+function fallbackDelayMs(attempt) {
+    const normalizedAttempt = Math.max(1, Math.floor(attempt));
+    const raw = RETRY_INITIAL_DELAY_MS * RETRY_BACKOFF_FACTOR ** (normalizedAttempt - 1);
+    return Math.min(raw, RETRY_MAX_DELAY_NO_HEADERS_MS);
+}
 function resolveSessionId(payload) {
     const candidates = [payload.properties?.sessionID, payload.properties?.sessionId, payload.properties?.info?.id];
     for (const value of candidates) {
@@ -71,23 +79,22 @@ function extractText(payload) {
         .map((value) => (typeof value === "string" ? value : JSON.stringify(value ?? "")))
         .join("\n");
 }
-function buildHint(delayMs, reason) {
+function buildHint(delayMs, reason, usesHeaderDelay) {
     const lines = ["[provider RETRY BACKOFF]", "Provider retry guidance detected."];
     if (reason) {
         lines.push(`- Canonical reason: ${reason}`);
     }
-    if (typeof delayMs === "number" && Number.isFinite(delayMs) && delayMs > 0) {
-        const seconds = (delayMs / 1000).toFixed(1);
-        lines.push(`- Wait approximately ${seconds}s before the next provider retry`);
-    }
-    else {
-        lines.push("- Apply exponential backoff before the next provider retry");
+    const seconds = (delayMs / 1000).toFixed(1);
+    lines.push(`- Wait approximately ${seconds}s before the next provider retry`);
+    if (!usesHeaderDelay) {
+        lines.push(`- Apply exponential backoff before the next provider retry (cap ${RETRY_MAX_DELAY_NO_HEADERS_MS / 1000}s without retry headers)`);
     }
     lines.push("- Prefer short follow-up prompts while provider pressure persists");
     return lines.join("\n");
 }
 export function createProviderRetryBackoffGuidanceHook(options) {
     const lastInjectedAt = new Map();
+    const headerlessAttempts = new Map();
     return {
         id: "provider-retry-backoff-guidance",
         priority: 360,
@@ -99,6 +106,7 @@ export function createProviderRetryBackoffGuidanceHook(options) {
                 const sessionId = resolveSessionId((payload ?? {}));
                 if (sessionId) {
                     lastInjectedAt.delete(sessionId);
+                    headerlessAttempts.delete(sessionId);
                 }
                 return;
             }
@@ -127,19 +135,28 @@ export function createProviderRetryBackoffGuidanceHook(options) {
                 return;
             }
             const directory = resolveDirectory(eventPayload, options.directory);
-            const delayMs = parseRetryAfterMs(headers);
+            const parsedHeaderDelayMs = parseRetryAfterMs(headers);
+            const usesHeaderDelay = typeof parsedHeaderDelayMs === "number" && Number.isFinite(parsedHeaderDelayMs);
+            const attempt = usesHeaderDelay ? 1 : (headerlessAttempts.get(sessionId) ?? 0) + 1;
+            const delayMs = usesHeaderDelay ? Math.ceil(parsedHeaderDelayMs) : fallbackDelayMs(attempt);
             await injectHookMessage({
                 session,
                 sessionId,
-                content: buildHint(delayMs, reason?.message ?? null),
+                content: buildHint(delayMs, reason?.message ?? null, usesHeaderDelay),
                 directory,
             });
             writeGatewayEventAudit(directory, {
                 hook: "provider-retry-backoff-guidance",
                 stage: "state",
-                reason_code: delayMs ? "provider_retry_backoff_delay_hint" : "provider_retry_backoff_generic_hint",
+                reason_code: usesHeaderDelay ? "provider_retry_backoff_delay_hint" : "provider_retry_backoff_generic_hint",
                 session_id: sessionId,
             });
+            if (usesHeaderDelay) {
+                headerlessAttempts.set(sessionId, 0);
+            }
+            else {
+                headerlessAttempts.set(sessionId, attempt);
+            }
             lastInjectedAt.set(sessionId, now);
         },
     };
