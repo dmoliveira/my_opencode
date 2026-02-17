@@ -27,8 +27,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: context-injector resolved session from payload/message metadata only; no fallback to last known active session id when transform payload omitted session identity.
    - Delivered: context-injector now falls back to the last known active session id for transform payloads with missing session identity, clears fallback state on matching `session.deleted`, and includes regression test coverage for transform fallback behavior.
 
-5. [ ] Context collector metadata/introspection parity
-   - Pre-check required: verify what metadata APIs already exist after source:id dedupe work.
+5. [x] Context collector metadata/introspection parity
+   - Pre-check completed: collector supported source:id dedupe and consume, but lacked upstream-like introspection (`getPending().entries`) and metadata passthrough on entries/options.
+   - Delivered: added `getPending()` with structured `entries` introspection, added optional metadata on register/entry records, aligned `consume()` with pending-context shape while preserving compatibility, and expanded collector tests for empty shape, metadata roundtrip, and session-isolated consume behavior.
 
 6. [ ] Injector-level truncation/size guards
    - Pre-check required: review existing context truncation safeguards and audit reason codes.
