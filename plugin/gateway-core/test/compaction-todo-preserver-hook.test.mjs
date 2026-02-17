@@ -112,3 +112,44 @@ test("compaction-todo-preserver clears snapshot on session.deleted", async () =>
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("compaction-todo-preserver clears stale snapshot when marker disappears", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-compaction-todo-"))
+  try {
+    let promptCalls = 0
+    const hook = createCompactionTodoPreserverHook({
+      directory,
+      enabled: true,
+      maxChars: 4000,
+      client: {
+        session: {
+          async promptAsync() {
+            promptCalls += 1
+          },
+          async messages() {
+            return { data: [] }
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-compact-4" },
+      output: { output: "pending tasks remain\n<CONTINUE-LOOP>" },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-compact-4" },
+      output: { output: "all tasks complete" },
+    })
+    await hook.event("session.compacted", {
+      directory,
+      properties: { info: { id: "session-compact-4" } },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

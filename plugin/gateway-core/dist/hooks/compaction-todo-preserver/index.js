@@ -54,6 +54,7 @@ export function createCompactionTodoPreserverHook(options) {
                 }
                 const raw = eventPayload.output.output;
                 if (!raw.includes(CONTINUE_LOOP_MARKER)) {
+                    snapshotBySession.delete(sessionId);
                     return;
                 }
                 const truncated = truncateInjectedText(raw, options.maxChars);
