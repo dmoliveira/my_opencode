@@ -19,6 +19,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "stop-continuation-guard",
             "keyword-detector",
             "auto-slash-command",
+            "compaction-context-injector",
             "context-injector",
             "rules-injector",
             "directory-agents-injector",
@@ -87,6 +88,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         guardMarkerMode: "both",
         guardVerbosity: "normal",
         maxSessionStateEntries: 512,
+    },
+    compactionContextInjector: {
+        enabled: true,
     },
     sessionRecovery: {
         enabled: true,

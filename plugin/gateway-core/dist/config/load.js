@@ -69,6 +69,9 @@ export function loadGatewayConfig(raw) {
     const preemptiveCompactionSource = source.preemptiveCompaction && typeof source.preemptiveCompaction === "object"
         ? source.preemptiveCompaction
         : {};
+    const compactionContextInjectorSource = source.compactionContextInjector && typeof source.compactionContextInjector === "object"
+        ? source.compactionContextInjector
+        : {};
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
@@ -261,6 +264,11 @@ export function loadGatewayConfig(raw) {
             guardMarkerMode: markerMode(preemptiveCompactionSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardMarkerMode),
             guardVerbosity: guardVerbosity(preemptiveCompactionSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardVerbosity),
             maxSessionStateEntries: positiveInt(preemptiveCompactionSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.maxSessionStateEntries),
+        },
+        compactionContextInjector: {
+            enabled: typeof compactionContextInjectorSource.enabled === "boolean"
+                ? compactionContextInjectorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.compactionContextInjector.enabled,
         },
         sessionRecovery: {
             enabled: typeof sessionRecoverySource.enabled === "boolean"

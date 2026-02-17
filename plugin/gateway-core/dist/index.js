@@ -5,6 +5,7 @@ import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js"
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
 import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js";
 import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
+import { createCompactionContextInjectorHook } from "./hooks/compaction-context-injector/index.js";
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
@@ -121,6 +122,10 @@ function configuredHooks(ctx) {
             guardMarkerMode: cfg.preemptiveCompaction.guardMarkerMode,
             guardVerbosity: cfg.preemptiveCompaction.guardVerbosity,
             maxSessionStateEntries: cfg.preemptiveCompaction.maxSessionStateEntries,
+        }),
+        createCompactionContextInjectorHook({
+            directory,
+            enabled: cfg.compactionContextInjector.enabled,
         }),
         createSessionRecoveryHook({
             directory,

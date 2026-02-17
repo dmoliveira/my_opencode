@@ -44,6 +44,9 @@ export interface PreemptiveCompactionConfig {
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;
 }
+export interface CompactionContextInjectorConfig {
+    enabled: boolean;
+}
 export interface SessionRecoveryConfig {
     enabled: boolean;
     autoResume: boolean;
@@ -240,6 +243,7 @@ export interface GatewayConfig {
     toolOutputTruncator: ToolOutputTruncatorConfig;
     contextWindowMonitor: ContextWindowMonitorConfig;
     preemptiveCompaction: PreemptiveCompactionConfig;
+    compactionContextInjector: CompactionContextInjectorConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;

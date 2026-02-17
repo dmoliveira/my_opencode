@@ -15,6 +15,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
   assert.equal(config.preemptiveCompaction.guardMarkerMode, "both")
   assert.equal(config.preemptiveCompaction.guardVerbosity, "normal")
+  assert.equal(config.compactionContextInjector.enabled, true)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
