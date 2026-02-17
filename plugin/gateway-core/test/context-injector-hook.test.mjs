@@ -103,6 +103,78 @@ test("context-injector inserts synthetic part in message transform", async () =>
   }
 })
 
+test("context-injector resolves transform session from message info.sessionId", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-2b", {
+      source: "test",
+      content: "Transform sessionId context block",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+    })
+    const output = {
+      messages: [
+        { info: { role: "assistant" }, parts: [{ type: "text", text: "A" }] },
+        { info: { role: "user", id: "m1", sessionId: "session-context-2b" }, parts: [{ type: "text", text: "B" }] },
+      ],
+    }
+    await hook.event("experimental.chat.messages.transform", {
+      input: {},
+      output,
+      directory,
+    })
+
+    const userParts = output.messages[1].parts
+    assert.equal(userParts?.[0]?.type, "text")
+    assert.equal(userParts?.[0]?.synthetic, true)
+    assert.match(String(userParts?.[0]?.text), /Transform sessionId context block/)
+    assert.equal(collector.hasPending("session-context-2b"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector resolves transform session from message info.sessionID", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-2c", {
+      source: "test",
+      content: "Transform sessionID context block",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+    })
+    const output = {
+      messages: [
+        { info: { role: "assistant" }, parts: [{ type: "text", text: "A" }] },
+        { info: { role: "user", id: "m1", sessionID: "session-context-2c" }, parts: [{ type: "text", text: "B" }] },
+      ],
+    }
+    await hook.event("experimental.chat.messages.transform", {
+      input: {},
+      output,
+      directory,
+    })
+
+    const userParts = output.messages[1].parts
+    assert.equal(userParts?.[0]?.type, "text")
+    assert.equal(userParts?.[0]?.synthetic, true)
+    assert.match(String(userParts?.[0]?.text), /Transform sessionID context block/)
+    assert.equal(collector.hasPending("session-context-2c"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("context-injector requeue uses stable fallback context id", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
   try {
@@ -134,6 +206,47 @@ test("context-injector requeue uses stable fallback context id", async () => {
     assert.equal(calls[0]?.sessionId, "session-fallback")
     assert.equal(calls[0]?.options?.source, "context-injector-requeue")
     assert.equal(calls[0]?.options?.id, "chat-message-fallback")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector falls back to last known session id in transform", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+    })
+
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-fallback" },
+      output: { parts: [{ type: "text", text: "seed" }] },
+      directory,
+    })
+
+    collector.register("session-context-fallback", {
+      source: "test",
+      id: "fallback-transform",
+      content: "Fallback transform context",
+      priority: "high",
+    })
+
+    const output = {
+      messages: [{ info: { role: "user", id: "m2" }, parts: [{ type: "text", text: "B" }] }],
+    }
+    await hook.event("experimental.chat.messages.transform", {
+      input: {},
+      output,
+      directory,
+    })
+
+    const userParts = output.messages[0].parts
+    assert.equal(userParts?.[0]?.type, "text")
+    assert.equal(userParts?.[0]?.synthetic, true)
+    assert.match(String(userParts?.[0]?.text), /Fallback transform context/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

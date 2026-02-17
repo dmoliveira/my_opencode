@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 // Resolves session id from known payload variants.
-function resolveSessionId(payload) {
+function resolveSessionId(payload, fallbackSessionId = "") {
     const record = payload;
     const candidates = [
         record.input?.sessionID,
@@ -18,13 +18,15 @@ function resolveSessionId(payload) {
     const messages = transformPayload.output?.messages;
     if (Array.isArray(messages)) {
         for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-            const value = messages[idx]?.info?.sessionID;
-            if (typeof value === "string" && value.trim()) {
-                return value.trim();
+            const sessionIdCandidates = [messages[idx]?.info?.sessionID, messages[idx]?.info?.sessionId];
+            for (const value of sessionIdCandidates) {
+                if (typeof value === "string" && value.trim()) {
+                    return value.trim();
+                }
             }
         }
     }
-    return "";
+    return fallbackSessionId.trim();
 }
 // Injects pending context into mutable output parts.
 function injectIntoParts(parts, merged) {
@@ -37,6 +39,7 @@ function injectIntoParts(parts, merged) {
 }
 // Creates context injector that injects pending context on chat and transform hooks.
 export function createContextInjectorHook(options) {
+    let lastKnownSessionId = "";
     return {
         id: "context-injector",
         priority: 295,
@@ -48,7 +51,11 @@ export function createContextInjectorHook(options) {
                 const eventPayload = (payload ?? {});
                 const sessionId = eventPayload.properties?.info?.id;
                 if (typeof sessionId === "string" && sessionId.trim()) {
-                    options.collector.clear(sessionId.trim());
+                    const normalized = sessionId.trim();
+                    options.collector.clear(normalized);
+                    if (lastKnownSessionId === normalized) {
+                        lastKnownSessionId = "";
+                    }
                 }
                 return;
             }
@@ -57,7 +64,10 @@ export function createContextInjectorHook(options) {
                 const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                     ? eventPayload.directory
                     : options.directory;
-                const sessionId = resolveSessionId(eventPayload);
+                const sessionId = resolveSessionId(eventPayload, lastKnownSessionId);
+                if (sessionId) {
+                    lastKnownSessionId = sessionId;
+                }
                 const parts = eventPayload.output?.parts;
                 if (!sessionId || !Array.isArray(parts) || !options.collector.hasPending(sessionId)) {
                     return;
@@ -91,7 +101,10 @@ export function createContextInjectorHook(options) {
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
-            const sessionId = resolveSessionId(eventPayload);
+            const sessionId = resolveSessionId(eventPayload, lastKnownSessionId);
+            if (sessionId) {
+                lastKnownSessionId = sessionId;
+            }
             const messages = eventPayload.output?.messages;
             if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
                 return;
