@@ -125,6 +125,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.keywordDetector && typeof source.keywordDetector === "object"
       ? (source.keywordDetector as Record<string, unknown>)
       : {}
+  const thinkModeSource =
+    source.thinkMode && typeof source.thinkMode === "object"
+      ? (source.thinkMode as Record<string, unknown>)
+      : {}
+  const thinkingBlockValidatorSource =
+    source.thinkingBlockValidator && typeof source.thinkingBlockValidator === "object"
+      ? (source.thinkingBlockValidator as Record<string, unknown>)
+      : {}
   const autoSlashSource =
     source.autoSlashCommand && typeof source.autoSlashCommand === "object"
       ? (source.autoSlashCommand as Record<string, unknown>)
@@ -540,6 +548,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof keywordDetectorSource.enabled === "boolean"
           ? keywordDetectorSource.enabled
           : DEFAULT_GATEWAY_CONFIG.keywordDetector.enabled,
+    },
+    thinkMode: {
+      enabled:
+        typeof thinkModeSource.enabled === "boolean"
+          ? thinkModeSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.thinkMode.enabled,
+    },
+    thinkingBlockValidator: {
+      enabled:
+        typeof thinkingBlockValidatorSource.enabled === "boolean"
+          ? thinkingBlockValidatorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.thinkingBlockValidator.enabled,
     },
     autoSlashCommand: {
       enabled:

@@ -80,6 +80,12 @@ export interface StopContinuationGuardConfig {
 export interface KeywordDetectorConfig {
     enabled: boolean;
 }
+export interface ThinkModeConfig {
+    enabled: boolean;
+}
+export interface ThinkingBlockValidatorConfig {
+    enabled: boolean;
+}
 export interface AutoSlashCommandConfig {
     enabled: boolean;
 }
@@ -273,6 +279,8 @@ export interface GatewayConfig {
     adaptiveValidationScheduler: AdaptiveValidationSchedulerConfig;
     stopContinuationGuard: StopContinuationGuardConfig;
     keywordDetector: KeywordDetectorConfig;
+    thinkMode: ThinkModeConfig;
+    thinkingBlockValidator: ThinkingBlockValidatorConfig;
     autoSlashCommand: AutoSlashCommandConfig;
     rulesInjector: RulesInjectorConfig;
     directoryAgentsInjector: DirectoryAgentsInjectorConfig;

@@ -106,6 +106,16 @@ export interface KeywordDetectorConfig {
   enabled: boolean
 }
 
+// Declares think-mode settings for structured reasoning reminders.
+export interface ThinkModeConfig {
+  enabled: boolean
+}
+
+// Declares thinking block validator settings for malformed block detection.
+export interface ThinkingBlockValidatorConfig {
+  enabled: boolean
+}
+
 // Declares auto slash routing settings for command-like natural prompts.
 export interface AutoSlashCommandConfig {
   enabled: boolean
@@ -376,6 +386,8 @@ export interface GatewayConfig {
   adaptiveValidationScheduler: AdaptiveValidationSchedulerConfig
   stopContinuationGuard: StopContinuationGuardConfig
   keywordDetector: KeywordDetectorConfig
+  thinkMode: ThinkModeConfig
+  thinkingBlockValidator: ThinkingBlockValidatorConfig
   autoSlashCommand: AutoSlashCommandConfig
   rulesInjector: RulesInjectorConfig
   directoryAgentsInjector: DirectoryAgentsInjectorConfig
@@ -434,6 +446,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "adaptive-validation-scheduler",
       "stop-continuation-guard",
       "keyword-detector",
+      "think-mode",
+      "thinking-block-validator",
       "auto-slash-command",
       "compaction-context-injector",
       "context-injector",
@@ -554,6 +568,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   keywordDetector: {
+    enabled: true,
+  },
+  thinkMode: {
+    enabled: true,
+  },
+  thinkingBlockValidator: {
     enabled: true,
   },
   autoSlashCommand: {
