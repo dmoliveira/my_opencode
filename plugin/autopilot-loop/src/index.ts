@@ -106,12 +106,33 @@ function parseGoal(rest: string): string {
 
 // Determines whether slashcommand should start autopilot loop handling.
 function isAutopilotStartCommand(command: string): boolean {
-  return command === "autopilot" || command === "autopilot-go" || command === "continue-work" || command === "autopilot-objective" || command === "ralph-loop"
+  return command === "autopilot-go" || command === "autopilot-resume" || command === "continue-work" || command === "autopilot-objective"
 }
 
 // Determines whether slashcommand should cancel autopilot loop handling.
 function isAutopilotStopCommand(command: string): boolean {
-  return command === "autopilot-stop" || command === "cancel-ralph"
+  return command === "autopilot-stop" || command === "autopilot-pause"
+}
+
+// Resolves whether /autopilot should start, stop, or be ignored.
+function resolveAutopilotAction(command: string, rest: string): "start" | "stop" | "none" {
+  if (isAutopilotStopCommand(command)) {
+    return "stop"
+  }
+  if (command === "autopilot") {
+    const head = rest.trim().split(/\s+/)[0]?.toLowerCase() ?? ""
+    if (!head || head === "start" || head === "go" || head === "resume" || head === "continue") {
+      return "start"
+    }
+    if (head === "stop" || head === "pause") {
+      return "stop"
+    }
+    return "none"
+  }
+  if (isAutopilotStartCommand(command)) {
+    return "start"
+  }
+  return "none"
 }
 
 // Resolves session id from event properties.
@@ -261,11 +282,12 @@ export default function AutopilotLoopPlugin(ctx: HookContext): PluginShape {
     }
 
     const parsed = parseCommand(commandRaw)
-    if (isAutopilotStopCommand(parsed.name)) {
+    const action = resolveAutopilotAction(parsed.name, parsed.rest)
+    if (action === "stop") {
       loop.cancelLoop(input.sessionID)
       return
     }
-    if (!isAutopilotStartCommand(parsed.name)) {
+    if (action !== "start") {
       return
     }
 

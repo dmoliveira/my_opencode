@@ -81,3 +81,69 @@ test("stop-continuation-guard blocks idle continuation after stop command", asyn
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("stop-continuation-guard handles command.execute.before pause flow", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-stop-guard-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-stop-2",
+        objective: "do work",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 0,
+        startedAt: new Date().toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test",
+    })
+
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["stop-continuation-guard", "continuation"],
+          disabled: ["autopilot-loop"],
+        },
+        stopContinuationGuard: { enabled: true },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "still running" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin["command.execute.before"](
+      { command: "autopilot-pause", sessionID: "session-stop-2" },
+      { parts: [] },
+    )
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-stop-2" },
+      },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

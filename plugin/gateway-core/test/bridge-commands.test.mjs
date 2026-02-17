@@ -31,16 +31,19 @@ test("parseAutopilotTemplateCommand maps rendered template command", () => {
 
 test("resolveAutopilotAction handles start and stop forms", () => {
   assert.equal(resolveAutopilotAction("autopilot", "go --goal ship"), "start")
+  assert.equal(resolveAutopilotAction("autopilot", "start --goal ship"), "start")
+  assert.equal(resolveAutopilotAction("autopilot", ""), "start")
   assert.equal(resolveAutopilotAction("autopilot", "stop --reason hold"), "stop")
   assert.equal(resolveAutopilotAction("autopilot-resume", ""), "start")
   assert.equal(resolveAutopilotAction("autopilot-pause", ""), "stop")
-  assert.equal(resolveAutopilotAction("cancel-ralph", ""), "stop")
+  assert.equal(resolveAutopilotAction("autopilot", "status --json"), "none")
+  assert.equal(resolveAutopilotAction("autopilot", "report --json"), "none")
+  assert.equal(resolveAutopilotAction("autopilot", "doctor --json"), "none")
   assert.equal(resolveAutopilotAction("help", ""), "none")
 })
 
-test("compatibility aliases normalize to canonical autopilot names", () => {
-  assert.equal(canonicalAutopilotCommandName("ralph-loop"), "autopilot-go")
-  assert.equal(canonicalAutopilotCommandName("cancel-ralph"), "autopilot-stop")
+test("canonical autopilot command mapping is identity", () => {
+  assert.equal(canonicalAutopilotCommandName("autopilot-go"), "autopilot-go")
   assert.equal(canonicalAutopilotCommandName("autopilot"), "autopilot")
 })
 
@@ -69,14 +72,20 @@ test("reason code catalog includes runtime routing reasons", () => {
 
 test("command parsers resolve completion and goal defaults", () => {
   assert.equal(parseCompletionMode("--completion-mode objective"), "objective")
+  assert.equal(parseCompletionMode("--completion-mode=objective"), "objective")
   assert.equal(parseCompletionMode(""), "promise")
   assert.equal(parseCompletionPromise('--completion-promise "DONE_NOW"', "DONE"), "DONE_NOW")
+  assert.equal(parseCompletionPromise("--completion-promise=DONE_NOW", "DONE"), "DONE_NOW")
   assert.equal(parseCompletionPromise("", "DONE"), "DONE")
   assert.equal(parseMaxIterations("--max-iterations 25", 100), 25)
+  assert.equal(parseMaxIterations("--max-iterations=25", 100), 25)
   assert.equal(parseMaxIterations("--max-iterations 0", 100), 0)
+  assert.equal(parseGoal("--goal=ship --max-budget balanced"), "ship")
+  assert.equal(parseGoal('--goal="close checklist" --max-budget balanced'), "close checklist")
   assert.equal(parseGoal('--goal "close checklist" --max-budget balanced'), "close checklist")
   assert.deepEqual(
     parseDoneCriteria('--done-criteria "item 1; item 2; item 3" --scope "**"'),
     ["item 1", "item 2", "item 3"]
   )
+  assert.deepEqual(parseDoneCriteria('--done-criteria="item 1; item 2" --scope "**"'), ["item 1", "item 2"])
 })

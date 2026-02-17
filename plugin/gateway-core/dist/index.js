@@ -48,6 +48,8 @@ import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
+import { contextCollector } from "./hooks/context-injector/collector.js";
+import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx) {
@@ -70,6 +72,7 @@ function configuredHooks(ctx) {
                 completionMode: cfg.autopilotLoop.completionMode,
                 completionPromise: cfg.autopilotLoop.completionPromise,
             },
+            collector: contextCollector,
         }),
         createContinuationHook({
             directory,
@@ -142,6 +145,11 @@ function configuredHooks(ctx) {
         createAutoSlashCommandHook({
             directory,
             enabled: cfg.autoSlashCommand.enabled,
+        }),
+        createContextInjectorHook({
+            directory,
+            enabled: cfg.hooks.enabled,
+            collector: contextCollector,
         }),
         createRulesInjectorHook({
             directory,
@@ -359,6 +367,20 @@ export default function GatewayCorePlugin(ctx) {
             await hook.event("tool.execute.before", { input, output, directory });
         }
     }
+    // Dispatches command execution interception event to ordered hooks.
+    async function commandExecuteBefore(input, output) {
+        writeGatewayEventAudit(directory, {
+            hook: "gateway-core",
+            stage: "dispatch",
+            reason_code: "command_execute_before_dispatch",
+            event_type: "command.execute.before",
+            command: input.command,
+            hook_count: hooks.length,
+        });
+        for (const hook of hooks) {
+            await hook.event("command.execute.before", { input, output, directory });
+        }
+    }
     // Dispatches slash command post-execution event to ordered hooks.
     async function toolExecuteAfter(input, output) {
         writeGatewayEventAudit(directory, {
@@ -394,10 +416,30 @@ export default function GatewayCorePlugin(ctx) {
             });
         }
     }
+    // Dispatches experimental chat transform lifecycle signal to ordered hooks.
+    async function chatMessagesTransform(input, output) {
+        writeGatewayEventAudit(directory, {
+            hook: "gateway-core",
+            stage: "dispatch",
+            reason_code: "chat_messages_transform_dispatch",
+            event_type: "experimental.chat.messages.transform",
+            has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+            hook_count: hooks.length,
+        });
+        for (const hook of hooks) {
+            await hook.event("experimental.chat.messages.transform", {
+                input,
+                output,
+                directory,
+            });
+        }
+    }
     return {
         event,
         "tool.execute.before": toolExecuteBefore,
+        "command.execute.before": commandExecuteBefore,
         "tool.execute.after": toolExecuteAfter,
         "chat.message": chatMessage,
+        "experimental.chat.messages.transform": chatMessagesTransform,
     };
 }

@@ -29,11 +29,10 @@ TypeScript scaffold is added at `plugin/autopilot-loop/`:
 - `plugin/autopilot-loop/src/constants.ts` - stable defaults
 - `plugin/autopilot-loop/package.json` + lint/format/build tooling
 
-Compatibility aliases now available:
+Canonical command surface:
 
-- `/ralph-loop "task"` -> promise-mode `/autopilot` run
-- `/cancel-ralph` -> stop active run
-- Canonical command surface remains `/autopilot*`; `ralph-*` names are compatibility-only.
+- `/autopilot*` commands are the only loop controls.
+- Ralph compatibility aliases were removed to simplify command routing and hook injection.
 
 Config wiring target (optional, requires bun runtime):
 

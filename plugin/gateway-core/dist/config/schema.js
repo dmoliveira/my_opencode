@@ -19,6 +19,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "stop-continuation-guard",
             "keyword-detector",
             "auto-slash-command",
+            "context-injector",
             "rules-injector",
             "directory-agents-injector",
             "directory-readme-injector",

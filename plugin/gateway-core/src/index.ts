@@ -48,6 +48,8 @@ import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js"
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js"
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js"
+import { contextCollector } from "./hooks/context-injector/collector.js"
+import { createContextInjectorHook } from "./hooks/context-injector/index.js"
 import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js"
 
 // Declares minimal plugin event payload shape for gateway dispatch.
@@ -101,6 +103,18 @@ interface ToolAfterInput {
   sessionID?: string
 }
 
+// Declares minimal command execute before input shape.
+interface CommandBeforeInput {
+  command: string
+  arguments?: string
+  sessionID?: string
+}
+
+// Declares minimal command execute before mutable output shape.
+interface CommandBeforeOutput {
+  parts?: Array<{ type: string; text?: string }>
+}
+
 // Declares minimal slash command post-execution mutable output shape.
 interface ToolAfterOutput {
   output?: unknown
@@ -119,6 +133,14 @@ interface ChatMessageInput {
 // Declares mutable chat message payload shape for prompt rewriting hooks.
 interface ChatMessageOutput {
   parts?: Array<{ type: string; text?: string }>
+}
+
+// Declares experimental chat messages transform mutable output shape.
+interface ChatMessagesTransformOutput {
+  messages: Array<{
+    info?: { role?: string; id?: string; sessionID?: string }
+    parts?: Array<{ type?: string; text?: string }>
+  }>
 }
 
 // Creates ordered hook list using gateway config and default hooks.
@@ -142,6 +164,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         completionMode: cfg.autopilotLoop.completionMode,
         completionPromise: cfg.autopilotLoop.completionPromise,
       },
+      collector: contextCollector,
     }),
     createContinuationHook({
       directory,
@@ -214,6 +237,11 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAutoSlashCommandHook({
       directory,
       enabled: cfg.autoSlashCommand.enabled,
+    }),
+    createContextInjectorHook({
+      directory,
+      enabled: cfg.hooks.enabled,
+      collector: contextCollector,
     }),
     createRulesInjectorHook({
       directory,
@@ -401,8 +429,13 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
 export default function GatewayCorePlugin(ctx: GatewayContext): {
   event(input: GatewayEventPayload): Promise<void>
   "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>
+  "command.execute.before"(input: CommandBeforeInput, output: CommandBeforeOutput): Promise<void>
   "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>
   "chat.message"(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void>
+  "experimental.chat.messages.transform"(
+    input: { sessionID?: string },
+    output: ChatMessagesTransformOutput,
+  ): Promise<void>
 } {
   const hooks = configuredHooks(ctx)
   const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd()
@@ -437,6 +470,24 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     })
     for (const hook of hooks) {
       await hook.event("tool.execute.before", { input, output, directory })
+    }
+  }
+
+  // Dispatches command execution interception event to ordered hooks.
+  async function commandExecuteBefore(
+    input: CommandBeforeInput,
+    output: CommandBeforeOutput,
+  ): Promise<void> {
+    writeGatewayEventAudit(directory, {
+      hook: "gateway-core",
+      stage: "dispatch",
+      reason_code: "command_execute_before_dispatch",
+      event_type: "command.execute.before",
+      command: input.command,
+      hook_count: hooks.length,
+    })
+    for (const hook of hooks) {
+      await hook.event("command.execute.before", { input, output, directory })
     }
   }
 
@@ -477,10 +528,34 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     }
   }
 
+  // Dispatches experimental chat transform lifecycle signal to ordered hooks.
+  async function chatMessagesTransform(
+    input: { sessionID?: string },
+    output: ChatMessagesTransformOutput,
+  ): Promise<void> {
+    writeGatewayEventAudit(directory, {
+      hook: "gateway-core",
+      stage: "dispatch",
+      reason_code: "chat_messages_transform_dispatch",
+      event_type: "experimental.chat.messages.transform",
+      has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+      hook_count: hooks.length,
+    })
+    for (const hook of hooks) {
+      await hook.event("experimental.chat.messages.transform", {
+        input,
+        output,
+        directory,
+      })
+    }
+  }
+
   return {
     event,
     "tool.execute.before": toolExecuteBefore,
+    "command.execute.before": commandExecuteBefore,
     "tool.execute.after": toolExecuteAfter,
     "chat.message": chatMessage,
+    "experimental.chat.messages.transform": chatMessagesTransform,
   }
 }

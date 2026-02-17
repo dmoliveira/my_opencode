@@ -124,7 +124,10 @@ def hook_diagnostics(pdir: Path) -> dict[str, Any]:
         "dist_index_exists": dist_index.exists(),
         "dist_hooks_exist": all(path.exists() for path in dist_hook_files),
         "dist_exposes_tool_execute_before": '"tool.execute.before"' in content,
+        "dist_exposes_command_execute_before": '"command.execute.before"' in content,
         "dist_exposes_chat_message": '"chat.message"' in content,
+        "dist_exposes_messages_transform": '"experimental.chat.messages.transform"'
+        in content,
         "dist_autopilot_handles_slashcommand": "tool.execute.before"
         in autopilot_loop_content
         and "slashcommand" in autopilot_loop_content,
@@ -153,7 +156,9 @@ def gateway_runtime_mode(
 ) -> dict[str, Any]:
     required_dist_flags = [
         "dist_exposes_tool_execute_before",
+        "dist_exposes_command_execute_before",
         "dist_exposes_chat_message",
+        "dist_exposes_messages_transform",
         "dist_autopilot_handles_slashcommand",
         "dist_continuation_handles_session_idle",
         "dist_safety_handles_session_deleted",
@@ -298,7 +303,9 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
     hooks = hooks_any if isinstance(hooks_any, dict) else {}
     required_dist_flags = [
         "dist_exposes_tool_execute_before",
+        "dist_exposes_command_execute_before",
         "dist_exposes_chat_message",
+        "dist_exposes_messages_transform",
         "dist_autopilot_handles_slashcommand",
         "dist_continuation_handles_session_idle",
         "dist_safety_handles_session_deleted",
@@ -395,7 +402,9 @@ def command_doctor(as_json: bool) -> int:
     if status["plugin_dist_exists"] and hooks:
         required_dist_flags = [
             "dist_exposes_tool_execute_before",
+            "dist_exposes_command_execute_before",
             "dist_exposes_chat_message",
+            "dist_exposes_messages_transform",
             "dist_autopilot_handles_slashcommand",
             "dist_continuation_handles_session_idle",
             "dist_safety_handles_session_deleted",
