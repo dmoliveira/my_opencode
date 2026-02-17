@@ -215,12 +215,22 @@ export function createTodoContinuationEnforcerHook(options: {
       let pending = state.pendingContinuation
       const client = options.client?.session
       if (!pending && client && !state.markerProbeAttempted) {
-        const response = await client.messages({
-          path: { id: sessionId },
-          query: { directory },
-        })
-        pending = hasPendingMarker(Array.isArray(response.data) ? response.data : [])
-        state.markerProbeAttempted = true
+        try {
+          const response = await client.messages({
+            path: { id: sessionId },
+            query: { directory },
+          })
+          pending = hasPendingMarker(Array.isArray(response.data) ? response.data : [])
+          state.markerProbeAttempted = true
+        } catch {
+          writeGatewayEventAudit(directory, {
+            hook: "todo-continuation-enforcer",
+            stage: "skip",
+            reason_code: "todo_continuation_probe_failed",
+            session_id: sessionId,
+          })
+          return
+        }
       }
       state.pendingContinuation = pending
       if (!pending || !client) {
