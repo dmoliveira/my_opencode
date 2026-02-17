@@ -39,5 +39,6 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: hook-level tests existed for command parsing, collector behavior, and transform injection independently, but end-to-end plugin tests covering command/slashcommand -> collector registration -> transform injection chain were missing.
    - Delivered: added integration tests for tool-command and command.execute.before producer paths into collector, negative non-start flow, and one-shot consume behavior across repeated transform calls.
 
-8. [ ] Injector reason-code granularity
-   - Pre-check required: compare current reason-code catalog with desired injector outcome taxonomy.
+8. [x] Injector reason-code granularity
+   - Pre-check completed: injector hooks emitted coarse reason-code coverage (mostly injected-only) with missing granular outcomes for requeue/missing-user/duplicate-context suppression paths.
+   - Delivered: expanded injector reason-code taxonomy in shared catalog, wired granular context-injector and compaction-context-injector outcomes (inject, truncate, requeue, duplicate, missing-user, missing-parts), and added audit-backed tests for the new branches.

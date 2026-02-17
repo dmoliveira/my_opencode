@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { REASON_CODES } from "../../bridge/reason-codes.js";
 const COMPACTION_CONTEXT_TEXT = [
     "[COMPACTION CONTEXT]",
     "When summarizing this session, include:",
@@ -29,6 +30,9 @@ export function createCompactionContextInjectorHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
+            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                ? eventPayload.directory
+                : options.directory;
             const command = typeof eventPayload.input?.command === "string" ? eventPayload.input.command : "";
             if (!isCompactionCommand(command)) {
                 return;
@@ -37,17 +41,24 @@ export function createCompactionContextInjectorHook(options) {
                 eventPayload.output.parts = [];
             }
             const parts = eventPayload.output?.parts;
-            if (!Array.isArray(parts) || hasCompactionMarker(parts)) {
+            if (!Array.isArray(parts)) {
+                return;
+            }
+            if (hasCompactionMarker(parts)) {
+                writeGatewayEventAudit(directory, {
+                    hook: "compaction-context-injector",
+                    stage: "inject",
+                    reason_code: REASON_CODES.COMPACTION_CONTEXT_ALREADY_PRESENT,
+                    session_id: typeof eventPayload.input?.sessionID === "string" ? eventPayload.input.sessionID : "",
+                    command: command.trim(),
+                });
                 return;
             }
             parts.unshift({ type: "text", text: COMPACTION_CONTEXT_TEXT });
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
             writeGatewayEventAudit(directory, {
                 hook: "compaction-context-injector",
                 stage: "inject",
-                reason_code: "compaction_context_injected",
+                reason_code: REASON_CODES.COMPACTION_CONTEXT_INJECTED,
                 session_id: typeof eventPayload.input?.sessionID === "string" ? eventPayload.input.sessionID : "",
                 command: command.trim(),
             });

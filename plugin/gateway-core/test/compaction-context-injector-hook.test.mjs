@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -8,6 +8,8 @@ import GatewayCorePlugin from "../dist/index.js"
 
 test("compaction-context-injector prepends context for summarize command", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-compaction-context-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -35,7 +37,17 @@ test("compaction-context-injector prepends context for summarize command", async
 
     assert.equal(output.parts.length > 1, true)
     assert.match(String(output.parts[0]?.text), /\[COMPACTION CONTEXT\]/)
+    const lines = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(lines.some((entry) => entry.reason_code === "compaction_context_injected"))
   } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
@@ -75,6 +87,8 @@ test("compaction-context-injector skips non-compaction commands", async () => {
 
 test("compaction-context-injector avoids duplicate marker injection", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-compaction-context-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -103,7 +117,17 @@ test("compaction-context-injector avoids duplicate marker injection", async () =
     )
 
     assert.equal(output.parts.length, 1)
+    const lines = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(lines.some((entry) => entry.reason_code === "compaction_context_already_present"))
   } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
