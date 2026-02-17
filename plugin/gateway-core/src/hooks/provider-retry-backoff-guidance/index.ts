@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
+import { classifyProviderRetryReason } from "../shared/provider-retry-reason.js"
 
 interface GatewayClient {
   session?: {
@@ -23,8 +24,6 @@ interface EventPayload {
     error?: unknown
   }
 }
-
-const SIGNAL_PATTERNS = [/too many requests/i, /rate limit/i, /retry after/i, /overloaded/i]
 
 function resolveSessionId(payload: EventPayload): string {
   const candidates = [payload.properties?.sessionID, payload.properties?.sessionId, payload.properties?.info?.id]
@@ -82,11 +81,7 @@ function normalizeHeaders(value: unknown): Record<string, string> {
 }
 
 function extractHeaders(payload: EventPayload): Record<string, string> {
-  const candidates: unknown[] = [
-    payload.error,
-    payload.message,
-    payload.properties?.error,
-  ]
+  const candidates: unknown[] = [payload.error, payload.message, payload.properties?.error]
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== "object") {
       continue
@@ -104,22 +99,17 @@ function extractHeaders(payload: EventPayload): Record<string, string> {
   return {}
 }
 
-function hasRetrySignal(payload: EventPayload): boolean {
-  const headers = extractHeaders(payload)
-  if (headers["retry-after"] || headers["retry-after-ms"]) {
-    return true
-  }
-  const merged = [payload.error, payload.message, payload.properties?.error]
+function extractText(payload: EventPayload): string {
+  return [payload.error, payload.message, payload.properties?.error]
     .map((value) => (typeof value === "string" ? value : JSON.stringify(value ?? "")))
     .join("\n")
-  return SIGNAL_PATTERNS.some((pattern) => pattern.test(merged))
 }
 
-function buildHint(delayMs: number | null): string {
-  const lines = [
-    "[provider RETRY BACKOFF]",
-    "Provider retry guidance detected.",
-  ]
+function buildHint(delayMs: number | null, reason: string | null): string {
+  const lines = ["[provider RETRY BACKOFF]", "Provider retry guidance detected."]
+  if (reason) {
+    lines.push(`- Canonical reason: ${reason}`)
+  }
   if (typeof delayMs === "number" && Number.isFinite(delayMs) && delayMs > 0) {
     const seconds = (delayMs / 1000).toFixed(1)
     lines.push(`- Wait approximately ${seconds}s before the next provider retry`)
@@ -155,7 +145,9 @@ export function createProviderRetryBackoffGuidanceHook(options: {
         return
       }
       const eventPayload = (payload ?? {}) as EventPayload
-      if (!hasRetrySignal(eventPayload)) {
+      const headers = extractHeaders(eventPayload)
+      const reason = classifyProviderRetryReason(extractText(eventPayload))
+      if (!reason && !headers["retry-after"] && !headers["retry-after-ms"]) {
         return
       }
       const sessionId = resolveSessionId(eventPayload)
@@ -170,11 +162,11 @@ export function createProviderRetryBackoffGuidanceHook(options: {
         return
       }
       const directory = resolveDirectory(eventPayload, options.directory)
-      const delayMs = parseRetryAfterMs(extractHeaders(eventPayload))
+      const delayMs = parseRetryAfterMs(headers)
       await injectHookMessage({
         session,
         sessionId,
-        content: buildHint(delayMs),
+        content: buildHint(delayMs, reason?.message ?? null),
         directory,
       })
       writeGatewayEventAudit(directory, {
