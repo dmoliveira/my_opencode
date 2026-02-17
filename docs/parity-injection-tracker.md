@@ -49,8 +49,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: local rules injector used static per-tool text and lacked file-aware rule discovery, frontmatter matching, and session-compaction cache reset behavior.
    - Delivered: added file-aware rule discovery from common rule directories, frontmatter `applyTo` matching (scalar/inline-array/yaml-list), copilot always-apply support, title/metadata file-path resolution, session dedupe with compaction reset, and expanded integration tests including brace-glob matching.
 
-10. [ ] Session guidance + continuation helpers parity
-   - Goal: bring user-facing session reminders and todo-continuation enforcement behavior closer to upstream.
+10. [x] Session guidance + continuation helpers parity
+   - Pre-check completed: no direct upstream hook files were available in this checkout, so parity was mapped to local analogs (`agent-user-reminder` and `task-resume-info`) with stronger session-aware guidance and continuation behavior.
+   - Delivered: upgraded reminders to session-aware guidance with dedupe/reset on session lifecycle events, strengthened continuation hints for pending loop output, and added comprehensive tests for one-time reminder behavior, compaction reset, continuation hinting, and duplicate suppression.
 
 11. [ ] Thought workflow guardrails parity
    - Goal: align think-mode and thinking-block validator behavior for safer reasoning flows.
