@@ -1,6 +1,31 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const DEFAULT_ACTUAL_LIMIT = 200_000;
 const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
+function guardPrefix(mode) {
+    if (mode === "plain") {
+        return "[Context Guard]:";
+    }
+    if (mode === "both") {
+        return "󰚩 Context Guard [Context Guard]:";
+    }
+    return CONTEXT_GUARD_PREFIX;
+}
+function pruneSessionStates(states, maxEntries) {
+    if (states.size <= maxEntries) {
+        return;
+    }
+    let oldestKey = "";
+    let oldestAt = Number.POSITIVE_INFINITY;
+    for (const [key, state] of states.entries()) {
+        if (state.lastSeenAtMs < oldestAt) {
+            oldestAt = state.lastSeenAtMs;
+            oldestKey = key;
+        }
+    }
+    if (oldestKey) {
+        states.delete(oldestKey);
+    }
+}
 // Resolves effective session id across payload variants.
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
@@ -53,12 +78,15 @@ export function createPreemptiveCompactionHook(options) {
                 toolCalls: 0,
                 lastCompactedAtToolCall: 0,
                 lastCompactedTokens: 0,
+                lastSeenAtMs: Date.now(),
             };
             const nextState = {
                 ...priorState,
                 toolCalls: priorState.toolCalls + 1,
+                lastSeenAtMs: Date.now(),
             };
             sessionStates.set(sessionId, nextState);
+            pruneSessionStates(sessionStates, options.maxSessionStateEntries);
             if (compactionInProgress.has(sessionId)) {
                 return;
             }
@@ -117,7 +145,16 @@ export function createPreemptiveCompactionHook(options) {
                     query: { directory },
                 });
                 if (typeof eventPayload.output?.output === "string") {
-                    eventPayload.output.output = `${eventPayload.output.output}\n\n${CONTEXT_GUARD_PREFIX} Preemptive compaction triggered to reduce context pressure.`;
+                    const prefix = guardPrefix(options.guardMarkerMode);
+                    if (options.guardVerbosity === "minimal") {
+                        eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} Preemptive compaction triggered.`;
+                    }
+                    else if (options.guardVerbosity === "debug") {
+                        eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} Preemptive compaction triggered to reduce context pressure.\n[threshold ${(options.warningThreshold * 100).toFixed(1)}%, cooldown=${options.compactionCooldownToolCalls} calls, min_delta=${options.minTokenDeltaForCompaction} tokens]`;
+                    }
+                    else {
+                        eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} Preemptive compaction triggered to reduce context pressure.`;
+                    }
                 }
                 sessionStates.set(sessionId, {
                     ...nextState,

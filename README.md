@@ -1598,6 +1598,9 @@ Notes:
 - `/gateway doctor --json` now includes `hook_diagnostics`, plugin entry dedupe telemetry, and process/runtime pressure diagnostics; it still fails when gateway is enabled without a valid built hook surface.
 - set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
 - trigger-only context warnings now include a Nerd Font marker (`󰚩 Context Guard:`) so pressure events stand out without adding steady-state noise.
+- context guard markers now support dual fallback mode (`󰚩 Context Guard [Context Guard]:`) and configurable verbosity (`minimal`, `normal`, `debug`) in gateway hook config.
+- `/gateway status --json` now reports `guard_event_counters` (warning/compaction counts and latest trigger timestamp).
+- `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
 
 Gateway event audit baseline (recommended before memory tuning):
 

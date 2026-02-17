@@ -31,12 +31,18 @@ export interface ContextWindowMonitorConfig {
     warningThreshold: number;
     reminderCooldownToolCalls: number;
     minTokenDeltaForReminder: number;
+    guardMarkerMode: "nerd" | "plain" | "both";
+    guardVerbosity: "minimal" | "normal" | "debug";
+    maxSessionStateEntries: number;
 }
 export interface PreemptiveCompactionConfig {
     enabled: boolean;
     warningThreshold: number;
     compactionCooldownToolCalls: number;
     minTokenDeltaForCompaction: number;
+    guardMarkerMode: "nerd" | "plain" | "both";
+    guardVerbosity: "minimal" | "normal" | "debug";
+    maxSessionStateEntries: number;
 }
 export interface SessionRecoveryConfig {
     enabled: boolean;

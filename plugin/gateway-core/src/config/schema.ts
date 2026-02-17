@@ -42,6 +42,9 @@ export interface ContextWindowMonitorConfig {
   warningThreshold: number
   reminderCooldownToolCalls: number
   minTokenDeltaForReminder: number
+  guardMarkerMode: "nerd" | "plain" | "both"
+  guardVerbosity: "minimal" | "normal" | "debug"
+  maxSessionStateEntries: number
 }
 
 // Declares preemptive compaction settings for high token pressure sessions.
@@ -50,6 +53,9 @@ export interface PreemptiveCompactionConfig {
   warningThreshold: number
   compactionCooldownToolCalls: number
   minTokenDeltaForCompaction: number
+  guardMarkerMode: "nerd" | "plain" | "both"
+  guardVerbosity: "minimal" | "normal" | "debug"
+  maxSessionStateEntries: number
 }
 
 // Declares session recovery settings for event-driven auto-resume attempts.
@@ -455,12 +461,18 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     warningThreshold: 0.7,
     reminderCooldownToolCalls: 12,
     minTokenDeltaForReminder: 25_000,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 512,
   },
   preemptiveCompaction: {
     enabled: true,
     warningThreshold: 0.78,
     compactionCooldownToolCalls: 10,
     minTokenDeltaForCompaction: 35_000,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 512,
   },
   sessionRecovery: {
     enabled: true,

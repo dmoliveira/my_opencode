@@ -47,5 +47,8 @@ export declare function createPreemptiveCompactionHook(options: {
     warningThreshold: number;
     compactionCooldownToolCalls: number;
     minTokenDeltaForCompaction: number;
+    guardMarkerMode: "nerd" | "plain" | "both";
+    guardVerbosity: "minimal" | "normal" | "debug";
+    maxSessionStateEntries: number;
 }): GatewayHook;
 export {};

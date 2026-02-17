@@ -199,6 +199,9 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       warningThreshold: cfg.contextWindowMonitor.warningThreshold,
       reminderCooldownToolCalls: cfg.contextWindowMonitor.reminderCooldownToolCalls,
       minTokenDeltaForReminder: cfg.contextWindowMonitor.minTokenDeltaForReminder,
+      guardMarkerMode: cfg.contextWindowMonitor.guardMarkerMode,
+      guardVerbosity: cfg.contextWindowMonitor.guardVerbosity,
+      maxSessionStateEntries: cfg.contextWindowMonitor.maxSessionStateEntries,
     }),
     createPreemptiveCompactionHook({
       directory,
@@ -207,6 +210,9 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       warningThreshold: cfg.preemptiveCompaction.warningThreshold,
       compactionCooldownToolCalls: cfg.preemptiveCompaction.compactionCooldownToolCalls,
       minTokenDeltaForCompaction: cfg.preemptiveCompaction.minTokenDeltaForCompaction,
+      guardMarkerMode: cfg.preemptiveCompaction.guardMarkerMode,
+      guardVerbosity: cfg.preemptiveCompaction.guardVerbosity,
+      maxSessionStateEntries: cfg.preemptiveCompaction.maxSessionStateEntries,
     }),
     createSessionRecoveryHook({
       directory,

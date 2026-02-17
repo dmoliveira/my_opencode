@@ -39,7 +39,7 @@ from gateway_plugin_bridge import (  # type: ignore
 # Prints usage for gateway command.
 def usage() -> int:
     print(
-        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json]"
+        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json] | /gateway tune memory [--json]"
     )
     return 2
 
@@ -74,6 +74,98 @@ def gateway_event_audit_path(cwd: Path) -> Path:
     if raw:
         return Path(raw).expanduser()
     return cwd / ".opencode" / "gateway-events.jsonl"
+
+
+def gateway_event_counters(cwd: Path) -> dict[str, Any]:
+    path = gateway_event_audit_path(cwd)
+    if not path.exists():
+        return {
+            "audit_path": str(path),
+            "total_events": 0,
+            "context_warnings_triggered": 0,
+            "compactions_triggered": 0,
+            "recent_window_minutes": 30,
+            "recent_context_warnings": 0,
+            "recent_compactions": 0,
+            "last_triggered_at": None,
+        }
+
+    total_events = 0
+    context_warnings = 0
+    compactions = 0
+    recent_context_warnings = 0
+    recent_compactions = 0
+    recent_window_minutes = 30
+    now_utc = datetime.now(UTC)
+    last_triggered_at: str | None = None
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                text = line.strip()
+                if not text:
+                    continue
+                try:
+                    payload = json.loads(text)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                total_events += 1
+                reason_code = str(payload.get("reason_code") or "")
+                event_time: datetime | None = None
+                for key in ("timestamp", "ts", "time"):
+                    event_time = parse_iso(payload.get(key))
+                    if event_time is not None:
+                        break
+                in_recent_window = False
+                if event_time is not None:
+                    delta_seconds = (now_utc - event_time).total_seconds()
+                    in_recent_window = (
+                        0 <= delta_seconds <= (recent_window_minutes * 60)
+                    )
+                if reason_code == "context_warning_appended":
+                    context_warnings += 1
+                    if in_recent_window:
+                        recent_context_warnings += 1
+                elif reason_code == "session_compacted_preemptively":
+                    compactions += 1
+                    if in_recent_window:
+                        recent_compactions += 1
+                if reason_code in {
+                    "context_warning_appended",
+                    "session_compacted_preemptively",
+                }:
+                    if event_time is not None:
+                        last_triggered_at = event_time.isoformat()
+                    else:
+                        for key in ("timestamp", "ts", "time"):
+                            value = payload.get(key)
+                            if isinstance(value, str) and value.strip():
+                                last_triggered_at = value.strip()
+                                break
+    except (OSError, UnicodeDecodeError):
+        return {
+            "audit_path": str(path),
+            "total_events": 0,
+            "context_warnings_triggered": 0,
+            "compactions_triggered": 0,
+            "recent_window_minutes": recent_window_minutes,
+            "recent_context_warnings": 0,
+            "recent_compactions": 0,
+            "last_triggered_at": None,
+            "read_error": True,
+        }
+
+    return {
+        "audit_path": str(path),
+        "total_events": total_events,
+        "context_warnings_triggered": context_warnings,
+        "compactions_triggered": compactions,
+        "recent_window_minutes": recent_window_minutes,
+        "recent_context_warnings": recent_context_warnings,
+        "recent_compactions": recent_compactions,
+        "last_triggered_at": last_triggered_at,
+    }
 
 
 def parse_iso(value: Any) -> datetime | None:
@@ -391,6 +483,7 @@ def status_payload(
         "event_audit_enabled": gateway_event_audit_enabled(),
         "event_audit_path": str(gateway_event_audit_path(cwd)),
         "event_audit_exists": gateway_event_audit_path(cwd).exists(),
+        "guard_event_counters": gateway_event_counters(cwd),
         "runtime_staleness": runtime_staleness(home),
         "process_pressure": process_pressure(),
     }
@@ -621,6 +714,85 @@ def command_doctor(as_json: bool) -> int:
     return 0 if not problems else 1
 
 
+def command_tune_memory(as_json: bool) -> int:
+    home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
+    config, _ = load_config()
+    status = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
+    counters_any = status.get("guard_event_counters")
+    counters = counters_any if isinstance(counters_any, dict) else {}
+    process_any = status.get("process_pressure")
+    process = process_any if isinstance(process_any, dict) else {}
+
+    warnings_count = int(counters.get("recent_context_warnings") or 0)
+    compactions_count = int(counters.get("recent_compactions") or 0)
+    continue_count = int(process.get("continue_process_count") or 0)
+    audit_enabled = status.get("event_audit_enabled") is True
+
+    current = {
+        "contextWindowMonitor": config.get("contextWindowMonitor", {}),
+        "preemptiveCompaction": config.get("preemptiveCompaction", {}),
+    }
+    recommended = {
+        "contextWindowMonitor": {
+            "warningThreshold": 0.72,
+            "reminderCooldownToolCalls": 14,
+            "minTokenDeltaForReminder": 30000,
+            "guardMarkerMode": "both",
+            "guardVerbosity": "normal",
+            "maxSessionStateEntries": 512,
+        },
+        "preemptiveCompaction": {
+            "warningThreshold": 0.8,
+            "compactionCooldownToolCalls": 12,
+            "minTokenDeltaForCompaction": 40000,
+            "guardMarkerMode": "both",
+            "guardVerbosity": "normal",
+            "maxSessionStateEntries": 512,
+        },
+    }
+    rationale: list[str] = [
+        "keep guard markers trigger-only to avoid steady-state noise",
+        "use dual marker mode for Nerd Font + plain fallback readability",
+        "cap per-session state maps to limit long-runtime memory growth",
+    ]
+    if not audit_enabled:
+        rationale.append(
+            "event audit is disabled; recent trigger counters may be incomplete"
+        )
+    if warnings_count >= 5:
+        rationale.append(
+            "high warning frequency in recent window; increase reminder cooldown or token delta"
+        )
+    if compactions_count >= 3:
+        rationale.append(
+            "frequent compactions in recent window; increase compaction cooldown and minimum token delta"
+        )
+    if continue_count >= 3:
+        rationale.append(
+            "multiple concurrent --continue sessions detected; prune stale sessions to reduce pressure"
+        )
+
+    payload = {
+        "result": "PASS",
+        "profile": "memory-balanced",
+        "status_snapshot": {
+            "runtime_mode": status.get("runtime_mode"),
+            "process_pressure": process,
+            "guard_event_counters": counters,
+        },
+        "current": current,
+        "recommended": recommended,
+        "rationale": rationale,
+        "next_steps": [
+            "apply recommended values under contextWindowMonitor and preemptiveCompaction",
+            "run /gateway status --json and /gateway doctor --json",
+            "collect 20-30 minute baseline with MY_OPENCODE_GATEWAY_EVENT_AUDIT=1",
+        ],
+    }
+    emit(payload, as_json=as_json)
+    return 0
+
+
 # Dispatches gateway command subcommands.
 def main(argv: list[str]) -> int:
     args = list(argv)
@@ -635,9 +807,13 @@ def main(argv: list[str]) -> int:
     if not args:
         return command_status(as_json)
     cmd = args.pop(0)
-    if args:
-        return usage()
     if cmd in {"help", "--help", "-h"}:
+        return usage()
+    if cmd == "tune":
+        if len(args) == 1 and args[0] == "memory":
+            return command_tune_memory(as_json)
+        return usage()
+    if args:
         return usage()
     if cmd == "status":
         return command_status(as_json)

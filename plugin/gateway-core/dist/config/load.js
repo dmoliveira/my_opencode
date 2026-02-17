@@ -36,6 +36,18 @@ function boundedFloat(value, min, max, fallback) {
     }
     return parsed;
 }
+function markerMode(value, fallback) {
+    if (value === "nerd" || value === "plain" || value === "both") {
+        return value;
+    }
+    return fallback;
+}
+function guardVerbosity(value, fallback) {
+    if (value === "minimal" || value === "normal" || value === "debug") {
+        return value;
+    }
+    return fallback;
+}
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
@@ -235,6 +247,9 @@ export function loadGatewayConfig(raw) {
             warningThreshold: boundedFloat(contextWindowSource.warningThreshold, 0.5, 0.95, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.warningThreshold),
             reminderCooldownToolCalls: positiveInt(contextWindowSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.reminderCooldownToolCalls),
             minTokenDeltaForReminder: nonNegativeInt(contextWindowSource.minTokenDeltaForReminder, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.minTokenDeltaForReminder),
+            guardMarkerMode: markerMode(contextWindowSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.guardMarkerMode),
+            guardVerbosity: guardVerbosity(contextWindowSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.guardVerbosity),
+            maxSessionStateEntries: positiveInt(contextWindowSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.maxSessionStateEntries),
         },
         preemptiveCompaction: {
             enabled: typeof preemptiveCompactionSource.enabled === "boolean"
@@ -243,6 +258,9 @@ export function loadGatewayConfig(raw) {
             warningThreshold: boundedFloat(preemptiveCompactionSource.warningThreshold, 0.6, 0.95, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.warningThreshold),
             compactionCooldownToolCalls: positiveInt(preemptiveCompactionSource.compactionCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.compactionCooldownToolCalls),
             minTokenDeltaForCompaction: nonNegativeInt(preemptiveCompactionSource.minTokenDeltaForCompaction, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.minTokenDeltaForCompaction),
+            guardMarkerMode: markerMode(preemptiveCompactionSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardMarkerMode),
+            guardVerbosity: guardVerbosity(preemptiveCompactionSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardVerbosity),
+            maxSessionStateEntries: positiveInt(preemptiveCompactionSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.maxSessionStateEntries),
         },
         sessionRecovery: {
             enabled: typeof sessionRecoverySource.enabled === "boolean"
