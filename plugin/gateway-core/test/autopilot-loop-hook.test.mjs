@@ -196,3 +196,41 @@ test("autopilot-loop pause preserves objective and resume restores it", async ()
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("autopilot-loop registers objective summary with stable context id", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
+  try {
+    const calls = []
+    const hook = createAutopilotLoopHook({
+      directory,
+      defaults: {
+        enabled: true,
+        maxIterations: 7,
+        completionMode: "promise",
+        completionPromise: "DONE",
+      },
+      collector: {
+        register(sessionId, options) {
+          calls.push({ sessionId, options })
+        },
+      },
+    })
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-summary",
+        args: { command: '/autopilot go --goal "ship summary"' },
+      },
+      output: {},
+      directory,
+    })
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.sessionId, "session-summary")
+    assert.equal(calls[0]?.options?.source, "autopilot-loop")
+    assert.equal(calls[0]?.options?.id, "objective-summary")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

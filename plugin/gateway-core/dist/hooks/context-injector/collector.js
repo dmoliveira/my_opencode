@@ -7,16 +7,32 @@ const PRIORITY_ORDER = {
 // Stores pending per-session context blocks that should be injected once.
 export class ContextCollector {
     sessions = new Map();
+    // Resolves deterministic map key used for source:id de-duplication.
+    keyFor(options) {
+        const source = options.source.trim();
+        const id = typeof options.id === "string" ? options.id.trim() : "";
+        if (id) {
+            return JSON.stringify(["id", source, id]);
+        }
+        return JSON.stringify(["content", source, options.content]);
+    }
     // Adds a context block for a session.
     register(sessionId, options) {
         const normalizedSession = sessionId.trim();
+        const normalizedSource = options.source.trim();
         const normalizedContent = options.content.trim();
-        if (!normalizedSession || !normalizedContent) {
+        if (!normalizedSession || !normalizedSource || !normalizedContent) {
             return;
         }
-        const current = this.sessions.get(normalizedSession) ?? [];
-        current.push({
-            source: options.source,
+        const current = this.sessions.get(normalizedSession) ?? new Map();
+        const key = this.keyFor({
+            source: normalizedSource,
+            id: options.id,
+            content: normalizedContent,
+        });
+        current.set(key, {
+            id: typeof options.id === "string" && options.id.trim() ? options.id.trim() : "",
+            source: normalizedSource,
             content: normalizedContent,
             priority: options.priority ?? "normal",
             timestamp: Date.now(),
@@ -26,17 +42,18 @@ export class ContextCollector {
     // Returns true when the session has pending injection content.
     hasPending(sessionId) {
         const current = this.sessions.get(sessionId.trim());
-        return Array.isArray(current) && current.length > 0;
+        return current instanceof Map && current.size > 0;
     }
     // Consumes pending session context and returns merged text.
     consume(sessionId) {
         const normalizedSession = sessionId.trim();
-        const current = this.sessions.get(normalizedSession) ?? [];
+        const current = this.sessions.get(normalizedSession);
         this.sessions.delete(normalizedSession);
-        if (current.length === 0) {
+        const entries = current ? [...current.values()] : [];
+        if (entries.length === 0) {
             return { hasContent: false, merged: "" };
         }
-        const merged = current
+        const merged = entries
             .slice()
             .sort((a, b) => {
             const prioDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];

@@ -102,3 +102,39 @@ test("context-injector inserts synthetic part in message transform", async () =>
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("context-injector requeue uses stable fallback context id", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const calls = []
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector: {
+        hasPending() {
+          return true
+        },
+        consume() {
+          return { hasContent: true, merged: "Fallback context" }
+        },
+        register(sessionId, options) {
+          calls.push({ sessionId, options })
+        },
+        clear() {},
+      },
+    })
+
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-fallback" },
+      output: { parts: [{ type: "tool-call" }] },
+      directory,
+    })
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.sessionId, "session-fallback")
+    assert.equal(calls[0]?.options?.source, "context-injector-requeue")
+    assert.equal(calls[0]?.options?.id, "chat-message-fallback")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

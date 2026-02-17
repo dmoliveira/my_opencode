@@ -120,6 +120,7 @@ export function createContextInjectorHook(options: {
         if (!injectIntoParts(parts, pending.merged)) {
           options.collector.register(sessionId, {
             source: "context-injector-requeue",
+            id: "chat-message-fallback",
             content: pending.merged,
             priority: "high",
           })

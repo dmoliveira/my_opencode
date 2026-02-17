@@ -1,4 +1,5 @@
 interface ContextEntry {
+    id: string;
     source: string;
     content: string;
     priority: "critical" | "high" | "normal" | "low";
@@ -6,8 +7,10 @@ interface ContextEntry {
 }
 export declare class ContextCollector {
     private sessions;
+    private keyFor;
     register(sessionId: string, options: {
         source: string;
+        id?: string;
         content: string;
         priority?: ContextEntry["priority"];
     }): void;
