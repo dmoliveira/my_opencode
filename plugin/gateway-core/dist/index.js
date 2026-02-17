@@ -43,6 +43,7 @@ import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blo
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
+import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js";
 import { createThinkModeHook } from "./hooks/think-mode/index.js";
 import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validator/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
@@ -246,6 +247,12 @@ function configuredHooks(ctx) {
             stopGuard,
             cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
             maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
+        }),
+        createCompactionTodoPreserverHook({
+            directory,
+            enabled: cfg.compactionTodoPreserver.enabled,
+            client: ctx.client,
+            maxChars: cfg.compactionTodoPreserver.maxChars,
         }),
         createEmptyTaskResponseDetectorHook({
             enabled: cfg.emptyTaskResponseDetector.enabled,
