@@ -19,6 +19,8 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "adaptive-validation-scheduler",
             "stop-continuation-guard",
             "keyword-detector",
+            "think-mode",
+            "thinking-block-validator",
             "auto-slash-command",
             "compaction-context-injector",
             "context-injector",
@@ -139,6 +141,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     keywordDetector: {
+        enabled: true,
+    },
+    thinkMode: {
+        enabled: true,
+    },
+    thinkingBlockValidator: {
         enabled: true,
     },
     autoSlashCommand: {

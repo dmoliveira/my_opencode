@@ -99,6 +99,12 @@ export function loadGatewayConfig(raw) {
     const keywordDetectorSource = source.keywordDetector && typeof source.keywordDetector === "object"
         ? source.keywordDetector
         : {};
+    const thinkModeSource = source.thinkMode && typeof source.thinkMode === "object"
+        ? source.thinkMode
+        : {};
+    const thinkingBlockValidatorSource = source.thinkingBlockValidator && typeof source.thinkingBlockValidator === "object"
+        ? source.thinkingBlockValidator
+        : {};
     const autoSlashSource = source.autoSlashCommand && typeof source.autoSlashCommand === "object"
         ? source.autoSlashCommand
         : {};
@@ -344,6 +350,16 @@ export function loadGatewayConfig(raw) {
             enabled: typeof keywordDetectorSource.enabled === "boolean"
                 ? keywordDetectorSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.keywordDetector.enabled,
+        },
+        thinkMode: {
+            enabled: typeof thinkModeSource.enabled === "boolean"
+                ? thinkModeSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.thinkMode.enabled,
+        },
+        thinkingBlockValidator: {
+            enabled: typeof thinkingBlockValidatorSource.enabled === "boolean"
+                ? thinkingBlockValidatorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.thinkingBlockValidator.enabled,
         },
         autoSlashCommand: {
             enabled: typeof autoSlashSource.enabled === "boolean"

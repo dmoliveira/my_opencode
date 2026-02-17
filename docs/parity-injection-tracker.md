@@ -53,8 +53,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: no direct upstream hook files were available in this checkout, so parity was mapped to local analogs (`agent-user-reminder` and `task-resume-info`) with stronger session-aware guidance and continuation behavior.
    - Delivered: upgraded reminders to session-aware guidance with dedupe/reset on session lifecycle events, strengthened continuation hints for pending loop output, and added comprehensive tests for one-time reminder behavior, compaction reset, continuation hinting, and duplicate suppression.
 
-11. [ ] Thought workflow guardrails parity
-   - Goal: align think-mode and thinking-block validator behavior for safer reasoning flows.
+11. [x] Thought workflow guardrails parity
+   - Pre-check completed: no direct upstream implementation files were present in the current checkout, so parity is being delivered through local hook additions (`think-mode` and `thinking-block-validator`) aligned to the documented guardrail goal.
+   - Delivered: added session-aware `think-mode` guidance with lifecycle reset semantics, added `thinking-block-validator` for malformed/misordered thinking tags across text parts, wired both hooks into config/loading/default order, and added dedicated hook + config tests.
 
 12. [ ] Directory guidance depth parity
    - Goal: move from path-notice injection toward richer AGENTS/README content injection with safe truncation.

@@ -26,6 +26,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.globalProcessPressure.criticalPauseAfterEvents, 1)
   assert.equal(config.globalProcessPressure.criticalEscalationAfterEvents, 3)
   assert.equal(config.globalProcessPressure.notifyOnCritical, true)
+  assert.equal(config.thinkMode.enabled, true)
+  assert.equal(config.thinkingBlockValidator.enabled, true)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
