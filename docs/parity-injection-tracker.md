@@ -97,9 +97,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: no local hook handles upstream-style plan/build mode transition reminders. Confirmed on latest main there is no dedicated plan-mode/build-mode transition guidance hook.
     - Delivered: added `mode-transition-reminder` hook for plan/build reminder detection, session-aware duplicate suppression/reset on `session.deleted`, config/default/order + loader wiring, and dedicated regression tests.
 
-21. [ ] Todo-read proactive cadence parity
+21. [x] Todo-read proactive cadence parity
     - Pre-check completed: local workflow blocks `task`/`todowrite`, but no proactive `todoread` reminder cadence exists. Confirmed on latest main there is no hook that nudges periodic todo-list reads in-session.
-    - Goal: add a lightweight cadence hook that reminds proactive todo reads at safe checkpoints (session start, before new task blocks, and after completion markers).
+    - Delivered: added `todoread-cadence-reminder` hook for session-start/checkpoint todo-read reminders on tool output, session reset on `session.deleted`, cooldown controls, config/default/order + loader wiring, and dedicated regression tests.
 
 22. [ ] Provider retry-after backoff guidance parity
     - Pre-check completed: local provider recovery handles token-limit compaction, but no retry-after header/backoff guidance path exists. Confirmed on latest main there is no retry-delay parser (`retry-after-ms`/`retry-after`/HTTP date) in gateway recovery hooks.

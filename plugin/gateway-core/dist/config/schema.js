@@ -43,6 +43,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "hashline-read-enhancer",
             "max-step-recovery",
             "mode-transition-reminder",
+            "todoread-cadence-reminder",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -249,6 +250,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     modeTransitionReminder: {
         enabled: true,
+    },
+    todoreadCadenceReminder: {
+        enabled: true,
+        cooldownEvents: 2,
     },
     commentChecker: {
         enabled: true,

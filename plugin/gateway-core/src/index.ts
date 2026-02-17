@@ -20,6 +20,7 @@ import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-lim
 import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/index.js"
 import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js"
 import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js"
+import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-reminder/index.js"
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js"
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js"
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js"
@@ -386,6 +387,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     }),
     createModeTransitionReminderHook({
       enabled: cfg.modeTransitionReminder.enabled,
+    }),
+    createTodoreadCadenceReminderHook({
+      enabled: cfg.todoreadCadenceReminder.enabled,
+      cooldownEvents: cfg.todoreadCadenceReminder.cooldownEvents,
     }),
     createCommentCheckerHook({
       enabled: cfg.commentChecker.enabled,

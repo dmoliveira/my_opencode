@@ -150,6 +150,10 @@ export interface MaxStepRecoveryConfig {
 export interface ModeTransitionReminderConfig {
     enabled: boolean;
 }
+export interface TodoreadCadenceReminderConfig {
+    enabled: boolean;
+    cooldownEvents: number;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -340,6 +344,7 @@ export interface GatewayConfig {
     hashlineReadEnhancer: HashlineReadEnhancerConfig;
     maxStepRecovery: MaxStepRecoveryConfig;
     modeTransitionReminder: ModeTransitionReminderConfig;
+    todoreadCadenceReminder: TodoreadCadenceReminderConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
