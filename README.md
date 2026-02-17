@@ -1386,6 +1386,8 @@ Supported plugin names: `notifier`, `morph`, `worktree`.
 
 `all` applies only to the stable set: `notifier`.
 
+Migration note: `supermemory` and `wakatime` were removed from this repo. If either still exists in a layered config override, remove those plugin entries manually or run `/plugin profile lean`.
+
 `/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
 
 `/plugin doctor --json` (or `/plugin-doctor-json`) prints machine-readable diagnostics for automation.
