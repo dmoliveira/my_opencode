@@ -123,9 +123,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: upstream `packages/opencode/src/session/retry.ts` normalizes retry reasons (for example `Too Many Requests`, `Rate Limited`, `Provider is overloaded`, free-usage credit hint), but local provider hooks do not expose canonical retry reason mapping. Confirmed on latest main with no canonical reason mapper in `plugin/gateway-core/src/hooks`.
     - Delivered: added shared `provider-retry-reason` canonicalization utility and wired it into provider retry-backoff and error-classifier hooks for consistent retry reason mapping/message text, plus dedicated shared regression tests.
 
-27. [ ] Context-overflow non-retry suppression parity
+27. [x] Context-overflow non-retry suppression parity
     - Pre-check completed: upstream `SessionRetry.retryable` explicitly treats context overflow as non-retryable, while local provider recovery hooks do not have explicit context-overflow skip logic. Confirmed on latest main with no `ContextOverflowError`/context-overflow suppression path in gateway hooks.
-    - Goal: add explicit non-retry suppression for context-overflow signatures to prevent unnecessary provider retry nudges and preserve deterministic remediation guidance.
+    - Delivered: added explicit context-overflow non-retry suppression in provider retry-backoff and error-classifier hooks using shared overflow detection utility, preventing retry nudges on non-retryable overflow failures, with dedicated regression tests.
 
 28. [ ] Retry delay clamp parity (headerless backoff cap)
     - Pre-check completed: upstream `SessionRetry.delay` caps headerless retry delay (`RETRY_MAX_DELAY_NO_HEADERS = 30000`) and handles retry headers; local retry-backoff guidance parses headers but does not enforce a canonical headerless delay clamp policy. Confirmed on latest main with no explicit no-header retry-delay cap in gateway retry guidance.
