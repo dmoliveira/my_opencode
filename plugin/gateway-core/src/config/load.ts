@@ -424,6 +424,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         globalProcessPressureSource.reminderCooldownToolCalls,
         DEFAULT_GATEWAY_CONFIG.globalProcessPressure.reminderCooldownToolCalls,
       ),
+      criticalReminderCooldownToolCalls: positiveInt(
+        globalProcessPressureSource.criticalReminderCooldownToolCalls,
+        DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalReminderCooldownToolCalls,
+      ),
       warningContinueSessions: positiveInt(
         globalProcessPressureSource.warningContinueSessions,
         DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningContinueSessions,
@@ -436,6 +440,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         globalProcessPressureSource.warningMaxRssMb,
         DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningMaxRssMb,
       ),
+      criticalMaxRssMb: positiveInt(
+        globalProcessPressureSource.criticalMaxRssMb,
+        DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalMaxRssMb,
+      ),
+      autoPauseOnCritical:
+        typeof globalProcessPressureSource.autoPauseOnCritical === "boolean"
+          ? globalProcessPressureSource.autoPauseOnCritical
+          : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.autoPauseOnCritical,
       guardMarkerMode: markerMode(
         globalProcessPressureSource.guardMarkerMode,
         DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardMarkerMode,

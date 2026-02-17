@@ -2,6 +2,7 @@ import { execSync } from "node:child_process"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
 interface ToolAfterPayload {
   input?: {
@@ -16,6 +17,7 @@ interface ToolAfterPayload {
 
 interface SessionPressureState {
   lastWarnedAtToolCall: number
+  lastCriticalWarnedAtToolCall: number
   lastSeenAtMs: number
 }
 
@@ -119,12 +121,16 @@ function sampleProcessPressure(): PressureSample {
 
 export function createGlobalProcessPressureHook(options: {
   directory: string
+  stopGuard?: StopContinuationGuard
   enabled: boolean
   checkCooldownToolCalls: number
   reminderCooldownToolCalls: number
+  criticalReminderCooldownToolCalls: number
   warningContinueSessions: number
   warningOpencodeProcesses: number
   warningMaxRssMb: number
+  criticalMaxRssMb: number
+  autoPauseOnCritical: boolean
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
@@ -156,6 +162,7 @@ export function createGlobalProcessPressureHook(options: {
       globalToolCalls += 1
       const priorState = sessionStates.get(sessionId) ?? {
         lastWarnedAtToolCall: 0,
+        lastCriticalWarnedAtToolCall: 0,
         lastSeenAtMs: Date.now(),
       }
       const nextState: SessionPressureState = {
@@ -194,11 +201,12 @@ export function createGlobalProcessPressureHook(options: {
       if (!sample) {
         return
       }
-      const thresholdExceeded =
+      const warningExceeded =
         sample.continueProcessCount >= options.warningContinueSessions ||
         sample.opencodeProcessCount >= options.warningOpencodeProcesses ||
         sample.maxRssMb >= options.warningMaxRssMb
-      if (!thresholdExceeded) {
+      const criticalExceeded = sample.maxRssMb >= options.criticalMaxRssMb
+      if (!warningExceeded && !criticalExceeded) {
         writeGatewayEventAudit(directory, {
           hook: "global-process-pressure",
           stage: "skip",
@@ -207,40 +215,75 @@ export function createGlobalProcessPressureHook(options: {
         })
         return
       }
-      if (
-        nextState.lastWarnedAtToolCall > 0 &&
-        globalToolCalls - nextState.lastWarnedAtToolCall < options.reminderCooldownToolCalls
-      ) {
+      const activeCooldownCalls = criticalExceeded
+        ? options.criticalReminderCooldownToolCalls
+        : options.reminderCooldownToolCalls
+      const lastWarnedAt = criticalExceeded
+        ? nextState.lastCriticalWarnedAtToolCall
+        : nextState.lastWarnedAtToolCall
+      if (lastWarnedAt > 0 && globalToolCalls - lastWarnedAt < activeCooldownCalls) {
         writeGatewayEventAudit(directory, {
           hook: "global-process-pressure",
           stage: "skip",
-          reason_code: "global_pressure_reminder_cooldown",
+          reason_code: criticalExceeded
+            ? "global_pressure_critical_cooldown"
+            : "global_pressure_reminder_cooldown",
           session_id: sessionId,
         })
         return
       }
 
       const outputText = eventPayload.output.output
-      if (
-        outputText.includes("[ERROR]") ||
-        outputText.includes("[TOOL OUTPUT TRUNCATED]")
-      ) {
+      const outputAppendAllowed =
+        !outputText.includes("[ERROR]") &&
+        !outputText.includes("[TOOL OUTPUT TRUNCATED]")
+
+      const prefix = guardPrefix(options.guardMarkerMode)
+      if (criticalExceeded) {
+        if (outputAppendAllowed) {
+          if (options.guardVerbosity === "minimal") {
+            eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected.`
+          } else if (options.guardVerbosity === "debug") {
+            eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected.\n[continue_sessions=${sample.continueProcessCount}, opencode_processes=${sample.opencodeProcessCount}, max_rss_mb=${sample.maxRssMb.toFixed(1)}, critical_rss_mb=${options.criticalMaxRssMb}]`
+          } else {
+            eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected; continuation for this session is being auto-paused.`
+          }
+        }
+        if (options.autoPauseOnCritical) {
+          options.stopGuard?.forceStop(
+            sessionId,
+            "continuation_stopped_critical_memory_pressure",
+          )
+        }
+        sessionStates.set(sessionId, {
+          ...nextState,
+          lastWarnedAtToolCall: globalToolCalls,
+          lastCriticalWarnedAtToolCall: globalToolCalls,
+        })
         writeGatewayEventAudit(directory, {
           hook: "global-process-pressure",
-          stage: "skip",
-          reason_code: "global_pressure_output_append_skipped",
+          stage: "state",
+          reason_code: outputAppendAllowed
+            ? "global_process_pressure_critical_appended"
+            : "global_process_pressure_critical_detected_no_append",
           session_id: sessionId,
+          continue_sessions: sample.continueProcessCount,
+          opencode_processes: sample.opencodeProcessCount,
+          max_rss_mb: Number(sample.maxRssMb.toFixed(1)),
+          critical_rss_mb: options.criticalMaxRssMb,
+          auto_pause: options.autoPauseOnCritical,
         })
         return
       }
 
-      const prefix = guardPrefix(options.guardMarkerMode)
-      if (options.guardVerbosity === "minimal") {
-        eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high.`
-      } else if (options.guardVerbosity === "debug") {
-        eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high.\n[continue_sessions=${sample.continueProcessCount}, opencode_processes=${sample.opencodeProcessCount}, max_rss_mb=${sample.maxRssMb.toFixed(1)}]`
-      } else {
-        eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high; memory risk increases with many concurrent sessions.`
+      if (outputAppendAllowed) {
+        if (options.guardVerbosity === "minimal") {
+          eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high.`
+        } else if (options.guardVerbosity === "debug") {
+          eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high.\n[continue_sessions=${sample.continueProcessCount}, opencode_processes=${sample.opencodeProcessCount}, max_rss_mb=${sample.maxRssMb.toFixed(1)}]`
+        } else {
+          eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high; memory risk increases with many concurrent sessions.`
+        }
       }
       sessionStates.set(sessionId, {
         ...nextState,
@@ -249,7 +292,9 @@ export function createGlobalProcessPressureHook(options: {
       writeGatewayEventAudit(directory, {
         hook: "global-process-pressure",
         stage: "state",
-        reason_code: "global_process_pressure_warning_appended",
+        reason_code: outputAppendAllowed
+          ? "global_process_pressure_warning_appended"
+          : "global_process_pressure_warning_detected_no_append",
         session_id: sessionId,
         continue_sessions: sample.continueProcessCount,
         opencode_processes: sample.opencodeProcessCount,

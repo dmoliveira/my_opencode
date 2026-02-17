@@ -48,6 +48,19 @@ export function createStopContinuationGuardHook(options) {
         isStopped(sessionId) {
             return stoppedSessions.has(sessionId);
         },
+        forceStop(sessionId, reasonCode = "continuation_stopped_forced") {
+            if (!sessionId.trim()) {
+                return;
+            }
+            const resolvedSessionId = sessionId.trim();
+            stoppedSessions.add(resolvedSessionId);
+            writeGatewayEventAudit(options.directory, {
+                hook: "stop-continuation-guard",
+                stage: "state",
+                reason_code: reasonCode,
+                session_id: resolvedSessionId,
+            });
+        },
         async event(type, payload) {
             if (!options.enabled) {
                 return;

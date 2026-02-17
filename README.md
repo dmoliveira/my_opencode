@@ -1601,6 +1601,7 @@ Notes:
 - context guard markers now support dual fallback mode (`󰚩 Context Guard [Context Guard]:`) and configurable verbosity (`minimal`, `normal`, `debug`) in gateway hook config.
 - context and compaction safeguards now apply across providers (not Anthropic-only), using a configurable default context limit for non-Anthropic providers.
 - global multi-session pressure warnings now trigger via `global-process-pressure` when concurrent `--continue` sessions/process counts or RSS exceed thresholds.
+- critical global RSS pressure (`>= 10GB` by default) now emits a critical guard event and auto-pauses continuation for the current session.
 - `/gateway status --json` now reports `guard_event_counters` (warning/compaction/global-pressure counts and latest trigger timestamp).
 - `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
 

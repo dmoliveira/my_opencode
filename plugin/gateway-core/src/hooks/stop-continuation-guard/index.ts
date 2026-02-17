@@ -9,6 +9,7 @@ import type { GatewayHook } from "../registry.js"
 // Declares guard interface exposed to continuation hook.
 export interface StopContinuationGuard {
   isStopped(sessionId: string): boolean
+  forceStop(sessionId: string, reasonCode?: string): void
 }
 
 interface ToolBeforePayload {
@@ -97,6 +98,19 @@ export function createStopContinuationGuardHook(options: {
     priority: 295,
     isStopped(sessionId: string): boolean {
       return stoppedSessions.has(sessionId)
+    },
+    forceStop(sessionId: string, reasonCode = "continuation_stopped_forced"): void {
+      if (!sessionId.trim()) {
+        return
+      }
+      const resolvedSessionId = sessionId.trim()
+      stoppedSessions.add(resolvedSessionId)
+      writeGatewayEventAudit(options.directory, {
+        hook: "stop-continuation-guard",
+        stage: "state",
+        reason_code: reasonCode,
+        session_id: resolvedSessionId,
+      })
     },
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled) {
