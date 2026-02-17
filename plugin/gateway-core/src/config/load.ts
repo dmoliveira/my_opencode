@@ -225,6 +225,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.providerErrorClassifier && typeof source.providerErrorClassifier === "object"
       ? (source.providerErrorClassifier as Record<string, unknown>)
       : {}
+  const codexHeaderInjectorSource =
+    source.codexHeaderInjector && typeof source.codexHeaderInjector === "object"
+      ? (source.codexHeaderInjector as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -822,6 +826,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         providerErrorClassifierSource.cooldownMs,
         DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.cooldownMs,
       ),
+    },
+    codexHeaderInjector: {
+      enabled:
+        typeof codexHeaderInjectorSource.enabled === "boolean"
+          ? codexHeaderInjectorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.codexHeaderInjector.enabled,
     },
     commentChecker: {
       enabled:

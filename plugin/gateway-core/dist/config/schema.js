@@ -46,6 +46,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "todoread-cadence-reminder",
             "provider-retry-backoff-guidance",
             "provider-error-classifier",
+            "codex-header-injector",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -264,6 +265,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
     providerErrorClassifier: {
         enabled: true,
         cooldownMs: 30000,
+    },
+    codexHeaderInjector: {
+        enabled: true,
     },
     commentChecker: {
         enabled: true,

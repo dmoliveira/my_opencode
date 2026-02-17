@@ -174,6 +174,9 @@ export function loadGatewayConfig(raw) {
     const providerErrorClassifierSource = source.providerErrorClassifier && typeof source.providerErrorClassifier === "object"
         ? source.providerErrorClassifier
         : {};
+    const codexHeaderInjectorSource = source.codexHeaderInjector && typeof source.codexHeaderInjector === "object"
+        ? source.codexHeaderInjector
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -548,6 +551,11 @@ export function loadGatewayConfig(raw) {
                 ? providerErrorClassifierSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.enabled,
             cooldownMs: positiveInt(providerErrorClassifierSource.cooldownMs, DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.cooldownMs),
+        },
+        codexHeaderInjector: {
+            enabled: typeof codexHeaderInjectorSource.enabled === "boolean"
+                ? codexHeaderInjectorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.codexHeaderInjector.enabled,
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"
