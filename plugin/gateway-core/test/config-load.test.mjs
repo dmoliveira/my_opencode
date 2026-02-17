@@ -48,6 +48,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.providerRetryBackoffGuidance.cooldownMs, 30000)
   assert.equal(config.providerErrorClassifier.enabled, true)
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
+  assert.equal(config.codexHeaderInjector.enabled, true)
   assert.equal(config.workflowConformanceGuard.enabled, false)
   assert.equal(config.prReadinessGuard.enabled, false)
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
@@ -187,4 +188,5 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.providerRetryBackoffGuidance.cooldownMs, 30000)
   assert.equal(config.providerErrorClassifier.enabled, true)
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
+  assert.equal(config.codexHeaderInjector.enabled, true)
 })

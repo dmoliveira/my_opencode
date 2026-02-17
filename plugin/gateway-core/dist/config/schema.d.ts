@@ -162,6 +162,9 @@ export interface ProviderErrorClassifierConfig {
     enabled: boolean;
     cooldownMs: number;
 }
+export interface CodexHeaderInjectorConfig {
+    enabled: boolean;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -355,6 +358,7 @@ export interface GatewayConfig {
     todoreadCadenceReminder: TodoreadCadenceReminderConfig;
     providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig;
     providerErrorClassifier: ProviderErrorClassifierConfig;
+    codexHeaderInjector: CodexHeaderInjectorConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;

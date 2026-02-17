@@ -225,6 +225,10 @@ export interface ProviderErrorClassifierConfig {
   cooldownMs: number
 }
 
+export interface CodexHeaderInjectorConfig {
+  enabled: boolean
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -477,6 +481,7 @@ export interface GatewayConfig {
   todoreadCadenceReminder: TodoreadCadenceReminderConfig
   providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig
   providerErrorClassifier: ProviderErrorClassifierConfig
+  codexHeaderInjector: CodexHeaderInjectorConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -551,6 +556,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "todoread-cadence-reminder",
       "provider-retry-backoff-guidance",
       "provider-error-classifier",
+      "codex-header-injector",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -769,6 +775,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   providerErrorClassifier: {
     enabled: true,
     cooldownMs: 30000,
+  },
+  codexHeaderInjector: {
+    enabled: true,
   },
   commentChecker: {
     enabled: true,
