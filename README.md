@@ -505,6 +505,13 @@ Autopilot gateway telemetry fields (`--json`):
 | `gateway_orphan_cleanup.state_path` | `string|null` | State file path only when cleanup mutated persisted bridge state. |
 
 ```bash
+# Help/control subcommands (no execution loop)
+/autopilot help
+/autopilot status --json
+
+# Execution runner (start-or-resume bounded cycles)
+/autopilot-go --goal "continue active docs request" --max-cycles 10 --json
+
 # Quick-fix objective (single-script scope)
 /autopilot start --goal "patch failing smoke check" --scope "scripts/install.sh" --done-criteria "install-test passes" --max-budget conservative --json
 /autopilot status --json

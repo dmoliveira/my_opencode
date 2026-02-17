@@ -113,6 +113,11 @@ Default reason codes:
 
 All non-pass outcomes must emit at least one remediation hint.
 
+Subcommand dispatch note:
+
+- `/autopilot help|status|report|doctor|pause|resume|stop` must dispatch directly to the requested subcommand.
+- `/autopilot` with no subcommand may default to `go` behavior.
+
 ## Safety Invariants
 
 - `/autopilot` never executes outside declared `scope`.
