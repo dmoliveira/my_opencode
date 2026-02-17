@@ -5,6 +5,11 @@ interface ToolAfterPayload {
   output?: { output?: unknown }
 }
 
+const RESUME_HINT =
+  "Resume hint: keep the returned task_id and reuse it to continue the same subagent session."
+const CONTINUE_HINT =
+  "Continuation hint: pending work remains; continue execution directly and avoid asking for extra confirmation turns."
+
 // Creates hook that appends resume hints after task tool responses.
 export function createTaskResumeInfoHook(options: { enabled: boolean }): GatewayHook {
   return {
@@ -19,12 +24,19 @@ export function createTaskResumeInfoHook(options: { enabled: boolean }): Gateway
       if (tool !== "task") {
         return
       }
-      if (typeof eventPayload.output?.output !== "string") {
+      const output = eventPayload.output
+      if (!output || typeof output.output !== "string") {
         return
       }
-      if (eventPayload.output.output.includes("task_id")) {
-        eventPayload.output.output += "\n\nResume hint: keep the returned task_id and reuse it to continue the same subagent session."
+      const text = output.output
+      let next = text
+      if (next.includes("task_id") && !next.includes(RESUME_HINT)) {
+        next += `\n\n${RESUME_HINT}`
       }
+      if (next.includes("<CONTINUE-LOOP>") && !next.includes(CONTINUE_HINT)) {
+        next += `\n\n${CONTINUE_HINT}`
+      }
+      output.output = next
     },
   }
 }
