@@ -63,9 +63,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 
 ## Next Batch Refresh (Post-12 Gap Scan)
 
-13. [ ] Todo-driven continuation enforcer parity
-    - Pre-check completed: local continuation flow supports loop state and stop guards, but does not enforce pending todo-driven continuation semantics with upstream-like idle/cooldown behavior.
-    - Goal: add a todo-aware continuation enforcer hook and align continuation stop/resume behavior with upstream idle-event semantics.
+13. [x] Todo-driven continuation enforcer parity
+    - Pre-check completed: local continuation flow supports loop state and stop guards, but does not enforce pending todo-driven continuation semantics with upstream-like idle/cooldown behavior. Confirmed on current main there is no existing `todo-continuation-enforcer` hook/config wiring.
+    - Delivered: added `todo-continuation-enforcer` hook with pending-marker tracking from task output, idle-time continuation injection with cooldown and failure budget, stop-guard + active-loop skip behavior, config/default/order wiring, and dedicated hook/config regression tests.
 
 14. [ ] Compaction todo snapshot restore parity
     - Pre-check completed: local compaction flow preserves context excerpts, but no dedicated compaction todo snapshot/restore hook was found.

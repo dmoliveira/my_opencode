@@ -173,6 +173,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.taskResumeInfo && typeof source.taskResumeInfo === "object"
       ? (source.taskResumeInfo as Record<string, unknown>)
       : {}
+  const todoContinuationEnforcerSource =
+    source.todoContinuationEnforcer && typeof source.todoContinuationEnforcer === "object"
+      ? (source.todoContinuationEnforcer as Record<string, unknown>)
+      : {}
   const emptyTaskResponseSource =
     source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
       ? (source.emptyTaskResponseDetector as Record<string, unknown>)
@@ -644,6 +648,20 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof taskResumeInfoSource.enabled === "boolean"
           ? taskResumeInfoSource.enabled
           : DEFAULT_GATEWAY_CONFIG.taskResumeInfo.enabled,
+    },
+    todoContinuationEnforcer: {
+      enabled:
+        typeof todoContinuationEnforcerSource.enabled === "boolean"
+          ? todoContinuationEnforcerSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.enabled,
+      cooldownMs: positiveInt(
+        todoContinuationEnforcerSource.cooldownMs,
+        DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.cooldownMs,
+      ),
+      maxConsecutiveFailures: positiveInt(
+        todoContinuationEnforcerSource.maxConsecutiveFailures,
+        DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.maxConsecutiveFailures,
+      ),
     },
     emptyTaskResponseDetector: {
       enabled:
