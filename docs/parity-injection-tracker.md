@@ -115,9 +115,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: upstream ships a dedicated Codex header prompt at `packages/opencode/src/session/prompt/codex_header.txt`, but local gateway has no dedicated Codex-header parity hook or injector. Confirmed on latest main with no `codex_header` references in `plugin/gateway-core`.
     - Delivered: added `codex-header-injector` hook for provider-aware Codex guidance injection across chat/transform events, with session duplicate suppression/reset on `session.deleted`, config/default/order + loader wiring, and dedicated regression tests.
 
-25. [ ] Plan tool handoff reminder parity (plan-enter / plan-exit)
+25. [x] Plan tool handoff reminder parity (plan-enter / plan-exit)
     - Pre-check completed: upstream includes explicit plan handoff prompts in `packages/opencode/src/tool/plan-enter.txt` and `packages/opencode/src/tool/plan-exit.txt`; local hooks currently have generic mode reminders but no plan-tool-specific handoff parity behavior. Confirmed on latest main with no `plan-enter` / `plan-exit` handling in gateway hooks.
-    - Goal: add explicit plan-enter/exit handoff reminders aligned to plan-tool transitions while avoiding duplicate reminders in the same session.
+    - Delivered: added `plan-handoff-reminder` hook for plan-enter/exit prompt signal detection with session-aware duplicate suppression/reset on `session.deleted`, config/default/order + loader wiring, and dedicated regression tests.
 
 26. [ ] Provider retry reason canonicalization parity
     - Pre-check completed: upstream `packages/opencode/src/session/retry.ts` normalizes retry reasons (for example `Too Many Requests`, `Rate Limited`, `Provider is overloaded`, free-usage credit hint), but local provider hooks do not expose canonical retry reason mapping. Confirmed on latest main with no canonical reason mapper in `plugin/gateway-core/src/hooks`.

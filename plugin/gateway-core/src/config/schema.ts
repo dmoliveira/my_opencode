@@ -229,6 +229,10 @@ export interface CodexHeaderInjectorConfig {
   enabled: boolean
 }
 
+export interface PlanHandoffReminderConfig {
+  enabled: boolean
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -482,6 +486,7 @@ export interface GatewayConfig {
   providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig
   providerErrorClassifier: ProviderErrorClassifierConfig
   codexHeaderInjector: CodexHeaderInjectorConfig
+  planHandoffReminder: PlanHandoffReminderConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -557,6 +562,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "provider-retry-backoff-guidance",
       "provider-error-classifier",
       "codex-header-injector",
+      "plan-handoff-reminder",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -777,6 +783,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     cooldownMs: 30000,
   },
   codexHeaderInjector: {
+    enabled: true,
+  },
+  planHandoffReminder: {
     enabled: true,
   },
   commentChecker: {

@@ -177,6 +177,9 @@ export function loadGatewayConfig(raw) {
     const codexHeaderInjectorSource = source.codexHeaderInjector && typeof source.codexHeaderInjector === "object"
         ? source.codexHeaderInjector
         : {};
+    const planHandoffReminderSource = source.planHandoffReminder && typeof source.planHandoffReminder === "object"
+        ? source.planHandoffReminder
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -556,6 +559,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof codexHeaderInjectorSource.enabled === "boolean"
                 ? codexHeaderInjectorSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.codexHeaderInjector.enabled,
+        },
+        planHandoffReminder: {
+            enabled: typeof planHandoffReminderSource.enabled === "boolean"
+                ? planHandoffReminderSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.planHandoffReminder.enabled,
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"

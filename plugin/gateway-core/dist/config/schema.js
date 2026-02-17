@@ -47,6 +47,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "provider-retry-backoff-guidance",
             "provider-error-classifier",
             "codex-header-injector",
+            "plan-handoff-reminder",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -267,6 +268,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         cooldownMs: 30000,
     },
     codexHeaderInjector: {
+        enabled: true,
+    },
+    planHandoffReminder: {
         enabled: true,
     },
     commentChecker: {

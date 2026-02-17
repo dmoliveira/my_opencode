@@ -24,6 +24,7 @@ import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-remi
 import { createProviderRetryBackoffGuidanceHook } from "./hooks/provider-retry-backoff-guidance/index.js";
 import { createProviderErrorClassifierHook } from "./hooks/provider-error-classifier/index.js";
 import { createCodexHeaderInjectorHook } from "./hooks/codex-header-injector/index.js";
+import { createPlanHandoffReminderHook } from "./hooks/plan-handoff-reminder/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
@@ -318,6 +319,9 @@ function configuredHooks(ctx) {
         createCodexHeaderInjectorHook({
             directory,
             enabled: cfg.codexHeaderInjector.enabled,
+        }),
+        createPlanHandoffReminderHook({
+            enabled: cfg.planHandoffReminder.enabled,
         }),
         createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,
