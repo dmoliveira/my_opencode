@@ -171,6 +171,9 @@ export function loadGatewayConfig(raw) {
     const providerRetryBackoffGuidanceSource = source.providerRetryBackoffGuidance && typeof source.providerRetryBackoffGuidance === "object"
         ? source.providerRetryBackoffGuidance
         : {};
+    const providerErrorClassifierSource = source.providerErrorClassifier && typeof source.providerErrorClassifier === "object"
+        ? source.providerErrorClassifier
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -539,6 +542,12 @@ export function loadGatewayConfig(raw) {
                 ? providerRetryBackoffGuidanceSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.enabled,
             cooldownMs: positiveInt(providerRetryBackoffGuidanceSource.cooldownMs, DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.cooldownMs),
+        },
+        providerErrorClassifier: {
+            enabled: typeof providerErrorClassifierSource.enabled === "boolean"
+                ? providerErrorClassifierSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.enabled,
+            cooldownMs: positiveInt(providerErrorClassifierSource.cooldownMs, DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.cooldownMs),
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"

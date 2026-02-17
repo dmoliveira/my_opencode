@@ -220,6 +220,11 @@ export interface ProviderRetryBackoffGuidanceConfig {
   cooldownMs: number
 }
 
+export interface ProviderErrorClassifierConfig {
+  enabled: boolean
+  cooldownMs: number
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -471,6 +476,7 @@ export interface GatewayConfig {
   modeTransitionReminder: ModeTransitionReminderConfig
   todoreadCadenceReminder: TodoreadCadenceReminderConfig
   providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig
+  providerErrorClassifier: ProviderErrorClassifierConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -544,6 +550,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "mode-transition-reminder",
       "todoread-cadence-reminder",
       "provider-retry-backoff-guidance",
+      "provider-error-classifier",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -756,6 +763,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     cooldownEvents: 2,
   },
   providerRetryBackoffGuidance: {
+    enabled: true,
+    cooldownMs: 30000,
+  },
+  providerErrorClassifier: {
     enabled: true,
     cooldownMs: 30000,
   },

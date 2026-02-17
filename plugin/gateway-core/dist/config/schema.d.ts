@@ -158,6 +158,10 @@ export interface ProviderRetryBackoffGuidanceConfig {
     enabled: boolean;
     cooldownMs: number;
 }
+export interface ProviderErrorClassifierConfig {
+    enabled: boolean;
+    cooldownMs: number;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -350,6 +354,7 @@ export interface GatewayConfig {
     modeTransitionReminder: ModeTransitionReminderConfig;
     todoreadCadenceReminder: TodoreadCadenceReminderConfig;
     providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig;
+    providerErrorClassifier: ProviderErrorClassifierConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
