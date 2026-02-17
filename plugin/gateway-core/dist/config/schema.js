@@ -40,6 +40,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "json-error-recovery",
             "provider-token-limit-recovery",
             "hashline-read-enhancer",
+            "max-step-recovery",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -233,6 +234,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         cooldownMs: 60000,
     },
     hashlineReadEnhancer: {
+        enabled: true,
+    },
+    maxStepRecovery: {
         enabled: true,
     },
     commentChecker: {
