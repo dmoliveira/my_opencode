@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -21,18 +20,16 @@ from config_layering import (  # type: ignore
 CONFIG_PATH = resolve_write_path()
 KNOWN_PLUGINS = {
     "notifier": "@mohak34/opencode-notifier@latest",
-    "supermemory": "opencode-supermemory",
     "morph": "github:JRedeker/opencode-morph-fast-apply",
     "worktree": "github:kdcokenny/opencode-worktree",
-    "wakatime": "opencode-wakatime",
 }
-PLUGIN_ORDER = ["notifier", "supermemory", "morph", "worktree", "wakatime"]
-STABLE_ALIASES = ["notifier", "supermemory", "wakatime"]
+PLUGIN_ORDER = ["notifier", "morph", "worktree"]
+STABLE_ALIASES = ["notifier"]
 EXPERIMENTAL_ALIASES = ["morph", "worktree"]
 PROFILE_MAP = {
     "lean": ["notifier"],
-    "stable": ["notifier", "supermemory", "wakatime"],
-    "experimental": ["notifier", "supermemory", "wakatime", "morph", "worktree"],
+    "stable": ["notifier"],
+    "experimental": ["notifier", "morph", "worktree"],
 }
 
 
@@ -62,8 +59,8 @@ def usage() -> int:
     print(
         "usage: /plugin status | /plugin doctor [--json] | /plugin setup-keys | /plugin profile <lean|stable|experimental> | /plugin enable <name|all> | /plugin disable <name|all>"
     )
-    print("names: notifier, supermemory, morph, worktree, wakatime")
-    print("note: 'all' applies stable plugins only: notifier, supermemory, wakatime")
+    print("names: notifier, morph, worktree")
+    print("note: 'all' applies stable plugins only: notifier")
     print("note: morph/worktree may require manual setup depending on plugin resolver")
     return 2
 
@@ -71,8 +68,6 @@ def usage() -> int:
 def print_next_steps() -> None:
     print("\nnext:")
     print("- /plugin enable notifier")
-    print("- /plugin enable supermemory")
-    print("- /plugin enable wakatime")
     print("- /plugin enable morph")
     print("- /plugin enable worktree")
     print("- /plugin profile lean|stable|experimental")
@@ -86,38 +81,6 @@ def print_status(plugins: list[str]) -> None:
         kind = "stable" if alias in STABLE_ALIASES else "experimental"
         print(f"{alias}: {state} [{kind}] ({package})")
     print(f"config: {CONFIG_PATH}")
-
-
-def has_supermemory_key() -> bool:
-    env_key = os.environ.get("SUPERMEMORY_API_KEY", "").strip()
-    if env_key:
-        return True
-
-    candidates = [
-        Path("~/.config/opencode/supermemory.json").expanduser(),
-        Path("~/.config/opencode/supermemory.jsonc").expanduser(),
-    ]
-    for path in candidates:
-        if not path.exists():
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except Exception:
-            continue
-        if re.search(r'"apiKey"\s*:\s*".+"', content):
-            return True
-    return False
-
-
-def has_wakatime_key() -> bool:
-    cfg = Path("~/.wakatime.cfg").expanduser()
-    if not cfg.exists():
-        return False
-    try:
-        content = cfg.read_text(encoding="utf-8")
-    except Exception:
-        return False
-    return bool(re.search(r"(?im)^\s*api_key\s*=\s*\S+", content))
 
 
 def collect_doctor(plugins: list[str]) -> dict:
@@ -138,14 +101,6 @@ def collect_doctor(plugins: list[str]) -> dict:
 
     if not CONFIG_PATH.exists():
         problems.append(f"missing config file: {CONFIG_PATH}")
-
-    if KNOWN_PLUGINS["supermemory"] in plugins and not has_supermemory_key():
-        problems.append(
-            "supermemory enabled but no API key found (set SUPERMEMORY_API_KEY or ~/.config/opencode/supermemory.json[c])"
-        )
-
-    if KNOWN_PLUGINS["wakatime"] in plugins and not has_wakatime_key():
-        problems.append("wakatime enabled but ~/.wakatime.cfg api_key is missing")
 
     if (
         KNOWN_PLUGINS["morph"] in plugins
@@ -174,8 +129,7 @@ def collect_doctor(plugins: list[str]) -> dict:
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
-            "set SUPERMEMORY_API_KEY and/or create ~/.config/opencode/supermemory.jsonc",
-            "add api_key to ~/.wakatime.cfg",
+            "set MORPH_API_KEY for morph plugin usage",
             "disable unmet plugins with: /plugin disable <name>",
         ]
         if problems
@@ -222,32 +176,14 @@ def print_setup_keys(plugins: list[str]) -> int:
     print("setup keys")
     print("----------")
 
-    needs_supermemory = (
-        KNOWN_PLUGINS["supermemory"] in plugins and not has_supermemory_key()
-    )
-    needs_wakatime = KNOWN_PLUGINS["wakatime"] in plugins and not has_wakatime_key()
     needs_morph = (
         KNOWN_PLUGINS["morph"] in plugins
         and not os.environ.get("MORPH_API_KEY", "").strip()
     )
 
-    if not (needs_supermemory or needs_wakatime or needs_morph):
+    if not needs_morph:
         print("all required keys are already configured for enabled plugins")
         return 0
-
-    if needs_supermemory:
-        print("\n[supermemory]")
-        print("export SUPERMEMORY_API_KEY='sm_your_key_here'")
-        print("or create ~/.config/opencode/supermemory.jsonc:")
-        print("{")
-        print('  "apiKey": "sm_your_key_here"')
-        print("}")
-
-    if needs_wakatime:
-        print("\n[wakatime]")
-        print("create ~/.wakatime.cfg with:")
-        print("[settings]")
-        print("api_key = waka_your_key_here")
 
     if needs_morph:
         print("\n[morph]")

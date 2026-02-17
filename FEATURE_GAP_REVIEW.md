@@ -40,9 +40,9 @@ Date: 2026-02-14
 - `/resume status --json` returns `FAIL` with `resume_missing_checkpoint` before any run.
 - This is technically consistent but noisy for first-use diagnostics.
 
-5. Plugin doctor fails by default in fresh env
+5. Plugin doctor fails when optional experimental keys are absent
 
-- `/doctor run --json` fails when `wakatime` is enabled but `~/.wakatime.cfg` key is absent.
+- `/doctor run --json` fails when `morph` is enabled but `MORPH_API_KEY` is absent.
 - Consider defaulting to warning or auto-switching to a non-failing baseline profile on first install.
 
 6. Installer self-check can stop early in resume path

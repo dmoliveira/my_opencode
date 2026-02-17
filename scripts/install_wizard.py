@@ -31,7 +31,7 @@ OPENCHAMBER_PACKAGE = os.environ.get(
     "MY_OPENCODE_OPENCHAMBER_PACKAGE", "@openchamber/web"
 )
 
-PLUGIN_ALIASES = ["notifier", "supermemory", "wakatime", "morph", "worktree"]
+PLUGIN_ALIASES = ["notifier", "morph", "worktree"]
 
 
 def now_iso() -> str:
