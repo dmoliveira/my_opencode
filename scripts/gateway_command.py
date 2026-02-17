@@ -802,6 +802,10 @@ def command_doctor(as_json: bool) -> int:
         warnings.append(
             f"detected {continue_count} concurrent opencode --continue processes; this can accelerate memory pressure"
         )
+        if continue_count >= 5:
+            warnings.append(
+                "pressure escalation guard may block non-essential reviewer/verifier task escalations until pressure drops"
+            )
     if opencode_count >= 8:
         warnings.append(
             f"detected {opencode_count} concurrent opencode-related processes; consider pruning stale sessions"
@@ -906,6 +910,7 @@ def command_tune_memory(as_json: bool) -> int:
         "contextWindowMonitor": config.get("contextWindowMonitor", {}),
         "preemptiveCompaction": config.get("preemptiveCompaction", {}),
         "globalProcessPressure": config.get("globalProcessPressure", {}),
+        "pressureEscalationGuard": config.get("pressureEscalationGuard", {}),
     }
     recommended = {
         "contextWindowMonitor": {
@@ -928,14 +933,14 @@ def command_tune_memory(as_json: bool) -> int:
         },
         "globalProcessPressure": {
             "enabled": True,
-            "checkCooldownToolCalls": 3,
+            "checkCooldownToolCalls": 2,
             "reminderCooldownToolCalls": 6,
             "criticalReminderCooldownToolCalls": 10,
             "criticalEscalationWindowToolCalls": 25,
             "criticalPauseAfterEvents": 1,
             "criticalEscalationAfterEvents": 3,
-            "warningContinueSessions": 5,
-            "warningOpencodeProcesses": 10,
+            "warningContinueSessions": 3,
+            "warningOpencodeProcesses": 7,
             "warningMaxRssMb": 1400,
             "criticalMaxRssMb": 10240,
             "autoPauseOnCritical": True,
@@ -943,6 +948,12 @@ def command_tune_memory(as_json: bool) -> int:
             "guardMarkerMode": "both",
             "guardVerbosity": "normal",
             "maxSessionStateEntries": 1024,
+        },
+        "pressureEscalationGuard": {
+            "enabled": True,
+            "maxContinueBeforeBlock": 5,
+            "blockedSubagentTypes": ["reviewer", "verifier", "explore", "librarian", "general"],
+            "allowPromptPatterns": ["blocker", "critical", "sev0", "sev1", "check failed", "pressure-override"],
         },
     }
     rationale: list[str] = [
@@ -994,6 +1005,7 @@ def command_tune_memory(as_json: bool) -> int:
             "apply recommended values under contextWindowMonitor and preemptiveCompaction",
             "run /gateway status --json and /gateway doctor --json",
             "collect 20-30 minute baseline with MY_OPENCODE_GATEWAY_EVENT_AUDIT=1",
+        "optionally set MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES and MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS for rotated audit retention",
         ],
     }
     emit(payload, as_json=as_json)

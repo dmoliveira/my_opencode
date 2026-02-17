@@ -11,6 +11,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "context-window-monitor",
             "preemptive-compaction",
             "global-process-pressure",
+            "pressure-escalation-guard",
             "session-recovery",
             "delegate-task-retry",
             "validation-evidence-ledger",
@@ -120,6 +121,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
         guardMarkerMode: "both",
         guardVerbosity: "normal",
         maxSessionStateEntries: 1024,
+    },
+    pressureEscalationGuard: {
+        enabled: true,
+        maxContinueBeforeBlock: 5,
+        blockedSubagentTypes: ["reviewer", "verifier", "explore", "librarian", "general"],
+        allowPromptPatterns: ["blocker", "critical", "sev0", "sev1", "check failed", "pressure-override"],
     },
     sessionRecovery: {
         enabled: true,

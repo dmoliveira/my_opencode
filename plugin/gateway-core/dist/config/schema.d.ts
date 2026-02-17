@@ -64,6 +64,12 @@ export interface GlobalProcessPressureConfig {
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;
 }
+export interface PressureEscalationGuardConfig {
+    enabled: boolean;
+    maxContinueBeforeBlock: number;
+    blockedSubagentTypes: string[];
+    allowPromptPatterns: string[];
+}
 export interface CompactionContextInjectorConfig {
     enabled: boolean;
 }
@@ -298,6 +304,7 @@ export interface GatewayConfig {
     preemptiveCompaction: PreemptiveCompactionConfig;
     compactionContextInjector: CompactionContextInjectorConfig;
     globalProcessPressure: GlobalProcessPressureConfig;
+    pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;

@@ -20,6 +20,7 @@ import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-lim
 import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
+import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
@@ -157,6 +158,13 @@ function configuredHooks(ctx) {
             guardMarkerMode: cfg.globalProcessPressure.guardMarkerMode,
             guardVerbosity: cfg.globalProcessPressure.guardVerbosity,
             maxSessionStateEntries: cfg.globalProcessPressure.maxSessionStateEntries,
+        }),
+        createPressureEscalationGuardHook({
+            directory,
+            enabled: cfg.pressureEscalationGuard.enabled,
+            maxContinueBeforeBlock: cfg.pressureEscalationGuard.maxContinueBeforeBlock,
+            blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
+            allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
         }),
         createSessionRecoveryHook({
             directory,

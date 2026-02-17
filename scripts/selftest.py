@@ -2050,6 +2050,21 @@ exit 0
             ),
             "gateway tune memory should include critical RSS auto-pause recommendations",
         )
+        expect(
+            isinstance(
+                gateway_tune.get("recommended", {})
+                .get("pressureEscalationGuard", {})
+                .get("maxContinueBeforeBlock"),
+                int,
+            )
+            and isinstance(
+                gateway_tune.get("recommended", {})
+                .get("pressureEscalationGuard", {})
+                .get("blockedSubagentTypes"),
+                list,
+            ),
+            "gateway tune memory should include pressure escalation guard recommendations",
+        )
 
         notify_policy_path = (
             home / ".config" / "opencode" / "opencode-notifications.json"

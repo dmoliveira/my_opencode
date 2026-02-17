@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
+- Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
+- Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
 - Added `docs/memory-incident-playbook.md` with detect/stabilize/recover/verify incident workflow for memory pressure.
 - Added e2e-style selftest coverage for repeated critical pressure audit signals across `/gateway doctor --json` and `/gateway tune memory --json` outputs.
 - Added critical-pressure refinement controls: escalation window/event thresholds, optional desktop notifications, and best-effort session-level RSS attribution in guard telemetry.
@@ -206,6 +208,8 @@ All notable changes to this project are documented in this file.
 ## v0.2.0 - 2026-02-12
 
 ### Adds
+- Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
+- Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
 - Added `/notify` command with granular controls (global, channel, event, and per-event channel), plus shortcut commands and presets.
 - Added `/digest` command enhancements including `--run-post`, plus a session wrapper script for digest on exit/Ctrl+C.
 - Added `/telemetry` command for LangGraph/local endpoint forwarding with endpoint, timeout, per-event toggles, and diagnostics.
@@ -224,6 +228,8 @@ All notable changes to this project are documented in this file.
 ## v0.1.1 - 2026-02-12
 
 ### Adds
+- Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
+- Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
 - Added `/plugin doctor --json` output for automation and CI integrations.
 - Added plugin command next-step suggestions and `/plugin help` guidance output.
 - Added autocomplete-friendly shortcut commands for plugin toggles and profiles.
@@ -239,6 +245,8 @@ All notable changes to this project are documented in this file.
 ## v0.1.0 - 2026-02-11
 
 ### Adds
+- Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
+- Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
 - Added portable OpenCode config with global symlink-based install flow.
 - Added `/mcp` command with internal toggles for `context7` and `gh_grep`.
 - Added `/plugin` command with stable/experimental plugin management.

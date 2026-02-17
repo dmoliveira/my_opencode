@@ -1607,6 +1607,8 @@ Notes:
 - `/gateway status --json` now reports `guard_event_counters` including session-correlated pressure observations (`session_pressure_attribution`, non-causal) and critical trigger timestamps.
 - `/gateway doctor --json` now exposes `remediation_commands` when critical pressure signals are detected.
 - `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
+- `pressure-escalation-guard` now blocks non-essential reviewer/verifier/explore/librarian/general task escalations while high continuation pressure is active (override via blocker/critical prompt patterns).
+- gateway event audit now supports bounded rotation via `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES` and `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`.
 - see `docs/memory-incident-playbook.md` for a fast detect/stabilize/recover/verify incident flow.
 
 Gateway event audit baseline (recommended before memory tuning):

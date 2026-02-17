@@ -107,6 +107,11 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
       guardVerbosity: "invalid",
       maxSessionStateEntries: 0,
     },
+    pressureEscalationGuard: {
+      maxContinueBeforeBlock: 0,
+      blockedSubagentTypes: [],
+      allowPromptPatterns: [],
+    },
     directoryAgentsInjector: {
       maxChars: 0,
     },
