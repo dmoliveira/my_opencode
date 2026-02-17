@@ -23,8 +23,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: helper previously exposed only `injectHookMessage` and was used by `continuation` + `session-recovery`; no reusable identity/body utility surface existed.
    - Delivered: added shared `resolveHookMessageIdentity` + `buildHookMessageBody` utilities, refactored `injectHookMessage` to use them, and added split-metadata regression tests.
 
-4. [ ] Session-id fallback parity in transform path
-   - Pre-check required: inspect current context-injector session id resolution and available session state sources.
+4. [x] Session-id fallback parity in transform path
+   - Pre-check completed: context-injector resolved session from payload/message metadata only; no fallback to last known active session id when transform payload omitted session identity.
+   - Delivered: context-injector now falls back to the last known active session id for transform payloads with missing session identity, clears fallback state on matching `session.deleted`, and includes regression test coverage for transform fallback behavior.
 
 5. [ ] Context collector metadata/introspection parity
    - Pre-check required: verify what metadata APIs already exist after source:id dedupe work.

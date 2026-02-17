@@ -26,7 +26,7 @@ interface TransformPayload {
   }
   output?: {
     messages?: Array<{
-      info?: { role?: string; id?: string; sessionID?: string }
+      info?: { role?: string; id?: string; sessionID?: string; sessionId?: string }
       parts?: TextPart[]
     }>
   }
@@ -40,7 +40,7 @@ interface EventPayload {
 }
 
 // Resolves session id from known payload variants.
-function resolveSessionId(payload: ChatPayload | TransformPayload): string {
+function resolveSessionId(payload: ChatPayload | TransformPayload, fallbackSessionId = ""): string {
   const record = payload as {
     input?: { sessionID?: string; sessionId?: string }
     properties?: { sessionID?: string; sessionId?: string; info?: { id?: string } }
@@ -61,13 +61,15 @@ function resolveSessionId(payload: ChatPayload | TransformPayload): string {
   const messages = transformPayload.output?.messages
   if (Array.isArray(messages)) {
     for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-      const value = messages[idx]?.info?.sessionID
-      if (typeof value === "string" && value.trim()) {
-        return value.trim()
+      const sessionIdCandidates = [messages[idx]?.info?.sessionID, messages[idx]?.info?.sessionId]
+      for (const value of sessionIdCandidates) {
+        if (typeof value === "string" && value.trim()) {
+          return value.trim()
+        }
       }
     }
   }
-  return ""
+  return fallbackSessionId.trim()
 }
 
 // Injects pending context into mutable output parts.
@@ -86,6 +88,7 @@ export function createContextInjectorHook(options: {
   enabled: boolean
   collector: ContextCollector
 }): GatewayHook {
+  let lastKnownSessionId = ""
   return {
     id: "context-injector",
     priority: 295,
@@ -97,7 +100,11 @@ export function createContextInjectorHook(options: {
         const eventPayload = (payload ?? {}) as EventPayload
         const sessionId = eventPayload.properties?.info?.id
         if (typeof sessionId === "string" && sessionId.trim()) {
-          options.collector.clear(sessionId.trim())
+          const normalized = sessionId.trim()
+          options.collector.clear(normalized)
+          if (lastKnownSessionId === normalized) {
+            lastKnownSessionId = ""
+          }
         }
         return
       }
@@ -108,7 +115,10 @@ export function createContextInjectorHook(options: {
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
             : options.directory
-        const sessionId = resolveSessionId(eventPayload)
+        const sessionId = resolveSessionId(eventPayload, lastKnownSessionId)
+        if (sessionId) {
+          lastKnownSessionId = sessionId
+        }
         const parts = eventPayload.output?.parts
         if (!sessionId || !Array.isArray(parts) || !options.collector.hasPending(sessionId)) {
           return
@@ -145,7 +155,10 @@ export function createContextInjectorHook(options: {
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
-      const sessionId = resolveSessionId(eventPayload)
+      const sessionId = resolveSessionId(eventPayload, lastKnownSessionId)
+      if (sessionId) {
+        lastKnownSessionId = sessionId
+      }
       const messages = eventPayload.output?.messages
       if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
         return
