@@ -127,6 +127,6 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: upstream `SessionRetry.retryable` explicitly treats context overflow as non-retryable, while local provider recovery hooks do not have explicit context-overflow skip logic. Confirmed on latest main with no `ContextOverflowError`/context-overflow suppression path in gateway hooks.
     - Delivered: added explicit context-overflow non-retry suppression in provider retry-backoff and error-classifier hooks using shared overflow detection utility, preventing retry nudges on non-retryable overflow failures, with dedicated regression tests.
 
-28. [ ] Retry delay clamp parity (headerless backoff cap)
+28. [x] Retry delay clamp parity (headerless backoff cap)
     - Pre-check completed: upstream `SessionRetry.delay` caps headerless retry delay (`RETRY_MAX_DELAY_NO_HEADERS = 30000`) and handles retry headers; local retry-backoff guidance parses headers but does not enforce a canonical headerless delay clamp policy. Confirmed on latest main with no explicit no-header retry-delay cap in gateway retry guidance.
-    - Goal: add deterministic retry delay clamp policy for headerless retry guidance and align delay messaging with upstream backoff semantics.
+    - Delivered: added headerless retry-delay clamp behavior (30s max) with exponential backoff progression, per-session attempt tracking, and explicit capped delay messaging in provider retry guidance, with dedicated regression tests.
