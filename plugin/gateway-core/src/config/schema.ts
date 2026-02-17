@@ -129,11 +129,13 @@ export interface RulesInjectorConfig {
 // Declares local AGENTS.md injector settings.
 export interface DirectoryAgentsInjectorConfig {
   enabled: boolean
+  maxChars: number
 }
 
 // Declares local README injector settings.
 export interface DirectoryReadmeInjectorConfig {
   enabled: boolean
+  maxChars: number
 }
 
 // Declares write guard settings to prevent overwriting existing files.
@@ -584,9 +586,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   directoryAgentsInjector: {
     enabled: true,
+    maxChars: 4000,
   },
   directoryReadmeInjector: {
     enabled: true,
+    maxChars: 4000,
   },
   noninteractiveShellGuard: {
     enabled: true,

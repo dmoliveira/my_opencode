@@ -94,9 +94,11 @@ export interface RulesInjectorConfig {
 }
 export interface DirectoryAgentsInjectorConfig {
     enabled: boolean;
+    maxChars: number;
 }
 export interface DirectoryReadmeInjectorConfig {
     enabled: boolean;
+    maxChars: number;
 }
 export interface WriteExistingFileGuardConfig {
     enabled: boolean;
