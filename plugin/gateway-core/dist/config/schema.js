@@ -389,7 +389,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         disallowAdminBypass: true,
     },
     ghChecksMergeGuard: {
-        enabled: true,
+        enabled: false,
         blockDraft: true,
         requireApprovedReview: true,
         requirePassingChecks: true,
