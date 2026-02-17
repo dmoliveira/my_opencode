@@ -192,6 +192,13 @@ def _resolve_args(command: str, tokens: set[str], prompt_lower: str) -> list[str
     return COMMANDS[command]["default_args"]
 
 
+def _render_slash_command(command: str, args: list[str]) -> str:
+    if command == "doctor":
+        visible_args = [arg for arg in args if arg != "run"]
+        return f"/{command} {' '.join(visible_args)}".strip()
+    return f"/{command} {' '.join(args)}".strip()
+
+
 def detect_intent(
     prompt: str,
     *,
@@ -262,7 +269,7 @@ def detect_intent(
 
     command = top["command"]
     args = _resolve_args(command, token_set, prompt_lower)
-    slash_command = f"/{command} {' '.join(args)}".strip()
+    slash_command = _render_slash_command(command, args)
     selected = {
         "command": command,
         "args": args,
