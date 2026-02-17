@@ -296,6 +296,7 @@ export function createAutopilotLoopHook(options: {
       ].join("\n")
       options.collector?.register(sessionId, {
         source: "autopilot-loop",
+        id: "objective-summary",
         content: objectiveSummary,
         priority: "high",
       })
