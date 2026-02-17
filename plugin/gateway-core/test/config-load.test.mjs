@@ -48,6 +48,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.providerRetryBackoffGuidance.cooldownMs, 30000)
   assert.equal(config.providerErrorClassifier.enabled, true)
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
+  assert.equal(config.workflowConformanceGuard.enabled, false)
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)

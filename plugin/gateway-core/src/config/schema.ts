@@ -813,7 +813,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     ],
   },
   workflowConformanceGuard: {
-    enabled: true,
+    enabled: false,
     protectedBranches: ["main", "master"],
     blockEditsOnProtectedBranches: true,
   },

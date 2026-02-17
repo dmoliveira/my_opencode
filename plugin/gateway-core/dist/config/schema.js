@@ -308,7 +308,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         ],
     },
     workflowConformanceGuard: {
-        enabled: true,
+        enabled: false,
         protectedBranches: ["main", "master"],
         blockEditsOnProtectedBranches: true,
     },
