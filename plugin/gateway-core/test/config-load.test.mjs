@@ -41,6 +41,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.providerTokenLimitRecovery.cooldownMs, 60000)
   assert.equal(config.hashlineReadEnhancer.enabled, true)
   assert.equal(config.maxStepRecovery.enabled, true)
+  assert.equal(config.modeTransitionReminder.enabled, true)
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
@@ -166,4 +167,5 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.providerTokenLimitRecovery.cooldownMs, 60000)
   assert.equal(config.hashlineReadEnhancer.enabled, true)
   assert.equal(config.maxStepRecovery.enabled, true)
+  assert.equal(config.modeTransitionReminder.enabled, true)
 })

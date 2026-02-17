@@ -19,6 +19,7 @@ import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/index.j
 import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-limit-recovery/index.js";
 import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/index.js";
 import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js";
+import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
@@ -282,6 +283,9 @@ function configuredHooks(ctx) {
         }),
         createMaxStepRecoveryHook({
             enabled: cfg.maxStepRecovery.enabled,
+        }),
+        createModeTransitionReminderHook({
+            enabled: cfg.modeTransitionReminder.enabled,
         }),
         createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,

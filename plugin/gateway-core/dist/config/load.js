@@ -159,6 +159,9 @@ export function loadGatewayConfig(raw) {
     const maxStepRecoverySource = source.maxStepRecovery && typeof source.maxStepRecovery === "object"
         ? source.maxStepRecovery
         : {};
+    const modeTransitionReminderSource = source.modeTransitionReminder && typeof source.modeTransitionReminder === "object"
+        ? source.modeTransitionReminder
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -498,6 +501,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof maxStepRecoverySource.enabled === "boolean"
                 ? maxStepRecoverySource.enabled
                 : DEFAULT_GATEWAY_CONFIG.maxStepRecovery.enabled,
+        },
+        modeTransitionReminder: {
+            enabled: typeof modeTransitionReminderSource.enabled === "boolean"
+                ? modeTransitionReminderSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.modeTransitionReminder.enabled,
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"
