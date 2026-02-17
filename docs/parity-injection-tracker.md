@@ -42,3 +42,18 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 8. [x] Injector reason-code granularity
    - Pre-check completed: injector hooks emitted coarse reason-code coverage (mostly injected-only) with missing granular outcomes for requeue/missing-user/duplicate-context suppression paths.
    - Delivered: expanded injector reason-code taxonomy in shared catalog, wired granular context-injector and compaction-context-injector outcomes (inject, truncate, requeue, duplicate, missing-user, missing-parts), and added audit-backed tests for the new branches.
+
+## Next Batch (Friendly Names)
+
+9. [x] Smart file-rule injector parity
+   - Pre-check completed: local rules injector used static per-tool text and lacked file-aware rule discovery, frontmatter matching, and session-compaction cache reset behavior.
+   - Delivered: added file-aware rule discovery from common rule directories, frontmatter `applyTo` matching (scalar/inline-array/yaml-list), copilot always-apply support, title/metadata file-path resolution, session dedupe with compaction reset, and expanded integration tests including brace-glob matching.
+
+10. [ ] Session guidance + continuation helpers parity
+   - Goal: bring user-facing session reminders and todo-continuation enforcement behavior closer to upstream.
+
+11. [ ] Thought workflow guardrails parity
+   - Goal: align think-mode and thinking-block validator behavior for safer reasoning flows.
+
+12. [ ] Directory guidance depth parity
+   - Goal: move from path-notice injection toward richer AGENTS/README content injection with safe truncation.
