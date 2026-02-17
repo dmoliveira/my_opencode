@@ -1,7 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
-import { classifyProviderRetryReason } from "../shared/provider-retry-reason.js"
+import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
 
 interface GatewayClient {
   session?: {
@@ -115,6 +115,9 @@ export function createProviderErrorClassifierHook(options: {
       }
       const eventPayload = (payload ?? {}) as EventPayload
       const text = extractErrorText(eventPayload)
+      if (isContextOverflowNonRetryable(text)) {
+        return
+      }
       const outcome = classify(text)
       const sessionId = resolveSessionId(eventPayload)
       const session = options.client?.session

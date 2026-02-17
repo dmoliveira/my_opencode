@@ -26,3 +26,15 @@ export function classifyProviderRetryReason(text) {
     }
     return null;
 }
+// Returns true when payload indicates context-overflow non-retryable failure.
+export function isContextOverflowNonRetryable(text) {
+    const patterns = [
+        /contextoverflowerror/i,
+        /context overflow/i,
+        /context window/i,
+        /maximum context/i,
+        /prompt is too long/i,
+        /input too long/i,
+    ];
+    return patterns.some((pattern) => pattern.test(text));
+}

@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage } from "../hook-message-injector/index.js";
-import { classifyProviderRetryReason } from "../shared/provider-retry-reason.js";
+import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js";
 function resolveSessionId(payload) {
     const candidates = [payload.properties?.sessionID, payload.properties?.sessionId, payload.properties?.info?.id];
     for (const value of candidates) {
@@ -107,7 +107,11 @@ export function createProviderRetryBackoffGuidanceHook(options) {
             }
             const eventPayload = (payload ?? {});
             const headers = extractHeaders(eventPayload);
-            const reason = classifyProviderRetryReason(extractText(eventPayload));
+            const text = extractText(eventPayload);
+            if (isContextOverflowNonRetryable(text)) {
+                return;
+            }
+            const reason = classifyProviderRetryReason(text);
             if (!reason && !headers["retry-after"] && !headers["retry-after-ms"]) {
                 return;
             }
