@@ -26,27 +26,30 @@ interface SessionClient {
   }): Promise<void>
 }
 
-// Injects synthetic hook content while preserving recent agent/model metadata.
-export async function injectHookMessage(args: {
+export interface HookMessageIdentity {
+  agent?: string
+  model?: { providerID: string; modelID: string; variant?: string }
+}
+
+// Resolves latest reusable agent/model identity from session history.
+export async function resolveHookMessageIdentity(args: {
   session: SessionClient
   sessionId: string
-  content: string
   directory: string
-}): Promise<boolean> {
-  const content = args.content.trim()
-  if (!content) {
-    return false
+}): Promise<HookMessageIdentity> {
+  if (typeof args.session.messages !== "function") {
+    return {}
   }
 
-  let agent: string | undefined
-  let model: { providerID: string; modelID: string; variant?: string } | undefined
-  if (typeof args.session.messages === "function") {
-    try {
-      const response = await args.session.messages({
-        path: { id: args.sessionId },
-        query: { directory: args.directory },
-      })
+  try {
+    const response = await args.session.messages({
+      path: { id: args.sessionId },
+      query: { directory: args.directory },
+    })
     const messages = Array.isArray(response.data) ? response.data : []
+    let agent: string | undefined
+    let model: { providerID: string; modelID: string; variant?: string } | undefined
+
     for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
       const info = messages[idx]?.info
       if (!info || info.role === "assistant") {
@@ -69,23 +72,56 @@ export async function injectHookMessage(args: {
           }
         }
       }
-      if (agent || model) {
+      if (agent && model) {
         break
       }
     }
-    } catch {
-      // best-effort metadata resolution
+
+    return {
+      ...(agent ? { agent } : {}),
+      ...(model ? { model } : {}),
     }
+  } catch {
+    return {}
   }
+}
+
+// Builds promptAsync body payload from content and optional identity.
+export function buildHookMessageBody(content: string, identity: HookMessageIdentity): {
+  parts: Array<{ type: string; text: string }>
+  agent?: string
+  model?: { providerID: string; modelID: string; variant?: string }
+} {
+  const normalized = content.trim()
+  return {
+    ...(identity.agent ? { agent: identity.agent } : {}),
+    ...(identity.model ? { model: identity.model } : {}),
+    parts: [{ type: "text", text: normalized }],
+  }
+}
+
+// Injects synthetic hook content while preserving recent agent/model metadata.
+export async function injectHookMessage(args: {
+  session: SessionClient
+  sessionId: string
+  content: string
+  directory: string
+}): Promise<boolean> {
+  const content = args.content.trim()
+  if (!content) {
+    return false
+  }
+
+  const identity = await resolveHookMessageIdentity({
+    session: args.session,
+    sessionId: args.sessionId,
+    directory: args.directory,
+  })
 
   try {
     await args.session.promptAsync({
       path: { id: args.sessionId },
-      body: {
-        ...(agent ? { agent } : {}),
-        ...(model ? { model } : {}),
-        parts: [{ type: "text", text: content }],
-      },
+      body: buildHookMessageBody(content, identity),
       query: { directory: args.directory },
     })
     return true

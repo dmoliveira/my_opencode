@@ -19,8 +19,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: `preemptive-compaction` exists and triggers summarize, but no dedicated compaction-context prompt injector hook existed in gateway-core.
    - Delivered: added `compaction-context-injector` hook, wired config/defaults, ensured compatibility with `auto-slash-command` across default and custom hook orders, and added dedicated test coverage.
 
-3. [ ] Message-injector utility parity (shared helper surface)
-   - Pre-check required: inventory current `hook-message-injector` callsites/utilities to avoid duplicate abstractions.
+3. [x] Message-injector utility parity (shared helper surface)
+   - Pre-check completed: helper previously exposed only `injectHookMessage` and was used by `continuation` + `session-recovery`; no reusable identity/body utility surface existed.
+   - Delivered: added shared `resolveHookMessageIdentity` + `buildHookMessageBody` utilities, refactored `injectHookMessage` to use them, and added split-metadata regression tests.
 
 4. [ ] Session-id fallback parity in transform path
    - Pre-check required: inspect current context-injector session id resolution and available session state sources.
