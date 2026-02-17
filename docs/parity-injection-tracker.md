@@ -86,3 +86,25 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 18. [x] Hashline read stability enhancer parity
     - Pre-check completed: local tool output processing covers truncation, but no hashline read enhancer equivalent was found. Confirmed on latest main there is no dedicated hashline read enhancer hook.
     - Delivered: added `hashline-read-enhancer` hook to append deterministic short hash tags to numbered read-output lines, avoid duplicate tagging on already-enhanced lines, wired config/default/order + loader support, and added dedicated regression tests.
+
+## Next Batch Refresh (Post-18 Gap Scan)
+
+19. [x] Max-step exhaustion recovery parity
+    - Pre-check completed: no local hook injects explicit recovery guidance when the model emits max-step/tool-disabled exhaustion text. Confirmed on latest main there is no `max-step` exhaustion detector in gateway hooks.
+    - Delivered: added `max-step-recovery` hook for max-step/tool-disabled exhaustion output detection, concise progress/remaining-work/next-action recovery guidance injection, config/default/order wiring, and dedicated regression tests with duplicate suppression.
+
+20. [ ] Plan/build mode transition reminder parity
+    - Pre-check completed: no local hook handles upstream-style plan/build mode transition reminders. Confirmed on latest main there is no dedicated plan-mode/build-mode transition guidance hook.
+    - Goal: add mode-transition detection and response guidance hooks for plan-mode and build-mode reminder payloads, with duplicate suppression and session safety.
+
+21. [ ] Todo-read proactive cadence parity
+    - Pre-check completed: local workflow blocks `task`/`todowrite`, but no proactive `todoread` reminder cadence exists. Confirmed on latest main there is no hook that nudges periodic todo-list reads in-session.
+    - Goal: add a lightweight cadence hook that reminds proactive todo reads at safe checkpoints (session start, before new task blocks, and after completion markers).
+
+22. [ ] Provider retry-after backoff guidance parity
+    - Pre-check completed: local provider recovery handles token-limit compaction, but no retry-after header/backoff guidance path exists. Confirmed on latest main there is no retry-delay parser (`retry-after-ms`/`retry-after`/HTTP date) in gateway recovery hooks.
+    - Goal: add provider retry guidance logic that parses retry headers/date values and emits deterministic backoff hints instead of immediate blind retries.
+
+23. [ ] Provider quota/rate-limit classification parity
+    - Pre-check completed: local recovery does not classify upstream-style quota and rate-limit signatures (for example free-usage exhaustion and structured `too_many_requests` payloads). Confirmed on latest main there is no dedicated classifier hook for these provider errors.
+    - Goal: add provider error classification + remediation hints for free-usage exhausted, overloaded, and rate-limited paths with clear reason codes.
