@@ -16,6 +16,7 @@ import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js"
 import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/index.js"
 import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/index.js"
+import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-limit-recovery/index.js"
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js"
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js"
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js"
@@ -359,6 +360,12 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     }),
     createJsonErrorRecoveryHook({
       enabled: cfg.jsonErrorRecovery.enabled,
+    }),
+    createProviderTokenLimitRecoveryHook({
+      directory,
+      enabled: cfg.providerTokenLimitRecovery.enabled,
+      client: ctx.client,
+      cooldownMs: cfg.providerTokenLimitRecovery.cooldownMs,
     }),
     createCommentCheckerHook({
       enabled: cfg.commentChecker.enabled,

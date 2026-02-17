@@ -38,6 +38,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "empty-task-response-detector",
             "edit-error-recovery",
             "json-error-recovery",
+            "provider-token-limit-recovery",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -225,6 +226,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     jsonErrorRecovery: {
         enabled: true,
+    },
+    providerTokenLimitRecovery: {
+        enabled: true,
+        cooldownMs: 60000,
     },
     commentChecker: {
         enabled: true,

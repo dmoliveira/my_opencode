@@ -131,6 +131,10 @@ export interface EditErrorRecoveryConfig {
 export interface JsonErrorRecoveryConfig {
     enabled: boolean;
 }
+export interface ProviderTokenLimitRecoveryConfig {
+    enabled: boolean;
+    cooldownMs: number;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -316,6 +320,7 @@ export interface GatewayConfig {
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
     editErrorRecovery: EditErrorRecoveryConfig;
     jsonErrorRecovery: JsonErrorRecoveryConfig;
+    providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;

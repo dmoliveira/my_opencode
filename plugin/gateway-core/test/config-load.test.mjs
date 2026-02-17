@@ -37,6 +37,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.compactionTodoPreserver.maxChars, 4000)
   assert.equal(config.editErrorRecovery.enabled, true)
   assert.equal(config.jsonErrorRecovery.enabled, true)
+  assert.equal(config.providerTokenLimitRecovery.enabled, true)
+  assert.equal(config.providerTokenLimitRecovery.cooldownMs, 60000)
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
@@ -122,6 +124,9 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
       envPrefixes: ["", "CI=true", 1],
       prefixCommands: ["", "git", 1],
     },
+    providerTokenLimitRecovery: {
+      cooldownMs: 0,
+    },
   })
   assert.equal(config.contextWindowMonitor.guardMarkerMode, "both")
   assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
@@ -156,4 +161,5 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.deepEqual(config.noninteractiveShellGuard.prefixCommands, ["git"])
   assert.equal(config.editErrorRecovery.enabled, true)
   assert.equal(config.jsonErrorRecovery.enabled, true)
+  assert.equal(config.providerTokenLimitRecovery.cooldownMs, 60000)
 })

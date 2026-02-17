@@ -150,6 +150,9 @@ export function loadGatewayConfig(raw) {
     const jsonErrorRecoverySource = source.jsonErrorRecovery && typeof source.jsonErrorRecovery === "object"
         ? source.jsonErrorRecovery
         : {};
+    const providerTokenLimitRecoverySource = source.providerTokenLimitRecovery && typeof source.providerTokenLimitRecovery === "object"
+        ? source.providerTokenLimitRecovery
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -473,6 +476,12 @@ export function loadGatewayConfig(raw) {
             enabled: typeof jsonErrorRecoverySource.enabled === "boolean"
                 ? jsonErrorRecoverySource.enabled
                 : DEFAULT_GATEWAY_CONFIG.jsonErrorRecovery.enabled,
+        },
+        providerTokenLimitRecovery: {
+            enabled: typeof providerTokenLimitRecoverySource.enabled === "boolean"
+                ? providerTokenLimitRecoverySource.enabled
+                : DEFAULT_GATEWAY_CONFIG.providerTokenLimitRecovery.enabled,
+            cooldownMs: positiveInt(providerTokenLimitRecoverySource.cooldownMs, DEFAULT_GATEWAY_CONFIG.providerTokenLimitRecovery.cooldownMs),
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"
