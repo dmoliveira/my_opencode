@@ -85,6 +85,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.preemptiveCompaction && typeof source.preemptiveCompaction === "object"
       ? (source.preemptiveCompaction as Record<string, unknown>)
       : {}
+  const compactionContextInjectorSource =
+    source.compactionContextInjector && typeof source.compactionContextInjector === "object"
+      ? (source.compactionContextInjector as Record<string, unknown>)
+      : {}
   const sessionRecoverySource =
     source.sessionRecovery && typeof source.sessionRecovery === "object"
       ? (source.sessionRecovery as Record<string, unknown>)
@@ -388,6 +392,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         preemptiveCompactionSource.maxSessionStateEntries,
         DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.maxSessionStateEntries,
       ),
+    },
+    compactionContextInjector: {
+      enabled:
+        typeof compactionContextInjectorSource.enabled === "boolean"
+          ? compactionContextInjectorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.compactionContextInjector.enabled,
     },
     sessionRecovery: {
       enabled:

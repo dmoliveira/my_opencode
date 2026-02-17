@@ -15,8 +15,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check: existing lightweight natural-language rewrite exists.
    - Gaps addressed in this run: tagged injection wrapping, explicit slash parsing hygiene, `command.execute.before` injection path, excluded command handling, safety hardening (no high-risk install rewrites), and doctor slash rendering parity (`/doctor` instead of `/doctor run`).
 
-2. [ ] Compaction-context injector parity
-   - Pre-check required: review `preemptive-compaction` and any existing compaction context hooks before implementing.
+2. [x] Compaction-context injector parity
+   - Pre-check completed: `preemptive-compaction` exists and triggers summarize, but no dedicated compaction-context prompt injector hook existed in gateway-core.
+   - Delivered: added `compaction-context-injector` hook, wired config/defaults, ensured compatibility with `auto-slash-command` across default and custom hook orders, and added dedicated test coverage.
 
 3. [ ] Message-injector utility parity (shared helper surface)
    - Pre-check required: inventory current `hook-message-injector` callsites/utilities to avoid duplicate abstractions.

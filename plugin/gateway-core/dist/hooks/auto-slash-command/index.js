@@ -62,6 +62,19 @@ function findSlashCommandPartIndex(parts) {
     }
     return parts.findIndex((part) => part.type === "text");
 }
+// Finds text part index that already contains explicit slash command text.
+function findExplicitSlashPartIndex(parts) {
+    for (let idx = 0; idx < parts.length; idx += 1) {
+        const part = parts[idx];
+        if (part.type !== "text") {
+            continue;
+        }
+        if ((part.text ?? "").trim().startsWith("/")) {
+            return idx;
+        }
+    }
+    return -1;
+}
 // Extracts user prompt text from chat payload input/output variants.
 function promptText(payload) {
     const props = payload.properties ?? {};
@@ -170,7 +183,7 @@ export function createAutoSlashCommandHook(options) {
             }
             const parts = eventPayload.output?.parts;
             const tagged = taggedSlashCommand(raw);
-            const idx = Array.isArray(parts) ? findSlashCommandPartIndex(parts) : -1;
+            const idx = Array.isArray(parts) ? findExplicitSlashPartIndex(parts) : -1;
             if (idx >= 0 && parts) {
                 parts[idx].text = tagged;
             }

@@ -58,6 +58,11 @@ export interface PreemptiveCompactionConfig {
   maxSessionStateEntries: number
 }
 
+// Declares compaction context injector settings for summarize commands.
+export interface CompactionContextInjectorConfig {
+  enabled: boolean
+}
+
 // Declares session recovery settings for event-driven auto-resume attempts.
 export interface SessionRecoveryConfig {
   enabled: boolean
@@ -339,6 +344,7 @@ export interface GatewayConfig {
   toolOutputTruncator: ToolOutputTruncatorConfig
   contextWindowMonitor: ContextWindowMonitorConfig
   preemptiveCompaction: PreemptiveCompactionConfig
+  compactionContextInjector: CompactionContextInjectorConfig
   sessionRecovery: SessionRecoveryConfig
   delegateTaskRetry: DelegateTaskRetryConfig
   validationEvidenceLedger: ValidationEvidenceLedgerConfig
@@ -405,6 +411,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "stop-continuation-guard",
       "keyword-detector",
       "auto-slash-command",
+      "compaction-context-injector",
       "context-injector",
       "rules-injector",
       "directory-agents-injector",
@@ -473,6 +480,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 512,
+  },
+  compactionContextInjector: {
+    enabled: true,
   },
   sessionRecovery: {
     enabled: true,
