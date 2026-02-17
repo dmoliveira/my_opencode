@@ -201,6 +201,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.hashlineReadEnhancer && typeof source.hashlineReadEnhancer === "object"
       ? (source.hashlineReadEnhancer as Record<string, unknown>)
       : {}
+  const maxStepRecoverySource =
+    source.maxStepRecovery && typeof source.maxStepRecovery === "object"
+      ? (source.maxStepRecovery as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -738,6 +742,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof hashlineReadEnhancerSource.enabled === "boolean"
           ? hashlineReadEnhancerSource.enabled
           : DEFAULT_GATEWAY_CONFIG.hashlineReadEnhancer.enabled,
+    },
+    maxStepRecovery: {
+      enabled:
+        typeof maxStepRecoverySource.enabled === "boolean"
+          ? maxStepRecoverySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.maxStepRecovery.enabled,
     },
     commentChecker: {
       enabled:

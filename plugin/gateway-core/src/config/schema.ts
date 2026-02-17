@@ -194,6 +194,10 @@ export interface HashlineReadEnhancerConfig {
   enabled: boolean
 }
 
+export interface MaxStepRecoveryConfig {
+  enabled: boolean
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -440,6 +444,7 @@ export interface GatewayConfig {
   jsonErrorRecovery: JsonErrorRecoveryConfig
   providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig
   hashlineReadEnhancer: HashlineReadEnhancerConfig
+  maxStepRecovery: MaxStepRecoveryConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -508,6 +513,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "json-error-recovery",
       "provider-token-limit-recovery",
       "hashline-read-enhancer",
+      "max-step-recovery",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -701,6 +707,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     cooldownMs: 60000,
   },
   hashlineReadEnhancer: {
+    enabled: true,
+  },
+  maxStepRecovery: {
     enabled: true,
   },
   commentChecker: {
