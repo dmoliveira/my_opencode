@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
+- Added context guard operability controls for gateway hooks: marker mode (`nerd|plain|both`), verbosity (`minimal|normal|debug`), and bounded per-session state retention.
+- Added `guard_event_counters` to `/gateway status --json` and `/gateway doctor --json`, plus `/gateway tune memory --json` profile recommendations.
 - Added recurring cooldown + token-delta controls for `context-window-monitor` and `preemptive-compaction` gateway hooks, with test coverage for repeat and skip paths.
 - Added gateway doctor diagnostics for duplicate gateway plugin entries, stale autopilot runtime state, and process-pressure telemetry.
 - Added ecosystem extension guidance for `opencode.nvim` (Neovim integration) and `OpenChamber` (desktop/web UI).

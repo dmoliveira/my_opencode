@@ -11,6 +11,10 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.postMergeSyncGuard.requireDeleteBranch, true)
   assert.equal(config.contextWindowMonitor.reminderCooldownToolCalls, 12)
   assert.equal(config.preemptiveCompaction.compactionCooldownToolCalls, 10)
+  assert.equal(config.contextWindowMonitor.guardMarkerMode, "both")
+  assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
+  assert.equal(config.preemptiveCompaction.guardMarkerMode, "both")
+  assert.equal(config.preemptiveCompaction.guardVerbosity, "normal")
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -42,4 +46,25 @@ test("loadGatewayConfig normalizes invalid compaction cooldown values", () => {
   })
   assert.equal(config.preemptiveCompaction.compactionCooldownToolCalls, 10)
   assert.equal(config.preemptiveCompaction.minTokenDeltaForCompaction, 35000)
+})
+
+test("loadGatewayConfig normalizes invalid guard marker and verbosity values", () => {
+  const config = loadGatewayConfig({
+    contextWindowMonitor: {
+      guardMarkerMode: "invalid",
+      guardVerbosity: "invalid",
+      maxSessionStateEntries: 0,
+    },
+    preemptiveCompaction: {
+      guardMarkerMode: "invalid",
+      guardVerbosity: "invalid",
+      maxSessionStateEntries: 0,
+    },
+  })
+  assert.equal(config.contextWindowMonitor.guardMarkerMode, "both")
+  assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
+  assert.equal(config.contextWindowMonitor.maxSessionStateEntries, 512)
+  assert.equal(config.preemptiveCompaction.guardMarkerMode, "both")
+  assert.equal(config.preemptiveCompaction.guardVerbosity, "normal")
+  assert.equal(config.preemptiveCompaction.maxSessionStateEntries, 512)
 })

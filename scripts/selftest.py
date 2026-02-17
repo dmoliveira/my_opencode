@@ -1735,6 +1735,25 @@ exit 0
             and isinstance(gateway_status.get("process_pressure"), dict),
             "gateway status should expose runtime staleness and process pressure telemetry",
         )
+        expect(
+            isinstance(gateway_status.get("guard_event_counters"), dict),
+            "gateway status should expose guard event counters",
+        )
+        expect(
+            isinstance(
+                gateway_status.get("guard_event_counters", {}).get(
+                    "recent_context_warnings"
+                ),
+                int,
+            )
+            and isinstance(
+                gateway_status.get("guard_event_counters", {}).get(
+                    "recent_compactions"
+                ),
+                int,
+            ),
+            "gateway status guard counters should include recent window metrics",
+        )
 
         stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
         stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1869,6 +1888,21 @@ exit 0
                 gateway_doctor.get("status", {}).get("runtime_staleness"), dict
             ),
             "gateway doctor should include process pressure and runtime staleness telemetry",
+        )
+        expect(
+            isinstance(
+                gateway_doctor.get("status", {}).get("guard_event_counters"), dict
+            ),
+            "gateway doctor should include guard event counters telemetry",
+        )
+
+        result = run_gateway("tune", "memory", "--json")
+        expect(result.returncode == 0, f"gateway tune memory failed: {result.stderr}")
+        gateway_tune = parse_json_output(result.stdout)
+        expect(
+            gateway_tune.get("result") == "PASS"
+            and isinstance(gateway_tune.get("recommended"), dict),
+            "gateway tune memory should return pass payload with recommended settings",
         )
 
         notify_policy_path = (

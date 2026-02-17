@@ -41,6 +41,23 @@ function boundedFloat(value: unknown, min: number, max: number, fallback: number
   return parsed
 }
 
+function markerMode(value: unknown, fallback: "nerd" | "plain" | "both"): "nerd" | "plain" | "both" {
+  if (value === "nerd" || value === "plain" || value === "both") {
+    return value
+  }
+  return fallback
+}
+
+function guardVerbosity(
+  value: unknown,
+  fallback: "minimal" | "normal" | "debug",
+): "minimal" | "normal" | "debug" {
+  if (value === "minimal" || value === "normal" || value === "debug") {
+    return value
+  }
+  return fallback
+}
+
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}
@@ -327,6 +344,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         contextWindowSource.minTokenDeltaForReminder,
         DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.minTokenDeltaForReminder,
       ),
+      guardMarkerMode: markerMode(
+        contextWindowSource.guardMarkerMode,
+        DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.guardMarkerMode,
+      ),
+      guardVerbosity: guardVerbosity(
+        contextWindowSource.guardVerbosity,
+        DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.guardVerbosity,
+      ),
+      maxSessionStateEntries: positiveInt(
+        contextWindowSource.maxSessionStateEntries,
+        DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.maxSessionStateEntries,
+      ),
     },
     preemptiveCompaction: {
       enabled:
@@ -346,6 +375,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       minTokenDeltaForCompaction: nonNegativeInt(
         preemptiveCompactionSource.minTokenDeltaForCompaction,
         DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.minTokenDeltaForCompaction,
+      ),
+      guardMarkerMode: markerMode(
+        preemptiveCompactionSource.guardMarkerMode,
+        DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardMarkerMode,
+      ),
+      guardVerbosity: guardVerbosity(
+        preemptiveCompactionSource.guardVerbosity,
+        DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardVerbosity,
+      ),
+      maxSessionStateEntries: positiveInt(
+        preemptiveCompactionSource.maxSessionStateEntries,
+        DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.maxSessionStateEntries,
       ),
     },
     sessionRecovery: {

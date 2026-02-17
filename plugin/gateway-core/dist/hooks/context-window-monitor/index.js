@@ -26,6 +26,31 @@ function warningSuffix(totalInputTokens, contextLimit) {
     return `[Context Status: ${usedPct}% used (${usedTokens}/${limitTokens} tokens), ${remainingPct}% remaining]`;
 }
 const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
+function guardPrefix(mode) {
+    if (mode === "plain") {
+        return "[Context Guard]:";
+    }
+    if (mode === "both") {
+        return "󰚩 Context Guard [Context Guard]:";
+    }
+    return CONTEXT_GUARD_PREFIX;
+}
+function pruneSessionStates(states, maxEntries) {
+    if (states.size <= maxEntries) {
+        return;
+    }
+    let oldestKey = "";
+    let oldestAt = Number.POSITIVE_INFINITY;
+    for (const [key, state] of states.entries()) {
+        if (state.lastSeenAtMs < oldestAt) {
+            oldestAt = state.lastSeenAtMs;
+            oldestKey = key;
+        }
+    }
+    if (oldestKey) {
+        states.delete(oldestKey);
+    }
+}
 // Creates context monitor hook that appends usage warnings once per session.
 export function createContextWindowMonitorHook(options) {
     const sessionStates = new Map();
@@ -64,12 +89,15 @@ export function createContextWindowMonitorHook(options) {
                 toolCalls: 0,
                 lastWarnedAtToolCall: 0,
                 lastWarnedTokens: 0,
+                lastSeenAtMs: Date.now(),
             };
             const nextState = {
                 ...priorState,
                 toolCalls: priorState.toolCalls + 1,
+                lastSeenAtMs: Date.now(),
             };
             sessionStates.set(sessionId, nextState);
+            pruneSessionStates(sessionStates, options.maxSessionStateEntries);
             if (typeof eventPayload.output?.output !== "string") {
                 writeGatewayEventAudit(directory, {
                     hook: "context-window-monitor",
@@ -148,7 +176,16 @@ export function createContextWindowMonitorHook(options) {
                     lastWarnedAtToolCall: nextState.toolCalls,
                     lastWarnedTokens: totalInputTokens,
                 });
-                eventPayload.output.output = `${eventPayload.output.output}\n\n${CONTEXT_GUARD_PREFIX} High context usage detected; keep responses focused.\n${warningSuffix(totalInputTokens, actualLimit)}`;
+                const prefix = guardPrefix(options.guardMarkerMode);
+                if (options.guardVerbosity === "minimal") {
+                    eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} High context usage detected.`;
+                }
+                else if (options.guardVerbosity === "debug") {
+                    eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} High context usage detected; threshold ${(options.warningThreshold * 100).toFixed(1)}% crossed.\n${warningSuffix(totalInputTokens, actualLimit)}\n[cooldown=${options.reminderCooldownToolCalls} calls, min_delta=${options.minTokenDeltaForReminder} tokens]`;
+                }
+                else {
+                    eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} High context usage detected; keep responses focused.\n${warningSuffix(totalInputTokens, actualLimit)}`;
+                }
                 writeGatewayEventAudit(directory, {
                     hook: "context-window-monitor",
                     stage: "state",

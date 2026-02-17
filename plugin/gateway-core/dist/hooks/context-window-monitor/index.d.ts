@@ -33,5 +33,8 @@ export declare function createContextWindowMonitorHook(options: {
     warningThreshold: number;
     reminderCooldownToolCalls: number;
     minTokenDeltaForReminder: number;
+    guardMarkerMode: "nerd" | "plain" | "both";
+    guardVerbosity: "minimal" | "normal" | "debug";
+    maxSessionStateEntries: number;
 }): GatewayHook;
 export {};
