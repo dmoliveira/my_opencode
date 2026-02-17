@@ -162,6 +162,9 @@ export function loadGatewayConfig(raw) {
     const modeTransitionReminderSource = source.modeTransitionReminder && typeof source.modeTransitionReminder === "object"
         ? source.modeTransitionReminder
         : {};
+    const todoreadCadenceReminderSource = source.todoreadCadenceReminder && typeof source.todoreadCadenceReminder === "object"
+        ? source.todoreadCadenceReminder
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -506,6 +509,12 @@ export function loadGatewayConfig(raw) {
             enabled: typeof modeTransitionReminderSource.enabled === "boolean"
                 ? modeTransitionReminderSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.modeTransitionReminder.enabled,
+        },
+        todoreadCadenceReminder: {
+            enabled: typeof todoreadCadenceReminderSource.enabled === "boolean"
+                ? todoreadCadenceReminderSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.todoreadCadenceReminder.enabled,
+            cooldownEvents: positiveInt(todoreadCadenceReminderSource.cooldownEvents, DEFAULT_GATEWAY_CONFIG.todoreadCadenceReminder.cooldownEvents),
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"

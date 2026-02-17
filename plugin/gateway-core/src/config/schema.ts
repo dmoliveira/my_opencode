@@ -202,6 +202,11 @@ export interface ModeTransitionReminderConfig {
   enabled: boolean
 }
 
+export interface TodoreadCadenceReminderConfig {
+  enabled: boolean
+  cooldownEvents: number
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -450,6 +455,7 @@ export interface GatewayConfig {
   hashlineReadEnhancer: HashlineReadEnhancerConfig
   maxStepRecovery: MaxStepRecoveryConfig
   modeTransitionReminder: ModeTransitionReminderConfig
+  todoreadCadenceReminder: TodoreadCadenceReminderConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -520,6 +526,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "hashline-read-enhancer",
       "max-step-recovery",
       "mode-transition-reminder",
+      "todoread-cadence-reminder",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -720,6 +727,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   modeTransitionReminder: {
     enabled: true,
+  },
+  todoreadCadenceReminder: {
+    enabled: true,
+    cooldownEvents: 2,
   },
   commentChecker: {
     enabled: true,
