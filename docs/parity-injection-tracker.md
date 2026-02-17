@@ -111,9 +111,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 
 ## Next Batch Refresh (Post-23 Gap Scan)
 
-24. [ ] Codex header instruction parity
+24. [x] Codex header instruction parity
     - Pre-check completed: upstream ships a dedicated Codex header prompt at `packages/opencode/src/session/prompt/codex_header.txt`, but local gateway has no dedicated Codex-header parity hook or injector. Confirmed on latest main with no `codex_header` references in `plugin/gateway-core`.
-    - Goal: add provider-aware Codex header guidance injection with duplicate suppression and clear ordering relative to existing rules/context injectors.
+    - Delivered: added `codex-header-injector` hook for provider-aware Codex guidance injection across chat/transform events, with session duplicate suppression/reset on `session.deleted`, config/default/order + loader wiring, and dedicated regression tests.
 
 25. [ ] Plan tool handoff reminder parity (plan-enter / plan-exit)
     - Pre-check completed: upstream includes explicit plan handoff prompts in `packages/opencode/src/tool/plan-enter.txt` and `packages/opencode/src/tool/plan-exit.txt`; local hooks currently have generic mode reminders but no plan-tool-specific handoff parity behavior. Confirmed on latest main with no `plan-enter` / `plan-exit` handling in gateway hooks.
