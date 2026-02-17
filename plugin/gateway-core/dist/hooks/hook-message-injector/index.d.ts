@@ -44,6 +44,31 @@ interface SessionClient {
         };
     }): Promise<void>;
 }
+export interface HookMessageIdentity {
+    agent?: string;
+    model?: {
+        providerID: string;
+        modelID: string;
+        variant?: string;
+    };
+}
+export declare function resolveHookMessageIdentity(args: {
+    session: SessionClient;
+    sessionId: string;
+    directory: string;
+}): Promise<HookMessageIdentity>;
+export declare function buildHookMessageBody(content: string, identity: HookMessageIdentity): {
+    parts: Array<{
+        type: string;
+        text: string;
+    }>;
+    agent?: string;
+    model?: {
+        providerID: string;
+        modelID: string;
+        variant?: string;
+    };
+};
 export declare function injectHookMessage(args: {
     session: SessionClient;
     sessionId: string;
