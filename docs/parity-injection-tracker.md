@@ -119,9 +119,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: upstream includes explicit plan handoff prompts in `packages/opencode/src/tool/plan-enter.txt` and `packages/opencode/src/tool/plan-exit.txt`; local hooks currently have generic mode reminders but no plan-tool-specific handoff parity behavior. Confirmed on latest main with no `plan-enter` / `plan-exit` handling in gateway hooks.
     - Delivered: added `plan-handoff-reminder` hook for plan-enter/exit prompt signal detection with session-aware duplicate suppression/reset on `session.deleted`, config/default/order + loader wiring, and dedicated regression tests.
 
-26. [ ] Provider retry reason canonicalization parity
+26. [x] Provider retry reason canonicalization parity
     - Pre-check completed: upstream `packages/opencode/src/session/retry.ts` normalizes retry reasons (for example `Too Many Requests`, `Rate Limited`, `Provider is overloaded`, free-usage credit hint), but local provider hooks do not expose canonical retry reason mapping. Confirmed on latest main with no canonical reason mapper in `plugin/gateway-core/src/hooks`.
-    - Goal: add shared provider retry reason canonicalization utility and wire it into provider recovery/classifier hooks for consistent reason codes and operator guidance.
+    - Delivered: added shared `provider-retry-reason` canonicalization utility and wired it into provider retry-backoff and error-classifier hooks for consistent retry reason mapping/message text, plus dedicated shared regression tests.
 
 27. [ ] Context-overflow non-retry suppression parity
     - Pre-check completed: upstream `SessionRetry.retryable` explicitly treats context overflow as non-retryable, while local provider recovery hooks do not have explicit context-overflow skip logic. Confirmed on latest main with no `ContextOverflowError`/context-overflow suppression path in gateway hooks.
