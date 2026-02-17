@@ -49,6 +49,7 @@ test("context-window-monitor appends warning when Anthropic usage is high", asyn
     const output = { output: "tool result" }
     await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-1" }, output)
     assert.ok(output.output.includes("Context Status"))
+    assert.ok(output.output.includes("Context Guard"))
   } finally {
     if (previousFlag === undefined) {
       delete process.env.ANTHROPIC_1M_CONTEXT

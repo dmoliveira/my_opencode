@@ -25,6 +25,7 @@ function warningSuffix(totalInputTokens, contextLimit) {
     const limitTokens = safeLimit.toLocaleString();
     return `[Context Status: ${usedPct}% used (${usedTokens}/${limitTokens} tokens), ${remainingPct}% remaining]`;
 }
+const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
 // Creates context monitor hook that appends usage warnings once per session.
 export function createContextWindowMonitorHook(options) {
     const sessionStates = new Map();
@@ -147,7 +148,7 @@ export function createContextWindowMonitorHook(options) {
                     lastWarnedAtToolCall: nextState.toolCalls,
                     lastWarnedTokens: totalInputTokens,
                 });
-                eventPayload.output.output = `${eventPayload.output.output}\n\nUse remaining context carefully and keep responses focused.\n${warningSuffix(totalInputTokens, actualLimit)}`;
+                eventPayload.output.output = `${eventPayload.output.output}\n\n${CONTEXT_GUARD_PREFIX} High context usage detected; keep responses focused.\n${warningSuffix(totalInputTokens, actualLimit)}`;
                 writeGatewayEventAudit(directory, {
                     hook: "context-window-monitor",
                     stage: "state",
