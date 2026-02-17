@@ -197,6 +197,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.providerTokenLimitRecovery && typeof source.providerTokenLimitRecovery === "object"
       ? (source.providerTokenLimitRecovery as Record<string, unknown>)
       : {}
+  const hashlineReadEnhancerSource =
+    source.hashlineReadEnhancer && typeof source.hashlineReadEnhancer === "object"
+      ? (source.hashlineReadEnhancer as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -728,6 +732,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         providerTokenLimitRecoverySource.cooldownMs,
         DEFAULT_GATEWAY_CONFIG.providerTokenLimitRecovery.cooldownMs,
       ),
+    },
+    hashlineReadEnhancer: {
+      enabled:
+        typeof hashlineReadEnhancerSource.enabled === "boolean"
+          ? hashlineReadEnhancerSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.hashlineReadEnhancer.enabled,
     },
     commentChecker: {
       enabled:

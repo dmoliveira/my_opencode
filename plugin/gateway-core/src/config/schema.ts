@@ -190,6 +190,10 @@ export interface ProviderTokenLimitRecoveryConfig {
   cooldownMs: number
 }
 
+export interface HashlineReadEnhancerConfig {
+  enabled: boolean
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -435,6 +439,7 @@ export interface GatewayConfig {
   editErrorRecovery: EditErrorRecoveryConfig
   jsonErrorRecovery: JsonErrorRecoveryConfig
   providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig
+  hashlineReadEnhancer: HashlineReadEnhancerConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -502,6 +507,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "edit-error-recovery",
       "json-error-recovery",
       "provider-token-limit-recovery",
+      "hashline-read-enhancer",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -693,6 +699,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   providerTokenLimitRecovery: {
     enabled: true,
     cooldownMs: 60000,
+  },
+  hashlineReadEnhancer: {
+    enabled: true,
   },
   commentChecker: {
     enabled: true,

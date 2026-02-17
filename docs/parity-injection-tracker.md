@@ -83,6 +83,6 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: local context-window monitoring and preemptive compaction are proactive, but no provider-specific error-triggered token-limit recovery hook was found. Confirmed on latest main there is no dedicated token-limit error recovery hook.
     - Delivered: added `provider-token-limit-recovery` hook that detects token-limit errors on `session.error`/`message.updated`, triggers summarize-based recovery with cooldown and session in-flight guards, injects concise continuation guidance, and includes config/default/order wiring plus dedicated tests.
 
-18. [ ] Hashline read stability enhancer parity
-    - Pre-check completed: local tool output processing covers truncation, but no hashline read enhancer equivalent was found.
-    - Goal: evaluate and, if in-scope, add hashline read-output stabilization to improve deterministic follow-up reads.
+18. [x] Hashline read stability enhancer parity
+    - Pre-check completed: local tool output processing covers truncation, but no hashline read enhancer equivalent was found. Confirmed on latest main there is no dedicated hashline read enhancer hook.
+    - Delivered: added `hashline-read-enhancer` hook to append deterministic short hash tags to numbered read-output lines, avoid duplicate tagging on already-enhanced lines, wired config/default/order + loader support, and added dedicated regression tests.

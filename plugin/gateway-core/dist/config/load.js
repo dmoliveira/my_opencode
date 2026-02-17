@@ -153,6 +153,9 @@ export function loadGatewayConfig(raw) {
     const providerTokenLimitRecoverySource = source.providerTokenLimitRecovery && typeof source.providerTokenLimitRecovery === "object"
         ? source.providerTokenLimitRecovery
         : {};
+    const hashlineReadEnhancerSource = source.hashlineReadEnhancer && typeof source.hashlineReadEnhancer === "object"
+        ? source.hashlineReadEnhancer
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -482,6 +485,11 @@ export function loadGatewayConfig(raw) {
                 ? providerTokenLimitRecoverySource.enabled
                 : DEFAULT_GATEWAY_CONFIG.providerTokenLimitRecovery.enabled,
             cooldownMs: positiveInt(providerTokenLimitRecoverySource.cooldownMs, DEFAULT_GATEWAY_CONFIG.providerTokenLimitRecovery.cooldownMs),
+        },
+        hashlineReadEnhancer: {
+            enabled: typeof hashlineReadEnhancerSource.enabled === "boolean"
+                ? hashlineReadEnhancerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.hashlineReadEnhancer.enabled,
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"
