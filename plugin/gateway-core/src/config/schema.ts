@@ -198,6 +198,10 @@ export interface MaxStepRecoveryConfig {
   enabled: boolean
 }
 
+export interface ModeTransitionReminderConfig {
+  enabled: boolean
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -445,6 +449,7 @@ export interface GatewayConfig {
   providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig
   hashlineReadEnhancer: HashlineReadEnhancerConfig
   maxStepRecovery: MaxStepRecoveryConfig
+  modeTransitionReminder: ModeTransitionReminderConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -514,6 +519,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "provider-token-limit-recovery",
       "hashline-read-enhancer",
       "max-step-recovery",
+      "mode-transition-reminder",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -710,6 +716,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   maxStepRecovery: {
+    enabled: true,
+  },
+  modeTransitionReminder: {
     enabled: true,
   },
   commentChecker: {

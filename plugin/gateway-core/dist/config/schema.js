@@ -41,6 +41,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "provider-token-limit-recovery",
             "hashline-read-enhancer",
             "max-step-recovery",
+            "mode-transition-reminder",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -237,6 +238,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     maxStepRecovery: {
+        enabled: true,
+    },
+    modeTransitionReminder: {
         enabled: true,
     },
     commentChecker: {

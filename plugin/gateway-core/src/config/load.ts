@@ -205,6 +205,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.maxStepRecovery && typeof source.maxStepRecovery === "object"
       ? (source.maxStepRecovery as Record<string, unknown>)
       : {}
+  const modeTransitionReminderSource =
+    source.modeTransitionReminder && typeof source.modeTransitionReminder === "object"
+      ? (source.modeTransitionReminder as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -748,6 +752,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof maxStepRecoverySource.enabled === "boolean"
           ? maxStepRecoverySource.enabled
           : DEFAULT_GATEWAY_CONFIG.maxStepRecovery.enabled,
+    },
+    modeTransitionReminder: {
+      enabled:
+        typeof modeTransitionReminderSource.enabled === "boolean"
+          ? modeTransitionReminderSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.modeTransitionReminder.enabled,
     },
     commentChecker: {
       enabled:

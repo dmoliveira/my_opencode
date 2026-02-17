@@ -141,6 +141,9 @@ export interface HashlineReadEnhancerConfig {
 export interface MaxStepRecoveryConfig {
     enabled: boolean;
 }
+export interface ModeTransitionReminderConfig {
+    enabled: boolean;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -329,6 +332,7 @@ export interface GatewayConfig {
     providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig;
     hashlineReadEnhancer: HashlineReadEnhancerConfig;
     maxStepRecovery: MaxStepRecoveryConfig;
+    modeTransitionReminder: ModeTransitionReminderConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
