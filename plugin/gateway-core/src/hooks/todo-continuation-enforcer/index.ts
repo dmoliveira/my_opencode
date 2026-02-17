@@ -53,6 +53,7 @@ interface SessionState {
   lastInjectedAt: number
   consecutiveFailures: number
   inFlight: boolean
+  markerProbeAttempted: boolean
 }
 
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>"
@@ -109,6 +110,7 @@ function getSessionState(store: Map<string, SessionState>, sessionId: string): S
     lastInjectedAt: 0,
     consecutiveFailures: 0,
     inFlight: false,
+    markerProbeAttempted: false,
   }
   store.set(sessionId, created)
   return created
@@ -149,6 +151,7 @@ export function createTodoContinuationEnforcerHook(options: {
         }
         const state = getSessionState(sessionState, sessionId)
         state.pendingContinuation = eventPayload.output.output.includes(CONTINUE_LOOP_MARKER)
+        state.markerProbeAttempted = true
         return
       }
 
@@ -183,28 +186,41 @@ export function createTodoContinuationEnforcerHook(options: {
       }
 
       const state = getSessionState(sessionState, sessionId)
+      const now = Date.now()
+      const cooldownBase = Math.max(1, Math.floor(options.cooldownMs))
+      const maxFailures = Math.max(1, Math.floor(options.maxConsecutiveFailures))
+      const failureResetWindowMs = Math.max(cooldownBase * 4, 60_000)
+      if (state.consecutiveFailures >= maxFailures) {
+        if (state.lastInjectedAt > 0 && now - state.lastInjectedAt > failureResetWindowMs) {
+          state.consecutiveFailures = 0
+        } else {
+          writeGatewayEventAudit(directory, {
+            hook: "todo-continuation-enforcer",
+            stage: "skip",
+            reason_code: "todo_continuation_failure_budget_exhausted",
+            session_id: sessionId,
+            failures: state.consecutiveFailures,
+          })
+          return
+        }
+      }
       if (state.inFlight) {
         return
       }
-      const maxFailures = Math.max(1, Math.floor(options.maxConsecutiveFailures))
-      if (state.consecutiveFailures >= maxFailures) {
-        return
-      }
-      const cooldownBase = Math.max(1, Math.floor(options.cooldownMs))
       const cooldownMs = cooldownBase * 2 ** Math.min(state.consecutiveFailures, 5)
-      const now = Date.now()
       if (state.lastInjectedAt > 0 && now - state.lastInjectedAt < cooldownMs) {
         return
       }
 
       let pending = state.pendingContinuation
       const client = options.client?.session
-      if (!pending && client) {
+      if (!pending && client && !state.markerProbeAttempted) {
         const response = await client.messages({
           path: { id: sessionId },
           query: { directory },
         })
         pending = hasPendingMarker(Array.isArray(response.data) ? response.data : [])
+        state.markerProbeAttempted = true
       }
       state.pendingContinuation = pending
       if (!pending || !client) {

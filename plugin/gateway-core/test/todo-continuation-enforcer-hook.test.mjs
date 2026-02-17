@@ -89,6 +89,50 @@ test("todo-continuation-enforcer honors cooldown across repeated idles", async (
   }
 })
 
+test("todo-continuation-enforcer avoids repeated message polling after no-marker probe", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let messageCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "no todo marker here" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            throw new Error("promptAsync should not be called")
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-2b" },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-2b" },
+    })
+
+    assert.equal(messageCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("todo-continuation-enforcer skips when active loop is running", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
   try {
