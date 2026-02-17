@@ -1,12 +1,31 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 
 // Declares minimal session prompt API used for recovery resume.
 interface GatewayClient {
   session?: {
+    messages?(args: {
+      path: { id: string }
+      query?: { directory?: string }
+    }): Promise<{
+      data?: Array<{
+        info?: {
+          role?: string
+          agent?: string
+          model?: { providerID?: string; modelID?: string; variant?: string }
+          providerID?: string
+          modelID?: string
+        }
+      }>
+    }>
     promptAsync(args: {
       path: { id: string }
-      body: { parts: Array<{ type: string; text: string }> }
+      body: {
+        parts: Array<{ type: string; text: string }>
+        agent?: string
+        model?: { providerID: string; modelID: string; variant?: string }
+      }
       query?: { directory?: string }
     }): Promise<void>
   }
@@ -131,18 +150,21 @@ export function createSessionRecoveryHook(options: {
       }
       recoveringSessions.add(sessionId)
       try {
-        await client.promptAsync({
-          path: { id: sessionId },
-          body: {
-            parts: [
-              {
-                type: "text",
-                text: "[session recovered - continuing previous task]",
-              },
-            ],
-          },
-          query: { directory },
+        const injected = await injectHookMessage({
+          session: client,
+          sessionId,
+          content: "[session recovered - continuing previous task]",
+          directory,
         })
+        if (!injected) {
+          writeGatewayEventAudit(directory, {
+            hook: "session-recovery",
+            stage: "skip",
+            reason_code: "session_recovery_resume_failed",
+            session_id: sessionId,
+          })
+          return
+        }
         writeGatewayEventAudit(directory, {
           hook: "session-recovery",
           stage: "state",

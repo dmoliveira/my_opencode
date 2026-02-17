@@ -1,6 +1,28 @@
 import type { GatewayHook } from "../registry.js";
 interface GatewayClient {
     session?: {
+        messages?(args: {
+            path: {
+                id: string;
+            };
+            query?: {
+                directory?: string;
+            };
+        }): Promise<{
+            data?: Array<{
+                info?: {
+                    role?: string;
+                    agent?: string;
+                    model?: {
+                        providerID?: string;
+                        modelID?: string;
+                        variant?: string;
+                    };
+                    providerID?: string;
+                    modelID?: string;
+                };
+            }>;
+        }>;
         promptAsync(args: {
             path: {
                 id: string;
@@ -10,6 +32,12 @@ interface GatewayClient {
                     type: string;
                     text: string;
                 }>;
+                agent?: string;
+                model?: {
+                    providerID: string;
+                    modelID: string;
+                    variant?: string;
+                };
             };
             query?: {
                 directory?: string;

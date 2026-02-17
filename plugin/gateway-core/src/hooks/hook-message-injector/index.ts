@@ -11,7 +11,7 @@ interface SessionMessage {
 }
 
 interface SessionClient {
-  messages(args: {
+  messages?(args: {
     path: { id: string }
     query?: { directory?: string }
   }): Promise<{ data?: SessionMessage[] }>
@@ -40,11 +40,12 @@ export async function injectHookMessage(args: {
 
   let agent: string | undefined
   let model: { providerID: string; modelID: string; variant?: string } | undefined
-  try {
-    const response = await args.session.messages({
-      path: { id: args.sessionId },
-      query: { directory: args.directory },
-    })
+  if (typeof args.session.messages === "function") {
+    try {
+      const response = await args.session.messages({
+        path: { id: args.sessionId },
+        query: { directory: args.directory },
+      })
     const messages = Array.isArray(response.data) ? response.data : []
     for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
       const info = messages[idx]?.info
@@ -72,8 +73,9 @@ export async function injectHookMessage(args: {
         break
       }
     }
-  } catch {
-    // best-effort metadata resolution
+    } catch {
+      // best-effort metadata resolution
+    }
   }
 
   try {

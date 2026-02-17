@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { injectHookMessage } from "../hook-message-injector/index.js";
 // Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error) {
     const candidate = error && typeof error === "object" && "message" in error
@@ -94,18 +95,21 @@ export function createSessionRecoveryHook(options) {
             }
             recoveringSessions.add(sessionId);
             try {
-                await client.promptAsync({
-                    path: { id: sessionId },
-                    body: {
-                        parts: [
-                            {
-                                type: "text",
-                                text: "[session recovered - continuing previous task]",
-                            },
-                        ],
-                    },
-                    query: { directory },
+                const injected = await injectHookMessage({
+                    session: client,
+                    sessionId,
+                    content: "[session recovered - continuing previous task]",
+                    directory,
                 });
+                if (!injected) {
+                    writeGatewayEventAudit(directory, {
+                        hook: "session-recovery",
+                        stage: "skip",
+                        reason_code: "session_recovery_resume_failed",
+                        session_id: sessionId,
+                    });
+                    return;
+                }
                 writeGatewayEventAudit(directory, {
                     hook: "session-recovery",
                     stage: "state",
