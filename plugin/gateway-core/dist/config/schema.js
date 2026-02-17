@@ -167,6 +167,21 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     noninteractiveShellGuard: {
         enabled: true,
+        injectEnvPrefix: true,
+        envPrefixes: [
+            "CI=true",
+            "DEBIAN_FRONTEND=noninteractive",
+            "GIT_TERMINAL_PROMPT=0",
+            "GIT_EDITOR=true",
+            "GIT_PAGER=cat",
+            "PAGER=cat",
+            "GCM_INTERACTIVE=never",
+            "HOMEBREW_NO_AUTO_UPDATE=1",
+            "npm_config_yes=true",
+            "PIP_NO_INPUT=1",
+            "YARN_ENABLE_IMMUTABLE_INSTALLS=false",
+        ],
+        prefixCommands: ["git", "gh"],
         blockedPatterns: [
             "\\b(vim|vi|nano|emacs|less|more|man)\\b",
             "\\bgit\\s+add\\s+-p\\b",

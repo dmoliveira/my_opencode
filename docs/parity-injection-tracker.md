@@ -71,9 +71,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: local compaction flow preserves context excerpts, but no dedicated compaction todo snapshot/restore hook was found. Confirmed on latest main there is no existing `compaction-todo-preserver` hook/config wiring.
     - Delivered: added `compaction-todo-preserver` hook that snapshots pending todo task output (`<CONTINUE-LOOP>` marker), restores snapshot guidance after `session.compacted`, clears snapshot state on `session.deleted`, and wires config/default/order + dedicated tests.
 
-15. [ ] Non-interactive env prefix injection parity
-    - Pre-check completed: local noninteractive shell guard blocks risky interactive commands, but does not prepend non-interactive env prefixes to compatible shell commands.
-    - Goal: inject safe non-interactive environment prefixes for git/bash command paths where upstream currently rewrites command execution context.
+15. [x] Non-interactive env prefix injection parity
+    - Pre-check completed: local noninteractive shell guard blocks risky interactive commands, but does not prepend non-interactive env prefixes to compatible shell commands. Confirmed on latest main there is no existing env-prefix injection path in `noninteractive-shell-guard`.
+    - Delivered: added non-interactive env prefix injection for configured bash command prefixes (`git`/`gh` by default), preserved existing interactive-command blocking semantics, added config/load/default wiring (`injectEnvPrefix`, `envPrefixes`, `prefixCommands`), and expanded regression tests for prefix insertion and non-duplication.
 
 16. [ ] Tool error recovery nudges parity (edit + JSON)
     - Pre-check completed: local gateway has generic continuation/session recovery hooks, but no dedicated edit-error/json-error recovery nudges were found.

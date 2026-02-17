@@ -216,6 +216,9 @@ function configuredHooks(ctx) {
         createNoninteractiveShellGuardHook({
             directory,
             enabled: cfg.noninteractiveShellGuard.enabled,
+            injectEnvPrefix: cfg.noninteractiveShellGuard.injectEnvPrefix,
+            envPrefixes: cfg.noninteractiveShellGuard.envPrefixes,
+            prefixCommands: cfg.noninteractiveShellGuard.prefixCommands,
             blockedPatterns: cfg.noninteractiveShellGuard.blockedPatterns,
         }),
         createWriteExistingFileGuardHook({

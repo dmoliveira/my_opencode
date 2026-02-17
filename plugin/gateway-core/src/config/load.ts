@@ -606,6 +606,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof noninteractiveShellSource.enabled === "boolean"
           ? noninteractiveShellSource.enabled
           : DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.enabled,
+      injectEnvPrefix:
+        typeof noninteractiveShellSource.injectEnvPrefix === "boolean"
+          ? noninteractiveShellSource.injectEnvPrefix
+          : DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.injectEnvPrefix,
+      envPrefixes:
+        noninteractiveShellSource.envPrefixes === undefined
+          ? DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.envPrefixes
+          : stringList(noninteractiveShellSource.envPrefixes),
+      prefixCommands:
+        noninteractiveShellSource.prefixCommands === undefined
+          ? DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.prefixCommands
+          : stringList(noninteractiveShellSource.prefixCommands),
       blockedPatterns:
         noninteractiveShellSource.blockedPatterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.noninteractiveShellGuard.blockedPatterns
