@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
+- Added `docs/memory-incident-playbook.md` with detect/stabilize/recover/verify incident workflow for memory pressure.
+- Added e2e-style selftest coverage for repeated critical pressure audit signals across `/gateway doctor --json` and `/gateway tune memory --json` outputs.
 - Added critical-pressure refinement controls: escalation window/event thresholds, optional desktop notifications, and best-effort session-level RSS attribution in guard telemetry.
 - Added `remediation_commands` to `/gateway doctor --json` for critical pressure response workflows.
 - Added critical global RSS pressure handling (`>=10GB`) that appends a critical guard warning and auto-pauses continuation for the current session.

@@ -1918,6 +1918,109 @@ exit 0
             "gateway doctor should expose remediation command block",
         )
 
+        audit_fixture_path = gateway_cwd / ".opencode" / "gateway-events-selftest.jsonl"
+        audit_fixture_path.parent.mkdir(parents=True, exist_ok=True)
+        now_ts = datetime.now(UTC)
+        audit_fixture_rows = [
+            {
+                "timestamp": (now_ts - timedelta(minutes=1)).isoformat(),
+                "hook": "global-process-pressure",
+                "reason_code": "global_process_pressure_critical_appended",
+                "session_id": "session-selftest-critical",
+                "max_rss_mb": 11500,
+            },
+            {
+                "timestamp": (now_ts - timedelta(minutes=2)).isoformat(),
+                "hook": "global-process-pressure",
+                "reason_code": "global_process_pressure_critical_detected_no_append",
+                "session_id": "session-selftest-critical",
+                "max_rss_mb": 11800,
+            },
+            {
+                "timestamp": (now_ts - timedelta(minutes=3)).isoformat(),
+                "hook": "global-process-pressure",
+                "reason_code": "global_process_pressure_warning_appended",
+                "session_id": "session-selftest-warning",
+                "max_rss_mb": 1700,
+            },
+        ]
+        audit_fixture_path.write_text(
+            "\n".join(json.dumps(row) for row in audit_fixture_rows) + "\n",
+            encoding="utf-8",
+        )
+
+        result = run_gateway(
+            "doctor",
+            "--json",
+            env_override={
+                "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH": str(audit_fixture_path)
+            },
+        )
+        expect(
+            result.returncode == 0,
+            f"gateway doctor with audit fixture failed: {result.stderr}",
+        )
+        gateway_doctor_critical = parse_json_output(result.stdout)
+        expect(
+            gateway_doctor_critical.get("result") == "PASS",
+            "gateway doctor with audit fixture should stay in pass state",
+        )
+        expect(
+            any(
+                "recent critical global pressure" in str(item)
+                for item in gateway_doctor_critical.get("warnings", [])
+            ),
+            "gateway doctor should surface recent critical pressure warning from audit fixture",
+        )
+        expect(
+            "/autopilot pause"
+            in gateway_doctor_critical.get("remediation_commands", []),
+            "gateway doctor remediation commands should include autopilot pause",
+        )
+        expect(
+            isinstance(gateway_doctor_critical.get("manual_emergency_steps"), list),
+            "gateway doctor should expose manual emergency steps",
+        )
+
+        result = run_gateway(
+            "tune",
+            "memory",
+            "--json",
+            env_override={
+                "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH": str(audit_fixture_path)
+            },
+        )
+        expect(
+            result.returncode == 0,
+            f"gateway tune memory with audit fixture failed: {result.stderr}",
+        )
+        gateway_tune_critical = parse_json_output(result.stdout)
+        expect(
+            int(
+                gateway_tune_critical.get("status_snapshot", {})
+                .get("guard_event_counters", {})
+                .get("recent_global_process_pressure_critical_events", 0)
+            )
+            >= 1,
+            "gateway tune memory should report recent critical event counts from audit fixture",
+        )
+        expect(
+            any(
+                "critical global process pressure observed" in str(item)
+                for item in gateway_tune_critical.get("rationale", [])
+            ),
+            "gateway tune memory rationale should include critical pressure guidance",
+        )
+        expect(
+            isinstance(
+                gateway_tune_critical.get("status_snapshot", {})
+                .get("guard_event_counters", {})
+                .get("session_pressure_attribution"),
+                list,
+            ),
+            "gateway tune memory should expose session pressure attribution list",
+        )
+
         result = run_gateway("tune", "memory", "--json")
         expect(result.returncode == 0, f"gateway tune memory failed: {result.stderr}")
         gateway_tune = parse_json_output(result.stdout)
