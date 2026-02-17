@@ -20,7 +20,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.preemptiveCompaction.defaultContextLimitTokens, 128000)
   assert.equal(config.globalProcessPressure.checkCooldownToolCalls, 3)
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
-  assert.equal(config.compactionContextInjector.enabled, true)
+  assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
+  assert.equal(config.globalProcessPressure.autoPauseOnCritical, true)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -71,9 +72,12 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
     globalProcessPressure: {
       checkCooldownToolCalls: 0,
       reminderCooldownToolCalls: 0,
+      criticalReminderCooldownToolCalls: 0,
       warningContinueSessions: 0,
       warningOpencodeProcesses: 0,
       warningMaxRssMb: 0,
+      criticalMaxRssMb: 0,
+      autoPauseOnCritical: "invalid",
       guardMarkerMode: "invalid",
       guardVerbosity: "invalid",
       maxSessionStateEntries: 0,
@@ -89,9 +93,12 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.preemptiveCompaction.defaultContextLimitTokens, 128000)
   assert.equal(config.globalProcessPressure.checkCooldownToolCalls, 3)
   assert.equal(config.globalProcessPressure.reminderCooldownToolCalls, 6)
+  assert.equal(config.globalProcessPressure.criticalReminderCooldownToolCalls, 10)
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
   assert.equal(config.globalProcessPressure.warningOpencodeProcesses, 10)
   assert.equal(config.globalProcessPressure.warningMaxRssMb, 1400)
+  assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
+  assert.equal(config.globalProcessPressure.autoPauseOnCritical, true)
   assert.equal(config.globalProcessPressure.guardMarkerMode, "both")
   assert.equal(config.globalProcessPressure.guardVerbosity, "normal")
   assert.equal(config.globalProcessPressure.maxSessionStateEntries, 1024)

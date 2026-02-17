@@ -86,10 +86,13 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
             "context_warnings_triggered": 0,
             "compactions_triggered": 0,
             "global_process_pressure_warnings": 0,
+            "global_process_pressure_critical_events": 0,
             "recent_window_minutes": 30,
             "recent_context_warnings": 0,
             "recent_compactions": 0,
             "recent_global_process_pressure_warnings": 0,
+            "recent_global_process_pressure_critical_events": 0,
+            "last_critical_triggered_at": None,
             "last_triggered_at": None,
         }
 
@@ -97,12 +100,15 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
     context_warnings = 0
     compactions = 0
     global_pressure_warnings = 0
+    global_pressure_critical_events = 0
     recent_context_warnings = 0
     recent_compactions = 0
     recent_global_pressure_warnings = 0
+    recent_global_pressure_critical_events = 0
     recent_window_minutes = 30
     now_utc = datetime.now(UTC)
     last_triggered_at: str | None = None
+    last_critical_triggered_at: str | None = None
     try:
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
@@ -136,14 +142,27 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
                     compactions += 1
                     if in_recent_window:
                         recent_compactions += 1
-                elif reason_code == "global_process_pressure_warning_appended":
+                elif reason_code in {
+                    "global_process_pressure_warning_appended",
+                    "global_process_pressure_warning_detected_no_append",
+                }:
                     global_pressure_warnings += 1
                     if in_recent_window:
                         recent_global_pressure_warnings += 1
+                elif reason_code in {
+                    "global_process_pressure_critical_appended",
+                    "global_process_pressure_critical_detected_no_append",
+                }:
+                    global_pressure_critical_events += 1
+                    if in_recent_window:
+                        recent_global_pressure_critical_events += 1
                 if reason_code in {
                     "context_warning_appended",
                     "session_compacted_preemptively",
                     "global_process_pressure_warning_appended",
+                    "global_process_pressure_warning_detected_no_append",
+                    "global_process_pressure_critical_appended",
+                    "global_process_pressure_critical_detected_no_append",
                 }:
                     if event_time is not None:
                         last_triggered_at = event_time.isoformat()
@@ -152,6 +171,18 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
                             value = payload.get(key)
                             if isinstance(value, str) and value.strip():
                                 last_triggered_at = value.strip()
+                                break
+                if reason_code in {
+                    "global_process_pressure_critical_appended",
+                    "global_process_pressure_critical_detected_no_append",
+                }:
+                    if event_time is not None:
+                        last_critical_triggered_at = event_time.isoformat()
+                    else:
+                        for key in ("timestamp", "ts", "time"):
+                            value = payload.get(key)
+                            if isinstance(value, str) and value.strip():
+                                last_critical_triggered_at = value.strip()
                                 break
     except (OSError, UnicodeDecodeError):
         return {
@@ -164,6 +195,9 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
             "recent_compactions": 0,
             "global_process_pressure_warnings": 0,
             "recent_global_process_pressure_warnings": 0,
+            "global_process_pressure_critical_events": 0,
+            "recent_global_process_pressure_critical_events": 0,
+            "last_critical_triggered_at": None,
             "last_triggered_at": None,
             "read_error": True,
         }
@@ -178,6 +212,9 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
         "recent_compactions": recent_compactions,
         "global_process_pressure_warnings": global_pressure_warnings,
         "recent_global_process_pressure_warnings": recent_global_pressure_warnings,
+        "global_process_pressure_critical_events": global_pressure_critical_events,
+        "recent_global_process_pressure_critical_events": recent_global_pressure_critical_events,
+        "last_critical_triggered_at": last_critical_triggered_at,
         "last_triggered_at": last_triggered_at,
     }
 
@@ -691,6 +728,10 @@ def command_doctor(as_json: bool) -> int:
         warnings.append(
             "detected high RSS opencode process(es); capture /gateway status --json baseline and reduce concurrent long-lived sessions"
         )
+    if max_rss_mb >= 10240:
+        problems.append(
+            "detected critical RSS (>10GB) in opencode process; current-session continuation should be auto-paused by global process pressure guard"
+        )
 
     hooks_any = status.get("hook_diagnostics")
     hooks = hooks_any if isinstance(hooks_any, dict) else {}
@@ -748,7 +789,11 @@ def command_tune_memory(as_json: bool) -> int:
     global_pressure_count = int(
         counters.get("recent_global_process_pressure_warnings") or 0
     )
+    global_pressure_critical_count = int(
+        counters.get("recent_global_process_pressure_critical_events") or 0
+    )
     continue_count = int(process.get("continue_process_count") or 0)
+    max_rss_mb = float(process.get("max_rss_mb") or 0)
     audit_enabled = status.get("event_audit_enabled") is True
 
     current = {
@@ -770,7 +815,7 @@ def command_tune_memory(as_json: bool) -> int:
             "warningThreshold": 0.8,
             "compactionCooldownToolCalls": 12,
             "minTokenDeltaForCompaction": 40000,
-            "defaultContextLimitTokens": 200000,
+            "defaultContextLimitTokens": 128000,
             "guardMarkerMode": "both",
             "guardVerbosity": "normal",
             "maxSessionStateEntries": 512,
@@ -779,9 +824,12 @@ def command_tune_memory(as_json: bool) -> int:
             "enabled": True,
             "checkCooldownToolCalls": 3,
             "reminderCooldownToolCalls": 6,
+            "criticalReminderCooldownToolCalls": 10,
             "warningContinueSessions": 5,
             "warningOpencodeProcesses": 10,
             "warningMaxRssMb": 1400,
+            "criticalMaxRssMb": 10240,
+            "autoPauseOnCritical": True,
             "guardMarkerMode": "both",
             "guardVerbosity": "normal",
             "maxSessionStateEntries": 1024,
@@ -808,9 +856,17 @@ def command_tune_memory(as_json: bool) -> int:
         rationale.append(
             "global process pressure repeatedly hit recent thresholds; many concurrent sessions are saturating memory"
         )
+    if global_pressure_critical_count >= 1:
+        rationale.append(
+            "critical global process pressure observed (>10GB RSS); continuation auto-pause should activate for the impacted session"
+        )
     if continue_count >= 3:
         rationale.append(
             "multiple concurrent --continue sessions detected; prune stale sessions to reduce pressure"
+        )
+    if max_rss_mb >= 10240:
+        rationale.append(
+            "max RSS is above 10GB now; expect immediate critical guard behavior and session-level continuation pause"
         )
 
     payload = {

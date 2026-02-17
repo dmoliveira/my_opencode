@@ -5,6 +5,7 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
+- Added critical global RSS pressure handling (`>=10GB`) that appends a critical guard warning and auto-pauses continuation for the current session.
 - Added provider-agnostic gateway memory safeguards plus `global-process-pressure` warnings for high multi-session process/RSS pressure.
 - Added global pressure warning counters to gateway audit telemetry and tune-memory rationale output.
 - Added context guard operability controls for gateway hooks: marker mode (`nerd|plain|both`), verbosity (`minimal|normal|debug`), and bounded per-session state retention.

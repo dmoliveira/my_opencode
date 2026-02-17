@@ -50,9 +50,12 @@ export interface GlobalProcessPressureConfig {
     enabled: boolean;
     checkCooldownToolCalls: number;
     reminderCooldownToolCalls: number;
+    criticalReminderCooldownToolCalls: number;
     warningContinueSessions: number;
     warningOpencodeProcesses: number;
     warningMaxRssMb: number;
+    criticalMaxRssMb: number;
+    autoPauseOnCritical: boolean;
     guardMarkerMode: "nerd" | "plain" | "both";
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;

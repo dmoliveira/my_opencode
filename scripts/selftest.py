@@ -1757,6 +1757,12 @@ exit 0
                     "recent_global_process_pressure_warnings"
                 ),
                 int,
+            )
+            and isinstance(
+                gateway_status.get("guard_event_counters", {}).get(
+                    "recent_global_process_pressure_critical_events"
+                ),
+                int,
             ),
             "gateway status guard counters should include recent window metrics",
         )
@@ -1909,6 +1915,21 @@ exit 0
             gateway_tune.get("result") == "PASS"
             and isinstance(gateway_tune.get("recommended"), dict),
             "gateway tune memory should return pass payload with recommended settings",
+        )
+        expect(
+            isinstance(
+                gateway_tune.get("recommended", {})
+                .get("globalProcessPressure", {})
+                .get("criticalMaxRssMb"),
+                int,
+            )
+            and isinstance(
+                gateway_tune.get("recommended", {})
+                .get("globalProcessPressure", {})
+                .get("autoPauseOnCritical"),
+                bool,
+            ),
+            "gateway tune memory should include critical RSS auto-pause recommendations",
         )
 
         notify_policy_path = (

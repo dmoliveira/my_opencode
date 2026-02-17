@@ -281,9 +281,14 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.enabled,
             checkCooldownToolCalls: positiveInt(globalProcessPressureSource.checkCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.checkCooldownToolCalls),
             reminderCooldownToolCalls: positiveInt(globalProcessPressureSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.reminderCooldownToolCalls),
+            criticalReminderCooldownToolCalls: positiveInt(globalProcessPressureSource.criticalReminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalReminderCooldownToolCalls),
             warningContinueSessions: positiveInt(globalProcessPressureSource.warningContinueSessions, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningContinueSessions),
             warningOpencodeProcesses: positiveInt(globalProcessPressureSource.warningOpencodeProcesses, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningOpencodeProcesses),
             warningMaxRssMb: positiveInt(globalProcessPressureSource.warningMaxRssMb, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningMaxRssMb),
+            criticalMaxRssMb: positiveInt(globalProcessPressureSource.criticalMaxRssMb, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalMaxRssMb),
+            autoPauseOnCritical: typeof globalProcessPressureSource.autoPauseOnCritical === "boolean"
+                ? globalProcessPressureSource.autoPauseOnCritical
+                : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.autoPauseOnCritical,
             guardMarkerMode: markerMode(globalProcessPressureSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardMarkerMode),
             guardVerbosity: guardVerbosity(globalProcessPressureSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardVerbosity),
             maxSessionStateEntries: positiveInt(globalProcessPressureSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.maxSessionStateEntries),
