@@ -135,6 +135,9 @@ export interface ProviderTokenLimitRecoveryConfig {
     enabled: boolean;
     cooldownMs: number;
 }
+export interface HashlineReadEnhancerConfig {
+    enabled: boolean;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -321,6 +324,7 @@ export interface GatewayConfig {
     editErrorRecovery: EditErrorRecoveryConfig;
     jsonErrorRecovery: JsonErrorRecoveryConfig;
     providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig;
+    hashlineReadEnhancer: HashlineReadEnhancerConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
