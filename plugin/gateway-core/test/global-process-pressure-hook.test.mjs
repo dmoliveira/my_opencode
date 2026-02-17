@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { join } from "node:path"
 import test from "node:test"
+import { tmpdir } from "node:os"
 
 import { createGlobalProcessPressureHook } from "../dist/hooks/global-process-pressure/index.js"
 
@@ -191,9 +194,12 @@ test("global-process-pressure still force-stops critical session on error output
 })
 
 test("global-process-pressure supports staged pause ladder", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-global-pressure-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   const forcedStops = []
   const hook = createGlobalProcessPressureHook({
-    directory: process.cwd(),
+    directory,
     stopGuard: {
       isStopped() {
         return false
@@ -230,16 +236,44 @@ test("global-process-pressure supports staged pause ladder", async () => {
   const first = {
     input: { sessionID: "session-global-pressure-ladder" },
     output: { output: "first" },
-    directory: process.cwd(),
+    directory,
   }
   await hook.event("tool.execute.after", first)
   assert.equal(forcedStops.length, 0)
+  assert.ok(first.output.output.includes("pause is armed"))
 
   const second = {
     input: { sessionID: "session-global-pressure-ladder" },
     output: { output: "second" },
-    directory: process.cwd(),
+    directory,
   }
   await hook.event("tool.execute.after", second)
   assert.equal(forcedStops.length, 1)
+  assert.ok(second.output.output.includes("repeatedly"))
+  assert.deepEqual(forcedStops[0], {
+    sessionId: "session-global-pressure-ladder",
+    reasonCode: "continuation_stopped_critical_memory_pressure",
+  })
+
+  const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+  const rows = readFileSync(auditPath, "utf-8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+  const criticalRows = rows.filter(
+    (row) => row.reason_code === "global_process_pressure_critical_appended",
+  )
+  assert.ok(criticalRows.length >= 2)
+  const lastTwo = criticalRows.slice(-2)
+  assert.equal(lastTwo[0].critical_events_in_window, 1)
+  assert.equal(lastTwo[1].critical_events_in_window, 2)
+  assert.equal(lastTwo[1].critical_escalated, true)
+
+  if (previousAudit === undefined) {
+    delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  } else {
+    process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+  }
+  rmSync(directory, { recursive: true, force: true })
 })

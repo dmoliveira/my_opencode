@@ -1607,6 +1607,7 @@ Notes:
 - `/gateway status --json` now reports `guard_event_counters` including session-correlated pressure observations (`session_pressure_attribution`, non-causal) and critical trigger timestamps.
 - `/gateway doctor --json` now exposes `remediation_commands` when critical pressure signals are detected.
 - `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
+- see `docs/memory-incident-playbook.md` for a fast detect/stabilize/recover/verify incident flow.
 
 Gateway event audit baseline (recommended before memory tuning):
 
