@@ -36,6 +36,7 @@ export class ContextCollector {
             content: normalizedContent,
             priority: options.priority ?? "normal",
             timestamp: Date.now(),
+            metadata: options.metadata,
         });
         this.sessions.set(normalizedSession, current);
     }
@@ -44,34 +45,41 @@ export class ContextCollector {
         const current = this.sessions.get(sessionId.trim());
         return current instanceof Map && current.size > 0;
     }
+    // Returns pending session context without clearing it.
+    getPending(sessionId) {
+        const normalizedSession = sessionId.trim();
+        const current = this.sessions.get(normalizedSession);
+        const entries = this.sortEntries(current ? [...current.values()] : []);
+        if (entries.length === 0) {
+            return { hasContent: false, merged: "", entries: [] };
+        }
+        const merged = entries.map((entry) => entry.content).join("\n\n---\n\n");
+        return {
+            hasContent: merged.trim().length > 0,
+            merged,
+            entries,
+        };
+    }
     // Consumes pending session context and returns merged text.
     consume(sessionId) {
         const normalizedSession = sessionId.trim();
-        const current = this.sessions.get(normalizedSession);
+        const pending = this.getPending(normalizedSession);
         this.sessions.delete(normalizedSession);
-        const entries = current ? [...current.values()] : [];
-        if (entries.length === 0) {
-            return { hasContent: false, merged: "" };
-        }
-        const merged = entries
-            .slice()
-            .sort((a, b) => {
+        return pending;
+    }
+    // Clears all pending session context.
+    clear(sessionId) {
+        this.sessions.delete(sessionId.trim());
+    }
+    // Sorts entries by priority, then insertion time.
+    sortEntries(entries) {
+        return entries.sort((a, b) => {
             const prioDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
             if (prioDiff !== 0) {
                 return prioDiff;
             }
             return a.timestamp - b.timestamp;
-        })
-            .map((entry) => entry.content)
-            .join("\n\n---\n\n");
-        return {
-            hasContent: merged.trim().length > 0,
-            merged,
-        };
-    }
-    // Clears all pending session context.
-    clear(sessionId) {
-        this.sessions.delete(sessionId.trim());
+        });
     }
 }
 export const contextCollector = new ContextCollector();
