@@ -177,6 +177,14 @@ export interface EmptyTaskResponseDetectorConfig {
   enabled: boolean
 }
 
+export interface EditErrorRecoveryConfig {
+  enabled: boolean
+}
+
+export interface JsonErrorRecoveryConfig {
+  enabled: boolean
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -419,6 +427,8 @@ export interface GatewayConfig {
   todoContinuationEnforcer: TodoContinuationEnforcerConfig
   compactionTodoPreserver: CompactionTodoPreserverConfig
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
+  editErrorRecovery: EditErrorRecoveryConfig
+  jsonErrorRecovery: JsonErrorRecoveryConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -483,6 +493,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "todo-continuation-enforcer",
       "compaction-todo-preserver",
       "empty-task-response-detector",
+      "edit-error-recovery",
+      "json-error-recovery",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -663,6 +675,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     maxChars: 4000,
   },
   emptyTaskResponseDetector: {
+    enabled: true,
+  },
+  editErrorRecovery: {
+    enabled: true,
+  },
+  jsonErrorRecovery: {
     enabled: true,
   },
   commentChecker: {

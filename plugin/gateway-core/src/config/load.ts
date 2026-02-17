@@ -185,6 +185,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
       ? (source.emptyTaskResponseDetector as Record<string, unknown>)
       : {}
+  const editErrorRecoverySource =
+    source.editErrorRecovery && typeof source.editErrorRecovery === "object"
+      ? (source.editErrorRecovery as Record<string, unknown>)
+      : {}
+  const jsonErrorRecoverySource =
+    source.jsonErrorRecovery && typeof source.jsonErrorRecovery === "object"
+      ? (source.jsonErrorRecovery as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -694,6 +702,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof emptyTaskResponseSource.enabled === "boolean"
           ? emptyTaskResponseSource.enabled
           : DEFAULT_GATEWAY_CONFIG.emptyTaskResponseDetector.enabled,
+    },
+    editErrorRecovery: {
+      enabled:
+        typeof editErrorRecoverySource.enabled === "boolean"
+          ? editErrorRecoverySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.editErrorRecovery.enabled,
+    },
+    jsonErrorRecovery: {
+      enabled:
+        typeof jsonErrorRecoverySource.enabled === "boolean"
+          ? jsonErrorRecoverySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.jsonErrorRecovery.enabled,
     },
     commentChecker: {
       enabled:

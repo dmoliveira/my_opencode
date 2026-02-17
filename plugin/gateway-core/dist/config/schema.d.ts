@@ -125,6 +125,12 @@ export interface CompactionTodoPreserverConfig {
 export interface EmptyTaskResponseDetectorConfig {
     enabled: boolean;
 }
+export interface EditErrorRecoveryConfig {
+    enabled: boolean;
+}
+export interface JsonErrorRecoveryConfig {
+    enabled: boolean;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -308,6 +314,8 @@ export interface GatewayConfig {
     todoContinuationEnforcer: TodoContinuationEnforcerConfig;
     compactionTodoPreserver: CompactionTodoPreserverConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
+    editErrorRecovery: EditErrorRecoveryConfig;
+    jsonErrorRecovery: JsonErrorRecoveryConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
