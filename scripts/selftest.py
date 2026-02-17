@@ -1763,6 +1763,12 @@ exit 0
                     "recent_global_process_pressure_critical_events"
                 ),
                 int,
+            )
+            and isinstance(
+                gateway_status.get("guard_event_counters", {}).get(
+                    "session_pressure_attribution"
+                ),
+                list,
             ),
             "gateway status guard counters should include recent window metrics",
         )
@@ -1907,6 +1913,10 @@ exit 0
             ),
             "gateway doctor should include guard event counters telemetry",
         )
+        expect(
+            isinstance(gateway_doctor.get("remediation_commands"), list),
+            "gateway doctor should expose remediation command block",
+        )
 
         result = run_gateway("tune", "memory", "--json")
         expect(result.returncode == 0, f"gateway tune memory failed: {result.stderr}")
@@ -1928,6 +1938,12 @@ exit 0
                 .get("globalProcessPressure", {})
                 .get("autoPauseOnCritical"),
                 bool,
+            )
+            and isinstance(
+                gateway_tune.get("recommended", {})
+                .get("globalProcessPressure", {})
+                .get("criticalPauseAfterEvents"),
+                int,
             ),
             "gateway tune memory should include critical RSS auto-pause recommendations",
         )

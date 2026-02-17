@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
 function isOpencodeCommand(command) {
@@ -83,6 +83,24 @@ function sampleProcessPressure() {
         maxRssMb,
     };
 }
+function notifyCriticalPressure(message) {
+    if (process.platform === "darwin") {
+        const script = `display notification ${JSON.stringify(message)} with title "OpenCode Context Guard"`;
+        const result = spawnSync("osascript", ["-e", script], {
+            stdio: ["ignore", "ignore", "ignore"],
+            timeout: 1000,
+        });
+        return result.status === 0;
+    }
+    if (process.platform === "linux") {
+        const result = spawnSync("notify-send", ["OpenCode Context Guard", message], {
+            stdio: ["ignore", "ignore", "ignore"],
+            timeout: 1000,
+        });
+        return result.status === 0;
+    }
+    return false;
+}
 export function createGlobalProcessPressureHook(options) {
     const sessionStates = new Map();
     let globalToolCalls = 0;
@@ -108,6 +126,8 @@ export function createGlobalProcessPressureHook(options) {
             const priorState = sessionStates.get(sessionId) ?? {
                 lastWarnedAtToolCall: 0,
                 lastCriticalWarnedAtToolCall: 0,
+                criticalEventsInWindow: 0,
+                criticalWindowStartToolCall: 0,
                 lastSeenAtMs: Date.now(),
             };
             const nextState = {
@@ -140,6 +160,7 @@ export function createGlobalProcessPressureHook(options) {
                     reason_code: "global_pressure_check_cooldown",
                     session_id: sessionId,
                 });
+                return;
             }
             const sample = lastSample;
             if (!sample) {
@@ -180,24 +201,49 @@ export function createGlobalProcessPressureHook(options) {
                 !outputText.includes("[TOOL OUTPUT TRUNCATED]");
             const prefix = guardPrefix(options.guardMarkerMode);
             if (criticalExceeded) {
+                const withinEscalationWindow = nextState.criticalWindowStartToolCall > 0 &&
+                    globalToolCalls - nextState.criticalWindowStartToolCall <=
+                        options.criticalEscalationWindowToolCalls;
+                const criticalEventsInWindow = withinEscalationWindow
+                    ? nextState.criticalEventsInWindow + 1
+                    : 1;
+                const criticalWindowStartToolCall = withinEscalationWindow
+                    ? nextState.criticalWindowStartToolCall
+                    : globalToolCalls;
+                const shouldEscalate = criticalEventsInWindow >= options.criticalEscalationAfterEvents;
+                const shouldPause = options.autoPauseOnCritical &&
+                    criticalEventsInWindow >= options.criticalPauseAfterEvents;
                 if (outputAppendAllowed) {
                     if (options.guardVerbosity === "minimal") {
                         eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected.`;
                     }
                     else if (options.guardVerbosity === "debug") {
-                        eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected.\n[continue_sessions=${sample.continueProcessCount}, opencode_processes=${sample.opencodeProcessCount}, max_rss_mb=${sample.maxRssMb.toFixed(1)}, critical_rss_mb=${options.criticalMaxRssMb}]`;
+                        eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected.\n[continue_sessions=${sample.continueProcessCount}, opencode_processes=${sample.opencodeProcessCount}, max_rss_mb=${sample.maxRssMb.toFixed(1)}, critical_rss_mb=${options.criticalMaxRssMb}, critical_events_in_window=${criticalEventsInWindow}]`;
                     }
                     else {
-                        eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected; continuation for this session is being auto-paused.`;
+                        eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected${shouldEscalate ? " repeatedly" : ""}; ${shouldPause ? "continuation for this session is being auto-paused" : "continuation pause is armed if pressure repeats"}.`;
                     }
                 }
-                if (options.autoPauseOnCritical) {
+                if (shouldPause) {
                     options.stopGuard?.forceStop(sessionId, "continuation_stopped_critical_memory_pressure");
+                }
+                if (options.notifyOnCritical) {
+                    const notified = notifyCriticalPressure(`Critical memory pressure (${sample.maxRssMb.toFixed(1)} MB RSS) in session ${sessionId}`);
+                    writeGatewayEventAudit(directory, {
+                        hook: "global-process-pressure",
+                        stage: "state",
+                        reason_code: notified
+                            ? "global_process_pressure_critical_notification_sent"
+                            : "global_process_pressure_critical_notification_failed",
+                        session_id: sessionId,
+                    });
                 }
                 sessionStates.set(sessionId, {
                     ...nextState,
                     lastWarnedAtToolCall: globalToolCalls,
                     lastCriticalWarnedAtToolCall: globalToolCalls,
+                    criticalEventsInWindow,
+                    criticalWindowStartToolCall,
                 });
                 writeGatewayEventAudit(directory, {
                     hook: "global-process-pressure",
@@ -210,7 +256,9 @@ export function createGlobalProcessPressureHook(options) {
                     opencode_processes: sample.opencodeProcessCount,
                     max_rss_mb: Number(sample.maxRssMb.toFixed(1)),
                     critical_rss_mb: options.criticalMaxRssMb,
-                    auto_pause: options.autoPauseOnCritical,
+                    auto_pause: shouldPause,
+                    critical_events_in_window: criticalEventsInWindow,
+                    critical_escalated: shouldEscalate,
                 });
                 return;
             }

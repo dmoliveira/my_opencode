@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
+- Added critical-pressure refinement controls: escalation window/event thresholds, optional desktop notifications, and best-effort session-level RSS attribution in guard telemetry.
+- Added `remediation_commands` to `/gateway doctor --json` for critical pressure response workflows.
 - Added critical global RSS pressure handling (`>=10GB`) that appends a critical guard warning and auto-pauses continuation for the current session.
 - Added provider-agnostic gateway memory safeguards plus `global-process-pressure` warnings for high multi-session process/RSS pressure.
 - Added global pressure warning counters to gateway audit telemetry and tune-memory rationale output.

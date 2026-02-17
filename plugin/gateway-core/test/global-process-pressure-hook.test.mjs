@@ -10,11 +10,15 @@ test("global-process-pressure appends warning when thresholds are exceeded", asy
     checkCooldownToolCalls: 1,
     reminderCooldownToolCalls: 1,
     criticalReminderCooldownToolCalls: 2,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
     warningContinueSessions: 5,
     warningOpencodeProcesses: 10,
     warningMaxRssMb: 1400,
     criticalMaxRssMb: 10240,
     autoPauseOnCritical: true,
+    notifyOnCritical: false,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 16,
@@ -44,11 +48,15 @@ test("global-process-pressure respects reminder cooldown per session", async () 
     checkCooldownToolCalls: 1,
     reminderCooldownToolCalls: 3,
     criticalReminderCooldownToolCalls: 4,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
     warningContinueSessions: 2,
     warningOpencodeProcesses: 3,
     warningMaxRssMb: 200,
     criticalMaxRssMb: 10240,
     autoPauseOnCritical: true,
+    notifyOnCritical: false,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 16,
@@ -94,11 +102,15 @@ test("global-process-pressure critical tier force-stops current session", async 
     checkCooldownToolCalls: 1,
     reminderCooldownToolCalls: 2,
     criticalReminderCooldownToolCalls: 3,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
     warningContinueSessions: 2,
     warningOpencodeProcesses: 3,
     warningMaxRssMb: 1400,
     criticalMaxRssMb: 10240,
     autoPauseOnCritical: true,
+    notifyOnCritical: false,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 16,
@@ -142,11 +154,15 @@ test("global-process-pressure still force-stops critical session on error output
     checkCooldownToolCalls: 1,
     reminderCooldownToolCalls: 2,
     criticalReminderCooldownToolCalls: 3,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
     warningContinueSessions: 2,
     warningOpencodeProcesses: 3,
     warningMaxRssMb: 1400,
     criticalMaxRssMb: 10240,
     autoPauseOnCritical: true,
+    notifyOnCritical: false,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 16,
@@ -172,4 +188,58 @@ test("global-process-pressure still force-stops critical session on error output
     sessionId: "session-global-pressure-critical-error",
     reasonCode: "continuation_stopped_critical_memory_pressure",
   })
+})
+
+test("global-process-pressure supports staged pause ladder", async () => {
+  const forcedStops = []
+  const hook = createGlobalProcessPressureHook({
+    directory: process.cwd(),
+    stopGuard: {
+      isStopped() {
+        return false
+      },
+      forceStop(sessionId, reasonCode) {
+        forcedStops.push({ sessionId, reasonCode })
+      },
+    },
+    enabled: true,
+    checkCooldownToolCalls: 1,
+    reminderCooldownToolCalls: 1,
+    criticalReminderCooldownToolCalls: 1,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 2,
+    criticalEscalationAfterEvents: 2,
+    warningContinueSessions: 2,
+    warningOpencodeProcesses: 3,
+    warningMaxRssMb: 1400,
+    criticalMaxRssMb: 10240,
+    autoPauseOnCritical: true,
+    notifyOnCritical: false,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 16,
+    sampler() {
+      return {
+        continueProcessCount: 4,
+        opencodeProcessCount: 7,
+        maxRssMb: 12000,
+      }
+    },
+  })
+
+  const first = {
+    input: { sessionID: "session-global-pressure-ladder" },
+    output: { output: "first" },
+    directory: process.cwd(),
+  }
+  await hook.event("tool.execute.after", first)
+  assert.equal(forcedStops.length, 0)
+
+  const second = {
+    input: { sessionID: "session-global-pressure-ladder" },
+    output: { output: "second" },
+    directory: process.cwd(),
+  }
+  await hook.event("tool.execute.after", second)
+  assert.equal(forcedStops.length, 1)
 })

@@ -282,6 +282,9 @@ export function loadGatewayConfig(raw) {
             checkCooldownToolCalls: positiveInt(globalProcessPressureSource.checkCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.checkCooldownToolCalls),
             reminderCooldownToolCalls: positiveInt(globalProcessPressureSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.reminderCooldownToolCalls),
             criticalReminderCooldownToolCalls: positiveInt(globalProcessPressureSource.criticalReminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalReminderCooldownToolCalls),
+            criticalEscalationWindowToolCalls: positiveInt(globalProcessPressureSource.criticalEscalationWindowToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalEscalationWindowToolCalls),
+            criticalPauseAfterEvents: positiveInt(globalProcessPressureSource.criticalPauseAfterEvents, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalPauseAfterEvents),
+            criticalEscalationAfterEvents: positiveInt(globalProcessPressureSource.criticalEscalationAfterEvents, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalEscalationAfterEvents),
             warningContinueSessions: positiveInt(globalProcessPressureSource.warningContinueSessions, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningContinueSessions),
             warningOpencodeProcesses: positiveInt(globalProcessPressureSource.warningOpencodeProcesses, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningOpencodeProcesses),
             warningMaxRssMb: positiveInt(globalProcessPressureSource.warningMaxRssMb, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningMaxRssMb),
@@ -289,6 +292,9 @@ export function loadGatewayConfig(raw) {
             autoPauseOnCritical: typeof globalProcessPressureSource.autoPauseOnCritical === "boolean"
                 ? globalProcessPressureSource.autoPauseOnCritical
                 : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.autoPauseOnCritical,
+            notifyOnCritical: typeof globalProcessPressureSource.notifyOnCritical === "boolean"
+                ? globalProcessPressureSource.notifyOnCritical
+                : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.notifyOnCritical,
             guardMarkerMode: markerMode(globalProcessPressureSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardMarkerMode),
             guardVerbosity: guardVerbosity(globalProcessPressureSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardVerbosity),
             maxSessionStateEntries: positiveInt(globalProcessPressureSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.maxSessionStateEntries),

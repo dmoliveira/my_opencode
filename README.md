@@ -1602,7 +1602,10 @@ Notes:
 - context and compaction safeguards now apply across providers (not Anthropic-only), using a configurable default context limit for non-Anthropic providers.
 - global multi-session pressure warnings now trigger via `global-process-pressure` when concurrent `--continue` sessions/process counts or RSS exceed thresholds.
 - critical global RSS pressure (`>= 10GB` by default) now emits a critical guard event and auto-pauses continuation for the current session.
-- `/gateway status --json` now reports `guard_event_counters` (warning/compaction/global-pressure counts and latest trigger timestamp).
+- critical response now supports a configurable escalation ladder (window + pause/escalation event thresholds) before stronger repeated-critical messaging.
+- critical events can trigger local desktop notifications (best effort on macOS/Linux), with audit reason codes for sent/failed notification attempts.
+- `/gateway status --json` now reports `guard_event_counters` including session-correlated pressure observations (`session_pressure_attribution`, non-causal) and critical trigger timestamps.
+- `/gateway doctor --json` now exposes `remediation_commands` when critical pressure signals are detected.
 - `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
 
 Gateway event audit baseline (recommended before memory tuning):
