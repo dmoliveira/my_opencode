@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { DEFAULT_INJECTED_TEXT_MAX_CHARS, truncateInjectedText } from "../shared/injected-text-truncator.js"
 import type { ContextCollector } from "./collector.js"
 
 interface TextPart {
@@ -87,8 +88,13 @@ export function createContextInjectorHook(options: {
   directory: string
   enabled: boolean
   collector: ContextCollector
+  maxChars?: number
 }): GatewayHook {
   let lastKnownSessionId = ""
+  const maxChars =
+    typeof options.maxChars === "number" && Number.isFinite(options.maxChars) && options.maxChars > 0
+      ? Math.floor(options.maxChars)
+      : DEFAULT_INJECTED_TEXT_MAX_CHARS
   return {
     id: "context-injector",
     priority: 295,
@@ -127,11 +133,22 @@ export function createContextInjectorHook(options: {
         if (!pending.hasContent) {
           return
         }
-        if (!injectIntoParts(parts, pending.merged)) {
+        const truncated = truncateInjectedText(pending.merged, maxChars)
+        if (truncated.truncated) {
+          writeGatewayEventAudit(directory, {
+            hook: "context-injector",
+            stage: "inject",
+            reason_code: "pending_context_truncated_chat_message",
+            session_id: sessionId,
+            context_length_before: truncated.originalLength,
+            context_length_after: truncated.text.length,
+          })
+        }
+        if (!injectIntoParts(parts, truncated.text)) {
           options.collector.register(sessionId, {
             source: "context-injector-requeue",
             id: "chat-message-fallback",
-            content: pending.merged,
+            content: truncated.text,
             priority: "high",
           })
           return
@@ -141,7 +158,7 @@ export function createContextInjectorHook(options: {
           stage: "inject",
           reason_code: "pending_context_injected_chat_message",
           session_id: sessionId,
-          context_length: pending.merged.length,
+          context_length: truncated.text.length,
         })
         return
       }
@@ -181,9 +198,20 @@ export function createContextInjectorHook(options: {
       if (!pending.hasContent) {
         return
       }
+      const truncated = truncateInjectedText(pending.merged, maxChars)
+      if (truncated.truncated) {
+        writeGatewayEventAudit(directory, {
+          hook: "context-injector",
+          stage: "inject",
+          reason_code: "pending_context_truncated_messages_transform",
+          session_id: sessionId,
+          context_length_before: truncated.originalLength,
+          context_length_after: truncated.text.length,
+        })
+      }
       const synthetic: TextPart & { synthetic: boolean } = {
         type: "text",
-        text: pending.merged,
+        text: truncated.text,
         synthetic: true,
       }
       parts.unshift(synthetic)
@@ -192,7 +220,7 @@ export function createContextInjectorHook(options: {
         stage: "inject",
         reason_code: "pending_context_injected_messages_transform",
         session_id: sessionId,
-        context_length: pending.merged.length,
+        context_length: truncated.text.length,
       })
     },
   }

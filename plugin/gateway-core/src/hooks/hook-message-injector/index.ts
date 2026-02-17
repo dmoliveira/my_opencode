@@ -1,3 +1,5 @@
+import { DEFAULT_INJECTED_TEXT_MAX_CHARS, truncateInjectedText } from "../shared/injected-text-truncator.js"
+
 interface SessionMessageInfo {
   role?: string
   agent?: string
@@ -106,8 +108,14 @@ export async function injectHookMessage(args: {
   sessionId: string
   content: string
   directory: string
+  maxChars?: number
 }): Promise<boolean> {
-  const content = args.content.trim()
+  const maxChars =
+    typeof args.maxChars === "number" && Number.isFinite(args.maxChars) && args.maxChars > 0
+      ? Math.floor(args.maxChars)
+      : DEFAULT_INJECTED_TEXT_MAX_CHARS
+  const truncated = truncateInjectedText(args.content, maxChars)
+  const content = truncated.text.trim()
   if (!content) {
     return false
   }

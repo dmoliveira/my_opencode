@@ -31,8 +31,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: collector supported source:id dedupe and consume, but lacked upstream-like introspection (`getPending().entries`) and metadata passthrough on entries/options.
    - Delivered: added `getPending()` with structured `entries` introspection, added optional metadata on register/entry records, aligned `consume()` with pending-context shape while preserving compatibility, and expanded collector tests for empty shape, metadata roundtrip, and session-isolated consume behavior.
 
-6. [ ] Injector-level truncation/size guards
-   - Pre-check required: review existing context truncation safeguards and audit reason codes.
+6. [x] Injector-level truncation/size guards
+   - Pre-check completed: injector entry points had no size guard and injected pending/ synthetic context verbatim; only tool-output truncation had max-char protections.
+   - Delivered: added shared injected-text truncator with bounded output, applied max-char guards to context-injector and hook-message-injector paths, added truncation audit reason codes for chat/transform injections, and expanded tests for oversized and tiny-limit truncation behavior.
 
 7. [ ] Integration tests for command -> collector -> transform flow
    - Pre-check required: inventory existing integration coverage to extend rather than duplicate.

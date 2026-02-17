@@ -1,3 +1,4 @@
+import { DEFAULT_INJECTED_TEXT_MAX_CHARS, truncateInjectedText } from "../shared/injected-text-truncator.js";
 // Resolves latest reusable agent/model identity from session history.
 export async function resolveHookMessageIdentity(args) {
     if (typeof args.session.messages !== "function") {
@@ -58,7 +59,11 @@ export function buildHookMessageBody(content, identity) {
 }
 // Injects synthetic hook content while preserving recent agent/model metadata.
 export async function injectHookMessage(args) {
-    const content = args.content.trim();
+    const maxChars = typeof args.maxChars === "number" && Number.isFinite(args.maxChars) && args.maxChars > 0
+        ? Math.floor(args.maxChars)
+        : DEFAULT_INJECTED_TEXT_MAX_CHARS;
+    const truncated = truncateInjectedText(args.content, maxChars);
+    const content = truncated.text.trim();
     if (!content) {
         return false;
     }

@@ -114,3 +114,41 @@ test("buildHookMessageBody includes metadata only when present", () => {
   assert.equal("model" in bodyWithoutIdentity, false)
   assert.equal(bodyWithoutIdentity.parts[0]?.text, "continue work")
 })
+
+test("injectHookMessage truncates oversized content before promptAsync", async () => {
+  let capturedText = ""
+  const result = await injectHookMessage({
+    session: {
+      async promptAsync(args) {
+        capturedText = String(args.body.parts[0]?.text ?? "")
+      },
+    },
+    sessionId: "session-truncate",
+    content: "Z".repeat(240),
+    directory: "/tmp",
+    maxChars: 120,
+  })
+
+  assert.equal(result, true)
+  assert.match(capturedText, /Content truncated due to context window limit/)
+  assert.ok(capturedText.length <= 120)
+})
+
+test("injectHookMessage respects tiny maxChars limits", async () => {
+  let capturedText = ""
+  const result = await injectHookMessage({
+    session: {
+      async promptAsync(args) {
+        capturedText = String(args.body.parts[0]?.text ?? "")
+      },
+    },
+    sessionId: "session-truncate-tiny",
+    content: "T".repeat(200),
+    directory: "/tmp",
+    maxChars: 10,
+  })
+
+  assert.equal(result, true)
+  assert.ok(capturedText.length > 0)
+  assert.ok(capturedText.length <= 10)
+})

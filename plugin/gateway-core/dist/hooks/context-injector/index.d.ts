@@ -4,4 +4,5 @@ export declare function createContextInjectorHook(options: {
     directory: string;
     enabled: boolean;
     collector: ContextCollector;
+    maxChars?: number;
 }): GatewayHook;
