@@ -15,6 +15,7 @@ import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.j
 import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js";
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
+import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
@@ -108,6 +109,7 @@ function configuredHooks(ctx) {
             warningThreshold: cfg.contextWindowMonitor.warningThreshold,
             reminderCooldownToolCalls: cfg.contextWindowMonitor.reminderCooldownToolCalls,
             minTokenDeltaForReminder: cfg.contextWindowMonitor.minTokenDeltaForReminder,
+            defaultContextLimitTokens: cfg.contextWindowMonitor.defaultContextLimitTokens,
             guardMarkerMode: cfg.contextWindowMonitor.guardMarkerMode,
             guardVerbosity: cfg.contextWindowMonitor.guardVerbosity,
             maxSessionStateEntries: cfg.contextWindowMonitor.maxSessionStateEntries,
@@ -119,6 +121,7 @@ function configuredHooks(ctx) {
             warningThreshold: cfg.preemptiveCompaction.warningThreshold,
             compactionCooldownToolCalls: cfg.preemptiveCompaction.compactionCooldownToolCalls,
             minTokenDeltaForCompaction: cfg.preemptiveCompaction.minTokenDeltaForCompaction,
+            defaultContextLimitTokens: cfg.preemptiveCompaction.defaultContextLimitTokens,
             guardMarkerMode: cfg.preemptiveCompaction.guardMarkerMode,
             guardVerbosity: cfg.preemptiveCompaction.guardVerbosity,
             maxSessionStateEntries: cfg.preemptiveCompaction.maxSessionStateEntries,
@@ -126,6 +129,18 @@ function configuredHooks(ctx) {
         createCompactionContextInjectorHook({
             directory,
             enabled: cfg.compactionContextInjector.enabled,
+        }),
+        createGlobalProcessPressureHook({
+            directory,
+            enabled: cfg.globalProcessPressure.enabled,
+            checkCooldownToolCalls: cfg.globalProcessPressure.checkCooldownToolCalls,
+            reminderCooldownToolCalls: cfg.globalProcessPressure.reminderCooldownToolCalls,
+            warningContinueSessions: cfg.globalProcessPressure.warningContinueSessions,
+            warningOpencodeProcesses: cfg.globalProcessPressure.warningOpencodeProcesses,
+            warningMaxRssMb: cfg.globalProcessPressure.warningMaxRssMb,
+            guardMarkerMode: cfg.globalProcessPressure.guardMarkerMode,
+            guardVerbosity: cfg.globalProcessPressure.guardVerbosity,
+            maxSessionStateEntries: cfg.globalProcessPressure.maxSessionStateEntries,
         }),
         createSessionRecoveryHook({
             directory,

@@ -74,7 +74,7 @@ test("gateway plugin dispatches tool.execute.after to truncator hook", async () 
         hooks: {
           enabled: true,
           order: ["tool-output-truncator"],
-          disabled: [],
+          disabled: ["global-process-pressure"],
         },
         autopilotLoop: {
           enabled: false,

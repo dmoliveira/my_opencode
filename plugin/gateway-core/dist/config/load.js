@@ -72,6 +72,9 @@ export function loadGatewayConfig(raw) {
     const compactionContextInjectorSource = source.compactionContextInjector && typeof source.compactionContextInjector === "object"
         ? source.compactionContextInjector
         : {};
+    const globalProcessPressureSource = source.globalProcessPressure && typeof source.globalProcessPressure === "object"
+        ? source.globalProcessPressure
+        : {};
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
@@ -250,6 +253,7 @@ export function loadGatewayConfig(raw) {
             warningThreshold: boundedFloat(contextWindowSource.warningThreshold, 0.5, 0.95, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.warningThreshold),
             reminderCooldownToolCalls: positiveInt(contextWindowSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.reminderCooldownToolCalls),
             minTokenDeltaForReminder: nonNegativeInt(contextWindowSource.minTokenDeltaForReminder, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.minTokenDeltaForReminder),
+            defaultContextLimitTokens: positiveInt(contextWindowSource.defaultContextLimitTokens, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.defaultContextLimitTokens),
             guardMarkerMode: markerMode(contextWindowSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.guardMarkerMode),
             guardVerbosity: guardVerbosity(contextWindowSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.guardVerbosity),
             maxSessionStateEntries: positiveInt(contextWindowSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.maxSessionStateEntries),
@@ -261,6 +265,7 @@ export function loadGatewayConfig(raw) {
             warningThreshold: boundedFloat(preemptiveCompactionSource.warningThreshold, 0.6, 0.95, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.warningThreshold),
             compactionCooldownToolCalls: positiveInt(preemptiveCompactionSource.compactionCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.compactionCooldownToolCalls),
             minTokenDeltaForCompaction: nonNegativeInt(preemptiveCompactionSource.minTokenDeltaForCompaction, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.minTokenDeltaForCompaction),
+            defaultContextLimitTokens: positiveInt(preemptiveCompactionSource.defaultContextLimitTokens, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.defaultContextLimitTokens),
             guardMarkerMode: markerMode(preemptiveCompactionSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardMarkerMode),
             guardVerbosity: guardVerbosity(preemptiveCompactionSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.guardVerbosity),
             maxSessionStateEntries: positiveInt(preemptiveCompactionSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.maxSessionStateEntries),
@@ -269,6 +274,19 @@ export function loadGatewayConfig(raw) {
             enabled: typeof compactionContextInjectorSource.enabled === "boolean"
                 ? compactionContextInjectorSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.compactionContextInjector.enabled,
+        },
+        globalProcessPressure: {
+            enabled: typeof globalProcessPressureSource.enabled === "boolean"
+                ? globalProcessPressureSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.enabled,
+            checkCooldownToolCalls: positiveInt(globalProcessPressureSource.checkCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.checkCooldownToolCalls),
+            reminderCooldownToolCalls: positiveInt(globalProcessPressureSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.reminderCooldownToolCalls),
+            warningContinueSessions: positiveInt(globalProcessPressureSource.warningContinueSessions, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningContinueSessions),
+            warningOpencodeProcesses: positiveInt(globalProcessPressureSource.warningOpencodeProcesses, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningOpencodeProcesses),
+            warningMaxRssMb: positiveInt(globalProcessPressureSource.warningMaxRssMb, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningMaxRssMb),
+            guardMarkerMode: markerMode(globalProcessPressureSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardMarkerMode),
+            guardVerbosity: guardVerbosity(globalProcessPressureSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardVerbosity),
+            maxSessionStateEntries: positiveInt(globalProcessPressureSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.maxSessionStateEntries),
         },
         sessionRecovery: {
             enabled: typeof sessionRecoverySource.enabled === "boolean"

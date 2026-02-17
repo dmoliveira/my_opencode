@@ -1,10 +1,12 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { resolveContextLimit } from "../shared/context-limit.js"
 import type { GatewayHook } from "../registry.js"
 
 // Declares minimal session message token shape for context monitor.
 interface AssistantMessageInfo {
   role?: string
   providerID?: string
+  modelID?: string
   tokens?: {
     input?: number
     cache?: { read?: number }
@@ -64,13 +66,6 @@ function resolveSessionId(payload: ToolAfterPayload): string {
   return ""
 }
 
-// Resolves Anthropic actual limit from environment toggles.
-function anthropicActualLimit(): number {
-  return process.env.ANTHROPIC_1M_CONTEXT === "true" || process.env.VERTEX_ANTHROPIC_1M_CONTEXT === "true"
-    ? 1_000_000
-    : 200_000
-}
-
 // Builds warning suffix with context usage details.
 function warningSuffix(totalInputTokens: number, contextLimit: number): string {
   const safeLimit = contextLimit > 0 ? contextLimit : 1
@@ -114,7 +109,7 @@ function pruneSessionStates(
   }
 }
 
-// Creates context monitor hook that appends usage warnings once per session.
+// Creates context monitor hook that appends usage warnings across providers.
 export function createContextWindowMonitorHook(options: {
   directory: string
   client?: GatewayClient
@@ -122,6 +117,7 @@ export function createContextWindowMonitorHook(options: {
   warningThreshold: number
   reminderCooldownToolCalls: number
   minTokenDeltaForReminder: number
+  defaultContextLimitTokens: number
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
@@ -201,17 +197,23 @@ export function createContextWindowMonitorHook(options: {
           .filter((item) => item.info?.role === "assistant")
           .map((item) => item.info)
         const last = assistants[assistants.length - 1]
-        if (!last || last.providerID !== "anthropic") {
+        if (!last) {
           writeGatewayEventAudit(directory, {
             hook: "context-window-monitor",
             stage: "skip",
-            reason_code: "provider_not_anthropic",
+            reason_code: "assistant_message_missing",
             session_id: sessionId,
           })
           return
         }
         const totalInputTokens = (last.tokens?.input ?? 0) + (last.tokens?.cache?.read ?? 0)
-        const actualLimit = anthropicActualLimit()
+        const providerID = typeof last.providerID === "string" ? last.providerID : ""
+        const modelID = typeof last.modelID === "string" ? last.modelID : ""
+        const actualLimit = resolveContextLimit({
+          providerID,
+          modelID,
+          defaultContextLimitTokens: options.defaultContextLimitTokens,
+        })
         const actualUsage = totalInputTokens / actualLimit
         if (actualUsage < options.warningThreshold) {
           writeGatewayEventAudit(directory, {

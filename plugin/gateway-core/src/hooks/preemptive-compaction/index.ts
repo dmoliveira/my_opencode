@@ -1,7 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { resolveContextLimit } from "../shared/context-limit.js"
 import type { GatewayHook } from "../registry.js"
-
-const DEFAULT_ACTUAL_LIMIT = 200_000
 
 // Declares assistant message token shape for compaction trigger.
 interface AssistantMessageInfo {
@@ -57,6 +56,7 @@ interface SessionCompactionState {
   toolCalls: number
   lastCompactedAtToolCall: number
   lastCompactedTokens: number
+  lastMissingMetadataNoticeAtToolCall: number
   lastSeenAtMs: number
 }
 
@@ -103,13 +103,6 @@ function resolveSessionId(payload: ToolAfterPayload): string {
   return ""
 }
 
-// Resolves Anthropic actual token limit from runtime environment flags.
-function anthropicActualLimit(): number {
-  return process.env.ANTHROPIC_1M_CONTEXT === "true" || process.env.VERTEX_ANTHROPIC_1M_CONTEXT === "true"
-    ? 1_000_000
-    : DEFAULT_ACTUAL_LIMIT
-}
-
 // Creates preemptive compaction hook for high context pressure sessions.
 export function createPreemptiveCompactionHook(options: {
   directory: string
@@ -118,6 +111,7 @@ export function createPreemptiveCompactionHook(options: {
   warningThreshold: number
   compactionCooldownToolCalls: number
   minTokenDeltaForCompaction: number
+  defaultContextLimitTokens: number
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
@@ -157,6 +151,7 @@ export function createPreemptiveCompactionHook(options: {
         toolCalls: 0,
         lastCompactedAtToolCall: 0,
         lastCompactedTokens: 0,
+        lastMissingMetadataNoticeAtToolCall: 0,
         lastSeenAtMs: Date.now(),
       }
       const nextState: SessionCompactionState = {
@@ -183,7 +178,13 @@ export function createPreemptiveCompactionHook(options: {
         if (!last) {
           return
         }
-        const actualLimit = last.providerID === "anthropic" ? anthropicActualLimit() : DEFAULT_ACTUAL_LIMIT
+        const providerID = typeof last.providerID === "string" ? last.providerID : ""
+        const modelID = typeof last.modelID === "string" ? last.modelID : ""
+        const actualLimit = resolveContextLimit({
+          providerID,
+          modelID,
+          defaultContextLimitTokens: options.defaultContextLimitTokens,
+        })
         const totalInputTokens = (last.tokens?.input ?? 0) + (last.tokens?.cache?.read ?? 0)
         const usageRatio = totalInputTokens / actualLimit
         if (usageRatio < options.warningThreshold) {
@@ -214,9 +215,24 @@ export function createPreemptiveCompactionHook(options: {
             return
           }
         }
-        const providerID = typeof last.providerID === "string" ? last.providerID : ""
-        const modelID = typeof last.modelID === "string" ? last.modelID : ""
         if (!providerID || !modelID) {
+          const missingNoticeElapsed =
+            nextState.toolCalls - nextState.lastMissingMetadataNoticeAtToolCall >=
+            options.compactionCooldownToolCalls
+          if (missingNoticeElapsed && typeof eventPayload.output?.output === "string") {
+            const prefix = guardPrefix(options.guardMarkerMode)
+            eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} High context pressure detected but auto-compaction skipped: provider/model metadata unavailable.`
+            sessionStates.set(sessionId, {
+              ...nextState,
+              lastMissingMetadataNoticeAtToolCall: nextState.toolCalls,
+            })
+          }
+          writeGatewayEventAudit(directory, {
+            hook: "preemptive-compaction",
+            stage: "skip",
+            reason_code: "compaction_missing_provider_or_model",
+            session_id: sessionId,
+          })
           return
         }
         compactionInProgress.add(sessionId)
