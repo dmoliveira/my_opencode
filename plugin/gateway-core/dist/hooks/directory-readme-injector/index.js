@@ -1,5 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { findNearestFile } from "../directory-context/finder.js";
+import { readFilePrefix } from "../shared/read-file-prefix.js";
+import { truncateInjectedText } from "../shared/injected-text-truncator.js";
 // Resolves stable session id from tool payload.
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
@@ -64,12 +66,23 @@ export function createDirectoryReadmeInjectorHook(options) {
             if (lastInjectedPathBySession.get(sessionId) === path) {
                 return;
             }
-            eventPayload.output.output = `${eventPayload.output.output}\n\nLocal README context loaded from: ${path}`;
+            const readmeText = readFilePrefix(path, options.maxChars);
+            const normalizedReadme = readmeText.trim();
+            let contextLine = `Local README context loaded from: ${path}`;
+            let reasonCode = "directory_readme_context_injected";
+            if (normalizedReadme) {
+                const truncated = truncateInjectedText(normalizedReadme, options.maxChars);
+                contextLine = `${contextLine}\n\nREADME.md excerpt:\n${truncated.text}`;
+                if (truncated.truncated) {
+                    reasonCode = "directory_readme_context_truncated";
+                }
+            }
+            eventPayload.output.output = `${eventPayload.output.output}\n\n${contextLine}`;
             lastInjectedPathBySession.set(sessionId, path);
             writeGatewayEventAudit(directory, {
                 hook: "directory-readme-injector",
                 stage: "state",
-                reason_code: "directory_readme_context_injected",
+                reason_code: reasonCode,
                 session_id: sessionId,
             });
         },

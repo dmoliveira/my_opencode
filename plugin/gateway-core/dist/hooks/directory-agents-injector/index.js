@@ -1,5 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { findNearestFile } from "../directory-context/finder.js";
+import { readFilePrefix } from "../shared/read-file-prefix.js";
+import { truncateInjectedText } from "../shared/injected-text-truncator.js";
 // Resolves stable session id from tool payload.
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
@@ -64,12 +66,23 @@ export function createDirectoryAgentsInjectorHook(options) {
             if (lastInjectedPathBySession.get(sessionId) === path) {
                 return;
             }
-            eventPayload.output.output = `${eventPayload.output.output}\n\nLocal instructions loaded from: ${path}`;
+            const guidanceText = readFilePrefix(path, options.maxChars);
+            const normalizedGuidance = guidanceText.trim();
+            let contextLine = `Local instructions loaded from: ${path}`;
+            let reasonCode = "directory_agents_context_injected";
+            if (normalizedGuidance) {
+                const truncated = truncateInjectedText(normalizedGuidance, options.maxChars);
+                contextLine = `${contextLine}\n\nAGENTS.md guidance excerpt:\n${truncated.text}`;
+                if (truncated.truncated) {
+                    reasonCode = "directory_agents_context_truncated";
+                }
+            }
+            eventPayload.output.output = `${eventPayload.output.output}\n\n${contextLine}`;
             lastInjectedPathBySession.set(sessionId, path);
             writeGatewayEventAudit(directory, {
                 hook: "directory-agents-injector",
                 stage: "state",
-                reason_code: "directory_agents_context_injected",
+                reason_code: reasonCode,
                 session_id: sessionId,
             });
         },

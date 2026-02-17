@@ -57,5 +57,6 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: no direct upstream implementation files were present in the current checkout, so parity is being delivered through local hook additions (`think-mode` and `thinking-block-validator`) aligned to the documented guardrail goal.
    - Delivered: added session-aware `think-mode` guidance with lifecycle reset semantics, added `thinking-block-validator` for malformed/misordered thinking tags across text parts, wired both hooks into config/loading/default order, and added dedicated hook + config tests.
 
-12. [ ] Directory guidance depth parity
-   - Goal: move from path-notice injection toward richer AGENTS/README content injection with safe truncation.
+12. [x] Directory guidance depth parity
+    - Pre-check completed: directory AGENTS/README injectors only appended nearest file paths and did not inject file content.
+    - Delivered: injectors now append truncated AGENTS/README content excerpts (with path context), added configurable `maxChars` knobs with safe defaults and normalization, and expanded tests for content injection and truncation behavior.

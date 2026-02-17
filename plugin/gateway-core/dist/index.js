@@ -204,10 +204,12 @@ function configuredHooks(ctx) {
         createDirectoryAgentsInjectorHook({
             directory,
             enabled: cfg.directoryAgentsInjector.enabled,
+            maxChars: cfg.directoryAgentsInjector.maxChars,
         }),
         createDirectoryReadmeInjectorHook({
             directory,
             enabled: cfg.directoryReadmeInjector.enabled,
+            maxChars: cfg.directoryReadmeInjector.maxChars,
         }),
         createNoninteractiveShellGuardHook({
             directory,

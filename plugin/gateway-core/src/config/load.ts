@@ -578,12 +578,20 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof directoryAgentsSource.enabled === "boolean"
           ? directoryAgentsSource.enabled
           : DEFAULT_GATEWAY_CONFIG.directoryAgentsInjector.enabled,
+      maxChars: positiveInt(
+        directoryAgentsSource.maxChars,
+        DEFAULT_GATEWAY_CONFIG.directoryAgentsInjector.maxChars,
+      ),
     },
     directoryReadmeInjector: {
       enabled:
         typeof directoryReadmeSource.enabled === "boolean"
           ? directoryReadmeSource.enabled
           : DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.enabled,
+      maxChars: positiveInt(
+        directoryReadmeSource.maxChars,
+        DEFAULT_GATEWAY_CONFIG.directoryReadmeInjector.maxChars,
+      ),
     },
     noninteractiveShellGuard: {
       enabled:

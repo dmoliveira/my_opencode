@@ -28,6 +28,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.globalProcessPressure.notifyOnCritical, true)
   assert.equal(config.thinkMode.enabled, true)
   assert.equal(config.thinkingBlockValidator.enabled, true)
+  assert.equal(config.directoryAgentsInjector.maxChars, 4000)
+  assert.equal(config.directoryReadmeInjector.maxChars, 4000)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -92,6 +94,12 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
       guardVerbosity: "invalid",
       maxSessionStateEntries: 0,
     },
+    directoryAgentsInjector: {
+      maxChars: 0,
+    },
+    directoryReadmeInjector: {
+      maxChars: 0,
+    },
   })
   assert.equal(config.contextWindowMonitor.guardMarkerMode, "both")
   assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
@@ -116,4 +124,6 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.globalProcessPressure.guardMarkerMode, "both")
   assert.equal(config.globalProcessPressure.guardVerbosity, "normal")
   assert.equal(config.globalProcessPressure.maxSessionStateEntries, 1024)
+  assert.equal(config.directoryAgentsInjector.maxChars, 4000)
+  assert.equal(config.directoryReadmeInjector.maxChars, 4000)
 })

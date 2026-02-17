@@ -157,9 +157,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     directoryAgentsInjector: {
         enabled: true,
+        maxChars: 4000,
     },
     directoryReadmeInjector: {
         enabled: true,
+        maxChars: 4000,
     },
     noninteractiveShellGuard: {
         enabled: true,
