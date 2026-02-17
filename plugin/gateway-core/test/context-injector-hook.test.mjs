@@ -251,3 +251,109 @@ test("context-injector falls back to last known session id in transform", async 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("context-injector truncates oversized chat pending context", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-truncate-chat", {
+      source: "test",
+      id: "large-chat-context",
+      content: "X".repeat(220),
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+      maxChars: 120,
+    })
+    const output = {
+      parts: [{ type: "text", text: "Original prompt" }],
+    }
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-truncate-chat" },
+      output,
+      directory,
+    })
+
+    const text = String(output.parts[0]?.text)
+    assert.match(text, /Content truncated due to context window limit/)
+    assert.match(text, /Original prompt/)
+    assert.equal(collector.hasPending("session-context-truncate-chat"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector truncates oversized transform pending context", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-truncate-transform", {
+      source: "test",
+      id: "large-transform-context",
+      content: "Y".repeat(220),
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+      maxChars: 120,
+    })
+    const output = {
+      messages: [
+        {
+          info: { role: "user", id: "m1", sessionID: "session-context-truncate-transform" },
+          parts: [{ type: "text", text: "Original transform prompt" }],
+        },
+      ],
+    }
+    await hook.event("experimental.chat.messages.transform", {
+      input: { sessionID: "session-context-truncate-transform" },
+      output,
+      directory,
+    })
+
+    const synthetic = output.messages[0]?.parts?.[0]
+    assert.equal(synthetic?.synthetic, true)
+    assert.match(String(synthetic?.text), /Content truncated due to context window limit/)
+    assert.equal(collector.hasPending("session-context-truncate-transform"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector respects tiny maxChars limits", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-truncate-tiny", {
+      source: "test",
+      id: "tiny-context",
+      content: "Q".repeat(120),
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+      maxChars: 10,
+    })
+    const output = {
+      parts: [{ type: "text", text: "Original prompt" }],
+    }
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-truncate-tiny" },
+      output,
+      directory,
+    })
+
+    const text = String(output.parts[0]?.text)
+    const [injected] = text.split("\n\n---\n\n")
+    assert.equal(injected.length, 10)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

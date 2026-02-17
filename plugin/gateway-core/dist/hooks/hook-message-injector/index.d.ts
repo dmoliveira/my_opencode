@@ -74,5 +74,6 @@ export declare function injectHookMessage(args: {
     sessionId: string;
     content: string;
     directory: string;
+    maxChars?: number;
 }): Promise<boolean>;
 export {};
