@@ -210,9 +210,9 @@ Recent progress:
 
 ## Hook adoption decisions (safety first)
 
-- `todo-continuation-enforcer`: intentionally not adopted.
-  - Rationale: this workflow already disables `task` and `todowrite` hooks and relies on `br` issue tracking.
-  - Risk: auto-nudging unfinished todo flows can override explicit user stop intent and degrade AI/human control.
+- `todo-continuation-enforcer`: adopted for parity.
+  - Rationale: pending todo markers are now used as bounded continuation signals with cooldown and failure budgets.
+  - Guardrails: stop guard checks and active-loop checks prevent duplicate or conflicting continuation nudges.
 
 - `think-mode`: intentionally not adopted as default behavior.
   - Rationale: forcing extra reasoning mode from keyword matches can increase latency/cost unexpectedly.
@@ -222,9 +222,9 @@ Recent progress:
   - Rationale: preemptive compaction already runs with deterministic triggers and audit logging.
   - Risk: injecting extra context immediately before compaction can increase token pressure and reduce compaction effectiveness.
 
-- `compaction-todo-preserver`: intentionally not adopted.
-  - Rationale: this gateway profile disables task/todowrite tooling in favor of br issue tracking.
-  - Risk: preserving todo snapshots adds stale state complexity without benefit in the current workflow.
+- `compaction-todo-preserver`: adopted for parity.
+  - Rationale: when compaction occurs after pending-task output, todo context is snapshotted and restored to prevent context loss.
+  - Guardrails: snapshot state is cleared on marker disappearance and session deletion to avoid stale restoration.
 
 - `thinking-block-validator`: intentionally not adopted.
   - Rationale: gateway-core does not transform Anthropic thinking blocks directly in current lifecycle handlers.
