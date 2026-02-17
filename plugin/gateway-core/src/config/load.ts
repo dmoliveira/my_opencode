@@ -177,6 +177,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.todoContinuationEnforcer && typeof source.todoContinuationEnforcer === "object"
       ? (source.todoContinuationEnforcer as Record<string, unknown>)
       : {}
+  const compactionTodoPreserverSource =
+    source.compactionTodoPreserver && typeof source.compactionTodoPreserver === "object"
+      ? (source.compactionTodoPreserver as Record<string, unknown>)
+      : {}
   const emptyTaskResponseSource =
     source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
       ? (source.emptyTaskResponseDetector as Record<string, unknown>)
@@ -661,6 +665,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       maxConsecutiveFailures: positiveInt(
         todoContinuationEnforcerSource.maxConsecutiveFailures,
         DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.maxConsecutiveFailures,
+      ),
+    },
+    compactionTodoPreserver: {
+      enabled:
+        typeof compactionTodoPreserverSource.enabled === "boolean"
+          ? compactionTodoPreserverSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.compactionTodoPreserver.enabled,
+      maxChars: positiveInt(
+        compactionTodoPreserverSource.maxChars,
+        DEFAULT_GATEWAY_CONFIG.compactionTodoPreserver.maxChars,
       ),
     },
     emptyTaskResponseDetector: {

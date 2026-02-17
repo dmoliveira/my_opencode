@@ -138,6 +138,9 @@ export function loadGatewayConfig(raw) {
     const todoContinuationEnforcerSource = source.todoContinuationEnforcer && typeof source.todoContinuationEnforcer === "object"
         ? source.todoContinuationEnforcer
         : {};
+    const compactionTodoPreserverSource = source.compactionTodoPreserver && typeof source.compactionTodoPreserver === "object"
+        ? source.compactionTodoPreserver
+        : {};
     const emptyTaskResponseSource = source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
         ? source.emptyTaskResponseDetector
         : {};
@@ -434,6 +437,12 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.enabled,
             cooldownMs: positiveInt(todoContinuationEnforcerSource.cooldownMs, DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.cooldownMs),
             maxConsecutiveFailures: positiveInt(todoContinuationEnforcerSource.maxConsecutiveFailures, DEFAULT_GATEWAY_CONFIG.todoContinuationEnforcer.maxConsecutiveFailures),
+        },
+        compactionTodoPreserver: {
+            enabled: typeof compactionTodoPreserverSource.enabled === "boolean"
+                ? compactionTodoPreserverSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.compactionTodoPreserver.enabled,
+            maxChars: positiveInt(compactionTodoPreserverSource.maxChars, DEFAULT_GATEWAY_CONFIG.compactionTodoPreserver.maxChars),
         },
         emptyTaskResponseDetector: {
             enabled: typeof emptyTaskResponseSource.enabled === "boolean"

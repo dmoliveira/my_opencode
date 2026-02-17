@@ -34,6 +34,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "tasks-todowrite-disabler",
             "task-resume-info",
             "todo-continuation-enforcer",
+            "compaction-todo-preserver",
             "empty-task-response-detector",
             "comment-checker",
             "agent-user-reminder",
@@ -194,6 +195,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         cooldownMs: 30000,
         maxConsecutiveFailures: 5,
+    },
+    compactionTodoPreserver: {
+        enabled: true,
+        maxChars: 4000,
     },
     emptyTaskResponseDetector: {
         enabled: true,

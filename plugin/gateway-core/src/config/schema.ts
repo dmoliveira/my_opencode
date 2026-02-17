@@ -166,6 +166,12 @@ export interface TodoContinuationEnforcerConfig {
   maxConsecutiveFailures: number
 }
 
+// Declares compaction todo snapshot/restore settings.
+export interface CompactionTodoPreserverConfig {
+  enabled: boolean
+  maxChars: number
+}
+
 // Declares empty task response detector settings.
 export interface EmptyTaskResponseDetectorConfig {
   enabled: boolean
@@ -408,6 +414,7 @@ export interface GatewayConfig {
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig
   taskResumeInfo: TaskResumeInfoConfig
   todoContinuationEnforcer: TodoContinuationEnforcerConfig
+  compactionTodoPreserver: CompactionTodoPreserverConfig
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
@@ -471,6 +478,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "tasks-todowrite-disabler",
       "task-resume-info",
       "todo-continuation-enforcer",
+      "compaction-todo-preserver",
       "empty-task-response-detector",
       "comment-checker",
       "agent-user-reminder",
@@ -631,6 +639,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     cooldownMs: 30000,
     maxConsecutiveFailures: 5,
+  },
+  compactionTodoPreserver: {
+    enabled: true,
+    maxChars: 4000,
   },
   emptyTaskResponseDetector: {
     enabled: true,

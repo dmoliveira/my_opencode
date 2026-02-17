@@ -118,6 +118,10 @@ export interface TodoContinuationEnforcerConfig {
     cooldownMs: number;
     maxConsecutiveFailures: number;
 }
+export interface CompactionTodoPreserverConfig {
+    enabled: boolean;
+    maxChars: number;
+}
 export interface EmptyTaskResponseDetectorConfig {
     enabled: boolean;
 }
@@ -299,6 +303,7 @@ export interface GatewayConfig {
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     taskResumeInfo: TaskResumeInfoConfig;
     todoContinuationEnforcer: TodoContinuationEnforcerConfig;
+    compactionTodoPreserver: CompactionTodoPreserverConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
