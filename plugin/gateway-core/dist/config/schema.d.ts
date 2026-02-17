@@ -113,6 +113,11 @@ export interface TasksTodowriteDisablerConfig {
 export interface TaskResumeInfoConfig {
     enabled: boolean;
 }
+export interface TodoContinuationEnforcerConfig {
+    enabled: boolean;
+    cooldownMs: number;
+    maxConsecutiveFailures: number;
+}
 export interface EmptyTaskResponseDetectorConfig {
     enabled: boolean;
 }
@@ -293,6 +298,7 @@ export interface GatewayConfig {
     subagentQuestionBlocker: SubagentQuestionBlockerConfig;
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     taskResumeInfo: TaskResumeInfoConfig;
+    todoContinuationEnforcer: TodoContinuationEnforcerConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;

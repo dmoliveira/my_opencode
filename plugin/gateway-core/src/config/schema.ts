@@ -159,6 +159,13 @@ export interface TaskResumeInfoConfig {
   enabled: boolean
 }
 
+// Declares todo-driven continuation enforcer settings.
+export interface TodoContinuationEnforcerConfig {
+  enabled: boolean
+  cooldownMs: number
+  maxConsecutiveFailures: number
+}
+
 // Declares empty task response detector settings.
 export interface EmptyTaskResponseDetectorConfig {
   enabled: boolean
@@ -400,6 +407,7 @@ export interface GatewayConfig {
   subagentQuestionBlocker: SubagentQuestionBlockerConfig
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig
   taskResumeInfo: TaskResumeInfoConfig
+  todoContinuationEnforcer: TodoContinuationEnforcerConfig
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
@@ -462,6 +470,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "subagent-question-blocker",
       "tasks-todowrite-disabler",
       "task-resume-info",
+      "todo-continuation-enforcer",
       "empty-task-response-detector",
       "comment-checker",
       "agent-user-reminder",
@@ -617,6 +626,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   taskResumeInfo: {
     enabled: true,
+  },
+  todoContinuationEnforcer: {
+    enabled: true,
+    cooldownMs: 30000,
+    maxConsecutiveFailures: 5,
   },
   emptyTaskResponseDetector: {
     enabled: true,

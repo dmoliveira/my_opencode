@@ -33,6 +33,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "subagent-question-blocker",
             "tasks-todowrite-disabler",
             "task-resume-info",
+            "todo-continuation-enforcer",
             "empty-task-response-detector",
             "comment-checker",
             "agent-user-reminder",
@@ -188,6 +189,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     taskResumeInfo: {
         enabled: true,
+    },
+    todoContinuationEnforcer: {
+        enabled: true,
+        cooldownMs: 30000,
+        maxConsecutiveFailures: 5,
     },
     emptyTaskResponseDetector: {
         enabled: true,

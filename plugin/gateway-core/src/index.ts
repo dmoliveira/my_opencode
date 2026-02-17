@@ -42,6 +42,7 @@ import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js"
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js"
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js"
+import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js"
 import { createThinkModeHook } from "./hooks/think-mode/index.js"
 import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validator/index.js"
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js"
@@ -329,6 +330,14 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     }),
     createTaskResumeInfoHook({
       enabled: cfg.taskResumeInfo.enabled,
+    }),
+    createTodoContinuationEnforcerHook({
+      directory,
+      enabled: cfg.todoContinuationEnforcer.enabled,
+      client: ctx.client,
+      stopGuard,
+      cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
+      maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
     }),
     createEmptyTaskResponseDetectorHook({
       enabled: cfg.emptyTaskResponseDetector.enabled,

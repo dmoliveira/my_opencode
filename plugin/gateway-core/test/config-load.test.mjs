@@ -30,6 +30,9 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.thinkingBlockValidator.enabled, true)
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
   assert.equal(config.directoryReadmeInjector.maxChars, 4000)
+  assert.equal(config.todoContinuationEnforcer.enabled, true)
+  assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
+  assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -100,6 +103,10 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
     directoryReadmeInjector: {
       maxChars: 0,
     },
+    todoContinuationEnforcer: {
+      cooldownMs: 0,
+      maxConsecutiveFailures: 0,
+    },
   })
   assert.equal(config.contextWindowMonitor.guardMarkerMode, "both")
   assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
@@ -126,4 +133,6 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.globalProcessPressure.maxSessionStateEntries, 1024)
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
   assert.equal(config.directoryReadmeInjector.maxChars, 4000)
+  assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
+  assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
 })
