@@ -80,6 +80,14 @@ export interface GlobalProcessPressureConfig {
   maxSessionStateEntries: number
 }
 
+// Declares high-pressure escalation guard settings for task/subagent launches.
+export interface PressureEscalationGuardConfig {
+  enabled: boolean
+  maxContinueBeforeBlock: number
+  blockedSubagentTypes: string[]
+  allowPromptPatterns: string[]
+}
+
 // Declares compaction context injector settings for summarize commands.
 export interface CompactionContextInjectorConfig {
   enabled: boolean
@@ -421,6 +429,7 @@ export interface GatewayConfig {
   preemptiveCompaction: PreemptiveCompactionConfig
   compactionContextInjector: CompactionContextInjectorConfig
   globalProcessPressure: GlobalProcessPressureConfig
+  pressureEscalationGuard: PressureEscalationGuardConfig
   sessionRecovery: SessionRecoveryConfig
   delegateTaskRetry: DelegateTaskRetryConfig
   validationEvidenceLedger: ValidationEvidenceLedgerConfig
@@ -489,6 +498,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "context-window-monitor",
       "preemptive-compaction",
       "global-process-pressure",
+      "pressure-escalation-guard",
       "session-recovery",
       "delegate-task-retry",
       "validation-evidence-ledger",
@@ -600,6 +610,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 1024,
+  },
+  pressureEscalationGuard: {
+    enabled: true,
+    maxContinueBeforeBlock: 5,
+    blockedSubagentTypes: ["reviewer", "verifier", "explore", "librarian", "general"],
+    allowPromptPatterns: ["blocker", "critical", "sev0", "sev1", "check failed", "pressure-override"],
   },
   sessionRecovery: {
     enabled: true,

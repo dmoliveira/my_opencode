@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs"
 import { dirname, join } from "node:path"
 
 // Returns true when gateway event auditing is enabled.
@@ -17,6 +17,36 @@ export function gatewayEventAuditPath(directory: string): string {
   return join(directory, ".opencode", "gateway-events.jsonl")
 }
 
+function auditMaxBytes(): number {
+  const parsed = Number.parseInt(String(process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES ?? ""), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 5 * 1024 * 1024
+  }
+  return parsed
+}
+
+function auditMaxBackups(): number {
+  const parsed = Number.parseInt(String(process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS ?? ""), 10)
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 3
+  }
+  return parsed
+}
+
+function rotateAudit(path: string): void {
+  const maxBackups = auditMaxBackups()
+  for (let idx = maxBackups; idx >= 1; idx -= 1) {
+    const src = `${path}.${idx}`
+    const dst = `${path}.${idx + 1}`
+    if (existsSync(src)) {
+      renameSync(src, dst)
+    }
+  }
+  if (existsSync(path)) {
+    renameSync(path, `${path}.1`)
+  }
+}
+
 // Appends one sanitized gateway event audit entry.
 export function writeGatewayEventAudit(
   directory: string,
@@ -31,5 +61,15 @@ export function writeGatewayEventAudit(
     ts: new Date().toISOString(),
     ...entry,
   }
-  appendFileSync(path, `${JSON.stringify(payload)}\n`, "utf-8")
+  const line = `${JSON.stringify(payload)}\n`
+  const maxBytes = auditMaxBytes()
+  try {
+    const currentSize = existsSync(path) ? statSync(path).size : 0
+    if (currentSize + Buffer.byteLength(line, "utf-8") > maxBytes) {
+      rotateAudit(path)
+    }
+  } catch {
+    // Best-effort rotation; continue append even if metadata checks fail.
+  }
+  appendFileSync(path, line, "utf-8")
 }

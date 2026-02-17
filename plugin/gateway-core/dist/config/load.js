@@ -75,6 +75,9 @@ export function loadGatewayConfig(raw) {
     const globalProcessPressureSource = source.globalProcessPressure && typeof source.globalProcessPressure === "object"
         ? source.globalProcessPressure
         : {};
+    const pressureEscalationGuardSource = source.pressureEscalationGuard && typeof source.pressureEscalationGuard === "object"
+        ? source.pressureEscalationGuard
+        : {};
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
@@ -328,6 +331,18 @@ export function loadGatewayConfig(raw) {
             guardMarkerMode: markerMode(globalProcessPressureSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardMarkerMode),
             guardVerbosity: guardVerbosity(globalProcessPressureSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardVerbosity),
             maxSessionStateEntries: positiveInt(globalProcessPressureSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.maxSessionStateEntries),
+        },
+        pressureEscalationGuard: {
+            enabled: typeof pressureEscalationGuardSource.enabled === "boolean"
+                ? pressureEscalationGuardSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.enabled,
+            maxContinueBeforeBlock: positiveInt(pressureEscalationGuardSource.maxContinueBeforeBlock, DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.maxContinueBeforeBlock),
+            blockedSubagentTypes: stringList(pressureEscalationGuardSource.blockedSubagentTypes).length > 0
+                ? stringList(pressureEscalationGuardSource.blockedSubagentTypes)
+                : DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.blockedSubagentTypes,
+            allowPromptPatterns: stringList(pressureEscalationGuardSource.allowPromptPatterns).length > 0
+                ? stringList(pressureEscalationGuardSource.allowPromptPatterns)
+                : DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.allowPromptPatterns,
         },
         sessionRecovery: {
             enabled: typeof sessionRecoverySource.enabled === "boolean"
