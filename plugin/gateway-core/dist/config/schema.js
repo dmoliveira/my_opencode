@@ -363,7 +363,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enforceOnPrMerge: true,
     },
     prReadinessGuard: {
-        enabled: true,
+        enabled: false,
         requireCleanWorktree: true,
         requireValidationEvidence: true,
     },
