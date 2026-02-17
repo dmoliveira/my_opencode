@@ -36,6 +36,8 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "todo-continuation-enforcer",
             "compaction-todo-preserver",
             "empty-task-response-detector",
+            "edit-error-recovery",
+            "json-error-recovery",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -216,6 +218,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
         maxChars: 4000,
     },
     emptyTaskResponseDetector: {
+        enabled: true,
+    },
+    editErrorRecovery: {
+        enabled: true,
+    },
+    jsonErrorRecovery: {
         enabled: true,
     },
     commentChecker: {

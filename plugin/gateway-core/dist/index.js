@@ -14,6 +14,8 @@ import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
 import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js";
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js";
+import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/index.js";
+import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
@@ -259,6 +261,12 @@ function configuredHooks(ctx) {
         }),
         createEmptyTaskResponseDetectorHook({
             enabled: cfg.emptyTaskResponseDetector.enabled,
+        }),
+        createEditErrorRecoveryHook({
+            enabled: cfg.editErrorRecovery.enabled,
+        }),
+        createJsonErrorRecoveryHook({
+            enabled: cfg.jsonErrorRecovery.enabled,
         }),
         createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,
