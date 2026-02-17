@@ -93,9 +93,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: no local hook injects explicit recovery guidance when the model emits max-step/tool-disabled exhaustion text. Confirmed on latest main there is no `max-step` exhaustion detector in gateway hooks.
     - Delivered: added `max-step-recovery` hook for max-step/tool-disabled exhaustion output detection, concise progress/remaining-work/next-action recovery guidance injection, config/default/order wiring, and dedicated regression tests with duplicate suppression.
 
-20. [ ] Plan/build mode transition reminder parity
+20. [x] Plan/build mode transition reminder parity
     - Pre-check completed: no local hook handles upstream-style plan/build mode transition reminders. Confirmed on latest main there is no dedicated plan-mode/build-mode transition guidance hook.
-    - Goal: add mode-transition detection and response guidance hooks for plan-mode and build-mode reminder payloads, with duplicate suppression and session safety.
+    - Delivered: added `mode-transition-reminder` hook for plan/build reminder detection, session-aware duplicate suppression/reset on `session.deleted`, config/default/order + loader wiring, and dedicated regression tests.
 
 21. [ ] Todo-read proactive cadence parity
     - Pre-check completed: local workflow blocks `task`/`todowrite`, but no proactive `todoread` reminder cadence exists. Confirmed on latest main there is no hook that nudges periodic todo-list reads in-session.
