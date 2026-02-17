@@ -79,9 +79,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: local gateway has generic continuation/session recovery hooks, but no dedicated edit-error/json-error recovery nudges were found. Confirmed on latest main there are no `edit-error-recovery` or `json-error-recovery` hooks/wiring.
     - Delivered: added dedicated `edit-error-recovery` and `json-error-recovery` hooks that append targeted retry guidance on matching failures, wired config/default/order + loader support, and added dedicated regression tests with duplicate-suppression coverage.
 
-17. [ ] Provider token-limit auto-recovery parity
-    - Pre-check completed: local context-window monitoring and preemptive compaction are proactive, but no provider-specific error-triggered token-limit recovery hook was found.
-    - Goal: add provider token-limit recovery handling on error/update events with safe compact/truncation fallback.
+17. [x] Provider token-limit auto-recovery parity
+    - Pre-check completed: local context-window monitoring and preemptive compaction are proactive, but no provider-specific error-triggered token-limit recovery hook was found. Confirmed on latest main there is no dedicated token-limit error recovery hook.
+    - Delivered: added `provider-token-limit-recovery` hook that detects token-limit errors on `session.error`/`message.updated`, triggers summarize-based recovery with cooldown and session in-flight guards, injects concise continuation guidance, and includes config/default/order wiring plus dedicated tests.
 
 18. [ ] Hashline read stability enhancer parity
     - Pre-check completed: local tool output processing covers truncation, but no hashline read enhancer equivalent was found.

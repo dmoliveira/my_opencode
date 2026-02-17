@@ -185,6 +185,11 @@ export interface JsonErrorRecoveryConfig {
   enabled: boolean
 }
 
+export interface ProviderTokenLimitRecoveryConfig {
+  enabled: boolean
+  cooldownMs: number
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -429,6 +434,7 @@ export interface GatewayConfig {
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig
   editErrorRecovery: EditErrorRecoveryConfig
   jsonErrorRecovery: JsonErrorRecoveryConfig
+  providerTokenLimitRecovery: ProviderTokenLimitRecoveryConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -495,6 +501,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "empty-task-response-detector",
       "edit-error-recovery",
       "json-error-recovery",
+      "provider-token-limit-recovery",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -682,6 +689,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   jsonErrorRecovery: {
     enabled: true,
+  },
+  providerTokenLimitRecovery: {
+    enabled: true,
+    cooldownMs: 60000,
   },
   commentChecker: {
     enabled: true,
