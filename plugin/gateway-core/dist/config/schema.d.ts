@@ -154,6 +154,10 @@ export interface TodoreadCadenceReminderConfig {
     enabled: boolean;
     cooldownEvents: number;
 }
+export interface ProviderRetryBackoffGuidanceConfig {
+    enabled: boolean;
+    cooldownMs: number;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -345,6 +349,7 @@ export interface GatewayConfig {
     maxStepRecovery: MaxStepRecoveryConfig;
     modeTransitionReminder: ModeTransitionReminderConfig;
     todoreadCadenceReminder: TodoreadCadenceReminderConfig;
+    providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
