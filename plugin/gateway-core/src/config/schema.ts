@@ -215,6 +215,11 @@ export interface TodoreadCadenceReminderConfig {
   cooldownEvents: number
 }
 
+export interface ProviderRetryBackoffGuidanceConfig {
+  enabled: boolean
+  cooldownMs: number
+}
+
 // Declares comment quality checker settings.
 export interface CommentCheckerConfig {
   enabled: boolean
@@ -465,6 +470,7 @@ export interface GatewayConfig {
   maxStepRecovery: MaxStepRecoveryConfig
   modeTransitionReminder: ModeTransitionReminderConfig
   todoreadCadenceReminder: TodoreadCadenceReminderConfig
+  providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig
   commentChecker: CommentCheckerConfig
   agentUserReminder: AgentUserReminderConfig
   unstableAgentBabysitter: UnstableAgentBabysitterConfig
@@ -537,6 +543,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "max-step-recovery",
       "mode-transition-reminder",
       "todoread-cadence-reminder",
+      "provider-retry-backoff-guidance",
       "comment-checker",
       "agent-user-reminder",
       "unstable-agent-babysitter",
@@ -747,6 +754,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   todoreadCadenceReminder: {
     enabled: true,
     cooldownEvents: 2,
+  },
+  providerRetryBackoffGuidance: {
+    enabled: true,
+    cooldownMs: 30000,
   },
   commentChecker: {
     enabled: true,

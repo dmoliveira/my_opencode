@@ -168,6 +168,9 @@ export function loadGatewayConfig(raw) {
     const todoreadCadenceReminderSource = source.todoreadCadenceReminder && typeof source.todoreadCadenceReminder === "object"
         ? source.todoreadCadenceReminder
         : {};
+    const providerRetryBackoffGuidanceSource = source.providerRetryBackoffGuidance && typeof source.providerRetryBackoffGuidance === "object"
+        ? source.providerRetryBackoffGuidance
+        : {};
     const commentCheckerSource = source.commentChecker && typeof source.commentChecker === "object"
         ? source.commentChecker
         : {};
@@ -530,6 +533,12 @@ export function loadGatewayConfig(raw) {
                 ? todoreadCadenceReminderSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.todoreadCadenceReminder.enabled,
             cooldownEvents: positiveInt(todoreadCadenceReminderSource.cooldownEvents, DEFAULT_GATEWAY_CONFIG.todoreadCadenceReminder.cooldownEvents),
+        },
+        providerRetryBackoffGuidance: {
+            enabled: typeof providerRetryBackoffGuidanceSource.enabled === "boolean"
+                ? providerRetryBackoffGuidanceSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.enabled,
+            cooldownMs: positiveInt(providerRetryBackoffGuidanceSource.cooldownMs, DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.cooldownMs),
         },
         commentChecker: {
             enabled: typeof commentCheckerSource.enabled === "boolean"

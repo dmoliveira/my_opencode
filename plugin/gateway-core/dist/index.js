@@ -21,6 +21,7 @@ import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/i
 import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js";
 import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js";
 import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-reminder/index.js";
+import { createProviderRetryBackoffGuidanceHook } from "./hooks/provider-retry-backoff-guidance/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
@@ -299,6 +300,12 @@ function configuredHooks(ctx) {
         createTodoreadCadenceReminderHook({
             enabled: cfg.todoreadCadenceReminder.enabled,
             cooldownEvents: cfg.todoreadCadenceReminder.cooldownEvents,
+        }),
+        createProviderRetryBackoffGuidanceHook({
+            directory,
+            enabled: cfg.providerRetryBackoffGuidance.enabled,
+            client: ctx.client,
+            cooldownMs: cfg.providerRetryBackoffGuidance.cooldownMs,
         }),
         createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,

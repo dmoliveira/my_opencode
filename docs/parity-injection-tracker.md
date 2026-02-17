@@ -101,9 +101,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: local workflow blocks `task`/`todowrite`, but no proactive `todoread` reminder cadence exists. Confirmed on latest main there is no hook that nudges periodic todo-list reads in-session.
     - Delivered: added `todoread-cadence-reminder` hook for session-start/checkpoint todo-read reminders on tool output, session reset on `session.deleted`, cooldown controls, config/default/order + loader wiring, and dedicated regression tests.
 
-22. [ ] Provider retry-after backoff guidance parity
+22. [x] Provider retry-after backoff guidance parity
     - Pre-check completed: local provider recovery handles token-limit compaction, but no retry-after header/backoff guidance path exists. Confirmed on latest main there is no retry-delay parser (`retry-after-ms`/`retry-after`/HTTP date) in gateway recovery hooks.
-    - Goal: add provider retry guidance logic that parses retry headers/date values and emits deterministic backoff hints instead of immediate blind retries.
+    - Delivered: added `provider-retry-backoff-guidance` hook with retry-after-ms/retry-after/date parsing, session cooldown controls, targeted prompt hints, config/default/order + loader wiring, and dedicated regression tests.
 
 23. [ ] Provider quota/rate-limit classification parity
     - Pre-check completed: local recovery does not classify upstream-style quota and rate-limit signatures (for example free-usage exhaustion and structured `too_many_requests` payloads). Confirmed on latest main there is no dedicated classifier hook for these provider errors.

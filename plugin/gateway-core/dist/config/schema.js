@@ -44,6 +44,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "max-step-recovery",
             "mode-transition-reminder",
             "todoread-cadence-reminder",
+            "provider-retry-backoff-guidance",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -254,6 +255,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     todoreadCadenceReminder: {
         enabled: true,
         cooldownEvents: 2,
+    },
+    providerRetryBackoffGuidance: {
+        enabled: true,
+        cooldownMs: 30000,
     },
     commentChecker: {
         enabled: true,

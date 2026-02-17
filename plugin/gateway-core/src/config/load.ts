@@ -217,6 +217,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.todoreadCadenceReminder && typeof source.todoreadCadenceReminder === "object"
       ? (source.todoreadCadenceReminder as Record<string, unknown>)
       : {}
+  const providerRetryBackoffGuidanceSource =
+    source.providerRetryBackoffGuidance && typeof source.providerRetryBackoffGuidance === "object"
+      ? (source.providerRetryBackoffGuidance as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -793,6 +797,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       cooldownEvents: positiveInt(
         todoreadCadenceReminderSource.cooldownEvents,
         DEFAULT_GATEWAY_CONFIG.todoreadCadenceReminder.cooldownEvents,
+      ),
+    },
+    providerRetryBackoffGuidance: {
+      enabled:
+        typeof providerRetryBackoffGuidanceSource.enabled === "boolean"
+          ? providerRetryBackoffGuidanceSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.enabled,
+      cooldownMs: positiveInt(
+        providerRetryBackoffGuidanceSource.cooldownMs,
+        DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.cooldownMs,
       ),
     },
     commentChecker: {
