@@ -42,6 +42,7 @@ export interface ContextWindowMonitorConfig {
   warningThreshold: number
   reminderCooldownToolCalls: number
   minTokenDeltaForReminder: number
+  defaultContextLimitTokens: number
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
@@ -53,6 +54,20 @@ export interface PreemptiveCompactionConfig {
   warningThreshold: number
   compactionCooldownToolCalls: number
   minTokenDeltaForCompaction: number
+  defaultContextLimitTokens: number
+  guardMarkerMode: "nerd" | "plain" | "both"
+  guardVerbosity: "minimal" | "normal" | "debug"
+  maxSessionStateEntries: number
+}
+
+// Declares global process pressure warnings for multi-session memory buildup.
+export interface GlobalProcessPressureConfig {
+  enabled: boolean
+  checkCooldownToolCalls: number
+  reminderCooldownToolCalls: number
+  warningContinueSessions: number
+  warningOpencodeProcesses: number
+  warningMaxRssMb: number
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
@@ -345,6 +360,7 @@ export interface GatewayConfig {
   contextWindowMonitor: ContextWindowMonitorConfig
   preemptiveCompaction: PreemptiveCompactionConfig
   compactionContextInjector: CompactionContextInjectorConfig
+  globalProcessPressure: GlobalProcessPressureConfig
   sessionRecovery: SessionRecoveryConfig
   delegateTaskRetry: DelegateTaskRetryConfig
   validationEvidenceLedger: ValidationEvidenceLedgerConfig
@@ -402,6 +418,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "semantic-output-summarizer",
       "context-window-monitor",
       "preemptive-compaction",
+      "global-process-pressure",
       "session-recovery",
       "delegate-task-retry",
       "validation-evidence-ledger",
@@ -468,6 +485,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     warningThreshold: 0.7,
     reminderCooldownToolCalls: 12,
     minTokenDeltaForReminder: 25_000,
+    defaultContextLimitTokens: 128_000,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 512,
@@ -477,12 +495,24 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     warningThreshold: 0.78,
     compactionCooldownToolCalls: 10,
     minTokenDeltaForCompaction: 35_000,
+    defaultContextLimitTokens: 128_000,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 512,
   },
   compactionContextInjector: {
     enabled: true,
+  },
+  globalProcessPressure: {
+    enabled: true,
+    checkCooldownToolCalls: 3,
+    reminderCooldownToolCalls: 6,
+    warningContinueSessions: 5,
+    warningOpencodeProcesses: 10,
+    warningMaxRssMb: 1400,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 1024,
   },
   sessionRecovery: {
     enabled: true,

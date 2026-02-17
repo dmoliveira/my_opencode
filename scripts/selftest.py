@@ -1751,6 +1751,12 @@ exit 0
                     "recent_compactions"
                 ),
                 int,
+            )
+            and isinstance(
+                gateway_status.get("guard_event_counters", {}).get(
+                    "recent_global_process_pressure_warnings"
+                ),
+                int,
             ),
             "gateway status guard counters should include recent window metrics",
         )

@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { resolveContextLimit } from "../shared/context-limit.js";
 // Resolves effective session id from tool after payload.
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
@@ -8,12 +9,6 @@ function resolveSessionId(payload) {
         }
     }
     return "";
-}
-// Resolves Anthropic actual limit from environment toggles.
-function anthropicActualLimit() {
-    return process.env.ANTHROPIC_1M_CONTEXT === "true" || process.env.VERTEX_ANTHROPIC_1M_CONTEXT === "true"
-        ? 1_000_000
-        : 200_000;
 }
 // Builds warning suffix with context usage details.
 function warningSuffix(totalInputTokens, contextLimit) {
@@ -51,7 +46,7 @@ function pruneSessionStates(states, maxEntries) {
         states.delete(oldestKey);
     }
 }
-// Creates context monitor hook that appends usage warnings once per session.
+// Creates context monitor hook that appends usage warnings across providers.
 export function createContextWindowMonitorHook(options) {
     const sessionStates = new Map();
     return {
@@ -127,17 +122,23 @@ export function createContextWindowMonitorHook(options) {
                     .filter((item) => item.info?.role === "assistant")
                     .map((item) => item.info);
                 const last = assistants[assistants.length - 1];
-                if (!last || last.providerID !== "anthropic") {
+                if (!last) {
                     writeGatewayEventAudit(directory, {
                         hook: "context-window-monitor",
                         stage: "skip",
-                        reason_code: "provider_not_anthropic",
+                        reason_code: "assistant_message_missing",
                         session_id: sessionId,
                     });
                     return;
                 }
                 const totalInputTokens = (last.tokens?.input ?? 0) + (last.tokens?.cache?.read ?? 0);
-                const actualLimit = anthropicActualLimit();
+                const providerID = typeof last.providerID === "string" ? last.providerID : "";
+                const modelID = typeof last.modelID === "string" ? last.modelID : "";
+                const actualLimit = resolveContextLimit({
+                    providerID,
+                    modelID,
+                    defaultContextLimitTokens: options.defaultContextLimitTokens,
+                });
                 const actualUsage = totalInputTokens / actualLimit;
                 if (actualUsage < options.warningThreshold) {
                     writeGatewayEventAudit(directory, {

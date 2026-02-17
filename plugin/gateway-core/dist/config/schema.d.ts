@@ -31,6 +31,7 @@ export interface ContextWindowMonitorConfig {
     warningThreshold: number;
     reminderCooldownToolCalls: number;
     minTokenDeltaForReminder: number;
+    defaultContextLimitTokens: number;
     guardMarkerMode: "nerd" | "plain" | "both";
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;
@@ -40,6 +41,18 @@ export interface PreemptiveCompactionConfig {
     warningThreshold: number;
     compactionCooldownToolCalls: number;
     minTokenDeltaForCompaction: number;
+    defaultContextLimitTokens: number;
+    guardMarkerMode: "nerd" | "plain" | "both";
+    guardVerbosity: "minimal" | "normal" | "debug";
+    maxSessionStateEntries: number;
+}
+export interface GlobalProcessPressureConfig {
+    enabled: boolean;
+    checkCooldownToolCalls: number;
+    reminderCooldownToolCalls: number;
+    warningContinueSessions: number;
+    warningOpencodeProcesses: number;
+    warningMaxRssMb: number;
     guardMarkerMode: "nerd" | "plain" | "both";
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;
@@ -244,6 +257,7 @@ export interface GatewayConfig {
     contextWindowMonitor: ContextWindowMonitorConfig;
     preemptiveCompaction: PreemptiveCompactionConfig;
     compactionContextInjector: CompactionContextInjectorConfig;
+    globalProcessPressure: GlobalProcessPressureConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;

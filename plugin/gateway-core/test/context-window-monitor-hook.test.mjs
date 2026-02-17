@@ -61,6 +61,53 @@ test("context-window-monitor appends warning when Anthropic usage is high", asyn
   }
 })
 
+test("context-window-monitor appends warning for non-anthropic providers", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-window-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["context-window-monitor"],
+          disabled: [],
+        },
+        contextWindowMonitor: {
+          enabled: true,
+          warningThreshold: 0.7,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    providerID: "openai",
+                    tokens: {
+                      input: 180000,
+                      cache: { read: 0 },
+                    },
+                  },
+                },
+              ],
+            }
+          },
+        },
+      },
+    })
+
+    const output = { output: "tool result" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-context-openai" }, output)
+    assert.ok(output.output.includes("Context Guard"))
+    assert.ok(output.output.includes("Context Status"))
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("context-window-monitor minimal verbosity keeps marker-only notice", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-context-window-"))
   const previousFlag = process.env.ANTHROPIC_1M_CONTEXT

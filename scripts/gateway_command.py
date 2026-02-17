@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -84,17 +85,21 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
             "total_events": 0,
             "context_warnings_triggered": 0,
             "compactions_triggered": 0,
+            "global_process_pressure_warnings": 0,
             "recent_window_minutes": 30,
             "recent_context_warnings": 0,
             "recent_compactions": 0,
+            "recent_global_process_pressure_warnings": 0,
             "last_triggered_at": None,
         }
 
     total_events = 0
     context_warnings = 0
     compactions = 0
+    global_pressure_warnings = 0
     recent_context_warnings = 0
     recent_compactions = 0
+    recent_global_pressure_warnings = 0
     recent_window_minutes = 30
     now_utc = datetime.now(UTC)
     last_triggered_at: str | None = None
@@ -131,9 +136,14 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
                     compactions += 1
                     if in_recent_window:
                         recent_compactions += 1
+                elif reason_code == "global_process_pressure_warning_appended":
+                    global_pressure_warnings += 1
+                    if in_recent_window:
+                        recent_global_pressure_warnings += 1
                 if reason_code in {
                     "context_warning_appended",
                     "session_compacted_preemptively",
+                    "global_process_pressure_warning_appended",
                 }:
                     if event_time is not None:
                         last_triggered_at = event_time.isoformat()
@@ -152,6 +162,8 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
             "recent_window_minutes": recent_window_minutes,
             "recent_context_warnings": 0,
             "recent_compactions": 0,
+            "global_process_pressure_warnings": 0,
+            "recent_global_process_pressure_warnings": 0,
             "last_triggered_at": None,
             "read_error": True,
         }
@@ -164,6 +176,8 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
         "recent_window_minutes": recent_window_minutes,
         "recent_context_warnings": recent_context_warnings,
         "recent_compactions": recent_compactions,
+        "global_process_pressure_warnings": global_pressure_warnings,
+        "recent_global_process_pressure_warnings": recent_global_pressure_warnings,
         "last_triggered_at": last_triggered_at,
     }
 
@@ -229,6 +243,12 @@ def runtime_staleness(home: Path) -> dict[str, Any]:
 
 
 def process_pressure() -> dict[str, Any]:
+    def is_opencode_command(command: str) -> bool:
+        lowered = command.strip().lower()
+        if not lowered:
+            return False
+        return bool(re.search(r"(^|[\s/])opencode(\s|$)", lowered))
+
     try:
         result = subprocess.run(
             ["ps", "-axo", "pid=,rss=,command="],
@@ -267,7 +287,7 @@ def process_pressure() -> dict[str, Any]:
         except ValueError:
             continue
         lowered = command.lower()
-        if "opencode" not in lowered:
+        if not is_opencode_command(command):
             continue
         opencode_process_count += 1
         if "--continue" in lowered:
@@ -725,18 +745,23 @@ def command_tune_memory(as_json: bool) -> int:
 
     warnings_count = int(counters.get("recent_context_warnings") or 0)
     compactions_count = int(counters.get("recent_compactions") or 0)
+    global_pressure_count = int(
+        counters.get("recent_global_process_pressure_warnings") or 0
+    )
     continue_count = int(process.get("continue_process_count") or 0)
     audit_enabled = status.get("event_audit_enabled") is True
 
     current = {
         "contextWindowMonitor": config.get("contextWindowMonitor", {}),
         "preemptiveCompaction": config.get("preemptiveCompaction", {}),
+        "globalProcessPressure": config.get("globalProcessPressure", {}),
     }
     recommended = {
         "contextWindowMonitor": {
             "warningThreshold": 0.72,
             "reminderCooldownToolCalls": 14,
             "minTokenDeltaForReminder": 30000,
+            "defaultContextLimitTokens": 128000,
             "guardMarkerMode": "both",
             "guardVerbosity": "normal",
             "maxSessionStateEntries": 512,
@@ -745,9 +770,21 @@ def command_tune_memory(as_json: bool) -> int:
             "warningThreshold": 0.8,
             "compactionCooldownToolCalls": 12,
             "minTokenDeltaForCompaction": 40000,
+            "defaultContextLimitTokens": 200000,
             "guardMarkerMode": "both",
             "guardVerbosity": "normal",
             "maxSessionStateEntries": 512,
+        },
+        "globalProcessPressure": {
+            "enabled": True,
+            "checkCooldownToolCalls": 3,
+            "reminderCooldownToolCalls": 6,
+            "warningContinueSessions": 5,
+            "warningOpencodeProcesses": 10,
+            "warningMaxRssMb": 1400,
+            "guardMarkerMode": "both",
+            "guardVerbosity": "normal",
+            "maxSessionStateEntries": 1024,
         },
     }
     rationale: list[str] = [
@@ -766,6 +803,10 @@ def command_tune_memory(as_json: bool) -> int:
     if compactions_count >= 3:
         rationale.append(
             "frequent compactions in recent window; increase compaction cooldown and minimum token delta"
+        )
+    if global_pressure_count >= 3:
+        rationale.append(
+            "global process pressure repeatedly hit recent thresholds; many concurrent sessions are saturating memory"
         )
     if continue_count >= 3:
         rationale.append(

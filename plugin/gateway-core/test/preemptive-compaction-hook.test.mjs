@@ -66,6 +66,105 @@ test("preemptive-compaction triggers summarize on high usage", async () => {
   }
 })
 
+test("preemptive-compaction triggers summarize for non-anthropic providers", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-preemptive-compaction-"))
+  try {
+    let summarizeCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["preemptive-compaction"],
+          disabled: [],
+        },
+        preemptiveCompaction: {
+          enabled: true,
+          warningThreshold: 0.78,
+          defaultContextLimitTokens: 200000,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    providerID: "openai",
+                    modelID: "gpt-5.3-codex",
+                    tokens: {
+                      input: 180000,
+                      cache: { read: 0 },
+                    },
+                  },
+                },
+              ],
+            }
+          },
+          async summarize() {
+            summarizeCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-openai" }, { output: "ok" })
+    assert.equal(summarizeCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("preemptive-compaction warns when metadata missing under pressure", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-preemptive-compaction-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["preemptive-compaction"],
+          disabled: [],
+        },
+        preemptiveCompaction: {
+          enabled: true,
+          warningThreshold: 0.78,
+          compactionCooldownToolCalls: 1,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    providerID: "openai",
+                    tokens: {
+                      input: 180000,
+                      cache: { read: 0 },
+                    },
+                  },
+                },
+              ],
+            }
+          },
+          async summarize() {},
+        },
+      },
+    })
+
+    const output = { output: "ok" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-metadata" }, output)
+    assert.ok(output.output.includes("auto-compaction skipped"))
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("preemptive-compaction minimal verbosity keeps concise marker", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-preemptive-compaction-"))
   const previousFlag = process.env.ANTHROPIC_1M_CONTEXT

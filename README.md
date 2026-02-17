@@ -1599,7 +1599,9 @@ Notes:
 - set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
 - trigger-only context warnings now include a Nerd Font marker (`󰚩 Context Guard:`) so pressure events stand out without adding steady-state noise.
 - context guard markers now support dual fallback mode (`󰚩 Context Guard [Context Guard]:`) and configurable verbosity (`minimal`, `normal`, `debug`) in gateway hook config.
-- `/gateway status --json` now reports `guard_event_counters` (warning/compaction counts and latest trigger timestamp).
+- context and compaction safeguards now apply across providers (not Anthropic-only), using a configurable default context limit for non-Anthropic providers.
+- global multi-session pressure warnings now trigger via `global-process-pressure` when concurrent `--continue` sessions/process counts or RSS exceed thresholds.
+- `/gateway status --json` now reports `guard_event_counters` (warning/compaction/global-pressure counts and latest trigger timestamp).
 - `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
 
 Gateway event audit baseline (recommended before memory tuning):
