@@ -105,6 +105,6 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
     - Pre-check completed: local provider recovery handles token-limit compaction, but no retry-after header/backoff guidance path exists. Confirmed on latest main there is no retry-delay parser (`retry-after-ms`/`retry-after`/HTTP date) in gateway recovery hooks.
     - Delivered: added `provider-retry-backoff-guidance` hook with retry-after-ms/retry-after/date parsing, session cooldown controls, targeted prompt hints, config/default/order + loader wiring, and dedicated regression tests.
 
-23. [ ] Provider quota/rate-limit classification parity
+23. [x] Provider quota/rate-limit classification parity
     - Pre-check completed: local recovery does not classify upstream-style quota and rate-limit signatures (for example free-usage exhaustion and structured `too_many_requests` payloads). Confirmed on latest main there is no dedicated classifier hook for these provider errors.
-    - Goal: add provider error classification + remediation hints for free-usage exhausted, overloaded, and rate-limited paths with clear reason codes.
+    - Delivered: added `provider-error-classifier` hook for free-usage exhausted, rate-limited, and overloaded provider error signatures with session cooldown control, remediation hints, config/default/order + loader wiring, and dedicated regression tests.
