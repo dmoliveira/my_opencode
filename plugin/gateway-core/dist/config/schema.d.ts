@@ -51,11 +51,15 @@ export interface GlobalProcessPressureConfig {
     checkCooldownToolCalls: number;
     reminderCooldownToolCalls: number;
     criticalReminderCooldownToolCalls: number;
+    criticalEscalationWindowToolCalls: number;
+    criticalPauseAfterEvents: number;
+    criticalEscalationAfterEvents: number;
     warningContinueSessions: number;
     warningOpencodeProcesses: number;
     warningMaxRssMb: number;
     criticalMaxRssMb: number;
     autoPauseOnCritical: boolean;
+    notifyOnCritical: boolean;
     guardMarkerMode: "nerd" | "plain" | "both";
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;

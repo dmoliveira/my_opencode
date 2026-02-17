@@ -22,6 +22,10 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
   assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
   assert.equal(config.globalProcessPressure.autoPauseOnCritical, true)
+  assert.equal(config.globalProcessPressure.criticalEscalationWindowToolCalls, 25)
+  assert.equal(config.globalProcessPressure.criticalPauseAfterEvents, 1)
+  assert.equal(config.globalProcessPressure.criticalEscalationAfterEvents, 3)
+  assert.equal(config.globalProcessPressure.notifyOnCritical, true)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -73,11 +77,15 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
       checkCooldownToolCalls: 0,
       reminderCooldownToolCalls: 0,
       criticalReminderCooldownToolCalls: 0,
+      criticalEscalationWindowToolCalls: 0,
+      criticalPauseAfterEvents: 0,
+      criticalEscalationAfterEvents: 0,
       warningContinueSessions: 0,
       warningOpencodeProcesses: 0,
       warningMaxRssMb: 0,
       criticalMaxRssMb: 0,
       autoPauseOnCritical: "invalid",
+      notifyOnCritical: "invalid",
       guardMarkerMode: "invalid",
       guardVerbosity: "invalid",
       maxSessionStateEntries: 0,
@@ -94,11 +102,15 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.globalProcessPressure.checkCooldownToolCalls, 3)
   assert.equal(config.globalProcessPressure.reminderCooldownToolCalls, 6)
   assert.equal(config.globalProcessPressure.criticalReminderCooldownToolCalls, 10)
+  assert.equal(config.globalProcessPressure.criticalEscalationWindowToolCalls, 25)
+  assert.equal(config.globalProcessPressure.criticalPauseAfterEvents, 1)
+  assert.equal(config.globalProcessPressure.criticalEscalationAfterEvents, 3)
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
   assert.equal(config.globalProcessPressure.warningOpencodeProcesses, 10)
   assert.equal(config.globalProcessPressure.warningMaxRssMb, 1400)
   assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
   assert.equal(config.globalProcessPressure.autoPauseOnCritical, true)
+  assert.equal(config.globalProcessPressure.notifyOnCritical, true)
   assert.equal(config.globalProcessPressure.guardMarkerMode, "both")
   assert.equal(config.globalProcessPressure.guardVerbosity, "normal")
   assert.equal(config.globalProcessPressure.maxSessionStateEntries, 1024)

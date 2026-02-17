@@ -66,11 +66,15 @@ export interface GlobalProcessPressureConfig {
   checkCooldownToolCalls: number
   reminderCooldownToolCalls: number
   criticalReminderCooldownToolCalls: number
+  criticalEscalationWindowToolCalls: number
+  criticalPauseAfterEvents: number
+  criticalEscalationAfterEvents: number
   warningContinueSessions: number
   warningOpencodeProcesses: number
   warningMaxRssMb: number
   criticalMaxRssMb: number
   autoPauseOnCritical: boolean
+  notifyOnCritical: boolean
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
@@ -511,11 +515,15 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     checkCooldownToolCalls: 3,
     reminderCooldownToolCalls: 6,
     criticalReminderCooldownToolCalls: 10,
+    criticalEscalationWindowToolCalls: 25,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
     warningContinueSessions: 5,
     warningOpencodeProcesses: 10,
     warningMaxRssMb: 1400,
     criticalMaxRssMb: 10_240,
     autoPauseOnCritical: true,
+    notifyOnCritical: true,
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 1024,
