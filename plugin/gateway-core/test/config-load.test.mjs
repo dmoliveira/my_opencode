@@ -35,6 +35,9 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
   assert.equal(config.compactionTodoPreserver.enabled, true)
   assert.equal(config.compactionTodoPreserver.maxChars, 4000)
+  assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
+  assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
+  assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -112,6 +115,11 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
     compactionTodoPreserver: {
       maxChars: 0,
     },
+    noninteractiveShellGuard: {
+      injectEnvPrefix: "invalid",
+      envPrefixes: ["", "CI=true", 1],
+      prefixCommands: ["", "git", 1],
+    },
   })
   assert.equal(config.contextWindowMonitor.guardMarkerMode, "both")
   assert.equal(config.contextWindowMonitor.guardVerbosity, "normal")
@@ -141,4 +149,7 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
   assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
   assert.equal(config.compactionTodoPreserver.maxChars, 4000)
+  assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
+  assert.deepEqual(config.noninteractiveShellGuard.envPrefixes, ["CI=true"])
+  assert.deepEqual(config.noninteractiveShellGuard.prefixCommands, ["git"])
 })

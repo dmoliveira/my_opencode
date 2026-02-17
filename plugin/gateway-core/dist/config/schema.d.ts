@@ -183,6 +183,9 @@ export interface ValidationEvidenceLedgerConfig {
 export interface NoninteractiveShellGuardConfig {
     enabled: boolean;
     blockedPatterns: string[];
+    injectEnvPrefix: boolean;
+    envPrefixes: string[];
+    prefixCommands: string[];
 }
 export interface DocsDriftGuardConfig {
     enabled: boolean;

@@ -13,6 +13,33 @@ interface ToolBeforePayload {
   directory?: string
 }
 
+function shouldPrefixCommand(command: string, prefixes: string[]): boolean {
+  const trimmed = command.trim()
+  if (!trimmed) {
+    return false
+  }
+  return prefixes.some((prefix) => new RegExp(`^${prefix}\\b`, "i").test(trimmed))
+}
+
+function hasExistingEnvPrefix(command: string, envPrefixes: string[]): boolean {
+  const trimmed = command.trim()
+  return envPrefixes.some((entry) => {
+    const key = entry.split("=", 1)[0]?.trim()
+    if (!key) {
+      return false
+    }
+    return new RegExp(`(^|\\s)${key}=`, "i").test(trimmed)
+  })
+}
+
+function prefixCommand(command: string, envPrefixes: string[]): string {
+  const assignments = envPrefixes.map((item) => item.trim()).filter(Boolean)
+  if (assignments.length === 0) {
+    return command
+  }
+  return `${assignments.join(" ")} ${command.trim()}`.trim()
+}
+
 // Returns first non-interactive violation message for command.
 function violation(command: string, blockedPatterns: RegExp[]): string | null {
   const value = command.trim()
@@ -50,6 +77,9 @@ function violation(command: string, blockedPatterns: RegExp[]): string | null {
 export function createNoninteractiveShellGuardHook(options: {
   directory: string
   enabled: boolean
+  injectEnvPrefix: boolean
+  envPrefixes: string[]
+  prefixCommands: string[]
   blockedPatterns: string[]
 }): GatewayHook {
   const blockedPatterns = options.blockedPatterns
@@ -77,15 +107,34 @@ export function createNoninteractiveShellGuardHook(options: {
       if (!command) {
         return
       }
-      const message = violation(command, blockedPatterns)
-      if (!message) {
-        return
-      }
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
       const directory =
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
+
+      if (
+        options.injectEnvPrefix &&
+        shouldPrefixCommand(command, options.prefixCommands) &&
+        !hasExistingEnvPrefix(command, options.envPrefixes)
+      ) {
+        const prefixed = prefixCommand(command, options.envPrefixes)
+        if (eventPayload.output?.args) {
+          eventPayload.output.args.command = prefixed
+        }
+        writeGatewayEventAudit(directory, {
+          hook: "noninteractive-shell-guard",
+          stage: "state",
+          reason_code: "noninteractive_env_prefixed",
+          session_id: sessionId,
+        })
+      }
+
+      const updatedCommand = String(eventPayload.output?.args?.command ?? command).trim()
+      const message = violation(updatedCommand, blockedPatterns)
+      if (!message) {
+        return
+      }
       writeGatewayEventAudit(directory, {
         hook: "noninteractive-shell-guard",
         stage: "skip",
