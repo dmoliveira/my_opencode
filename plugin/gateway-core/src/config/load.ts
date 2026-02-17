@@ -221,6 +221,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.providerRetryBackoffGuidance && typeof source.providerRetryBackoffGuidance === "object"
       ? (source.providerRetryBackoffGuidance as Record<string, unknown>)
       : {}
+  const providerErrorClassifierSource =
+    source.providerErrorClassifier && typeof source.providerErrorClassifier === "object"
+      ? (source.providerErrorClassifier as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -807,6 +811,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       cooldownMs: positiveInt(
         providerRetryBackoffGuidanceSource.cooldownMs,
         DEFAULT_GATEWAY_CONFIG.providerRetryBackoffGuidance.cooldownMs,
+      ),
+    },
+    providerErrorClassifier: {
+      enabled:
+        typeof providerErrorClassifierSource.enabled === "boolean"
+          ? providerErrorClassifierSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.enabled,
+      cooldownMs: positiveInt(
+        providerErrorClassifierSource.cooldownMs,
+        DEFAULT_GATEWAY_CONFIG.providerErrorClassifier.cooldownMs,
       ),
     },
     commentChecker: {

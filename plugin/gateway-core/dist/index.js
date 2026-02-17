@@ -22,6 +22,7 @@ import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js";
 import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js";
 import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-reminder/index.js";
 import { createProviderRetryBackoffGuidanceHook } from "./hooks/provider-retry-backoff-guidance/index.js";
+import { createProviderErrorClassifierHook } from "./hooks/provider-error-classifier/index.js";
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
@@ -306,6 +307,12 @@ function configuredHooks(ctx) {
             enabled: cfg.providerRetryBackoffGuidance.enabled,
             client: ctx.client,
             cooldownMs: cfg.providerRetryBackoffGuidance.cooldownMs,
+        }),
+        createProviderErrorClassifierHook({
+            directory,
+            enabled: cfg.providerErrorClassifier.enabled,
+            client: ctx.client,
+            cooldownMs: cfg.providerErrorClassifier.cooldownMs,
         }),
         createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,

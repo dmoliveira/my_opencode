@@ -45,6 +45,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "mode-transition-reminder",
             "todoread-cadence-reminder",
             "provider-retry-backoff-guidance",
+            "provider-error-classifier",
             "comment-checker",
             "agent-user-reminder",
             "unstable-agent-babysitter",
@@ -257,6 +258,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
         cooldownEvents: 2,
     },
     providerRetryBackoffGuidance: {
+        enabled: true,
+        cooldownMs: 30000,
+    },
+    providerErrorClassifier: {
         enabled: true,
         cooldownMs: 30000,
     },
