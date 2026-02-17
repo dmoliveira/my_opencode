@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -354,6 +354,88 @@ test("context-injector respects tiny maxChars limits", async () => {
     const [injected] = text.split("\n\n---\n\n")
     assert.equal(injected.length, 10)
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector records granular reason when transform has no user message", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-no-user", {
+      source: "test",
+      id: "no-user",
+      content: "Pending context with no user message",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+    })
+
+    await hook.event("experimental.chat.messages.transform", {
+      input: { sessionID: "session-context-no-user" },
+      output: {
+        messages: [{ info: { role: "assistant", id: "m1" }, parts: [{ type: "text", text: "A" }] }],
+      },
+      directory,
+    })
+
+    const lines = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(lines.some((entry) => entry.reason_code === "pending_context_transform_no_user_message"))
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector records granular reason when transform user message has no parts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-no-parts", {
+      source: "test",
+      id: "no-parts",
+      content: "Pending context with missing parts",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+    })
+
+    await hook.event("experimental.chat.messages.transform", {
+      input: { sessionID: "session-context-no-parts" },
+      output: {
+        messages: [{ info: { role: "user", id: "m1" } }],
+      },
+      directory,
+    })
+
+    const lines = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(lines.some((entry) => entry.reason_code === "pending_context_transform_missing_parts"))
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })

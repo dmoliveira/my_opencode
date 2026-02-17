@@ -15,5 +15,14 @@ export declare const REASON_CODES: {
     readonly RUNTIME_PLUGIN_NOT_READY: "gateway_plugin_not_ready";
     readonly LOOP_STATE_AVAILABLE: "loop_state_available";
     readonly LOOP_STATE_BRIDGE_IGNORED_IN_PLUGIN_MODE: "bridge_state_ignored_in_plugin_mode";
+    readonly CONTEXT_INJECT_CHAT: "pending_context_injected_chat_message";
+    readonly CONTEXT_INJECT_TRANSFORM: "pending_context_injected_messages_transform";
+    readonly CONTEXT_TRUNCATED_CHAT: "pending_context_truncated_chat_message";
+    readonly CONTEXT_TRUNCATED_TRANSFORM: "pending_context_truncated_messages_transform";
+    readonly CONTEXT_REQUEUED_NO_TEXT_PART: "pending_context_requeued_no_text_part";
+    readonly CONTEXT_TRANSFORM_NO_USER_MESSAGE: "pending_context_transform_no_user_message";
+    readonly CONTEXT_TRANSFORM_NO_PARTS: "pending_context_transform_missing_parts";
+    readonly COMPACTION_CONTEXT_INJECTED: "compaction_context_injected";
+    readonly COMPACTION_CONTEXT_ALREADY_PRESENT: "compaction_context_already_present";
 };
 export type GatewayReasonCode = (typeof REASON_CODES)[keyof typeof REASON_CODES];

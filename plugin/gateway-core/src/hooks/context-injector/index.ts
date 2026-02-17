@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { REASON_CODES } from "../../bridge/reason-codes.js"
 import type { GatewayHook } from "../registry.js"
 import { DEFAULT_INJECTED_TEXT_MAX_CHARS, truncateInjectedText } from "../shared/injected-text-truncator.js"
 import type { ContextCollector } from "./collector.js"
@@ -138,13 +139,20 @@ export function createContextInjectorHook(options: {
           writeGatewayEventAudit(directory, {
             hook: "context-injector",
             stage: "inject",
-            reason_code: "pending_context_truncated_chat_message",
+            reason_code: REASON_CODES.CONTEXT_TRUNCATED_CHAT,
             session_id: sessionId,
             context_length_before: truncated.originalLength,
             context_length_after: truncated.text.length,
           })
         }
         if (!injectIntoParts(parts, truncated.text)) {
+          writeGatewayEventAudit(directory, {
+            hook: "context-injector",
+            stage: "inject",
+            reason_code: REASON_CODES.CONTEXT_REQUEUED_NO_TEXT_PART,
+            session_id: sessionId,
+            context_length: truncated.text.length,
+          })
           options.collector.register(sessionId, {
             source: "context-injector-requeue",
             id: "chat-message-fallback",
@@ -156,7 +164,7 @@ export function createContextInjectorHook(options: {
         writeGatewayEventAudit(directory, {
           hook: "context-injector",
           stage: "inject",
-          reason_code: "pending_context_injected_chat_message",
+          reason_code: REASON_CODES.CONTEXT_INJECT_CHAT,
           session_id: sessionId,
           context_length: truncated.text.length,
         })
@@ -188,10 +196,26 @@ export function createContextInjectorHook(options: {
         }
       }
       if (lastUserIndex < 0) {
+        if (options.collector.hasPending(sessionId)) {
+          writeGatewayEventAudit(directory, {
+            hook: "context-injector",
+            stage: "inject",
+            reason_code: REASON_CODES.CONTEXT_TRANSFORM_NO_USER_MESSAGE,
+            session_id: sessionId,
+          })
+        }
         return
       }
       const parts = messages[lastUserIndex].parts
       if (!Array.isArray(parts)) {
+        if (options.collector.hasPending(sessionId)) {
+          writeGatewayEventAudit(directory, {
+            hook: "context-injector",
+            stage: "inject",
+            reason_code: REASON_CODES.CONTEXT_TRANSFORM_NO_PARTS,
+            session_id: sessionId,
+          })
+        }
         return
       }
       const pending = options.collector.consume(sessionId)
@@ -203,7 +227,7 @@ export function createContextInjectorHook(options: {
         writeGatewayEventAudit(directory, {
           hook: "context-injector",
           stage: "inject",
-          reason_code: "pending_context_truncated_messages_transform",
+          reason_code: REASON_CODES.CONTEXT_TRUNCATED_TRANSFORM,
           session_id: sessionId,
           context_length_before: truncated.originalLength,
           context_length_after: truncated.text.length,
@@ -218,7 +242,7 @@ export function createContextInjectorHook(options: {
       writeGatewayEventAudit(directory, {
         hook: "context-injector",
         stage: "inject",
-        reason_code: "pending_context_injected_messages_transform",
+        reason_code: REASON_CODES.CONTEXT_INJECT_TRANSFORM,
         session_id: sessionId,
         context_length: truncated.text.length,
       })

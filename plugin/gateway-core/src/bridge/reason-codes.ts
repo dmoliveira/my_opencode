@@ -17,6 +17,15 @@ export const REASON_CODES = {
   RUNTIME_PLUGIN_NOT_READY: "gateway_plugin_not_ready",
   LOOP_STATE_AVAILABLE: "loop_state_available",
   LOOP_STATE_BRIDGE_IGNORED_IN_PLUGIN_MODE: "bridge_state_ignored_in_plugin_mode",
+  CONTEXT_INJECT_CHAT: "pending_context_injected_chat_message",
+  CONTEXT_INJECT_TRANSFORM: "pending_context_injected_messages_transform",
+  CONTEXT_TRUNCATED_CHAT: "pending_context_truncated_chat_message",
+  CONTEXT_TRUNCATED_TRANSFORM: "pending_context_truncated_messages_transform",
+  CONTEXT_REQUEUED_NO_TEXT_PART: "pending_context_requeued_no_text_part",
+  CONTEXT_TRANSFORM_NO_USER_MESSAGE: "pending_context_transform_no_user_message",
+  CONTEXT_TRANSFORM_NO_PARTS: "pending_context_transform_missing_parts",
+  COMPACTION_CONTEXT_INJECTED: "compaction_context_injected",
+  COMPACTION_CONTEXT_ALREADY_PRESENT: "compaction_context_already_present",
 } as const
 
 // Declares reason-code literal union for gateway outputs.

@@ -68,6 +68,19 @@ test("reason code catalog includes runtime routing reasons", () => {
     REASON_CODES.LOOP_STATE_BRIDGE_IGNORED_IN_PLUGIN_MODE,
     "bridge_state_ignored_in_plugin_mode"
   )
+  assert.equal(REASON_CODES.CONTEXT_INJECT_CHAT, "pending_context_injected_chat_message")
+  assert.equal(
+    REASON_CODES.CONTEXT_INJECT_TRANSFORM,
+    "pending_context_injected_messages_transform"
+  )
+  assert.equal(
+    REASON_CODES.CONTEXT_REQUEUED_NO_TEXT_PART,
+    "pending_context_requeued_no_text_part"
+  )
+  assert.equal(
+    REASON_CODES.COMPACTION_CONTEXT_ALREADY_PRESENT,
+    "compaction_context_already_present"
+  )
 })
 
 test("command parsers resolve completion and goal defaults", () => {
