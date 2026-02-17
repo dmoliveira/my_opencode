@@ -63,12 +63,13 @@ test("preemptive-compaction triggers summarize on high usage", async () => {
   }
 })
 
-test("preemptive-compaction only compacts once per session until cleanup", async () => {
+test("preemptive-compaction re-compacts after cooldown and token growth", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-preemptive-compaction-"))
   const previousFlag = process.env.ANTHROPIC_1M_CONTEXT
   delete process.env.ANTHROPIC_1M_CONTEXT
   try {
     let summarizeCalls = 0
+    let messageCalls = 0
     const plugin = GatewayCorePlugin({
       directory,
       config: {
@@ -80,11 +81,16 @@ test("preemptive-compaction only compacts once per session until cleanup", async
         preemptiveCompaction: {
           enabled: true,
           warningThreshold: 0.78,
+          compactionCooldownToolCalls: 2,
+          minTokenDeltaForCompaction: 5000,
         },
       },
       client: {
         session: {
           async messages() {
+            messageCalls += 1
+            const tokensByCall = [185000, 189000, 195000, 196000, 205000]
+            const input = tokensByCall[Math.min(messageCalls - 1, tokensByCall.length - 1)]
             return {
               data: [
                 {
@@ -93,7 +99,7 @@ test("preemptive-compaction only compacts once per session until cleanup", async
                     providerID: "anthropic",
                     modelID: "claude-3-7-sonnet",
                     tokens: {
-                      input: 185000,
+                      input,
                       cache: { read: 0 },
                     },
                   },
@@ -112,6 +118,9 @@ test("preemptive-compaction only compacts once per session until cleanup", async
     await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-2" }, { output: "ok" })
     assert.equal(summarizeCalls, 1)
 
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-2" }, { output: "ok" })
+    assert.equal(summarizeCalls, 2)
+
     await plugin.event({
       event: {
         type: "session.deleted",
@@ -119,7 +128,72 @@ test("preemptive-compaction only compacts once per session until cleanup", async
       },
     })
     await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-2" }, { output: "ok" })
-    assert.equal(summarizeCalls, 2)
+    assert.equal(summarizeCalls, 3)
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ANTHROPIC_1M_CONTEXT
+    } else {
+      process.env.ANTHROPIC_1M_CONTEXT = previousFlag
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("preemptive-compaction skips repeat when token delta stays below threshold", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-preemptive-compaction-"))
+  const previousFlag = process.env.ANTHROPIC_1M_CONTEXT
+  delete process.env.ANTHROPIC_1M_CONTEXT
+  try {
+    let summarizeCalls = 0
+    let messageCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["preemptive-compaction"],
+          disabled: [],
+        },
+        preemptiveCompaction: {
+          enabled: true,
+          warningThreshold: 0.78,
+          compactionCooldownToolCalls: 1,
+          minTokenDeltaForCompaction: 20000,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            const tokensByCall = [185000, 190000]
+            const input = tokensByCall[Math.min(messageCalls - 1, tokensByCall.length - 1)]
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    providerID: "anthropic",
+                    modelID: "claude-3-7-sonnet",
+                    tokens: {
+                      input,
+                      cache: { read: 0 },
+                    },
+                  },
+                },
+              ],
+            }
+          },
+          async summarize() {
+            summarizeCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-3" }, { output: "ok" })
+    assert.equal(summarizeCalls, 1)
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-3" }, { output: "ok" })
+    assert.equal(summarizeCalls, 1)
   } finally {
     if (previousFlag === undefined) {
       delete process.env.ANTHROPIC_1M_CONTEXT

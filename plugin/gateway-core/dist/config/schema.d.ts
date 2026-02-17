@@ -29,10 +29,14 @@ export interface ToolOutputTruncatorConfig {
 export interface ContextWindowMonitorConfig {
     enabled: boolean;
     warningThreshold: number;
+    reminderCooldownToolCalls: number;
+    minTokenDeltaForReminder: number;
 }
 export interface PreemptiveCompactionConfig {
     enabled: boolean;
     warningThreshold: number;
+    compactionCooldownToolCalls: number;
+    minTokenDeltaForCompaction: number;
 }
 export interface SessionRecoveryConfig {
     enabled: boolean;

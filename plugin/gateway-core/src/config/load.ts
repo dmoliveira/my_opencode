@@ -319,6 +319,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         0.95,
         DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.warningThreshold,
       ),
+      reminderCooldownToolCalls: positiveInt(
+        contextWindowSource.reminderCooldownToolCalls,
+        DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.reminderCooldownToolCalls,
+      ),
+      minTokenDeltaForReminder: nonNegativeInt(
+        contextWindowSource.minTokenDeltaForReminder,
+        DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.minTokenDeltaForReminder,
+      ),
     },
     preemptiveCompaction: {
       enabled:
@@ -330,6 +338,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         0.6,
         0.95,
         DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.warningThreshold,
+      ),
+      compactionCooldownToolCalls: positiveInt(
+        preemptiveCompactionSource.compactionCooldownToolCalls,
+        DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.compactionCooldownToolCalls,
+      ),
+      minTokenDeltaForCompaction: nonNegativeInt(
+        preemptiveCompactionSource.minTokenDeltaForCompaction,
+        DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.minTokenDeltaForCompaction,
       ),
     },
     sessionRecovery: {

@@ -5,6 +5,8 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Adds
+- Added recurring cooldown + token-delta controls for `context-window-monitor` and `preemptive-compaction` gateway hooks, with test coverage for repeat and skip paths.
+- Added gateway doctor diagnostics for duplicate gateway plugin entries, stale autopilot runtime state, and process-pressure telemetry.
 - Added ecosystem extension guidance for `opencode.nvim` (Neovim integration) and `OpenChamber` (desktop/web UI).
 - Added install and verification commands for both optional integrations.
 - Added `scripts/install_wizard.py` for guided install/reconfigure flows across plugin, MCP, policy, telemetry, post-session, and optional ecosystem integrations.

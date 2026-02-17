@@ -28,12 +28,43 @@ def gateway_plugin_spec(home: Path) -> str:
     return f"file:{home / '.config' / 'opencode' / 'my_opencode' / 'plugin' / 'gateway-core'}"
 
 
-# Returns true when gateway plugin spec is enabled in config.
-def plugin_enabled(config: dict[str, Any], home: Path) -> bool:
+def _resolve_file_plugin_path(spec: str, home: Path) -> Path | None:
+    if not isinstance(spec, str) or not spec.startswith("file:"):
+        return None
+    raw_path = spec[5:].strip()
+    if not raw_path:
+        return None
+    normalized = raw_path.replace("{env:HOME}", str(home))
+    path = Path(normalized).expanduser()
+    try:
+        return path.resolve(strict=False)
+    except OSError:
+        return path
+
+
+def _is_gateway_plugin_spec(spec: str, home: Path) -> bool:
+    resolved = _resolve_file_plugin_path(spec, home)
+    if resolved is None:
+        return False
+    target = (
+        home / ".config" / "opencode" / "my_opencode" / "plugin" / "gateway-core"
+    ).resolve(strict=False)
+    return resolved == target
+
+
+def gateway_plugin_entries(config: dict[str, Any], home: Path) -> list[str]:
     plugins_any = config.get("plugin")
     plugins = plugins_any if isinstance(plugins_any, list) else []
-    spec = gateway_plugin_spec(home)
-    return any(isinstance(item, str) and item == spec for item in plugins)
+    entries: list[str] = []
+    for item in plugins:
+        if isinstance(item, str) and _is_gateway_plugin_spec(item, home):
+            entries.append(item)
+    return entries
+
+
+# Returns true when gateway plugin spec is enabled in config.
+def plugin_enabled(config: dict[str, Any], home: Path) -> bool:
+    return len(gateway_plugin_entries(config, home)) > 0
 
 
 # Enables or disables gateway plugin spec in config plugin list.
@@ -45,7 +76,7 @@ def set_plugin_enabled(config: dict[str, Any], home: Path, enabled: bool) -> Non
         else []
     )
     spec = gateway_plugin_spec(home)
-    filtered = [item for item in plugins if item != spec]
+    filtered = [item for item in plugins if not _is_gateway_plugin_spec(item, home)]
     if enabled:
         filtered.insert(0, spec)
     config["plugin"] = filtered

@@ -197,12 +197,16 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       client: ctx.client,
       enabled: cfg.contextWindowMonitor.enabled,
       warningThreshold: cfg.contextWindowMonitor.warningThreshold,
+      reminderCooldownToolCalls: cfg.contextWindowMonitor.reminderCooldownToolCalls,
+      minTokenDeltaForReminder: cfg.contextWindowMonitor.minTokenDeltaForReminder,
     }),
     createPreemptiveCompactionHook({
       directory,
       client: ctx.client,
       enabled: cfg.preemptiveCompaction.enabled,
       warningThreshold: cfg.preemptiveCompaction.warningThreshold,
+      compactionCooldownToolCalls: cfg.preemptiveCompaction.compactionCooldownToolCalls,
+      minTokenDeltaForCompaction: cfg.preemptiveCompaction.minTokenDeltaForCompaction,
     }),
     createSessionRecoveryHook({
       directory,

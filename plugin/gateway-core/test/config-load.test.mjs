@@ -9,6 +9,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.prBodyEvidenceGuard.requireSummarySection, true)
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
   assert.equal(config.postMergeSyncGuard.requireDeleteBranch, true)
+  assert.equal(config.contextWindowMonitor.reminderCooldownToolCalls, 12)
+  assert.equal(config.preemptiveCompaction.compactionCooldownToolCalls, 10)
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -18,4 +20,26 @@ test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
     },
   })
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
+})
+
+test("loadGatewayConfig normalizes invalid context monitor cooldown values", () => {
+  const config = loadGatewayConfig({
+    contextWindowMonitor: {
+      reminderCooldownToolCalls: 0,
+      minTokenDeltaForReminder: -5,
+    },
+  })
+  assert.equal(config.contextWindowMonitor.reminderCooldownToolCalls, 12)
+  assert.equal(config.contextWindowMonitor.minTokenDeltaForReminder, 25000)
+})
+
+test("loadGatewayConfig normalizes invalid compaction cooldown values", () => {
+  const config = loadGatewayConfig({
+    preemptiveCompaction: {
+      compactionCooldownToolCalls: 0,
+      minTokenDeltaForCompaction: -5,
+    },
+  })
+  assert.equal(config.preemptiveCompaction.compactionCooldownToolCalls, 10)
+  assert.equal(config.preemptiveCompaction.minTokenDeltaForCompaction, 35000)
 })

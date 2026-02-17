@@ -73,10 +73,14 @@ export const DEFAULT_GATEWAY_CONFIG = {
     contextWindowMonitor: {
         enabled: true,
         warningThreshold: 0.7,
+        reminderCooldownToolCalls: 12,
+        minTokenDeltaForReminder: 25_000,
     },
     preemptiveCompaction: {
         enabled: true,
         warningThreshold: 0.78,
+        compactionCooldownToolCalls: 10,
+        minTokenDeltaForCompaction: 35_000,
     },
     sessionRecovery: {
         enabled: true,

@@ -1725,6 +1725,16 @@ exit 0
             and isinstance(gateway_status.get("event_audit_exists"), bool),
             "gateway status should expose event audit toggle and path telemetry",
         )
+        expect(
+            isinstance(gateway_status.get("plugin_entry_count"), int)
+            and isinstance(gateway_status.get("plugin_entries"), list),
+            "gateway status should expose plugin entry dedupe telemetry",
+        )
+        expect(
+            isinstance(gateway_status.get("runtime_staleness"), dict)
+            and isinstance(gateway_status.get("process_pressure"), dict),
+            "gateway status should expose runtime staleness and process pressure telemetry",
+        )
 
         stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
         stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1780,6 +1790,39 @@ exit 0
             "gateway enable should set plugin entry enabled",
         )
 
+        layered_cfg = json.loads(layered_cfg_path.read_text(encoding="utf-8"))
+        plugin_list = layered_cfg.get("plugin")
+        if isinstance(plugin_list, list):
+            duplicate_spec = (
+                "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+            )
+            if duplicate_spec not in plugin_list:
+                plugin_list.append(duplicate_spec)
+            layered_cfg["plugin"] = plugin_list
+            layered_cfg_path.write_text(
+                json.dumps(layered_cfg, indent=2) + "\n", encoding="utf-8"
+            )
+
+        result = run_gateway("doctor", "--json")
+        expect(
+            result.returncode == 1,
+            "gateway doctor should fail when gateway plugin is configured multiple times while enabled",
+        )
+        gateway_doctor_duplicate = parse_json_output(result.stdout)
+        expect(
+            any(
+                "configured multiple times" in str(item)
+                for item in gateway_doctor_duplicate.get("problems", [])
+            ),
+            "gateway doctor should report duplicate gateway plugin entries as problems",
+        )
+
+        result = run_gateway("enable", "--force", "--json")
+        expect(
+            result.returncode == 0,
+            "gateway enable --force should normalize duplicate gateway plugin entries",
+        )
+
         result = run_gateway(
             "enable",
             "--json",
@@ -1819,6 +1862,13 @@ exit 0
         expect(
             isinstance(gateway_doctor.get("status", {}).get("hook_diagnostics"), dict),
             "gateway doctor should include hook diagnostics in status",
+        )
+        expect(
+            isinstance(gateway_doctor.get("status", {}).get("process_pressure"), dict)
+            and isinstance(
+                gateway_doctor.get("status", {}).get("runtime_staleness"), dict
+            ),
+            "gateway doctor should include process pressure and runtime staleness telemetry",
         )
 
         notify_policy_path = (

@@ -19,7 +19,7 @@ function anthropicActualLimit() {
 // Creates preemptive compaction hook for high context pressure sessions.
 export function createPreemptiveCompactionHook(options) {
     const compactionInProgress = new Set();
-    const compactedSessions = new Set();
+    const sessionStates = new Map();
     return {
         id: "preemptive-compaction",
         priority: 270,
@@ -31,8 +31,9 @@ export function createPreemptiveCompactionHook(options) {
                 const eventPayload = (payload ?? {});
                 const sessionId = eventPayload.properties?.info?.id;
                 if (typeof sessionId === "string" && sessionId.trim()) {
-                    compactionInProgress.delete(sessionId.trim());
-                    compactedSessions.delete(sessionId.trim());
+                    const resolvedSessionId = sessionId.trim();
+                    compactionInProgress.delete(resolvedSessionId);
+                    sessionStates.delete(resolvedSessionId);
                 }
                 return;
             }
@@ -47,7 +48,17 @@ export function createPreemptiveCompactionHook(options) {
             if (!sessionId) {
                 return;
             }
-            if (compactedSessions.has(sessionId) || compactionInProgress.has(sessionId)) {
+            const priorState = sessionStates.get(sessionId) ?? {
+                toolCalls: 0,
+                lastCompactedAtToolCall: 0,
+                lastCompactedTokens: 0,
+            };
+            const nextState = {
+                ...priorState,
+                toolCalls: priorState.toolCalls + 1,
+            };
+            sessionStates.set(sessionId, nextState);
+            if (compactionInProgress.has(sessionId)) {
                 return;
             }
             const client = options.client?.session;
@@ -70,6 +81,29 @@ export function createPreemptiveCompactionHook(options) {
                 if (usageRatio < options.warningThreshold) {
                     return;
                 }
+                const hasPriorCompaction = nextState.lastCompactedAtToolCall > 0;
+                if (hasPriorCompaction) {
+                    const cooldownElapsed = nextState.toolCalls - nextState.lastCompactedAtToolCall >= options.compactionCooldownToolCalls;
+                    const tokenDeltaEnough = totalInputTokens - nextState.lastCompactedTokens >= options.minTokenDeltaForCompaction;
+                    if (!cooldownElapsed) {
+                        writeGatewayEventAudit(directory, {
+                            hook: "preemptive-compaction",
+                            stage: "skip",
+                            reason_code: "compaction_cooldown_not_elapsed",
+                            session_id: sessionId,
+                        });
+                        return;
+                    }
+                    if (!tokenDeltaEnough) {
+                        writeGatewayEventAudit(directory, {
+                            hook: "preemptive-compaction",
+                            stage: "skip",
+                            reason_code: "compaction_token_delta_too_small",
+                            session_id: sessionId,
+                        });
+                        return;
+                    }
+                }
                 const providerID = typeof last.providerID === "string" ? last.providerID : "";
                 const modelID = typeof last.modelID === "string" ? last.modelID : "";
                 if (!providerID || !modelID) {
@@ -81,7 +115,11 @@ export function createPreemptiveCompactionHook(options) {
                     body: { providerID, modelID, auto: true },
                     query: { directory },
                 });
-                compactedSessions.add(sessionId);
+                sessionStates.set(sessionId, {
+                    ...nextState,
+                    lastCompactedAtToolCall: nextState.toolCalls,
+                    lastCompactedTokens: totalInputTokens,
+                });
                 writeGatewayEventAudit(directory, {
                     hook: "preemptive-compaction",
                     stage: "state",

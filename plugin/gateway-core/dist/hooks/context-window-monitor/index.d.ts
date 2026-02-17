@@ -31,5 +31,7 @@ export declare function createContextWindowMonitorHook(options: {
     client?: GatewayClient;
     enabled: boolean;
     warningThreshold: number;
+    reminderCooldownToolCalls: number;
+    minTokenDeltaForReminder: number;
 }): GatewayHook;
 export {};

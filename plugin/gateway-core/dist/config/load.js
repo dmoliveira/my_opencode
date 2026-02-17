@@ -233,12 +233,16 @@ export function loadGatewayConfig(raw) {
                 ? contextWindowSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.enabled,
             warningThreshold: boundedFloat(contextWindowSource.warningThreshold, 0.5, 0.95, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.warningThreshold),
+            reminderCooldownToolCalls: positiveInt(contextWindowSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.reminderCooldownToolCalls),
+            minTokenDeltaForReminder: nonNegativeInt(contextWindowSource.minTokenDeltaForReminder, DEFAULT_GATEWAY_CONFIG.contextWindowMonitor.minTokenDeltaForReminder),
         },
         preemptiveCompaction: {
             enabled: typeof preemptiveCompactionSource.enabled === "boolean"
                 ? preemptiveCompactionSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.enabled,
             warningThreshold: boundedFloat(preemptiveCompactionSource.warningThreshold, 0.6, 0.95, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.warningThreshold),
+            compactionCooldownToolCalls: positiveInt(preemptiveCompactionSource.compactionCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.compactionCooldownToolCalls),
+            minTokenDeltaForCompaction: nonNegativeInt(preemptiveCompactionSource.minTokenDeltaForCompaction, DEFAULT_GATEWAY_CONFIG.preemptiveCompaction.minTokenDeltaForCompaction),
         },
         sessionRecovery: {
             enabled: typeof sessionRecoverySource.enabled === "boolean"

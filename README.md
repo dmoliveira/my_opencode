@@ -1595,8 +1595,18 @@ Notes:
 - use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
 - `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
-- `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
+- `/gateway doctor --json` now includes `hook_diagnostics`, plugin entry dedupe telemetry, and process/runtime pressure diagnostics; it still fails when gateway is enabled without a valid built hook surface.
 - set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
+
+Gateway event audit baseline (recommended before memory tuning):
+
+```bash
+MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 /gateway status --json
+MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 /gateway doctor --json
+```
+
+- Keep a normal 20-30 minute coding session and compare `process_pressure` plus `runtime_staleness` from `/gateway status --json` before/after.
+- Review `.opencode/gateway-events.jsonl` for recurring `context-window-monitor` and `preemptive-compaction` events to confirm cadence is controlled but recurring.
 
 Gateway orphan cleanup report fields (`--json`):
 
