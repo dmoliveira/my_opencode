@@ -22,7 +22,6 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
   assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
   assert.equal(config.globalProcessPressure.autoPauseOnCritical, true)
-<<<<<<< HEAD
   assert.equal(config.globalProcessPressure.criticalEscalationWindowToolCalls, 25)
   assert.equal(config.globalProcessPressure.criticalPauseAfterEvents, 1)
   assert.equal(config.globalProcessPressure.criticalEscalationAfterEvents, 3)
