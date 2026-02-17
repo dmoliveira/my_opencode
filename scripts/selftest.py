@@ -6536,6 +6536,10 @@ version: 1
             (auto_slash_detect.get("selected") or {}).get("command") == "doctor",
             "auto-slash schema should map clear diagnostic intent to doctor",
         )
+        expect(
+            (auto_slash_detect.get("selected") or {}).get("slash_command") == "/doctor",
+            "auto-slash schema should render doctor slash command without duplicate run subcommand",
+        )
 
         auto_slash_dataset = [
             {"prompt": "run doctor diagnostics", "expected": "doctor"},
