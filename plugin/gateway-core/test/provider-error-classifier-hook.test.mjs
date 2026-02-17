@@ -40,3 +40,20 @@ test("provider-error-classifier classifies rate limited and overloaded signals",
   assert.match(String(prompts[0].body.parts[0].text), /rate limiting/i)
   assert.match(String(prompts[1].body.parts[0].text), /overload/i)
 })
+
+
+test("provider-error-classifier skips context-overflow non-retryable errors", async () => {
+  const prompts = []
+  const hook = createProviderErrorClassifierHook({
+    directory: process.cwd(),
+    enabled: true,
+    cooldownMs: 1,
+    client: { session: { async promptAsync(args) { prompts.push(args) } } },
+  })
+
+  await hook.event("session.error", {
+    properties: { sessionID: "s4", error: "ContextOverflowError: maximum context reached" },
+  })
+
+  assert.equal(prompts.length, 0)
+})

@@ -4,3 +4,4 @@ export interface ProviderRetryReason {
     message: string;
 }
 export declare function classifyProviderRetryReason(text: string): ProviderRetryReason | null;
+export declare function isContextOverflowNonRetryable(text: string): boolean;

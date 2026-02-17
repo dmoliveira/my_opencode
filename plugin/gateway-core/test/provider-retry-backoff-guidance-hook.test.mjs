@@ -51,3 +51,20 @@ test("provider-retry-backoff-guidance falls back to generic backoff hint", async
   const text = String(prompts[0].body.parts[0].text)
   assert.match(text, /exponential backoff/i)
 })
+
+
+test("provider-retry-backoff-guidance skips context-overflow non-retryable errors", async () => {
+  const prompts = []
+  const hook = createProviderRetryBackoffGuidanceHook({
+    directory: process.cwd(),
+    enabled: true,
+    cooldownMs: 1,
+    client: { session: { async promptAsync(args) { prompts.push(args) } } },
+  })
+
+  await hook.event("session.error", {
+    properties: { sessionID: "s3", error: "ContextOverflowError: prompt is too long" },
+  })
+
+  assert.equal(prompts.length, 0)
+})
