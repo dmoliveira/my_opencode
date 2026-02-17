@@ -108,3 +108,25 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 23. [x] Provider quota/rate-limit classification parity
     - Pre-check completed: local recovery does not classify upstream-style quota and rate-limit signatures (for example free-usage exhaustion and structured `too_many_requests` payloads). Confirmed on latest main there is no dedicated classifier hook for these provider errors.
     - Delivered: added `provider-error-classifier` hook for free-usage exhausted, rate-limited, and overloaded provider error signatures with session cooldown control, remediation hints, config/default/order + loader wiring, and dedicated regression tests.
+
+## Next Batch Refresh (Post-23 Gap Scan)
+
+24. [ ] Codex header instruction parity
+    - Pre-check completed: upstream ships a dedicated Codex header prompt at `packages/opencode/src/session/prompt/codex_header.txt`, but local gateway has no dedicated Codex-header parity hook or injector. Confirmed on latest main with no `codex_header` references in `plugin/gateway-core`.
+    - Goal: add provider-aware Codex header guidance injection with duplicate suppression and clear ordering relative to existing rules/context injectors.
+
+25. [ ] Plan tool handoff reminder parity (plan-enter / plan-exit)
+    - Pre-check completed: upstream includes explicit plan handoff prompts in `packages/opencode/src/tool/plan-enter.txt` and `packages/opencode/src/tool/plan-exit.txt`; local hooks currently have generic mode reminders but no plan-tool-specific handoff parity behavior. Confirmed on latest main with no `plan-enter` / `plan-exit` handling in gateway hooks.
+    - Goal: add explicit plan-enter/exit handoff reminders aligned to plan-tool transitions while avoiding duplicate reminders in the same session.
+
+26. [ ] Provider retry reason canonicalization parity
+    - Pre-check completed: upstream `packages/opencode/src/session/retry.ts` normalizes retry reasons (for example `Too Many Requests`, `Rate Limited`, `Provider is overloaded`, free-usage credit hint), but local provider hooks do not expose canonical retry reason mapping. Confirmed on latest main with no canonical reason mapper in `plugin/gateway-core/src/hooks`.
+    - Goal: add shared provider retry reason canonicalization utility and wire it into provider recovery/classifier hooks for consistent reason codes and operator guidance.
+
+27. [ ] Context-overflow non-retry suppression parity
+    - Pre-check completed: upstream `SessionRetry.retryable` explicitly treats context overflow as non-retryable, while local provider recovery hooks do not have explicit context-overflow skip logic. Confirmed on latest main with no `ContextOverflowError`/context-overflow suppression path in gateway hooks.
+    - Goal: add explicit non-retry suppression for context-overflow signatures to prevent unnecessary provider retry nudges and preserve deterministic remediation guidance.
+
+28. [ ] Retry delay clamp parity (headerless backoff cap)
+    - Pre-check completed: upstream `SessionRetry.delay` caps headerless retry delay (`RETRY_MAX_DELAY_NO_HEADERS = 30000`) and handles retry headers; local retry-backoff guidance parses headers but does not enforce a canonical headerless delay clamp policy. Confirmed on latest main with no explicit no-header retry-delay cap in gateway retry guidance.
+    - Goal: add deterministic retry delay clamp policy for headerless retry guidance and align delay messaging with upstream backoff semantics.
