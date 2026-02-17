@@ -40,6 +40,9 @@ interface ToolAfterPayload {
     sessionID?: string
     sessionId?: string
   }
+  output?: {
+    output?: unknown
+  }
   directory?: string
 }
 
@@ -55,6 +58,8 @@ interface SessionCompactionState {
   lastCompactedAtToolCall: number
   lastCompactedTokens: number
 }
+
+const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:"
 
 // Resolves effective session id across payload variants.
 function resolveSessionId(payload: ToolAfterPayload): string {
@@ -183,6 +188,9 @@ export function createPreemptiveCompactionHook(options: {
           body: { providerID, modelID, auto: true },
           query: { directory },
         })
+        if (typeof eventPayload.output?.output === "string") {
+          eventPayload.output.output = `${eventPayload.output.output}\n\n${CONTEXT_GUARD_PREFIX} Preemptive compaction triggered to reduce context pressure.`
+        }
         sessionStates.set(sessionId, {
           ...nextState,
           lastCompactedAtToolCall: nextState.toolCalls,

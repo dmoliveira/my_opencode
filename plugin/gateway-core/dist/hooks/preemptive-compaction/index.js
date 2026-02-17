@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const DEFAULT_ACTUAL_LIMIT = 200_000;
+const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
 // Resolves effective session id across payload variants.
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
@@ -115,6 +116,9 @@ export function createPreemptiveCompactionHook(options) {
                     body: { providerID, modelID, auto: true },
                     query: { directory },
                 });
+                if (typeof eventPayload.output?.output === "string") {
+                    eventPayload.output.output = `${eventPayload.output.output}\n\n${CONTEXT_GUARD_PREFIX} Preemptive compaction triggered to reduce context pressure.`;
+                }
                 sessionStates.set(sessionId, {
                     ...nextState,
                     lastCompactedAtToolCall: nextState.toolCalls,

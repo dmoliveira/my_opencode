@@ -51,8 +51,10 @@ test("preemptive-compaction triggers summarize on high usage", async () => {
       },
     })
 
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-1" }, { output: "ok" })
+    const output = { output: "ok" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-1" }, output)
     assert.equal(summarizeCalls, 1)
+    assert.ok(output.output.includes("Context Guard"))
   } finally {
     if (previousFlag === undefined) {
       delete process.env.ANTHROPIC_1M_CONTEXT
