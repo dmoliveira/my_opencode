@@ -9,7 +9,7 @@ Use this as memory + executable checklist.
 ## Decisions (Locked) ✅
 
 - [x] **Core architecture**: TypeScript plugin gateway first.
-- [x] **Command interface**: keep slash-command UX stable (`/autopilot` canonical; `/ralph-loop` compatibility alias).
+- [x] **Command interface**: keep slash-command UX stable with `/autopilot*` as the canonical surface.
 - [x] **Completion model**: support both `promise` and `objective` modes.
 - [x] **Default completion mode**: `promise`.
 - [x] **Build default agent** remains `build` (not changed).
@@ -40,7 +40,7 @@ Final choice for this roadmap:
 ## What is already done 📌
 
 - [x] Promise/objective dual completion modes in `/autopilot`.
-- [x] Ralph compatibility aliases (`/ralph-loop`, `/cancel-ralph`) routed to canonical `/autopilot*` semantics.
+- [x] Removed Ralph compatibility aliases to simplify canonical `/autopilot*` semantics.
 - [x] Autopilot hook scaffold package (`plugin/autopilot-loop`) with lint/build setup.
 - [x] Agent system foundations (contracts, doctor, generated specs).
 - [x] Initial roadmap docs and migration notes.
@@ -158,7 +158,7 @@ Recent progress:
 ### Phase 2 — Autopilot hook parity
 - [ ] Move loop continuation logic to hook events (`session.idle`)
 - [ ] Keep `/autopilot*` Python commands as control facade
-- [x] Add `/ralph-loop` and `/cancel-ralph` bridge parity *(compatibility aliases only; no separate runtime semantics)*
+- [x] Keep bridge parity on `/autopilot*` only *(single runtime semantic surface)*
 
 ### Phase 3 — Safety and policy packs
 - [ ] Add guard hooks (scope/budget/anti-loop/kill-switch)
@@ -193,7 +193,7 @@ Recent progress:
 - [ ] `/autopilot` continues across idle events without manual nudges
 - [ ] Promise mode completes only after explicit completion signal
 - [ ] Objective mode completes only after objective gates pass
-- [x] `/cancel-ralph` always stops active loop
+- [x] `/autopilot stop` always stops active loop
 - [ ] Budget/scope guardrails stop safely with clear reason codes
 - [ ] `doctor` output clearly shows plugin health and active mode
 

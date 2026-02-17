@@ -329,7 +329,7 @@ exit 0
             'autopilot_command.py" $ARGUMENTS --json' in autopilot_template,
             "autopilot command template should pass through slash arguments for subcommand/help dispatch",
         )
-        for command_name in ("continue-work", "ralph-loop"):
+        for command_name in ("continue-work", "autopilot-go"):
             template = str(
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )
@@ -4913,6 +4913,19 @@ version: 1
             "autopilot start should initialize budget-stop verification run",
         )
 
+        autopilot_command_pause_budget = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "pause", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_pause_budget.returncode == 0,
+            "autopilot pause should prepare resume budget-stop verification run",
+        )
+
         autopilot_command_resume_budget_stop = subprocess.run(
             [
                 sys.executable,
@@ -5021,6 +5034,50 @@ version: 1
             autopilot_command_status_after_stop_report.get("run", {}).get("status")
             == "stopped",
             "autopilot status should retain stopped state after stop transition",
+        )
+
+        autopilot_command_resume_after_stop = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "resume", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_resume_after_stop.returncode == 1,
+            "autopilot resume should fail when current state is stopped",
+        )
+        autopilot_command_resume_after_stop_report = parse_json_output(
+            autopilot_command_resume_after_stop.stdout
+        )
+        expect(
+            autopilot_command_resume_after_stop_report.get("reason_code")
+            == "invalid_state_transition",
+            "autopilot resume after stop should expose invalid_state_transition reason code",
+        )
+
+        autopilot_command_status_after_resume_attempt = subprocess.run(
+            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autopilot_command_status_after_resume_attempt.returncode == 0,
+            "autopilot status should succeed after invalid resume attempt",
+        )
+        autopilot_command_status_after_resume_attempt_report = parse_json_output(
+            autopilot_command_status_after_resume_attempt.stdout
+        )
+        expect(
+            autopilot_command_status_after_resume_attempt_report.get("run", {}).get(
+                "status"
+            )
+            == "stopped",
+            "autopilot status should remain stopped after invalid resume attempt",
         )
 
         forced_budget_config = load_json_file(config_path)

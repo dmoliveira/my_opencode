@@ -47,18 +47,8 @@ const AUTOPILOT_START_COMMANDS = new Set([
 
 const AUTOPILOT_STOP_COMMANDS = new Set(["autopilot-stop", "autopilot-pause"])
 
-const AUTOPILOT_COMPAT_START_ALIASES = new Set(["ralph-loop"])
-
-const AUTOPILOT_COMPAT_STOP_ALIASES = new Set(["cancel-ralph"])
-
-// Normalizes compatibility aliases to canonical autopilot command names.
+// Normalizes autopilot command names.
 export function canonicalAutopilotCommandName(name: string): string {
-  if (AUTOPILOT_COMPAT_START_ALIASES.has(name)) {
-    return "autopilot-go"
-  }
-  if (AUTOPILOT_COMPAT_STOP_ALIASES.has(name)) {
-    return "autopilot-stop"
-  }
   return name
 }
 
@@ -73,26 +63,30 @@ export function resolveAutopilotAction(name: string, args: string): "start" | "s
   }
   if (command === "autopilot") {
     const head = args.trim().split(/\s+/)[0]?.toLowerCase() ?? ""
+    if (!head || head === "start" || head === "go" || head === "resume" || head === "continue") {
+      return "start"
+    }
     if (head === "stop" || head === "pause") {
       return "stop"
     }
+    return "none"
   }
   return "start"
 }
 
 // Returns true when command should start or continue autopilot loop.
 export function isAutopilotCommand(name: string): boolean {
-  return AUTOPILOT_START_COMMANDS.has(name) || AUTOPILOT_COMPAT_START_ALIASES.has(name)
+  return AUTOPILOT_START_COMMANDS.has(name)
 }
 
 // Returns true when command should stop active autopilot loop.
 export function isAutopilotStopCommand(name: string): boolean {
-  return AUTOPILOT_STOP_COMMANDS.has(name) || AUTOPILOT_COMPAT_STOP_ALIASES.has(name)
+  return AUTOPILOT_STOP_COMMANDS.has(name)
 }
 
 // Parses completion mode from command argument string.
 export function parseCompletionMode(args: string): "promise" | "objective" {
-  const explicit = args.match(/--completion-mode\s+(promise|objective)/i)
+  const explicit = args.match(/--completion-mode(?:\s+|=)(promise|objective)/i)
   if (explicit?.[1]?.toLowerCase() === "objective") {
     return "objective"
   }
@@ -101,11 +95,11 @@ export function parseCompletionMode(args: string): "promise" | "objective" {
 
 // Parses completion promise token from command argument string.
 export function parseCompletionPromise(args: string, fallback: string): string {
-  const quoted = args.match(/--completion-promise\s+"([^"]+)"/i)
+  const quoted = args.match(/--completion-promise(?:\s+|=)"([^"]+)"/i)
   if (quoted?.[1]?.trim()) {
     return quoted[1].trim()
   }
-  const plain = args.match(/--completion-promise\s+([^\s]+)/i)
+  const plain = args.match(/--completion-promise(?:\s+|=)([^\s]+)/i)
   if (plain?.[1]?.trim()) {
     return plain[1].trim()
   }
@@ -114,7 +108,7 @@ export function parseCompletionPromise(args: string, fallback: string): string {
 
 // Parses iteration cap from command argument string.
 export function parseMaxIterations(args: string, fallback: number): number {
-  const match = args.match(/--max-iterations\s+(\d+)/i)
+  const match = args.match(/--max-iterations(?:\s+|=)(\d+)/i)
   if (!match) {
     return fallback
   }
@@ -127,9 +121,10 @@ export function parseMaxIterations(args: string, fallback: number): number {
 
 // Parses goal text from command argument string.
 export function parseGoal(args: string): string {
-  const goal = args.match(/--goal\s+"([^"]+)"/i)
-  if (goal?.[1]?.trim()) {
-    return goal[1].trim()
+  const goal = args.match(/--goal(?:\s+|=)(?:"([^"]+)"|'([^']+)'|([^\s]+))/i)
+  const explicit = goal?.[1] ?? goal?.[2] ?? goal?.[3] ?? ""
+  if (explicit.trim()) {
+    return explicit.trim()
   }
   const quoted = args.match(/^"([^"]+)"/)
   if (quoted?.[1]?.trim()) {
@@ -137,6 +132,9 @@ export function parseGoal(args: string): string {
   }
   const stripped = args
     .replace(/--[a-z-]+\s+"[^"]+"/gi, "")
+    .replace(/--[a-z-]+="[^"]+"/gi, "")
+    .replace(/--[a-z-]+='[^']+'/gi, "")
+    .replace(/--[a-z-]+=[^\s]+/gi, "")
     .replace(/--[a-z-]+\s+[^\s]+/gi, "")
     .trim()
   return stripped || "continue current objective until done"
@@ -150,7 +148,7 @@ export function parseDoneCriteria(args: string): string[] {
     return []
   }
   const start = match.index + match[0].length
-  const tail = args.slice(start).trim()
+  const tail = args.slice(start).trim().replace(/^=/, "").trim()
   if (!tail) {
     return []
   }

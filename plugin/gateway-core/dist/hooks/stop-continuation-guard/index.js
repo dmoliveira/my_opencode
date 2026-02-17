@@ -1,4 +1,4 @@
-import { parseSlashCommand, resolveAutopilotAction } from "../../bridge/commands.js";
+import { parseAutopilotTemplateCommand, parseSlashCommand, resolveAutopilotAction, } from "../../bridge/commands.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 // Resolves session id across payload variants.
 function resolveSessionId(payload) {
@@ -17,7 +17,21 @@ function resolveSessionId(payload) {
 }
 // Resolves command text across payload variants.
 function resolveCommand(payload) {
-    const candidates = [payload.output?.args?.command, payload.properties?.command];
+    const commandName = typeof payload.input?.command === "string" && payload.input.command.trim()
+        ? payload.input.command.trim().replace(/^\//, "")
+        : "";
+    const commandArgs = typeof payload.input?.arguments === "string" && payload.input.arguments.trim()
+        ? payload.input.arguments.trim()
+        : "";
+    const commandExecuteBefore = commandName
+        ? `/${commandName}${commandArgs ? ` ${commandArgs}` : ""}`
+        : "";
+    const candidates = [
+        payload.output?.args?.command,
+        payload.input?.args?.command,
+        payload.properties?.command,
+        commandExecuteBefore,
+    ];
     for (const value of candidates) {
         if (typeof value === "string" && value.trim()) {
             return value.trim();
@@ -54,7 +68,7 @@ export function createStopContinuationGuardHook(options) {
                 }
                 return;
             }
-            if (type !== "tool.execute.before") {
+            if (type !== "tool.execute.before" && type !== "command.execute.before") {
                 return;
             }
             const eventPayload = (payload ?? {});
@@ -66,7 +80,17 @@ export function createStopContinuationGuardHook(options) {
             if (!sessionId || !command) {
                 return;
             }
-            const parsed = parseSlashCommand(command);
+            const toolName = String(eventPayload.input?.tool || "");
+            let parsed = parseSlashCommand(command);
+            if (!command.trim().startsWith("/") && toolName !== "slashcommand") {
+                const templateParsed = parseAutopilotTemplateCommand(command);
+                if (templateParsed) {
+                    parsed = templateParsed;
+                }
+                else {
+                    return;
+                }
+            }
             const action = resolveAutopilotAction(parsed.name, parsed.args);
             if (action !== "stop") {
                 return;

@@ -733,6 +733,21 @@ def command_resume(args: list[str]) -> int:
     runtime, code = _runtime_or_fail(write_path, as_json=as_json)
     if runtime is None:
         return code
+    runtime_status_value = str(runtime.get("status") or "")
+    if runtime_status_value != "paused":
+        payload = {
+            "result": "FAIL",
+            "reason_code": "invalid_state_transition",
+            "status": runtime_status_value,
+            "allowed_from": ["paused"],
+            "next_actions": [
+                "run /autopilot pause before /autopilot resume",
+                "run /autopilot go to continue from non-paused states",
+            ],
+        }
+        payload.update(gateway_state_snapshot(Path.cwd(), config))
+        emit(payload, as_json=as_json)
+        return 1
 
     integrated = integrate_controls(
         run=runtime,
@@ -918,7 +933,9 @@ def command_doctor(args: list[str]) -> int:
         )
     required_gateway_flags = [
         "dist_exposes_tool_execute_before",
+        "dist_exposes_command_execute_before",
         "dist_exposes_chat_message",
+        "dist_exposes_messages_transform",
         "dist_autopilot_handles_slashcommand",
         "dist_continuation_handles_session_idle",
         "dist_safety_handles_session_deleted",

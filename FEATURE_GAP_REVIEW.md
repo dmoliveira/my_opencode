@@ -57,7 +57,7 @@ If you want closer behavior to `oh-my-opencode`, these are still missing:
 
 - Multi-agent orchestration stack (Sisyphus/Prometheus/Atlas/Hephaestus-style workflow).
 - `@plan` style planning handoff and boulder-style continuity model.
-- Loop-oriented commands (`/ralph-loop`, `/ulw-loop`, `/init-deep`) and related hook semantics.
+- Loop-oriented commands (`/autopilot*`, `/ulw-loop`, `/init-deep`) and related hook semantics.
 - Richer built-in hook catalog (many quality/recovery/context hooks in upstream project).
 - Built-in MCP parity (notably websearch/Exa path from upstream docs).
 - Tmux visual multi-agent execution mode.

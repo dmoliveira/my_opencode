@@ -6,6 +6,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
 import type { GatewayState } from "../../state/types.js"
 import type { GatewayHook } from "../registry.js"
+import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { KeywordDetector } from "../keyword-detector/index.js"
 import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
@@ -431,10 +432,11 @@ export function createContinuationHook(options: {
 
       if (client) {
         const mode = options.keywordDetector?.modeForSession(sessionId) ?? null
-        await client.promptAsync({
-          path: { id: sessionId },
-          body: { parts: [{ type: "text", text: continuationPrompt(state, mode) }] },
-          query: { directory },
+        await injectHookMessage({
+          session: client,
+          sessionId,
+          content: continuationPrompt(state, mode),
+          directory,
         })
         writeGatewayEventAudit(directory, {
           hook: "continuation",

@@ -482,7 +482,7 @@ Task 28.4 autopilot command UX/workflow notes:
 - command module: `scripts/autopilot_command.py`
 - alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
 - objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
-- compatibility aliases are available as `/ralph-loop` and `/cancel-ralph`; canonical flow remains `/autopilot*`.
+- canonical flow is `/autopilot*`; Ralph compatibility aliases were removed to simplify command injection paths.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
@@ -515,9 +515,9 @@ Autopilot gateway telemetry fields (`--json`):
 /autopilot-go-verbose --goal "continue active docs request" --max-cycles 10 --json
 /continue-work "finish cheatsheet updates and validations"
 
-# Compatibility aliases (canonical flow is /autopilot*)
-/ralph-loop "finish docs checklist end-to-end"
-/cancel-ralph
+# Canonical command surface
+/autopilot-go --goal "finish docs checklist end-to-end"
+/autopilot-stop --reason "manual"
 
 # Objective-gate completion mode (alternative to promise mode)
 /autopilot-objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced

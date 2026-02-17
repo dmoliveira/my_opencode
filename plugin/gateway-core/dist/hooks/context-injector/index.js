@@ -1,0 +1,131 @@
+import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+// Resolves session id from known payload variants.
+function resolveSessionId(payload) {
+    const record = payload;
+    const candidates = [
+        record.input?.sessionID,
+        record.input?.sessionId,
+        record.properties?.sessionID,
+        record.properties?.sessionId,
+        record.properties?.info?.id,
+    ];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    const transformPayload = payload;
+    const messages = transformPayload.output?.messages;
+    if (Array.isArray(messages)) {
+        for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+            const value = messages[idx]?.info?.sessionID;
+            if (typeof value === "string" && value.trim()) {
+                return value.trim();
+            }
+        }
+    }
+    return "";
+}
+// Injects pending context into mutable output parts.
+function injectIntoParts(parts, merged) {
+    const textPart = parts.find((part) => part.type === "text" && typeof part.text === "string");
+    if (!textPart || typeof textPart.text !== "string") {
+        return false;
+    }
+    textPart.text = `${merged}\n\n---\n\n${textPart.text}`;
+    return true;
+}
+// Creates context injector that injects pending context on chat and transform hooks.
+export function createContextInjectorHook(options) {
+    return {
+        id: "context-injector",
+        priority: 295,
+        async event(type, payload) {
+            if (!options.enabled) {
+                return;
+            }
+            if (type === "session.deleted") {
+                const eventPayload = (payload ?? {});
+                const sessionId = eventPayload.properties?.info?.id;
+                if (typeof sessionId === "string" && sessionId.trim()) {
+                    options.collector.clear(sessionId.trim());
+                }
+                return;
+            }
+            if (type === "chat.message") {
+                const eventPayload = (payload ?? {});
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                const sessionId = resolveSessionId(eventPayload);
+                const parts = eventPayload.output?.parts;
+                if (!sessionId || !Array.isArray(parts) || !options.collector.hasPending(sessionId)) {
+                    return;
+                }
+                const pending = options.collector.consume(sessionId);
+                if (!pending.hasContent) {
+                    return;
+                }
+                if (!injectIntoParts(parts, pending.merged)) {
+                    options.collector.register(sessionId, {
+                        source: "context-injector-requeue",
+                        content: pending.merged,
+                        priority: "high",
+                    });
+                    return;
+                }
+                writeGatewayEventAudit(directory, {
+                    hook: "context-injector",
+                    stage: "inject",
+                    reason_code: "pending_context_injected_chat_message",
+                    session_id: sessionId,
+                    context_length: pending.merged.length,
+                });
+                return;
+            }
+            if (type !== "experimental.chat.messages.transform") {
+                return;
+            }
+            const eventPayload = (payload ?? {});
+            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                ? eventPayload.directory
+                : options.directory;
+            const sessionId = resolveSessionId(eventPayload);
+            const messages = eventPayload.output?.messages;
+            if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
+                return;
+            }
+            let lastUserIndex = -1;
+            for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+                if (messages[idx]?.info?.role === "user") {
+                    lastUserIndex = idx;
+                    break;
+                }
+            }
+            if (lastUserIndex < 0) {
+                return;
+            }
+            const parts = messages[lastUserIndex].parts;
+            if (!Array.isArray(parts)) {
+                return;
+            }
+            const pending = options.collector.consume(sessionId);
+            if (!pending.hasContent) {
+                return;
+            }
+            const synthetic = {
+                type: "text",
+                text: pending.merged,
+                synthetic: true,
+            };
+            parts.unshift(synthetic);
+            writeGatewayEventAudit(directory, {
+                hook: "context-injector",
+                stage: "inject",
+                reason_code: "pending_context_injected_messages_transform",
+                session_id: sessionId,
+                context_length: pending.merged.length,
+            });
+        },
+    };
+}

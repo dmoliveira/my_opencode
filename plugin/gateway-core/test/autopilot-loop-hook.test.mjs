@@ -40,7 +40,7 @@ test("autopilot-loop hook accepts command from input args shape", async () => {
   }
 })
 
-test("autopilot-loop hook starts loop even when tool label differs", async () => {
+test("autopilot-loop hook starts loop from command.execute.before", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
   try {
     const hook = createAutopilotLoopHook({
@@ -53,15 +53,13 @@ test("autopilot-loop hook starts loop even when tool label differs", async () =>
       },
     })
 
-    await hook.event("tool.execute.before", {
+    await hook.event("command.execute.before", {
       input: {
-        tool: "command",
+        command: "autopilot-go",
+        arguments: '--goal "session objective"',
         sessionID: "session-variant",
       },
-      properties: {
-        command: "/ralph-loop",
-        sessionID: "session-variant",
-      },
+      output: {},
       directory,
     })
 
@@ -69,6 +67,7 @@ test("autopilot-loop hook starts loop even when tool label differs", async () =>
     assert.ok(state?.activeLoop)
     assert.equal(state?.activeLoop?.active, true)
     assert.equal(state?.activeLoop?.sessionId, "session-variant")
+    assert.equal(state?.activeLoop?.objective, "session objective")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -106,6 +105,93 @@ test("autopilot-loop hook parses rendered command template invocations", async (
     assert.equal(state?.activeLoop?.active, true)
     assert.equal(state?.activeLoop?.sessionId, "session-template")
     assert.equal(state?.activeLoop?.objective, "ship")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("autopilot-loop hook ignores non-start autopilot subcommands", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
+  try {
+    const hook = createAutopilotLoopHook({
+      directory,
+      defaults: {
+        enabled: true,
+        maxIterations: 0,
+        completionMode: "promise",
+        completionPromise: "DONE",
+      },
+    })
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-status",
+        args: { command: "/autopilot status --json" },
+      },
+      output: {},
+      directory,
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state, null)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("autopilot-loop pause preserves objective and resume restores it", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
+  try {
+    const hook = createAutopilotLoopHook({
+      directory,
+      defaults: {
+        enabled: true,
+        maxIterations: 25,
+        completionMode: "promise",
+        completionPromise: "DONE",
+      },
+    })
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-pause-resume",
+        args: { command: '/autopilot go --goal "ship objective" --done-criteria "item 1; item 2"' },
+      },
+      output: {},
+      directory,
+    })
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-pause-resume",
+        args: { command: "/autopilot pause" },
+      },
+      output: {},
+      directory,
+    })
+
+    let state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, false)
+    assert.equal(state?.activeLoop?.objective, "ship objective")
+    assert.deepEqual(state?.activeLoop?.doneCriteria, ["item 1", "item 2"])
+
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-pause-resume",
+        args: { command: "/autopilot resume" },
+      },
+      output: {},
+      directory,
+    })
+
+    state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.objective, "ship objective")
+    assert.deepEqual(state?.activeLoop?.doneCriteria, ["item 1", "item 2"])
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

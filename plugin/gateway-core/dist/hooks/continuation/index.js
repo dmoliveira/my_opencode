@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js";
+import { injectHookMessage } from "../hook-message-injector/index.js";
 // Resolves active session id from event payload.
 function resolveSessionId(payload) {
     const direct = payload.properties?.sessionID;
@@ -354,10 +355,11 @@ export function createContinuationHook(options) {
             });
             if (client) {
                 const mode = options.keywordDetector?.modeForSession(sessionId) ?? null;
-                await client.promptAsync({
-                    path: { id: sessionId },
-                    body: { parts: [{ type: "text", text: continuationPrompt(state, mode) }] },
-                    query: { directory },
+                await injectHookMessage({
+                    session: client,
+                    sessionId,
+                    content: continuationPrompt(state, mode),
+                    directory,
                 });
                 writeGatewayEventAudit(directory, {
                     hook: "continuation",
