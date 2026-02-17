@@ -13,7 +13,7 @@ interface SessionMessage {
     info?: SessionMessageInfo;
 }
 interface SessionClient {
-    messages(args: {
+    messages?(args: {
         path: {
             id: string;
         };
