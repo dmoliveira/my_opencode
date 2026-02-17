@@ -559,8 +559,6 @@ Task 28.5 autopilot verification notes:
 ## Installed plugin stack 🔌
 
 - `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
-- `opencode-supermemory` - persistent memory across sessions.
-- `opencode-wakatime` - tracks OpenCode coding activity and AI line changes in WakaTime.
 
 ### Experimental plugin options 🧪
 
@@ -1348,8 +1346,6 @@ Use these directly in OpenCode:
 /plugin doctor
 /plugin doctor --json
 /setup-keys
-/plugin enable supermemory
-/plugin disable supermemory
 /plugin profile lean
 /plugin profile stable
 /plugin profile experimental
@@ -1364,8 +1360,6 @@ Autocomplete-friendly shortcuts:
 ```text
 /plugin-help
 /plugin-enable-notifier
-/plugin-enable-supermemory
-/plugin-enable-wakatime
 /plugin-enable-morph
 /plugin-enable-worktree
 /plugin-profile-lean
@@ -1388,9 +1382,9 @@ Global command helper shortcuts:
 `/complete <prefix>` returns ranked slash command suggestions with descriptions.
 `/ac` is a short alias for `/complete`.
 
-Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
+Supported plugin names: `notifier`, `morph`, `worktree`.
 
-`all` applies only to the stable set: `notifier`, `supermemory`, `wakatime`.
+`all` applies only to the stable set: `notifier`.
 
 `/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
 
@@ -1400,12 +1394,10 @@ Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatim
 
 Profiles:
 - `lean` -> `notifier`
-- `stable` -> `notifier`, `supermemory`, `wakatime`
+- `stable` -> `notifier`
 - `experimental` -> `stable` + `morph`, `worktree`
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
-
-For WakaTime, configure `~/.wakatime.cfg` with your `api_key` before enabling `wakatime`.
 
 ## Notification control inside OpenCode 🔔
 

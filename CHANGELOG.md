@@ -215,7 +215,7 @@ All notable changes to this project are documented in this file.
 ### Adds
 - Added `/plugin doctor --json` output for automation and CI integrations.
 - Added plugin command next-step suggestions and `/plugin help` guidance output.
-- Added autocomplete-friendly shortcut commands like `/plugin-enable-supermemory` and `/plugin-profile-stable`.
+- Added autocomplete-friendly shortcut commands for plugin toggles and profiles.
 - Added GitHub Actions CI workflow for script/config validation and installer smoke tests.
 - Added `Makefile` with `help`, `validate`, `doctor`, `doctor-json`, `install-test`, and `release` targets.
 
@@ -237,7 +237,7 @@ All notable changes to this project are documented in this file.
 - Added MIT license and expanded setup/usage documentation.
 
 ### Changes
-- Set stable plugin defaults to `notifier`, `supermemory`, `wakatime`.
+- Set stable plugin defaults to `notifier`.
 - Kept `morph` and `worktree` as opt-in experimental plugins.
 
 ### Removals

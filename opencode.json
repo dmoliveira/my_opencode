@@ -650,14 +650,6 @@
       "description": "Enable notifier plugin",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable notifier`\nShow only the command output."
     },
-    "plugin-enable-supermemory": {
-      "description": "Enable supermemory plugin",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable supermemory`\nShow only the command output."
-    },
-    "plugin-enable-wakatime": {
-      "description": "Enable wakatime plugin",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable wakatime`\nShow only the command output."
-    },
     "plugin-enable-morph": {
       "description": "Enable morph plugin (experimental)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable morph`\nShow only the command output."
