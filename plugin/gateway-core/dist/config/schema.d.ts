@@ -165,6 +165,9 @@ export interface ProviderErrorClassifierConfig {
 export interface CodexHeaderInjectorConfig {
     enabled: boolean;
 }
+export interface PlanHandoffReminderConfig {
+    enabled: boolean;
+}
 export interface CommentCheckerConfig {
     enabled: boolean;
 }
@@ -359,6 +362,7 @@ export interface GatewayConfig {
     providerRetryBackoffGuidance: ProviderRetryBackoffGuidanceConfig;
     providerErrorClassifier: ProviderErrorClassifierConfig;
     codexHeaderInjector: CodexHeaderInjectorConfig;
+    planHandoffReminder: PlanHandoffReminderConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;

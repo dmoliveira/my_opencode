@@ -229,6 +229,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.codexHeaderInjector && typeof source.codexHeaderInjector === "object"
       ? (source.codexHeaderInjector as Record<string, unknown>)
       : {}
+  const planHandoffReminderSource =
+    source.planHandoffReminder && typeof source.planHandoffReminder === "object"
+      ? (source.planHandoffReminder as Record<string, unknown>)
+      : {}
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
@@ -832,6 +836,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof codexHeaderInjectorSource.enabled === "boolean"
           ? codexHeaderInjectorSource.enabled
           : DEFAULT_GATEWAY_CONFIG.codexHeaderInjector.enabled,
+    },
+    planHandoffReminder: {
+      enabled:
+        typeof planHandoffReminderSource.enabled === "boolean"
+          ? planHandoffReminderSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.planHandoffReminder.enabled,
     },
     commentChecker: {
       enabled:
