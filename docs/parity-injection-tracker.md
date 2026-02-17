@@ -60,3 +60,29 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 12. [x] Directory guidance depth parity
     - Pre-check completed: directory AGENTS/README injectors only appended nearest file paths and did not inject file content.
     - Delivered: injectors now append truncated AGENTS/README content excerpts (with path context), added configurable `maxChars` knobs with safe defaults and normalization, and expanded tests for content injection and truncation behavior.
+
+## Next Batch Refresh (Post-12 Gap Scan)
+
+13. [ ] Todo-driven continuation enforcer parity
+    - Pre-check completed: local continuation flow supports loop state and stop guards, but does not enforce pending todo-driven continuation semantics with upstream-like idle/cooldown behavior.
+    - Goal: add a todo-aware continuation enforcer hook and align continuation stop/resume behavior with upstream idle-event semantics.
+
+14. [ ] Compaction todo snapshot restore parity
+    - Pre-check completed: local compaction flow preserves context excerpts, but no dedicated compaction todo snapshot/restore hook was found.
+    - Goal: preserve and restore todo context across compaction lifecycle events (`session.compacted`/`session.deleted`).
+
+15. [ ] Non-interactive env prefix injection parity
+    - Pre-check completed: local noninteractive shell guard blocks risky interactive commands, but does not prepend non-interactive env prefixes to compatible shell commands.
+    - Goal: inject safe non-interactive environment prefixes for git/bash command paths where upstream currently rewrites command execution context.
+
+16. [ ] Tool error recovery nudges parity (edit + JSON)
+    - Pre-check completed: local gateway has generic continuation/session recovery hooks, but no dedicated edit-error/json-error recovery nudges were found.
+    - Goal: add focused recovery guidance hooks for edit failures and JSON parse failures.
+
+17. [ ] Provider token-limit auto-recovery parity
+    - Pre-check completed: local context-window monitoring and preemptive compaction are proactive, but no provider-specific error-triggered token-limit recovery hook was found.
+    - Goal: add provider token-limit recovery handling on error/update events with safe compact/truncation fallback.
+
+18. [ ] Hashline read stability enhancer parity
+    - Pre-check completed: local tool output processing covers truncation, but no hashline read enhancer equivalent was found.
+    - Goal: evaluate and, if in-scope, add hashline read-output stabilization to improve deterministic follow-up reads.
