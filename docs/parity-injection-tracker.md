@@ -35,8 +35,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
    - Pre-check completed: injector entry points had no size guard and injected pending/ synthetic context verbatim; only tool-output truncation had max-char protections.
    - Delivered: added shared injected-text truncator with bounded output, applied max-char guards to context-injector and hook-message-injector paths, added truncation audit reason codes for chat/transform injections, and expanded tests for oversized and tiny-limit truncation behavior.
 
-7. [ ] Integration tests for command -> collector -> transform flow
-   - Pre-check required: inventory existing integration coverage to extend rather than duplicate.
+7. [x] Integration tests for command -> collector -> transform flow
+   - Pre-check completed: hook-level tests existed for command parsing, collector behavior, and transform injection independently, but end-to-end plugin tests covering command/slashcommand -> collector registration -> transform injection chain were missing.
+   - Delivered: added integration tests for tool-command and command.execute.before producer paths into collector, negative non-start flow, and one-shot consume behavior across repeated transform calls.
 
 8. [ ] Injector reason-code granularity
    - Pre-check required: compare current reason-code catalog with desired injector outcome taxonomy.
