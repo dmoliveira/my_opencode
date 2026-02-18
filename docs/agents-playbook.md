@@ -50,6 +50,8 @@ opencode agent list
 
 Validate agent contract + runtime wiring with:
 
+This now also verifies orchestration policy markers in the nearest `AGENTS.md` (quickplay + WT checklist + pressure defaults).
+
 ```text
 /agent-doctor
 /agent-doctor-json

@@ -25,7 +25,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
-- 🤖 Built-in `/agent-doctor` command for custom agent contract and runtime checks.
+- 🤖 Built-in `/agent-doctor` command for custom agent contract, orchestration policy marker, and runtime checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
