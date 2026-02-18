@@ -34,6 +34,14 @@ Tasks:
 
 See also: `docs/plan/lsp-milestones-changelog.md` for merged PR-by-PR delivery history.
 
+## Post-Roadmap Hardening
+Status: `finished`
+
+Tasks:
+1. Allow guarded `RenameFile` apply path for `/lsp rename` when explicitly opted-in. `finished`
+2. Keep `CreateFile`/`DeleteFile` operations blocked during apply. `finished`
+3. Add helper coverage for renamefile validation and apply behavior in selftest. `finished`
+
 ## Validation
 Status: `finished`
 
