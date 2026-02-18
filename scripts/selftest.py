@@ -3755,6 +3755,62 @@ index 3333333..4444444 100644
             "lsp doctor should emit PASS or WARN result",
         )
 
+        lsp_goto = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "goto-definition",
+                "--symbol",
+                "load_layered_config",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_goto.returncode == 0,
+            f"lsp goto-definition should succeed: {lsp_goto.stderr}",
+        )
+        lsp_goto_report = parse_json_output(lsp_goto.stdout)
+        expect(
+            lsp_goto_report.get("backend") == "text"
+            and isinstance(lsp_goto_report.get("definitions"), list),
+            "lsp goto-definition should report text fallback definitions",
+        )
+
+        lsp_refs = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "find-references",
+                "--symbol",
+                "load_layered_config",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_refs.returncode == 0,
+            f"lsp find-references should succeed: {lsp_refs.stderr}",
+        )
+        lsp_refs_report = parse_json_output(lsp_refs.stdout)
+        expect(
+            lsp_refs_report.get("backend") == "text"
+            and isinstance(lsp_refs_report.get("references"), list),
+            "lsp find-references should report text fallback references",
+        )
+
         cross_language_plan = evaluate_semantic_capability(
             "rename",
             [

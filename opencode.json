@@ -546,6 +546,14 @@
       "description": "Run LSP diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" doctor --json`\nShow only the command output."
     },
+    "lsp-goto-definition": {
+      "description": "Find likely symbol definitions within explicit scope",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" goto-definition $ARGUMENTS`\nShow only the command output."
+    },
+    "lsp-find-references": {
+      "description": "Find symbol references within explicit scope",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" find-references $ARGUMENTS`\nShow only the command output."
+    },
     "checkpoint": {
       "description": "Inspect checkpoint snapshots (list|show|prune|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
