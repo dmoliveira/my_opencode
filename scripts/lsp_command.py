@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import shutil
@@ -450,6 +451,18 @@ def _backend_details(
         else None,
         "error": lsp_error or None,
     }
+
+
+def _build_diff_preview(path: str, before: str, after: str) -> list[str]:
+    return list(
+        difflib.unified_diff(
+            before.splitlines(),
+            after.splitlines(),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            lineterm="",
+        )
+    )
 
 
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
@@ -1182,6 +1195,17 @@ def command_rename(args: list[str]) -> int:
             applied_edits += int(row["edits"])
 
     result = "PASS" if not blockers else "WARN"
+    diff_preview = [
+        {
+            "path": str(row["path"]),
+            "diff": _build_diff_preview(
+                path=str(row["path"]),
+                before=str(row.get("before", "")),
+                after=str(row.get("after", "")),
+            ),
+        }
+        for row in edit_plan
+    ]
     report = {
         "result": result,
         "backend": backend,
@@ -1199,6 +1223,7 @@ def command_rename(args: list[str]) -> int:
         "validation": [
             {"path": row["path"], "validation": row["validation"]} for row in edit_plan
         ],
+        "diff_preview": diff_preview,
         "change_annotations": change_annotations,
         "resource_operations": resource_operations,
         "lsp_error": lsp_error or None,

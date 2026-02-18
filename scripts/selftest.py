@@ -3945,6 +3945,12 @@ index 3333333..4444444 100644
             isinstance(lsp_rename_plan_report.get("backend_details"), dict),
             "lsp rename should include backend details metadata",
         )
+        diff_preview = lsp_rename_plan_report.get("diff_preview")
+        expect(
+            isinstance(diff_preview, list)
+            and (not diff_preview or isinstance(diff_preview[0].get("diff"), list)),
+            "lsp rename planning should include per-file diff preview entries",
+        )
 
         with tempfile.TemporaryDirectory() as lsp_mock_dir:
             lsp_mock_root = Path(lsp_mock_dir)
