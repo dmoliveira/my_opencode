@@ -46,6 +46,15 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
     "release-scribe.md": ["mode: subagent", "write: false", "edit: false"],
 }
 
+REQUIRED_ORCHESTRATION_MARKERS: list[str] = [
+    "## Orchestration quickplay",
+    "### wt flow",
+    "WT execution checklist (use in every run)",
+    "### Memory-aware orchestration (default)",
+    "Pressure mode matrix (deterministic defaults)",
+    "Print `<CONTINUE-LOOP>` as the final line only when at least one task is still pending after the current cycle.",
+]
+
 
 def usage() -> int:
     print("usage: /agent-doctor [run] [--json] | /agent-doctor help")
@@ -174,6 +183,41 @@ def _check_runtime_discovery() -> list[dict[str, Any]]:
     return checks
 
 
+def _check_orchestration_contract(path: Path) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    exists = path.exists() and path.is_file()
+    checks.append(
+        {
+            "name": "orchestration_contract_exists",
+            "ok": exists,
+            "reason": "" if exists else f"missing file: {path}",
+            "path": str(path),
+        }
+    )
+    if not exists:
+        return checks
+
+    content = path.read_text(encoding="utf-8")
+    for marker in REQUIRED_ORCHESTRATION_MARKERS:
+        checks.append(
+            {
+                "name": f"orchestration_contract_{marker}",
+                "ok": marker in content,
+                "reason": "" if marker in content else f"missing marker: {marker}",
+                "path": str(path),
+            }
+        )
+    return checks
+
+
+def _resolve_orchestration_contract_path() -> Path | None:
+    for directory in [REPO_ROOT, *REPO_ROOT.parents]:
+        candidate = directory / "AGENTS.md"
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
 def command_run(*, as_json: bool) -> int:
     checks: list[dict[str, Any]] = []
     if SOURCE_AGENT_DIR.exists() and SOURCE_AGENT_DIR.is_dir():
@@ -189,6 +233,18 @@ def command_run(*, as_json: bool) -> int:
         )
     checks.extend(_check_agent_files(INSTALLED_AGENT_DIR, "installed"))
     checks.extend(_check_runtime_discovery())
+    contract_path = _resolve_orchestration_contract_path()
+    if contract_path is None:
+        checks.append(
+            {
+                "name": "orchestration_contract_exists",
+                "ok": True,
+                "reason": "orchestration contract check skipped: AGENTS.md not found in repo ancestry",
+                "path": str(REPO_ROOT),
+            }
+        )
+    else:
+        checks.extend(_check_orchestration_contract(contract_path))
 
     failed = [check for check in checks if not bool(check.get("ok"))]
     payload = {
