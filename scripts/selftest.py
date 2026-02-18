@@ -115,6 +115,7 @@ START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
+LSP_SCRIPT = REPO_ROOT / "scripts" / "lsp_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
@@ -3715,6 +3716,43 @@ index 3333333..4444444 100644
         expect(
             safe_edit_doctor_report.get("result") == "PASS",
             "safe-edit doctor should report PASS when at least one backend is available",
+        )
+
+        lsp_status = subprocess.run(
+            [sys.executable, str(LSP_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_status.returncode == 0,
+            f"lsp status should succeed: {lsp_status.stderr}",
+        )
+        lsp_status_report = parse_json_output(lsp_status.stdout)
+        expect(
+            isinstance(lsp_status_report.get("servers"), list)
+            and isinstance(lsp_status_report.get("languages"), dict),
+            "lsp status should report servers and language grouping",
+        )
+
+        lsp_doctor = subprocess.run(
+            [sys.executable, str(LSP_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_doctor.returncode == 0,
+            f"lsp doctor should succeed: {lsp_doctor.stderr}",
+        )
+        lsp_doctor_report = parse_json_output(lsp_doctor.stdout)
+        expect(
+            lsp_doctor_report.get("result") in {"PASS", "WARN"},
+            "lsp doctor should emit PASS or WARN result",
         )
 
         cross_language_plan = evaluate_semantic_capability(
@@ -7562,6 +7600,15 @@ version: 1
         expect(
             safe_edit_checks[0].get("ok") is True,
             "doctor safe-edit check should pass",
+        )
+
+        lsp_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "lsp"
+        ]
+        expect(bool(lsp_checks), "doctor summary should include lsp check")
+        expect(
+            lsp_checks[0].get("ok") is True,
+            "doctor lsp check should pass",
         )
 
     print("selftest: PASS")

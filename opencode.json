@@ -534,6 +534,18 @@
       "description": "Run safe-edit diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" doctor --json`\nShow only the command output."
     },
+    "lsp": {
+      "description": "Inspect LSP readiness and diagnostics (status|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "lsp-status": {
+      "description": "Show LSP server readiness in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" status --json`\nShow only the command output."
+    },
+    "lsp-doctor": {
+      "description": "Run LSP diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" doctor --json`\nShow only the command output."
+    },
     "checkpoint": {
       "description": "Inspect checkpoint snapshots (list|show|prune|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
