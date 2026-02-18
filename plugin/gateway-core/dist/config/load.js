@@ -48,6 +48,28 @@ function guardVerbosity(value, fallback) {
     }
     return fallback;
 }
+function severityOperator(value, fallback) {
+    if (value === "any" || value === "all") {
+        return value;
+    }
+    return fallback;
+}
+function nonEmptyLabel(value, fallback) {
+    if (typeof value !== "string") {
+        return fallback;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+}
+function durationThreshold(value, fallback) {
+    if (typeof value !== "string") {
+        return fallback;
+    }
+    const trimmed = value.trim().toLowerCase();
+    return /^(?:\d+)\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/.test(trimmed)
+        ? trimmed
+        : fallback;
+}
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
@@ -346,6 +368,15 @@ export function loadGatewayConfig(raw) {
             guardMarkerMode: markerMode(globalProcessPressureSource.guardMarkerMode, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardMarkerMode),
             guardVerbosity: guardVerbosity(globalProcessPressureSource.guardVerbosity, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.guardVerbosity),
             maxSessionStateEntries: positiveInt(globalProcessPressureSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.maxSessionStateEntries),
+            selfSeverityOperator: severityOperator(globalProcessPressureSource.selfSeverityOperator, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfSeverityOperator),
+            selfHighCpuPct: nonNegativeInt(globalProcessPressureSource.selfHighCpuPct, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfHighCpuPct),
+            selfHighRssMb: nonNegativeInt(globalProcessPressureSource.selfHighRssMb, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfHighRssMb),
+            selfHighElapsed: durationThreshold(globalProcessPressureSource.selfHighElapsed, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfHighElapsed),
+            selfHighLabel: nonEmptyLabel(globalProcessPressureSource.selfHighLabel, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfHighLabel),
+            selfLowLabel: nonEmptyLabel(globalProcessPressureSource.selfLowLabel, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfLowLabel),
+            selfAppendMarker: typeof globalProcessPressureSource.selfAppendMarker === "boolean"
+                ? globalProcessPressureSource.selfAppendMarker
+                : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfAppendMarker,
         },
         pressureEscalationGuard: {
             enabled: typeof pressureEscalationGuardSource.enabled === "boolean"
