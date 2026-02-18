@@ -554,6 +554,10 @@
       "description": "Find symbol references within explicit scope",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" find-references $ARGUMENTS`\nShow only the command output."
     },
+    "lsp-symbols": {
+      "description": "List symbols from a document or workspace scope",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" symbols $ARGUMENTS`\nShow only the command output."
+    },
     "checkpoint": {
       "description": "Inspect checkpoint snapshots (list|show|prune|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."

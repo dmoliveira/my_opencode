@@ -60,7 +60,8 @@ def usage() -> int:
     print(
         "usage: /lsp status [--json] | /lsp doctor [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
-        "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json]"
+        "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
+        "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json]"
     )
     return 2
 
@@ -281,6 +282,57 @@ def _scan_references(
     return results
 
 
+def _symbol_patterns(suffix: str) -> list[re.Pattern[str]]:
+    if suffix == ".py":
+        return [
+            re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+            re.compile(r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b"),
+        ]
+    if suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}:
+        return [
+            re.compile(r"^\s*function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+            re.compile(
+                r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\b"
+            ),
+            re.compile(r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\b"),
+        ]
+    if suffix == ".go":
+        return [
+            re.compile(r"^\s*func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+            re.compile(r"^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)\b"),
+        ]
+    if suffix == ".rs":
+        return [
+            re.compile(r"^\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("),
+            re.compile(
+                r"^\s*(?:pub\s+)?(?:struct|enum|trait|type)\s+([A-Za-z_][A-Za-z0-9_]*)\b"
+            ),
+        ]
+    return []
+
+
+def _extract_symbols(path: Path, root: Path) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    patterns = _symbol_patterns(path.suffix.lower())
+    if not patterns:
+        return results
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for idx, line in enumerate(lines, start=1):
+        for pattern in patterns:
+            matched = pattern.search(line)
+            if matched:
+                results.append(
+                    {
+                        "name": matched.group(1),
+                        "path": str(path.relative_to(root)),
+                        "line": idx,
+                        "text": line.strip(),
+                    }
+                )
+                break
+    return results
+
+
 def _parse_symbol_scope_args(args: list[str]) -> tuple[str, list[str], bool] | None:
     as_json = "--json" in args
     symbol = ""
@@ -368,6 +420,106 @@ def command_find_references(args: list[str]) -> int:
         print(f"references: {len(references)}")
         for row in references[:40]:
             print(f"- {row['path']}:{row['line']} {row['text']}")
+    return 0
+
+
+def command_symbols(args: list[str]) -> int:
+    as_json = "--json" in args
+    view = ""
+    file_value = ""
+    query = ""
+    scope_patterns: list[str] = []
+
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--view":
+            if index + 1 >= len(args):
+                return usage()
+            view = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--file":
+            if index + 1 >= len(args):
+                return usage()
+            file_value = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--query":
+            if index + 1 >= len(args):
+                return usage()
+            query = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--scope":
+            if index + 1 >= len(args):
+                return usage()
+            scope_patterns = _split_scope(args[index + 1])
+            index += 2
+            continue
+        return usage()
+
+    root = Path.cwd()
+    if view == "document":
+        if not file_value:
+            return usage()
+        target = (root / file_value).resolve()
+        if not target.exists() or not target.is_file():
+            payload = {
+                "result": "WARN",
+                "reason_code": "lsp_symbols_file_not_found",
+                "file": file_value,
+                "symbols": [],
+            }
+            if as_json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(f"result: WARN\nfile: {file_value}")
+            return 0
+
+        symbols = _extract_symbols(target, root)
+        report = {
+            "result": "PASS" if symbols else "WARN",
+            "backend": "text",
+            "reason_code": "lsp_text_fallback_used",
+            "view": "document",
+            "file": file_value,
+            "symbols": symbols,
+        }
+    elif view == "workspace":
+        if not query or not scope_patterns:
+            return usage()
+        files = _discover_files(root, scope_patterns)
+        symbols: list[dict[str, Any]] = []
+        for path in files:
+            symbols.extend(_extract_symbols(path, root))
+        lowered = query.lower()
+        filtered = [
+            row for row in symbols if lowered in str(row.get("name", "")).lower()
+        ]
+        report = {
+            "result": "PASS" if filtered else "WARN",
+            "backend": "text",
+            "reason_code": "lsp_text_fallback_used",
+            "view": "workspace",
+            "query": query,
+            "scope": scope_patterns,
+            "scanned_files": len(files),
+            "symbols": filtered,
+        }
+    else:
+        return usage()
+
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"result: {report['result']}")
+        print(f"symbols: {len(report.get('symbols', []))}")
+        for row in report.get("symbols", [])[:30]:
+            print(f"- {row['name']} {row['path']}:{row['line']}")
     return 0
 
 
@@ -484,6 +636,8 @@ def main(argv: list[str]) -> int:
         return command_goto_definition(rest)
     if command == "find-references":
         return command_find_references(rest)
+    if command == "symbols":
+        return command_symbols(rest)
     return usage()
 
 

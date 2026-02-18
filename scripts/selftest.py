@@ -3811,6 +3811,62 @@ index 3333333..4444444 100644
             "lsp find-references should report text fallback references",
         )
 
+        lsp_symbols_document = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "symbols",
+                "--view",
+                "document",
+                "--file",
+                "scripts/config_layering.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_symbols_document.returncode == 0,
+            f"lsp symbols document view should succeed: {lsp_symbols_document.stderr}",
+        )
+        lsp_symbols_document_report = parse_json_output(lsp_symbols_document.stdout)
+        expect(
+            isinstance(lsp_symbols_document_report.get("symbols"), list),
+            "lsp symbols document view should report symbol list",
+        )
+
+        lsp_symbols_workspace = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "symbols",
+                "--view",
+                "workspace",
+                "--query",
+                "load",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_symbols_workspace.returncode == 0,
+            f"lsp symbols workspace view should succeed: {lsp_symbols_workspace.stderr}",
+        )
+        lsp_symbols_workspace_report = parse_json_output(lsp_symbols_workspace.stdout)
+        expect(
+            isinstance(lsp_symbols_workspace_report.get("symbols"), list),
+            "lsp symbols workspace view should report symbol list",
+        )
+
         cross_language_plan = evaluate_semantic_capability(
             "rename",
             [

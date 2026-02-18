@@ -138,6 +138,7 @@ Current scope includes:
 - command module: `scripts/lsp_command.py`
 - diagnostics: `/lsp status --json`, `/lsp doctor --json`
 - scoped navigation helpers: `/lsp goto-definition --symbol <name> --scope <glob[,glob...]> --json`, `/lsp find-references --symbol <name> --scope <glob[,glob...]> --json`
+- symbol index helpers: `/lsp symbols --view document --file <path> --json`, `/lsp symbols --view workspace --query <name> --scope <glob[,glob...]> --json`
 - layered config support via `lsp` object in `.opencode/my_opencode.json` or `~/.config/opencode/my_opencode.json`
 - deterministic precedence from existing layered config merge (`project` overrides `user` overrides bundled defaults)
 
@@ -176,6 +177,8 @@ Examples:
 /lsp doctor --json
 /lsp goto-definition --symbol load_layered_config --scope scripts/*.py --json
 /lsp find-references --symbol load_layered_config --scope scripts/*.py --json
+/lsp symbols --view document --file scripts/config_layering.py --json
+/lsp symbols --view workspace --query load --scope scripts/*.py --json
 ```
 
 ## Checkpoint snapshot baseline

@@ -34,7 +34,7 @@ Value: Medium-High
 
 Tasks:
 1. Add `/lsp goto-definition` and `/lsp find-references`. `finished`
-2. Add `/lsp symbols` for document/workspace lookup. `doing`
+2. Add `/lsp symbols` for document/workspace lookup. `finished`
 3. Add guarded rename flow (`prepare-rename` + `rename`) with safe fallback messaging. `doing`
 4. Add validation and docs for non-interactive usage. `doing`
 
