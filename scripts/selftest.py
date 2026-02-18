@@ -115,6 +115,7 @@ START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
+LSP_SCRIPT = REPO_ROOT / "scripts" / "lsp_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
@@ -3715,6 +3716,215 @@ index 3333333..4444444 100644
         expect(
             safe_edit_doctor_report.get("result") == "PASS",
             "safe-edit doctor should report PASS when at least one backend is available",
+        )
+
+        lsp_status = subprocess.run(
+            [sys.executable, str(LSP_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_status.returncode == 0,
+            f"lsp status should succeed: {lsp_status.stderr}",
+        )
+        lsp_status_report = parse_json_output(lsp_status.stdout)
+        expect(
+            isinstance(lsp_status_report.get("servers"), list)
+            and isinstance(lsp_status_report.get("languages"), dict),
+            "lsp status should report servers and language grouping",
+        )
+
+        lsp_doctor = subprocess.run(
+            [sys.executable, str(LSP_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_doctor.returncode == 0,
+            f"lsp doctor should succeed: {lsp_doctor.stderr}",
+        )
+        lsp_doctor_report = parse_json_output(lsp_doctor.stdout)
+        expect(
+            lsp_doctor_report.get("result") in {"PASS", "WARN"},
+            "lsp doctor should emit PASS or WARN result",
+        )
+
+        lsp_goto = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "goto-definition",
+                "--symbol",
+                "load_layered_config",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_goto.returncode == 0,
+            f"lsp goto-definition should succeed: {lsp_goto.stderr}",
+        )
+        lsp_goto_report = parse_json_output(lsp_goto.stdout)
+        expect(
+            lsp_goto_report.get("backend") == "text"
+            and isinstance(lsp_goto_report.get("definitions"), list),
+            "lsp goto-definition should report text fallback definitions",
+        )
+
+        lsp_refs = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "find-references",
+                "--symbol",
+                "load_layered_config",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_refs.returncode == 0,
+            f"lsp find-references should succeed: {lsp_refs.stderr}",
+        )
+        lsp_refs_report = parse_json_output(lsp_refs.stdout)
+        expect(
+            lsp_refs_report.get("backend") == "text"
+            and isinstance(lsp_refs_report.get("references"), list),
+            "lsp find-references should report text fallback references",
+        )
+
+        lsp_symbols_document = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "symbols",
+                "--view",
+                "document",
+                "--file",
+                "scripts/config_layering.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_symbols_document.returncode == 0,
+            f"lsp symbols document view should succeed: {lsp_symbols_document.stderr}",
+        )
+        lsp_symbols_document_report = parse_json_output(lsp_symbols_document.stdout)
+        expect(
+            isinstance(lsp_symbols_document_report.get("symbols"), list),
+            "lsp symbols document view should report symbol list",
+        )
+
+        lsp_symbols_workspace = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "symbols",
+                "--view",
+                "workspace",
+                "--query",
+                "load",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_symbols_workspace.returncode == 0,
+            f"lsp symbols workspace view should succeed: {lsp_symbols_workspace.stderr}",
+        )
+        lsp_symbols_workspace_report = parse_json_output(lsp_symbols_workspace.stdout)
+        expect(
+            isinstance(lsp_symbols_workspace_report.get("symbols"), list),
+            "lsp symbols workspace view should report symbol list",
+        )
+
+        lsp_prepare_rename = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "prepare-rename",
+                "--symbol",
+                "load_layered_config",
+                "--new-name",
+                "load_cfg",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_prepare_rename.returncode == 0,
+            f"lsp prepare-rename should succeed: {lsp_prepare_rename.stderr}",
+        )
+        lsp_prepare_rename_report = parse_json_output(lsp_prepare_rename.stdout)
+        expect(
+            lsp_prepare_rename_report.get("result") in {"PASS", "WARN"},
+            "lsp prepare-rename should emit PASS or WARN result",
+        )
+
+        lsp_rename_plan = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "rename",
+                "--symbol",
+                "load_layered_config",
+                "--new-name",
+                "load_cfg",
+                "--scope",
+                "scripts/*.py",
+                "--allow-text-fallback",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_rename_plan.returncode == 0,
+            f"lsp rename planning should succeed: {lsp_rename_plan.stderr}",
+        )
+        lsp_rename_plan_report = parse_json_output(lsp_rename_plan.stdout)
+        expect(
+            lsp_rename_plan_report.get("applied") is False
+            and isinstance(lsp_rename_plan_report.get("validation"), list),
+            "lsp rename planning should return validation details without applying",
         )
 
         cross_language_plan = evaluate_semantic_capability(
@@ -7562,6 +7772,15 @@ version: 1
         expect(
             safe_edit_checks[0].get("ok") is True,
             "doctor safe-edit check should pass",
+        )
+
+        lsp_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "lsp"
+        ]
+        expect(bool(lsp_checks), "doctor summary should include lsp check")
+        expect(
+            lsp_checks[0].get("ok") is True,
+            "doctor lsp check should pass",
         )
 
     print("selftest: PASS")

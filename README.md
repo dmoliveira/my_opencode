@@ -24,6 +24,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
+- 🧭 Built-in `/lsp` command for language-server readiness and install diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 🤖 Built-in `/agent-doctor` command for custom agent contract, orchestration policy marker, and runtime checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
@@ -129,6 +130,59 @@ Verification notes:
 - selftest now covers cross-language rename/reference validation samples (`python`, `typescript`, `go`, `rust`).
 - fallback tests cover explicit-scope gating and unsupported-language failure paths.
 - install smoke now exercises `/safe-edit plan` in addition to status/doctor checks.
+
+## LSP readiness baseline
+
+Current scope includes:
+
+- command module: `scripts/lsp_command.py`
+- diagnostics: `/lsp status --json`, `/lsp doctor --json`
+- scoped navigation helpers: `/lsp goto-definition --symbol <name> --scope <glob[,glob...]> --json`, `/lsp find-references --symbol <name> --scope <glob[,glob...]> --json`
+- symbol index helpers: `/lsp symbols --view document --file <path> --json`, `/lsp symbols --view workspace --query <name> --scope <glob[,glob...]> --json`
+- guarded rename helpers: `/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --json`, `/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --allow-text-fallback [--apply] --json`
+- layered config support via `lsp` object in `.opencode/my_opencode.json` or `~/.config/opencode/my_opencode.json`
+- deterministic precedence from existing layered config merge (`project` overrides `user` overrides bundled defaults)
+
+Supported config keys per server entry:
+
+- `command` (array, required)
+- `extensions` (array, required)
+- `priority` (number, optional; higher wins)
+- `disabled` (boolean, optional)
+- `env` (object, optional)
+- `initialization` (object, optional)
+
+Example:
+
+```json
+{
+  "lsp": {
+    "typescript-language-server": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx"],
+      "priority": 10
+    },
+    "pylsp": {
+      "command": ["pylsp"],
+      "extensions": [".py"],
+      "disabled": true
+    }
+  }
+}
+```
+
+Examples:
+
+```text
+/lsp status --json
+/lsp doctor --json
+/lsp goto-definition --symbol load_layered_config --scope scripts/*.py --json
+/lsp find-references --symbol load_layered_config --scope scripts/*.py --json
+/lsp symbols --view document --file scripts/config_layering.py --json
+/lsp symbols --view workspace --query load --scope scripts/*.py --json
+/lsp prepare-rename --symbol load_layered_config --new-name load_cfg --scope scripts/*.py --json
+/lsp rename --symbol load_layered_config --new-name load_cfg --scope scripts/*.py --allow-text-fallback --json
+```
 
 ## Checkpoint snapshot baseline
 
@@ -750,7 +804,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/lsp status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -762,7 +816,7 @@ chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/session_command.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/start_work_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
-chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py ~/.config/opencode/my_opencode/scripts/lsp_command.py
 ```
 
 ## Install wizard flow 🧭
