@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from config_layering import load_layered_config  # type: ignore
+from safe_edit_adapters import validate_changed_references  # type: ignore
 
 
 DEFAULT_LSP_SERVERS: list[dict[str, Any]] = [
@@ -61,7 +62,9 @@ def usage() -> int:
         "usage: /lsp status [--json] | /lsp doctor [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
-        "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json]"
+        "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
+        "/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--json] | "
+        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--apply] [--json]"
     )
     return 2
 
@@ -523,6 +526,181 @@ def command_symbols(args: list[str]) -> int:
     return 0
 
 
+def _parse_rename_args(
+    args: list[str], *, allow_apply_flags: bool
+) -> tuple[str, str, list[str], bool, bool, bool] | None:
+    as_json = "--json" in args
+    allow_text_fallback = "--allow-text-fallback" in args
+    apply_changes = "--apply" in args
+    symbol = ""
+    new_name = ""
+    scope_patterns: list[str] = []
+
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in {"--json", "--allow-text-fallback"}:
+            index += 1
+            continue
+        if token == "--apply" and allow_apply_flags:
+            index += 1
+            continue
+        if token == "--symbol":
+            if index + 1 >= len(args):
+                return None
+            symbol = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--new-name":
+            if index + 1 >= len(args):
+                return None
+            new_name = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--scope":
+            if index + 1 >= len(args):
+                return None
+            scope_patterns = _split_scope(args[index + 1])
+            index += 2
+            continue
+        return None
+
+    if not symbol or not new_name or not scope_patterns:
+        return None
+    return symbol, new_name, scope_patterns, allow_text_fallback, apply_changes, as_json
+
+
+def command_prepare_rename(args: list[str]) -> int:
+    parsed = _parse_rename_args(args, allow_apply_flags=False)
+    if parsed is None:
+        return usage()
+    symbol, new_name, scope_patterns, _, _, as_json = parsed
+
+    root = Path.cwd()
+    files = _discover_files(root, scope_patterns)
+    definitions = _scan_definitions(symbol, files, root)
+    references = _scan_references(symbol, files, root)
+
+    issues: list[str] = []
+    if not references:
+        issues.append("symbol has no references in scope")
+    if len(definitions) == 0:
+        issues.append("symbol definition not found in scope")
+    if len(definitions) > 1:
+        issues.append("symbol definition is ambiguous in scope")
+    if symbol == new_name:
+        issues.append("new name must differ from current symbol")
+
+    report = {
+        "result": "PASS" if not issues else "WARN",
+        "backend": "text",
+        "reason_code": "lsp_text_fallback_used",
+        "symbol": symbol,
+        "new_name": new_name,
+        "scope": scope_patterns,
+        "scanned_files": len(files),
+        "definitions": definitions,
+        "references": len(references),
+        "issues": issues,
+        "can_rename": not issues,
+    }
+
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"result: {report['result']}")
+        print(f"can_rename: {report['can_rename']}")
+        for issue in issues:
+            print(f"- issue: {issue}")
+    return 0
+
+
+def command_rename(args: list[str]) -> int:
+    parsed = _parse_rename_args(args, allow_apply_flags=True)
+    if parsed is None:
+        return usage()
+    symbol, new_name, scope_patterns, allow_text_fallback, apply_changes, as_json = (
+        parsed
+    )
+
+    root = Path.cwd()
+    files = _discover_files(root, scope_patterns)
+    references = _scan_references(symbol, files, root)
+    pattern = re.compile(rf"\b{re.escape(symbol)}\b")
+    edit_plan: list[dict[str, Any]] = []
+
+    for path in files:
+        before = path.read_text(encoding="utf-8", errors="replace")
+        replaced, count = pattern.subn(new_name, before)
+        if count == 0:
+            continue
+        validation = validate_changed_references(before, replaced, symbol, new_name)
+        edit_plan.append(
+            {
+                "path": str(path.relative_to(root)),
+                "edits": count,
+                "validation": validation,
+                "before": before,
+                "after": replaced,
+            }
+        )
+
+    blockers: list[str] = []
+    if not allow_text_fallback:
+        blockers.append("text fallback requires --allow-text-fallback")
+    if not references:
+        blockers.append("symbol has no references in scope")
+    if symbol == new_name:
+        blockers.append("new name must differ from current symbol")
+    for row in edit_plan:
+        if row["validation"].get("result") != "PASS":
+            blockers.append(f"validation failed for {row['path']}")
+
+    applied_files: list[str] = []
+    applied_edits = 0
+    if apply_changes and not blockers:
+        for row in edit_plan:
+            path = root / str(row["path"])
+            path.write_text(str(row["after"]), encoding="utf-8")
+            applied_files.append(str(row["path"]))
+            applied_edits += int(row["edits"])
+
+    result = "PASS" if not blockers else "WARN"
+    report = {
+        "result": result,
+        "backend": "text",
+        "reason_code": "lsp_text_fallback_used",
+        "symbol": symbol,
+        "new_name": new_name,
+        "scope": scope_patterns,
+        "apply_requested": apply_changes,
+        "applied": bool(apply_changes and not blockers),
+        "planned_files": len(edit_plan),
+        "planned_edits": sum(int(row["edits"]) for row in edit_plan),
+        "applied_files": applied_files,
+        "applied_edits": applied_edits,
+        "blockers": sorted(set(blockers)),
+        "validation": [
+            {"path": row["path"], "validation": row["validation"]} for row in edit_plan
+        ],
+    }
+
+    for row in edit_plan:
+        row.pop("before", None)
+        row.pop("after", None)
+
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"result: {report['result']}")
+        print(f"applied: {report['applied']}")
+        print(f"planned_files: {report['planned_files']}")
+        print(f"planned_edits: {report['planned_edits']}")
+        for blocker in report["blockers"]:
+            print(f"- blocker: {blocker}")
+    return 0
+
+
 def _group_by_language(servers: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for server in servers:
@@ -638,6 +816,10 @@ def main(argv: list[str]) -> int:
         return command_find_references(rest)
     if command == "symbols":
         return command_symbols(rest)
+    if command == "prepare-rename":
+        return command_prepare_rename(rest)
+    if command == "rename":
+        return command_rename(rest)
     return usage()
 
 

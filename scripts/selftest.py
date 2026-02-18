@@ -3867,6 +3867,66 @@ index 3333333..4444444 100644
             "lsp symbols workspace view should report symbol list",
         )
 
+        lsp_prepare_rename = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "prepare-rename",
+                "--symbol",
+                "load_layered_config",
+                "--new-name",
+                "load_cfg",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_prepare_rename.returncode == 0,
+            f"lsp prepare-rename should succeed: {lsp_prepare_rename.stderr}",
+        )
+        lsp_prepare_rename_report = parse_json_output(lsp_prepare_rename.stdout)
+        expect(
+            lsp_prepare_rename_report.get("result") in {"PASS", "WARN"},
+            "lsp prepare-rename should emit PASS or WARN result",
+        )
+
+        lsp_rename_plan = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "rename",
+                "--symbol",
+                "load_layered_config",
+                "--new-name",
+                "load_cfg",
+                "--scope",
+                "scripts/*.py",
+                "--allow-text-fallback",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_rename_plan.returncode == 0,
+            f"lsp rename planning should succeed: {lsp_rename_plan.stderr}",
+        )
+        lsp_rename_plan_report = parse_json_output(lsp_rename_plan.stdout)
+        expect(
+            lsp_rename_plan_report.get("applied") is False
+            and isinstance(lsp_rename_plan_report.get("validation"), list),
+            "lsp rename planning should return validation details without applying",
+        )
+
         cross_language_plan = evaluate_semantic_capability(
             "rename",
             [

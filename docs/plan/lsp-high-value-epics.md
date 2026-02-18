@@ -29,14 +29,14 @@ Tasks:
 4. Surface configuration diagnostics in `/lsp doctor`. `finished`
 
 ## Epic E3 (P1): Direct LSP Operations
-Status: `doing` (after E2)
+Status: `finished`
 Value: Medium-High
 
 Tasks:
 1. Add `/lsp goto-definition` and `/lsp find-references`. `finished`
 2. Add `/lsp symbols` for document/workspace lookup. `finished`
-3. Add guarded rename flow (`prepare-rename` + `rename`) with safe fallback messaging. `doing`
-4. Add validation and docs for non-interactive usage. `doing`
+3. Add guarded rename flow (`prepare-rename` + `rename`) with safe fallback messaging. `finished`
+4. Add validation and docs for non-interactive usage. `finished`
 
 ## Execution Order
 1. E1
