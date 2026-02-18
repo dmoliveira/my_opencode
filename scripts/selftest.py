@@ -52,6 +52,7 @@ from safe_edit_adapters import (  # type: ignore
     evaluate_semantic_capability,
     validate_changed_references,
 )
+from lsp_command import _workspace_edit_text_changes  # type: ignore
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
@@ -3925,6 +3926,33 @@ index 3333333..4444444 100644
             lsp_rename_plan_report.get("applied") is False
             and isinstance(lsp_rename_plan_report.get("validation"), list),
             "lsp rename planning should return validation details without applying",
+        )
+
+        workspace_change_map = _workspace_edit_text_changes(
+            {
+                "documentChanges": [
+                    {
+                        "textDocument": {
+                            "uri": "file:///tmp/example.py",
+                            "version": 1,
+                        },
+                        "edits": [
+                            {
+                                "range": {
+                                    "start": {"line": 0, "character": 0},
+                                    "end": {"line": 0, "character": 3},
+                                },
+                                "newText": "foo",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        expect(
+            isinstance(workspace_change_map.get("file:///tmp/example.py"), list)
+            and len(workspace_change_map["file:///tmp/example.py"]) == 1,
+            "lsp workspace edit helper should parse documentChanges text edits",
         )
 
         cross_language_plan = evaluate_semantic_capability(
