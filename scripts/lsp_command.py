@@ -426,6 +426,32 @@ def _edit_plan_from_workspace_edit(
     return plan, resource_operations, used_annotations
 
 
+def _backend_details(
+    *,
+    backend: str,
+    reason_code: str,
+    server: dict[str, Any] | None,
+    attempted_protocol: bool,
+    lsp_error: str,
+) -> dict[str, Any]:
+    return {
+        "backend": backend,
+        "reason_code": reason_code,
+        "attempted_protocol": attempted_protocol,
+        "server_id": str(server.get("id")) if isinstance(server, dict) else None,
+        "server_command": list(server.get("command", []))
+        if isinstance(server, dict)
+        else [],
+        "server_binary": str(server.get("binary"))
+        if isinstance(server, dict)
+        else None,
+        "server_source": str(server.get("source"))
+        if isinstance(server, dict)
+        else None,
+        "error": lsp_error or None,
+    }
+
+
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
     escaped = re.escape(symbol)
     if suffix == ".py":
@@ -585,10 +611,14 @@ def command_goto_definition(args: list[str]) -> int:
     definitions: list[dict[str, Any]] = []
     backend = "text"
     reason_code = "lsp_text_fallback_used"
+    attempted_protocol = False
+    selected_server: dict[str, Any] | None = None
 
     if anchor is not None:
         server = choose_server_for_path(Path(anchor["path"]), servers)
         if server is not None:
+            attempted_protocol = True
+            selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
                     raw_locations = client.goto_definition(
@@ -624,6 +654,13 @@ def command_goto_definition(args: list[str]) -> int:
         "scanned_files": len(files),
         "definitions": definitions,
         "lsp_error": lsp_error or None,
+        "backend_details": _backend_details(
+            backend=backend,
+            reason_code=reason_code,
+            server=selected_server,
+            attempted_protocol=attempted_protocol,
+            lsp_error=lsp_error,
+        ),
     }
 
     if as_json:
@@ -651,10 +688,14 @@ def command_find_references(args: list[str]) -> int:
     references: list[dict[str, Any]] = []
     backend = "text"
     reason_code = "lsp_text_fallback_used"
+    attempted_protocol = False
+    selected_server: dict[str, Any] | None = None
 
     if anchor is not None:
         server = choose_server_for_path(Path(anchor["path"]), servers)
         if server is not None:
+            attempted_protocol = True
+            selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
                     raw_locations = client.find_references(
@@ -690,6 +731,13 @@ def command_find_references(args: list[str]) -> int:
         "scanned_files": len(files),
         "references": references,
         "lsp_error": lsp_error or None,
+        "backend_details": _backend_details(
+            backend=backend,
+            reason_code=reason_code,
+            server=selected_server,
+            attempted_protocol=attempted_protocol,
+            lsp_error=lsp_error,
+        ),
     }
 
     if as_json:
@@ -751,9 +799,17 @@ def command_symbols(args: list[str]) -> int:
         if not target.exists() or not target.is_file():
             payload = {
                 "result": "WARN",
+                "backend": "text",
                 "reason_code": "lsp_symbols_file_not_found",
                 "file": file_value,
                 "symbols": [],
+                "backend_details": _backend_details(
+                    backend="text",
+                    reason_code="lsp_symbols_file_not_found",
+                    server=None,
+                    attempted_protocol=False,
+                    lsp_error="",
+                ),
             }
             if as_json:
                 print(json.dumps(payload, indent=2))
@@ -766,7 +822,11 @@ def command_symbols(args: list[str]) -> int:
         reason_code = "lsp_text_fallback_used"
         lsp_error = ""
         server = choose_server_for_path(target, servers)
+        attempted_protocol = False
+        selected_server: dict[str, Any] | None = None
         if server is not None:
+            attempted_protocol = True
+            selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
                     raw_symbols = client.document_symbols(target)
@@ -812,6 +872,13 @@ def command_symbols(args: list[str]) -> int:
             "file": file_value,
             "symbols": symbols,
             "lsp_error": lsp_error or None,
+            "backend_details": _backend_details(
+                backend=backend,
+                reason_code=reason_code,
+                server=selected_server,
+                attempted_protocol=attempted_protocol,
+                lsp_error=lsp_error,
+            ),
         }
     elif view == "workspace":
         if not query or not scope_patterns:
@@ -829,9 +896,13 @@ def command_symbols(args: list[str]) -> int:
         lsp_error = ""
         workspace_symbols = filtered
         anchor = files[0] if files else None
+        attempted_protocol = False
+        selected_server: dict[str, Any] | None = None
         if anchor is not None:
             server = choose_server_for_path(anchor, servers)
             if server is not None:
+                attempted_protocol = True
+                selected_server = server
                 try:
                     with LspClient(
                         command=list(server["command"]), root=root
@@ -872,6 +943,13 @@ def command_symbols(args: list[str]) -> int:
             "scanned_files": len(files),
             "symbols": workspace_symbols,
             "lsp_error": lsp_error or None,
+            "backend_details": _backend_details(
+                backend=backend,
+                reason_code=reason_code,
+                server=selected_server,
+                attempted_protocol=attempted_protocol,
+                lsp_error=lsp_error,
+            ),
         }
     else:
         return usage()
@@ -944,11 +1022,15 @@ def command_prepare_rename(args: list[str]) -> int:
     backend = "text"
     reason_code = "lsp_text_fallback_used"
     lsp_error = ""
+    attempted_protocol = False
+    selected_server: dict[str, Any] | None = None
 
     anchor = _resolve_symbol_anchor(symbol, files, root)
     if anchor is not None:
         server = choose_server_for_path(Path(anchor["path"]), servers)
         if server is not None:
+            attempted_protocol = True
+            selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
                     prepare_payload = client.prepare_rename(
@@ -985,6 +1067,13 @@ def command_prepare_rename(args: list[str]) -> int:
         "issues": issues,
         "can_rename": not issues,
         "lsp_error": lsp_error or None,
+        "backend_details": _backend_details(
+            backend=backend,
+            reason_code=reason_code,
+            server=selected_server,
+            attempted_protocol=attempted_protocol,
+            lsp_error=lsp_error,
+        ),
     }
 
     if as_json:
@@ -1016,11 +1105,15 @@ def command_rename(args: list[str]) -> int:
     edit_plan: list[dict[str, Any]] = []
     resource_operations: list[dict[str, Any]] = []
     change_annotations: dict[str, dict[str, Any]] = {}
+    attempted_protocol = False
+    selected_server: dict[str, Any] | None = None
 
     anchor = _resolve_symbol_anchor(symbol, files, root)
     if anchor is not None:
         server = choose_server_for_path(Path(anchor["path"]), servers)
         if server is not None:
+            attempted_protocol = True
+            selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
                     workspace_edit = client.rename(
@@ -1109,6 +1202,13 @@ def command_rename(args: list[str]) -> int:
         "change_annotations": change_annotations,
         "resource_operations": resource_operations,
         "lsp_error": lsp_error or None,
+        "backend_details": _backend_details(
+            backend=backend,
+            reason_code=reason_code,
+            server=selected_server,
+            attempted_protocol=attempted_protocol,
+            lsp_error=lsp_error,
+        ),
     }
 
     for row in edit_plan:
@@ -1162,6 +1262,13 @@ def command_status(args: list[str]) -> int:
         "languages": _group_by_language(servers),
         "missing_server_ids": [row["id"] for row in missing],
         "config": config_info,
+        "backend_details": _backend_details(
+            backend="diagnostic",
+            reason_code="status_inventory",
+            server=None,
+            attempted_protocol=False,
+            lsp_error="",
+        ),
     }
 
     if as_json:
@@ -1204,6 +1311,13 @@ def command_doctor(args: list[str]) -> int:
         "problems": problems,
         "servers": servers,
         "config": config_info,
+        "backend_details": _backend_details(
+            backend="diagnostic",
+            reason_code="doctor_inventory",
+            server=None,
+            attempted_protocol=False,
+            lsp_error="",
+        ),
         "quick_fixes": [
             "/lsp status --json",
             "configure lsp.<server>.command and lsp.<server>.extensions in .opencode/my_opencode.json",

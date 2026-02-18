@@ -3739,6 +3739,10 @@ index 3333333..4444444 100644
             and isinstance(lsp_status_report.get("languages"), dict),
             "lsp status should report servers and language grouping",
         )
+        expect(
+            isinstance(lsp_status_report.get("backend_details"), dict),
+            "lsp status should include backend details metadata",
+        )
 
         lsp_doctor = subprocess.run(
             [sys.executable, str(LSP_SCRIPT), "doctor", "--json"],
@@ -3756,6 +3760,10 @@ index 3333333..4444444 100644
         expect(
             lsp_doctor_report.get("result") in {"PASS", "WARN"},
             "lsp doctor should emit PASS or WARN result",
+        )
+        expect(
+            isinstance(lsp_doctor_report.get("backend_details"), dict),
+            "lsp doctor should include backend details metadata",
         )
 
         lsp_goto = subprocess.run(
@@ -3784,6 +3792,10 @@ index 3333333..4444444 100644
             lsp_goto_report.get("backend") in {"lsp", "text"}
             and isinstance(lsp_goto_report.get("definitions"), list),
             "lsp goto-definition should report lsp or text definitions",
+        )
+        expect(
+            isinstance(lsp_goto_report.get("backend_details"), dict),
+            "lsp goto-definition should include backend details metadata",
         )
 
         lsp_refs = subprocess.run(
@@ -3928,6 +3940,10 @@ index 3333333..4444444 100644
             lsp_rename_plan_report.get("applied") is False
             and isinstance(lsp_rename_plan_report.get("validation"), list),
             "lsp rename planning should return validation details without applying",
+        )
+        expect(
+            isinstance(lsp_rename_plan_report.get("backend_details"), dict),
+            "lsp rename should include backend details metadata",
         )
 
         with tempfile.TemporaryDirectory() as lsp_mock_dir:
