@@ -32,6 +32,8 @@ Tasks:
 4. Expose `backend_details` field in `/lsp` JSON outputs (server id/command/path reason). `finished`
 5. Add dry-run diff preview output for `/lsp rename` before `--apply`. `finished`
 
+See also: `docs/plan/lsp-milestones-changelog.md` for merged PR-by-PR delivery history.
+
 ## Validation
 Status: `finished`
 
