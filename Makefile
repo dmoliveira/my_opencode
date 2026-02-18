@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -42,6 +42,10 @@ gateway-doctor: ## Run gateway plugin diagnostics
 
 gateway-turn-watch: ## Stream long-turn alerts from gateway audit
 	python3 scripts/gateway_turn_watch.py --follow --json
+
+gateway-turn-watch-webhook: ## Stream long-turn alerts and POST to WEBHOOK_URL
+	@if [ -z "$(WEBHOOK_URL)" ]; then echo "WEBHOOK_URL is required"; exit 2; fi
+	python3 scripts/gateway_turn_watch.py --follow --json --webhook-url "$(WEBHOOK_URL)"
 
 selftest: ## Run deterministic command self-tests
 	python3 scripts/selftest.py

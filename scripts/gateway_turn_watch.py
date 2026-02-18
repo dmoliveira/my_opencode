@@ -7,6 +7,8 @@ import json
 import os
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Iterable, TextIO
 
@@ -90,6 +92,56 @@ def emit_alert(alert: dict[str, object], *, as_json: bool) -> None:
     )
 
 
+def parse_headers(entries: list[str]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for raw in entries:
+        text = raw.strip()
+        if not text:
+            continue
+        if ":" not in text:
+            continue
+        key, value = text.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        headers[key] = value
+    return headers
+
+
+def send_webhook(
+    alert: dict[str, object],
+    *,
+    webhook_url: str,
+    timeout_s: float,
+    headers: dict[str, str],
+) -> tuple[bool, str]:
+    payload = json.dumps(alert, separators=(",", ":")).encode("utf-8")
+    request_headers = {
+        "content-type": "application/json",
+        "user-agent": "my-opencode-gateway-turn-watch/1.0",
+        **headers,
+    }
+    request = urllib.request.Request(
+        webhook_url,
+        data=payload,
+        method="POST",
+        headers=request_headers,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=max(0.5, timeout_s)) as response:
+            status = int(getattr(response, "status", 200))
+            if 200 <= status < 300:
+                return True, ""
+            return False, f"non-2xx status={status}"
+    except urllib.error.HTTPError as exc:
+        return False, f"http_error status={exc.code}"
+    except urllib.error.URLError as exc:
+        return False, f"url_error reason={exc.reason}"
+    except TimeoutError:
+        return False, "timeout"
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Stream simplified long-turn alerts from gateway event audit JSONL.",
@@ -132,6 +184,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=0,
         help="Minimum elapsed_ms required to emit an alert.",
     )
+    parser.add_argument(
+        "--webhook-url",
+        default="",
+        help="Optional HTTPS endpoint to POST each emitted alert as JSON.",
+    )
+    parser.add_argument(
+        "--webhook-timeout-s",
+        type=float,
+        default=5.0,
+        help="Webhook POST timeout in seconds (default: 5.0).",
+    )
+    parser.add_argument(
+        "--webhook-header",
+        action="append",
+        default=[],
+        help="Extra webhook header in 'Name: Value' form (repeatable).",
+    )
     return parser.parse_args(argv)
 
 
@@ -141,6 +210,8 @@ def main(argv: list[str]) -> int:
     reason_codes = {
         item.strip() for item in args.reason_code if item.strip()
     } or DEFAULT_REASON_CODES
+    webhook_url = str(args.webhook_url or "").strip()
+    webhook_headers = parse_headers(list(args.webhook_header or []))
     if not path.exists() and not args.follow:
         print(f"gateway-turn-watch: audit file not found: {path}", file=sys.stderr)
         return 1
@@ -171,6 +242,19 @@ def main(argv: list[str]) -> int:
             continue
         alert = build_alert(payload, path)
         emit_alert(alert, as_json=bool(args.json))
+        if webhook_url:
+            ok, detail = send_webhook(
+                alert,
+                webhook_url=webhook_url,
+                timeout_s=float(args.webhook_timeout_s),
+                headers=webhook_headers,
+            )
+            if not ok:
+                print(
+                    f"gateway-turn-watch: webhook delivery failed ({detail})",
+                    file=sys.stderr,
+                    flush=True,
+                )
     return 0
 
 
