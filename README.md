@@ -137,6 +137,7 @@ Current scope includes:
 
 - command module: `scripts/lsp_command.py`
 - diagnostics: `/lsp status --json`, `/lsp doctor --json`
+- protocol-first execution using configured language servers (JSON-RPC over stdio) with deterministic text fallback when unavailable
 - scoped navigation helpers: `/lsp goto-definition --symbol <name> --scope <glob[,glob...]> --json`, `/lsp find-references --symbol <name> --scope <glob[,glob...]> --json`
 - symbol index helpers: `/lsp symbols --view document --file <path> --json`, `/lsp symbols --view workspace --query <name> --scope <glob[,glob...]> --json`
 - guarded rename helpers: `/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --json`, `/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --allow-text-fallback [--apply] --json`

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from config_layering import load_layered_config  # type: ignore
+from lsp_rpc_client import LspClient, choose_server_for_path, uri_to_path  # type: ignore
 from safe_edit_adapters import validate_changed_references  # type: ignore
 
 
@@ -221,6 +222,96 @@ def _discover_files(root: Path, patterns: list[str]) -> list[Path]:
     return sorted(seen.values(), key=lambda item: str(item))
 
 
+def _resolve_symbol_anchor(
+    symbol: str, files: list[Path], root: Path
+) -> dict[str, Any] | None:
+    pattern = re.compile(rf"\b{re.escape(symbol)}\b")
+    for path in files:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for index, line in enumerate(lines, start=1):
+            matched = pattern.search(line)
+            if matched:
+                return {
+                    "path": path,
+                    "line": index,
+                    "character": matched.start(),
+                    "path_relative": str(path.relative_to(root)),
+                }
+    return None
+
+
+def _location_payload(item: dict[str, Any], root: Path) -> dict[str, Any] | None:
+    uri = str(item.get("uri") or item.get("targetUri") or "").strip()
+    if not uri:
+        return None
+    path = uri_to_path(uri)
+    if path is None:
+        return None
+    range_payload = item.get("range") or item.get("targetRange")
+    if not isinstance(range_payload, dict):
+        return None
+    start = range_payload.get("start")
+    if not isinstance(start, dict):
+        return None
+    line0 = int(start.get("line", 0))
+    char0 = int(start.get("character", 0))
+    try:
+        relative = str(path.resolve().relative_to(root))
+    except Exception:
+        relative = str(path)
+    return {
+        "path": relative,
+        "line": line0 + 1,
+        "character": char0,
+    }
+
+
+def _offset_for_position(text: str, line0: int, char0: int) -> int:
+    if line0 < 0:
+        return 0
+    lines = text.splitlines(keepends=True)
+    if line0 >= len(lines):
+        return len(text)
+    offset = sum(len(lines[index]) for index in range(line0))
+    line_text = lines[line0]
+    clamped_char = max(0, min(char0, len(line_text)))
+    return offset + clamped_char
+
+
+def _apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
+    normalized: list[dict[str, Any]] = []
+    for edit in edits:
+        range_payload = edit.get("range")
+        if not isinstance(range_payload, dict):
+            continue
+        start = range_payload.get("start")
+        end = range_payload.get("end")
+        if not isinstance(start, dict) or not isinstance(end, dict):
+            continue
+        start_line = int(start.get("line", 0))
+        start_char = int(start.get("character", 0))
+        end_line = int(end.get("line", 0))
+        end_char = int(end.get("character", 0))
+        start_offset = _offset_for_position(text, start_line, start_char)
+        end_offset = _offset_for_position(text, end_line, end_char)
+        normalized.append(
+            {
+                "start": start_offset,
+                "end": end_offset,
+                "new_text": str(edit.get("newText", "")),
+            }
+        )
+    normalized.sort(
+        key=lambda item: (int(item["start"]), int(item["end"])), reverse=True
+    )
+    output = text
+    for edit in normalized:
+        start = int(edit["start"])
+        end = int(edit["end"])
+        output = output[:start] + str(edit["new_text"]) + output[end:]
+    return output
+
+
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
     escaped = re.escape(symbol)
     if suffix == ".py":
@@ -374,15 +465,51 @@ def command_goto_definition(args: list[str]) -> int:
 
     root = Path.cwd()
     files = _discover_files(root, scope_patterns)
-    definitions = _scan_definitions(symbol, files, root)
+    servers, _ = _collect_servers()
+    anchor = _resolve_symbol_anchor(symbol, files, root)
+    lsp_error = ""
+    definitions: list[dict[str, Any]] = []
+    backend = "text"
+    reason_code = "lsp_text_fallback_used"
+
+    if anchor is not None:
+        server = choose_server_for_path(Path(anchor["path"]), servers)
+        if server is not None:
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    raw_locations = client.goto_definition(
+                        path=Path(anchor["path"]),
+                        line0=int(anchor["line"]) - 1,
+                        char0=int(anchor["character"]),
+                    )
+                parsed = [
+                    location
+                    for location in (
+                        _location_payload(item, root)
+                        for item in raw_locations
+                        if isinstance(item, dict)
+                    )
+                    if location is not None
+                ]
+                if parsed:
+                    definitions = parsed
+                    backend = "lsp"
+                    reason_code = "lsp_protocol_success"
+            except Exception as exc:
+                lsp_error = str(exc)
+
+    if not definitions:
+        definitions = _scan_definitions(symbol, files, root)
+
     report = {
         "result": "PASS" if definitions else "WARN",
-        "backend": "text",
-        "reason_code": "lsp_text_fallback_used",
+        "backend": backend,
+        "reason_code": reason_code,
         "symbol": symbol,
         "scope": scope_patterns,
         "scanned_files": len(files),
         "definitions": definitions,
+        "lsp_error": lsp_error or None,
     }
 
     if as_json:
@@ -404,15 +531,51 @@ def command_find_references(args: list[str]) -> int:
 
     root = Path.cwd()
     files = _discover_files(root, scope_patterns)
-    references = _scan_references(symbol, files, root)
+    servers, _ = _collect_servers()
+    anchor = _resolve_symbol_anchor(symbol, files, root)
+    lsp_error = ""
+    references: list[dict[str, Any]] = []
+    backend = "text"
+    reason_code = "lsp_text_fallback_used"
+
+    if anchor is not None:
+        server = choose_server_for_path(Path(anchor["path"]), servers)
+        if server is not None:
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    raw_locations = client.find_references(
+                        path=Path(anchor["path"]),
+                        line0=int(anchor["line"]) - 1,
+                        char0=int(anchor["character"]),
+                    )
+                parsed = [
+                    location
+                    for location in (
+                        _location_payload(item, root)
+                        for item in raw_locations
+                        if isinstance(item, dict)
+                    )
+                    if location is not None
+                ]
+                if parsed:
+                    references = parsed
+                    backend = "lsp"
+                    reason_code = "lsp_protocol_success"
+            except Exception as exc:
+                lsp_error = str(exc)
+
+    if not references:
+        references = _scan_references(symbol, files, root)
+
     report = {
         "result": "PASS" if references else "WARN",
-        "backend": "text",
-        "reason_code": "lsp_text_fallback_used",
+        "backend": backend,
+        "reason_code": reason_code,
         "symbol": symbol,
         "scope": scope_patterns,
         "scanned_files": len(files),
         "references": references,
+        "lsp_error": lsp_error or None,
     }
 
     if as_json:
@@ -466,6 +629,7 @@ def command_symbols(args: list[str]) -> int:
         return usage()
 
     root = Path.cwd()
+    servers, _ = _collect_servers()
     if view == "document":
         if not file_value:
             return usage()
@@ -484,13 +648,56 @@ def command_symbols(args: list[str]) -> int:
             return 0
 
         symbols = _extract_symbols(target, root)
+        backend = "text"
+        reason_code = "lsp_text_fallback_used"
+        lsp_error = ""
+        server = choose_server_for_path(target, servers)
+        if server is not None:
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    raw_symbols = client.document_symbols(target)
+                parsed: list[dict[str, Any]] = []
+                for item in raw_symbols:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name") or "").strip()
+                    if not name:
+                        continue
+                    location = item.get("location")
+                    if isinstance(location, dict):
+                        payload = _location_payload(location, root)
+                        line_value = payload["line"] if payload else 1
+                        path_value = (
+                            payload["path"]
+                            if payload
+                            else str(target.relative_to(root))
+                        )
+                    else:
+                        line_value = 1
+                        path_value = str(target.relative_to(root))
+                    parsed.append(
+                        {
+                            "name": name,
+                            "path": path_value,
+                            "line": line_value,
+                            "text": "",
+                        }
+                    )
+                if parsed:
+                    symbols = parsed
+                    backend = "lsp"
+                    reason_code = "lsp_protocol_success"
+            except Exception as exc:
+                lsp_error = str(exc)
+
         report = {
             "result": "PASS" if symbols else "WARN",
-            "backend": "text",
-            "reason_code": "lsp_text_fallback_used",
+            "backend": backend,
+            "reason_code": reason_code,
             "view": "document",
             "file": file_value,
             "symbols": symbols,
+            "lsp_error": lsp_error or None,
         }
     elif view == "workspace":
         if not query or not scope_patterns:
@@ -503,15 +710,54 @@ def command_symbols(args: list[str]) -> int:
         filtered = [
             row for row in symbols if lowered in str(row.get("name", "")).lower()
         ]
+        backend = "text"
+        reason_code = "lsp_text_fallback_used"
+        lsp_error = ""
+        workspace_symbols = filtered
+        anchor = files[0] if files else None
+        if anchor is not None:
+            server = choose_server_for_path(anchor, servers)
+            if server is not None:
+                try:
+                    with LspClient(
+                        command=list(server["command"]), root=root
+                    ) as client:
+                        raw_symbols = client.workspace_symbols(query)
+                    parsed: list[dict[str, Any]] = []
+                    for item in raw_symbols:
+                        if not isinstance(item, dict):
+                            continue
+                        name = str(item.get("name") or "").strip()
+                        if not name:
+                            continue
+                        payload = _location_payload(item.get("location", {}), root)
+                        if payload is None:
+                            continue
+                        parsed.append(
+                            {
+                                "name": name,
+                                "path": payload["path"],
+                                "line": payload["line"],
+                                "text": "",
+                            }
+                        )
+                    if parsed:
+                        workspace_symbols = parsed
+                        backend = "lsp"
+                        reason_code = "lsp_protocol_success"
+                except Exception as exc:
+                    lsp_error = str(exc)
+
         report = {
-            "result": "PASS" if filtered else "WARN",
-            "backend": "text",
-            "reason_code": "lsp_text_fallback_used",
+            "result": "PASS" if workspace_symbols else "WARN",
+            "backend": backend,
+            "reason_code": reason_code,
             "view": "workspace",
             "query": query,
             "scope": scope_patterns,
             "scanned_files": len(files),
-            "symbols": filtered,
+            "symbols": workspace_symbols,
+            "lsp_error": lsp_error or None,
         }
     else:
         return usage()
@@ -580,6 +826,27 @@ def command_prepare_rename(args: list[str]) -> int:
     files = _discover_files(root, scope_patterns)
     definitions = _scan_definitions(symbol, files, root)
     references = _scan_references(symbol, files, root)
+    servers, _ = _collect_servers()
+    backend = "text"
+    reason_code = "lsp_text_fallback_used"
+    lsp_error = ""
+
+    anchor = _resolve_symbol_anchor(symbol, files, root)
+    if anchor is not None:
+        server = choose_server_for_path(Path(anchor["path"]), servers)
+        if server is not None:
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    prepare_payload = client.prepare_rename(
+                        path=Path(anchor["path"]),
+                        line0=int(anchor["line"]) - 1,
+                        char0=int(anchor["character"]),
+                    )
+                if prepare_payload is not None:
+                    backend = "lsp"
+                    reason_code = "lsp_protocol_success"
+            except Exception as exc:
+                lsp_error = str(exc)
 
     issues: list[str] = []
     if not references:
@@ -593,8 +860,8 @@ def command_prepare_rename(args: list[str]) -> int:
 
     report = {
         "result": "PASS" if not issues else "WARN",
-        "backend": "text",
-        "reason_code": "lsp_text_fallback_used",
+        "backend": backend,
+        "reason_code": reason_code,
         "symbol": symbol,
         "new_name": new_name,
         "scope": scope_patterns,
@@ -603,6 +870,7 @@ def command_prepare_rename(args: list[str]) -> int:
         "references": len(references),
         "issues": issues,
         "can_rename": not issues,
+        "lsp_error": lsp_error or None,
     }
 
     if as_json:
@@ -627,26 +895,88 @@ def command_rename(args: list[str]) -> int:
     files = _discover_files(root, scope_patterns)
     references = _scan_references(symbol, files, root)
     pattern = re.compile(rf"\b{re.escape(symbol)}\b")
+    servers, _ = _collect_servers()
+    backend = "text"
+    reason_code = "lsp_text_fallback_used"
+    lsp_error = ""
     edit_plan: list[dict[str, Any]] = []
 
-    for path in files:
-        before = path.read_text(encoding="utf-8", errors="replace")
-        replaced, count = pattern.subn(new_name, before)
-        if count == 0:
-            continue
-        validation = validate_changed_references(before, replaced, symbol, new_name)
-        edit_plan.append(
-            {
-                "path": str(path.relative_to(root)),
-                "edits": count,
-                "validation": validation,
-                "before": before,
-                "after": replaced,
-            }
-        )
+    anchor = _resolve_symbol_anchor(symbol, files, root)
+    if anchor is not None:
+        server = choose_server_for_path(Path(anchor["path"]), servers)
+        if server is not None:
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    workspace_edit = client.rename(
+                        path=Path(anchor["path"]),
+                        line0=int(anchor["line"]) - 1,
+                        char0=int(anchor["character"]),
+                        new_name=new_name,
+                    )
+                if isinstance(workspace_edit, dict):
+                    changes = workspace_edit.get("changes")
+                    if isinstance(changes, dict):
+                        for uri, edits in changes.items():
+                            if not isinstance(edits, list):
+                                continue
+                            target_path = uri_to_path(str(uri))
+                            if target_path is None:
+                                continue
+                            before = target_path.read_text(
+                                encoding="utf-8", errors="replace"
+                            )
+                            after = _apply_text_edits(
+                                before,
+                                [item for item in edits if isinstance(item, dict)],
+                            )
+                            if before == after:
+                                continue
+                            validation = validate_changed_references(
+                                before, after, symbol, new_name
+                            )
+                            replaced_count = len(
+                                re.findall(rf"\b{re.escape(new_name)}\b", after)
+                            )
+                            try:
+                                relative_path = str(
+                                    target_path.resolve().relative_to(root)
+                                )
+                            except Exception:
+                                relative_path = str(target_path)
+                            edit_plan.append(
+                                {
+                                    "path": relative_path,
+                                    "edits": replaced_count,
+                                    "validation": validation,
+                                    "before": before,
+                                    "after": after,
+                                }
+                            )
+                        if edit_plan:
+                            backend = "lsp"
+                            reason_code = "lsp_protocol_success"
+            except Exception as exc:
+                lsp_error = str(exc)
+
+    if not edit_plan:
+        for path in files:
+            before = path.read_text(encoding="utf-8", errors="replace")
+            replaced, count = pattern.subn(new_name, before)
+            if count == 0:
+                continue
+            validation = validate_changed_references(before, replaced, symbol, new_name)
+            edit_plan.append(
+                {
+                    "path": str(path.relative_to(root)),
+                    "edits": count,
+                    "validation": validation,
+                    "before": before,
+                    "after": replaced,
+                }
+            )
 
     blockers: list[str] = []
-    if not allow_text_fallback:
+    if backend == "text" and not allow_text_fallback:
         blockers.append("text fallback requires --allow-text-fallback")
     if not references:
         blockers.append("symbol has no references in scope")
@@ -668,8 +998,8 @@ def command_rename(args: list[str]) -> int:
     result = "PASS" if not blockers else "WARN"
     report = {
         "result": result,
-        "backend": "text",
-        "reason_code": "lsp_text_fallback_used",
+        "backend": backend,
+        "reason_code": reason_code,
         "symbol": symbol,
         "new_name": new_name,
         "scope": scope_patterns,
@@ -683,6 +1013,7 @@ def command_rename(args: list[str]) -> int:
         "validation": [
             {"path": row["path"], "validation": row["validation"]} for row in edit_plan
         ],
+        "lsp_error": lsp_error or None,
     }
 
     for row in edit_plan:
