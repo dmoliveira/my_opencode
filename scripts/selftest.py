@@ -52,7 +52,11 @@ from safe_edit_adapters import (  # type: ignore
     evaluate_semantic_capability,
     validate_changed_references,
 )
-from lsp_command import _workspace_edit_text_changes  # type: ignore
+from lsp_command import (  # type: ignore
+    _apply_renamefile_operations,
+    _validate_renamefile_operations,
+    _workspace_edit_text_changes,
+)
 from lsp_rpc_client import LspClient  # type: ignore
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
@@ -4087,6 +4091,36 @@ index 3333333..4444444 100644
             is True,
             "lsp workspace edit helper should normalize change annotation policy",
         )
+
+        with tempfile.TemporaryDirectory() as rename_dir:
+            rename_root = Path(rename_dir)
+            source = rename_root / "src.py"
+            target = rename_root / "renamed.py"
+            source.write_text("print('ok')\n", encoding="utf-8")
+            rename_ops = [
+                {
+                    "kind": "renamefile",
+                    "old_uri": source.resolve().as_uri(),
+                    "new_uri": target.resolve().as_uri(),
+                }
+            ]
+            rename_validation_errors = _validate_renamefile_operations(
+                rename_root, rename_ops
+            )
+            expect(
+                rename_validation_errors == [],
+                "renamefile validation should pass for in-repo existing source and empty target",
+            )
+            applied_rename_ops, apply_blockers = _apply_renamefile_operations(
+                rename_root, rename_ops
+            )
+            expect(
+                apply_blockers == []
+                and len(applied_rename_ops) == 1
+                and target.exists()
+                and not source.exists(),
+                "renamefile apply helper should perform safe rename when validation passes",
+            )
 
         cross_language_plan = evaluate_semantic_capability(
             "rename",

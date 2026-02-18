@@ -66,7 +66,7 @@ def usage() -> int:
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
         "/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--json] | "
-        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--apply] [--json]"
+        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--allow-rename-file-ops] [--apply] [--json]"
     )
     return 2
 
@@ -463,6 +463,126 @@ def _build_diff_preview(path: str, before: str, after: str) -> list[str]:
             lineterm="",
         )
     )
+
+
+def _resource_kind(kind: str) -> str:
+    lowered = kind.strip().lower()
+    if lowered in {"rename", "renamefile"}:
+        return "renamefile"
+    if lowered in {"create", "createfile"}:
+        return "createfile"
+    if lowered in {"delete", "deletefile"}:
+        return "deletefile"
+    return lowered
+
+
+def _split_resource_operations(
+    resource_operations: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rename_ops: list[dict[str, Any]] = []
+    blocked_ops: list[dict[str, Any]] = []
+    for operation in resource_operations:
+        kind = _resource_kind(str(operation.get("kind") or ""))
+        normalized = dict(operation)
+        normalized["kind"] = kind
+        if kind == "renamefile":
+            if normalized.get("old_uri") and normalized.get("new_uri"):
+                rename_ops.append(normalized)
+            else:
+                blocked_ops.append(normalized)
+            continue
+        blocked_ops.append(normalized)
+    return rename_ops, blocked_ops
+
+
+def _apply_renamefile_operations(
+    root: Path,
+    operations: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], list[str]]:
+    applied: list[dict[str, str]] = []
+    blockers: list[str] = []
+    prepared: list[tuple[Path, Path]] = []
+    root_resolved = root.resolve()
+    for operation in operations:
+        old_uri = str(operation.get("old_uri") or "")
+        new_uri = str(operation.get("new_uri") or "")
+        old_path = uri_to_path(old_uri)
+        new_path = uri_to_path(new_uri)
+        if old_path is None or new_path is None:
+            blockers.append("renamefile operation has invalid file URI")
+            continue
+        old_resolved = old_path.resolve()
+        new_resolved = new_path.resolve()
+        try:
+            old_resolved.relative_to(root_resolved)
+            new_resolved.relative_to(root_resolved)
+        except Exception:
+            blockers.append("renamefile operation points outside repository root")
+            continue
+        if not old_resolved.exists():
+            blockers.append(f"renamefile source missing: {old_resolved}")
+            continue
+        if new_resolved.exists() and old_resolved != new_resolved:
+            blockers.append(f"renamefile target already exists: {new_resolved}")
+            continue
+        prepared.append((old_resolved, new_resolved))
+
+    if blockers:
+        return [], blockers
+
+    for old_resolved, new_resolved in prepared:
+        new_resolved.parent.mkdir(parents=True, exist_ok=True)
+        old_resolved.rename(new_resolved)
+        applied.append(
+            {
+                "from": str(old_resolved.relative_to(root_resolved)),
+                "to": str(new_resolved.relative_to(root_resolved)),
+            }
+        )
+    return applied, blockers
+
+
+def _validate_renamefile_operations(
+    root: Path,
+    operations: list[dict[str, Any]],
+) -> list[str]:
+    validation_errors: list[str] = []
+    seen_targets: set[str] = set()
+    root_resolved = root.resolve()
+    for operation in operations:
+        old_uri = str(operation.get("old_uri") or "")
+        new_uri = str(operation.get("new_uri") or "")
+        old_path = uri_to_path(old_uri)
+        new_path = uri_to_path(new_uri)
+        if old_path is None or new_path is None:
+            validation_errors.append("renamefile operation has invalid file URI")
+            continue
+        old_resolved = old_path.resolve()
+        new_resolved = new_path.resolve()
+        try:
+            old_resolved.relative_to(root_resolved)
+            new_resolved.relative_to(root_resolved)
+        except Exception:
+            validation_errors.append(
+                "renamefile operation points outside repository root"
+            )
+            continue
+        if not old_resolved.exists():
+            validation_errors.append(f"renamefile source missing: {old_resolved}")
+            continue
+        if new_resolved.exists() and old_resolved != new_resolved:
+            validation_errors.append(
+                f"renamefile target already exists: {new_resolved}"
+            )
+            continue
+        target_key = str(new_resolved)
+        if target_key in seen_targets:
+            validation_errors.append(
+                f"renamefile target collides with another operation: {new_resolved}"
+            )
+            continue
+        seen_targets.add(target_key)
+    return validation_errors
 
 
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
@@ -979,9 +1099,10 @@ def command_symbols(args: list[str]) -> int:
 
 def _parse_rename_args(
     args: list[str], *, allow_apply_flags: bool
-) -> tuple[str, str, list[str], bool, bool, bool] | None:
+) -> tuple[str, str, list[str], bool, bool, bool, bool] | None:
     as_json = "--json" in args
     allow_text_fallback = "--allow-text-fallback" in args
+    allow_rename_file_ops = "--allow-rename-file-ops" in args
     apply_changes = "--apply" in args
     symbol = ""
     new_name = ""
@@ -990,7 +1111,7 @@ def _parse_rename_args(
     index = 0
     while index < len(args):
         token = args[index]
-        if token in {"--json", "--allow-text-fallback"}:
+        if token in {"--json", "--allow-text-fallback", "--allow-rename-file-ops"}:
             index += 1
             continue
         if token == "--apply" and allow_apply_flags:
@@ -1018,14 +1139,22 @@ def _parse_rename_args(
 
     if not symbol or not new_name or not scope_patterns:
         return None
-    return symbol, new_name, scope_patterns, allow_text_fallback, apply_changes, as_json
+    return (
+        symbol,
+        new_name,
+        scope_patterns,
+        allow_text_fallback,
+        allow_rename_file_ops,
+        apply_changes,
+        as_json,
+    )
 
 
 def command_prepare_rename(args: list[str]) -> int:
     parsed = _parse_rename_args(args, allow_apply_flags=False)
     if parsed is None:
         return usage()
-    symbol, new_name, scope_patterns, _, _, as_json = parsed
+    symbol, new_name, scope_patterns, _, _, _, as_json = parsed
 
     root = Path.cwd()
     files = _discover_files(root, scope_patterns)
@@ -1103,9 +1232,15 @@ def command_rename(args: list[str]) -> int:
     parsed = _parse_rename_args(args, allow_apply_flags=True)
     if parsed is None:
         return usage()
-    symbol, new_name, scope_patterns, allow_text_fallback, apply_changes, as_json = (
-        parsed
-    )
+    (
+        symbol,
+        new_name,
+        scope_patterns,
+        allow_text_fallback,
+        allow_rename_file_ops,
+        apply_changes,
+        as_json,
+    ) = parsed
 
     root = Path.cwd()
     files = _discover_files(root, scope_patterns)
@@ -1167,6 +1302,10 @@ def command_rename(args: list[str]) -> int:
                 }
             )
 
+    renamefile_operations, blocked_resource_ops = _split_resource_operations(
+        resource_operations
+    )
+
     blockers: list[str] = []
     if backend == "text" and not allow_text_fallback:
         blockers.append("text fallback requires --allow-text-fallback")
@@ -1174,25 +1313,34 @@ def command_rename(args: list[str]) -> int:
         blockers.append("symbol has no references in scope")
     if symbol == new_name:
         blockers.append("new name must differ from current symbol")
-    if resource_operations:
-        blockers.append("workspace edit includes resource operations; apply is blocked")
+    if blocked_resource_ops:
+        blockers.append("workspace edit includes unsupported resource operations")
+    if renamefile_operations and not allow_rename_file_ops:
+        blockers.append("renamefile operations require --allow-rename-file-ops")
     if any(
         bool(annotation.get("needs_confirmation", False))
         for annotation in change_annotations.values()
     ):
         blockers.append("change annotations require confirmation; apply is blocked")
+    if renamefile_operations:
+        blockers.extend(_validate_renamefile_operations(root, renamefile_operations))
     for row in edit_plan:
         if row["validation"].get("result") != "PASS":
             blockers.append(f"validation failed for {row['path']}")
 
     applied_files: list[str] = []
     applied_edits = 0
+    applied_resource_operations: list[dict[str, str]] = []
     if apply_changes and not blockers:
         for row in edit_plan:
             path = root / str(row["path"])
             path.write_text(str(row["after"]), encoding="utf-8")
             applied_files.append(str(row["path"]))
             applied_edits += int(row["edits"])
+        applied_resource_operations, _ = _apply_renamefile_operations(
+            root=root,
+            operations=renamefile_operations,
+        )
 
     result = "PASS" if not blockers else "WARN"
     diff_preview = [
@@ -1213,18 +1361,22 @@ def command_rename(args: list[str]) -> int:
         "symbol": symbol,
         "new_name": new_name,
         "scope": scope_patterns,
+        "allow_rename_file_ops": allow_rename_file_ops,
         "apply_requested": apply_changes,
         "applied": bool(apply_changes and not blockers),
         "planned_files": len(edit_plan),
         "planned_edits": sum(int(row["edits"]) for row in edit_plan),
         "applied_files": applied_files,
         "applied_edits": applied_edits,
+        "applied_resource_operations": applied_resource_operations,
         "blockers": sorted(set(blockers)),
         "validation": [
             {"path": row["path"], "validation": row["validation"]} for row in edit_plan
         ],
         "diff_preview": diff_preview,
         "change_annotations": change_annotations,
+        "renamefile_operations": renamefile_operations,
+        "blocked_resource_operations": blocked_resource_ops,
         "resource_operations": resource_operations,
         "lsp_error": lsp_error or None,
         "backend_details": _backend_details(
