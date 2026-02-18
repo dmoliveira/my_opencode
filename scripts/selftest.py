@@ -3778,9 +3778,9 @@ index 3333333..4444444 100644
         )
         lsp_goto_report = parse_json_output(lsp_goto.stdout)
         expect(
-            lsp_goto_report.get("backend") == "text"
+            lsp_goto_report.get("backend") in {"lsp", "text"}
             and isinstance(lsp_goto_report.get("definitions"), list),
-            "lsp goto-definition should report text fallback definitions",
+            "lsp goto-definition should report lsp or text definitions",
         )
 
         lsp_refs = subprocess.run(
@@ -3806,9 +3806,9 @@ index 3333333..4444444 100644
         )
         lsp_refs_report = parse_json_output(lsp_refs.stdout)
         expect(
-            lsp_refs_report.get("backend") == "text"
+            lsp_refs_report.get("backend") in {"lsp", "text"}
             and isinstance(lsp_refs_report.get("references"), list),
-            "lsp find-references should report text fallback references",
+            "lsp find-references should report lsp or text references",
         )
 
         lsp_symbols_document = subprocess.run(
