@@ -314,8 +314,9 @@ def _apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
 
 def _workspace_edit_text_changes(
     workspace_edit: dict[str, Any],
-) -> dict[str, list[dict[str, Any]]]:
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     by_uri: dict[str, list[dict[str, Any]]] = {}
+    resource_operations: list[dict[str, Any]] = []
 
     changes = workspace_edit.get("changes")
     if isinstance(changes, dict):
@@ -331,6 +332,24 @@ def _workspace_edit_text_changes(
         for item in document_changes:
             if not isinstance(item, dict):
                 continue
+            kind = str(item.get("kind") or "").strip().lower()
+            if kind in {
+                "rename",
+                "renamefile",
+                "create",
+                "createfile",
+                "delete",
+                "deletefile",
+            }:
+                resource_operations.append(
+                    {
+                        "kind": kind,
+                        "uri": str(item.get("uri") or "").strip() or None,
+                        "old_uri": str(item.get("oldUri") or "").strip() or None,
+                        "new_uri": str(item.get("newUri") or "").strip() or None,
+                    }
+                )
+                continue
             text_document = item.get("textDocument")
             edits = item.get("edits")
             if not isinstance(text_document, dict) or not isinstance(edits, list):
@@ -341,7 +360,7 @@ def _workspace_edit_text_changes(
             bucket = by_uri.setdefault(uri, [])
             bucket.extend(edit for edit in edits if isinstance(edit, dict))
 
-    return by_uri
+    return by_uri, resource_operations
 
 
 def _edit_plan_from_workspace_edit(
@@ -349,9 +368,9 @@ def _edit_plan_from_workspace_edit(
     root: Path,
     symbol: str,
     new_name: str,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     plan: list[dict[str, Any]] = []
-    by_uri = _workspace_edit_text_changes(workspace_edit)
+    by_uri, resource_operations = _workspace_edit_text_changes(workspace_edit)
     for uri, edits in by_uri.items():
         target_path = uri_to_path(str(uri))
         if target_path is None:
@@ -374,7 +393,7 @@ def _edit_plan_from_workspace_edit(
                 "after": after,
             }
         )
-    return plan
+    return plan, resource_operations
 
 
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
@@ -965,6 +984,7 @@ def command_rename(args: list[str]) -> int:
     reason_code = "lsp_text_fallback_used"
     lsp_error = ""
     edit_plan: list[dict[str, Any]] = []
+    resource_operations: list[dict[str, Any]] = []
 
     anchor = _resolve_symbol_anchor(symbol, files, root)
     if anchor is not None:
@@ -979,7 +999,7 @@ def command_rename(args: list[str]) -> int:
                         new_name=new_name,
                     )
                 if isinstance(workspace_edit, dict):
-                    edit_plan = _edit_plan_from_workspace_edit(
+                    edit_plan, resource_operations = _edit_plan_from_workspace_edit(
                         workspace_edit=workspace_edit,
                         root=root,
                         symbol=symbol,
@@ -1015,6 +1035,8 @@ def command_rename(args: list[str]) -> int:
         blockers.append("symbol has no references in scope")
     if symbol == new_name:
         blockers.append("new name must differ from current symbol")
+    if resource_operations:
+        blockers.append("workspace edit includes resource operations; apply is blocked")
     for row in edit_plan:
         if row["validation"].get("result") != "PASS":
             blockers.append(f"validation failed for {row['path']}")
@@ -1046,6 +1068,7 @@ def command_rename(args: list[str]) -> int:
         "validation": [
             {"path": row["path"], "validation": row["validation"]} for row in edit_plan
         ],
+        "resource_operations": resource_operations,
         "lsp_error": lsp_error or None,
     }
 

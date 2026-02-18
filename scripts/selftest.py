@@ -3928,7 +3928,7 @@ index 3333333..4444444 100644
             "lsp rename planning should return validation details without applying",
         )
 
-        workspace_change_map = _workspace_edit_text_changes(
+        workspace_change_map, workspace_ops = _workspace_edit_text_changes(
             {
                 "documentChanges": [
                     {
@@ -3953,6 +3953,30 @@ index 3333333..4444444 100644
             isinstance(workspace_change_map.get("file:///tmp/example.py"), list)
             and len(workspace_change_map["file:///tmp/example.py"]) == 1,
             "lsp workspace edit helper should parse documentChanges text edits",
+        )
+        expect(
+            workspace_ops == [],
+            "lsp workspace edit helper should keep resource operation list empty for pure text edits",
+        )
+
+        _, workspace_resource_ops = _workspace_edit_text_changes(
+            {
+                "documentChanges": [
+                    {
+                        "kind": "rename",
+                        "oldUri": "file:///tmp/old.py",
+                        "newUri": "file:///tmp/new.py",
+                    },
+                    {
+                        "kind": "delete",
+                        "uri": "file:///tmp/obsolete.py",
+                    },
+                ]
+            }
+        )
+        expect(
+            len(workspace_resource_ops) == 2,
+            "lsp workspace edit helper should extract resource operations from documentChanges",
         )
 
         cross_language_plan = evaluate_semantic_capability(
