@@ -44,6 +44,53 @@ test("global-process-pressure appends warning when thresholds are exceeded", asy
   assert.ok(payload.output.output.includes("Global process pressure"))
 })
 
+test("global-process-pressure sends contextual critical notification copy", async () => {
+  const notifications = []
+  const hook = createGlobalProcessPressureHook({
+    directory: process.cwd(),
+    enabled: true,
+    checkCooldownToolCalls: 1,
+    reminderCooldownToolCalls: 1,
+    criticalReminderCooldownToolCalls: 2,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
+    warningContinueSessions: 5,
+    warningOpencodeProcesses: 10,
+    warningMaxRssMb: 1400,
+    criticalMaxRssMb: 10000,
+    autoPauseOnCritical: true,
+    notifyOnCritical: true,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 16,
+    criticalNotifier(title, message) {
+      notifications.push({ title, message })
+      return true
+    },
+    sampler() {
+      return {
+        continueProcessCount: 8,
+        opencodeProcessCount: 12,
+        maxRssMb: 12034.4,
+      }
+    },
+  })
+
+  const payload = {
+    input: { sessionID: "session-global-pressure-notify-context-long-id" },
+    output: { output: "tool result" },
+    directory: process.cwd(),
+  }
+  await hook.event("tool.execute.after", payload)
+
+  assert.equal(notifications.length, 1)
+  assert.equal(notifications[0].title, "OpenCode Memory Guard")
+  assert.ok(notifications[0].message.includes("Critical pressure: RSS 12034 MB"))
+  assert.ok(notifications[0].message.includes("limit 10000 MB"))
+  assert.ok(notifications[0].message.includes("Auto-pause active."))
+})
+
 test("global-process-pressure respects reminder cooldown per session", async () => {
   const hook = createGlobalProcessPressureHook({
     directory: process.cwd(),

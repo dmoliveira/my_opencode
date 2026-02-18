@@ -282,9 +282,9 @@ function sampleProcessPressure(): PressureSample {
   }
 }
 
-function notifyCriticalPressure(message: string): boolean {
+function notifyCriticalPressure(title: string, message: string): boolean {
   if (process.platform === "darwin") {
-    const script = `display notification ${JSON.stringify(message)} with title "OpenCode Context Guard"`
+    const script = `display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}`
     const result = spawnSync("osascript", ["-e", script], {
       stdio: ["ignore", "ignore", "ignore"],
       timeout: 1000,
@@ -292,13 +292,35 @@ function notifyCriticalPressure(message: string): boolean {
     return result.status === 0
   }
   if (process.platform === "linux") {
-    const result = spawnSync("notify-send", ["OpenCode Context Guard", message], {
+    const result = spawnSync("notify-send", [title, message], {
       stdio: ["ignore", "ignore", "ignore"],
       timeout: 1000,
     })
     return result.status === 0
   }
   return false
+}
+
+function shortSessionId(sessionId: string): string {
+  const trimmed = sessionId.trim()
+  if (!trimmed) {
+    return "unknown"
+  }
+  if (trimmed.length <= 14) {
+    return trimmed
+  }
+  return `${trimmed.slice(0, 14)}...`
+}
+
+function buildCriticalNotificationMessage(options: {
+  sessionId: string
+  sample: PressureSample
+  criticalRssMb: number
+  shouldPause: boolean
+}): string {
+  const rss = Number(options.sample.maxRssMb.toFixed(0))
+  const action = options.shouldPause ? "Auto-pause active." : "Auto-pause armed."
+  return `Critical pressure: RSS ${rss} MB (limit ${options.criticalRssMb} MB). session ${shortSessionId(options.sessionId)}. ${action}`
 }
 
 function selfPressureSummary(
@@ -381,12 +403,14 @@ export function createGlobalProcessPressureHook(options: {
   selfLowLabel?: string
   selfAppendMarker?: boolean
   sampler?: () => PressureSample
+  criticalNotifier?: (title: string, message: string) => boolean
 }): GatewayHook {
   const sessionStates = new Map<string, SessionPressureState>()
   let globalToolCalls = 0
   let lastCheckedAtToolCall = 0
   let lastSample: PressureSample | null = null
   const runSample = options.sampler ?? sampleProcessPressure
+  const sendCriticalNotification = options.criticalNotifier ?? notifyCriticalPressure
   const selfSeverityOperator = options.selfSeverityOperator === "all" ? "all" : "any"
   const selfHighCpuPct =
     typeof options.selfHighCpuPct === "number" && Number.isFinite(options.selfHighCpuPct)
@@ -558,8 +582,14 @@ export function createGlobalProcessPressureHook(options: {
           )
         }
         if (options.notifyOnCritical) {
-          const notified = notifyCriticalPressure(
-            `Critical memory pressure (${sample.maxRssMb.toFixed(1)} MB RSS) in session ${sessionId}`,
+          const notified = sendCriticalNotification(
+            "OpenCode Memory Guard",
+            buildCriticalNotificationMessage({
+              sessionId,
+              sample,
+              criticalRssMb: options.criticalMaxRssMb,
+              shouldPause,
+            }),
           )
           writeGatewayEventAudit(directory, {
             hook: "global-process-pressure",
