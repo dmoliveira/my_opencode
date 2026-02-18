@@ -77,7 +77,7 @@ export function createLongTurnWatchdogHook(options: {
   now?: () => number
 }): GatewayHook {
   const states = new Map<string, TurnState>()
-  const now = options.now ?? (() => Date.now())
+  const now = options.now ?? (() : number => Date.now())
 
   return {
     id: "long-turn-watchdog",
