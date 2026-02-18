@@ -67,7 +67,7 @@ test("noninteractive-shell-guard prefixes git commands with non-interactive env"
         noninteractiveShellGuard: {
           enabled: true,
           injectEnvPrefix: true,
-          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "npm_config_yes=true"],
           prefixCommands: ["git"],
           blockedPatterns: [],
         },
@@ -77,13 +77,14 @@ test("noninteractive-shell-guard prefixes git commands with non-interactive env"
     const output = { args: { command: "git status" } }
     await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-noninteractive-2" }, output)
     assert.equal(output.args.command.startsWith("CI=true GIT_TERMINAL_PROMPT=0 git status"), true)
+    assert.equal(output.args.command.includes("npm_config_yes=true"), false)
 
     const prePrefixed = { args: { command: "CI=true git status" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-noninteractive-2" },
       prePrefixed,
     )
-    assert.equal(prePrefixed.args.command, "CI=true git status")
+    assert.equal(prePrefixed.args.command, "GIT_TERMINAL_PROMPT=0 CI=true git status")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
