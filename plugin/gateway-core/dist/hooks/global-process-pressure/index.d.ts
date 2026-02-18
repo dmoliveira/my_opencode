@@ -42,5 +42,6 @@ export declare function createGlobalProcessPressureHook(options: {
     selfLowLabel?: string;
     selfAppendMarker?: boolean;
     sampler?: () => PressureSample;
+    criticalNotifier?: (title: string, message: string) => boolean;
 }): GatewayHook;
 export {};
