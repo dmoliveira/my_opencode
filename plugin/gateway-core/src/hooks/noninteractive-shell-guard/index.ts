@@ -14,26 +14,59 @@ interface ToolBeforePayload {
 }
 
 function shouldPrefixCommand(command: string, prefixes: string[]): boolean {
-  const trimmed = command.trim()
-  if (!trimmed) {
+  const binary = commandBinary(command)
+  if (!binary) {
     return false
   }
-  return prefixes.some((prefix) => new RegExp(`^${prefix}\\b`, "i").test(trimmed))
+  return prefixes.some((prefix) => binary === prefix.toLowerCase())
 }
 
-function hasExistingEnvPrefix(command: string, envPrefixes: string[]): boolean {
-  const trimmed = command.trim()
-  return envPrefixes.some((entry) => {
-    const key = entry.split("=", 1)[0]?.trim()
-    if (!key) {
-      return false
+function envKey(entry: string): string {
+  return entry.split("=", 1)[0]?.trim() ?? ""
+}
+
+function hasEnvAssignment(command: string, key: string): boolean {
+  return new RegExp(`(^|\\s)${key}=`, "i").test(command.trim())
+}
+
+function commandBinary(command: string): string {
+  const tokens = command.trim().split(/\s+/).filter(Boolean)
+  for (const token of tokens) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+      continue
     }
-    return new RegExp(`(^|\\s)${key}=`, "i").test(trimmed)
-  })
+    return token.toLowerCase()
+  }
+  return ""
+}
+
+function allowedEnvKeys(command: string): Set<string> {
+  const binary = commandBinary(command)
+  if (binary === "git" || binary === "gh") {
+    return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE"])
+  }
+  return new Set()
 }
 
 function prefixCommand(command: string, envPrefixes: string[]): string {
-  const assignments = envPrefixes.map((item) => item.trim()).filter(Boolean)
+  const allowlist = allowedEnvKeys(command)
+  const assignments = envPrefixes
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((entry) => {
+      if (allowlist.size === 0) {
+        return true
+      }
+      const key = envKey(entry)
+      return key ? allowlist.has(key) : false
+    })
+    .filter((entry) => {
+      const key = envKey(entry)
+      if (!key) {
+        return false
+      }
+      return !hasEnvAssignment(command, key)
+    })
   if (assignments.length === 0) {
     return command
   }
@@ -115,19 +148,18 @@ export function createNoninteractiveShellGuardHook(options: {
 
       if (
         options.injectEnvPrefix &&
-        shouldPrefixCommand(command, options.prefixCommands) &&
-        !hasExistingEnvPrefix(command, options.envPrefixes)
+        shouldPrefixCommand(command, options.prefixCommands)
       ) {
         const prefixed = prefixCommand(command, options.envPrefixes)
-        if (eventPayload.output?.args) {
+        if (prefixed !== command && eventPayload.output?.args) {
           eventPayload.output.args.command = prefixed
+          writeGatewayEventAudit(directory, {
+            hook: "noninteractive-shell-guard",
+            stage: "state",
+            reason_code: "noninteractive_env_prefixed",
+            session_id: sessionId,
+          })
         }
-        writeGatewayEventAudit(directory, {
-          hook: "noninteractive-shell-guard",
-          stage: "state",
-          reason_code: "noninteractive_env_prefixed",
-          session_id: sessionId,
-        })
       }
 
       const updatedCommand = String(eventPayload.output?.args?.command ?? command).trim()
