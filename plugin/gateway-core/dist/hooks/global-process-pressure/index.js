@@ -1,6 +1,7 @@
 import { execSync, spawnSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
+const SESSION_PRESSURE_MARKER = "[SESSION-PRESSURE]";
 function isOpencodeCommand(command) {
     const lowered = command.trim().toLowerCase();
     if (!lowered) {
@@ -42,45 +43,172 @@ function pruneSessionStates(states, maxEntries) {
         states.delete(oldestKey);
     }
 }
-function sampleProcessPressure() {
-    const stdout = execSync("ps -axo rss=,command=", {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 1200,
-    });
-    let opencodeProcessCount = 0;
-    let continueProcessCount = 0;
-    let maxRssMb = 0;
+function parseElapsedSeconds(raw) {
+    const value = raw.trim();
+    if (!value) {
+        return 0;
+    }
+    let days = 0;
+    let clock = value;
+    if (value.includes("-")) {
+        const parts = value.split("-", 2);
+        days = Number.parseInt(parts[0] ?? "0", 10);
+        clock = parts[1] ?? "";
+    }
+    const clockParts = clock.split(":").map((item) => Number.parseInt(item, 10));
+    if (clockParts.some((item) => !Number.isFinite(item) || item < 0)) {
+        return 0;
+    }
+    let hours = 0;
+    let minutes = 0;
+    let seconds = 0;
+    if (clockParts.length === 3) {
+        ;
+        [hours, minutes, seconds] = clockParts;
+    }
+    else if (clockParts.length === 2) {
+        ;
+        [minutes, seconds] = clockParts;
+    }
+    else if (clockParts.length === 1) {
+        ;
+        [seconds] = clockParts;
+    }
+    return days * 86_400 + hours * 3600 + minutes * 60 + seconds;
+}
+function parseDurationThresholdSeconds(spec) {
+    const normalized = String(spec || "").trim().toLowerCase();
+    const match = normalized.match(/^(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/);
+    if (!match) {
+        return 0;
+    }
+    const value = Number.parseInt(match[1] ?? "0", 10);
+    const unit = match[2] ?? "s";
+    if (!Number.isFinite(value) || value <= 0) {
+        return 0;
+    }
+    if (["s", "sec", "secs", "second", "seconds"].includes(unit)) {
+        return value;
+    }
+    if (["m", "min", "mins", "minute", "minutes"].includes(unit)) {
+        return value * 60;
+    }
+    if (["h", "hr", "hrs", "hour", "hours"].includes(unit)) {
+        return value * 3600;
+    }
+    return value * 86_400;
+}
+function readCwdForPid(pid) {
+    if (!Number.isFinite(pid) || pid <= 0) {
+        return "";
+    }
+    try {
+        const stdout = execSync(`lsof -a -p ${Math.floor(pid)} -d cwd -Fn`, {
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: 1200,
+        });
+        for (const line of stdout.split("\n")) {
+            if (line.startsWith("n")) {
+                return line.slice(1).trim();
+            }
+        }
+    }
+    catch {
+        return "";
+    }
+    return "";
+}
+function parseProcessRows(stdout) {
+    const rows = [];
     for (const rawLine of stdout.split("\n")) {
         const line = rawLine.trim();
         if (!line) {
             continue;
         }
-        const firstSpace = line.indexOf(" ");
-        if (firstSpace <= 0) {
+        const parts = line.split(/\s+/, 7);
+        if (parts.length < 7) {
             continue;
         }
-        const rssToken = line.slice(0, firstSpace).trim();
-        const command = line.slice(firstSpace + 1).trim().toLowerCase();
-        if (!isOpencodeCommand(command)) {
+        const pid = Number.parseInt(parts[0] ?? "0", 10);
+        const ppid = Number.parseInt(parts[1] ?? "0", 10);
+        const cpuPct = Number.parseFloat(parts[2] ?? "0");
+        const memPct = Number.parseFloat(parts[3] ?? "0");
+        const rssKb = Number.parseInt(parts[4] ?? "0", 10);
+        const elapsed = String(parts[5] ?? "");
+        const command = String(parts[6] ?? "").trim();
+        if (!Number.isFinite(pid) || pid <= 0 || !command) {
+            continue;
+        }
+        rows.push({
+            pid,
+            ppid: Number.isFinite(ppid) && ppid > 0 ? ppid : 0,
+            cpuPct: Number.isFinite(cpuPct) ? cpuPct : 0,
+            memPct: Number.isFinite(memPct) ? memPct : 0,
+            rssMb: Number.isFinite(rssKb) && rssKb > 0 ? rssKb / 1024 : 0,
+            elapsed,
+            elapsedSeconds: parseElapsedSeconds(elapsed),
+            command,
+            commandLower: command.toLowerCase(),
+        });
+    }
+    return rows;
+}
+function resolveSelfSessionSample(rows) {
+    const rowByPid = new Map();
+    for (const row of rows) {
+        rowByPid.set(row.pid, row);
+    }
+    const visited = new Set();
+    let candidatePid = process.pid;
+    while (candidatePid > 1 && !visited.has(candidatePid)) {
+        visited.add(candidatePid);
+        const row = rowByPid.get(candidatePid);
+        if (!row) {
+            break;
+        }
+        if (isOpencodeCommand(row.commandLower)) {
+            return {
+                pid: row.pid,
+                cpuPct: row.cpuPct,
+                memPct: row.memPct,
+                rssMb: row.rssMb,
+                elapsed: row.elapsed,
+                elapsedSeconds: row.elapsedSeconds,
+                cwd: readCwdForPid(row.pid),
+            };
+        }
+        candidatePid = row.ppid;
+    }
+    return null;
+}
+function sampleProcessPressure() {
+    const stdout = execSync("ps -axo pid=,ppid=,pcpu=,pmem=,rss=,etime=,command=", {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 1200,
+    });
+    const rows = parseProcessRows(stdout);
+    let opencodeProcessCount = 0;
+    let continueProcessCount = 0;
+    let maxRssMb = 0;
+    for (const row of rows) {
+        if (!isOpencodeCommand(row.commandLower)) {
             continue;
         }
         opencodeProcessCount += 1;
-        if (command.includes("--continue")) {
+        if (row.commandLower.includes("--continue")) {
             continueProcessCount += 1;
         }
-        const rssKb = Number.parseInt(rssToken, 10);
-        if (Number.isFinite(rssKb) && rssKb > 0) {
-            const rssMb = rssKb / 1024;
-            if (rssMb > maxRssMb) {
-                maxRssMb = rssMb;
-            }
+        if (row.rssMb > maxRssMb) {
+            maxRssMb = row.rssMb;
         }
     }
     return {
         opencodeProcessCount,
         continueProcessCount,
         maxRssMb,
+        selfSession: resolveSelfSessionSample(rows),
     };
 }
 function notifyCriticalPressure(message) {
@@ -101,12 +229,66 @@ function notifyCriticalPressure(message) {
     }
     return false;
 }
+function selfPressureSummary(sample, options) {
+    const self = sample.selfSession;
+    const cpuMatch = !!self && options.highCpuPct > 0 && self.cpuPct >= options.highCpuPct;
+    const rssMatch = !!self && options.highRssMb > 0 && self.rssMb >= options.highRssMb;
+    const elapsedMatch = !!self && options.highElapsedSeconds > 0 && self.elapsedSeconds >= options.highElapsedSeconds;
+    const conditions = [
+        options.highCpuPct > 0 ? cpuMatch : null,
+        options.highRssMb > 0 ? rssMatch : null,
+        options.highElapsedSeconds > 0 ? elapsedMatch : null,
+    ].filter((item) => item !== null);
+    const isHigh = conditions.length > 0
+        ? options.operator === "all"
+            ? conditions.every(Boolean)
+            : conditions.some(Boolean)
+        : false;
+    return {
+        label: isHigh ? options.highLabel : options.lowLabel,
+        isHigh,
+        operator: options.operator,
+        cpuMatch,
+        rssMatch,
+        elapsedMatch,
+        elapsedThresholdSeconds: options.highElapsedSeconds,
+        sample: self,
+    };
+}
+function appendSessionPressureMarker(output, summary) {
+    const details = [
+        `${SESSION_PRESSURE_MARKER} PRESSURE=${summary.label}`,
+        `pid=${summary.sample?.pid ?? "unknown"}`,
+        `cpu_pct=${typeof summary.sample?.cpuPct === "number" ? summary.sample.cpuPct.toFixed(1) : "n/a"}`,
+        `rss_mb=${typeof summary.sample?.rssMb === "number" ? summary.sample.rssMb.toFixed(1) : "n/a"}`,
+        `elapsed=${summary.sample?.elapsed || "n/a"}`,
+    ];
+    if (summary.sample?.cwd) {
+        details.push(`cwd=${summary.sample.cwd}`);
+    }
+    return `${output}\n${details.join(" ")}`;
+}
 export function createGlobalProcessPressureHook(options) {
     const sessionStates = new Map();
     let globalToolCalls = 0;
     let lastCheckedAtToolCall = 0;
     let lastSample = null;
     const runSample = options.sampler ?? sampleProcessPressure;
+    const selfSeverityOperator = options.selfSeverityOperator === "all" ? "all" : "any";
+    const selfHighCpuPct = typeof options.selfHighCpuPct === "number" && Number.isFinite(options.selfHighCpuPct)
+        ? Math.max(0, options.selfHighCpuPct)
+        : 100;
+    const selfHighRssMb = typeof options.selfHighRssMb === "number" && Number.isFinite(options.selfHighRssMb)
+        ? Math.max(0, options.selfHighRssMb)
+        : 10_240;
+    const selfHighElapsedSeconds = parseDurationThresholdSeconds(options.selfHighElapsed ?? "5h");
+    const selfHighLabel = typeof options.selfHighLabel === "string" && options.selfHighLabel.trim()
+        ? options.selfHighLabel.trim()
+        : "HIGH";
+    const selfLowLabel = typeof options.selfLowLabel === "string" && options.selfLowLabel.trim()
+        ? options.selfLowLabel.trim()
+        : "LOW";
+    const selfAppendMarker = options.selfAppendMarker !== false;
     return {
         id: "global-process-pressure",
         priority: 275,
@@ -166,6 +348,14 @@ export function createGlobalProcessPressureHook(options) {
             if (!sample) {
                 return;
             }
+            const selfSummary = selfPressureSummary(sample, {
+                operator: selfSeverityOperator,
+                highCpuPct: selfHighCpuPct,
+                highRssMb: selfHighRssMb,
+                highElapsedSeconds: selfHighElapsedSeconds,
+                highLabel: selfHighLabel,
+                lowLabel: selfLowLabel,
+            });
             const warningExceeded = sample.continueProcessCount >= options.warningContinueSessions ||
                 sample.opencodeProcessCount >= options.warningOpencodeProcesses ||
                 sample.maxRssMb >= options.warningMaxRssMb;
@@ -176,6 +366,11 @@ export function createGlobalProcessPressureHook(options) {
                     stage: "skip",
                     reason_code: "global_pressure_below_threshold",
                     session_id: sessionId,
+                    severity: selfSummary.label,
+                    self_pid: selfSummary.sample?.pid ?? null,
+                    self_cpu_pct: selfSummary.sample ? Number(selfSummary.sample.cpuPct.toFixed(1)) : null,
+                    self_rss_mb: selfSummary.sample ? Number(selfSummary.sample.rssMb.toFixed(1)) : null,
+                    self_elapsed_seconds: selfSummary.sample?.elapsedSeconds ?? null,
                 });
                 return;
             }
@@ -193,6 +388,8 @@ export function createGlobalProcessPressureHook(options) {
                         ? "global_pressure_critical_cooldown"
                         : "global_pressure_reminder_cooldown",
                     session_id: sessionId,
+                    severity: selfSummary.label,
+                    self_pid: selfSummary.sample?.pid ?? null,
                 });
                 return;
             }
@@ -223,6 +420,9 @@ export function createGlobalProcessPressureHook(options) {
                     else {
                         eventPayload.output.output = `${outputText}\n\n${prefix} Critical memory pressure detected${shouldEscalate ? " repeatedly" : ""}; ${shouldPause ? "continuation for this session is being auto-paused" : "continuation pause is armed if pressure repeats"}.`;
                     }
+                    if (selfAppendMarker) {
+                        eventPayload.output.output = appendSessionPressureMarker(String(eventPayload.output.output), selfSummary);
+                    }
                 }
                 if (shouldPause) {
                     options.stopGuard?.forceStop(sessionId, "continuation_stopped_critical_memory_pressure");
@@ -236,6 +436,8 @@ export function createGlobalProcessPressureHook(options) {
                             ? "global_process_pressure_critical_notification_sent"
                             : "global_process_pressure_critical_notification_failed",
                         session_id: sessionId,
+                        severity: selfSummary.label,
+                        self_pid: selfSummary.sample?.pid ?? null,
                     });
                 }
                 sessionStates.set(sessionId, {
@@ -259,6 +461,18 @@ export function createGlobalProcessPressureHook(options) {
                     auto_pause: shouldPause,
                     critical_events_in_window: criticalEventsInWindow,
                     critical_escalated: shouldEscalate,
+                    severity: selfSummary.label,
+                    severity_operator: selfSummary.operator,
+                    self_pid: selfSummary.sample?.pid ?? null,
+                    self_cpu_pct: selfSummary.sample ? Number(selfSummary.sample.cpuPct.toFixed(1)) : null,
+                    self_mem_pct: selfSummary.sample ? Number(selfSummary.sample.memPct.toFixed(1)) : null,
+                    self_rss_mb: selfSummary.sample ? Number(selfSummary.sample.rssMb.toFixed(1)) : null,
+                    self_elapsed_seconds: selfSummary.sample?.elapsedSeconds ?? null,
+                    self_elapsed_raw: selfSummary.sample?.elapsed ?? null,
+                    self_cwd: selfSummary.sample?.cwd || null,
+                    self_high_cpu_match: selfSummary.cpuMatch,
+                    self_high_rss_match: selfSummary.rssMatch,
+                    self_high_elapsed_match: selfSummary.elapsedMatch,
                 });
                 return;
             }
@@ -271,6 +485,9 @@ export function createGlobalProcessPressureHook(options) {
                 }
                 else {
                     eventPayload.output.output = `${outputText}\n\n${prefix} Global process pressure is high; memory risk increases with many concurrent sessions.`;
+                }
+                if (selfAppendMarker) {
+                    eventPayload.output.output = appendSessionPressureMarker(String(eventPayload.output.output), selfSummary);
                 }
             }
             sessionStates.set(sessionId, {
@@ -287,6 +504,18 @@ export function createGlobalProcessPressureHook(options) {
                 continue_sessions: sample.continueProcessCount,
                 opencode_processes: sample.opencodeProcessCount,
                 max_rss_mb: Number(sample.maxRssMb.toFixed(1)),
+                severity: selfSummary.label,
+                severity_operator: selfSummary.operator,
+                self_pid: selfSummary.sample?.pid ?? null,
+                self_cpu_pct: selfSummary.sample ? Number(selfSummary.sample.cpuPct.toFixed(1)) : null,
+                self_mem_pct: selfSummary.sample ? Number(selfSummary.sample.memPct.toFixed(1)) : null,
+                self_rss_mb: selfSummary.sample ? Number(selfSummary.sample.rssMb.toFixed(1)) : null,
+                self_elapsed_seconds: selfSummary.sample?.elapsedSeconds ?? null,
+                self_elapsed_raw: selfSummary.sample?.elapsed ?? null,
+                self_cwd: selfSummary.sample?.cwd || null,
+                self_high_cpu_match: selfSummary.cpuMatch,
+                self_high_rss_match: selfSummary.rssMatch,
+                self_high_elapsed_match: selfSummary.elapsedMatch,
             });
         },
     };

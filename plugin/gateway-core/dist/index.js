@@ -165,6 +165,13 @@ function configuredHooks(ctx) {
             guardMarkerMode: cfg.globalProcessPressure.guardMarkerMode,
             guardVerbosity: cfg.globalProcessPressure.guardVerbosity,
             maxSessionStateEntries: cfg.globalProcessPressure.maxSessionStateEntries,
+            selfSeverityOperator: cfg.globalProcessPressure.selfSeverityOperator,
+            selfHighCpuPct: cfg.globalProcessPressure.selfHighCpuPct,
+            selfHighRssMb: cfg.globalProcessPressure.selfHighRssMb,
+            selfHighElapsed: cfg.globalProcessPressure.selfHighElapsed,
+            selfHighLabel: cfg.globalProcessPressure.selfHighLabel,
+            selfLowLabel: cfg.globalProcessPressure.selfLowLabel,
+            selfAppendMarker: cfg.globalProcessPressure.selfAppendMarker,
         }),
         createPressureEscalationGuardHook({
             directory,

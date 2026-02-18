@@ -78,6 +78,13 @@ export interface GlobalProcessPressureConfig {
   guardMarkerMode: "nerd" | "plain" | "both"
   guardVerbosity: "minimal" | "normal" | "debug"
   maxSessionStateEntries: number
+  selfSeverityOperator: "any" | "all"
+  selfHighCpuPct: number
+  selfHighRssMb: number
+  selfHighElapsed: string
+  selfHighLabel: string
+  selfLowLabel: string
+  selfAppendMarker: boolean
 }
 
 // Declares high-pressure escalation guard settings for task/subagent launches.
@@ -643,6 +650,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     guardMarkerMode: "both",
     guardVerbosity: "normal",
     maxSessionStateEntries: 1024,
+    selfSeverityOperator: "any",
+    selfHighCpuPct: 100,
+    selfHighRssMb: 10_240,
+    selfHighElapsed: "5h",
+    selfHighLabel: "HIGH",
+    selfLowLabel: "LOW",
+    selfAppendMarker: true,
   },
   pressureEscalationGuard: {
     enabled: true,

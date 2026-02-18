@@ -277,3 +277,112 @@ test("global-process-pressure supports staged pause ladder", async () => {
   }
   rmSync(directory, { recursive: true, force: true })
 })
+
+
+test("global-process-pressure appends self-session HIGH marker using any-operator", async () => {
+  const hook = createGlobalProcessPressureHook({
+    directory: process.cwd(),
+    enabled: true,
+    checkCooldownToolCalls: 1,
+    reminderCooldownToolCalls: 1,
+    criticalReminderCooldownToolCalls: 2,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
+    warningContinueSessions: 2,
+    warningOpencodeProcesses: 3,
+    warningMaxRssMb: 1400,
+    criticalMaxRssMb: 10240,
+    autoPauseOnCritical: true,
+    notifyOnCritical: false,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 16,
+    selfSeverityOperator: "any",
+    selfHighCpuPct: 100,
+    selfHighRssMb: 10240,
+    selfHighElapsed: "5h",
+    selfHighLabel: "HIGH",
+    selfLowLabel: "LOW",
+    selfAppendMarker: true,
+    sampler() {
+      return {
+        continueProcessCount: 8,
+        opencodeProcessCount: 12,
+        maxRssMb: 1800,
+        selfSession: {
+          pid: 1234,
+          cpuPct: 125,
+          memPct: 1.1,
+          rssMb: 900,
+          elapsed: "00:06:00",
+          elapsedSeconds: 360,
+          cwd: "/tmp/session",
+        },
+      }
+    },
+  })
+
+  const payload = {
+    input: { sessionID: "session-global-pressure-self-any" },
+    output: { output: "tool result" },
+    directory: process.cwd(),
+  }
+  await hook.event("tool.execute.after", payload)
+
+  assert.match(String(payload.output.output), /PRESSURE=HIGH/)
+})
+
+test("global-process-pressure appends LOW marker when all-operator is not satisfied", async () => {
+  const hook = createGlobalProcessPressureHook({
+    directory: process.cwd(),
+    enabled: true,
+    checkCooldownToolCalls: 1,
+    reminderCooldownToolCalls: 1,
+    criticalReminderCooldownToolCalls: 2,
+    criticalEscalationWindowToolCalls: 10,
+    criticalPauseAfterEvents: 1,
+    criticalEscalationAfterEvents: 3,
+    warningContinueSessions: 2,
+    warningOpencodeProcesses: 3,
+    warningMaxRssMb: 1400,
+    criticalMaxRssMb: 10240,
+    autoPauseOnCritical: true,
+    notifyOnCritical: false,
+    guardMarkerMode: "both",
+    guardVerbosity: "normal",
+    maxSessionStateEntries: 16,
+    selfSeverityOperator: "all",
+    selfHighCpuPct: 100,
+    selfHighRssMb: 10240,
+    selfHighElapsed: "5m",
+    selfHighLabel: "HIGH",
+    selfLowLabel: "LOW",
+    selfAppendMarker: true,
+    sampler() {
+      return {
+        continueProcessCount: 8,
+        opencodeProcessCount: 12,
+        maxRssMb: 1800,
+        selfSession: {
+          pid: 4567,
+          cpuPct: 120,
+          memPct: 1.1,
+          rssMb: 700,
+          elapsed: "00:04:00",
+          elapsedSeconds: 240,
+          cwd: "/tmp/session",
+        },
+      }
+    },
+  })
+
+  const payload = {
+    input: { sessionID: "session-global-pressure-self-all" },
+    output: { output: "tool result" },
+    directory: process.cwd(),
+  }
+  await hook.event("tool.execute.after", payload)
+
+  assert.match(String(payload.output.output), /PRESSURE=LOW/)
+})

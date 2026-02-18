@@ -63,6 +63,13 @@ export interface GlobalProcessPressureConfig {
     guardMarkerMode: "nerd" | "plain" | "both";
     guardVerbosity: "minimal" | "normal" | "debug";
     maxSessionStateEntries: number;
+    selfSeverityOperator: "any" | "all";
+    selfHighCpuPct: number;
+    selfHighRssMb: number;
+    selfHighElapsed: string;
+    selfHighLabel: string;
+    selfLowLabel: string;
+    selfAppendMarker: boolean;
 }
 export interface PressureEscalationGuardConfig {
     enabled: boolean;

@@ -128,6 +128,13 @@ export const DEFAULT_GATEWAY_CONFIG = {
         guardMarkerMode: "both",
         guardVerbosity: "normal",
         maxSessionStateEntries: 1024,
+        selfSeverityOperator: "any",
+        selfHighCpuPct: 100,
+        selfHighRssMb: 10_240,
+        selfHighElapsed: "5h",
+        selfHighLabel: "HIGH",
+        selfLowLabel: "LOW",
+        selfAppendMarker: true,
     },
     pressureEscalationGuard: {
         enabled: true,
