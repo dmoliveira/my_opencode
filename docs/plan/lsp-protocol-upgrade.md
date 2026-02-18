@@ -29,7 +29,7 @@ Tasks:
 1. Support `workspaceEdit` resource operations (`RenameFile`, `CreateFile`, `DeleteFile`) in rename planning, with safe blocking when present. `finished`
 2. Support `workspaceEdit.changeAnnotations` + per-edit annotation IDs with safer apply policy. `finished`
 3. Add mock LSP integration test harness for deterministic protocol CI coverage. `finished`
-4. Expose `backend_details` field in `/lsp` JSON outputs (server id/command/path reason). `doing`
+4. Expose `backend_details` field in `/lsp` JSON outputs (server id/command/path reason). `finished`
 5. Add dry-run diff preview output for `/lsp rename` before `--apply`. `doing`
 
 ## Validation
