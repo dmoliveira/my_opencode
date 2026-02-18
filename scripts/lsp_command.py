@@ -312,6 +312,71 @@ def _apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
     return output
 
 
+def _workspace_edit_text_changes(
+    workspace_edit: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    by_uri: dict[str, list[dict[str, Any]]] = {}
+
+    changes = workspace_edit.get("changes")
+    if isinstance(changes, dict):
+        for uri, edits in changes.items():
+            if not isinstance(edits, list):
+                continue
+            key = str(uri)
+            bucket = by_uri.setdefault(key, [])
+            bucket.extend(item for item in edits if isinstance(item, dict))
+
+    document_changes = workspace_edit.get("documentChanges")
+    if isinstance(document_changes, list):
+        for item in document_changes:
+            if not isinstance(item, dict):
+                continue
+            text_document = item.get("textDocument")
+            edits = item.get("edits")
+            if not isinstance(text_document, dict) or not isinstance(edits, list):
+                continue
+            uri = str(text_document.get("uri") or "").strip()
+            if not uri:
+                continue
+            bucket = by_uri.setdefault(uri, [])
+            bucket.extend(edit for edit in edits if isinstance(edit, dict))
+
+    return by_uri
+
+
+def _edit_plan_from_workspace_edit(
+    workspace_edit: dict[str, Any],
+    root: Path,
+    symbol: str,
+    new_name: str,
+) -> list[dict[str, Any]]:
+    plan: list[dict[str, Any]] = []
+    by_uri = _workspace_edit_text_changes(workspace_edit)
+    for uri, edits in by_uri.items():
+        target_path = uri_to_path(str(uri))
+        if target_path is None:
+            continue
+        before = target_path.read_text(encoding="utf-8", errors="replace")
+        after = _apply_text_edits(before, edits)
+        if before == after:
+            continue
+        validation = validate_changed_references(before, after, symbol, new_name)
+        try:
+            relative_path = str(target_path.resolve().relative_to(root))
+        except Exception:
+            relative_path = str(target_path)
+        plan.append(
+            {
+                "path": relative_path,
+                "edits": len(edits),
+                "validation": validation,
+                "before": before,
+                "after": after,
+            }
+        )
+    return plan
+
+
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
     escaped = re.escape(symbol)
     if suffix == ".py":
@@ -914,47 +979,15 @@ def command_rename(args: list[str]) -> int:
                         new_name=new_name,
                     )
                 if isinstance(workspace_edit, dict):
-                    changes = workspace_edit.get("changes")
-                    if isinstance(changes, dict):
-                        for uri, edits in changes.items():
-                            if not isinstance(edits, list):
-                                continue
-                            target_path = uri_to_path(str(uri))
-                            if target_path is None:
-                                continue
-                            before = target_path.read_text(
-                                encoding="utf-8", errors="replace"
-                            )
-                            after = _apply_text_edits(
-                                before,
-                                [item for item in edits if isinstance(item, dict)],
-                            )
-                            if before == after:
-                                continue
-                            validation = validate_changed_references(
-                                before, after, symbol, new_name
-                            )
-                            replaced_count = len(
-                                re.findall(rf"\b{re.escape(new_name)}\b", after)
-                            )
-                            try:
-                                relative_path = str(
-                                    target_path.resolve().relative_to(root)
-                                )
-                            except Exception:
-                                relative_path = str(target_path)
-                            edit_plan.append(
-                                {
-                                    "path": relative_path,
-                                    "edits": replaced_count,
-                                    "validation": validation,
-                                    "before": before,
-                                    "after": after,
-                                }
-                            )
-                        if edit_plan:
-                            backend = "lsp"
-                            reason_code = "lsp_protocol_success"
+                    edit_plan = _edit_plan_from_workspace_edit(
+                        workspace_edit=workspace_edit,
+                        root=root,
+                        symbol=symbol,
+                        new_name=new_name,
+                    )
+                    if edit_plan:
+                        backend = "lsp"
+                        reason_code = "lsp_protocol_success"
             except Exception as exc:
                 lsp_error = str(exc)
 

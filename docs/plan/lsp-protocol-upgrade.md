@@ -14,6 +14,14 @@ Tasks:
 4. Route `/lsp prepare-rename` and `/lsp rename` planning through protocol workspace edits with guarded fallback. `finished`
 5. Preserve existing text fallback behavior and reason codes when protocol path is unavailable. `finished`
 
+## Epic P2: WorkspaceEdit documentChanges Support
+Status: `finished`
+
+Tasks:
+1. Parse `workspaceEdit.documentChanges[*].textDocument.uri` + `edits` for rename planning flows. `finished`
+2. Merge `changes` and `documentChanges` edit streams into one deterministic edit plan. `finished`
+3. Keep existing guardrails (`--allow-text-fallback`, validation, apply mode) unchanged for fallback behavior. `finished`
+
 ## Validation
 Status: `finished`
 
