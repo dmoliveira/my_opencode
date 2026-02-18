@@ -12,10 +12,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "preemptive-compaction",
             "global-process-pressure",
             "long-turn-watchdog",
+            "notify-events",
             "pressure-escalation-guard",
             "session-recovery",
             "delegate-task-retry",
             "validation-evidence-ledger",
+            "mistake-ledger",
             "parallel-opportunity-detector",
             "read-budget-optimizer",
             "adaptive-validation-scheduler",
@@ -87,7 +89,18 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         maxChars: 12000,
         maxLines: 220,
-        tools: ["bash", "Bash", "read", "Read", "grep", "Grep", "webfetch", "WebFetch", "glob", "Glob"],
+        tools: [
+            "bash",
+            "Bash",
+            "read",
+            "Read",
+            "grep",
+            "Grep",
+            "webfetch",
+            "WebFetch",
+            "glob",
+            "Glob",
+        ],
     },
     contextWindowMonitor: {
         enabled: true,
@@ -144,11 +157,29 @@ export const DEFAULT_GATEWAY_CONFIG = {
         maxSessionStateEntries: 1024,
         prefix: "[Turn Watchdog]:",
     },
+    notifyEvents: {
+        enabled: true,
+        cooldownMs: 1200,
+        style: "brief",
+    },
     pressureEscalationGuard: {
         enabled: true,
         maxContinueBeforeBlock: 5,
-        blockedSubagentTypes: ["reviewer", "verifier", "explore", "librarian", "general"],
-        allowPromptPatterns: ["blocker", "critical", "sev0", "sev1", "check failed", "pressure-override"],
+        blockedSubagentTypes: [
+            "reviewer",
+            "verifier",
+            "explore",
+            "librarian",
+            "general",
+        ],
+        allowPromptPatterns: [
+            "blocker",
+            "critical",
+            "sev0",
+            "sev1",
+            "check failed",
+            "pressure-override",
+        ],
     },
     sessionRecovery: {
         enabled: true,
@@ -159,6 +190,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     validationEvidenceLedger: {
         enabled: true,
+    },
+    mistakeLedger: {
+        enabled: true,
+        path: ".opencode/mistake-ledger.jsonl",
     },
     parallelOpportunityDetector: {
         enabled: true,
@@ -227,7 +262,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     agentReservationGuard: {
         enabled: true,
         enforce: false,
-        reservationEnvKeys: ["AGENTMAIL_RESERVATION_ACTIVE", "MY_OPENCODE_FILE_RESERVATION_ACTIVE"],
+        reservationEnvKeys: [
+            "AGENTMAIL_RESERVATION_ACTIVE",
+            "MY_OPENCODE_FILE_RESERVATION_ACTIVE",
+        ],
     },
     subagentQuestionBlocker: {
         enabled: true,
@@ -348,7 +386,14 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     dependencyRiskGuard: {
         enabled: true,
-        lockfilePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "poetry.lock", "uv.lock", "Cargo.lock"],
+        lockfilePatterns: [
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+            "poetry.lock",
+            "uv.lock",
+            "Cargo.lock",
+        ],
         commandPatterns: [
             "\\bnpm\\s+(install|update|uninstall|audit\\s+fix)\\b",
             "\\bpnpm\\s+(install|update|remove|audit)\\b",
@@ -360,7 +405,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     docsDriftGuard: {
         enabled: true,
-        sourcePatterns: ["plugin/gateway-core/src/**", "plugin/gateway-core/package.json"],
+        sourcePatterns: [
+            "plugin/gateway-core/src/**",
+            "plugin/gateway-core/package.json",
+        ],
         docsPatterns: ["README.md", "docs/**", "plugin/gateway-core/**/*.md"],
         blockOnDrift: false,
     },
@@ -420,9 +468,18 @@ export const DEFAULT_GATEWAY_CONFIG = {
     parallelWriterConflictGuard: {
         enabled: true,
         maxConcurrentWriters: 2,
-        writerCountEnvKeys: ["MY_OPENCODE_ACTIVE_WRITERS", "AGENTMAIL_ACTIVE_WRITERS"],
-        reservationPathsEnvKeys: ["MY_OPENCODE_FILE_RESERVATION_PATHS", "AGENTMAIL_RESERVATION_PATHS"],
-        activeReservationPathsEnvKeys: ["MY_OPENCODE_ACTIVE_RESERVATION_PATHS", "AGENTMAIL_ACTIVE_RESERVATION_PATHS"],
+        writerCountEnvKeys: [
+            "MY_OPENCODE_ACTIVE_WRITERS",
+            "AGENTMAIL_ACTIVE_WRITERS",
+        ],
+        reservationPathsEnvKeys: [
+            "MY_OPENCODE_FILE_RESERVATION_PATHS",
+            "AGENTMAIL_RESERVATION_PATHS",
+        ],
+        activeReservationPathsEnvKeys: [
+            "MY_OPENCODE_ACTIVE_RESERVATION_PATHS",
+            "AGENTMAIL_ACTIVE_RESERVATION_PATHS",
+        ],
         enforceReservationCoverage: true,
     },
     secretCommitGuard: {

@@ -38,6 +38,9 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.longTurnWatchdog.reminderCooldownMs, 120000)
   assert.equal(config.longTurnWatchdog.maxSessionStateEntries, 1024)
   assert.equal(config.longTurnWatchdog.prefix, "[Turn Watchdog]:")
+  assert.equal(config.notifyEvents.enabled, true)
+  assert.equal(config.notifyEvents.cooldownMs, 1200)
+  assert.equal(config.notifyEvents.style, "brief")
   assert.equal(config.thinkMode.enabled, true)
   assert.equal(config.thinkingBlockValidator.enabled, true)
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
@@ -137,6 +140,10 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
       maxSessionStateEntries: 0,
       prefix: "   ",
     },
+    notifyEvents: {
+      cooldownMs: -1,
+      style: "invalid",
+    },
     pressureEscalationGuard: {
       maxContinueBeforeBlock: 0,
       blockedSubagentTypes: [],
@@ -206,6 +213,9 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.longTurnWatchdog.reminderCooldownMs, 120000)
   assert.equal(config.longTurnWatchdog.maxSessionStateEntries, 1024)
   assert.equal(config.longTurnWatchdog.prefix, "[Turn Watchdog]:")
+  assert.equal(config.notifyEvents.enabled, true)
+  assert.equal(config.notifyEvents.cooldownMs, 1200)
+  assert.equal(config.notifyEvents.style, "brief")
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
   assert.equal(config.directoryReadmeInjector.maxChars, 4000)
   assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)

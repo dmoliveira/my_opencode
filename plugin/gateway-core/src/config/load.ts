@@ -1,51 +1,59 @@
-import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js"
+import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js";
 
 // Coerces unknown value into a normalized string array.
 function stringList(value: unknown): string[] {
   if (!Array.isArray(value)) {
-    return []
+    return [];
   }
   return value
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
-    .filter((item) => item.length > 0)
+    .filter((item) => item.length > 0);
 }
 
 // Coerces unknown value into a safe non-negative integer fallback.
 function nonNegativeInt(value: unknown, fallback: number): number {
-  const parsed = Number.parseInt(String(value ?? ""), 10)
+  const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback
+    return fallback;
   }
-  return parsed
+  return parsed;
 }
 
 // Coerces unknown value into a safe positive integer fallback.
 function positiveInt(value: unknown, fallback: number): number {
-  const parsed = Number.parseInt(String(value ?? ""), 10)
+  const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback
+    return fallback;
   }
-  return parsed
+  return parsed;
 }
 
 // Coerces unknown value into bounded float fallback.
-function boundedFloat(value: unknown, min: number, max: number, fallback: number): number {
-  const parsed = Number.parseFloat(String(value ?? ""))
+function boundedFloat(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const parsed = Number.parseFloat(String(value ?? ""));
   if (!Number.isFinite(parsed)) {
-    return fallback
+    return fallback;
   }
   if (parsed < min || parsed > max) {
-    return fallback
+    return fallback;
   }
-  return parsed
+  return parsed;
 }
 
-function markerMode(value: unknown, fallback: "nerd" | "plain" | "both"): "nerd" | "plain" | "both" {
+function markerMode(
+  value: unknown,
+  fallback: "nerd" | "plain" | "both",
+): "nerd" | "plain" | "both" {
   if (value === "nerd" || value === "plain" || value === "both") {
-    return value
+    return value;
   }
-  return fallback
+  return fallback;
 }
 
 function guardVerbosity(
@@ -53,326 +61,374 @@ function guardVerbosity(
   fallback: "minimal" | "normal" | "debug",
 ): "minimal" | "normal" | "debug" {
   if (value === "minimal" || value === "normal" || value === "debug") {
-    return value
+    return value;
   }
-  return fallback
+  return fallback;
 }
 
-function severityOperator(value: unknown, fallback: "any" | "all"): "any" | "all" {
+function severityOperator(
+  value: unknown,
+  fallback: "any" | "all",
+): "any" | "all" {
   if (value === "any" || value === "all") {
-    return value
+    return value;
   }
-  return fallback
+  return fallback;
 }
 
 function nonEmptyLabel(value: unknown, fallback: string): string {
   if (typeof value !== "string") {
-    return fallback
+    return fallback;
   }
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : fallback
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 function durationThreshold(value: unknown, fallback: string): string {
   if (typeof value !== "string") {
-    return fallback
+    return fallback;
   }
-  const trimmed = value.trim().toLowerCase()
-  return /^(?:\d+)\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/.test(trimmed)
+  const trimmed = value.trim().toLowerCase();
+  return /^(?:\d+)\s*(?:s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/.test(
+    trimmed,
+  )
     ? trimmed
-    : fallback
+    : fallback;
 }
 
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
-  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}
+  const source =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const hooksSource =
     source.hooks && typeof source.hooks === "object"
       ? (source.hooks as Record<string, unknown>)
-      : {}
+      : {};
   const autopilotSource =
     source.autopilotLoop && typeof source.autopilotLoop === "object"
       ? (source.autopilotLoop as Record<string, unknown>)
-      : {}
+      : {};
   const qualitySource =
     source.quality && typeof source.quality === "object"
       ? (source.quality as Record<string, unknown>)
-      : {}
+      : {};
   const truncatorSource =
     source.toolOutputTruncator && typeof source.toolOutputTruncator === "object"
       ? (source.toolOutputTruncator as Record<string, unknown>)
-      : {}
+      : {};
   const contextWindowSource =
-    source.contextWindowMonitor && typeof source.contextWindowMonitor === "object"
+    source.contextWindowMonitor &&
+    typeof source.contextWindowMonitor === "object"
       ? (source.contextWindowMonitor as Record<string, unknown>)
-      : {}
+      : {};
   const preemptiveCompactionSource =
-    source.preemptiveCompaction && typeof source.preemptiveCompaction === "object"
+    source.preemptiveCompaction &&
+    typeof source.preemptiveCompaction === "object"
       ? (source.preemptiveCompaction as Record<string, unknown>)
-      : {}
+      : {};
   const compactionContextInjectorSource =
-    source.compactionContextInjector && typeof source.compactionContextInjector === "object"
+    source.compactionContextInjector &&
+    typeof source.compactionContextInjector === "object"
       ? (source.compactionContextInjector as Record<string, unknown>)
-      : {}
+      : {};
   const globalProcessPressureSource =
-    source.globalProcessPressure && typeof source.globalProcessPressure === "object"
+    source.globalProcessPressure &&
+    typeof source.globalProcessPressure === "object"
       ? (source.globalProcessPressure as Record<string, unknown>)
-      : {}
+      : {};
   const longTurnWatchdogSource =
     source.longTurnWatchdog && typeof source.longTurnWatchdog === "object"
       ? (source.longTurnWatchdog as Record<string, unknown>)
-      : {}
+      : {};
+  const notifyEventsSource =
+    source.notifyEvents && typeof source.notifyEvents === "object"
+      ? (source.notifyEvents as Record<string, unknown>)
+      : {};
   const pressureEscalationGuardSource =
-    source.pressureEscalationGuard && typeof source.pressureEscalationGuard === "object"
+    source.pressureEscalationGuard &&
+    typeof source.pressureEscalationGuard === "object"
       ? (source.pressureEscalationGuard as Record<string, unknown>)
-      : {}
+      : {};
   const sessionRecoverySource =
     source.sessionRecovery && typeof source.sessionRecovery === "object"
       ? (source.sessionRecovery as Record<string, unknown>)
-      : {}
+      : {};
   const delegateTaskRetrySource =
     source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
       ? (source.delegateTaskRetry as Record<string, unknown>)
-      : {}
+      : {};
   const validationEvidenceLedgerSource =
-    source.validationEvidenceLedger && typeof source.validationEvidenceLedger === "object"
+    source.validationEvidenceLedger &&
+    typeof source.validationEvidenceLedger === "object"
       ? (source.validationEvidenceLedger as Record<string, unknown>)
-      : {}
+      : {};
+  const mistakeLedgerSource =
+    source.mistakeLedger && typeof source.mistakeLedger === "object"
+      ? (source.mistakeLedger as Record<string, unknown>)
+      : {};
   const parallelOpportunitySource =
-    source.parallelOpportunityDetector && typeof source.parallelOpportunityDetector === "object"
+    source.parallelOpportunityDetector &&
+    typeof source.parallelOpportunityDetector === "object"
       ? (source.parallelOpportunityDetector as Record<string, unknown>)
-      : {}
+      : {};
   const readBudgetOptimizerSource =
     source.readBudgetOptimizer && typeof source.readBudgetOptimizer === "object"
       ? (source.readBudgetOptimizer as Record<string, unknown>)
-      : {}
+      : {};
   const adaptiveValidationSchedulerSource =
-    source.adaptiveValidationScheduler && typeof source.adaptiveValidationScheduler === "object"
+    source.adaptiveValidationScheduler &&
+    typeof source.adaptiveValidationScheduler === "object"
       ? (source.adaptiveValidationScheduler as Record<string, unknown>)
-      : {}
+      : {};
   const stopGuardSource =
-    source.stopContinuationGuard && typeof source.stopContinuationGuard === "object"
+    source.stopContinuationGuard &&
+    typeof source.stopContinuationGuard === "object"
       ? (source.stopContinuationGuard as Record<string, unknown>)
-      : {}
+      : {};
   const keywordDetectorSource =
     source.keywordDetector && typeof source.keywordDetector === "object"
       ? (source.keywordDetector as Record<string, unknown>)
-      : {}
+      : {};
   const thinkModeSource =
     source.thinkMode && typeof source.thinkMode === "object"
       ? (source.thinkMode as Record<string, unknown>)
-      : {}
+      : {};
   const thinkingBlockValidatorSource =
-    source.thinkingBlockValidator && typeof source.thinkingBlockValidator === "object"
+    source.thinkingBlockValidator &&
+    typeof source.thinkingBlockValidator === "object"
       ? (source.thinkingBlockValidator as Record<string, unknown>)
-      : {}
+      : {};
   const autoSlashSource =
     source.autoSlashCommand && typeof source.autoSlashCommand === "object"
       ? (source.autoSlashCommand as Record<string, unknown>)
-      : {}
+      : {};
   const rulesInjectorSource =
     source.rulesInjector && typeof source.rulesInjector === "object"
       ? (source.rulesInjector as Record<string, unknown>)
-      : {}
+      : {};
   const directoryAgentsSource =
-    source.directoryAgentsInjector && typeof source.directoryAgentsInjector === "object"
+    source.directoryAgentsInjector &&
+    typeof source.directoryAgentsInjector === "object"
       ? (source.directoryAgentsInjector as Record<string, unknown>)
-      : {}
+      : {};
   const directoryReadmeSource =
-    source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
+    source.directoryReadmeInjector &&
+    typeof source.directoryReadmeInjector === "object"
       ? (source.directoryReadmeInjector as Record<string, unknown>)
-      : {}
+      : {};
   const noninteractiveShellSource =
-    source.noninteractiveShellGuard && typeof source.noninteractiveShellGuard === "object"
+    source.noninteractiveShellGuard &&
+    typeof source.noninteractiveShellGuard === "object"
       ? (source.noninteractiveShellGuard as Record<string, unknown>)
-      : {}
+      : {};
   const writeExistingGuardSource =
-    source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
+    source.writeExistingFileGuard &&
+    typeof source.writeExistingFileGuard === "object"
       ? (source.writeExistingFileGuard as Record<string, unknown>)
-      : {}
+      : {};
   const agentReservationSource =
-    source.agentReservationGuard && typeof source.agentReservationGuard === "object"
+    source.agentReservationGuard &&
+    typeof source.agentReservationGuard === "object"
       ? (source.agentReservationGuard as Record<string, unknown>)
-      : {}
+      : {};
   const subagentQuestionSource =
-    source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
+    source.subagentQuestionBlocker &&
+    typeof source.subagentQuestionBlocker === "object"
       ? (source.subagentQuestionBlocker as Record<string, unknown>)
-      : {}
+      : {};
   const tasksTodowriteSource =
-    source.tasksTodowriteDisabler && typeof source.tasksTodowriteDisabler === "object"
+    source.tasksTodowriteDisabler &&
+    typeof source.tasksTodowriteDisabler === "object"
       ? (source.tasksTodowriteDisabler as Record<string, unknown>)
-      : {}
+      : {};
   const taskResumeInfoSource =
     source.taskResumeInfo && typeof source.taskResumeInfo === "object"
       ? (source.taskResumeInfo as Record<string, unknown>)
-      : {}
+      : {};
   const todoContinuationEnforcerSource =
-    source.todoContinuationEnforcer && typeof source.todoContinuationEnforcer === "object"
+    source.todoContinuationEnforcer &&
+    typeof source.todoContinuationEnforcer === "object"
       ? (source.todoContinuationEnforcer as Record<string, unknown>)
-      : {}
+      : {};
   const compactionTodoPreserverSource =
-    source.compactionTodoPreserver && typeof source.compactionTodoPreserver === "object"
+    source.compactionTodoPreserver &&
+    typeof source.compactionTodoPreserver === "object"
       ? (source.compactionTodoPreserver as Record<string, unknown>)
-      : {}
+      : {};
   const emptyTaskResponseSource =
-    source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
+    source.emptyTaskResponseDetector &&
+    typeof source.emptyTaskResponseDetector === "object"
       ? (source.emptyTaskResponseDetector as Record<string, unknown>)
-      : {}
+      : {};
   const editErrorRecoverySource =
     source.editErrorRecovery && typeof source.editErrorRecovery === "object"
       ? (source.editErrorRecovery as Record<string, unknown>)
-      : {}
+      : {};
   const jsonErrorRecoverySource =
     source.jsonErrorRecovery && typeof source.jsonErrorRecovery === "object"
       ? (source.jsonErrorRecovery as Record<string, unknown>)
-      : {}
+      : {};
   const providerTokenLimitRecoverySource =
-    source.providerTokenLimitRecovery && typeof source.providerTokenLimitRecovery === "object"
+    source.providerTokenLimitRecovery &&
+    typeof source.providerTokenLimitRecovery === "object"
       ? (source.providerTokenLimitRecovery as Record<string, unknown>)
-      : {}
+      : {};
   const hashlineReadEnhancerSource =
-    source.hashlineReadEnhancer && typeof source.hashlineReadEnhancer === "object"
+    source.hashlineReadEnhancer &&
+    typeof source.hashlineReadEnhancer === "object"
       ? (source.hashlineReadEnhancer as Record<string, unknown>)
-      : {}
+      : {};
   const maxStepRecoverySource =
     source.maxStepRecovery && typeof source.maxStepRecovery === "object"
       ? (source.maxStepRecovery as Record<string, unknown>)
-      : {}
+      : {};
   const modeTransitionReminderSource =
-    source.modeTransitionReminder && typeof source.modeTransitionReminder === "object"
+    source.modeTransitionReminder &&
+    typeof source.modeTransitionReminder === "object"
       ? (source.modeTransitionReminder as Record<string, unknown>)
-      : {}
+      : {};
   const todoreadCadenceReminderSource =
-    source.todoreadCadenceReminder && typeof source.todoreadCadenceReminder === "object"
+    source.todoreadCadenceReminder &&
+    typeof source.todoreadCadenceReminder === "object"
       ? (source.todoreadCadenceReminder as Record<string, unknown>)
-      : {}
+      : {};
   const providerRetryBackoffGuidanceSource =
-    source.providerRetryBackoffGuidance && typeof source.providerRetryBackoffGuidance === "object"
+    source.providerRetryBackoffGuidance &&
+    typeof source.providerRetryBackoffGuidance === "object"
       ? (source.providerRetryBackoffGuidance as Record<string, unknown>)
-      : {}
+      : {};
   const providerErrorClassifierSource =
-    source.providerErrorClassifier && typeof source.providerErrorClassifier === "object"
+    source.providerErrorClassifier &&
+    typeof source.providerErrorClassifier === "object"
       ? (source.providerErrorClassifier as Record<string, unknown>)
-      : {}
+      : {};
   const codexHeaderInjectorSource =
     source.codexHeaderInjector && typeof source.codexHeaderInjector === "object"
       ? (source.codexHeaderInjector as Record<string, unknown>)
-      : {}
+      : {};
   const planHandoffReminderSource =
     source.planHandoffReminder && typeof source.planHandoffReminder === "object"
       ? (source.planHandoffReminder as Record<string, unknown>)
-      : {}
+      : {};
   const commentCheckerSource =
     source.commentChecker && typeof source.commentChecker === "object"
       ? (source.commentChecker as Record<string, unknown>)
-      : {}
+      : {};
   const agentUserReminderSource =
     source.agentUserReminder && typeof source.agentUserReminder === "object"
       ? (source.agentUserReminder as Record<string, unknown>)
-      : {}
+      : {};
   const unstableBabysitterSource =
-    source.unstableAgentBabysitter && typeof source.unstableAgentBabysitter === "object"
+    source.unstableAgentBabysitter &&
+    typeof source.unstableAgentBabysitter === "object"
       ? (source.unstableAgentBabysitter as Record<string, unknown>)
-      : {}
+      : {};
   const questionLabelSource =
-    source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
+    source.questionLabelTruncator &&
+    typeof source.questionLabelTruncator === "object"
       ? (source.questionLabelTruncator as Record<string, unknown>)
-      : {}
+      : {};
   const semanticOutputSummarizerSource =
-    source.semanticOutputSummarizer && typeof source.semanticOutputSummarizer === "object"
+    source.semanticOutputSummarizer &&
+    typeof source.semanticOutputSummarizer === "object"
       ? (source.semanticOutputSummarizer as Record<string, unknown>)
-      : {}
+      : {};
   const dangerousCommandSource =
-    source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
+    source.dangerousCommandGuard &&
+    typeof source.dangerousCommandGuard === "object"
       ? (source.dangerousCommandGuard as Record<string, unknown>)
-      : {}
+      : {};
   const secretLeakSource =
     source.secretLeakGuard && typeof source.secretLeakGuard === "object"
       ? (source.secretLeakGuard as Record<string, unknown>)
-      : {}
+      : {};
   const workflowConformanceSource =
-    source.workflowConformanceGuard && typeof source.workflowConformanceGuard === "object"
+    source.workflowConformanceGuard &&
+    typeof source.workflowConformanceGuard === "object"
       ? (source.workflowConformanceGuard as Record<string, unknown>)
-      : {}
+      : {};
   const scopeDriftSource =
     source.scopeDriftGuard && typeof source.scopeDriftGuard === "object"
       ? (source.scopeDriftGuard as Record<string, unknown>)
-      : {}
+      : {};
   const doneProofSource =
     source.doneProofEnforcer && typeof source.doneProofEnforcer === "object"
       ? (source.doneProofEnforcer as Record<string, unknown>)
-      : {}
+      : {};
   const dependencyRiskSource =
     source.dependencyRiskGuard && typeof source.dependencyRiskGuard === "object"
       ? (source.dependencyRiskGuard as Record<string, unknown>)
-      : {}
+      : {};
   const docsDriftSource =
     source.docsDriftGuard && typeof source.docsDriftGuard === "object"
       ? (source.docsDriftGuard as Record<string, unknown>)
-      : {}
+      : {};
   const hookTestParitySource =
     source.hookTestParityGuard && typeof source.hookTestParityGuard === "object"
       ? (source.hookTestParityGuard as Record<string, unknown>)
-      : {}
+      : {};
   const retryBudgetSource =
     source.retryBudgetGuard && typeof source.retryBudgetGuard === "object"
       ? (source.retryBudgetGuard as Record<string, unknown>)
-      : {}
+      : {};
   const staleLoopExpirySource =
-    source.staleLoopExpiryGuard && typeof source.staleLoopExpiryGuard === "object"
+    source.staleLoopExpiryGuard &&
+    typeof source.staleLoopExpiryGuard === "object"
       ? (source.staleLoopExpiryGuard as Record<string, unknown>)
-      : {}
+      : {};
   const branchFreshnessSource =
-    source.branchFreshnessGuard && typeof source.branchFreshnessGuard === "object"
+    source.branchFreshnessGuard &&
+    typeof source.branchFreshnessGuard === "object"
       ? (source.branchFreshnessGuard as Record<string, unknown>)
-      : {}
+      : {};
   const prReadinessSource =
     source.prReadinessGuard && typeof source.prReadinessGuard === "object"
       ? (source.prReadinessGuard as Record<string, unknown>)
-      : {}
+      : {};
   const mergeReadinessSource =
     source.mergeReadinessGuard && typeof source.mergeReadinessGuard === "object"
       ? (source.mergeReadinessGuard as Record<string, unknown>)
-      : {}
+      : {};
   const ghChecksMergeSource =
     source.ghChecksMergeGuard && typeof source.ghChecksMergeGuard === "object"
       ? (source.ghChecksMergeGuard as Record<string, unknown>)
-      : {}
+      : {};
   const postMergeSyncSource =
     source.postMergeSyncGuard && typeof source.postMergeSyncGuard === "object"
       ? (source.postMergeSyncGuard as Record<string, unknown>)
-      : {}
+      : {};
   const parallelWriterConflictSource =
-    source.parallelWriterConflictGuard && typeof source.parallelWriterConflictGuard === "object"
+    source.parallelWriterConflictGuard &&
+    typeof source.parallelWriterConflictGuard === "object"
       ? (source.parallelWriterConflictGuard as Record<string, unknown>)
-      : {}
+      : {};
   const secretCommitSource =
     source.secretCommitGuard && typeof source.secretCommitGuard === "object"
       ? (source.secretCommitGuard as Record<string, unknown>)
-      : {}
+      : {};
   const prBodyEvidenceSource =
     source.prBodyEvidenceGuard && typeof source.prBodyEvidenceGuard === "object"
       ? (source.prBodyEvidenceGuard as Record<string, unknown>)
-      : {}
+      : {};
   const tsSource =
     qualitySource.ts && typeof qualitySource.ts === "object"
       ? (qualitySource.ts as Record<string, unknown>)
-      : {}
+      : {};
   const pySource =
     qualitySource.py && typeof qualitySource.py === "object"
       ? (qualitySource.py as Record<string, unknown>)
-      : {}
+      : {};
 
   const completionMode =
-    autopilotSource.completionMode === "objective" ? "objective" : "promise"
+    autopilotSource.completionMode === "objective" ? "objective" : "promise";
   const qualityProfile =
     qualitySource.profile === "off" || qualitySource.profile === "strict"
       ? qualitySource.profile
-      : "fast"
+      : "fast";
   const truncatorTools =
     truncatorSource.tools === undefined
       ? DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.tools
-      : stringList(truncatorSource.tools)
+      : stringList(truncatorSource.tools);
 
   return {
     hooks: {
@@ -519,11 +575,13 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       criticalReminderCooldownToolCalls: positiveInt(
         globalProcessPressureSource.criticalReminderCooldownToolCalls,
-        DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalReminderCooldownToolCalls,
+        DEFAULT_GATEWAY_CONFIG.globalProcessPressure
+          .criticalReminderCooldownToolCalls,
       ),
       criticalEscalationWindowToolCalls: positiveInt(
         globalProcessPressureSource.criticalEscalationWindowToolCalls,
-        DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalEscalationWindowToolCalls,
+        DEFAULT_GATEWAY_CONFIG.globalProcessPressure
+          .criticalEscalationWindowToolCalls,
       ),
       criticalPauseAfterEvents: positiveInt(
         globalProcessPressureSource.criticalPauseAfterEvents,
@@ -531,7 +589,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       criticalEscalationAfterEvents: positiveInt(
         globalProcessPressureSource.criticalEscalationAfterEvents,
-        DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalEscalationAfterEvents,
+        DEFAULT_GATEWAY_CONFIG.globalProcessPressure
+          .criticalEscalationAfterEvents,
       ),
       warningContinueSessions: positiveInt(
         globalProcessPressureSource.warningContinueSessions,
@@ -616,9 +675,24 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.maxSessionStateEntries,
       ),
       prefix:
-        typeof longTurnWatchdogSource.prefix === "string" && longTurnWatchdogSource.prefix.trim().length > 0
+        typeof longTurnWatchdogSource.prefix === "string" &&
+        longTurnWatchdogSource.prefix.trim().length > 0
           ? longTurnWatchdogSource.prefix.trim()
           : DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.prefix,
+    },
+    notifyEvents: {
+      enabled:
+        typeof notifyEventsSource.enabled === "boolean"
+          ? notifyEventsSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.notifyEvents.enabled,
+      cooldownMs: nonNegativeInt(
+        notifyEventsSource.cooldownMs,
+        DEFAULT_GATEWAY_CONFIG.notifyEvents.cooldownMs,
+      ),
+      style:
+        notifyEventsSource.style === "detailed"
+          ? "detailed"
+          : DEFAULT_GATEWAY_CONFIG.notifyEvents.style,
     },
     pressureEscalationGuard: {
       enabled:
@@ -630,7 +704,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.maxContinueBeforeBlock,
       ),
       blockedSubagentTypes:
-        stringList(pressureEscalationGuardSource.blockedSubagentTypes).length > 0
+        stringList(pressureEscalationGuardSource.blockedSubagentTypes).length >
+        0
           ? stringList(pressureEscalationGuardSource.blockedSubagentTypes)
           : DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.blockedSubagentTypes,
       allowPromptPatterns:
@@ -660,6 +735,17 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? validationEvidenceLedgerSource.enabled
           : DEFAULT_GATEWAY_CONFIG.validationEvidenceLedger.enabled,
     },
+    mistakeLedger: {
+      enabled:
+        typeof mistakeLedgerSource.enabled === "boolean"
+          ? mistakeLedgerSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.mistakeLedger.enabled,
+      path:
+        typeof mistakeLedgerSource.path === "string" &&
+        mistakeLedgerSource.path.trim().length > 0
+          ? mistakeLedgerSource.path.trim()
+          : DEFAULT_GATEWAY_CONFIG.mistakeLedger.path,
+    },
     parallelOpportunityDetector: {
       enabled:
         typeof parallelOpportunitySource.enabled === "boolean"
@@ -687,7 +773,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           : DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler.enabled,
       reminderEditThreshold: nonNegativeInt(
         adaptiveValidationSchedulerSource.reminderEditThreshold,
-        DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler.reminderEditThreshold,
+        DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler
+          .reminderEditThreshold,
       ),
     },
     stopContinuationGuard: {
@@ -988,7 +1075,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? secretLeakSource.enabled
           : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.enabled,
       redactionToken:
-        typeof secretLeakSource.redactionToken === "string" && secretLeakSource.redactionToken.trim().length > 0
+        typeof secretLeakSource.redactionToken === "string" &&
+        secretLeakSource.redactionToken.trim().length > 0
           ? secretLeakSource.redactionToken
           : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken,
       patterns:
@@ -1006,9 +1094,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.protectedBranches
           : stringList(workflowConformanceSource.protectedBranches),
       blockEditsOnProtectedBranches:
-        typeof workflowConformanceSource.blockEditsOnProtectedBranches === "boolean"
+        typeof workflowConformanceSource.blockEditsOnProtectedBranches ===
+        "boolean"
           ? workflowConformanceSource.blockEditsOnProtectedBranches
-          : DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.blockEditsOnProtectedBranches,
+          : DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard
+              .blockEditsOnProtectedBranches,
     },
     scopeDriftGuard: {
       enabled:
@@ -1118,7 +1208,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? branchFreshnessSource.enabled
           : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.enabled,
       baseRef:
-        typeof branchFreshnessSource.baseRef === "string" && branchFreshnessSource.baseRef.trim().length > 0
+        typeof branchFreshnessSource.baseRef === "string" &&
+        branchFreshnessSource.baseRef.trim().length > 0
           ? branchFreshnessSource.baseRef.trim()
           : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.baseRef,
       maxBehind: nonNegativeInt(
@@ -1164,7 +1255,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       requireValidationEvidence:
         typeof prBodyEvidenceSource.requireValidationEvidence === "boolean"
           ? prBodyEvidenceSource.requireValidationEvidence
-          : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.requireValidationEvidence,
+          : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard
+              .requireValidationEvidence,
       allowUninspectableBody:
         typeof prBodyEvidenceSource.allowUninspectableBody === "boolean"
           ? prBodyEvidenceSource.allowUninspectableBody
@@ -1243,20 +1335,27 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       writerCountEnvKeys:
         parallelWriterConflictSource.writerCountEnvKeys === undefined
-          ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.writerCountEnvKeys
+          ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+              .writerCountEnvKeys
           : stringList(parallelWriterConflictSource.writerCountEnvKeys),
       reservationPathsEnvKeys:
         parallelWriterConflictSource.reservationPathsEnvKeys === undefined
-          ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.reservationPathsEnvKeys
+          ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+              .reservationPathsEnvKeys
           : stringList(parallelWriterConflictSource.reservationPathsEnvKeys),
       activeReservationPathsEnvKeys:
         parallelWriterConflictSource.activeReservationPathsEnvKeys === undefined
-          ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.activeReservationPathsEnvKeys
-          : stringList(parallelWriterConflictSource.activeReservationPathsEnvKeys),
+          ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+              .activeReservationPathsEnvKeys
+          : stringList(
+              parallelWriterConflictSource.activeReservationPathsEnvKeys,
+            ),
       enforceReservationCoverage:
-        typeof parallelWriterConflictSource.enforceReservationCoverage === "boolean"
+        typeof parallelWriterConflictSource.enforceReservationCoverage ===
+        "boolean"
           ? parallelWriterConflictSource.enforceReservationCoverage
-          : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.enforceReservationCoverage,
+          : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+              .enforceReservationCoverage,
     },
     secretCommitGuard: {
       enabled:
@@ -1272,12 +1371,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       profile: qualityProfile,
       ts: {
         lint: typeof tsSource.lint === "boolean" ? tsSource.lint : true,
-        typecheck: typeof tsSource.typecheck === "boolean" ? tsSource.typecheck : true,
+        typecheck:
+          typeof tsSource.typecheck === "boolean" ? tsSource.typecheck : true,
         tests: typeof tsSource.tests === "boolean" ? tsSource.tests : false,
       },
       py: {
-        selftest: typeof pySource.selftest === "boolean" ? pySource.selftest : true,
+        selftest:
+          typeof pySource.selftest === "boolean" ? pySource.selftest : true,
       },
     },
-  }
+  };
 }

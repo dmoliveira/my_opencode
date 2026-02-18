@@ -1,179 +1,186 @@
-import { loadGatewayConfig } from "./config/load.js"
-import { writeGatewayEventAudit } from "./audit/event-audit.js"
-import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js"
-import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js"
-import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js"
-import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js"
-import { createCommentCheckerHook } from "./hooks/comment-checker/index.js"
-import { createCompactionContextInjectorHook } from "./hooks/compaction-context-injector/index.js"
-import { createContinuationHook } from "./hooks/continuation/index.js"
-import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js"
-import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js"
-import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js"
-import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js"
-import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js"
-import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js"
-import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js"
-import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/index.js"
-import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/index.js"
-import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-limit-recovery/index.js"
-import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/index.js"
-import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js"
-import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js"
-import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-reminder/index.js"
-import { createProviderRetryBackoffGuidanceHook } from "./hooks/provider-retry-backoff-guidance/index.js"
-import { createProviderErrorClassifierHook } from "./hooks/provider-error-classifier/index.js"
-import { createCodexHeaderInjectorHook } from "./hooks/codex-header-injector/index.js"
-import { createPlanHandoffReminderHook } from "./hooks/plan-handoff-reminder/index.js"
-import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js"
-import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js"
-import { createLongTurnWatchdogHook } from "./hooks/long-turn-watchdog/index.js"
-import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js"
-import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js"
-import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js"
-import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js"
-import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js"
-import { createMergeReadinessGuardHook } from "./hooks/merge-readiness-guard/index.js"
-import { createNoninteractiveShellGuardHook } from "./hooks/noninteractive-shell-guard/index.js"
-import { createParallelOpportunityDetectorHook } from "./hooks/parallel-opportunity-detector/index.js"
-import { createParallelWriterConflictGuardHook } from "./hooks/parallel-writer-conflict-guard/index.js"
-import { createPostMergeSyncGuardHook } from "./hooks/post-merge-sync-guard/index.js"
-import { createPrBodyEvidenceGuardHook } from "./hooks/pr-body-evidence-guard/index.js"
-import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js"
-import { createPrReadinessGuardHook } from "./hooks/pr-readiness-guard/index.js"
-import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js"
-import { createReadBudgetOptimizerHook } from "./hooks/read-budget-optimizer/index.js"
-import { createRulesInjectorHook } from "./hooks/rules-injector/index.js"
-import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js"
-import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js"
-import { createSecretCommitGuardHook } from "./hooks/secret-commit-guard/index.js"
-import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js"
-import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js"
-import { createSafetyHook } from "./hooks/safety/index.js"
-import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js"
-import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js"
-import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js"
-import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js"
-import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js"
-import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js"
-import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js"
-import { createThinkModeHook } from "./hooks/think-mode/index.js"
-import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validator/index.js"
-import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js"
-import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js"
-import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js"
-import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js"
-import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js"
-import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js"
-import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js"
-import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js"
-import { contextCollector } from "./hooks/context-injector/collector.js"
-import { createContextInjectorHook } from "./hooks/context-injector/index.js"
-import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js"
+import { loadGatewayConfig } from "./config/load.js";
+import { writeGatewayEventAudit } from "./audit/event-audit.js";
+import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
+import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
+import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
+import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js";
+import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
+import { createCompactionContextInjectorHook } from "./hooks/compaction-context-injector/index.js";
+import { createContinuationHook } from "./hooks/continuation/index.js";
+import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
+import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
+import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
+import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
+import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
+import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js";
+import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js";
+import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/index.js";
+import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/index.js";
+import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-limit-recovery/index.js";
+import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/index.js";
+import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js";
+import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js";
+import { createNotifyEventsHook } from "./hooks/notify-events/index.js";
+import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-reminder/index.js";
+import { createProviderRetryBackoffGuidanceHook } from "./hooks/provider-retry-backoff-guidance/index.js";
+import { createProviderErrorClassifierHook } from "./hooks/provider-error-classifier/index.js";
+import { createCodexHeaderInjectorHook } from "./hooks/codex-header-injector/index.js";
+import { createPlanHandoffReminderHook } from "./hooks/plan-handoff-reminder/index.js";
+import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js";
+import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
+import { createLongTurnWatchdogHook } from "./hooks/long-turn-watchdog/index.js";
+import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
+import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
+import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
+import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
+import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
+import { createMergeReadinessGuardHook } from "./hooks/merge-readiness-guard/index.js";
+import { createNoninteractiveShellGuardHook } from "./hooks/noninteractive-shell-guard/index.js";
+import { createParallelOpportunityDetectorHook } from "./hooks/parallel-opportunity-detector/index.js";
+import { createParallelWriterConflictGuardHook } from "./hooks/parallel-writer-conflict-guard/index.js";
+import { createPostMergeSyncGuardHook } from "./hooks/post-merge-sync-guard/index.js";
+import { createPrBodyEvidenceGuardHook } from "./hooks/pr-body-evidence-guard/index.js";
+import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
+import { createPrReadinessGuardHook } from "./hooks/pr-readiness-guard/index.js";
+import { createQuestionLabelTruncatorHook } from "./hooks/question-label-truncator/index.js";
+import { createReadBudgetOptimizerHook } from "./hooks/read-budget-optimizer/index.js";
+import { createRulesInjectorHook } from "./hooks/rules-injector/index.js";
+import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js";
+import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
+import { createSecretCommitGuardHook } from "./hooks/secret-commit-guard/index.js";
+import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
+import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
+import { createSafetyHook } from "./hooks/safety/index.js";
+import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
+import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
+import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
+import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
+import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
+import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
+import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js";
+import { createThinkModeHook } from "./hooks/think-mode/index.js";
+import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validator/index.js";
+import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
+import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
+import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
+import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
+import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
+import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
+import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
+import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
+import { contextCollector } from "./hooks/context-injector/collector.js";
+import { createContextInjectorHook } from "./hooks/context-injector/index.js";
+import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js";
 
 // Declares minimal plugin event payload shape for gateway dispatch.
 interface GatewayEventPayload {
   event: {
-    type: string
-    properties?: Record<string, unknown>
-  }
+    type: string;
+    properties?: Record<string, unknown>;
+  };
 }
 
 // Declares minimal context shape passed by plugin host.
 interface GatewayContext {
-  config?: unknown
-  directory?: string
+  config?: unknown;
+  directory?: string;
   client?: {
     session?: {
       messages(args: {
-        path: { id: string }
-        query?: { directory?: string }
+        path: { id: string };
+        query?: { directory?: string };
       }): Promise<{
-        data?: Array<{ info?: { role?: string }; parts?: Array<{ type: string; text?: string }> }>
-      }>
+        data?: Array<{
+          info?: { role?: string };
+          parts?: Array<{ type: string; text?: string }>;
+        }>;
+      }>;
       promptAsync(args: {
-        path: { id: string }
-        body: { parts: Array<{ type: string; text: string }> }
-        query?: { directory?: string }
-      }): Promise<void>
+        path: { id: string };
+        body: { parts: Array<{ type: string; text: string }> };
+        query?: { directory?: string };
+      }): Promise<void>;
       summarize(args: {
-        path: { id: string }
-        body: { providerID: string; modelID: string; auto: boolean }
-        query?: { directory?: string }
-      }): Promise<void>
-    }
-  }
+        path: { id: string };
+        body: { providerID: string; modelID: string; auto: boolean };
+        query?: { directory?: string };
+      }): Promise<void>;
+    };
+  };
 }
 
 // Declares minimal slash command pre-execution input shape.
 interface ToolBeforeInput {
-  tool: string
-  sessionID?: string
+  tool: string;
+  sessionID?: string;
 }
 
 // Declares minimal slash command mutable output shape.
 interface ToolBeforeOutput {
-  args?: { command?: string }
+  args?: { command?: string };
 }
 
 // Declares minimal slash command post-execution input shape.
 interface ToolAfterInput {
-  tool: string
-  sessionID?: string
+  tool: string;
+  sessionID?: string;
 }
 
 // Declares minimal command execute before input shape.
 interface CommandBeforeInput {
-  command: string
-  arguments?: string
-  sessionID?: string
+  command: string;
+  arguments?: string;
+  sessionID?: string;
 }
 
 // Declares minimal command execute before mutable output shape.
 interface CommandBeforeOutput {
-  parts?: Array<{ type: string; text?: string }>
+  parts?: Array<{ type: string; text?: string }>;
 }
 
 // Declares minimal slash command post-execution mutable output shape.
 interface ToolAfterOutput {
-  output?: unknown
-  metadata?: unknown
+  output?: unknown;
+  metadata?: unknown;
 }
 
 // Declares minimal chat message event input shape.
 interface ChatMessageInput {
-  sessionID?: string
-  prompt?: string
-  text?: string
-  message?: string
-  parts?: Array<{ type?: string; text?: string }>
+  sessionID?: string;
+  prompt?: string;
+  text?: string;
+  message?: string;
+  parts?: Array<{ type?: string; text?: string }>;
 }
 
 // Declares mutable chat message payload shape for prompt rewriting hooks.
 interface ChatMessageOutput {
-  parts?: Array<{ type: string; text?: string }>
+  parts?: Array<{ type: string; text?: string }>;
 }
 
 // Declares experimental chat messages transform mutable output shape.
 interface ChatMessagesTransformOutput {
   messages: Array<{
-    info?: { role?: string; id?: string; sessionID?: string }
-    parts?: Array<{ type?: string; text?: string }>
-  }>
+    info?: { role?: string; id?: string; sessionID?: string };
+    parts?: Array<{ type?: string; text?: string }>;
+  }>;
 }
 
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx: GatewayContext): GatewayHook[] {
-  const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd()
-  const cfg = loadGatewayConfig(ctx.config)
+  const directory =
+    typeof ctx.directory === "string" && ctx.directory.trim()
+      ? ctx.directory
+      : process.cwd();
+  const cfg = loadGatewayConfig(ctx.config);
   const stopGuard = createStopContinuationGuardHook({
     directory,
     enabled: cfg.stopContinuationGuard.enabled,
-  })
+  });
   const keywordDetector = createKeywordDetectorHook({
     directory,
     enabled: cfg.keywordDetector.enabled,
-  })
+  });
   const hooks = [
     createAutopilotLoopHook({
       directory,
@@ -216,9 +223,12 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       client: ctx.client,
       enabled: cfg.contextWindowMonitor.enabled,
       warningThreshold: cfg.contextWindowMonitor.warningThreshold,
-      reminderCooldownToolCalls: cfg.contextWindowMonitor.reminderCooldownToolCalls,
-      minTokenDeltaForReminder: cfg.contextWindowMonitor.minTokenDeltaForReminder,
-      defaultContextLimitTokens: cfg.contextWindowMonitor.defaultContextLimitTokens,
+      reminderCooldownToolCalls:
+        cfg.contextWindowMonitor.reminderCooldownToolCalls,
+      minTokenDeltaForReminder:
+        cfg.contextWindowMonitor.minTokenDeltaForReminder,
+      defaultContextLimitTokens:
+        cfg.contextWindowMonitor.defaultContextLimitTokens,
       guardMarkerMode: cfg.contextWindowMonitor.guardMarkerMode,
       guardVerbosity: cfg.contextWindowMonitor.guardVerbosity,
       maxSessionStateEntries: cfg.contextWindowMonitor.maxSessionStateEntries,
@@ -228,9 +238,12 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       client: ctx.client,
       enabled: cfg.preemptiveCompaction.enabled,
       warningThreshold: cfg.preemptiveCompaction.warningThreshold,
-      compactionCooldownToolCalls: cfg.preemptiveCompaction.compactionCooldownToolCalls,
-      minTokenDeltaForCompaction: cfg.preemptiveCompaction.minTokenDeltaForCompaction,
-      defaultContextLimitTokens: cfg.preemptiveCompaction.defaultContextLimitTokens,
+      compactionCooldownToolCalls:
+        cfg.preemptiveCompaction.compactionCooldownToolCalls,
+      minTokenDeltaForCompaction:
+        cfg.preemptiveCompaction.minTokenDeltaForCompaction,
+      defaultContextLimitTokens:
+        cfg.preemptiveCompaction.defaultContextLimitTokens,
       guardMarkerMode: cfg.preemptiveCompaction.guardMarkerMode,
       guardVerbosity: cfg.preemptiveCompaction.guardVerbosity,
       maxSessionStateEntries: cfg.preemptiveCompaction.maxSessionStateEntries,
@@ -244,13 +257,20 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       stopGuard,
       enabled: cfg.globalProcessPressure.enabled,
       checkCooldownToolCalls: cfg.globalProcessPressure.checkCooldownToolCalls,
-      reminderCooldownToolCalls: cfg.globalProcessPressure.reminderCooldownToolCalls,
-      criticalReminderCooldownToolCalls: cfg.globalProcessPressure.criticalReminderCooldownToolCalls,
-      criticalEscalationWindowToolCalls: cfg.globalProcessPressure.criticalEscalationWindowToolCalls,
-      criticalPauseAfterEvents: cfg.globalProcessPressure.criticalPauseAfterEvents,
-      criticalEscalationAfterEvents: cfg.globalProcessPressure.criticalEscalationAfterEvents,
-      warningContinueSessions: cfg.globalProcessPressure.warningContinueSessions,
-      warningOpencodeProcesses: cfg.globalProcessPressure.warningOpencodeProcesses,
+      reminderCooldownToolCalls:
+        cfg.globalProcessPressure.reminderCooldownToolCalls,
+      criticalReminderCooldownToolCalls:
+        cfg.globalProcessPressure.criticalReminderCooldownToolCalls,
+      criticalEscalationWindowToolCalls:
+        cfg.globalProcessPressure.criticalEscalationWindowToolCalls,
+      criticalPauseAfterEvents:
+        cfg.globalProcessPressure.criticalPauseAfterEvents,
+      criticalEscalationAfterEvents:
+        cfg.globalProcessPressure.criticalEscalationAfterEvents,
+      warningContinueSessions:
+        cfg.globalProcessPressure.warningContinueSessions,
+      warningOpencodeProcesses:
+        cfg.globalProcessPressure.warningOpencodeProcesses,
       warningMaxRssMb: cfg.globalProcessPressure.warningMaxRssMb,
       criticalMaxRssMb: cfg.globalProcessPressure.criticalMaxRssMb,
       autoPauseOnCritical: cfg.globalProcessPressure.autoPauseOnCritical,
@@ -274,10 +294,17 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       maxSessionStateEntries: cfg.longTurnWatchdog.maxSessionStateEntries,
       prefix: cfg.longTurnWatchdog.prefix,
     }),
+    createNotifyEventsHook({
+      directory,
+      enabled: cfg.notifyEvents.enabled,
+      cooldownMs: cfg.notifyEvents.cooldownMs,
+      style: cfg.notifyEvents.style,
+    }),
     createPressureEscalationGuardHook({
       directory,
       enabled: cfg.pressureEscalationGuard.enabled,
-      maxContinueBeforeBlock: cfg.pressureEscalationGuard.maxContinueBeforeBlock,
+      maxContinueBeforeBlock:
+        cfg.pressureEscalationGuard.maxContinueBeforeBlock,
       blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
       allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
     }),
@@ -302,12 +329,14 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: cfg.readBudgetOptimizer.enabled,
       smallReadLimit: cfg.readBudgetOptimizer.smallReadLimit,
-      maxConsecutiveSmallReads: cfg.readBudgetOptimizer.maxConsecutiveSmallReads,
+      maxConsecutiveSmallReads:
+        cfg.readBudgetOptimizer.maxConsecutiveSmallReads,
     }),
     createAdaptiveValidationSchedulerHook({
       directory,
       enabled: cfg.adaptiveValidationScheduler.enabled,
-      reminderEditThreshold: cfg.adaptiveValidationScheduler.reminderEditThreshold,
+      reminderEditThreshold:
+        cfg.adaptiveValidationScheduler.reminderEditThreshold,
     }),
     stopGuard,
     keywordDetector,
@@ -376,7 +405,8 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       client: ctx.client,
       stopGuard,
       cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
-      maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
+      maxConsecutiveFailures:
+        cfg.todoContinuationEnforcer.maxConsecutiveFailures,
     }),
     createCompactionTodoPreserverHook({
       directory,
@@ -465,7 +495,8 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: cfg.workflowConformanceGuard.enabled,
       protectedBranches: cfg.workflowConformanceGuard.protectedBranches,
-      blockEditsOnProtectedBranches: cfg.workflowConformanceGuard.blockEditsOnProtectedBranches,
+      blockEditsOnProtectedBranches:
+        cfg.workflowConformanceGuard.blockEditsOnProtectedBranches,
     }),
     createScopeDriftGuardHook({
       directory,
@@ -511,11 +542,15 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createParallelWriterConflictGuardHook({
       directory,
       enabled: cfg.parallelWriterConflictGuard.enabled,
-      maxConcurrentWriters: cfg.parallelWriterConflictGuard.maxConcurrentWriters,
+      maxConcurrentWriters:
+        cfg.parallelWriterConflictGuard.maxConcurrentWriters,
       writerCountEnvKeys: cfg.parallelWriterConflictGuard.writerCountEnvKeys,
-      reservationPathsEnvKeys: cfg.parallelWriterConflictGuard.reservationPathsEnvKeys,
-      activeReservationPathsEnvKeys: cfg.parallelWriterConflictGuard.activeReservationPathsEnvKeys,
-      enforceReservationCoverage: cfg.parallelWriterConflictGuard.enforceReservationCoverage,
+      reservationPathsEnvKeys:
+        cfg.parallelWriterConflictGuard.reservationPathsEnvKeys,
+      activeReservationPathsEnvKeys:
+        cfg.parallelWriterConflictGuard.activeReservationPathsEnvKeys,
+      enforceReservationCoverage:
+        cfg.parallelWriterConflictGuard.enforceReservationCoverage,
     }),
     createBranchFreshnessGuardHook({
       directory,
@@ -536,8 +571,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: cfg.prBodyEvidenceGuard.enabled,
       requireSummarySection: cfg.prBodyEvidenceGuard.requireSummarySection,
-      requireValidationSection: cfg.prBodyEvidenceGuard.requireValidationSection,
-      requireValidationEvidence: cfg.prBodyEvidenceGuard.requireValidationEvidence,
+      requireValidationSection:
+        cfg.prBodyEvidenceGuard.requireValidationSection,
+      requireValidationEvidence:
+        cfg.prBodyEvidenceGuard.requireValidationEvidence,
       allowUninspectableBody: cfg.prBodyEvidenceGuard.allowUninspectableBody,
       requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
     }),
@@ -564,27 +601,42 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       enforceMainSyncInline: cfg.postMergeSyncGuard.enforceMainSyncInline,
       reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
     }),
-  ]
+  ];
   if (!cfg.hooks.enabled) {
-    return []
+    return [];
   }
-  return resolveHookOrder(hooks, cfg.hooks.order, cfg.hooks.disabled)
+  return resolveHookOrder(hooks, cfg.hooks.order, cfg.hooks.disabled);
 }
 
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx: GatewayContext): {
-  event(input: GatewayEventPayload): Promise<void>
-  "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>
-  "command.execute.before"(input: CommandBeforeInput, output: CommandBeforeOutput): Promise<void>
-  "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>
-  "chat.message"(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void>
+  event(input: GatewayEventPayload): Promise<void>;
+  "tool.execute.before"(
+    input: ToolBeforeInput,
+    output: ToolBeforeOutput,
+  ): Promise<void>;
+  "command.execute.before"(
+    input: CommandBeforeInput,
+    output: CommandBeforeOutput,
+  ): Promise<void>;
+  "tool.execute.after"(
+    input: ToolAfterInput,
+    output: ToolAfterOutput,
+  ): Promise<void>;
+  "chat.message"(
+    input: ChatMessageInput,
+    output?: ChatMessageOutput,
+  ): Promise<void>;
   "experimental.chat.messages.transform"(
     input: { sessionID?: string },
     output: ChatMessagesTransformOutput,
-  ): Promise<void>
+  ): Promise<void>;
 } {
-  const hooks = configuredHooks(ctx)
-  const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd()
+  const hooks = configuredHooks(ctx);
+  const directory =
+    typeof ctx.directory === "string" && ctx.directory.trim()
+      ? ctx.directory
+      : process.cwd();
 
   // Dispatches plugin lifecycle event to all enabled hooks in order.
   async function event(input: GatewayEventPayload): Promise<void> {
@@ -594,17 +646,20 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
       reason_code: "event_dispatch",
       event_type: input.event.type,
       hook_count: hooks.length,
-    })
+    });
     for (const hook of hooks) {
       await hook.event(input.event.type, {
         properties: input.event.properties,
         directory,
-      })
+      });
     }
   }
 
   // Dispatches slash command interception event to ordered hooks.
-  async function toolExecuteBefore(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void> {
+  async function toolExecuteBefore(
+    input: ToolBeforeInput,
+    output: ToolBeforeOutput,
+  ): Promise<void> {
     writeGatewayEventAudit(directory, {
       hook: "gateway-core",
       stage: "dispatch",
@@ -612,10 +667,12 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
       event_type: "tool.execute.before",
       tool: input.tool,
       hook_count: hooks.length,
-      has_command: typeof output.args?.command === "string" && output.args.command.trim().length > 0,
-    })
+      has_command:
+        typeof output.args?.command === "string" &&
+        output.args.command.trim().length > 0,
+    });
     for (const hook of hooks) {
-      await hook.event("tool.execute.before", { input, output, directory })
+      await hook.event("tool.execute.before", { input, output, directory });
     }
   }
 
@@ -631,14 +688,17 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
       event_type: "command.execute.before",
       command: input.command,
       hook_count: hooks.length,
-    })
+    });
     for (const hook of hooks) {
-      await hook.event("command.execute.before", { input, output, directory })
+      await hook.event("command.execute.before", { input, output, directory });
     }
   }
 
   // Dispatches slash command post-execution event to ordered hooks.
-  async function toolExecuteAfter(input: ToolAfterInput, output: ToolAfterOutput): Promise<void> {
+  async function toolExecuteAfter(
+    input: ToolAfterInput,
+    output: ToolAfterOutput,
+  ): Promise<void> {
     writeGatewayEventAudit(directory, {
       hook: "gateway-core",
       stage: "dispatch",
@@ -646,23 +706,29 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
       event_type: "tool.execute.after",
       tool: input.tool,
       hook_count: hooks.length,
-      has_output: typeof output.output === "string" && output.output.trim().length > 0,
-    })
+      has_output:
+        typeof output.output === "string" && output.output.trim().length > 0,
+    });
     for (const hook of hooks) {
-      await hook.event("tool.execute.after", { input, output, directory })
+      await hook.event("tool.execute.after", { input, output, directory });
     }
   }
 
   // Dispatches chat message lifecycle signal to ordered hooks.
-  async function chatMessage(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void> {
+  async function chatMessage(
+    input: ChatMessageInput,
+    output?: ChatMessageOutput,
+  ): Promise<void> {
     writeGatewayEventAudit(directory, {
       hook: "gateway-core",
       stage: "dispatch",
       reason_code: "chat_message_dispatch",
       event_type: "chat.message",
-      has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+      has_session_id:
+        typeof input.sessionID === "string" &&
+        input.sessionID.trim().length > 0,
       hook_count: hooks.length,
-    })
+    });
     for (const hook of hooks) {
       await hook.event("chat.message", {
         properties: {
@@ -670,7 +736,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         },
         output,
         directory,
-      })
+      });
     }
   }
 
@@ -684,15 +750,17 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
       stage: "dispatch",
       reason_code: "chat_messages_transform_dispatch",
       event_type: "experimental.chat.messages.transform",
-      has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+      has_session_id:
+        typeof input.sessionID === "string" &&
+        input.sessionID.trim().length > 0,
       hook_count: hooks.length,
-    })
+    });
     for (const hook of hooks) {
       await hook.event("experimental.chat.messages.transform", {
         input,
         output,
         directory,
-      })
+      });
     }
   }
 
@@ -703,5 +771,5 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     "tool.execute.after": toolExecuteAfter,
     "chat.message": chatMessage,
     "experimental.chat.messages.transform": chatMessagesTransform,
-  }
+  };
 }
