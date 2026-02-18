@@ -361,16 +361,101 @@ def runtime_staleness(home: Path) -> dict[str, Any]:
     }
 
 
-def process_pressure() -> dict[str, Any]:
+def process_pressure(config: dict[str, Any] | None = None) -> dict[str, Any]:
     def is_opencode_command(command: str) -> bool:
         lowered = command.strip().lower()
         if not lowered:
             return False
         return bool(re.search(r"(^|[\s/])opencode(\s|$)", lowered))
 
+    def parse_elapsed_seconds(value: str) -> int:
+        text = value.strip()
+        if not text:
+            return 0
+        days = 0
+        clock = text
+        if "-" in text:
+            parts = text.split("-", 1)
+            try:
+                days = int(parts[0])
+            except ValueError:
+                days = 0
+            clock = parts[1] if len(parts) > 1 else ""
+        chunks = clock.split(":")
+        try:
+            nums = [int(item) for item in chunks]
+        except ValueError:
+            return 0
+        hours = 0
+        minutes = 0
+        seconds = 0
+        if len(nums) == 3:
+            hours, minutes, seconds = nums
+        elif len(nums) == 2:
+            minutes, seconds = nums
+        elif len(nums) == 1:
+            seconds = nums[0]
+        return max(0, days * 86400 + hours * 3600 + minutes * 60 + seconds)
+
+    def duration_threshold_seconds(raw: Any) -> int:
+        text = str(raw or "").strip().lower()
+        match = re.match(
+            r"^(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$",
+            text,
+        )
+        if not match:
+            return 0
+        value = int(match.group(1))
+        unit = match.group(2)
+        if unit in {"s", "sec", "secs", "second", "seconds"}:
+            return value
+        if unit in {"m", "min", "mins", "minute", "minutes"}:
+            return value * 60
+        if unit in {"h", "hr", "hrs", "hour", "hours"}:
+            return value * 3600
+        return value * 86400
+
+    def resolve_self_session(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+        by_pid = {int(row["pid"]): row for row in rows if isinstance(row.get("pid"), int)}
+        current = os.getpid()
+        visited: set[int] = set()
+        while current > 1 and current not in visited:
+            visited.add(current)
+            row = by_pid.get(current)
+            if row is None:
+                break
+            if is_opencode_command(str(row.get("command") or "")):
+                cwd = ""
+                try:
+                    lsof = subprocess.run(
+                        ["lsof", "-a", "-p", str(current), "-d", "cwd", "-Fn"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=2,
+                    )
+                    if lsof.returncode == 0:
+                        for item in lsof.stdout.splitlines():
+                            if item.startswith("n"):
+                                cwd = item[1:].strip()
+                                break
+                except Exception:
+                    cwd = ""
+                return {
+                    "pid": current,
+                    "cpu_pct": float(row.get("cpu_pct") or 0),
+                    "mem_pct": float(row.get("mem_pct") or 0),
+                    "rss_mb": float(row.get("rss_mb") or 0),
+                    "elapsed": str(row.get("elapsed") or ""),
+                    "elapsed_seconds": int(row.get("elapsed_seconds") or 0),
+                    "cwd": cwd,
+                }
+            current = int(row.get("ppid") or 0)
+        return None
+
     try:
         result = subprocess.run(
-            ["ps", "-axo", "pid=,rss=,command="],
+            ["ps", "-axo", "pid=,ppid=,pcpu=,pmem=,rss=,etime=,command="],
             capture_output=True,
             text=True,
             check=False,
@@ -383,6 +468,7 @@ def process_pressure() -> dict[str, Any]:
             "continue_process_count": 0,
             "max_rss_mb": 0,
             "high_rss": [],
+            "self_session": None,
         }
     if result.returncode != 0:
         return {
@@ -391,8 +477,10 @@ def process_pressure() -> dict[str, Any]:
             "continue_process_count": 0,
             "max_rss_mb": 0,
             "high_rss": [],
+            "self_session": None,
         }
 
+    rows: list[dict[str, Any]] = []
     opencode_process_count = 0
     continue_process_count = 0
     max_rss_kb = 0
@@ -401,20 +489,47 @@ def process_pressure() -> dict[str, Any]:
         line = raw_line.strip()
         if not line:
             continue
+        parts = line.split(maxsplit=6)
+        if len(parts) < 7:
+            continue
+        pid_text, ppid_text, cpu_text, mem_text, rss_text, elapsed_text, command = parts
+        lowered = command.lower()
         try:
-            pid_text, rss_text, command = line.split(maxsplit=2)
+            pid = int(pid_text)
         except ValueError:
             continue
-        lowered = command.lower()
+        try:
+            ppid = int(ppid_text)
+        except ValueError:
+            ppid = 0
+        try:
+            cpu_pct = float(cpu_text)
+        except ValueError:
+            cpu_pct = 0.0
+        try:
+            mem_pct = float(mem_text)
+        except ValueError:
+            mem_pct = 0.0
+        try:
+            rss_kb = int(rss_text)
+        except ValueError:
+            rss_kb = 0
+        row = {
+            "pid": pid,
+            "ppid": ppid,
+            "cpu_pct": cpu_pct,
+            "mem_pct": mem_pct,
+            "rss_mb": round(rss_kb / 1024, 1),
+            "elapsed": elapsed_text,
+            "elapsed_seconds": parse_elapsed_seconds(elapsed_text),
+            "command": command,
+        }
+        rows.append(row)
         if not is_opencode_command(command):
             continue
         opencode_process_count += 1
         if "--continue" in lowered:
             continue_process_count += 1
-        try:
-            rss_kb = int(rss_text)
-        except ValueError:
-            rss_kb = 0
         if rss_kb > max_rss_kb:
             max_rss_kb = rss_kb
         if rss_kb >= 1_000_000:
@@ -426,11 +541,53 @@ def process_pressure() -> dict[str, Any]:
                     command_preview = command_preview[:180]
             high_rss.append(
                 {
-                    "pid": int(pid_text),
+                    "pid": pid,
                     "rss_mb": round(rss_kb / 1024, 1),
                     "command": command_preview,
                 }
             )
+
+    self_session = resolve_self_session(rows)
+    pressure_cfg_any = config.get("globalProcessPressure") if isinstance(config, dict) else {}
+    pressure_cfg = pressure_cfg_any if isinstance(pressure_cfg_any, dict) else {}
+    operator = "all" if str(pressure_cfg.get("selfSeverityOperator") or "").strip().lower() == "all" else "any"
+    high_cpu = float(pressure_cfg.get("selfHighCpuPct") or 100)
+    high_rss_threshold = float(pressure_cfg.get("selfHighRssMb") or 10240)
+    high_elapsed_seconds = duration_threshold_seconds(pressure_cfg.get("selfHighElapsed") or "5h")
+    high_label = str(pressure_cfg.get("selfHighLabel") or "HIGH").strip() or "HIGH"
+    low_label = str(pressure_cfg.get("selfLowLabel") or "LOW").strip() or "LOW"
+
+    conditions: list[bool] = []
+    cpu_match = bool(self_session and high_cpu > 0 and float(self_session.get("cpu_pct") or 0) >= high_cpu)
+    rss_match = bool(self_session and high_rss_threshold > 0 and float(self_session.get("rss_mb") or 0) >= high_rss_threshold)
+    elapsed_match = bool(
+        self_session
+        and high_elapsed_seconds > 0
+        and int(self_session.get("elapsed_seconds") or 0) >= high_elapsed_seconds
+    )
+    if high_cpu > 0:
+        conditions.append(cpu_match)
+    if high_rss_threshold > 0:
+        conditions.append(rss_match)
+    if high_elapsed_seconds > 0:
+        conditions.append(elapsed_match)
+    is_high = False
+    if conditions:
+        is_high = all(conditions) if operator == "all" else any(conditions)
+
+    if self_session is not None:
+        self_session["severity"] = high_label if is_high else low_label
+        self_session["severity_operator"] = operator
+        self_session["thresholds"] = {
+            "cpu_pct": high_cpu,
+            "rss_mb": high_rss_threshold,
+            "elapsed_seconds": high_elapsed_seconds,
+        }
+        self_session["matches"] = {
+            "cpu": cpu_match,
+            "rss": rss_match,
+            "elapsed": elapsed_match,
+        }
 
     return {
         "sampled": True,
@@ -438,6 +595,7 @@ def process_pressure() -> dict[str, Any]:
         "continue_process_count": continue_process_count,
         "max_rss_mb": round(max_rss_kb / 1024, 1),
         "high_rss": high_rss[:5],
+        "self_session": self_session,
     }
 
 
@@ -624,7 +782,7 @@ def status_payload(
         "event_audit_exists": gateway_event_audit_path(cwd).exists(),
         "guard_event_counters": gateway_event_counters(cwd),
         "runtime_staleness": runtime_staleness(home),
-        "process_pressure": process_pressure(),
+        "process_pressure": process_pressure(config),
     }
     if cleanup is not None:
         payload["orphan_cleanup"] = cleanup
