@@ -20,6 +20,7 @@ import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-lim
 import { createHashlineReadEnhancerHook } from "./hooks/hashline-read-enhancer/index.js";
 import { createMaxStepRecoveryHook } from "./hooks/max-step-recovery/index.js";
 import { createModeTransitionReminderHook } from "./hooks/mode-transition-reminder/index.js";
+import { createNotifyEventsHook } from "./hooks/notify-events/index.js";
 import { createTodoreadCadenceReminderHook } from "./hooks/todoread-cadence-reminder/index.js";
 import { createProviderRetryBackoffGuidanceHook } from "./hooks/provider-retry-backoff-guidance/index.js";
 import { createProviderErrorClassifierHook } from "./hooks/provider-error-classifier/index.js";
@@ -72,7 +73,9 @@ import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx) {
-    const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd();
+    const directory = typeof ctx.directory === "string" && ctx.directory.trim()
+        ? ctx.directory
+        : process.cwd();
     const cfg = loadGatewayConfig(ctx.config);
     const stopGuard = createStopContinuationGuardHook({
         directory,
@@ -181,6 +184,12 @@ function configuredHooks(ctx) {
             reminderCooldownMs: cfg.longTurnWatchdog.reminderCooldownMs,
             maxSessionStateEntries: cfg.longTurnWatchdog.maxSessionStateEntries,
             prefix: cfg.longTurnWatchdog.prefix,
+        }),
+        createNotifyEventsHook({
+            directory,
+            enabled: cfg.notifyEvents.enabled,
+            cooldownMs: cfg.notifyEvents.cooldownMs,
+            style: cfg.notifyEvents.style,
         }),
         createPressureEscalationGuardHook({
             directory,
@@ -481,7 +490,9 @@ function configuredHooks(ctx) {
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx) {
     const hooks = configuredHooks(ctx);
-    const directory = typeof ctx.directory === "string" && ctx.directory.trim() ? ctx.directory : process.cwd();
+    const directory = typeof ctx.directory === "string" && ctx.directory.trim()
+        ? ctx.directory
+        : process.cwd();
     // Dispatches plugin lifecycle event to all enabled hooks in order.
     async function event(input) {
         writeGatewayEventAudit(directory, {
@@ -507,7 +518,8 @@ export default function GatewayCorePlugin(ctx) {
             event_type: "tool.execute.before",
             tool: input.tool,
             hook_count: hooks.length,
-            has_command: typeof output.args?.command === "string" && output.args.command.trim().length > 0,
+            has_command: typeof output.args?.command === "string" &&
+                output.args.command.trim().length > 0,
         });
         for (const hook of hooks) {
             await hook.event("tool.execute.before", { input, output, directory });
@@ -549,7 +561,8 @@ export default function GatewayCorePlugin(ctx) {
             stage: "dispatch",
             reason_code: "chat_message_dispatch",
             event_type: "chat.message",
-            has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+            has_session_id: typeof input.sessionID === "string" &&
+                input.sessionID.trim().length > 0,
             hook_count: hooks.length,
         });
         for (const hook of hooks) {
@@ -569,7 +582,8 @@ export default function GatewayCorePlugin(ctx) {
             stage: "dispatch",
             reason_code: "chat_messages_transform_dispatch",
             event_type: "experimental.chat.messages.transform",
-            has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+            has_session_id: typeof input.sessionID === "string" &&
+                input.sessionID.trim().length > 0,
             hook_count: hooks.length,
         });
         for (const hook of hooks) {

@@ -85,22 +85,30 @@ export function loadGatewayConfig(raw) {
     const truncatorSource = source.toolOutputTruncator && typeof source.toolOutputTruncator === "object"
         ? source.toolOutputTruncator
         : {};
-    const contextWindowSource = source.contextWindowMonitor && typeof source.contextWindowMonitor === "object"
+    const contextWindowSource = source.contextWindowMonitor &&
+        typeof source.contextWindowMonitor === "object"
         ? source.contextWindowMonitor
         : {};
-    const preemptiveCompactionSource = source.preemptiveCompaction && typeof source.preemptiveCompaction === "object"
+    const preemptiveCompactionSource = source.preemptiveCompaction &&
+        typeof source.preemptiveCompaction === "object"
         ? source.preemptiveCompaction
         : {};
-    const compactionContextInjectorSource = source.compactionContextInjector && typeof source.compactionContextInjector === "object"
+    const compactionContextInjectorSource = source.compactionContextInjector &&
+        typeof source.compactionContextInjector === "object"
         ? source.compactionContextInjector
         : {};
-    const globalProcessPressureSource = source.globalProcessPressure && typeof source.globalProcessPressure === "object"
+    const globalProcessPressureSource = source.globalProcessPressure &&
+        typeof source.globalProcessPressure === "object"
         ? source.globalProcessPressure
         : {};
     const longTurnWatchdogSource = source.longTurnWatchdog && typeof source.longTurnWatchdog === "object"
         ? source.longTurnWatchdog
         : {};
-    const pressureEscalationGuardSource = source.pressureEscalationGuard && typeof source.pressureEscalationGuard === "object"
+    const notifyEventsSource = source.notifyEvents && typeof source.notifyEvents === "object"
+        ? source.notifyEvents
+        : {};
+    const pressureEscalationGuardSource = source.pressureEscalationGuard &&
+        typeof source.pressureEscalationGuard === "object"
         ? source.pressureEscalationGuard
         : {};
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
@@ -109,19 +117,26 @@ export function loadGatewayConfig(raw) {
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
         : {};
-    const validationEvidenceLedgerSource = source.validationEvidenceLedger && typeof source.validationEvidenceLedger === "object"
+    const validationEvidenceLedgerSource = source.validationEvidenceLedger &&
+        typeof source.validationEvidenceLedger === "object"
         ? source.validationEvidenceLedger
         : {};
-    const parallelOpportunitySource = source.parallelOpportunityDetector && typeof source.parallelOpportunityDetector === "object"
+    const mistakeLedgerSource = source.mistakeLedger && typeof source.mistakeLedger === "object"
+        ? source.mistakeLedger
+        : {};
+    const parallelOpportunitySource = source.parallelOpportunityDetector &&
+        typeof source.parallelOpportunityDetector === "object"
         ? source.parallelOpportunityDetector
         : {};
     const readBudgetOptimizerSource = source.readBudgetOptimizer && typeof source.readBudgetOptimizer === "object"
         ? source.readBudgetOptimizer
         : {};
-    const adaptiveValidationSchedulerSource = source.adaptiveValidationScheduler && typeof source.adaptiveValidationScheduler === "object"
+    const adaptiveValidationSchedulerSource = source.adaptiveValidationScheduler &&
+        typeof source.adaptiveValidationScheduler === "object"
         ? source.adaptiveValidationScheduler
         : {};
-    const stopGuardSource = source.stopContinuationGuard && typeof source.stopContinuationGuard === "object"
+    const stopGuardSource = source.stopContinuationGuard &&
+        typeof source.stopContinuationGuard === "object"
         ? source.stopContinuationGuard
         : {};
     const keywordDetectorSource = source.keywordDetector && typeof source.keywordDetector === "object"
@@ -130,7 +145,8 @@ export function loadGatewayConfig(raw) {
     const thinkModeSource = source.thinkMode && typeof source.thinkMode === "object"
         ? source.thinkMode
         : {};
-    const thinkingBlockValidatorSource = source.thinkingBlockValidator && typeof source.thinkingBlockValidator === "object"
+    const thinkingBlockValidatorSource = source.thinkingBlockValidator &&
+        typeof source.thinkingBlockValidator === "object"
         ? source.thinkingBlockValidator
         : {};
     const autoSlashSource = source.autoSlashCommand && typeof source.autoSlashCommand === "object"
@@ -139,37 +155,47 @@ export function loadGatewayConfig(raw) {
     const rulesInjectorSource = source.rulesInjector && typeof source.rulesInjector === "object"
         ? source.rulesInjector
         : {};
-    const directoryAgentsSource = source.directoryAgentsInjector && typeof source.directoryAgentsInjector === "object"
+    const directoryAgentsSource = source.directoryAgentsInjector &&
+        typeof source.directoryAgentsInjector === "object"
         ? source.directoryAgentsInjector
         : {};
-    const directoryReadmeSource = source.directoryReadmeInjector && typeof source.directoryReadmeInjector === "object"
+    const directoryReadmeSource = source.directoryReadmeInjector &&
+        typeof source.directoryReadmeInjector === "object"
         ? source.directoryReadmeInjector
         : {};
-    const noninteractiveShellSource = source.noninteractiveShellGuard && typeof source.noninteractiveShellGuard === "object"
+    const noninteractiveShellSource = source.noninteractiveShellGuard &&
+        typeof source.noninteractiveShellGuard === "object"
         ? source.noninteractiveShellGuard
         : {};
-    const writeExistingGuardSource = source.writeExistingFileGuard && typeof source.writeExistingFileGuard === "object"
+    const writeExistingGuardSource = source.writeExistingFileGuard &&
+        typeof source.writeExistingFileGuard === "object"
         ? source.writeExistingFileGuard
         : {};
-    const agentReservationSource = source.agentReservationGuard && typeof source.agentReservationGuard === "object"
+    const agentReservationSource = source.agentReservationGuard &&
+        typeof source.agentReservationGuard === "object"
         ? source.agentReservationGuard
         : {};
-    const subagentQuestionSource = source.subagentQuestionBlocker && typeof source.subagentQuestionBlocker === "object"
+    const subagentQuestionSource = source.subagentQuestionBlocker &&
+        typeof source.subagentQuestionBlocker === "object"
         ? source.subagentQuestionBlocker
         : {};
-    const tasksTodowriteSource = source.tasksTodowriteDisabler && typeof source.tasksTodowriteDisabler === "object"
+    const tasksTodowriteSource = source.tasksTodowriteDisabler &&
+        typeof source.tasksTodowriteDisabler === "object"
         ? source.tasksTodowriteDisabler
         : {};
     const taskResumeInfoSource = source.taskResumeInfo && typeof source.taskResumeInfo === "object"
         ? source.taskResumeInfo
         : {};
-    const todoContinuationEnforcerSource = source.todoContinuationEnforcer && typeof source.todoContinuationEnforcer === "object"
+    const todoContinuationEnforcerSource = source.todoContinuationEnforcer &&
+        typeof source.todoContinuationEnforcer === "object"
         ? source.todoContinuationEnforcer
         : {};
-    const compactionTodoPreserverSource = source.compactionTodoPreserver && typeof source.compactionTodoPreserver === "object"
+    const compactionTodoPreserverSource = source.compactionTodoPreserver &&
+        typeof source.compactionTodoPreserver === "object"
         ? source.compactionTodoPreserver
         : {};
-    const emptyTaskResponseSource = source.emptyTaskResponseDetector && typeof source.emptyTaskResponseDetector === "object"
+    const emptyTaskResponseSource = source.emptyTaskResponseDetector &&
+        typeof source.emptyTaskResponseDetector === "object"
         ? source.emptyTaskResponseDetector
         : {};
     const editErrorRecoverySource = source.editErrorRecovery && typeof source.editErrorRecovery === "object"
@@ -178,25 +204,31 @@ export function loadGatewayConfig(raw) {
     const jsonErrorRecoverySource = source.jsonErrorRecovery && typeof source.jsonErrorRecovery === "object"
         ? source.jsonErrorRecovery
         : {};
-    const providerTokenLimitRecoverySource = source.providerTokenLimitRecovery && typeof source.providerTokenLimitRecovery === "object"
+    const providerTokenLimitRecoverySource = source.providerTokenLimitRecovery &&
+        typeof source.providerTokenLimitRecovery === "object"
         ? source.providerTokenLimitRecovery
         : {};
-    const hashlineReadEnhancerSource = source.hashlineReadEnhancer && typeof source.hashlineReadEnhancer === "object"
+    const hashlineReadEnhancerSource = source.hashlineReadEnhancer &&
+        typeof source.hashlineReadEnhancer === "object"
         ? source.hashlineReadEnhancer
         : {};
     const maxStepRecoverySource = source.maxStepRecovery && typeof source.maxStepRecovery === "object"
         ? source.maxStepRecovery
         : {};
-    const modeTransitionReminderSource = source.modeTransitionReminder && typeof source.modeTransitionReminder === "object"
+    const modeTransitionReminderSource = source.modeTransitionReminder &&
+        typeof source.modeTransitionReminder === "object"
         ? source.modeTransitionReminder
         : {};
-    const todoreadCadenceReminderSource = source.todoreadCadenceReminder && typeof source.todoreadCadenceReminder === "object"
+    const todoreadCadenceReminderSource = source.todoreadCadenceReminder &&
+        typeof source.todoreadCadenceReminder === "object"
         ? source.todoreadCadenceReminder
         : {};
-    const providerRetryBackoffGuidanceSource = source.providerRetryBackoffGuidance && typeof source.providerRetryBackoffGuidance === "object"
+    const providerRetryBackoffGuidanceSource = source.providerRetryBackoffGuidance &&
+        typeof source.providerRetryBackoffGuidance === "object"
         ? source.providerRetryBackoffGuidance
         : {};
-    const providerErrorClassifierSource = source.providerErrorClassifier && typeof source.providerErrorClassifier === "object"
+    const providerErrorClassifierSource = source.providerErrorClassifier &&
+        typeof source.providerErrorClassifier === "object"
         ? source.providerErrorClassifier
         : {};
     const codexHeaderInjectorSource = source.codexHeaderInjector && typeof source.codexHeaderInjector === "object"
@@ -211,22 +243,27 @@ export function loadGatewayConfig(raw) {
     const agentUserReminderSource = source.agentUserReminder && typeof source.agentUserReminder === "object"
         ? source.agentUserReminder
         : {};
-    const unstableBabysitterSource = source.unstableAgentBabysitter && typeof source.unstableAgentBabysitter === "object"
+    const unstableBabysitterSource = source.unstableAgentBabysitter &&
+        typeof source.unstableAgentBabysitter === "object"
         ? source.unstableAgentBabysitter
         : {};
-    const questionLabelSource = source.questionLabelTruncator && typeof source.questionLabelTruncator === "object"
+    const questionLabelSource = source.questionLabelTruncator &&
+        typeof source.questionLabelTruncator === "object"
         ? source.questionLabelTruncator
         : {};
-    const semanticOutputSummarizerSource = source.semanticOutputSummarizer && typeof source.semanticOutputSummarizer === "object"
+    const semanticOutputSummarizerSource = source.semanticOutputSummarizer &&
+        typeof source.semanticOutputSummarizer === "object"
         ? source.semanticOutputSummarizer
         : {};
-    const dangerousCommandSource = source.dangerousCommandGuard && typeof source.dangerousCommandGuard === "object"
+    const dangerousCommandSource = source.dangerousCommandGuard &&
+        typeof source.dangerousCommandGuard === "object"
         ? source.dangerousCommandGuard
         : {};
     const secretLeakSource = source.secretLeakGuard && typeof source.secretLeakGuard === "object"
         ? source.secretLeakGuard
         : {};
-    const workflowConformanceSource = source.workflowConformanceGuard && typeof source.workflowConformanceGuard === "object"
+    const workflowConformanceSource = source.workflowConformanceGuard &&
+        typeof source.workflowConformanceGuard === "object"
         ? source.workflowConformanceGuard
         : {};
     const scopeDriftSource = source.scopeDriftGuard && typeof source.scopeDriftGuard === "object"
@@ -247,10 +284,12 @@ export function loadGatewayConfig(raw) {
     const retryBudgetSource = source.retryBudgetGuard && typeof source.retryBudgetGuard === "object"
         ? source.retryBudgetGuard
         : {};
-    const staleLoopExpirySource = source.staleLoopExpiryGuard && typeof source.staleLoopExpiryGuard === "object"
+    const staleLoopExpirySource = source.staleLoopExpiryGuard &&
+        typeof source.staleLoopExpiryGuard === "object"
         ? source.staleLoopExpiryGuard
         : {};
-    const branchFreshnessSource = source.branchFreshnessGuard && typeof source.branchFreshnessGuard === "object"
+    const branchFreshnessSource = source.branchFreshnessGuard &&
+        typeof source.branchFreshnessGuard === "object"
         ? source.branchFreshnessGuard
         : {};
     const prReadinessSource = source.prReadinessGuard && typeof source.prReadinessGuard === "object"
@@ -265,7 +304,8 @@ export function loadGatewayConfig(raw) {
     const postMergeSyncSource = source.postMergeSyncGuard && typeof source.postMergeSyncGuard === "object"
         ? source.postMergeSyncGuard
         : {};
-    const parallelWriterConflictSource = source.parallelWriterConflictGuard && typeof source.parallelWriterConflictGuard === "object"
+    const parallelWriterConflictSource = source.parallelWriterConflictGuard &&
+        typeof source.parallelWriterConflictGuard === "object"
         ? source.parallelWriterConflictGuard
         : {};
     const secretCommitSource = source.secretCommitGuard && typeof source.secretCommitGuard === "object"
@@ -354,10 +394,13 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.enabled,
             checkCooldownToolCalls: positiveInt(globalProcessPressureSource.checkCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.checkCooldownToolCalls),
             reminderCooldownToolCalls: positiveInt(globalProcessPressureSource.reminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.reminderCooldownToolCalls),
-            criticalReminderCooldownToolCalls: positiveInt(globalProcessPressureSource.criticalReminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalReminderCooldownToolCalls),
-            criticalEscalationWindowToolCalls: positiveInt(globalProcessPressureSource.criticalEscalationWindowToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalEscalationWindowToolCalls),
+            criticalReminderCooldownToolCalls: positiveInt(globalProcessPressureSource.criticalReminderCooldownToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure
+                .criticalReminderCooldownToolCalls),
+            criticalEscalationWindowToolCalls: positiveInt(globalProcessPressureSource.criticalEscalationWindowToolCalls, DEFAULT_GATEWAY_CONFIG.globalProcessPressure
+                .criticalEscalationWindowToolCalls),
             criticalPauseAfterEvents: positiveInt(globalProcessPressureSource.criticalPauseAfterEvents, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalPauseAfterEvents),
-            criticalEscalationAfterEvents: positiveInt(globalProcessPressureSource.criticalEscalationAfterEvents, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.criticalEscalationAfterEvents),
+            criticalEscalationAfterEvents: positiveInt(globalProcessPressureSource.criticalEscalationAfterEvents, DEFAULT_GATEWAY_CONFIG.globalProcessPressure
+                .criticalEscalationAfterEvents),
             warningContinueSessions: positiveInt(globalProcessPressureSource.warningContinueSessions, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningContinueSessions),
             warningOpencodeProcesses: positiveInt(globalProcessPressureSource.warningOpencodeProcesses, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningOpencodeProcesses),
             warningMaxRssMb: positiveInt(globalProcessPressureSource.warningMaxRssMb, DEFAULT_GATEWAY_CONFIG.globalProcessPressure.warningMaxRssMb),
@@ -388,16 +431,27 @@ export function loadGatewayConfig(raw) {
             warningThresholdMs: positiveInt(longTurnWatchdogSource.warningThresholdMs, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.warningThresholdMs),
             reminderCooldownMs: nonNegativeInt(longTurnWatchdogSource.reminderCooldownMs, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.reminderCooldownMs),
             maxSessionStateEntries: positiveInt(longTurnWatchdogSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.maxSessionStateEntries),
-            prefix: typeof longTurnWatchdogSource.prefix === "string" && longTurnWatchdogSource.prefix.trim().length > 0
+            prefix: typeof longTurnWatchdogSource.prefix === "string" &&
+                longTurnWatchdogSource.prefix.trim().length > 0
                 ? longTurnWatchdogSource.prefix.trim()
                 : DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.prefix,
+        },
+        notifyEvents: {
+            enabled: typeof notifyEventsSource.enabled === "boolean"
+                ? notifyEventsSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.notifyEvents.enabled,
+            cooldownMs: nonNegativeInt(notifyEventsSource.cooldownMs, DEFAULT_GATEWAY_CONFIG.notifyEvents.cooldownMs),
+            style: notifyEventsSource.style === "detailed"
+                ? "detailed"
+                : DEFAULT_GATEWAY_CONFIG.notifyEvents.style,
         },
         pressureEscalationGuard: {
             enabled: typeof pressureEscalationGuardSource.enabled === "boolean"
                 ? pressureEscalationGuardSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.enabled,
             maxContinueBeforeBlock: positiveInt(pressureEscalationGuardSource.maxContinueBeforeBlock, DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.maxContinueBeforeBlock),
-            blockedSubagentTypes: stringList(pressureEscalationGuardSource.blockedSubagentTypes).length > 0
+            blockedSubagentTypes: stringList(pressureEscalationGuardSource.blockedSubagentTypes).length >
+                0
                 ? stringList(pressureEscalationGuardSource.blockedSubagentTypes)
                 : DEFAULT_GATEWAY_CONFIG.pressureEscalationGuard.blockedSubagentTypes,
             allowPromptPatterns: stringList(pressureEscalationGuardSource.allowPromptPatterns).length > 0
@@ -422,6 +476,15 @@ export function loadGatewayConfig(raw) {
                 ? validationEvidenceLedgerSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.validationEvidenceLedger.enabled,
         },
+        mistakeLedger: {
+            enabled: typeof mistakeLedgerSource.enabled === "boolean"
+                ? mistakeLedgerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.mistakeLedger.enabled,
+            path: typeof mistakeLedgerSource.path === "string" &&
+                mistakeLedgerSource.path.trim().length > 0
+                ? mistakeLedgerSource.path.trim()
+                : DEFAULT_GATEWAY_CONFIG.mistakeLedger.path,
+        },
         parallelOpportunityDetector: {
             enabled: typeof parallelOpportunitySource.enabled === "boolean"
                 ? parallelOpportunitySource.enabled
@@ -438,7 +501,8 @@ export function loadGatewayConfig(raw) {
             enabled: typeof adaptiveValidationSchedulerSource.enabled === "boolean"
                 ? adaptiveValidationSchedulerSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler.enabled,
-            reminderEditThreshold: nonNegativeInt(adaptiveValidationSchedulerSource.reminderEditThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler.reminderEditThreshold),
+            reminderEditThreshold: nonNegativeInt(adaptiveValidationSchedulerSource.reminderEditThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveValidationScheduler
+                .reminderEditThreshold),
         },
         stopContinuationGuard: {
             enabled: typeof stopGuardSource.enabled === "boolean"
@@ -654,7 +718,8 @@ export function loadGatewayConfig(raw) {
             enabled: typeof secretLeakSource.enabled === "boolean"
                 ? secretLeakSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.enabled,
-            redactionToken: typeof secretLeakSource.redactionToken === "string" && secretLeakSource.redactionToken.trim().length > 0
+            redactionToken: typeof secretLeakSource.redactionToken === "string" &&
+                secretLeakSource.redactionToken.trim().length > 0
                 ? secretLeakSource.redactionToken
                 : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken,
             patterns: secretLeakSource.patterns === undefined
@@ -668,9 +733,11 @@ export function loadGatewayConfig(raw) {
             protectedBranches: workflowConformanceSource.protectedBranches === undefined
                 ? DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.protectedBranches
                 : stringList(workflowConformanceSource.protectedBranches),
-            blockEditsOnProtectedBranches: typeof workflowConformanceSource.blockEditsOnProtectedBranches === "boolean"
+            blockEditsOnProtectedBranches: typeof workflowConformanceSource.blockEditsOnProtectedBranches ===
+                "boolean"
                 ? workflowConformanceSource.blockEditsOnProtectedBranches
-                : DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard.blockEditsOnProtectedBranches,
+                : DEFAULT_GATEWAY_CONFIG.workflowConformanceGuard
+                    .blockEditsOnProtectedBranches,
         },
         scopeDriftGuard: {
             enabled: typeof scopeDriftSource.enabled === "boolean"
@@ -752,7 +819,8 @@ export function loadGatewayConfig(raw) {
             enabled: typeof branchFreshnessSource.enabled === "boolean"
                 ? branchFreshnessSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.enabled,
-            baseRef: typeof branchFreshnessSource.baseRef === "string" && branchFreshnessSource.baseRef.trim().length > 0
+            baseRef: typeof branchFreshnessSource.baseRef === "string" &&
+                branchFreshnessSource.baseRef.trim().length > 0
                 ? branchFreshnessSource.baseRef.trim()
                 : DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.baseRef,
             maxBehind: nonNegativeInt(branchFreshnessSource.maxBehind, DEFAULT_GATEWAY_CONFIG.branchFreshnessGuard.maxBehind),
@@ -786,7 +854,8 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.requireValidationSection,
             requireValidationEvidence: typeof prBodyEvidenceSource.requireValidationEvidence === "boolean"
                 ? prBodyEvidenceSource.requireValidationEvidence
-                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.requireValidationEvidence,
+                : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard
+                    .requireValidationEvidence,
             allowUninspectableBody: typeof prBodyEvidenceSource.allowUninspectableBody === "boolean"
                 ? prBodyEvidenceSource.allowUninspectableBody
                 : DEFAULT_GATEWAY_CONFIG.prBodyEvidenceGuard.allowUninspectableBody,
@@ -845,17 +914,22 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.enabled,
             maxConcurrentWriters: positiveInt(parallelWriterConflictSource.maxConcurrentWriters, DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.maxConcurrentWriters),
             writerCountEnvKeys: parallelWriterConflictSource.writerCountEnvKeys === undefined
-                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.writerCountEnvKeys
+                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+                    .writerCountEnvKeys
                 : stringList(parallelWriterConflictSource.writerCountEnvKeys),
             reservationPathsEnvKeys: parallelWriterConflictSource.reservationPathsEnvKeys === undefined
-                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.reservationPathsEnvKeys
+                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+                    .reservationPathsEnvKeys
                 : stringList(parallelWriterConflictSource.reservationPathsEnvKeys),
             activeReservationPathsEnvKeys: parallelWriterConflictSource.activeReservationPathsEnvKeys === undefined
-                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.activeReservationPathsEnvKeys
+                ? DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+                    .activeReservationPathsEnvKeys
                 : stringList(parallelWriterConflictSource.activeReservationPathsEnvKeys),
-            enforceReservationCoverage: typeof parallelWriterConflictSource.enforceReservationCoverage === "boolean"
+            enforceReservationCoverage: typeof parallelWriterConflictSource.enforceReservationCoverage ===
+                "boolean"
                 ? parallelWriterConflictSource.enforceReservationCoverage
-                : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.enforceReservationCoverage,
+                : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
+                    .enforceReservationCoverage,
         },
         secretCommitGuard: {
             enabled: typeof secretCommitSource.enabled === "boolean"

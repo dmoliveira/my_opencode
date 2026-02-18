@@ -78,6 +78,11 @@ export interface LongTurnWatchdogConfig {
     maxSessionStateEntries: number;
     prefix: string;
 }
+export interface NotifyEventsConfig {
+    enabled: boolean;
+    cooldownMs: number;
+    style: "brief" | "detailed";
+}
 export interface PressureEscalationGuardConfig {
     enabled: boolean;
     maxContinueBeforeBlock: number;
@@ -237,6 +242,10 @@ export interface StaleLoopExpiryGuardConfig {
 export interface ValidationEvidenceLedgerConfig {
     enabled: boolean;
 }
+export interface MistakeLedgerConfig {
+    enabled: boolean;
+    path: string;
+}
 export interface NoninteractiveShellGuardConfig {
     enabled: boolean;
     blockedPatterns: string[];
@@ -343,10 +352,12 @@ export interface GatewayConfig {
     compactionContextInjector: CompactionContextInjectorConfig;
     globalProcessPressure: GlobalProcessPressureConfig;
     longTurnWatchdog: LongTurnWatchdogConfig;
+    notifyEvents: NotifyEventsConfig;
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;
+    mistakeLedger: MistakeLedgerConfig;
     parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
     readBudgetOptimizer: ReadBudgetOptimizerConfig;
     adaptiveValidationScheduler: AdaptiveValidationSchedulerConfig;
