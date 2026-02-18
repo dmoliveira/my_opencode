@@ -27,6 +27,7 @@ import { createCodexHeaderInjectorHook } from "./hooks/codex-header-injector/ind
 import { createPlanHandoffReminderHook } from "./hooks/plan-handoff-reminder/index.js"
 import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/index.js"
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js"
+import { createLongTurnWatchdogHook } from "./hooks/long-turn-watchdog/index.js"
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js"
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js"
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js"
@@ -264,6 +265,14 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       selfHighLabel: cfg.globalProcessPressure.selfHighLabel,
       selfLowLabel: cfg.globalProcessPressure.selfLowLabel,
       selfAppendMarker: cfg.globalProcessPressure.selfAppendMarker,
+    }),
+    createLongTurnWatchdogHook({
+      directory,
+      enabled: cfg.longTurnWatchdog.enabled,
+      warningThresholdMs: cfg.longTurnWatchdog.warningThresholdMs,
+      reminderCooldownMs: cfg.longTurnWatchdog.reminderCooldownMs,
+      maxSessionStateEntries: cfg.longTurnWatchdog.maxSessionStateEntries,
+      prefix: cfg.longTurnWatchdog.prefix,
     }),
     createPressureEscalationGuardHook({
       directory,

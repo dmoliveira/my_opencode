@@ -71,6 +71,13 @@ export interface GlobalProcessPressureConfig {
     selfLowLabel: string;
     selfAppendMarker: boolean;
 }
+export interface LongTurnWatchdogConfig {
+    enabled: boolean;
+    warningThresholdMs: number;
+    reminderCooldownMs: number;
+    maxSessionStateEntries: number;
+    prefix: string;
+}
 export interface PressureEscalationGuardConfig {
     enabled: boolean;
     maxContinueBeforeBlock: number;
@@ -335,6 +342,7 @@ export interface GatewayConfig {
     preemptiveCompaction: PreemptiveCompactionConfig;
     compactionContextInjector: CompactionContextInjectorConfig;
     globalProcessPressure: GlobalProcessPressureConfig;
+    longTurnWatchdog: LongTurnWatchdogConfig;
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;

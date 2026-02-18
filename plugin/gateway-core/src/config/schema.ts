@@ -87,6 +87,15 @@ export interface GlobalProcessPressureConfig {
   selfAppendMarker: boolean
 }
 
+// Declares long-turn watchdog settings for delayed turn warnings.
+export interface LongTurnWatchdogConfig {
+  enabled: boolean
+  warningThresholdMs: number
+  reminderCooldownMs: number
+  maxSessionStateEntries: number
+  prefix: string
+}
+
 // Declares high-pressure escalation guard settings for task/subagent launches.
 export interface PressureEscalationGuardConfig {
   enabled: boolean
@@ -459,6 +468,7 @@ export interface GatewayConfig {
   preemptiveCompaction: PreemptiveCompactionConfig
   compactionContextInjector: CompactionContextInjectorConfig
   globalProcessPressure: GlobalProcessPressureConfig
+  longTurnWatchdog: LongTurnWatchdogConfig
   pressureEscalationGuard: PressureEscalationGuardConfig
   sessionRecovery: SessionRecoveryConfig
   delegateTaskRetry: DelegateTaskRetryConfig
@@ -533,6 +543,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "context-window-monitor",
       "preemptive-compaction",
       "global-process-pressure",
+      "long-turn-watchdog",
       "pressure-escalation-guard",
       "session-recovery",
       "delegate-task-retry",
@@ -657,6 +668,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     selfHighLabel: "HIGH",
     selfLowLabel: "LOW",
     selfAppendMarker: true,
+  },
+  longTurnWatchdog: {
+    enabled: true,
+    warningThresholdMs: 45000,
+    reminderCooldownMs: 120000,
+    maxSessionStateEntries: 1024,
+    prefix: "[Turn Watchdog]:",
   },
   pressureEscalationGuard: {
     enabled: true,
