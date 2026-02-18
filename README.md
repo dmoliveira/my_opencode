@@ -142,6 +142,7 @@ Current scope includes:
 - symbol index helpers: `/lsp symbols --view document --file <path> --json`, `/lsp symbols --view workspace --query <name> --scope <glob[,glob...]> --json`
 - guarded rename helpers: `/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --json`, `/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --allow-text-fallback [--apply] --json`
 - safety note: protocol rename plans that include workspace resource operations (`rename/create/delete file`) are reported and blocked from apply.
+- safety note: protocol rename plans with `changeAnnotations` requiring confirmation are reported and blocked from apply.
 - layered config support via `lsp` object in `.opencode/my_opencode.json` or `~/.config/opencode/my_opencode.json`
 - deterministic precedence from existing layered config merge (`project` overrides `user` overrides bundled defaults)
 

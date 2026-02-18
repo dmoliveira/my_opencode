@@ -3928,26 +3928,28 @@ index 3333333..4444444 100644
             "lsp rename planning should return validation details without applying",
         )
 
-        workspace_change_map, workspace_ops = _workspace_edit_text_changes(
-            {
-                "documentChanges": [
-                    {
-                        "textDocument": {
-                            "uri": "file:///tmp/example.py",
-                            "version": 1,
-                        },
-                        "edits": [
-                            {
-                                "range": {
-                                    "start": {"line": 0, "character": 0},
-                                    "end": {"line": 0, "character": 3},
-                                },
-                                "newText": "foo",
-                            }
-                        ],
-                    }
-                ]
-            }
+        workspace_change_map, workspace_ops, workspace_annotations = (
+            _workspace_edit_text_changes(
+                {
+                    "documentChanges": [
+                        {
+                            "textDocument": {
+                                "uri": "file:///tmp/example.py",
+                                "version": 1,
+                            },
+                            "edits": [
+                                {
+                                    "range": {
+                                        "start": {"line": 0, "character": 0},
+                                        "end": {"line": 0, "character": 3},
+                                    },
+                                    "newText": "foo",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
         )
         expect(
             isinstance(workspace_change_map.get("file:///tmp/example.py"), list)
@@ -3958,25 +3960,59 @@ index 3333333..4444444 100644
             workspace_ops == [],
             "lsp workspace edit helper should keep resource operation list empty for pure text edits",
         )
+        expect(
+            workspace_annotations == {},
+            "lsp workspace edit helper should keep annotation map empty when absent",
+        )
 
-        _, workspace_resource_ops = _workspace_edit_text_changes(
-            {
-                "documentChanges": [
-                    {
-                        "kind": "rename",
-                        "oldUri": "file:///tmp/old.py",
-                        "newUri": "file:///tmp/new.py",
+        _, workspace_resource_ops, workspace_annotations_with_policy = (
+            _workspace_edit_text_changes(
+                {
+                    "changeAnnotations": {
+                        "a1": {
+                            "label": "Rename symbol references",
+                            "description": "Cross-file rename operation",
+                            "needsConfirmation": True,
+                        }
                     },
-                    {
-                        "kind": "delete",
-                        "uri": "file:///tmp/obsolete.py",
-                    },
-                ]
-            }
+                    "documentChanges": [
+                        {
+                            "kind": "rename",
+                            "oldUri": "file:///tmp/old.py",
+                            "newUri": "file:///tmp/new.py",
+                        },
+                        {
+                            "textDocument": {
+                                "uri": "file:///tmp/file.py",
+                                "version": 1,
+                            },
+                            "edits": [
+                                {
+                                    "range": {
+                                        "start": {"line": 0, "character": 0},
+                                        "end": {"line": 0, "character": 3},
+                                    },
+                                    "newText": "foo",
+                                    "annotationId": "a1",
+                                }
+                            ],
+                        },
+                        {
+                            "kind": "delete",
+                            "uri": "file:///tmp/obsolete.py",
+                        },
+                    ],
+                }
+            )
         )
         expect(
             len(workspace_resource_ops) == 2,
             "lsp workspace edit helper should extract resource operations from documentChanges",
+        )
+        expect(
+            workspace_annotations_with_policy.get("a1", {}).get("needs_confirmation")
+            is True,
+            "lsp workspace edit helper should normalize change annotation policy",
         )
 
         cross_language_plan = evaluate_semantic_capability(

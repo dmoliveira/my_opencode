@@ -314,9 +314,25 @@ def _apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
 
 def _workspace_edit_text_changes(
     workspace_edit: dict[str, Any],
-) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+) -> tuple[
+    dict[str, list[dict[str, Any]]],
+    list[dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
     by_uri: dict[str, list[dict[str, Any]]] = {}
     resource_operations: list[dict[str, Any]] = []
+    change_annotations: dict[str, dict[str, Any]] = {}
+
+    annotations_payload = workspace_edit.get("changeAnnotations")
+    if isinstance(annotations_payload, dict):
+        for annotation_id, raw in annotations_payload.items():
+            if not isinstance(raw, dict):
+                continue
+            change_annotations[str(annotation_id)] = {
+                "label": str(raw.get("label") or "").strip(),
+                "description": str(raw.get("description") or "").strip() or None,
+                "needs_confirmation": bool(raw.get("needsConfirmation", False)),
+            }
 
     changes = workspace_edit.get("changes")
     if isinstance(changes, dict):
@@ -360,7 +376,7 @@ def _workspace_edit_text_changes(
             bucket = by_uri.setdefault(uri, [])
             bucket.extend(edit for edit in edits if isinstance(edit, dict))
 
-    return by_uri, resource_operations
+    return by_uri, resource_operations, change_annotations
 
 
 def _edit_plan_from_workspace_edit(
@@ -368,9 +384,12 @@ def _edit_plan_from_workspace_edit(
     root: Path,
     symbol: str,
     new_name: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, dict[str, Any]]]:
     plan: list[dict[str, Any]] = []
-    by_uri, resource_operations = _workspace_edit_text_changes(workspace_edit)
+    by_uri, resource_operations, change_annotations = _workspace_edit_text_changes(
+        workspace_edit
+    )
+    used_annotation_ids: set[str] = set()
     for uri, edits in by_uri.items():
         target_path = uri_to_path(str(uri))
         if target_path is None:
@@ -384,16 +403,27 @@ def _edit_plan_from_workspace_edit(
             relative_path = str(target_path.resolve().relative_to(root))
         except Exception:
             relative_path = str(target_path)
+        annotation_ids = [
+            str(edit.get("annotationId"))
+            for edit in edits
+            if isinstance(edit, dict) and str(edit.get("annotationId") or "").strip()
+        ]
+        used_annotation_ids.update(annotation_ids)
         plan.append(
             {
                 "path": relative_path,
                 "edits": len(edits),
                 "validation": validation,
+                "annotation_ids": sorted(set(annotation_ids)),
                 "before": before,
                 "after": after,
             }
         )
-    return plan, resource_operations
+    used_annotations: dict[str, dict[str, Any]] = {}
+    for annotation_id in sorted(used_annotation_ids):
+        if annotation_id in change_annotations:
+            used_annotations[annotation_id] = change_annotations[annotation_id]
+    return plan, resource_operations, used_annotations
 
 
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
@@ -985,6 +1015,7 @@ def command_rename(args: list[str]) -> int:
     lsp_error = ""
     edit_plan: list[dict[str, Any]] = []
     resource_operations: list[dict[str, Any]] = []
+    change_annotations: dict[str, dict[str, Any]] = {}
 
     anchor = _resolve_symbol_anchor(symbol, files, root)
     if anchor is not None:
@@ -999,11 +1030,13 @@ def command_rename(args: list[str]) -> int:
                         new_name=new_name,
                     )
                 if isinstance(workspace_edit, dict):
-                    edit_plan, resource_operations = _edit_plan_from_workspace_edit(
-                        workspace_edit=workspace_edit,
-                        root=root,
-                        symbol=symbol,
-                        new_name=new_name,
+                    edit_plan, resource_operations, change_annotations = (
+                        _edit_plan_from_workspace_edit(
+                            workspace_edit=workspace_edit,
+                            root=root,
+                            symbol=symbol,
+                            new_name=new_name,
+                        )
                     )
                     if edit_plan:
                         backend = "lsp"
@@ -1037,6 +1070,11 @@ def command_rename(args: list[str]) -> int:
         blockers.append("new name must differ from current symbol")
     if resource_operations:
         blockers.append("workspace edit includes resource operations; apply is blocked")
+    if any(
+        bool(annotation.get("needs_confirmation", False))
+        for annotation in change_annotations.values()
+    ):
+        blockers.append("change annotations require confirmation; apply is blocked")
     for row in edit_plan:
         if row["validation"].get("result") != "PASS":
             blockers.append(f"validation failed for {row['path']}")
@@ -1068,6 +1106,7 @@ def command_rename(args: list[str]) -> int:
         "validation": [
             {"path": row["path"], "validation": row["validation"]} for row in edit_plan
         ],
+        "change_annotations": change_annotations,
         "resource_operations": resource_operations,
         "lsp_error": lsp_error or None,
     }
