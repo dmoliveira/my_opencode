@@ -53,6 +53,7 @@ from safe_edit_adapters import (  # type: ignore
     validate_changed_references,
 )
 from lsp_command import _workspace_edit_text_changes  # type: ignore
+from lsp_rpc_client import LspClient  # type: ignore
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
@@ -117,6 +118,7 @@ TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 LSP_SCRIPT = REPO_ROOT / "scripts" / "lsp_command.py"
+MOCK_LSP_SERVER_SCRIPT = REPO_ROOT / "scripts" / "mock_lsp_server.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
@@ -3927,6 +3929,55 @@ index 3333333..4444444 100644
             and isinstance(lsp_rename_plan_report.get("validation"), list),
             "lsp rename planning should return validation details without applying",
         )
+
+        with tempfile.TemporaryDirectory() as lsp_mock_dir:
+            lsp_mock_root = Path(lsp_mock_dir)
+            lsp_mock_file = lsp_mock_root / "sample.py"
+            lsp_mock_file.write_text(
+                "def alpha():\n    return alpha\n",
+                encoding="utf-8",
+            )
+            with LspClient(
+                command=[sys.executable, str(MOCK_LSP_SERVER_SCRIPT)],
+                root=lsp_mock_root,
+            ) as mock_client:
+                defs = mock_client.goto_definition(lsp_mock_file, line0=1, char0=12)
+                refs = mock_client.find_references(lsp_mock_file, line0=1, char0=12)
+                doc_symbols = mock_client.document_symbols(lsp_mock_file)
+                workspace_symbols = mock_client.workspace_symbols("alp")
+                prep = mock_client.prepare_rename(lsp_mock_file, line0=1, char0=12)
+                rename_payload = mock_client.rename(
+                    lsp_mock_file,
+                    line0=1,
+                    char0=12,
+                    new_name="beta",
+                )
+
+            expect(
+                isinstance(defs, list) and len(defs) >= 1,
+                "mock lsp client goto-definition should return at least one location",
+            )
+            expect(
+                isinstance(refs, list) and len(refs) >= 2,
+                "mock lsp client find-references should return declaration and usage",
+            )
+            expect(
+                isinstance(doc_symbols, list) and len(doc_symbols) >= 1,
+                "mock lsp client document-symbol should return at least one symbol",
+            )
+            expect(
+                isinstance(workspace_symbols, list) and len(workspace_symbols) >= 1,
+                "mock lsp client workspace-symbol should return query matches",
+            )
+            expect(
+                isinstance(prep, dict) and isinstance(prep.get("range"), dict),
+                "mock lsp client prepare-rename should return rename range",
+            )
+            expect(
+                isinstance(rename_payload, dict)
+                and isinstance(rename_payload.get("changes"), dict),
+                "mock lsp client rename should return workspace edit changes",
+            )
 
         workspace_change_map, workspace_ops, workspace_annotations = (
             _workspace_edit_text_changes(
