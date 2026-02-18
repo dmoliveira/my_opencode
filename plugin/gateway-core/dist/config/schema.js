@@ -11,6 +11,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "context-window-monitor",
             "preemptive-compaction",
             "global-process-pressure",
+            "long-turn-watchdog",
             "pressure-escalation-guard",
             "session-recovery",
             "delegate-task-retry",
@@ -135,6 +136,13 @@ export const DEFAULT_GATEWAY_CONFIG = {
         selfHighLabel: "HIGH",
         selfLowLabel: "LOW",
         selfAppendMarker: true,
+    },
+    longTurnWatchdog: {
+        enabled: true,
+        warningThresholdMs: 45000,
+        reminderCooldownMs: 120000,
+        maxSessionStateEntries: 1024,
+        prefix: "[Turn Watchdog]:",
     },
     pressureEscalationGuard: {
         enabled: true,

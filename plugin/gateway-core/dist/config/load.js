@@ -97,6 +97,9 @@ export function loadGatewayConfig(raw) {
     const globalProcessPressureSource = source.globalProcessPressure && typeof source.globalProcessPressure === "object"
         ? source.globalProcessPressure
         : {};
+    const longTurnWatchdogSource = source.longTurnWatchdog && typeof source.longTurnWatchdog === "object"
+        ? source.longTurnWatchdog
+        : {};
     const pressureEscalationGuardSource = source.pressureEscalationGuard && typeof source.pressureEscalationGuard === "object"
         ? source.pressureEscalationGuard
         : {};
@@ -377,6 +380,17 @@ export function loadGatewayConfig(raw) {
             selfAppendMarker: typeof globalProcessPressureSource.selfAppendMarker === "boolean"
                 ? globalProcessPressureSource.selfAppendMarker
                 : DEFAULT_GATEWAY_CONFIG.globalProcessPressure.selfAppendMarker,
+        },
+        longTurnWatchdog: {
+            enabled: typeof longTurnWatchdogSource.enabled === "boolean"
+                ? longTurnWatchdogSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.enabled,
+            warningThresholdMs: positiveInt(longTurnWatchdogSource.warningThresholdMs, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.warningThresholdMs),
+            reminderCooldownMs: nonNegativeInt(longTurnWatchdogSource.reminderCooldownMs, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.reminderCooldownMs),
+            maxSessionStateEntries: positiveInt(longTurnWatchdogSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.maxSessionStateEntries),
+            prefix: typeof longTurnWatchdogSource.prefix === "string" && longTurnWatchdogSource.prefix.trim().length > 0
+                ? longTurnWatchdogSource.prefix.trim()
+                : DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.prefix,
         },
         pressureEscalationGuard: {
             enabled: typeof pressureEscalationGuardSource.enabled === "boolean"

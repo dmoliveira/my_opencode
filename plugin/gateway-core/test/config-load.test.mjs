@@ -33,6 +33,11 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.globalProcessPressure.selfHighLabel, "HIGH")
   assert.equal(config.globalProcessPressure.selfLowLabel, "LOW")
   assert.equal(config.globalProcessPressure.selfAppendMarker, true)
+  assert.equal(config.longTurnWatchdog.enabled, true)
+  assert.equal(config.longTurnWatchdog.warningThresholdMs, 45000)
+  assert.equal(config.longTurnWatchdog.reminderCooldownMs, 120000)
+  assert.equal(config.longTurnWatchdog.maxSessionStateEntries, 1024)
+  assert.equal(config.longTurnWatchdog.prefix, "[Turn Watchdog]:")
   assert.equal(config.thinkMode.enabled, true)
   assert.equal(config.thinkingBlockValidator.enabled, true)
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
@@ -126,6 +131,12 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
       guardVerbosity: "invalid",
       maxSessionStateEntries: 0,
     },
+    longTurnWatchdog: {
+      warningThresholdMs: 0,
+      reminderCooldownMs: -5,
+      maxSessionStateEntries: 0,
+      prefix: "   ",
+    },
     pressureEscalationGuard: {
       maxContinueBeforeBlock: 0,
       blockedSubagentTypes: [],
@@ -190,6 +201,11 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.globalProcessPressure.selfHighLabel, "HIGH")
   assert.equal(config.globalProcessPressure.selfLowLabel, "LOW")
   assert.equal(config.globalProcessPressure.selfAppendMarker, true)
+  assert.equal(config.longTurnWatchdog.enabled, true)
+  assert.equal(config.longTurnWatchdog.warningThresholdMs, 45000)
+  assert.equal(config.longTurnWatchdog.reminderCooldownMs, 120000)
+  assert.equal(config.longTurnWatchdog.maxSessionStateEntries, 1024)
+  assert.equal(config.longTurnWatchdog.prefix, "[Turn Watchdog]:")
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
   assert.equal(config.directoryReadmeInjector.maxChars, 4000)
   assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
