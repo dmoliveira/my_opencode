@@ -117,6 +117,7 @@ AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
+SKILL_CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "skill_contract_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 TASK_GRAPH_SCRIPT = REPO_ROOT / "scripts" / "task_graph_command.py"
@@ -361,6 +362,14 @@ exit 0
             "--completion-mode objective" in init_deep_template,
             "init-deep should map to objective completion mode",
         )
+
+        for skill_name in ("playwright", "frontend-ui-ux", "git-master"):
+            template = str((command_map.get(skill_name, {}) or {}).get("template", ""))
+            expect(
+                'skill_contract_command.py"' in template
+                and f" {skill_name} --json`" in template,
+                f"{skill_name} command should resolve skill contract payload",
+            )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
         expect(
@@ -5038,6 +5047,49 @@ index 3333333..4444444 100644
             and browser_doctor_playwright_report.get("selected_ready") is True,
             "browser doctor should report ready selected provider after reset",
         )
+
+        for skill_name in ("playwright", "frontend-ui-ux", "git-master"):
+            skill_contract = subprocess.run(
+                [
+                    sys.executable,
+                    str(SKILL_CONTRACT_SCRIPT),
+                    skill_name,
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=refactor_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(
+                skill_contract.returncode == 0,
+                f"skill contract command should succeed for {skill_name}",
+            )
+            skill_contract_payload = parse_json_output(skill_contract.stdout)
+            expect(
+                skill_contract_payload.get("name") == skill_name,
+                f"skill contract payload should expose skill name for {skill_name}",
+            )
+            expect(
+                isinstance(skill_contract_payload.get("triggers"), list)
+                and len(skill_contract_payload["triggers"]) >= 1,
+                f"skill contract should include triggers for {skill_name}",
+            )
+            expect(
+                isinstance(skill_contract_payload.get("boundaries"), list)
+                and len(skill_contract_payload["boundaries"]) >= 1,
+                f"skill contract should include boundaries for {skill_name}",
+            )
+            expect(
+                isinstance(skill_contract_payload.get("reuse_commands"), list)
+                and len(skill_contract_payload["reuse_commands"]) >= 1,
+                f"skill contract should include reuse commands for {skill_name}",
+            )
+            expect(
+                bool(skill_contract_payload.get("fallback")),
+                f"skill contract should include fallback guidance for {skill_name}",
+            )
 
         plan_path = tmp / "plan_execution_selftest.md"
         plan_path.write_text(

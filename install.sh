@@ -75,6 +75,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/browser_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/browser_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/skill_contract_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/skill_contract_command.py"
+fi
 if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/todo_command.py"
 fi

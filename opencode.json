@@ -322,6 +322,18 @@
       "description": "Run browser provider diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
     },
+    "playwright": {
+      "description": "Skill contract for browser automation with Playwright-first defaults",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" playwright --json`\nUse this skill contract as execution guardrails for the current request. Prefer `/browser profile playwright` and `/browser doctor --json` before browser-driven execution, then continue concrete implementation in this session."
+    },
+    "frontend-ui-ux": {
+      "description": "Skill contract for frontend UI/UX implementation quality",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" frontend-ui-ux --json`\nUse this skill contract as execution guardrails for the current request. Reuse existing frontend patterns, ensure desktop/mobile behavior, and continue concrete implementation now."
+    },
+    "git-master": {
+      "description": "Skill contract for safe git workflow and PR-first delivery",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" git-master --json`\nUse this skill contract as execution guardrails for the current request. Follow safe git workflow defaults, gather validation evidence, and continue concrete implementation now."
+    },
     "autopilot": {
       "description": "Continue current task autonomously with autopilot guardrails",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" $ARGUMENTS --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
