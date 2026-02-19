@@ -66,7 +66,7 @@ def usage() -> int:
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
         "/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--json] | "
-        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--allow-rename-file-ops] [--apply] [--json]"
+        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--allow-rename-file-ops] [--max-diff-files <n>] [--max-diff-lines <n>] [--apply] [--json]"
     )
     return 2
 
@@ -1099,10 +1099,12 @@ def command_symbols(args: list[str]) -> int:
 
 def _parse_rename_args(
     args: list[str], *, allow_apply_flags: bool
-) -> tuple[str, str, list[str], bool, bool, bool, bool] | None:
+) -> tuple[str, str, list[str], bool, bool, int, int, bool, bool] | None:
     as_json = "--json" in args
     allow_text_fallback = "--allow-text-fallback" in args
     allow_rename_file_ops = "--allow-rename-file-ops" in args
+    max_diff_files = 25
+    max_diff_lines = 1200
     apply_changes = "--apply" in args
     symbol = ""
     new_name = ""
@@ -1113,6 +1115,24 @@ def _parse_rename_args(
         token = args[index]
         if token in {"--json", "--allow-text-fallback", "--allow-rename-file-ops"}:
             index += 1
+            continue
+        if token == "--max-diff-files":
+            if index + 1 >= len(args):
+                return None
+            try:
+                max_diff_files = max(0, int(args[index + 1]))
+            except ValueError:
+                return None
+            index += 2
+            continue
+        if token == "--max-diff-lines":
+            if index + 1 >= len(args):
+                return None
+            try:
+                max_diff_lines = max(0, int(args[index + 1]))
+            except ValueError:
+                return None
+            index += 2
             continue
         if token == "--apply" and allow_apply_flags:
             index += 1
@@ -1145,6 +1165,8 @@ def _parse_rename_args(
         scope_patterns,
         allow_text_fallback,
         allow_rename_file_ops,
+        max_diff_files,
+        max_diff_lines,
         apply_changes,
         as_json,
     )
@@ -1154,7 +1176,7 @@ def command_prepare_rename(args: list[str]) -> int:
     parsed = _parse_rename_args(args, allow_apply_flags=False)
     if parsed is None:
         return usage()
-    symbol, new_name, scope_patterns, _, _, _, as_json = parsed
+    symbol, new_name, scope_patterns, _, _, _, _, _, as_json = parsed
 
     root = Path.cwd()
     files = _discover_files(root, scope_patterns)
@@ -1238,6 +1260,8 @@ def command_rename(args: list[str]) -> int:
         scope_patterns,
         allow_text_fallback,
         allow_rename_file_ops,
+        max_diff_files,
+        max_diff_lines,
         apply_changes,
         as_json,
     ) = parsed
@@ -1305,6 +1329,19 @@ def command_rename(args: list[str]) -> int:
     renamefile_operations, blocked_resource_ops = _split_resource_operations(
         resource_operations
     )
+    diff_preview = [
+        {
+            "path": str(row["path"]),
+            "diff": _build_diff_preview(
+                path=str(row["path"]),
+                before=str(row.get("before", "")),
+                after=str(row.get("after", "")),
+            ),
+        }
+        for row in edit_plan
+    ]
+    diff_file_count = len(diff_preview)
+    diff_line_count = sum(len(item.get("diff", [])) for item in diff_preview)
 
     blockers: list[str] = []
     if backend == "text" and not allow_text_fallback:
@@ -1324,6 +1361,14 @@ def command_rename(args: list[str]) -> int:
         blockers.append("change annotations require confirmation; apply is blocked")
     if renamefile_operations:
         blockers.extend(_validate_renamefile_operations(root, renamefile_operations))
+    if apply_changes and diff_file_count > max_diff_files:
+        blockers.append(
+            f"diff review threshold exceeded: files {diff_file_count}>{max_diff_files}"
+        )
+    if apply_changes and diff_line_count > max_diff_lines:
+        blockers.append(
+            f"diff review threshold exceeded: lines {diff_line_count}>{max_diff_lines}"
+        )
     for row in edit_plan:
         if row["validation"].get("result") != "PASS":
             blockers.append(f"validation failed for {row['path']}")
@@ -1343,17 +1388,6 @@ def command_rename(args: list[str]) -> int:
         )
 
     result = "PASS" if not blockers else "WARN"
-    diff_preview = [
-        {
-            "path": str(row["path"]),
-            "diff": _build_diff_preview(
-                path=str(row["path"]),
-                before=str(row.get("before", "")),
-                after=str(row.get("after", "")),
-            ),
-        }
-        for row in edit_plan
-    ]
     report = {
         "result": result,
         "backend": backend,
@@ -1362,6 +1396,10 @@ def command_rename(args: list[str]) -> int:
         "new_name": new_name,
         "scope": scope_patterns,
         "allow_rename_file_ops": allow_rename_file_ops,
+        "max_diff_files": max_diff_files,
+        "max_diff_lines": max_diff_lines,
+        "diff_file_count": diff_file_count,
+        "diff_line_count": diff_line_count,
         "apply_requested": apply_changes,
         "applied": bool(apply_changes and not blockers),
         "planned_files": len(edit_plan),
