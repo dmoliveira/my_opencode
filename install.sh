@@ -78,6 +78,9 @@ fi
 if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/todo_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/task_graph_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/task_graph_command.py"
+fi
 if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/resume_command.py"
 fi
@@ -209,6 +212,15 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
 	if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/todo_command.py" status --json
 		python3 "$INSTALL_DIR/scripts/todo_command.py" enforce --json
+	fi
+	if [ -f "$INSTALL_DIR/scripts/task_graph_command.py" ]; then
+		TASK_ID=$(python3 "$INSTALL_DIR/scripts/task_graph_command.py" create --subject "Install self-check task" --owner install-self-check --json | python3 -c 'import json,sys; print((json.load(sys.stdin).get("task") or {}).get("id") or "")')
+		python3 "$INSTALL_DIR/scripts/task_graph_command.py" list --json
+		if [ -n "$TASK_ID" ]; then
+			python3 "$INSTALL_DIR/scripts/task_graph_command.py" update "$TASK_ID" --status completed --json
+			python3 "$INSTALL_DIR/scripts/task_graph_command.py" ready --json
+		fi
+		python3 "$INSTALL_DIR/scripts/task_graph_command.py" doctor --json
 	fi
 	if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true

@@ -506,6 +506,34 @@
       "description": "Run todo compliance enforcement checks in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" enforce --json`\nShow only the command output."
     },
+    "task": {
+      "description": "Manage persistent task graph (create|list|get|update|ready|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "task-create": {
+      "description": "Create one task graph entry",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" create $ARGUMENTS --json`\nShow only the command output."
+    },
+    "task-list": {
+      "description": "List task graph entries",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" list $ARGUMENTS --json`\nShow only the command output."
+    },
+    "task-get": {
+      "description": "Show one task graph entry by id",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" get $ARGUMENTS --json`\nShow only the command output."
+    },
+    "task-update": {
+      "description": "Update task graph entry fields",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" update $ARGUMENTS --json`\nShow only the command output."
+    },
+    "task-ready": {
+      "description": "List dependency-unblocked pending tasks",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" ready --json`\nShow only the command output."
+    },
+    "task-doctor": {
+      "description": "Run task graph diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" doctor --json`\nShow only the command output."
+    },
     "resume": {
       "description": "Manage runtime recovery controls (status|now|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" $ARGUMENTS`\nShow only the command output."
