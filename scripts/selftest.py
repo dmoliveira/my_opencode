@@ -120,6 +120,7 @@ RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
 TMUX_SCRIPT = REPO_ROOT / "scripts" / "tmux_command.py"
+PACKAGED_CLI_SCRIPT = REPO_ROOT / "scripts" / "my_opencode_cli.py"
 SKILL_CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "skill_contract_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
@@ -385,6 +386,15 @@ exit 0
             expect(
                 'tmux_command.py"' in template,
                 f"{command_name} command should resolve tmux visual mode backend",
+            )
+
+        for command_name in ("my-opencode", "my-opencode-version"):
+            template = str(
+                (command_map.get(command_name, {}) or {}).get("template", "")
+            )
+            expect(
+                'my_opencode_cli.py"' in template,
+                f"{command_name} command should resolve packaged CLI backend",
             )
 
         for skill_name in ("playwright", "frontend-ui-ux", "git-master"):
@@ -5161,6 +5171,77 @@ index 3333333..4444444 100644
             tmux_doctor_report.get("result") in {"PASS", "WARN"}
             and isinstance(tmux_doctor_report.get("warnings"), list),
             "tmux doctor should return stable diagnostics payload",
+        )
+
+        packaged_cli_version = subprocess.run(
+            [sys.executable, str(PACKAGED_CLI_SCRIPT), "version"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            packaged_cli_version.returncode == 0
+            and "my_opencode-cli" in packaged_cli_version.stdout,
+            "packaged CLI version command should return stable version banner",
+        )
+
+        packaged_cli_doctor = subprocess.run(
+            [sys.executable, str(PACKAGED_CLI_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            packaged_cli_doctor.returncode == 0,
+            "packaged CLI doctor command should succeed",
+        )
+
+        packaged_cli_install = subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGED_CLI_SCRIPT),
+                "install",
+                "--repo-url",
+                str(REPO_ROOT),
+                "--repo-ref",
+                "HEAD",
+                "--install-dir",
+                str(tmp / "packaged-cli-install"),
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            packaged_cli_install.returncode == 0
+            and "install.sh --non-interactive" in packaged_cli_install.stdout,
+            "packaged CLI install command should support non-interactive dry-run output",
+        )
+
+        packaged_cli_run = subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGED_CLI_SCRIPT),
+                "run",
+                "--opencode-binary",
+                "/usr/bin/true",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            packaged_cli_run.returncode == 0,
+            "packaged CLI run command should execute configured binary",
         )
 
         for skill_name in ("playwright", "frontend-ui-ux", "git-master"):

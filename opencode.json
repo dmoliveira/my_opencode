@@ -338,6 +338,14 @@
       "description": "Run tmux visual mode diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" doctor --json`\nShow only the command output."
     },
+    "my-opencode": {
+      "description": "Run packaged my_opencode CLI (install|doctor|run|version)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "my-opencode-version": {
+      "description": "Show packaged my_opencode CLI version",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py\" version`\nShow only the command output."
+    },
     "playwright": {
       "description": "Skill contract for browser automation with Playwright-first defaults",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" playwright --json`\nUse this skill contract as execution guardrails for the current request. Prefer `/browser profile playwright` and `/browser doctor --json` before browser-driven execution, then continue concrete implementation in this session."

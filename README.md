@@ -33,6 +33,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - 🧭 Built-in `/tmux` command for optional visual-mode status/config/doctor with headless fallback.
 - 🧩 Built-in skill contracts via `/playwright`, `/frontend-ui-ux`, and `/git-master` to guide browser, UI, and git workflows.
+- 📦 Packaged CLI backend at `scripts/my_opencode_cli.py` for `install`, `doctor`, `run`, and `version` flows.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
 - 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
@@ -834,7 +835,23 @@ chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/open
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
 chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py ~/.config/opencode/my_opencode/scripts/lsp_command.py
+chmod +x ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py
 ```
+
+## Packaged CLI parity
+
+Use:
+```bash
+python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py version
+python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py doctor --json
+python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py install --dry-run
+python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py run --opencode-binary /usr/bin/true
+```
+
+Notes:
+- `install` is non-interactive by default and supports `--repo-url`, `--repo-ref`, and `--install-dir` overrides.
+- `doctor` delegates to the same diagnostics pipeline as `/doctor`.
+- `run` supports a binary override for deterministic automation tests.
 
 ## Install wizard flow 🧭
 
