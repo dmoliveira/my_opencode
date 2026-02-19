@@ -450,6 +450,10 @@
       "description": "Generate release note draft from git history",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft $ARGUMENTS --json`\nShow only the command output."
     },
+    "release-train-draft-milestones": {
+      "description": "Generate release note draft with parity and LSP milestone context",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft --include-milestones $ARGUMENTS --json`\nShow only the command output."
+    },
     "release-train-doctor": {
       "description": "Run release-train diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" doctor --json`\nShow only the command output."
@@ -585,6 +589,14 @@
     "task-doctor": {
       "description": "Run task graph diagnostics",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" doctor --json`\nShow only the command output."
+    },
+    "plan-handoff": {
+      "description": "Thin @plan-style continuity profile over canonical runtime commands",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" $ARGUMENTS --json`\nShow only the command output."
+    },
+    "plan-handoff-status": {
+      "description": "Show plan-handoff compatibility profile status in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" status --json`\nShow only the command output."
     },
     "resume": {
       "description": "Manage runtime recovery controls (status|now|disable)",
@@ -750,10 +762,6 @@
       "description": "Show plugin diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" doctor --json`\nShow only the command output."
     },
-    "plugin-enable-notifier": {
-      "description": "Enable notifier plugin",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable notifier`\nShow only the command output."
-    },
     "plugin-enable-morph": {
       "description": "Enable morph plugin (experimental)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable morph`\nShow only the command output."
@@ -911,7 +919,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" doctor --json`\nShow only the command output."
     },
     "gateway": {
-      "description": "Manage plugin gateway mode (status|enable|disable|doctor)",
+      "description": "Manage plugin gateway mode (status|enable|disable|doctor|tune memory|recover memory)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "gateway-status": {
@@ -929,6 +937,30 @@
     "gateway-doctor": {
       "description": "Run plugin gateway diagnostics",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" doctor --json`\nShow only the command output."
+    },
+    "gateway-recover-memory": {
+      "description": "Plan or apply memory pressure recovery",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" recover memory $ARGUMENTS --json`\nShow only the command output."
+    },
+    "gateway-recover-watch": {
+      "description": "Run bounded memory recovery watch loop",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" recover memory --watch --apply --resume --compress --force-kill --interval-seconds 20 --max-cycles 6 --json`\nShow only the command output."
+    },
+    "gateway-protection": {
+      "description": "Manage macOS gateway protection launch agent (status|enable|disable)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection $ARGUMENTS --json`\nShow only the command output."
+    },
+    "gateway-protection-status": {
+      "description": "Show gateway protection launch agent status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection status --json`\nShow only the command output."
+    },
+    "gateway-protection-report": {
+      "description": "Show recent gateway protection watch cycles",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection report --limit 20 --json`\nShow only the command output."
+    },
+    "gateway-protection-cache": {
+      "description": "Show or clear pane-to-session recovery cache",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection cache $ARGUMENTS --json`\nShow only the command output."
     },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
@@ -956,8 +988,7 @@
     }
   },
   "plugin": [
-    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core",
-    "@mohak34/opencode-notifier@latest"
+    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
   ],
   "instructions": [
     "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",

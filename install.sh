@@ -10,6 +10,14 @@ NON_INTERACTIVE=false
 SKIP_SELF_CHECK=false
 RUN_WIZARD=false
 WIZARD_RECONFIGURE=false
+ENABLE_PROTECTION_FOREVER=true
+
+PROTECTION_LABEL="com.my_opencode.gateway-protection"
+LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
+PROTECTION_PLIST="$LAUNCH_AGENT_DIR/$PROTECTION_LABEL.plist"
+PROTECTION_LOG_DIR="$HOME/.config/opencode/my_opencode/logs"
+PROTECTION_STDOUT="$PROTECTION_LOG_DIR/gateway-protection.stdout.log"
+PROTECTION_STDERR="$PROTECTION_LOG_DIR/gateway-protection.stderr.log"
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
@@ -25,8 +33,14 @@ while [ "$#" -gt 0 ]; do
 	--reconfigure)
 		WIZARD_RECONFIGURE=true
 		;;
+	--protection-forever)
+		ENABLE_PROTECTION_FOREVER=true
+		;;
+	--no-protection-forever)
+		ENABLE_PROTECTION_FOREVER=false
+		;;
 	-h | --help)
-		printf "Usage: %s [--non-interactive] [--skip-self-check] [--wizard] [--reconfigure]\n" "$0"
+		printf "Usage: %s [--non-interactive] [--skip-self-check] [--wizard] [--reconfigure] [--protection-forever|--no-protection-forever]\n" "$0"
 		exit 0
 		;;
 	*)
@@ -46,6 +60,88 @@ if ! command -v python3 >/dev/null 2>&1; then
 	printf "Error: python3 is required but not installed.\n" >&2
 	exit 1
 fi
+
+append_shell_block() {
+	local rc_file="$1"
+	local block_start="# >>> my_opencode memory guard >>>"
+	local block_end="# <<< my_opencode memory guard <<<"
+	[ -f "$rc_file" ] || touch "$rc_file"
+	if grep -Fq "$block_start" "$rc_file"; then
+		return 0
+	fi
+	cat >>"$rc_file" <<EOF
+
+$block_start
+export MY_OPENCODE_GATEWAY_EVENT_AUDIT=1
+export MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES=524288
+export MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS=5
+alias gw-recover-now='python3 "\$HOME/.config/opencode/my_opencode/scripts/gateway_command.py" recover memory --apply --resume --compress --continue-prompt --force-kill --json'
+alias gw-recover-watch='python3 "\$HOME/.config/opencode/my_opencode/scripts/gateway_command.py" recover memory --watch --apply --resume --compress --continue-prompt --force-kill --interval-seconds 20 --max-cycles 30 --json'
+$block_end
+EOF
+}
+
+install_protection_launch_agent() {
+	if ! command -v launchctl >/dev/null 2>&1; then
+		printf "warning: launchctl unavailable; skipping forever protection agent install\n"
+		return 0
+	fi
+	mkdir -p "$LAUNCH_AGENT_DIR" "$PROTECTION_LOG_DIR"
+	cat >"$PROTECTION_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$PROTECTION_LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>python3</string>
+    <string>$INSTALL_DIR/scripts/gateway_command.py</string>
+    <string>recover</string>
+    <string>memory</string>
+    <string>--watch</string>
+    <string>--apply</string>
+    <string>--resume</string>
+    <string>--compress</string>
+    <string>--continue-prompt</string>
+    <string>--force-kill</string>
+    <string>--interval-seconds</string>
+    <string>20</string>
+    <string>--json</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MY_OPENCODE_GATEWAY_EVENT_AUDIT</key>
+    <string>1</string>
+    <key>MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES</key>
+    <string>524288</string>
+    <key>MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS</key>
+    <string>5</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$PROTECTION_STDOUT</string>
+  <key>StandardErrorPath</key>
+  <string>$PROTECTION_STDERR</string>
+</dict>
+</plist>
+EOF
+	launchctl bootout "gui/$(id -u)" "$PROTECTION_PLIST" >/dev/null 2>&1 || true
+	if launchctl bootstrap "gui/$(id -u)" "$PROTECTION_PLIST" >/dev/null 2>&1; then
+		launchctl kickstart -k "gui/$(id -u)/$PROTECTION_LABEL" >/dev/null 2>&1 || true
+		printf "gateway protection: launch agent installed and started (%s)\n" "$PROTECTION_LABEL"
+		return 0
+	fi
+	if launchctl load -w "$PROTECTION_PLIST" >/dev/null 2>&1; then
+		printf "gateway protection: launch agent installed via legacy load (%s)\n" "$PROTECTION_LABEL"
+		return 0
+	fi
+	printf "warning: unable to start launch agent automatically; plist created at %s\n" "$PROTECTION_PLIST"
+}
 
 mkdir -p "$CONFIG_DIR"
 
@@ -89,6 +185,9 @@ if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
 fi
 if [ -f "$INSTALL_DIR/scripts/task_graph_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/task_graph_command.py"
+fi
+if [ -f "$INSTALL_DIR/scripts/plan_handoff_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/plan_handoff_command.py"
 fi
 if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/resume_command.py"
@@ -139,6 +238,14 @@ if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/gateway_command.py"
 fi
 ln -sfn "$INSTALL_DIR/opencode.json" "$CONFIG_PATH"
+
+append_shell_block "$HOME/.zshrc"
+append_shell_block "$HOME/.bashrc"
+append_shell_block "$HOME/.bash_profile"
+
+if [ "$ENABLE_PROTECTION_FOREVER" = true ]; then
+	install_protection_launch_agent
+fi
 
 if [ -d "$INSTALL_DIR/agent" ]; then
 	mkdir -p "$CONFIG_DIR/agent"
@@ -231,6 +338,10 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
 		fi
 		python3 "$INSTALL_DIR/scripts/task_graph_command.py" doctor --json
 	fi
+	if [ -f "$INSTALL_DIR/scripts/plan_handoff_command.py" ]; then
+		python3 "$INSTALL_DIR/scripts/plan_handoff_command.py" status --json
+		python3 "$INSTALL_DIR/scripts/plan_handoff_command.py" handoff --json
+	fi
 	if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true
 		RUNTIME_PATH="$HOME/.config/opencode/my_opencode/runtime/plan_execution.json"
@@ -284,6 +395,7 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" status --json
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" prepare --version 0.0.1 --json || true
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --head HEAD --json
+		python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --include-milestones --head HEAD --json
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" doctor --json
 	fi
 	if [ -f "$INSTALL_DIR/scripts/hotfix_command.py" ]; then
@@ -339,6 +451,15 @@ fi
 
 printf "\nDone! ✅\n"
 printf "Config linked: %s -> %s\n" "$CONFIG_PATH" "$INSTALL_DIR/opencode.json"
+if [ "$ENABLE_PROTECTION_FOREVER" = true ]; then
+	printf "Memory protection forever: enabled (%s)\n" "$PROTECTION_LABEL"
+	printf "  launchctl print gui/%s/%s\n" "$(id -u)" "$PROTECTION_LABEL"
+	printf "  logs: %s and %s\n" "$PROTECTION_STDOUT" "$PROTECTION_STDERR"
+else
+	printf "Memory protection forever: disabled by flag\n"
+	printf "  rerun installer with --protection-forever to enable launch agent\n"
+fi
+printf "Shell shortcuts installed: gw-recover-now, gw-recover-watch (open a new shell or source rc file)\n"
 printf "\nOpen OpenCode and use:\n"
 printf "  /mcp status\n"
 printf "  /mcp help\n"
@@ -407,6 +528,7 @@ printf "  /pr-review-doctor\n"
 printf "  /release-train status --json\n"
 printf "  /release-train prepare --version 0.0.1 --json\n"
 printf "  /release-train draft --head HEAD --json\n"
+printf "  /release-train-draft-milestones --head HEAD\n"
 printf "  /release-train-doctor\n"
 printf "  /hotfix start --incident-id INC-42 --scope patch --impact sev2 --json\n"
 printf "  /hotfix status --json\n"
@@ -441,5 +563,5 @@ printf "  /nvim install minimal --link-init\n"
 printf "  ~/.config/opencode/my_opencode/install.sh --wizard --reconfigure\n"
 printf "  /doctor-json\n"
 printf "  /setup-keys\n"
-printf "  /plugin enable notifier\n"
-printf "  /plugin disable notifier\n"
+printf "  /notify status\n"
+printf "  /notify profile focus\n"

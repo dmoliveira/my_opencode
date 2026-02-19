@@ -25,6 +25,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🗂️ Built-in `/task` command for persistent dependency-aware task graph tracking.
+- 🔁 Built-in `/plan-handoff` compatibility profile for `@plan`-style continuity over `/autopilot`, `/task`, `/resume`, and `/checkpoint`.
 - 🧭 Built-in `/lsp` command for language-server readiness and install diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 🤖 Built-in `/agent-doctor` command for custom agent contract, orchestration policy marker, and runtime checks.
@@ -74,6 +75,8 @@ Detailed guide: `docs/agents-playbook.md` 📘
 Operating contract: `instructions/agent_operating_contract.md` 🛡️
 
 Autopilot hook migration plan: `docs/autopilot-hook-roadmap.md` 🔁
+
+Mistake ledger capture/report guide: `plugin/gateway-core/docs/mistake-ledger-report.md` 🧾
 
 ## Roadmap plan 🗺️
 
@@ -394,12 +397,13 @@ Task 24.2 release assistant engine notes:
 - backend module: `scripts/release_train_engine.py` with `status`, `prepare`, `draft`, `publish`, and `doctor` command flows.
 - `prepare` emits deterministic `reason_codes` and remediation for clean-tree, branch, validation, changelog, and semver gating checks.
 - `draft` composes release-note entries from git history since the latest (or provided) tag.
+- `draft --include-milestones` appends parity/LSP milestone context from plan docs for consolidated wave summaries.
 - `publish` enforces readiness and explicit confirmation, with dry-run and rollback action metadata.
 
 Task 24.3 command integration notes:
 
 - command module: `scripts/release_train_command.py`
-- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-doctor`
+- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-draft-milestones`, `/release-train-doctor`
 - doctor integration: unified `/doctor run --json` now includes `release-train` subsystem readiness checks.
 - release-check integration: `make release-check VERSION=x.y.z` now invokes release-train preflight gating.
 
@@ -409,6 +413,7 @@ Examples:
 /release-train status --json
 /release-train prepare --version 0.3.0 --json
 /release-train draft --head HEAD --json
+/release-train-draft-milestones --head HEAD
 /release-train doctor --json
 ```
 
@@ -416,7 +421,7 @@ Task 24.4 verification notes:
 
 - selftest validates breaking-change/changelog mismatch blocking with `version_mismatch_breaking_change` reason codes.
 - selftest validates publish behavior split between `--dry-run` pass and confirmation-required blocking for live publish.
-- install smoke validates `/release-train` status, prepare, draft, and doctor command paths.
+- install smoke validates `/release-train` status, prepare, draft, milestone draft, and doctor command paths.
 
 Task 25.1 hotfix policy contract notes:
 
@@ -638,7 +643,8 @@ Task 28.5 autopilot verification notes:
 
 ## Installed plugin stack 🔌
 
-- `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
+- `file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core` - core hook/runtime plugin, including built-in notification events for completion/errors/prompts.
+- `plugin/gateway-core/docs/mistake-ledger-report.md` - how to capture assistant mistake logs and generate top/digest/session reports (text, JSON, CSV).
 
 ### Experimental plugin options 🧪
 
@@ -827,7 +833,22 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
+- enable gateway memory protection defaults in your shell profile (`gw-recover-now`, `gw-recover-watch` aliases)
+- install a macOS LaunchAgent (`com.my_opencode.gateway-protection`) for always-on memory recovery (disable with `--no-protection-forever`)
 - run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/lsp status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+
+Protection forever controls:
+
+```bash
+# default installer behavior already enables forever protection
+curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash -s -- --protection-forever
+
+# opt out of launch agent installation
+curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash -s -- --no-protection-forever
+
+# inspect running agent
+launchctl print gui/$(id -u)/com.my_opencode.gateway-protection
+```
 
 ## Manual install 🛠️
 
@@ -1534,8 +1555,10 @@ Use these directly in OpenCode:
 /plugin profile lean
 /plugin profile stable
 /plugin profile experimental
-/plugin enable notifier
-/plugin disable notifier
+/plugin enable morph
+/plugin disable morph
+/plugin enable worktree
+/plugin disable worktree
 /plugin enable all
 /plugin disable all
 ```
@@ -1544,7 +1567,6 @@ Autocomplete-friendly shortcuts:
 
 ```text
 /plugin-help
-/plugin-enable-notifier
 /plugin-enable-morph
 /plugin-enable-worktree
 /plugin-profile-lean
@@ -1567,9 +1589,9 @@ Global command helper shortcuts:
 `/complete <prefix>` returns ranked slash command suggestions with descriptions.
 `/ac` is a short alias for `/complete`.
 
-Supported plugin names: `notifier`, `morph`, `worktree`.
+Supported plugin names: `morph`, `worktree`.
 
-`all` applies only to the stable set: `notifier`.
+`all` currently applies only to the stable set (none). Notification behavior is now internal via gateway hooks and `/notify` config.
 
 Migration note: `supermemory` and `wakatime` were removed from this repo. If either still exists in a layered config override, remove those plugin entries manually or run `/plugin profile lean`.
 
@@ -1581,9 +1603,9 @@ Migration note: `supermemory` and `wakatime` were removed from this repo. If eit
 
 Profiles:
 
-- `lean` -> `notifier`
-- `stable` -> `notifier`
-- `experimental` -> `stable` + `morph`, `worktree`
+- `lean` -> no optional external plugins
+- `stable` -> no optional external plugins
+- `experimental` -> `morph`, `worktree`
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 
