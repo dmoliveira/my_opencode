@@ -136,7 +136,7 @@ Verification notes:
 Current scope includes:
 
 - command module: `scripts/lsp_command.py`
-- diagnostics: `/lsp status --json`, `/lsp doctor --json`
+- diagnostics: `/lsp status --json`, `/lsp doctor [--verbose] --json`
 - protocol-first execution using configured language servers (JSON-RPC over stdio) with deterministic text fallback when unavailable
 - JSON responses include `backend_details` metadata (backend mode, reason code, attempted protocol, selected server details)
 - scoped navigation helpers: `/lsp goto-definition --symbol <name> --scope <glob[,glob...]> --json`, `/lsp find-references --symbol <name> --scope <glob[,glob...]> --json`
@@ -145,6 +145,7 @@ Current scope includes:
 - safety note: protocol rename plans that include resource operations are blocked unless operations are safe `RenameFile` entries and `--allow-rename-file-ops` is explicitly enabled.
 - safety note: protocol rename plans with `changeAnnotations` requiring confirmation are reported and blocked from apply.
 - dry-run rename output includes per-file unified diff preview under `diff_preview` before apply.
+- `/lsp doctor --verbose` probes initialize-time server capabilities and reports a command-level support matrix for `goto-definition`, `find-references`, `symbols`, `prepare-rename`, and `rename`.
 - layered config support via `lsp` object in `.opencode/my_opencode.json` or `~/.config/opencode/my_opencode.json`
 - deterministic precedence from existing layered config merge (`project` overrides `user` overrides bundled defaults)
 
@@ -181,6 +182,7 @@ Examples:
 ```text
 /lsp status --json
 /lsp doctor --json
+/lsp doctor --verbose --json
 /lsp goto-definition --symbol load_layered_config --scope scripts/*.py --json
 /lsp find-references --symbol load_layered_config --scope scripts/*.py --json
 /lsp symbols --view document --file scripts/config_layering.py --json

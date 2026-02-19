@@ -51,6 +51,7 @@ Tasks:
 2. Keep `CreateFile`/`DeleteFile` operations blocked during apply. `finished`
 3. Add helper coverage for renamefile validation and apply behavior in selftest. `finished`
 4. Enforce diff review thresholds before `/lsp rename --apply` via `max_diff_files` and `max_diff_lines`. `finished`
+5. Add `/lsp doctor --verbose` capability probing matrix for protocol command support coverage. `finished`
 
 ## Validation
 
