@@ -3956,6 +3956,45 @@ index 3333333..4444444 100644
             "lsp rename planning should include per-file diff preview entries",
         )
 
+        lsp_rename_threshold_block = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "rename",
+                "--symbol",
+                "load_layered_config",
+                "--new-name",
+                "load_cfg",
+                "--scope",
+                "scripts/*.py",
+                "--allow-text-fallback",
+                "--max-diff-files",
+                "0",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_rename_threshold_block.returncode == 0,
+            f"lsp rename threshold block command should succeed: {lsp_rename_threshold_block.stderr}",
+        )
+        lsp_rename_threshold_block_report = parse_json_output(
+            lsp_rename_threshold_block.stdout
+        )
+        expect(
+            lsp_rename_threshold_block_report.get("applied") is False
+            and any(
+                "diff review threshold exceeded" in str(item)
+                for item in lsp_rename_threshold_block_report.get("blockers", [])
+            ),
+            "lsp rename should block apply when diff review thresholds are exceeded",
+        )
+
         with tempfile.TemporaryDirectory() as lsp_mock_dir:
             lsp_mock_root = Path(lsp_mock_dir)
             lsp_mock_file = lsp_mock_root / "sample.py"
