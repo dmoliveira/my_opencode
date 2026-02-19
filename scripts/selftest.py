@@ -4038,6 +4038,46 @@ index 3333333..4444444 100644
                 "lsp code-actions disabled apply should not mutate file contents",
             )
 
+            lsp_code_actions_kind_filter = subprocess.run(
+                [
+                    sys.executable,
+                    str(LSP_SCRIPT),
+                    "code-actions",
+                    "--symbol",
+                    "alpha",
+                    "--scope",
+                    "*.py",
+                    "--kind",
+                    "quickfix.mock.disabled",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=lsp_actions_env,
+                check=False,
+                cwd=lsp_actions_root,
+            )
+            expect(
+                lsp_code_actions_kind_filter.returncode == 0,
+                f"lsp code-actions --kind should succeed: {lsp_code_actions_kind_filter.stderr}",
+            )
+            lsp_code_actions_kind_filter_report = parse_json_output(
+                lsp_code_actions_kind_filter.stdout
+            )
+            kind_summary = lsp_code_actions_kind_filter_report.get("summary", {})
+            expect(
+                lsp_code_actions_kind_filter_report.get("kind")
+                == "quickfix.mock.disabled"
+                and isinstance(
+                    lsp_code_actions_kind_filter_report.get("code_actions"), list
+                )
+                and len(lsp_code_actions_kind_filter_report.get("code_actions", []))
+                == 1
+                and isinstance(kind_summary, dict)
+                and kind_summary.get("total") == 1,
+                "lsp code-actions --kind should deterministically filter action results",
+            )
+
         lsp_doctor_verbose = subprocess.run(
             [sys.executable, str(LSP_SCRIPT), "doctor", "--verbose", "--json"],
             capture_output=True,
