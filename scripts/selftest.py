@@ -3920,8 +3920,9 @@ index 3333333..4444444 100644
         lsp_code_actions_report = parse_json_output(lsp_code_actions.stdout)
         expect(
             lsp_code_actions_report.get("result") in {"PASS", "WARN"}
-            and isinstance(lsp_code_actions_report.get("code_actions"), list),
-            "lsp code-actions should emit a deterministic code action list",
+            and isinstance(lsp_code_actions_report.get("code_actions"), list)
+            and isinstance(lsp_code_actions_report.get("summary"), dict),
+            "lsp code-actions should emit deterministic action list and summary metadata",
         )
         expect(
             isinstance(lsp_code_actions_report.get("backend_details"), dict),
