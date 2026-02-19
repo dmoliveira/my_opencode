@@ -476,6 +476,7 @@ def _code_action_summary(code_actions: list[dict[str, Any]]) -> dict[str, Any]:
     by_kind: dict[str, int] = {}
     disabled_count = 0
     editable_count = 0
+    preferred_count = 0
     for row in code_actions:
         kind = str(row.get("kind") or "unknown")
         by_kind[kind] = by_kind.get(kind, 0) + 1
@@ -483,10 +484,13 @@ def _code_action_summary(code_actions: list[dict[str, Any]]) -> dict[str, Any]:
             disabled_count += 1
         if bool(row.get("has_edit")):
             editable_count += 1
+        if bool(row.get("is_preferred")):
+            preferred_count += 1
     return {
         "total": len(code_actions),
         "editable": editable_count,
         "disabled": disabled_count,
+        "preferred": preferred_count,
         "by_kind": dict(sorted(by_kind.items())),
     }
 
