@@ -63,6 +63,10 @@ Thresholds and recovery criteria are configurable via `memoryRecovery` in your c
     "aggregateRequireSwapUsedMb": 12000,
     "aggregateRequireContinueSessions": 6,
     "aggregateBatchSize": 1,
+    "emergencySwapEnabled": true,
+    "emergencySwapUsedMb": 28000,
+    "emergencyCandidateMinFootprintMb": 4500,
+    "emergencyBatchSize": 1,
     "autoContinuePromptOnResume": true,
     "notificationsEnabled": true,
     "notifyBeforeRecovery": true,
@@ -76,6 +80,8 @@ Thresholds and recovery criteria are configurable via `memoryRecovery` in your c
 Session targeting: pane-aware resume prefers `opencode --session <id>` when a session id (`ses_*`) is visible in tmux pane title, then falls back to a per-pane cache (`~/.config/opencode/my_opencode/runtime/gateway-pane-session-cache.json`), then per-directory latest session, and finally `opencode --continue`.
 
 Aggregate safety net: when no single process crosses `candidateMinFootprintMb`, recovery can still trigger in aggregate mode if total opencode footprint crosses `aggregateMaxPressureMb` and swap/session preconditions are met; it then recovers only the top `aggregateBatchSize` offenders.
+
+Emergency swap safety net: when swap crosses `emergencySwapUsedMb`, recovery can select top footprint candidates even if normal/aggregate candidate thresholds are not met, to prevent full machine stalls.
 
 LaunchAgent controls from OpenCode:
 
