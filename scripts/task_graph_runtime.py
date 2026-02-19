@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, Callable
 
 import fcntl
 
@@ -24,17 +24,26 @@ def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _env_override_path(name: str) -> Path | None:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    if value.startswith("{") or value.startswith("["):
+        return None
+    return Path(value).expanduser()
+
+
 def runtime_path(write_path: Path) -> Path:
-    override = os.environ.get(RUNTIME_ENV_VAR, "").strip()
-    if override:
-        return Path(override).expanduser()
+    override = _env_override_path(RUNTIME_ENV_VAR)
+    if override is not None:
+        return override
     return write_path.parent / "my_opencode" / "runtime" / "task_graph.json"
 
 
 def lock_path(write_path: Path) -> Path:
-    override = os.environ.get(LOCK_ENV_VAR, "").strip()
-    if override:
-        return Path(override).expanduser()
+    override = _env_override_path(LOCK_ENV_VAR)
+    if override is not None:
+        return override
     return runtime_path(write_path).with_suffix(".lock")
 
 
@@ -136,7 +145,9 @@ class LockedState:
     runtime_path: Path
 
 
-def with_locked_state(write_path: Path, mutate: callable) -> LockedState:
+def with_locked_state(
+    write_path: Path, mutate: Callable[[dict[str, Any]], dict[str, Any]]
+) -> LockedState:
     runtime = runtime_path(write_path)
     lock = lock_path(write_path)
     lock.parent.mkdir(parents=True, exist_ok=True)
