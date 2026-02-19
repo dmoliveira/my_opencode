@@ -1039,6 +1039,7 @@ def command_goto_definition(args: list[str]) -> int:
     if not definitions:
         definitions = _scan_definitions(symbol, files, root)
 
+    warnings = _command_warnings(reason_code, lsp_error)
     report = {
         "result": "PASS" if definitions else "WARN",
         "backend": backend,
@@ -1047,6 +1048,7 @@ def command_goto_definition(args: list[str]) -> int:
         "scope": scope_patterns,
         "scanned_files": len(files),
         "definitions": definitions,
+        "warnings": warnings,
         "lsp_error": lsp_error or None,
         "backend_details": _backend_details(
             backend=backend,
@@ -1063,6 +1065,8 @@ def command_goto_definition(args: list[str]) -> int:
         print(f"result: {report['result']}")
         print(f"symbol: {symbol}")
         print(f"definitions: {len(definitions)}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for row in definitions[:20]:
             print(f"- {row['path']}:{row['line']} {row['text']}")
     return 0
@@ -1123,6 +1127,8 @@ def command_find_references(args: list[str]) -> int:
     if not references:
         references = _scan_references(symbol, files, root)
 
+    warnings = _command_warnings(reason_code, lsp_error)
+
     report = {
         "result": "PASS" if references else "WARN",
         "backend": backend,
@@ -1131,6 +1137,7 @@ def command_find_references(args: list[str]) -> int:
         "scope": scope_patterns,
         "scanned_files": len(files),
         "references": references,
+        "warnings": warnings,
         "lsp_error": lsp_error or None,
         "backend_details": _backend_details(
             backend=backend,
@@ -1147,6 +1154,8 @@ def command_find_references(args: list[str]) -> int:
         print(f"result: {report['result']}")
         print(f"symbol: {symbol}")
         print(f"references: {len(references)}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for row in references[:40]:
             print(f"- {row['path']}:{row['line']} {row['text']}")
     return 0
@@ -1369,11 +1378,18 @@ def command_symbols(args: list[str]) -> int:
     else:
         return usage()
 
+    warnings = _command_warnings(
+        str(report.get("reason_code") or ""), str(report.get("lsp_error") or "")
+    )
+    report["warnings"] = warnings
+
     if as_json:
         print(json.dumps(report, indent=2))
     else:
         print(f"result: {report['result']}")
         print(f"symbols: {len(report.get('symbols', []))}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for row in report.get("symbols", [])[:30]:
             print(f"- {row['name']} {row['path']}:{row['line']}")
     return 0
@@ -1423,6 +1439,7 @@ def command_diagnostics(args: list[str]) -> int:
         diagnostics.extend(_fallback_text_diagnostics(path, root))
 
     summary = _diagnostic_summary(diagnostics, len(files))
+    warnings = _command_warnings(reason_code, lsp_error)
     report = {
         "result": "PASS" if summary["total"] == 0 else "WARN",
         "backend": backend,
@@ -1430,6 +1447,7 @@ def command_diagnostics(args: list[str]) -> int:
         "scope": scope_patterns,
         "summary": summary,
         "diagnostics": diagnostics,
+        "warnings": warnings,
         "lsp_error": lsp_error or None,
         "backend_details": _backend_details(
             backend=backend,
@@ -1445,6 +1463,8 @@ def command_diagnostics(args: list[str]) -> int:
         print(f"result: {report['result']}")
         print(f"diagnostics: {summary['total']}")
         print(f"severity: {summary['severity']}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for item in diagnostics[:40]:
             print(
                 f"- {item['severity']} {item['path']}:{item['line']}:{item['character']} {item['message']}"
@@ -1567,6 +1587,7 @@ def command_code_actions(args: list[str]) -> int:
                         applied_edits += int(row["edits"])
                     applied = True
 
+    warnings = _command_warnings(reason_code, lsp_error)
     report = {
         "result": "PASS"
         if (code_actions and (not apply_changes or applied))
@@ -1582,6 +1603,7 @@ def command_code_actions(args: list[str]) -> int:
         "applied_files": applied_files,
         "applied_edits": applied_edits,
         "selected_action": selected_action,
+        "warnings": warnings,
         "blockers": sorted(set(blockers)),
         "scanned_files": len(scoped_files),
         "target": str(target_path.resolve().relative_to(root))
@@ -1604,6 +1626,8 @@ def command_code_actions(args: list[str]) -> int:
         print(f"target: {report['target']}")
         print(f"code_actions: {len(code_actions)}")
         print(f"applied: {applied}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for blocker in report["blockers"]:
             print(f"- blocker: {blocker}")
         for item in code_actions[:30]:
@@ -1749,6 +1773,8 @@ def command_prepare_rename(args: list[str]) -> int:
     if symbol == new_name:
         issues.append("new name must differ from current symbol")
 
+    warnings = _command_warnings(reason_code, lsp_error)
+
     report = {
         "result": "PASS" if not issues else "WARN",
         "backend": backend,
@@ -1761,6 +1787,7 @@ def command_prepare_rename(args: list[str]) -> int:
         "references": len(references),
         "issues": issues,
         "can_rename": not issues,
+        "warnings": warnings,
         "lsp_error": lsp_error or None,
         "backend_details": _backend_details(
             backend=backend,
@@ -1776,6 +1803,8 @@ def command_prepare_rename(args: list[str]) -> int:
     else:
         print(f"result: {report['result']}")
         print(f"can_rename: {report['can_rename']}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for issue in issues:
             print(f"- issue: {issue}")
     return 0
@@ -1937,6 +1966,7 @@ def command_rename(args: list[str]) -> int:
         )
 
     result = "PASS" if not blockers else "WARN"
+    warnings = _command_warnings(reason_code, lsp_error)
     report = {
         "result": result,
         "backend": backend,
@@ -1958,6 +1988,7 @@ def command_rename(args: list[str]) -> int:
         "applied_files": applied_files,
         "applied_edits": applied_edits,
         "applied_resource_operations": applied_resource_operations,
+        "warnings": warnings,
         "blockers": sorted(set(blockers)),
         "validation": [
             {"path": row["path"], "validation": row["validation"]} for row in edit_plan
@@ -1997,6 +2028,8 @@ def command_rename(args: list[str]) -> int:
         print(f"applied: {report['applied']}")
         print(f"planned_files: {report['planned_files']}")
         print(f"planned_edits: {report['planned_edits']}")
+        for warning in warnings:
+            print(f"- warning: {warning}")
         for blocker in report["blockers"]:
             print(f"- blocker: {blocker}")
     return 0
@@ -2072,6 +2105,36 @@ def _capability_reason_code(key: str) -> str:
     snake = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key)
     slug = re.sub(r"[^a-z0-9]+", "_", snake.lower()).strip("_")
     return f"lsp_capability_missing_{slug}"
+
+
+def _capability_warning(reason_code: str) -> str | None:
+    if not reason_code.startswith("lsp_capability_missing_"):
+        return None
+    capability = reason_code.removeprefix("lsp_capability_missing_")
+    hints = {
+        "definition_provider": "selected server lacks definitionProvider; use symbols/find-references or text fallback",
+        "references_provider": "selected server lacks referencesProvider; use symbols or text fallback",
+        "document_symbol_provider": "selected server lacks documentSymbolProvider; using text symbol extraction",
+        "workspace_symbol_provider": "selected server lacks workspaceSymbolProvider; using text symbol search",
+        "prepare_rename_provider": "selected server lacks prepareRenameProvider; rename checks may be partial",
+        "rename_provider": "selected server lacks renameProvider; using guarded text fallback",
+        "diagnostic_provider": "selected server lacks diagnosticProvider; using marker-based text diagnostics",
+        "code_action_provider": "selected server lacks codeActionProvider; code actions unavailable on this server",
+    }
+    return hints.get(
+        capability,
+        f"selected server lacks required capability: {capability}",
+    )
+
+
+def _command_warnings(reason_code: str, lsp_error: str) -> list[str]:
+    warnings: list[str] = []
+    capability_warning = _capability_warning(reason_code)
+    if capability_warning:
+        warnings.append(capability_warning)
+    if lsp_error:
+        warnings.append(f"lsp protocol error: {lsp_error}")
+    return warnings
 
 
 def _preflight_server_capability(
