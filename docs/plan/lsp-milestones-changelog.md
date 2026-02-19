@@ -14,8 +14,11 @@ This document is the consolidated changelog for the LSP delivery stream in `my_o
 | Deterministic mock protocol harness | Added mock JSON-RPC LSP fixture + integration selftest coverage | [#235](https://github.com/dmoliveira/my_opencode/pull/235) | 2026-02-18T22:08:50Z | `cb6b85e7c6fc1c3f3ff743a4cc0542bbbf04d0a8` |
 | Backend observability metadata | Added `backend_details` across `/lsp` JSON outputs | [#238](https://github.com/dmoliveira/my_opencode/pull/238) | 2026-02-18T22:24:59Z | `0cd1a2c7e4f07fb2dd0ac32d1f953d1afaa29e64` |
 | Dry-run diff preview | Added per-file unified diff previews in `/lsp rename` dry-run JSON output | [#239](https://github.com/dmoliveira/my_opencode/pull/239) | 2026-02-18T22:45:02Z | `ab28cbd91282303d609c6c00bdf52f5546a23af5` |
+| Guarded renamefile apply | Added opt-in apply path for safe `RenameFile` operations and validation helpers | [#242](https://github.com/dmoliveira/my_opencode/pull/242) | 2026-02-18T23:39:06Z | `4832f7ded4298c8a844d0509fda5ece6e8bbd80e` |
+| Diff review thresholds | Added `max_diff_files` and `max_diff_lines` blockers before `/lsp rename --apply` | [#243](https://github.com/dmoliveira/my_opencode/pull/243) | 2026-02-19T01:17:01Z | `47ee1e52569e7efe3399880c4140a69d4ea4baf4` |
+| Verbose capability probing | Added `/lsp doctor --verbose` command-level capability matrix and summary reporting | [#246](https://github.com/dmoliveira/my_opencode/pull/246) | 2026-02-19T02:32:17Z | `dedbb8641f6d5454269fab2e88aa374772f8f5af` |
 
 ## Notes
 
 - PR [#237](https://github.com/dmoliveira/my_opencode/pull/237) (initial backend details branch) was superseded by [#238](https://github.com/dmoliveira/my_opencode/pull/238) due branch freshness guard constraints during merge.
-- Current roadmap status is fully complete in `docs/plan/lsp-protocol-upgrade.md` and `docs/plan/lsp-high-value-epics.md`.
+- Initial protocol hardening roadmap is complete in `docs/plan/lsp-protocol-upgrade.md`; next-wave planning now continues in `docs/plan/lsp-high-value-epics.md` (E4-E6).
