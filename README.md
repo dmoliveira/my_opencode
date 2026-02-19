@@ -143,15 +143,17 @@ Verification notes:
 Current scope includes:
 
 - command module: `scripts/lsp_command.py`
-- diagnostics: `/lsp status --json`, `/lsp doctor [--verbose] --json`
+- diagnostics: `/lsp status --json`, `/lsp doctor [--verbose] --json`, `/lsp diagnostics --scope <glob[,glob...]> --json`
 - protocol-first execution using configured language servers (JSON-RPC over stdio) with deterministic text fallback when unavailable
 - JSON responses include `backend_details` metadata (backend mode, reason code, attempted protocol, selected server details)
 - scoped navigation helpers: `/lsp goto-definition --symbol <name> --scope <glob[,glob...]> --json`, `/lsp find-references --symbol <name> --scope <glob[,glob...]> --json`
 - symbol index helpers: `/lsp symbols --view document --file <path> --json`, `/lsp symbols --view workspace --query <name> --scope <glob[,glob...]> --json`
+- code-action helpers: `/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--kind <prefix>] [--index <n>] [--apply] --json`
 - guarded rename helpers: `/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --json`, `/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --allow-text-fallback [--allow-rename-file-ops] [--apply] --json`
 - safety note: protocol rename plans that include resource operations are blocked unless operations are safe `RenameFile` entries and `--allow-rename-file-ops` is explicitly enabled.
 - safety note: protocol rename plans with `changeAnnotations` requiring confirmation are reported and blocked from apply.
 - dry-run rename output includes per-file unified diff preview under `diff_preview` before apply.
+- `/lsp code-actions` reports deterministic summary metadata (`total`, `editable`, `disabled`, `by_kind`) and blocks apply for server-disabled actions.
 - `/lsp doctor --verbose` probes initialize-time server capabilities and reports a command-level support matrix for `goto-definition`, `find-references`, `symbols`, `prepare-rename`, and `rename`.
 - layered config support via `lsp` object in `.opencode/my_opencode.json` or `~/.config/opencode/my_opencode.json`
 - deterministic precedence from existing layered config merge (`project` overrides `user` overrides bundled defaults)
@@ -190,10 +192,13 @@ Examples:
 /lsp status --json
 /lsp doctor --json
 /lsp doctor --verbose --json
+/lsp diagnostics --scope scripts/*.py --json
 /lsp goto-definition --symbol load_layered_config --scope scripts/*.py --json
 /lsp find-references --symbol load_layered_config --scope scripts/*.py --json
 /lsp symbols --view document --file scripts/config_layering.py --json
 /lsp symbols --view workspace --query load --scope scripts/*.py --json
+/lsp code-actions --symbol load_layered_config --scope scripts/*.py --kind quickfix --json
+/lsp code-actions --symbol load_layered_config --scope scripts/*.py --index 0 --apply --json
 /lsp prepare-rename --symbol load_layered_config --new-name load_cfg --scope scripts/*.py --json
 /lsp rename --symbol load_layered_config --new-name load_cfg --scope scripts/*.py --allow-text-fallback --json
 ```
@@ -841,6 +846,7 @@ chmod +x ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py
 ## Packaged CLI parity
 
 Use:
+
 ```bash
 python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py version
 python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py doctor --json
@@ -849,6 +855,7 @@ python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py run --opencode
 ```
 
 Notes:
+
 - `install` is non-interactive by default and supports `--repo-url`, `--repo-ref`, and `--install-dir` overrides.
 - `doctor` delegates to the same diagnostics pipeline as `/doctor`.
 - `run` supports a binary override for deterministic automation tests.
@@ -1155,6 +1162,7 @@ Wizard support:
 ## Optional tmux visual mode
 
 Use:
+
 ```text
 /tmux status --json
 /tmux config enabled true
@@ -1163,6 +1171,7 @@ Use:
 ```
 
 Behavior:
+
 - reuses existing pane/session runtime cache at `~/.config/opencode/my_opencode/runtime/gateway-pane-session-cache.json`
 - reports `headless_fallback` when tmux is unavailable or explicitly disabled
 - keeps non-tmux fallback behavior explicit via `runtime_mode` and `reason_code`
@@ -1170,6 +1179,7 @@ Behavior:
 ## Skill contract shortcuts
 
 Use:
+
 ```text
 /playwright
 /frontend-ui-ux
@@ -1177,11 +1187,13 @@ Use:
 ```
 
 What they do:
+
 - `/playwright`: loads Playwright-first browser automation guardrails and recommends `/browser` readiness checks.
 - `/frontend-ui-ux`: loads frontend implementation quality boundaries (intentional design + responsive validation).
 - `/git-master`: loads safe git workflow boundaries for commit/PR/merge hygiene.
 
 Implementation note:
+
 - all three shortcuts are thin wrappers over `scripts/skill_contract_command.py` and reuse existing command pathways (no separate runtime engine).
 
 ## Keyword-triggered execution modes
