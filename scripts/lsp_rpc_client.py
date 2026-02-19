@@ -64,6 +64,7 @@ class LspClient:
         self._proc: subprocess.Popen[bytes] | None = None
         self._next_id = 1
         self._opened: set[str] = set()
+        self.server_capabilities: dict[str, Any] = {}
 
     def __enter__(self) -> "LspClient":
         self._proc = subprocess.Popen(
@@ -107,7 +108,10 @@ class LspClient:
                 ],
             },
         )
-        _ = init_result
+        if isinstance(init_result, dict):
+            capabilities = init_result.get("capabilities")
+            if isinstance(capabilities, dict):
+                self.server_capabilities = capabilities
         self._notify("initialized", {})
 
     def _require_proc(self) -> subprocess.Popen[bytes]:
