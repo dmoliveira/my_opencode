@@ -754,11 +754,18 @@ def command_goto_definition(args: list[str]) -> int:
             selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
-                    raw_locations = client.goto_definition(
-                        path=Path(anchor["path"]),
-                        line0=int(anchor["line"]) - 1,
-                        char0=int(anchor["character"]),
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "goto-definition"
                     )
+                    if capability_ok:
+                        raw_locations = client.goto_definition(
+                            path=Path(anchor["path"]),
+                            line0=int(anchor["line"]) - 1,
+                            char0=int(anchor["character"]),
+                        )
+                    else:
+                        raw_locations = []
+                        reason_code = capability_reason
                 parsed = [
                     location
                     for location in (
@@ -831,11 +838,18 @@ def command_find_references(args: list[str]) -> int:
             selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
-                    raw_locations = client.find_references(
-                        path=Path(anchor["path"]),
-                        line0=int(anchor["line"]) - 1,
-                        char0=int(anchor["character"]),
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "find-references"
                     )
+                    if capability_ok:
+                        raw_locations = client.find_references(
+                            path=Path(anchor["path"]),
+                            line0=int(anchor["line"]) - 1,
+                            char0=int(anchor["character"]),
+                        )
+                    else:
+                        raw_locations = []
+                        reason_code = capability_reason
                 parsed = [
                     location
                     for location in (
@@ -962,7 +976,14 @@ def command_symbols(args: list[str]) -> int:
             selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
-                    raw_symbols = client.document_symbols(target)
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "symbols-document"
+                    )
+                    raw_symbols = (
+                        client.document_symbols(target) if capability_ok else []
+                    )
+                    if not capability_ok:
+                        reason_code = capability_reason
                 parsed: list[dict[str, Any]] = []
                 for item in raw_symbols:
                     if not isinstance(item, dict):
@@ -1040,7 +1061,14 @@ def command_symbols(args: list[str]) -> int:
                     with LspClient(
                         command=list(server["command"]), root=root
                     ) as client:
-                        raw_symbols = client.workspace_symbols(query)
+                        capability_ok, capability_reason = _preflight_server_capability(
+                            client.server_capabilities, "symbols-workspace"
+                        )
+                        raw_symbols = (
+                            client.workspace_symbols(query) if capability_ok else []
+                        )
+                        if not capability_ok:
+                            reason_code = capability_reason
                     parsed: list[dict[str, Any]] = []
                     for item in raw_symbols:
                         if not isinstance(item, dict):
@@ -1197,11 +1225,18 @@ def command_prepare_rename(args: list[str]) -> int:
             selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
-                    prepare_payload = client.prepare_rename(
-                        path=Path(anchor["path"]),
-                        line0=int(anchor["line"]) - 1,
-                        char0=int(anchor["character"]),
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "prepare-rename"
                     )
+                    if capability_ok:
+                        prepare_payload = client.prepare_rename(
+                            path=Path(anchor["path"]),
+                            line0=int(anchor["line"]) - 1,
+                            char0=int(anchor["character"]),
+                        )
+                    else:
+                        prepare_payload = None
+                        reason_code = capability_reason
                 if prepare_payload is not None:
                     backend = "lsp"
                     reason_code = "lsp_protocol_success"
@@ -1288,12 +1323,19 @@ def command_rename(args: list[str]) -> int:
             selected_server = server
             try:
                 with LspClient(command=list(server["command"]), root=root) as client:
-                    workspace_edit = client.rename(
-                        path=Path(anchor["path"]),
-                        line0=int(anchor["line"]) - 1,
-                        char0=int(anchor["character"]),
-                        new_name=new_name,
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "rename"
                     )
+                    if capability_ok:
+                        workspace_edit = client.rename(
+                            path=Path(anchor["path"]),
+                            line0=int(anchor["line"]) - 1,
+                            char0=int(anchor["character"]),
+                            new_name=new_name,
+                        )
+                    else:
+                        workspace_edit = None
+                        reason_code = capability_reason
                 if isinstance(workspace_edit, dict):
                     edit_plan, resource_operations, change_annotations = (
                         _edit_plan_from_workspace_edit(
@@ -1470,6 +1512,15 @@ CAPABILITY_MATRIX: list[tuple[str, str]] = [
     ("prepareRenameProvider", "prepare-rename"),
 ]
 
+COMMAND_CAPABILITY_REQUIREMENTS: dict[str, str] = {
+    "goto-definition": "definitionProvider",
+    "find-references": "referencesProvider",
+    "symbols-document": "documentSymbolProvider",
+    "symbols-workspace": "workspaceSymbolProvider",
+    "prepare-rename": "prepareRenameProvider",
+    "rename": "renameProvider",
+}
+
 
 def _truthy_capability(value: Any) -> bool:
     if isinstance(value, bool):
@@ -1487,6 +1538,30 @@ def _extract_prepare_rename_provider(capabilities: dict[str, Any]) -> Any:
     if isinstance(rename_provider, dict):
         return rename_provider.get("prepareProvider")
     return None
+
+
+def _required_capability_value(capabilities: dict[str, Any], key: str) -> Any:
+    if key == "prepareRenameProvider":
+        return _extract_prepare_rename_provider(capabilities)
+    return capabilities.get(key)
+
+
+def _capability_reason_code(key: str) -> str:
+    snake = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key)
+    slug = re.sub(r"[^a-z0-9]+", "_", snake.lower()).strip("_")
+    return f"lsp_capability_missing_{slug}"
+
+
+def _preflight_server_capability(
+    capabilities: dict[str, Any], command: str
+) -> tuple[bool, str]:
+    required = COMMAND_CAPABILITY_REQUIREMENTS.get(command)
+    if not required:
+        return True, ""
+    value = _required_capability_value(capabilities, required)
+    if _truthy_capability(value):
+        return True, ""
+    return False, _capability_reason_code(required)
 
 
 def _capability_matrix(capabilities: dict[str, Any]) -> list[dict[str, Any]]:

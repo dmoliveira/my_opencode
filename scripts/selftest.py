@@ -4093,6 +4093,101 @@ index 3333333..4444444 100644
                 "mock lsp client rename should return workspace edit changes",
             )
 
+            mock_lsp_config = lsp_mock_root / "opencode-lsp-mock.json"
+            mock_lsp_config.write_text(
+                json.dumps(
+                    {
+                        "lsp": {
+                            "mock-lsp": {
+                                "command": [
+                                    sys.executable,
+                                    str(MOCK_LSP_SERVER_SCRIPT),
+                                ],
+                                "extensions": [".py"],
+                                "priority": 100,
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            mock_env = os.environ.copy()
+            mock_env["OPENCODE_CONFIG_PATH"] = str(mock_lsp_config)
+            mock_env.pop("SUPERMEMORY_API_KEY", None)
+            mock_env.pop("MORPH_API_KEY", None)
+
+            lsp_capability_preflight_goto = subprocess.run(
+                [
+                    sys.executable,
+                    str(LSP_SCRIPT),
+                    "goto-definition",
+                    "--symbol",
+                    "alpha",
+                    "--scope",
+                    "*.py",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=mock_env,
+                check=False,
+                cwd=lsp_mock_root,
+            )
+            expect(
+                lsp_capability_preflight_goto.returncode == 0,
+                f"lsp capability preflight goto-definition should succeed: {lsp_capability_preflight_goto.stderr}",
+            )
+            lsp_capability_preflight_goto_report = parse_json_output(
+                lsp_capability_preflight_goto.stdout
+            )
+            expect(
+                lsp_capability_preflight_goto_report.get("backend") == "text"
+                and lsp_capability_preflight_goto_report.get("reason_code")
+                == "lsp_capability_missing_definition_provider"
+                and isinstance(
+                    lsp_capability_preflight_goto_report.get("definitions"), list
+                )
+                and len(lsp_capability_preflight_goto_report["definitions"]) >= 1,
+                "lsp goto-definition should preflight capability and fallback to text when provider is missing",
+            )
+
+            lsp_capability_preflight_workspace = subprocess.run(
+                [
+                    sys.executable,
+                    str(LSP_SCRIPT),
+                    "symbols",
+                    "--view",
+                    "workspace",
+                    "--query",
+                    "alp",
+                    "--scope",
+                    "*.py",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=mock_env,
+                check=False,
+                cwd=lsp_mock_root,
+            )
+            expect(
+                lsp_capability_preflight_workspace.returncode == 0,
+                f"lsp capability preflight symbols workspace should succeed: {lsp_capability_preflight_workspace.stderr}",
+            )
+            lsp_capability_preflight_workspace_report = parse_json_output(
+                lsp_capability_preflight_workspace.stdout
+            )
+            expect(
+                lsp_capability_preflight_workspace_report.get("backend") == "text"
+                and lsp_capability_preflight_workspace_report.get("reason_code")
+                == "lsp_capability_missing_workspace_symbol_provider"
+                and isinstance(
+                    lsp_capability_preflight_workspace_report.get("symbols"), list
+                )
+                and len(lsp_capability_preflight_workspace_report["symbols"]) >= 1,
+                "lsp symbols workspace should preflight capability and fallback to text when provider is missing",
+            )
+
         workspace_change_map, workspace_ops, workspace_annotations = (
             _workspace_edit_text_changes(
                 {
