@@ -1291,7 +1291,7 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
             ],
         },
         "memoryRecovery": {
-            "candidateMinFootprintMb": 4000,
+            "candidateMinFootprintMb": 6000,
             "candidateMinRssMb": 1400,
             "forceKillMinPressureMb": 12000,
             "aggregateEnabled": True,
@@ -1305,6 +1305,8 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
             "emergencySwapUsedMb": 28000,
             "emergencyCandidateMinFootprintMb": 4500,
             "emergencyBatchSize": 1,
+            "compactWaitSeconds": 10,
+            "compactPollSeconds": 0.5,
             "autoContinuePromptOnResume": True,
             "notificationsEnabled": True,
             "notifyBeforeRecovery": True,
@@ -1357,6 +1359,13 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
     if swap_used_mb >= 28_000:
         rationale.append(
             "emergency swap guard should select top footprint candidates even when normal per-process thresholds are not crossed"
+        )
+    if (
+        float((current.get("memoryRecovery") or {}).get("candidateMinFootprintMb") or 0)
+        < 6000
+    ):
+        rationale.append(
+            "candidateMinFootprintMb below 6000 may cause frequent auto-restarts in high-session environments"
         )
 
     payload = {
@@ -1731,6 +1740,10 @@ def command_recover_memory(
         recovery.get("emergencyCandidateMinFootprintMb"), 4_500.0
     )
     emergency_batch_size = max(1, parse_int(recovery.get("emergencyBatchSize"), 1))
+    compact_wait_seconds = parse_float(recovery.get("compactWaitSeconds"), 10.0)
+    compact_poll_seconds = max(
+        0.2, parse_float(recovery.get("compactPollSeconds"), 0.5)
+    )
 
     status = status_payload(config, home, Path.cwd(), cleanup_orphans=False)
     process_any = status.get("process_pressure")
@@ -2145,16 +2158,20 @@ def command_recover_memory(
                         pane_session_cache[pane_id] = session_id
                         save_pane_session_cache(pane_session_cache)
                     if resumed and compress:
-                        time.sleep(2)
-                        cmd_name = pane_current_command(pane_id)
-                        if cmd_name == "opencode":
-                            compressed = send_to_pane(pane_id, "/compact")
-                            action["compress_attempted"] = True
-                            action["compress_ok"] = compressed
-                        else:
+                        last_compact_cmd = ""
+                        compact_deadline = time.time() + compact_wait_seconds
+                        while time.time() < compact_deadline:
+                            last_compact_cmd = pane_current_command(pane_id)
+                            if last_compact_cmd == "opencode":
+                                compressed = send_to_pane(pane_id, "/compact")
+                                action["compress_attempted"] = True
+                                action["compress_ok"] = compressed
+                                break
+                            time.sleep(compact_poll_seconds)
+                        if not action.get("compress_attempted"):
                             action["compress_attempted"] = False
                             action["compress_skipped_reason"] = (
-                                f"pane command is '{cmd_name or 'unknown'}'"
+                                f"pane command is '{last_compact_cmd or 'unknown'}' after {compact_wait_seconds:.1f}s wait"
                             )
                     if resumed and continue_prompt_enabled:
                         time.sleep(1)
@@ -2232,6 +2249,8 @@ def command_recover_memory(
             "emergency_swap_used_mb": emergency_swap_used_mb,
             "emergency_candidate_min_footprint_mb": emergency_candidate_min_footprint_mb,
             "emergency_batch_size": emergency_batch_size,
+            "compact_wait_seconds": compact_wait_seconds,
+            "compact_poll_seconds": compact_poll_seconds,
             "auto_continue_prompt_on_resume": auto_continue_prompt,
             "notifications_enabled": notifications_enabled,
             "notify_before_recovery": notify_before_recovery,

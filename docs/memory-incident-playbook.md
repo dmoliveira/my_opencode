@@ -45,7 +45,7 @@ Pane-aware recovery (Phase B):
 /gateway recover memory --watch --apply --resume --compress --force-kill --interval-seconds 20 --max-cycles 6
 ```
 
-When PID-to-pane mapping is available in tmux, this restarts `opencode --continue` (or `--session <id>`) in the impacted pane and injects `/compact` after resume with safety checks.
+When PID-to-pane mapping is available in tmux, this restarts `opencode --continue` (or `--session <id>`) in the impacted pane and injects `/compact` after resume with safety checks and a retry wait window.
 Use `--watch` for automated polling and recovery actions in bounded cycles.
 
 Thresholds and recovery criteria are configurable via `memoryRecovery` in your config:
@@ -53,7 +53,7 @@ Thresholds and recovery criteria are configurable via `memoryRecovery` in your c
 ```json
 {
   "memoryRecovery": {
-    "candidateMinFootprintMb": 4000,
+    "candidateMinFootprintMb": 6000,
     "candidateMinRssMb": 1400,
     "forceKillMinPressureMb": 12000,
     "aggregateEnabled": true,
@@ -67,6 +67,8 @@ Thresholds and recovery criteria are configurable via `memoryRecovery` in your c
     "emergencySwapUsedMb": 28000,
     "emergencyCandidateMinFootprintMb": 4500,
     "emergencyBatchSize": 1,
+    "compactWaitSeconds": 10,
+    "compactPollSeconds": 0.5,
     "autoContinuePromptOnResume": true,
     "notificationsEnabled": true,
     "notifyBeforeRecovery": true,
