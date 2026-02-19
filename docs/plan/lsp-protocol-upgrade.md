@@ -62,6 +62,7 @@ Tasks:
 13. Enhance `/lsp diagnostics` summary with source counts and top diagnostic codes. `finished`
 14. Block `/lsp code-actions --apply` when selected action is marked disabled by the server. `finished`
 15. Add `/lsp code-actions` summary metadata for kind, editable, and disabled counts. `finished`
+16. Add optional `/lsp code-actions --kind <prefix>` filtering for deterministic action triage. `finished`
 
 ## Validation
 

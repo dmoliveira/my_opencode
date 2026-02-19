@@ -63,7 +63,7 @@ def usage() -> int:
     print(
         "usage: /lsp status [--json] | /lsp doctor [--verbose] [--json] | "
         "/lsp diagnostics --scope <glob[,glob...]> [--json] | "
-        "/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--index <n>] [--apply] [--json] | "
+        "/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--kind <prefix>] [--index <n>] [--apply] [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
@@ -346,12 +346,13 @@ def _diagnostic_summary(
 
 def _parse_code_actions_args(
     args: list[str],
-) -> tuple[str, str, list[str], int, bool, bool] | None:
+) -> tuple[str, str, list[str], str, int, bool, bool] | None:
     as_json = "--json" in args
     apply_changes = "--apply" in args
     file_value = ""
     symbol_value = ""
     scope_patterns: list[str] = []
+    kind_prefix = ""
     index_value = 0
     index = 0
     while index < len(args):
@@ -366,6 +367,12 @@ def _parse_code_actions_args(
                 index_value = max(0, int(args[index + 1]))
             except ValueError:
                 return None
+            index += 2
+            continue
+        if token == "--kind":
+            if index + 1 >= len(args):
+                return None
+            kind_prefix = args[index + 1].strip()
             index += 2
             continue
         if token == "--file":
@@ -389,9 +396,17 @@ def _parse_code_actions_args(
         return None
 
     if file_value and not symbol_value and not scope_patterns:
-        return file_value, "", [], index_value, apply_changes, as_json
+        return file_value, "", [], kind_prefix, index_value, apply_changes, as_json
     if symbol_value and scope_patterns and not file_value:
-        return "", symbol_value, scope_patterns, index_value, apply_changes, as_json
+        return (
+            "",
+            symbol_value,
+            scope_patterns,
+            kind_prefix,
+            index_value,
+            apply_changes,
+            as_json,
+        )
     return None
 
 
@@ -1511,9 +1526,15 @@ def command_code_actions(args: list[str]) -> int:
     parsed = _parse_code_actions_args(args)
     if parsed is None:
         return usage()
-    file_value, symbol_value, scope_patterns, selected_index, apply_changes, as_json = (
-        parsed
-    )
+    (
+        file_value,
+        symbol_value,
+        scope_patterns,
+        kind_prefix,
+        selected_index,
+        apply_changes,
+        as_json,
+    ) = parsed
 
     root = Path.cwd()
     servers, _ = _collect_servers()
@@ -1561,6 +1582,14 @@ def command_code_actions(args: list[str]) -> int:
                         code_actions = _normalize_code_actions(
                             raw_actions, target_path, root
                         )
+                        if kind_prefix:
+                            paired = [
+                                (raw_action, action)
+                                for raw_action, action in zip(raw_actions, code_actions)
+                                if str(action.get("kind") or "").startswith(kind_prefix)
+                            ]
+                            raw_actions = [item[0] for item in paired]
+                            code_actions = [item[1] for item in paired]
                     else:
                         reason_code = capability_reason
                 if code_actions:
@@ -1636,6 +1665,7 @@ def command_code_actions(args: list[str]) -> int:
         "file": file_value or None,
         "symbol": symbol_value or None,
         "scope": scope_patterns,
+        "kind": kind_prefix or None,
         "selected_index": selected_index,
         "apply_requested": apply_changes,
         "applied": applied,
