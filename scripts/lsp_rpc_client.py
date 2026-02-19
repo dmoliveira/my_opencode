@@ -289,3 +289,19 @@ class LspClient:
         if isinstance(result, dict):
             return result
         return None
+
+    def document_diagnostics(self, path: Path) -> list[dict[str, Any]]:
+        self.ensure_open(path)
+        result = self._request(
+            "textDocument/diagnostic",
+            {
+                "textDocument": {"uri": path_to_uri(path)},
+            },
+        )
+        if isinstance(result, dict):
+            items = result.get("items")
+            if isinstance(items, list):
+                return [item for item in items if isinstance(item, dict)]
+        if isinstance(result, list):
+            return [item for item in result if isinstance(item, dict)]
+        return []
