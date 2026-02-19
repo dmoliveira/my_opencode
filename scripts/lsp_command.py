@@ -1572,6 +1572,9 @@ def command_code_actions(args: list[str]) -> int:
             raw_selected = (
                 raw_actions[selected_index] if selected_index < len(raw_actions) else {}
             )
+            disabled_reason = str(selected_action.get("disabled_reason") or "").strip()
+            if disabled_reason:
+                blockers.append(f"selected code action is disabled: {disabled_reason}")
             workspace_edit = raw_selected.get("edit")
             if not isinstance(workspace_edit, dict):
                 blockers.append(

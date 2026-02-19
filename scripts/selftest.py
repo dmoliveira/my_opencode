@@ -3993,6 +3993,50 @@ index 3333333..4444444 100644
                 "lsp code-actions apply should mutate file contents with selected edit",
             )
 
+            before_disabled_apply = lsp_actions_file.read_text(encoding="utf-8")
+            lsp_code_actions_disabled_apply = subprocess.run(
+                [
+                    sys.executable,
+                    str(LSP_SCRIPT),
+                    "code-actions",
+                    "--symbol",
+                    "alpha",
+                    "--scope",
+                    "*.py",
+                    "--index",
+                    "1",
+                    "--apply",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=lsp_actions_env,
+                check=False,
+                cwd=lsp_actions_root,
+            )
+            expect(
+                lsp_code_actions_disabled_apply.returncode == 0,
+                f"lsp code-actions disabled apply should return structured warn report: {lsp_code_actions_disabled_apply.stderr}",
+            )
+            lsp_code_actions_disabled_apply_report = parse_json_output(
+                lsp_code_actions_disabled_apply.stdout
+            )
+            expect(
+                lsp_code_actions_disabled_apply_report.get("applied") is False
+                and any(
+                    "selected code action is disabled" in str(item)
+                    for item in lsp_code_actions_disabled_apply_report.get(
+                        "blockers", []
+                    )
+                ),
+                "lsp code-actions should block apply for server-disabled actions",
+            )
+            after_disabled_apply = lsp_actions_file.read_text(encoding="utf-8")
+            expect(
+                before_disabled_apply == after_disabled_apply,
+                "lsp code-actions disabled apply should not mutate file contents",
+            )
+
         lsp_doctor_verbose = subprocess.run(
             [sys.executable, str(LSP_SCRIPT), "doctor", "--verbose", "--json"],
             capture_output=True,
