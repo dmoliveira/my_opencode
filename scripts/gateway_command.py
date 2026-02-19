@@ -1301,6 +1301,10 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
             "aggregateRequireSwapUsedMb": 12000,
             "aggregateRequireContinueSessions": 6,
             "aggregateBatchSize": 1,
+            "emergencySwapEnabled": True,
+            "emergencySwapUsedMb": 28000,
+            "emergencyCandidateMinFootprintMb": 4500,
+            "emergencyBatchSize": 1,
             "autoContinuePromptOnResume": True,
             "notificationsEnabled": True,
             "notifyBeforeRecovery": True,
@@ -1349,6 +1353,10 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
     if opencode_total_pressure_mb >= 40_960 and continue_count >= 6:
         rationale.append(
             "aggregate opencode pressure is high despite no single process crossing critical threshold; aggregate recovery candidates should be considered"
+        )
+    if swap_used_mb >= 28_000:
+        rationale.append(
+            "emergency swap guard should select top footprint candidates even when normal per-process thresholds are not crossed"
         )
 
     payload = {
@@ -1717,6 +1725,12 @@ def command_recover_memory(
         recovery.get("aggregateRequireContinueSessions"), 6
     )
     aggregate_batch_size = max(1, parse_int(recovery.get("aggregateBatchSize"), 1))
+    emergency_swap_enabled = recovery.get("emergencySwapEnabled") is not False
+    emergency_swap_used_mb = parse_float(recovery.get("emergencySwapUsedMb"), 28_000.0)
+    emergency_candidate_min_footprint_mb = parse_float(
+        recovery.get("emergencyCandidateMinFootprintMb"), 4_500.0
+    )
+    emergency_batch_size = max(1, parse_int(recovery.get("emergencyBatchSize"), 1))
 
     status = status_payload(config, home, Path.cwd(), cleanup_orphans=False)
     process_any = status.get("process_pressure")
@@ -1738,6 +1752,8 @@ def command_recover_memory(
     candidate_mode = "primary"
     aggregate_trigger = False
     aggregate_reason = ""
+    emergency_trigger = False
+    emergency_reason = ""
     high_footprint_any = process.get("high_footprint")
     high_footprint = high_footprint_any if isinstance(high_footprint_any, list) else []
     for entry in high_footprint:
@@ -1854,6 +1870,41 @@ def command_recover_memory(
     )
     if candidate_mode == "aggregate":
         candidates = candidates[:aggregate_batch_size]
+
+    if not candidates and emergency_swap_enabled:
+        emergency_trigger = swap_used_mb >= emergency_swap_used_mb
+        if emergency_trigger:
+            candidate_mode = "emergency_swap"
+            emergency_reason = f"swap_used_mb={swap_used_mb:.1f} >= emergencySwapUsedMb={emergency_swap_used_mb:.1f}"
+            for entry in high_footprint:
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    pid = int(entry.get("pid") or 0)
+                except (TypeError, ValueError):
+                    pid = 0
+                if pid <= 1:
+                    continue
+                footprint_mb = float(entry.get("footprint_mb") or 0)
+                if footprint_mb < emergency_candidate_min_footprint_mb:
+                    continue
+                candidates.append(
+                    {
+                        "pid": pid,
+                        "footprint_mb": footprint_mb,
+                        "rss_mb": float(entry.get("rss_mb") or 0),
+                        "elapsed": str(entry.get("elapsed") or ""),
+                        "command": str(entry.get("command") or ""),
+                    }
+                )
+            candidates = sorted(
+                candidates,
+                key=lambda item: max(
+                    float(item.get("footprint_mb") or 0),
+                    float(item.get("rss_mb") or 0),
+                ),
+                reverse=True,
+            )[:emergency_batch_size]
 
     actions: list[dict[str, Any]] = []
     pids = [int(item.get("pid") or 0) for item in candidates]
@@ -2177,6 +2228,10 @@ def command_recover_memory(
             "aggregate_require_swap_used_mb": aggregate_require_swap_used_mb,
             "aggregate_require_continue_sessions": aggregate_require_continue_sessions,
             "aggregate_batch_size": aggregate_batch_size,
+            "emergency_swap_enabled": emergency_swap_enabled,
+            "emergency_swap_used_mb": emergency_swap_used_mb,
+            "emergency_candidate_min_footprint_mb": emergency_candidate_min_footprint_mb,
+            "emergency_batch_size": emergency_batch_size,
             "auto_continue_prompt_on_resume": auto_continue_prompt,
             "notifications_enabled": notifications_enabled,
             "notify_before_recovery": notify_before_recovery,
@@ -2194,6 +2249,8 @@ def command_recover_memory(
         "candidate_mode": candidate_mode,
         "aggregate_trigger": aggregate_trigger,
         "aggregate_reason": aggregate_reason,
+        "emergency_trigger": emergency_trigger,
+        "emergency_reason": emergency_reason,
         "candidate_count": len(candidates),
         "candidates": candidates[:8],
         "actions": actions,
@@ -2359,11 +2416,17 @@ def command_recover_memory_watch(
             if isinstance(payload, dict)
             else False
         )
+        emergency_triggered = (
+            bool(payload.get("emergency_trigger"))
+            if isinstance(payload, dict)
+            else False
+        )
         triggered = (
             candidate_count > 0
             or max_pressure_mb >= critical_threshold
             or swap_used_mb >= critical_swap_mb
             or aggregate_triggered
+            or emergency_triggered
         )
         row = {
             "cycle": cycle_index,
@@ -2377,6 +2440,7 @@ def command_recover_memory_watch(
             "candidate_count": candidate_count,
             "action_count": action_count,
             "aggregate_trigger": aggregate_triggered,
+            "emergency_trigger": emergency_triggered,
         }
         if isinstance(payload, dict):
             row["mode"] = payload.get("mode")
