@@ -55,6 +55,7 @@ from safe_edit_adapters import (  # type: ignore
 from lsp_command import (  # type: ignore
     _apply_renamefile_operations,
     _group_resource_operations,
+    _split_resource_operations,
     _validate_renamefile_operations,
     _workspace_edit_text_changes,
 )
@@ -4318,11 +4319,18 @@ index 3333333..4444444 100644
         grouped_workspace_resource_ops = _group_resource_operations(
             workspace_resource_ops
         )
+        split_rename_ops, split_blocked_ops = _split_resource_operations(
+            workspace_resource_ops
+        )
         expect(
             len(grouped_workspace_resource_ops.get("renamefile", [])) == 1
             and len(grouped_workspace_resource_ops.get("createfile", [])) == 1
             and len(grouped_workspace_resource_ops.get("deletefile", [])) == 1,
             "lsp resource operation grouping should classify rename/create/delete entries",
+        )
+        expect(
+            len(split_rename_ops) == 1 and split_blocked_ops == [],
+            "lsp resource split helper should keep create/delete ops out of unsupported bucket",
         )
         expect(
             workspace_annotations_with_policy.get("a1", {}).get("needs_confirmation")
