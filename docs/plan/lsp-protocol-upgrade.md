@@ -60,6 +60,7 @@ Tasks:
 11. Add guarded `--apply` path for `/lsp code-actions` when selected action contains safe text edits only. `finished`
 12. Add explicit capability-missing warning hints across `/lsp` command outputs. `finished`
 13. Enhance `/lsp diagnostics` summary with source counts and top diagnostic codes. `finished`
+14. Block `/lsp code-actions --apply` when selected action is marked disabled by the server. `finished`
 
 ## Validation
 

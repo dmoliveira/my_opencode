@@ -220,7 +220,12 @@ def _handle_request(method: str, params: dict[str, Any]) -> Any:
                         ]
                     }
                 },
-            }
+            },
+            {
+                "title": "Mock: disabled action",
+                "kind": "quickfix.mock.disabled",
+                "disabled": {"reason": "mock guard: unsafe preview-only action"},
+            },
         ]
 
     return None
