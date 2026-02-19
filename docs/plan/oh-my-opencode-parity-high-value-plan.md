@@ -21,7 +21,7 @@ Rules:
 | Epic | Priority | State | Current activity | Next checkpoint | Blocker | Last update (UTC) |
 | --- | --- | --- | --- | --- | --- | --- |
 | E0 Command/hook hygiene + naming guard | P0 | 󰄵 [x] finished | Audit + drift checks + naming simplification landed | Start E1 schema and dependency invariants | - | 2026-02-19T01:46:00Z |
-| E1 Persistent task graph | P0 | 󰄱 [ ] backlog | Not started | Schema + invariants | - | - |
+| E1 Persistent task graph | P0 | 󰄵 [x] finished | Runtime + command surface + validation landed | Start E2 contract mapping | - | 2026-02-19T02:40:00Z |
 | E2 Loop command parity | P0 | 󰄱 [ ] backlog | Not started | Command contract mapping | Waiting on E1 | - |
 | E3 Built-in skill parity | P1 | 󰄱 [ ] backlog | Not started | Skill contracts | Waiting on E2 | - |
 | E4 Planning specialist tier | P1 | 󰄱 [ ] backlog | Not started | Role spec draft | Waiting on E1 | - |
@@ -37,13 +37,13 @@ Rules:
   - [x] E0-T4 Add naming glossary and accessibility rules (plain-English first, minimal aliases).
   - [x] E0-T5 Implement accepted consolidations and migration notes.
   - [x] E0-T6 Add drift checks to prevent stale command/hook surfaces.
-- [ ] E1 Persistent task graph + dependency scheduler
-  - [ ] E1-T1 Define durable schema (`id`, `status`, `blockedBy`, `blocks`, `owner`, timestamps).
-  - [ ] E1-T2 Implement lock-safe storage with restart persistence.
-  - [ ] E1-T3 Implement `create/list/get/update/ready` backend and JSON output.
-  - [ ] E1-T4 Wire slash commands in `opencode.json` and doctor/help integration.
-  - [ ] E1-T5 Add selftests for lifecycle + dependency edge cases.
-  - [ ] E1-T6 Add docs with examples and failure guidance.
+- [x] E1 Persistent task graph + dependency scheduler
+  - [x] E1-T1 Define durable schema (`id`, `status`, `blockedBy`, `blocks`, `owner`, timestamps).
+  - [x] E1-T2 Implement lock-safe storage with restart persistence.
+  - [x] E1-T3 Implement `create/list/get/update/ready` backend and JSON output.
+  - [x] E1-T4 Wire slash commands in `opencode.json` and doctor/help integration.
+  - [x] E1-T5 Add selftests for lifecycle + dependency edge cases.
+  - [x] E1-T6 Add docs with examples and failure guidance.
 - [ ] E2 Loop command parity (`/init-deep`, `/ulw-loop`, `/ralph-loop`)
   - [ ] E2-T1 Define loop contracts mapped to existing autopilot/keyword/continuation runtime.
   - [ ] E2-T2 Prefer existing loop commands first; add aliases only when strictly needed for parity.
@@ -74,8 +74,8 @@ Rules:
   - [ ] E6-T5 Add docs and CI-safe examples.
 
 Progress counters:
-- Epics completed: `1/7`
-- Tasks completed: `6/35`
+- Epics completed: `2/7`
+- Tasks completed: `12/35`
 
 ## Parity coverage map
 
@@ -155,5 +155,6 @@ An epic is done only when:
 | Timestamp (UTC) | Epic/Task | Change | Evidence |
 | --- | --- | --- | --- |
 | 2026-02-19T01:40:00Z | E0 / plan baseline | Created parity plan with checkbox tracking, parity map, and naming accessibility policy | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T02:40:00Z | E1-T1..E1-T6 | Added persistent task graph runtime, `/task` command family, wiring, docs, and coverage | `scripts/task_graph_runtime.py`, `scripts/task_graph_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`, `Makefile` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |

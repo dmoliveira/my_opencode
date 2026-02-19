@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -211,10 +212,15 @@ def _check_orchestration_contract(path: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_orchestration_contract_path() -> Path | None:
-    for directory in [REPO_ROOT, *REPO_ROOT.parents]:
-        candidate = directory / "AGENTS.md"
+    override = os.environ.get("MY_OPENCODE_ORCHESTRATION_CONTRACT_PATH", "").strip()
+    if override:
+        candidate = Path(override).expanduser()
         if candidate.exists() and candidate.is_file():
             return candidate
+        return None
+    candidate = REPO_ROOT / "AGENTS.md"
+    if candidate.exists() and candidate.is_file():
+        return candidate
     return None
 
 

@@ -24,6 +24,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
+- 🗂️ Built-in `/task` command for persistent dependency-aware task graph tracking.
 - 🧭 Built-in `/lsp` command for language-server readiness and install diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 🤖 Built-in `/agent-doctor` command for custom agent contract, orchestration policy marker, and runtime checks.
@@ -1768,6 +1769,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/release_train_command.py` - `/release-train` command surface and doctor/checklist integration
 - `scripts/hotfix_runtime.py` - incident hotfix runtime profile with checkpoint and timeline capture
 - `scripts/todo_command.py` - backend script for `/todo`
+- `scripts/task_graph_command.py` - backend script for `/task` persistent dependency graph controls
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
 - `scripts/safe_edit_command.py` - `/safe-edit` command surface for semantic adapter planning and diagnostics

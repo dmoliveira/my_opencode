@@ -119,6 +119,7 @@ RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
+TASK_GRAPH_SCRIPT = REPO_ROOT / "scripts" / "task_graph_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 LSP_SCRIPT = REPO_ROOT / "scripts" / "lsp_command.py"
@@ -8063,6 +8064,66 @@ version: 1
         expect(
             lsp_checks[0].get("ok") is True,
             "doctor lsp check should pass",
+        )
+
+        task_create = run_script(
+            TASK_GRAPH_SCRIPT,
+            cfg,
+            home,
+            "create",
+            "--subject",
+            "Build task graph backend",
+            "--owner",
+            "selftest",
+            "--json",
+        )
+        expect(
+            task_create.returncode == 0,
+            f"task create should succeed: {task_create.stderr}",
+        )
+        task_create_payload = parse_json_output(task_create.stdout)
+        task_id = str(task_create_payload.get("task", {}).get("id") or "")
+        expect(task_id.startswith("T-"), "task create should return generated task id")
+
+        task_list = run_script(TASK_GRAPH_SCRIPT, cfg, home, "list", "--json")
+        expect(
+            task_list.returncode == 0, f"task list should succeed: {task_list.stderr}"
+        )
+        task_list_payload = parse_json_output(task_list.stdout)
+        expect(
+            int(task_list_payload.get("count", 0)) >= 1,
+            "task list should include created task",
+        )
+
+        task_update = run_script(
+            TASK_GRAPH_SCRIPT,
+            cfg,
+            home,
+            "update",
+            task_id,
+            "--status",
+            "completed",
+            "--json",
+        )
+        expect(
+            task_update.returncode == 0,
+            f"task update should succeed: {task_update.stderr}",
+        )
+        task_update_payload = parse_json_output(task_update.stdout)
+        expect(
+            task_update_payload.get("task", {}).get("status") == "completed",
+            "task update should change status to completed",
+        )
+
+        task_doctor = run_script(TASK_GRAPH_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            task_doctor.returncode == 0,
+            f"task doctor should succeed: {task_doctor.stderr}",
+        )
+        task_doctor_payload = parse_json_output(task_doctor.stdout)
+        expect(
+            task_doctor_payload.get("result") == "PASS",
+            "task doctor should report PASS",
         )
 
     print("selftest: PASS")
