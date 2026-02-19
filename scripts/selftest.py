@@ -1309,6 +1309,15 @@ exit 0
         report = parse_json_output(result.stdout)
         expect(report.get("result") == "PASS", "notify doctor should pass")
 
+        result = run_notify("doctor", "--verbose")
+        expect(
+            result.returncode == 0, f"notify doctor --verbose failed: {result.stderr}"
+        )
+        expect(
+            "runtime:" in result.stdout,
+            "notify doctor --verbose should print runtime section",
+        )
+
         digest_path = home / ".config" / "opencode" / "digests" / "selftest.json"
         session_index_path = home / ".config" / "opencode" / "sessions" / "index.json"
         session_index_path.parent.mkdir(parents=True, exist_ok=True)
