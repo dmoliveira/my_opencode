@@ -53,6 +53,9 @@ This setup keeps `build` as the default agent, and adds focused specialists for 
 - `verifier` (subagent): read-only validation runner for test/lint/build checks.
 - `reviewer` (subagent): read-only quality/risk review pass before final delivery.
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
+- `strategic-planner` (subagent): read-only planning specialist for sequencing and milestone structure.
+- `ambiguity-analyst` (subagent): read-only analyst for assumptions, unknowns, and default decision paths.
+- `plan-critic` (subagent): read-only plan reviewer for feasibility, risk coverage, and exit criteria.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
 Agent source-of-truth specs live in `agent/specs/*.json` and generate markdown via `scripts/build_agents.py`.

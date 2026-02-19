@@ -263,6 +263,9 @@ oracle (subagent)
 verifier (subagent)
 reviewer (subagent)
 release-scribe (subagent)
+strategic-planner (subagent)
+ambiguity-analyst (subagent)
+plan-critic (subagent)
 EOF
   exit 0
 fi
@@ -301,6 +304,15 @@ exit 0
             "verifier.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
             "reviewer.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
             "release-scribe.md": {
+                "must": ["mode: subagent", "write: false", "edit: false"]
+            },
+            "strategic-planner.md": {
+                "must": ["mode: subagent", "write: false", "edit: false"]
+            },
+            "ambiguity-analyst.md": {
+                "must": ["mode: subagent", "write: false", "edit: false"]
+            },
+            "plan-critic.md": {
                 "must": ["mode: subagent", "write: false", "edit: false"]
             },
         }
