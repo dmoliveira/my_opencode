@@ -3918,11 +3918,16 @@ index 3333333..4444444 100644
             f"lsp code-actions should succeed: {lsp_code_actions.stderr}",
         )
         lsp_code_actions_report = parse_json_output(lsp_code_actions.stdout)
+        code_action_summary = lsp_code_actions_report.get("summary", {})
         expect(
             lsp_code_actions_report.get("result") in {"PASS", "WARN"}
             and isinstance(lsp_code_actions_report.get("code_actions"), list)
             and isinstance(lsp_code_actions_report.get("summary"), dict),
             "lsp code-actions should emit deterministic action list and summary metadata",
+        )
+        expect(
+            isinstance(code_action_summary.get("preferred"), int),
+            "lsp code-actions summary should expose preferred action count",
         )
         expect(
             isinstance(lsp_code_actions_report.get("backend_details"), dict),
@@ -4074,7 +4079,8 @@ index 3333333..4444444 100644
                 and len(lsp_code_actions_kind_filter_report.get("code_actions", []))
                 == 1
                 and isinstance(kind_summary, dict)
-                and kind_summary.get("total") == 1,
+                and kind_summary.get("total") == 1
+                and kind_summary.get("preferred") == 0,
                 "lsp code-actions --kind should deterministically filter action results",
             )
 
