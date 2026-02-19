@@ -118,6 +118,7 @@ AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
+TMUX_SCRIPT = REPO_ROOT / "scripts" / "tmux_command.py"
 SKILL_CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "skill_contract_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
@@ -375,6 +376,15 @@ exit 0
             "--completion-mode objective" in init_deep_template,
             "init-deep should map to objective completion mode",
         )
+
+        for command_name in ("tmux", "tmux-status", "tmux-config", "tmux-doctor-json"):
+            template = str(
+                (command_map.get(command_name, {}) or {}).get("template", "")
+            )
+            expect(
+                'tmux_command.py"' in template,
+                f"{command_name} command should resolve tmux visual mode backend",
+            )
 
         for skill_name in ("playwright", "frontend-ui-ux", "git-master"):
             template = str((command_map.get(skill_name, {}) or {}).get("template", ""))
@@ -5089,6 +5099,60 @@ index 3333333..4444444 100644
             browser_doctor_playwright_report.get("provider") == "playwright"
             and browser_doctor_playwright_report.get("selected_ready") is True,
             "browser doctor should report ready selected provider after reset",
+        )
+
+        tmux_status = subprocess.run(
+            [sys.executable, str(TMUX_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(tmux_status.returncode == 0, "tmux status should succeed")
+        tmux_status_report = parse_json_output(tmux_status.stdout)
+        expect(
+            isinstance(tmux_status_report.get("pane_session_cache"), dict)
+            and tmux_status_report.get("runtime_mode") in {"tmux", "headless_fallback"},
+            "tmux status should report runtime mode and pane session cache summary",
+        )
+
+        tmux_config = subprocess.run(
+            [sys.executable, str(TMUX_SCRIPT), "config", "enabled", "true"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(tmux_config.returncode == 0, "tmux config should update enabled flag")
+        tmux_config_path_line = next(
+            (
+                line
+                for line in tmux_config.stdout.splitlines()
+                if line.startswith("config: ")
+            ),
+            "",
+        )
+        expect(
+            bool(tmux_config_path_line),
+            "tmux config output should include write-path line",
+        )
+
+        tmux_doctor = subprocess.run(
+            [sys.executable, str(TMUX_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(tmux_doctor.returncode == 0, "tmux doctor should succeed")
+        tmux_doctor_report = parse_json_output(tmux_doctor.stdout)
+        expect(
+            tmux_doctor_report.get("result") in {"PASS", "WARN"}
+            and isinstance(tmux_doctor_report.get("warnings"), list),
+            "tmux doctor should return stable diagnostics payload",
         )
 
         for skill_name in ("playwright", "frontend-ui-ux", "git-master"):

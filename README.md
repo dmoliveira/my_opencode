@@ -31,6 +31,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
+- 🧭 Built-in `/tmux` command for optional visual-mode status/config/doctor with headless fallback.
 - 🧩 Built-in skill contracts via `/playwright`, `/frontend-ui-ux`, and `/git-master` to guide browser, UI, and git workflows.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
 - 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
@@ -1133,6 +1134,21 @@ Wizard support:
 
 - `install_wizard.py` supports `--browser-profile <playwright|agent-browser>`
 - interactive wizard includes the same provider choice during fresh setup and reconfigure
+
+## Optional tmux visual mode
+
+Use:
+```text
+/tmux status --json
+/tmux config enabled true
+/tmux config layout split-3
+/tmux doctor --json
+```
+
+Behavior:
+- reuses existing pane/session runtime cache at `~/.config/opencode/my_opencode/runtime/gateway-pane-session-cache.json`
+- reports `headless_fallback` when tmux is unavailable or explicitly disabled
+- keeps non-tmux fallback behavior explicit via `runtime_mode` and `reason_code`
 
 ## Skill contract shortcuts
 

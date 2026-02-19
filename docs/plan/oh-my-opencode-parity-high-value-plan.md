@@ -25,7 +25,7 @@ Rules:
 | E2 Loop command parity | P0 | 󰄵 [x] finished | Compatibility aliases mapped to canonical `/autopilot*` | Start E3 skill contracts | - | 2026-02-19T03:03:00Z |
 | E3 Built-in skill parity | P1 | 󰄵 [x] finished | Skill contracts + wrappers + tests/docs landed | Start E4 role contracts | - | 2026-02-19T04:20:00Z |
 | E4 Planning specialist tier | P1 | 󰄵 [x] finished | Added planning specialist agent specs + checks/docs | Start E5 tmux constraints | - | 2026-02-19T04:40:00Z |
-| E5 Optional tmux visual mode | P1 | 󰄱 [ ] backlog | Not started | Constraint/config draft | Waiting on E1 | - |
+| E5 Optional tmux visual mode | P1 | 󰄵 [x] finished | Added `/tmux` status/config/doctor + fallback checks/docs | Start E6 packaged CLI contract | - | 2026-02-19T04:55:00Z |
 | E6 Packaged CLI parity (`install/doctor/run`) | P2 | 󰄱 [ ] backlog | Not started | CLI contract | Waiting on E1 | - |
 
 ## Master checklist
@@ -60,12 +60,12 @@ Rules:
   - [x] E4-T2 Add role specs/prompts and generation wiring.
   - [x] E4-T3 Add discoverability in README/help.
   - [x] E4-T4 Add `agent-doctor` checks and targeted tests.
-- [ ] E5 Optional tmux visual multi-agent mode
-  - [ ] E5-T1 Finalize tmux constraints and config schema.
-  - [ ] E5-T2 Integrate pane orchestration with existing background/session mapping.
-  - [ ] E5-T3 Add `/tmux` status/config helper surface.
-  - [ ] E5-T4 Add non-tmux fallback and safety handling.
-  - [ ] E5-T5 Add docs and selftests.
+- [x] E5 Optional tmux visual multi-agent mode
+  - [x] E5-T1 Finalize tmux constraints and config schema.
+  - [x] E5-T2 Integrate pane orchestration with existing background/session mapping.
+  - [x] E5-T3 Add `/tmux` status/config helper surface.
+  - [x] E5-T4 Add non-tmux fallback and safety handling.
+  - [x] E5-T5 Add docs and selftests.
 - [ ] E6 Packaged CLI parity
   - [ ] E6-T1 Define packaged CLI contract (`install`, `doctor`, `run`, `version`).
   - [ ] E6-T2 Implement packaged entrypoint and non-interactive argument parsing.
@@ -74,8 +74,8 @@ Rules:
   - [ ] E6-T5 Add docs and CI-safe examples.
 
 Progress counters:
-- Epics completed: `5/7`
-- Tasks completed: `25/35`
+- Epics completed: `6/7`
+- Tasks completed: `30/35`
 
 ## Parity coverage map
 
@@ -85,7 +85,7 @@ Progress counters:
 | Loop-oriented slash workflows | E2 | finished |
 | Built-in skill trio | E3 | finished |
 | Planning-specialist roles | E4 | finished |
-| Tmux visual multi-agent mode | E5 | planned |
+| Tmux visual multi-agent mode | E5 | finished |
 | Packaged top-level CLI (`install/doctor/run`) | E6 | planned |
 | Local command/hook drift prevention (value-add) | E0 | finished |
 
@@ -159,5 +159,6 @@ An epic is done only when:
 | 2026-02-19T03:03:00Z | E2-T1..E2-T5 | Added loop compatibility aliases as thin wrappers over canonical `/autopilot*`, plus docs and selftest coverage | `opencode.json`, `scripts/selftest.py`, `README.md`, `scripts/hygiene_drift_check.py` |
 | 2026-02-19T04:20:00Z | E3-T1..E3-T4 | Added built-in skill contracts for `/playwright`, `/frontend-ui-ux`, `/git-master` with command wiring, selftest coverage, and docs | `scripts/skill_contract_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh` |
 | 2026-02-19T04:40:00Z | E4-T1..E4-T4 | Added planning specialist tier agents (`strategic-planner`, `ambiguity-analyst`, `plan-critic`) with generated docs, `agent-doctor` coverage, and selftest/README updates | `agent/specs/*.json`, `agent/*.md`, `scripts/agent_doctor.py`, `scripts/selftest.py`, `README.md` |
+| 2026-02-19T04:55:00Z | E5-T1..E5-T5 | Added optional tmux visual mode command surface with layered config schema, pane cache visibility, non-tmux fallback diagnostics, and selftest/docs updates | `scripts/tmux_command.py`, `opencode.json`, `scripts/selftest.py`, `install.sh`, `README.md` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |

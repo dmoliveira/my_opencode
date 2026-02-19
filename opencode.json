@@ -322,6 +322,22 @@
       "description": "Run browser provider diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
     },
+    "tmux": {
+      "description": "Manage optional tmux visual mode (status|config|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "tmux-status": {
+      "description": "Show tmux visual mode status in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" status --json`\nShow only the command output."
+    },
+    "tmux-config": {
+      "description": "Configure tmux visual mode defaults",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" config $ARGUMENTS`\nShow only the command output."
+    },
+    "tmux-doctor-json": {
+      "description": "Run tmux visual mode diagnostics in JSON",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" doctor --json`\nShow only the command output."
+    },
     "playwright": {
       "description": "Skill contract for browser automation with Playwright-first defaults",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" playwright --json`\nUse this skill contract as execution guardrails for the current request. Prefer `/browser profile playwright` and `/browser doctor --json` before browser-driven execution, then continue concrete implementation in this session."
