@@ -25,6 +25,9 @@ REQUIRED_AGENTS: dict[str, dict[str, str]] = {
     "verifier": {"mode": "subagent"},
     "reviewer": {"mode": "subagent"},
     "release-scribe": {"mode": "subagent"},
+    "strategic-planner": {"mode": "subagent"},
+    "ambiguity-analyst": {"mode": "subagent"},
+    "plan-critic": {"mode": "subagent"},
 }
 
 REQUIRED_MARKERS: dict[str, list[str]] = {
@@ -45,6 +48,9 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
     "verifier.md": ["mode: subagent", "write: false", "edit: false"],
     "reviewer.md": ["mode: subagent", "write: false", "edit: false"],
     "release-scribe.md": ["mode: subagent", "write: false", "edit: false"],
+    "strategic-planner.md": ["mode: subagent", "write: false", "edit: false"],
+    "ambiguity-analyst.md": ["mode: subagent", "write: false", "edit: false"],
+    "plan-critic.md": ["mode: subagent", "write: false", "edit: false"],
 }
 
 REQUIRED_ORCHESTRATION_MARKERS: list[str] = [
