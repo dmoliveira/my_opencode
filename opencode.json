@@ -775,7 +775,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile lean`\nShow only the command output."
     },
     "notify": {
-      "description": "Manage notification controls (status|profile|enable|disable|channel)",
+      "description": "Manage notification controls (status|profile|enable|disable|channel|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "notify-help": {
@@ -789,6 +789,10 @@
     "notify-doctor-json": {
       "description": "Run notification diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" doctor --json`\nShow only the command output."
+    },
+    "notify-test": {
+      "description": "Send notification test events (hook|terminal-notifier|osascript)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_test_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "notify-profile-all": {
       "description": "Enable all notification channels and events",

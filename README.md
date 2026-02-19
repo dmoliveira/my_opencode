@@ -16,7 +16,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
-- 🔔 Built-in `/notify` command to tune notification behavior by level, sound theme, event sound overrides, icon pack version, and runtime diagnostics (`/notify doctor --verbose`).
+- 🔔 Built-in `/notify` command to tune notification behavior by level, sound theme, event sound overrides, icon pack version, and runtime diagnostics (`/notify doctor --verbose`), plus `/notify-test` for cross-backend event smoke tests.
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
@@ -1596,6 +1596,9 @@ Use these directly in OpenCode:
 /notify help
 /notify doctor
 /notify doctor --json
+/notify-test --method hook --event all
+/notify-test --method terminal-notifier --event all --list
+/notify-test --method osascript --event question
 /notify profile all
 /notify profile quiet
 /notify profile focus

@@ -97,6 +97,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
 MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
+NOTIFY_TEST_SCRIPT = REPO_ROOT / "scripts" / "notify_test_command.py"
 DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
 SESSION_SCRIPT = REPO_ROOT / "scripts" / "session_command.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
@@ -1374,6 +1375,37 @@ exit 0
         expect(
             "runtime:" in result.stdout,
             "notify doctor --verbose should print runtime section",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(NOTIFY_TEST_SCRIPT),
+                "--method",
+                "hook",
+                "--event",
+                "all",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=notify_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"notify test harness dry-run failed: {result.stderr}",
+        )
+        notify_test_report = parse_json_output(result.stdout)
+        expect(
+            notify_test_report.get("result") == "PASS"
+            and isinstance(notify_test_report.get("events"), list)
+            and len(notify_test_report.get("events", [])) == 4
+            and isinstance(notify_test_report.get("results"), list)
+            and len(notify_test_report.get("results", [])) == 4,
+            "notify test harness should emit deterministic all-event dry-run report",
         )
 
         digest_path = home / ".config" / "opencode" / "digests" / "selftest.json"
