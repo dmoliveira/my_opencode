@@ -1,7 +1,7 @@
 # Oh-My-OpenCode High-Value Parity Plan
 
 Date: 2026-02-19
-Owner: `br` task `bd-2md`
+Owner: `br` task `bd-2vf`
 Scope: close high-value parity gaps while reusing existing `my_opencode` systems and avoiding duplicate runtimes; cycle 1 is complete and cycle 2 backlog is tracked here.
 
 ## Status model
@@ -30,6 +30,9 @@ Rules:
 | E6 Packaged CLI parity (`install/doctor/run`) | P2 | 󰄵 [x] finished | Added packaged CLI entrypoint + clean-HOME coverage | Start cycle 2 backlog planning | - | 2026-02-19T05:05:00Z |
 | E7 MCP provider parity (`websearch`/OAuth-ready path) | P1 | 󰅚 [ ] blocked | Deferred by owner for this cycle (OAuth path not planned) | Keep out-of-scope note and revisit in future cycle only if needed | Owner decision: skip OAuth scope | 2026-02-19T06:40:00Z |
 | E8 Plan-handoff continuity parity (`@plan`-style flow) | P2 | 󰄵 [x] finished | E8-T1..T4 complete with compatibility command, tests, and migration docs | Re-check parity backlog after owner scope decisions | E7 deferred by owner | 2026-02-19T06:56:00Z |
+| E9 Parity backlog refresh + release-note automation | P1 | 󰄵 [x] finished | Completed parity rescan and milestone-aware release-note automation baseline | Start parity drift watchdog expansion | Scope excludes OAuth/E7 by owner decision | 2026-02-19T07:40:00Z |
+| E10 Parity drift watchdog expansion | P2 | 󰄵 [x] finished | Expanded hygiene drift checks with parity checklist/activity/PR-label snapshot watchdog | Start merged-PR metadata fallback pass | GitHub label audit is best-effort and warning-only when unavailable | 2026-02-19T08:12:00Z |
+| E11 Parity watchdog metadata fallback | P2 | 󰄵 [x] finished | Added merged-PR title heuristics fallback when labels are absent | Re-check remaining non-LSP backlog priorities | Metadata checks remain warning-only; no release blocker introduced | 2026-02-19T10:03:00Z |
 
 ## Master checklist
 
@@ -81,14 +84,26 @@ Rules:
   - [ ] E7-T2 Define minimal config and doctor diagnostics for provider auth readiness.
   - [ ] E7-T3 Implement opt-in provider wiring that reuses existing MCP and `/mcp` command surfaces.
   - [ ] E7-T4 Add install/readme docs and smoke validation path.
-- [ ] E8 Plan-handoff continuity parity (`@plan`-style flow)
+- [x] E8 Plan-handoff continuity parity (`@plan`-style flow)
   - [x] E8-T1 Map continuity semantics onto existing `/autopilot`, `/task`, `/resume`, and checkpoint behavior.
   - [x] E8-T2 Add thin compatibility command/profile surface (no second runtime).
   - [x] E8-T3 Add selftests for handoff, resume, and blocked-state transitions.
   - [x] E8-T4 Add docs and migration examples with canonical command guidance.
+- [x] E9 Parity backlog refresh + release-note automation
+  - [x] E9-T1 Re-scan high-value parity gaps after E8 completion and record evidence.
+  - [x] E9-T2 Define and implement baseline release-note automation for parity/LSP milestone waves.
+  - [x] E9-T3 Add validation/docs updates and close with migration notes.
+- [x] E10 Parity drift watchdog expansion
+  - [x] E10-T1 Expand drift checks to compare parity quick board/checklist/activity consistency.
+  - [x] E10-T2 Add best-effort merged PR label snapshot audit (warning-only when unavailable).
+  - [x] E10-T3 Validate and document watchdog expansion behavior.
+- [x] E11 Parity watchdog metadata fallback
+  - [x] E11-T1 Add merged-PR metadata fetch path (`labels` + `title`) for watchdog checks.
+  - [x] E11-T2 Use title-based area markers as fallback when labels are absent.
+  - [x] E11-T3 Keep parity watchdog output warning-only and validate behavior via `make validate` + `make selftest`.
 Progress counters:
-- Epics completed: `7/9`
-- Tasks completed: `39/43`
+- Epics completed: `11/12`
+- Tasks completed: `48/52`
 
 ## Parity coverage map
 
@@ -102,20 +117,24 @@ Progress counters:
 | Packaged top-level CLI (`install/doctor/run`) | E6 | finished |
 | MCP provider OAuth/websearch path | E7 | backlog |
 | Plan-handoff continuity profile (`@plan`-style intent) | E8 | finished |
+| Post-E8 parity backlog refresh + release-note automation | E9 | finished |
+| Parity drift watchdog expansion | E10 | finished |
+| Parity watchdog metadata fallback | E11 | finished |
 | Local command/hook drift prevention (value-add) | E0 | finished |
 
-Note: MCP OAuth parity was intentionally out-of-scope for cycle 1 and is deferred for this cycle by owner decision; E8 is the active next parity track.
+Note: MCP OAuth parity was intentionally out-of-scope for cycle 1 and remains deferred by owner decision.
 
 ## Remaining gap backlog (post-parity)
 
-Status: `backlog`
+Status: `backlog` (`br`: `bd-hs8` closed)
 
 Gaps:
 
-- P1: Add consolidated release-note automation for parity + LSP milestone waves to reduce manual changelog drift.
 - P2: Add richer `/lsp code-actions` triage metadata (per-source counts and preferred/disabled ratio percentages).
 - P2: Add `/lsp diagnostics` text-mode compact table output for large scopes with deterministic truncation controls.
-- P2: Add parity drift watchdog that compares this plan checklist against live command/help surfaces and recent merged PR labels.
+
+Current focus:
+- Next candidate: P2 parity backlog handoff to LSP-focused branch owner.
 
 No P0 blockers remain from the original parity scope; the above items are follow-on polish and maintainability work.
 
@@ -200,5 +219,9 @@ An epic is done only when:
 | 2026-02-19T06:44:00Z | E8-T1 continuity mapping | Added continuity mapping spec and acceptance checks for `@plan`-style handoff using existing `/autopilot` + `/task` + `/resume` surfaces | `docs/specs/e8-plan-handoff-continuity-mapping.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T06:49:00Z | E8-T2 compatibility surface | Added `/plan-handoff` thin compatibility command/profile wiring without introducing a new runtime | `scripts/plan_handoff_command.py`, `opencode.json`, `scripts/selftest.py`, `install.sh`, `README.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T06:56:00Z | E8-T3..E8-T4 completion | Added targeted selftest coverage and migration examples for plan-handoff continuity flow with canonical command guidance | `scripts/selftest.py`, `docs/specs/e8-plan-handoff-continuity-mapping.md`, `README.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T07:36:00Z | E9 start | Opened post-E8 candidate for parity gap rescan and release-note automation baseline (OAuth scope excluded) | `docs/plan/oh-my-opencode-parity-high-value-plan.md`, `docs/plan/e9-release-note-automation.md` |
+| 2026-02-19T07:40:00Z | E9-T1..E9-T3 completion | Added milestone-aware release-note draft automation (`--include-milestones`) with command wiring, docs, install smoke, and selftest coverage | `scripts/release_train_engine.py`, `scripts/release_train_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`, `docs/plan/e9-release-note-automation.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T08:12:00Z | E10-T1..E10-T3 completion | Expanded parity drift watchdog to validate quick board/checklist/activity consistency and best-effort merged PR label snapshot coverage | `scripts/hygiene_drift_check.py`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T10:03:00Z | E11-T1..E11-T3 completion | Added merged-PR metadata fallback for parity watchdog (title heuristics when labels are absent) and preserved warning-only behavior | `scripts/hygiene_drift_check.py`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |

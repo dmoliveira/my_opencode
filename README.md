@@ -397,12 +397,13 @@ Task 24.2 release assistant engine notes:
 - backend module: `scripts/release_train_engine.py` with `status`, `prepare`, `draft`, `publish`, and `doctor` command flows.
 - `prepare` emits deterministic `reason_codes` and remediation for clean-tree, branch, validation, changelog, and semver gating checks.
 - `draft` composes release-note entries from git history since the latest (or provided) tag.
+- `draft --include-milestones` appends parity/LSP milestone context from plan docs for consolidated wave summaries.
 - `publish` enforces readiness and explicit confirmation, with dry-run and rollback action metadata.
 
 Task 24.3 command integration notes:
 
 - command module: `scripts/release_train_command.py`
-- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-doctor`
+- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-draft-milestones`, `/release-train-doctor`
 - doctor integration: unified `/doctor run --json` now includes `release-train` subsystem readiness checks.
 - release-check integration: `make release-check VERSION=x.y.z` now invokes release-train preflight gating.
 
@@ -412,6 +413,7 @@ Examples:
 /release-train status --json
 /release-train prepare --version 0.3.0 --json
 /release-train draft --head HEAD --json
+/release-train-draft-milestones --head HEAD
 /release-train doctor --json
 ```
 
@@ -419,7 +421,7 @@ Task 24.4 verification notes:
 
 - selftest validates breaking-change/changelog mismatch blocking with `version_mismatch_breaking_change` reason codes.
 - selftest validates publish behavior split between `--dry-run` pass and confirmation-required blocking for live publish.
-- install smoke validates `/release-train` status, prepare, draft, and doctor command paths.
+- install smoke validates `/release-train` status, prepare, draft, milestone draft, and doctor command paths.
 
 Task 25.1 hotfix policy contract notes:
 

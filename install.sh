@@ -395,6 +395,7 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" status --json
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" prepare --version 0.0.1 --json || true
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --head HEAD --json
+		python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --include-milestones --head HEAD --json
 		python3 "$INSTALL_DIR/scripts/release_train_command.py" doctor --json
 	fi
 	if [ -f "$INSTALL_DIR/scripts/hotfix_command.py" ]; then
@@ -527,6 +528,7 @@ printf "  /pr-review-doctor\n"
 printf "  /release-train status --json\n"
 printf "  /release-train prepare --version 0.0.1 --json\n"
 printf "  /release-train draft --head HEAD --json\n"
+printf "  /release-train-draft-milestones --head HEAD\n"
 printf "  /release-train-doctor\n"
 printf "  /hotfix start --incident-id INC-42 --scope patch --impact sev2 --json\n"
 printf "  /hotfix status --json\n"

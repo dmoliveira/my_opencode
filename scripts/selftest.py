@@ -416,6 +416,17 @@ exit 0
                 f"{command_name} command should resolve plan handoff backend",
             )
 
+        release_train_milestone_template = str(
+            (command_map.get("release-train-draft-milestones", {}) or {}).get(
+                "template", ""
+            )
+        )
+        expect(
+            'release_train_command.py" draft --include-milestones'
+            in release_train_milestone_template,
+            "release-train-draft-milestones should pass include-milestones flag",
+        )
+
         plan_handoff_status = run_script(
             PLAN_HANDOFF_SCRIPT, cfg_path, home, "status", "--json"
         )
@@ -2939,6 +2950,40 @@ index 3333333..4444444 100644
             release_engine_draft_payload.get("result") == "PASS"
             and isinstance(release_engine_draft_payload.get("entries"), list),
             "release-train draft should emit structured release note entries",
+        )
+
+        release_engine_draft_milestones = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_ENGINE_SCRIPT),
+                "draft",
+                "--include-milestones",
+                "--head",
+                "HEAD",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_engine_draft_milestones.returncode == 0,
+            "release-train milestone draft should generate release note entries",
+        )
+        release_engine_draft_milestones_payload = parse_json_output(
+            release_engine_draft_milestones.stdout
+        )
+        milestone_context = release_engine_draft_milestones_payload.get(
+            "milestone_context"
+        )
+        expect(
+            isinstance(milestone_context, dict)
+            and isinstance(milestone_context.get("sources"), dict)
+            and isinstance(milestone_context.get("parity_recent"), list)
+            and isinstance(milestone_context.get("lsp_recent"), list),
+            "release-train milestone draft should include milestone context payload",
         )
 
         release_command_doctor = subprocess.run(

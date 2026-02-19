@@ -221,7 +221,11 @@ def evaluate_prepare(
 
 
 def draft_release_notes(
-    repo_root: Path, *, base_tag: str | None, head: str
+    repo_root: Path,
+    *,
+    base_tag: str | None,
+    head: str,
+    include_milestones: bool = False,
 ) -> dict[str, Any]:
     start = base_tag or latest_tag(repo_root)
     if start:
@@ -240,13 +244,50 @@ def draft_release_notes(
         }
     entries = [line.strip() for line in out.splitlines() if line.strip()]
     bullets = [f"- {line}" for line in entries]
-    return {
+    payload: dict[str, Any] = {
         "result": "PASS",
         "base_tag": start,
         "head": head,
         "entry_count": len(entries),
         "entries": entries,
         "markdown": "\n".join(bullets),
+    }
+    if include_milestones:
+        payload["milestone_context"] = collect_milestone_context(repo_root)
+    return payload
+
+
+def collect_milestone_context(repo_root: Path) -> dict[str, Any]:
+    parity_plan = (
+        repo_root / "docs" / "plan" / "oh-my-opencode-parity-high-value-plan.md"
+    )
+    lsp_changelog = repo_root / "docs" / "plan" / "lsp-milestones-changelog.md"
+
+    parity_items: list[str] = []
+    if parity_plan.exists():
+        parity_text = parity_plan.read_text(encoding="utf-8")
+        for line in parity_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("|") and "| 2026-" in stripped:
+                parity_items.append(stripped)
+        parity_items = parity_items[-6:]
+
+    lsp_items: list[str] = []
+    if lsp_changelog.exists():
+        lsp_text = lsp_changelog.read_text(encoding="utf-8")
+        for line in lsp_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                lsp_items.append(stripped)
+        lsp_items = lsp_items[-6:]
+
+    return {
+        "sources": {
+            "parity_plan": str(parity_plan),
+            "lsp_changelog": str(lsp_changelog),
+        },
+        "parity_recent": parity_items,
+        "lsp_recent": lsp_items,
     }
 
 
@@ -331,10 +372,16 @@ def main(argv: list[str]) -> int:
         try:
             base_tag = pop_value(args, "--base-tag")
             head = pop_value(args, "--head", "HEAD") or "HEAD"
+            include_milestones = pop_flag(args, "--include-milestones")
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        payload = draft_release_notes(repo_root, base_tag=base_tag, head=head)
+        payload = draft_release_notes(
+            repo_root,
+            base_tag=base_tag,
+            head=head,
+            include_milestones=include_milestones,
+        )
         print_payload(payload, as_json)
         return 0 if payload.get("result") == "PASS" else 1
 

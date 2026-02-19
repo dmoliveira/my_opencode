@@ -450,6 +450,10 @@
       "description": "Generate release note draft from git history",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft $ARGUMENTS --json`\nShow only the command output."
     },
+    "release-train-draft-milestones": {
+      "description": "Generate release note draft with parity and LSP milestone context",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft --include-milestones $ARGUMENTS --json`\nShow only the command output."
+    },
     "release-train-doctor": {
       "description": "Run release-train diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" doctor --json`\nShow only the command output."

@@ -124,11 +124,17 @@ def command_draft(args: list[str]) -> int:
         )
         base_tag = pop_value(args, "--base-tag")
         head = pop_value(args, "--head", "HEAD") or "HEAD"
+        include_milestones = pop_flag(args, "--include-milestones")
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
-    payload = draft_release_notes(repo_root, base_tag=base_tag, head=head)
+    payload = draft_release_notes(
+        repo_root,
+        base_tag=base_tag,
+        head=head,
+        include_milestones=include_milestones,
+    )
     emit(payload, as_json=as_json)
     return 0 if payload.get("result") == "PASS" else 1
 
