@@ -64,7 +64,6 @@ Tasks:
 15. Add `/lsp code-actions` summary metadata for kind, editable, and disabled counts. `finished`
 16. Add optional `/lsp code-actions --kind <prefix>` filtering for deterministic action triage. `finished`
 17. Add `preferred` count to `/lsp code-actions` summary metadata. `finished`
-17. Add `/lsp code-actions` summary preferred-action count for faster quick-fix triage. `finished`
 
 ## Validation
 
