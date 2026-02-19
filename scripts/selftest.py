@@ -3794,6 +3794,30 @@ index 3333333..4444444 100644
             "lsp doctor should include backend details metadata",
         )
 
+        lsp_doctor_verbose = subprocess.run(
+            [sys.executable, str(LSP_SCRIPT), "doctor", "--verbose", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_doctor_verbose.returncode == 0,
+            f"lsp doctor --verbose should succeed: {lsp_doctor_verbose.stderr}",
+        )
+        lsp_doctor_verbose_report = parse_json_output(lsp_doctor_verbose.stdout)
+        capability_probing = lsp_doctor_verbose_report.get("capability_probing", {})
+        expect(
+            capability_probing.get("enabled") is True,
+            "lsp doctor --verbose should enable capability probing",
+        )
+        expect(
+            isinstance(capability_probing.get("servers"), list)
+            and isinstance(capability_probing.get("summary"), list),
+            "lsp doctor --verbose should include server and summary capability matrices",
+        )
+
         lsp_goto = subprocess.run(
             [
                 sys.executable,

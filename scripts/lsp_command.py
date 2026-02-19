@@ -61,7 +61,7 @@ DEFAULT_LSP_SERVERS: list[dict[str, Any]] = [
 
 def usage() -> int:
     print(
-        "usage: /lsp status [--json] | /lsp doctor [--json] | "
+        "usage: /lsp status [--json] | /lsp doctor [--verbose] [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
@@ -1461,6 +1461,125 @@ def _group_by_language(servers: list[dict[str, Any]]) -> dict[str, dict[str, Any
     return grouped
 
 
+CAPABILITY_MATRIX: list[tuple[str, str]] = [
+    ("definitionProvider", "goto-definition"),
+    ("referencesProvider", "find-references"),
+    ("documentSymbolProvider", "symbols(document)"),
+    ("workspaceSymbolProvider", "symbols(workspace)"),
+    ("renameProvider", "rename"),
+    ("prepareRenameProvider", "prepare-rename"),
+]
+
+
+def _truthy_capability(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (dict, list, str)):
+        return True
+    return False
+
+
+def _extract_prepare_rename_provider(capabilities: dict[str, Any]) -> Any:
+    explicit = capabilities.get("prepareRenameProvider")
+    if explicit is not None:
+        return explicit
+    rename_provider = capabilities.get("renameProvider")
+    if isinstance(rename_provider, dict):
+        return rename_provider.get("prepareProvider")
+    return None
+
+
+def _capability_matrix(capabilities: dict[str, Any]) -> list[dict[str, Any]]:
+    matrix: list[dict[str, Any]] = []
+    for key, label in CAPABILITY_MATRIX:
+        raw_value: Any = capabilities.get(key)
+        if key == "prepareRenameProvider":
+            raw_value = _extract_prepare_rename_provider(capabilities)
+        supported = _truthy_capability(raw_value)
+        matrix.append(
+            {
+                "capability": key,
+                "label": label,
+                "supported": supported,
+                "raw": raw_value,
+            }
+        )
+    return matrix
+
+
+def _probe_server_capabilities(root: Path, server: dict[str, Any]) -> dict[str, Any]:
+    if not bool(server.get("installed")):
+        return {
+            "server_id": server["id"],
+            "status": "missing_binary",
+            "installed": False,
+            "matrix": [],
+            "supported": 0,
+            "total": len(CAPABILITY_MATRIX),
+            "error": None,
+            "capabilities": {},
+        }
+    try:
+        with LspClient(command=list(server["command"]), root=root) as client:
+            capabilities = dict(client.server_capabilities)
+        matrix = _capability_matrix(capabilities)
+        supported = sum(1 for row in matrix if row["supported"])
+        return {
+            "server_id": server["id"],
+            "status": "ok",
+            "installed": True,
+            "matrix": matrix,
+            "supported": supported,
+            "total": len(matrix),
+            "error": None,
+            "capabilities": capabilities,
+        }
+    except Exception as exc:
+        return {
+            "server_id": server["id"],
+            "status": "probe_failed",
+            "installed": True,
+            "matrix": [],
+            "supported": 0,
+            "total": len(CAPABILITY_MATRIX),
+            "error": str(exc),
+            "capabilities": {},
+        }
+
+
+def _doctor_capability_probe(
+    root: Path, servers: list[dict[str, Any]]
+) -> dict[str, Any]:
+    server_probes = [
+        _probe_server_capabilities(root=root, server=row) for row in servers
+    ]
+    summary: list[dict[str, Any]] = []
+    for key, label in CAPABILITY_MATRIX:
+        supported = 0
+        total = 0
+        for probe in server_probes:
+            if probe["status"] != "ok":
+                continue
+            total += 1
+            for item in probe["matrix"]:
+                if item["capability"] == key and item["supported"]:
+                    supported += 1
+                    break
+        summary.append(
+            {
+                "capability": key,
+                "label": label,
+                "supported_servers": supported,
+                "probed_servers": total,
+            }
+        )
+    return {
+        "enabled": True,
+        "servers": server_probes,
+        "summary": summary,
+    }
+
+
 def command_status(args: list[str]) -> int:
     if any(arg not in ("--json",) for arg in args):
         return usage()
@@ -1499,9 +1618,10 @@ def command_status(args: list[str]) -> int:
 
 
 def command_doctor(args: list[str]) -> int:
-    if any(arg not in ("--json",) for arg in args):
+    if any(arg not in ("--json", "--verbose") for arg in args):
         return usage()
     as_json = "--json" in args
+    verbose = "--verbose" in args
 
     servers, config_info = _collect_servers()
     installed = [row for row in servers if row["installed"]]
@@ -1518,6 +1638,19 @@ def command_doctor(args: list[str]) -> int:
     elif not installed:
         problems.append("no configured LSP server is installed")
 
+    capability_probing: dict[str, Any] = {
+        "enabled": False,
+        "servers": [],
+        "summary": [],
+    }
+    if verbose:
+        capability_probing = _doctor_capability_probe(root=Path.cwd(), servers=servers)
+        for probe in capability_probing["servers"]:
+            if probe["status"] == "probe_failed" and probe["error"]:
+                warnings.append(
+                    f"capability probe failed for {probe['server_id']}: {probe['error']}"
+                )
+
     report = {
         "result": "PASS" if not problems else "WARN",
         "installed": len(installed),
@@ -1525,6 +1658,7 @@ def command_doctor(args: list[str]) -> int:
         "warnings": warnings,
         "problems": problems,
         "servers": servers,
+        "capability_probing": capability_probing,
         "config": config_info,
         "backend_details": _backend_details(
             backend="diagnostic",
@@ -1545,6 +1679,25 @@ def command_doctor(args: list[str]) -> int:
     else:
         print(f"result: {report['result']}")
         print(f"installed: {report['installed']}/{report['total']}")
+        if verbose:
+            print("capability probing:")
+            for probe in capability_probing["servers"]:
+                if probe["status"] == "ok":
+                    states = ", ".join(
+                        f"{item['label']}={'yes' if item['supported'] else 'no'}"
+                        for item in probe["matrix"]
+                    )
+                    print(
+                        f"- {probe['server_id']}: status=ok supported={probe['supported']}/{probe['total']} {states}"
+                    )
+                elif probe["status"] == "missing_binary":
+                    print(
+                        f"- {probe['server_id']}: status=missing_binary supported=0/{probe['total']}"
+                    )
+                else:
+                    print(
+                        f"- {probe['server_id']}: status=probe_failed error={probe['error']}"
+                    )
         for warning in warnings:
             print(f"- warning: {warning}")
         for problem in problems:
