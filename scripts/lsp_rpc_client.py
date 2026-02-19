@@ -305,3 +305,28 @@ class LspClient:
         if isinstance(result, list):
             return [item for item in result if isinstance(item, dict)]
         return []
+
+    def code_actions(
+        self,
+        path: Path,
+        line0: int,
+        char0: int,
+        diagnostics: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        self.ensure_open(path)
+        result = self._request(
+            "textDocument/codeAction",
+            {
+                "textDocument": {"uri": path_to_uri(path)},
+                "range": {
+                    "start": {"line": line0, "character": char0},
+                    "end": {"line": line0, "character": char0},
+                },
+                "context": {
+                    "diagnostics": diagnostics or [],
+                },
+            },
+        )
+        if not isinstance(result, list):
+            return []
+        return [item for item in result if isinstance(item, dict)]
