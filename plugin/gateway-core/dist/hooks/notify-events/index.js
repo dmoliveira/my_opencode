@@ -375,6 +375,39 @@ function firstPropertyText(properties, keys) {
     }
     return "";
 }
+function contextParts(payload) {
+    const properties = payload.properties && typeof payload.properties === "object"
+        ? payload.properties
+        : {};
+    const input = payload.input && typeof payload.input === "object"
+        ? payload.input
+        : {};
+    const sessionId = firstPropertyText(properties, ["session_id", "sessionID", "sessionId"]) ||
+        firstPropertyText(input, ["sessionID", "sessionId"]);
+    const windowId = firstPropertyText(properties, ["window_id", "windowID", "windowId", "window"]) ||
+        firstPropertyText(input, ["windowID", "windowId"]);
+    const workingDir = cleanText(payload.directory) ||
+        firstPropertyText(properties, ["cwd", "working_directory", "workingDirectory", "directory"]);
+    const parts = [];
+    if (sessionId) {
+        parts.push(`session ${sessionId}`);
+    }
+    if (windowId) {
+        parts.push(`window ${windowId}`);
+    }
+    if (workingDir) {
+        parts.push(`cwd ${workingDir}`);
+    }
+    return parts;
+}
+function messageWithContext(baseMessage, payload, style) {
+    const parts = contextParts(payload);
+    if (!parts.length) {
+        return baseMessage;
+    }
+    const maxChars = style === "detailed" ? 230 : 170;
+    return truncateText(`${baseMessage} [${parts.join(" | ")}]`, maxChars);
+}
 function messageForEvent(eventName, payload, style) {
     const properties = payload.properties && typeof payload.properties === "object"
         ? payload.properties
@@ -382,20 +415,20 @@ function messageForEvent(eventName, payload, style) {
     if (eventName === "complete") {
         return {
             title: "OpenCode Complete",
-            message: style === "detailed"
+            message: messageWithContext(style === "detailed"
                 ? "Task completed successfully."
-                : "Task completed.",
+                : "Task completed.", payload, style),
         };
     }
     if (eventName === "error") {
         const detail = truncateText(firstPropertyText(properties, ["message", "error", "reason", "detail"]), style === "detailed" ? 180 : 120);
         return {
             title: "OpenCode Error",
-            message: detail
+            message: messageWithContext(detail
                 ? style === "detailed"
                     ? `Session error detected: ${detail}`
                     : `Session error: ${detail}`
-                : "Session error detected.",
+                : "Session error detected.", payload, style),
         };
     }
     if (eventName === "permission") {
@@ -407,21 +440,21 @@ function messageForEvent(eventName, payload, style) {
         ]), style === "detailed" ? 140 : 100);
         return {
             title: "OpenCode Permission",
-            message: detail
+            message: messageWithContext(detail
                 ? style === "detailed"
                     ? `Action required before continuing: ${detail}`
                     : `Permission required: ${detail}`
-                : "Permission prompt requires input.",
+                : "Permission prompt requires input.", payload, style),
         };
     }
     const question = truncateText(firstPropertyText(properties, ["question", "prompt", "title", "label"]), style === "detailed" ? 140 : 100);
     return {
         title: "OpenCode Input Needed",
-        message: question
+        message: messageWithContext(question
             ? style === "detailed"
                 ? `Response needed to continue: ${question}`
                 : `Question: ${question}`
-            : "Question requires input.",
+            : "Question requires input.", payload, style),
     };
 }
 export function createNotifyEventsHook(options) {
