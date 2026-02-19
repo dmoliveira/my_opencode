@@ -3842,6 +3842,38 @@ index 3333333..4444444 100644
             "lsp doctor should include backend details metadata",
         )
 
+        lsp_diagnostics = subprocess.run(
+            [
+                sys.executable,
+                str(LSP_SCRIPT),
+                "diagnostics",
+                "--scope",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            lsp_diagnostics.returncode == 0,
+            f"lsp diagnostics should succeed: {lsp_diagnostics.stderr}",
+        )
+        lsp_diagnostics_report = parse_json_output(lsp_diagnostics.stdout)
+        summary = lsp_diagnostics_report.get("summary", {})
+        expect(
+            isinstance(lsp_diagnostics_report.get("diagnostics"), list)
+            and isinstance(summary, dict)
+            and isinstance(summary.get("severity"), dict),
+            "lsp diagnostics should include structured diagnostics list and severity summary",
+        )
+        expect(
+            isinstance(lsp_diagnostics_report.get("backend_details"), dict),
+            "lsp diagnostics should include backend details metadata",
+        )
+
         lsp_doctor_verbose = subprocess.run(
             [sys.executable, str(LSP_SCRIPT), "doctor", "--verbose", "--json"],
             capture_output=True,

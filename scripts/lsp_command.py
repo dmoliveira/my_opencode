@@ -62,6 +62,7 @@ DEFAULT_LSP_SERVERS: list[dict[str, Any]] = [
 def usage() -> int:
     print(
         "usage: /lsp status [--json] | /lsp doctor [--verbose] [--json] | "
+        "/lsp diagnostics --scope <glob[,glob...]> [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
@@ -206,6 +207,124 @@ def _collect_servers() -> tuple[list[dict[str, Any]], dict[str, Any]]:
 
 def _split_scope(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+DIAGNOSTIC_SEVERITY_LABELS: dict[int, str] = {
+    1: "error",
+    2: "warning",
+    3: "information",
+    4: "hint",
+}
+
+COMMENT_MARKER_PATTERN = re.compile(r"(?:#|//|/\*)\s*(TODO|FIXME|XXX|HACK)\b")
+
+
+def _parse_scope_only_args(args: list[str]) -> tuple[list[str], bool] | None:
+    as_json = "--json" in args
+    scope_patterns: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--scope":
+            if index + 1 >= len(args):
+                return None
+            scope_patterns = _split_scope(args[index + 1])
+            index += 2
+            continue
+        return None
+    if not scope_patterns:
+        return None
+    return scope_patterns, as_json
+
+
+def _severity_label(value: Any) -> str:
+    try:
+        key = int(value)
+    except (TypeError, ValueError):
+        key = 3
+    return DIAGNOSTIC_SEVERITY_LABELS.get(key, "information")
+
+
+def _fallback_text_diagnostics(path: Path, root: Path) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    relative = str(path.resolve().relative_to(root))
+    for line_index, text in enumerate(lines, start=1):
+        matched = COMMENT_MARKER_PATTERN.search(text)
+        if not matched:
+            continue
+        marker = str(matched.group(1) or "TODO").upper()
+        diagnostics.append(
+            {
+                "path": relative,
+                "line": line_index,
+                "character": max(matched.start(1), 0),
+                "severity": "warning" if marker == "FIXME" else "hint",
+                "message": text.strip() or f"{marker} marker",
+                "code": marker,
+                "source": "text-fallback",
+                "backend": "text",
+            }
+        )
+    return diagnostics
+
+
+def _normalize_protocol_diagnostics(
+    raw_diagnostics: list[dict[str, Any]], path: Path, root: Path
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    relative = str(path.resolve().relative_to(root))
+    for item in raw_diagnostics:
+        range_payload = item.get("range")
+        if not isinstance(range_payload, dict):
+            continue
+        start = range_payload.get("start")
+        if not isinstance(start, dict):
+            continue
+        line0 = int(start.get("line", 0))
+        char0 = int(start.get("character", 0))
+        normalized.append(
+            {
+                "path": relative,
+                "line": line0 + 1,
+                "character": char0,
+                "severity": _severity_label(item.get("severity")),
+                "message": str(item.get("message") or "").strip() or "diagnostic",
+                "code": item.get("code"),
+                "source": str(item.get("source") or "lsp").strip() or "lsp",
+                "backend": "lsp",
+            }
+        )
+    return normalized
+
+
+def _diagnostic_summary(
+    diagnostics: list[dict[str, Any]], scanned_files: int
+) -> dict[str, Any]:
+    severity_counts = {
+        "error": 0,
+        "warning": 0,
+        "information": 0,
+        "hint": 0,
+    }
+    by_file: dict[str, int] = {}
+    for item in diagnostics:
+        severity = str(item.get("severity") or "information")
+        if severity not in severity_counts:
+            severity = "information"
+        severity_counts[severity] += 1
+        path = str(item.get("path") or "")
+        if path:
+            by_file[path] = by_file.get(path, 0) + 1
+    return {
+        "total": len(diagnostics),
+        "scanned_files": scanned_files,
+        "severity": severity_counts,
+        "files_with_diagnostics": len(by_file),
+    }
 
 
 def _discover_files(root: Path, patterns: list[str]) -> list[Path]:
@@ -1146,6 +1265,79 @@ def command_symbols(args: list[str]) -> int:
     return 0
 
 
+def command_diagnostics(args: list[str]) -> int:
+    parsed = _parse_scope_only_args(args)
+    if parsed is None:
+        return usage()
+    scope_patterns, as_json = parsed
+
+    root = Path.cwd()
+    files = _discover_files(root, scope_patterns)
+    servers, _ = _collect_servers()
+    diagnostics: list[dict[str, Any]] = []
+    backend = "text"
+    reason_code = "lsp_text_fallback_used"
+    attempted_protocol = False
+    selected_server: dict[str, Any] | None = None
+    lsp_error = ""
+
+    for path in files:
+        server = choose_server_for_path(path, servers)
+        protocol_diagnostics: list[dict[str, Any]] = []
+        if server is not None:
+            attempted_protocol = True
+            selected_server = server
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "diagnostics"
+                    )
+                    if capability_ok:
+                        protocol_diagnostics = _normalize_protocol_diagnostics(
+                            client.document_diagnostics(path), path, root
+                        )
+                    else:
+                        reason_code = capability_reason
+                if protocol_diagnostics:
+                    backend = "lsp"
+                    reason_code = "lsp_protocol_success"
+                    diagnostics.extend(protocol_diagnostics)
+                    continue
+            except Exception as exc:
+                lsp_error = str(exc)
+                reason_code = "lsp_protocol_error_fallback"
+        diagnostics.extend(_fallback_text_diagnostics(path, root))
+
+    summary = _diagnostic_summary(diagnostics, len(files))
+    report = {
+        "result": "PASS" if summary["total"] == 0 else "WARN",
+        "backend": backend,
+        "reason_code": reason_code,
+        "scope": scope_patterns,
+        "summary": summary,
+        "diagnostics": diagnostics,
+        "lsp_error": lsp_error or None,
+        "backend_details": _backend_details(
+            backend=backend,
+            reason_code=reason_code,
+            server=selected_server,
+            attempted_protocol=attempted_protocol,
+            lsp_error=lsp_error,
+        ),
+    }
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"result: {report['result']}")
+        print(f"diagnostics: {summary['total']}")
+        print(f"severity: {summary['severity']}")
+        for item in diagnostics[:40]:
+            print(
+                f"- {item['severity']} {item['path']}:{item['line']}:{item['character']} {item['message']}"
+            )
+    return 0
+
+
 def _parse_rename_args(
     args: list[str], *, allow_apply_flags: bool
 ) -> tuple[str, str, list[str], bool, bool, bool, bool, int, int, bool, bool] | None:
@@ -1561,6 +1753,7 @@ CAPABILITY_MATRIX: list[tuple[str, str]] = [
     ("referencesProvider", "find-references"),
     ("documentSymbolProvider", "symbols(document)"),
     ("workspaceSymbolProvider", "symbols(workspace)"),
+    ("diagnosticProvider", "diagnostics"),
     ("renameProvider", "rename"),
     ("prepareRenameProvider", "prepare-rename"),
 ]
@@ -1570,6 +1763,7 @@ COMMAND_CAPABILITY_REQUIREMENTS: dict[str, str] = {
     "find-references": "referencesProvider",
     "symbols-document": "documentSymbolProvider",
     "symbols-workspace": "workspaceSymbolProvider",
+    "diagnostics": "diagnosticProvider",
     "prepare-rename": "prepareRenameProvider",
     "rename": "renameProvider",
 }
@@ -1846,6 +2040,8 @@ def main(argv: list[str]) -> int:
         return command_status(rest)
     if command == "doctor":
         return command_doctor(rest)
+    if command == "diagnostics":
+        return command_diagnostics(rest)
     if command == "goto-definition":
         return command_goto_definition(rest)
     if command == "find-references":
