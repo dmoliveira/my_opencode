@@ -457,6 +457,25 @@ def _workspace_edit_apply_plan(
     return plan, resource_operations, change_annotations
 
 
+def _code_action_summary(code_actions: list[dict[str, Any]]) -> dict[str, Any]:
+    by_kind: dict[str, int] = {}
+    disabled_count = 0
+    editable_count = 0
+    for row in code_actions:
+        kind = str(row.get("kind") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        if str(row.get("disabled_reason") or "").strip():
+            disabled_count += 1
+        if bool(row.get("has_edit")):
+            editable_count += 1
+    return {
+        "total": len(code_actions),
+        "editable": editable_count,
+        "disabled": disabled_count,
+        "by_kind": dict(sorted(by_kind.items())),
+    }
+
+
 def _discover_files(root: Path, patterns: list[str]) -> list[Path]:
     seen: dict[str, Path] = {}
     for pattern in patterns:
@@ -1607,6 +1626,7 @@ def command_code_actions(args: list[str]) -> int:
                     applied = True
 
     warnings = _command_warnings(reason_code, lsp_error)
+    summary = _code_action_summary(code_actions)
     report = {
         "result": "PASS"
         if (code_actions and (not apply_changes or applied))
@@ -1622,6 +1642,7 @@ def command_code_actions(args: list[str]) -> int:
         "applied_files": applied_files,
         "applied_edits": applied_edits,
         "selected_action": selected_action,
+        "summary": summary,
         "warnings": warnings,
         "blockers": sorted(set(blockers)),
         "scanned_files": len(scoped_files),
@@ -1644,6 +1665,7 @@ def command_code_actions(args: list[str]) -> int:
         print(f"result: {report['result']}")
         print(f"target: {report['target']}")
         print(f"code_actions: {len(code_actions)}")
+        print(f"summary: {summary}")
         print(f"applied: {applied}")
         for warning in warnings:
             print(f"- warning: {warning}")
