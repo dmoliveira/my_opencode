@@ -276,6 +276,7 @@ exit 0
             shutil.copy2(agent_file, installed_agent_dir / agent_file.name)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
+        cfg_path = cfg
 
         # Agent operating contract sanity checks
         expect(AGENT_DIR.exists(), "agent directory should exist")
@@ -338,7 +339,13 @@ exit 0
             'autopilot_command.py" $ARGUMENTS --json' in autopilot_template,
             "autopilot command template should pass through slash arguments for subcommand/help dispatch",
         )
-        for command_name in ("continue-work", "autopilot-go"):
+        for command_name in (
+            "continue-work",
+            "autoloop",
+            "ulw-loop",
+            "ralph-loop",
+            "autopilot-go",
+        ):
             template = str(
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )
@@ -346,6 +353,14 @@ exit 0
                 '--goal "$ARGUMENTS"' in template,
                 f"{command_name} command template should pass slash arguments as explicit goal",
             )
+
+        init_deep_template = str(
+            (command_map.get("init-deep", {}) or {}).get("template", "")
+        )
+        expect(
+            "--completion-mode objective" in init_deep_template,
+            "init-deep should map to objective completion mode",
+        )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
         expect(
@@ -8068,7 +8083,7 @@ version: 1
 
         task_create = run_script(
             TASK_GRAPH_SCRIPT,
-            cfg,
+            cfg_path,
             home,
             "create",
             "--subject",
@@ -8085,7 +8100,7 @@ version: 1
         task_id = str(task_create_payload.get("task", {}).get("id") or "")
         expect(task_id.startswith("T-"), "task create should return generated task id")
 
-        task_list = run_script(TASK_GRAPH_SCRIPT, cfg, home, "list", "--json")
+        task_list = run_script(TASK_GRAPH_SCRIPT, cfg_path, home, "list", "--json")
         expect(
             task_list.returncode == 0, f"task list should succeed: {task_list.stderr}"
         )
@@ -8097,7 +8112,7 @@ version: 1
 
         task_update = run_script(
             TASK_GRAPH_SCRIPT,
-            cfg,
+            cfg_path,
             home,
             "update",
             task_id,
@@ -8115,7 +8130,7 @@ version: 1
             "task update should change status to completed",
         )
 
-        task_doctor = run_script(TASK_GRAPH_SCRIPT, cfg, home, "doctor", "--json")
+        task_doctor = run_script(TASK_GRAPH_SCRIPT, cfg_path, home, "doctor", "--json")
         expect(
             task_doctor.returncode == 0,
             f"task doctor should succeed: {task_doctor.stderr}",
