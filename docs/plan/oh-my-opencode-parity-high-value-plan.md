@@ -1,7 +1,7 @@
 # Oh-My-OpenCode High-Value Parity Plan
 
-Date: 2026-02-19
-Owner: `br` task `bd-1n9`
+Date: 2026-02-19 (refreshed)
+Owner: `br` task `bd-a75`
 Scope: close high-value parity gaps while reusing existing `my_opencode` systems and avoiding duplicate runtimes.
 
 ## Status model
@@ -12,21 +12,22 @@ Scope: close high-value parity gaps while reusing existing `my_opencode` systems
 - `󰄵 [x] finished`
 
 Rules:
+
 - Mark `[x]` only after validation criteria and done criteria pass.
 - Update quick board + checklist + activity log together.
 - Keep this plan synchronized with `br` issue status.
 
 ## Quick board
 
-| Epic | Priority | State | Current activity | Next checkpoint | Blocker | Last update (UTC) |
-| --- | --- | --- | --- | --- | --- | --- |
-| E0 Command/hook hygiene + naming guard | P0 | 󰄵 [x] finished | Audit + drift checks + naming simplification landed | Start E1 schema and dependency invariants | - | 2026-02-19T01:46:00Z |
-| E1 Persistent task graph | P0 | 󰄵 [x] finished | Runtime + command surface + validation landed | Start E2 contract mapping | - | 2026-02-19T02:40:00Z |
-| E2 Loop command parity | P0 | 󰄵 [x] finished | Compatibility aliases mapped to canonical `/autopilot*` | Start E3 skill contracts | - | 2026-02-19T03:03:00Z |
-| E3 Built-in skill parity | P1 | 󰄵 [x] finished | Skill contracts + wrappers + tests/docs landed | Start E4 role contracts | - | 2026-02-19T04:20:00Z |
-| E4 Planning specialist tier | P1 | 󰄵 [x] finished | Added planning specialist agent specs + checks/docs | Start E5 tmux constraints | - | 2026-02-19T04:40:00Z |
-| E5 Optional tmux visual mode | P1 | 󰄵 [x] finished | Added `/tmux` status/config/doctor + fallback checks/docs | Start E6 packaged CLI contract | - | 2026-02-19T04:55:00Z |
-| E6 Packaged CLI parity (`install/doctor/run`) | P2 | 󰄵 [x] finished | Added packaged CLI entrypoint + clean-HOME coverage | Plan fully complete | - | 2026-02-19T05:05:00Z |
+| Epic                                          | Priority | State          | Current activity                                          | Next checkpoint                           | Blocker | Last update (UTC)    |
+| --------------------------------------------- | -------- | -------------- | --------------------------------------------------------- | ----------------------------------------- | ------- | -------------------- |
+| E0 Command/hook hygiene + naming guard        | P0       | 󰄵 [x] finished | Audit + drift checks + naming simplification landed       | Start E1 schema and dependency invariants | -       | 2026-02-19T01:46:00Z |
+| E1 Persistent task graph                      | P0       | 󰄵 [x] finished | Runtime + command surface + validation landed             | Start E2 contract mapping                 | -       | 2026-02-19T02:40:00Z |
+| E2 Loop command parity                        | P0       | 󰄵 [x] finished | Compatibility aliases mapped to canonical `/autopilot*`   | Start E3 skill contracts                  | -       | 2026-02-19T03:03:00Z |
+| E3 Built-in skill parity                      | P1       | 󰄵 [x] finished | Skill contracts + wrappers + tests/docs landed            | Start E4 role contracts                   | -       | 2026-02-19T04:20:00Z |
+| E4 Planning specialist tier                   | P1       | 󰄵 [x] finished | Added planning specialist agent specs + checks/docs       | Start E5 tmux constraints                 | -       | 2026-02-19T04:40:00Z |
+| E5 Optional tmux visual mode                  | P1       | 󰄵 [x] finished | Added `/tmux` status/config/doctor + fallback checks/docs | Start E6 packaged CLI contract            | -       | 2026-02-19T04:55:00Z |
+| E6 Packaged CLI parity (`install/doctor/run`) | P2       | 󰄵 [x] finished | Added packaged CLI entrypoint + clean-HOME coverage       | Plan fully complete                       | -       | 2026-02-19T05:05:00Z |
 
 ## Master checklist
 
@@ -74,28 +75,43 @@ Rules:
   - [x] E6-T5 Add docs and CI-safe examples.
 
 Progress counters:
+
 - Epics completed: `7/7`
 - Tasks completed: `35/35`
 
 ## Parity coverage map
 
-| Upstream high-value capability | Plan coverage | Status |
-| --- | --- | --- |
-| Persistent dependency task tools | E1 | finished |
-| Loop-oriented slash workflows | E2 | finished |
-| Built-in skill trio | E3 | finished |
-| Planning-specialist roles | E4 | finished |
-| Tmux visual multi-agent mode | E5 | finished |
-| Packaged top-level CLI (`install/doctor/run`) | E6 | finished |
-| Local command/hook drift prevention (value-add) | E0 | finished |
+| Upstream high-value capability                  | Plan coverage | Status   |
+| ----------------------------------------------- | ------------- | -------- |
+| Persistent dependency task tools                | E1            | finished |
+| Loop-oriented slash workflows                   | E2            | finished |
+| Built-in skill trio                             | E3            | finished |
+| Planning-specialist roles                       | E4            | finished |
+| Tmux visual multi-agent mode                    | E5            | finished |
+| Packaged top-level CLI (`install/doctor/run`)   | E6            | finished |
+| Local command/hook drift prevention (value-add) | E0            | finished |
 
 Note: MCP OAuth parity is intentionally out-of-scope for this cycle.
+
+## Remaining gap backlog (post-parity)
+
+Status: `backlog`
+
+Gaps:
+
+- P1: Add consolidated release-note automation for parity + LSP milestone waves to reduce manual changelog drift.
+- P2: Add richer `/lsp code-actions` triage metadata (per-source counts and preferred/disabled ratio percentages).
+- P2: Add `/lsp diagnostics` text-mode compact table output for large scopes with deterministic truncation controls.
+- P2: Add parity drift watchdog that compares this plan checklist against live command/help surfaces and recent merged PR labels.
+
+No P0 blockers remain from the original parity scope; the above items are follow-on polish and maintainability work.
 
 ## Naming and accessibility policy (plain-English, low cognitive load)
 
 Goal: keep command and role names obvious, short, and aligned with what already exists.
 
 Rules:
+
 - Prefer existing command families (`/autopilot`, `/autoflow`, current agent roles) over introducing new names.
 - Add new slash commands only when a capability gap cannot be solved by improving existing commands.
 - If parity requires compatibility aliases, keep them minimal and document one canonical command.
@@ -103,22 +119,23 @@ Rules:
 
 Canonical command strategy for E2:
 
-| Intent | Canonical command | Compatibility policy |
-| --- | --- | --- |
-| Deep execution initialization | existing `/autopilot` + objective/profile inputs | add alias only if parity requires |
-| Continuous autonomous loop | existing `/autopilot` runtime controls | add alias only if migration risk is high |
-| Build/craft loop workflow | existing `/autoflow` and related runtime commands | avoid new command unless gap is proven |
+| Intent                        | Canonical command                                 | Compatibility policy                     |
+| ----------------------------- | ------------------------------------------------- | ---------------------------------------- |
+| Deep execution initialization | existing `/autopilot` + objective/profile inputs  | add alias only if parity requires        |
+| Continuous autonomous loop    | existing `/autopilot` runtime controls            | add alias only if migration risk is high |
+| Build/craft loop workflow     | existing `/autoflow` and related runtime commands | avoid new command unless gap is proven   |
 
 Optional compatibility note:
+
 - If `/autoloop` is requested for familiarity, implement it as a thin alias to existing `/autopilot` behavior (no separate runtime).
 
 Canonical role strategy for E4:
 
-| Role label in UI/docs | Purpose |
-| --- | --- |
-| `Strategic Planner` | plan synthesis and sequencing |
-| `Ambiguity Analyst` | hidden assumptions and risk discovery |
-| `Plan Critic` | quality review before execution |
+| Role label in UI/docs | Purpose                               |
+| --------------------- | ------------------------------------- |
+| `Strategic Planner`   | plan synthesis and sequencing         |
+| `Ambiguity Analyst`   | hidden assumptions and risk discovery |
+| `Plan Critic`         | quality review before execution       |
 
 ## Reuse-first guardrails (no duplication)
 
@@ -130,6 +147,7 @@ Canonical role strategy for E4:
 - E6 must call existing backend scripts; slash commands remain first-class.
 
 No-go list:
+
 - Do not introduce a second task runtime store when E1 can extend existing state patterns.
 - Do not create a new loop engine separate from autopilot/continuation hooks.
 - Do not add redundant command families when existing commands can be extended with flags/profiles.
@@ -145,6 +163,7 @@ No-go list:
 ## Done definition (global)
 
 An epic is done only when:
+
 - All epic tasks are `[x]` and timestamped in activity log.
 - Validation gates pass with recorded evidence.
 - Docs and migration guidance are updated.
@@ -152,14 +171,14 @@ An epic is done only when:
 
 ## Activity log
 
-| Timestamp (UTC) | Epic/Task | Change | Evidence |
-| --- | --- | --- | --- |
-| 2026-02-19T01:40:00Z | E0 / plan baseline | Created parity plan with checkbox tracking, parity map, and naming accessibility policy | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
-| 2026-02-19T02:40:00Z | E1-T1..E1-T6 | Added persistent task graph runtime, `/task` command family, wiring, docs, and coverage | `scripts/task_graph_runtime.py`, `scripts/task_graph_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`, `Makefile` |
-| 2026-02-19T03:03:00Z | E2-T1..E2-T5 | Added loop compatibility aliases as thin wrappers over canonical `/autopilot*`, plus docs and selftest coverage | `opencode.json`, `scripts/selftest.py`, `README.md`, `scripts/hygiene_drift_check.py` |
-| 2026-02-19T04:20:00Z | E3-T1..E3-T4 | Added built-in skill contracts for `/playwright`, `/frontend-ui-ux`, `/git-master` with command wiring, selftest coverage, and docs | `scripts/skill_contract_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh` |
-| 2026-02-19T04:40:00Z | E4-T1..E4-T4 | Added planning specialist tier agents (`strategic-planner`, `ambiguity-analyst`, `plan-critic`) with generated docs, `agent-doctor` coverage, and selftest/README updates | `agent/specs/*.json`, `agent/*.md`, `scripts/agent_doctor.py`, `scripts/selftest.py`, `README.md` |
-| 2026-02-19T04:55:00Z | E5-T1..E5-T5 | Added optional tmux visual mode command surface with layered config schema, pane cache visibility, non-tmux fallback diagnostics, and selftest/docs updates | `scripts/tmux_command.py`, `opencode.json`, `scripts/selftest.py`, `install.sh`, `README.md` |
-| 2026-02-19T05:05:00Z | E6-T1..E6-T5 | Added packaged CLI parity entrypoint (`install`, `doctor`, `run`, `version`) with non-interactive defaults, install-test/selftest coverage, and docs examples | `scripts/my_opencode_cli.py`, `Makefile`, `scripts/selftest.py`, `opencode.json`, `install.sh`, `README.md` |
-| 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
-| 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |
+| Timestamp (UTC)      | Epic/Task          | Change                                                                                                                                                                    | Evidence                                                                                                                                        |
+| -------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-19T01:40:00Z | E0 / plan baseline | Created parity plan with checkbox tracking, parity map, and naming accessibility policy                                                                                   | `docs/plan/oh-my-opencode-parity-high-value-plan.md`                                                                                            |
+| 2026-02-19T02:40:00Z | E1-T1..E1-T6       | Added persistent task graph runtime, `/task` command family, wiring, docs, and coverage                                                                                   | `scripts/task_graph_runtime.py`, `scripts/task_graph_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`, `Makefile` |
+| 2026-02-19T03:03:00Z | E2-T1..E2-T5       | Added loop compatibility aliases as thin wrappers over canonical `/autopilot*`, plus docs and selftest coverage                                                           | `opencode.json`, `scripts/selftest.py`, `README.md`, `scripts/hygiene_drift_check.py`                                                           |
+| 2026-02-19T04:20:00Z | E3-T1..E3-T4       | Added built-in skill contracts for `/playwright`, `/frontend-ui-ux`, `/git-master` with command wiring, selftest coverage, and docs                                       | `scripts/skill_contract_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`                                          |
+| 2026-02-19T04:40:00Z | E4-T1..E4-T4       | Added planning specialist tier agents (`strategic-planner`, `ambiguity-analyst`, `plan-critic`) with generated docs, `agent-doctor` coverage, and selftest/README updates | `agent/specs/*.json`, `agent/*.md`, `scripts/agent_doctor.py`, `scripts/selftest.py`, `README.md`                                               |
+| 2026-02-19T04:55:00Z | E5-T1..E5-T5       | Added optional tmux visual mode command surface with layered config schema, pane cache visibility, non-tmux fallback diagnostics, and selftest/docs updates               | `scripts/tmux_command.py`, `opencode.json`, `scripts/selftest.py`, `install.sh`, `README.md`                                                    |
+| 2026-02-19T05:05:00Z | E6-T1..E6-T5       | Added packaged CLI parity entrypoint (`install`, `doctor`, `run`, `version`) with non-interactive defaults, install-test/selftest coverage, and docs examples             | `scripts/my_opencode_cli.py`, `Makefile`, `scripts/selftest.py`, `opencode.json`, `install.sh`, `README.md`                                     |
+| 2026-02-19T01:44:00Z | E0-T1..E0-T5       | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance                                                                                     | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json`                                                                                   |
+| 2026-02-19T01:46:00Z | E0-T6              | Added automated drift checks and wired into validation target                                                                                                             | `scripts/hygiene_drift_check.py`, `Makefile`                                                                                                    |
