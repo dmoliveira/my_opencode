@@ -53,6 +53,7 @@ Tasks:
 4. Enforce diff review thresholds before `/lsp rename --apply` via `max_diff_files` and `max_diff_lines`. `finished`
 5. Add `/lsp doctor --verbose` capability probing matrix for protocol command support coverage. `finished`
 6. Preflight command execution against required protocol capabilities before issuing LSP requests. `finished`
+7. Expose dry-run `CreateFile`/`DeleteFile` operation visibility in `/lsp rename` planning output. `finished`
 
 ## Validation
 

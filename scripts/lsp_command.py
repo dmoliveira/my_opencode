@@ -495,6 +495,26 @@ def _split_resource_operations(
     return rename_ops, blocked_ops
 
 
+def _group_resource_operations(
+    resource_operations: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {
+        "renamefile": [],
+        "createfile": [],
+        "deletefile": [],
+        "other": [],
+    }
+    for operation in resource_operations:
+        normalized = dict(operation)
+        kind = _resource_kind(str(operation.get("kind") or ""))
+        normalized["kind"] = kind
+        if kind in {"renamefile", "createfile", "deletefile"}:
+            grouped[kind].append(normalized)
+        else:
+            grouped["other"].append(normalized)
+    return grouped
+
+
 def _apply_renamefile_operations(
     root: Path,
     operations: list[dict[str, Any]],
@@ -1371,6 +1391,7 @@ def command_rename(args: list[str]) -> int:
     renamefile_operations, blocked_resource_ops = _split_resource_operations(
         resource_operations
     )
+    grouped_resource_ops = _group_resource_operations(resource_operations)
     diff_preview = [
         {
             "path": str(row["path"]),
@@ -1456,6 +1477,15 @@ def command_rename(args: list[str]) -> int:
         "diff_preview": diff_preview,
         "change_annotations": change_annotations,
         "renamefile_operations": renamefile_operations,
+        "createfile_operations": grouped_resource_ops["createfile"],
+        "deletefile_operations": grouped_resource_ops["deletefile"],
+        "resource_operation_summary": {
+            "total": len(resource_operations),
+            "renamefile": len(grouped_resource_ops["renamefile"]),
+            "createfile": len(grouped_resource_ops["createfile"]),
+            "deletefile": len(grouped_resource_ops["deletefile"]),
+            "other": len(grouped_resource_ops["other"]),
+        },
         "blocked_resource_operations": blocked_resource_ops,
         "resource_operations": resource_operations,
         "lsp_error": lsp_error or None,
