@@ -114,7 +114,8 @@ function parseState(raw) {
         if (sound.customFiles && typeof sound.customFiles === "object") {
             for (const event of Object.keys(state.sound.customFiles)) {
                 const custom = normalizeLabel(sound.customFiles[event]);
-                if (custom || sound.customFiles[event] === "") {
+                if (custom ||
+                    sound.customFiles[event] === "") {
                     state.sound.customFiles[event] = custom;
                 }
             }
@@ -170,12 +171,16 @@ function loadNotifyState(directory) {
     }
     const globalConfigPath = join(homedir(), ".config", "opencode", "opencode.json");
     const globalConfig = readJson(globalConfigPath);
-    if (globalConfig && typeof globalConfig === "object" && "notify" in globalConfig) {
+    if (globalConfig &&
+        typeof globalConfig === "object" &&
+        "notify" in globalConfig) {
         return parseState(globalConfig.notify);
     }
     const projectConfigPath = join(directory, "opencode.json");
     const projectConfig = readJson(projectConfigPath);
-    if (projectConfig && typeof projectConfig === "object" && "notify" in projectConfig) {
+    if (projectConfig &&
+        typeof projectConfig === "object" &&
+        "notify" in projectConfig) {
         return parseState(projectConfig.notify);
     }
     return defaultState();
@@ -208,7 +213,9 @@ function terminalNotifierPath() {
         encoding: "utf-8",
         timeout: 1000,
     });
-    if (result.status === 0 && typeof result.stdout === "string" && result.stdout.trim()) {
+    if (result.status === 0 &&
+        typeof result.stdout === "string" &&
+        result.stdout.trim()) {
         terminalNotifierBin = result.stdout.trim();
     }
     else {
@@ -249,7 +256,8 @@ function resolvedEventTheme(state, eventName) {
 }
 function soundNameForEvent(state, eventName) {
     const theme = resolvedEventTheme(state, eventName);
-    return SOUND_THEME_LIBRARY[theme][eventName] ?? SOUND_THEME_LIBRARY.classic[eventName];
+    return (SOUND_THEME_LIBRARY[theme][eventName] ??
+        SOUND_THEME_LIBRARY.classic[eventName]);
 }
 function customSoundPath(state, eventName, directory) {
     const configured = state.sound.customFiles[eventName];
@@ -266,6 +274,7 @@ function notifyVisualMac(options) {
     if (notifier) {
         const args = ["-title", options.title, "-message", options.message];
         if (options.imagePath) {
+            args.push("-appIcon", options.imagePath);
             args.push("-contentImage", options.imagePath);
         }
         if (options.soundName) {
@@ -367,11 +376,15 @@ function firstPropertyText(properties, keys) {
     return "";
 }
 function messageForEvent(eventName, payload, style) {
-    const properties = payload.properties && typeof payload.properties === "object" ? payload.properties : {};
+    const properties = payload.properties && typeof payload.properties === "object"
+        ? payload.properties
+        : {};
     if (eventName === "complete") {
         return {
             title: "OpenCode Complete",
-            message: style === "detailed" ? "Task completed successfully." : "Task completed.",
+            message: style === "detailed"
+                ? "Task completed successfully."
+                : "Task completed.",
         };
     }
     if (eventName === "error") {
@@ -386,7 +399,12 @@ function messageForEvent(eventName, payload, style) {
         };
     }
     if (eventName === "permission") {
-        const detail = truncateText(firstPropertyText(properties, ["permission", "action", "command", "tool"]), style === "detailed" ? 140 : 100);
+        const detail = truncateText(firstPropertyText(properties, [
+            "permission",
+            "action",
+            "command",
+            "tool",
+        ]), style === "detailed" ? 140 : 100);
         return {
             title: "OpenCode Permission",
             message: detail
@@ -420,7 +438,9 @@ export function createNotifyEventsHook(options) {
                     content,
                 })
                 : { visualSent: false, soundSent: false };
-            const soundSent = sound && !visualResult.soundSent ? notifySound(eventName, state, directory) : visualResult.soundSent;
+            const soundSent = sound && !visualResult.soundSent
+                ? notifySound(eventName, state, directory)
+                : visualResult.soundSent;
             return {
                 visualSent: visualResult.visualSent,
                 soundSent,
@@ -434,7 +454,8 @@ export function createNotifyEventsHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+            const directory = typeof eventPayload.directory === "string" &&
+                eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
             const eventName = eventFromType(type, eventPayload);
@@ -452,7 +473,9 @@ export function createNotifyEventsHook(options) {
             }
             const ts = now();
             const previous = lastSent.get(eventName) ?? 0;
-            if (options.cooldownMs > 0 && previous > 0 && ts - previous < options.cooldownMs) {
+            if (options.cooldownMs > 0 &&
+                previous > 0 &&
+                ts - previous < options.cooldownMs) {
                 writeGatewayEventAudit(directory, {
                     hook: "notify-events",
                     stage: "skip",
@@ -469,7 +492,9 @@ export function createNotifyEventsHook(options) {
             writeGatewayEventAudit(directory, {
                 hook: "notify-events",
                 stage: "state",
-                reason_code: result.visualSent || result.soundSent ? "notification_sent" : "notification_not_sent",
+                reason_code: result.visualSent || result.soundSent
+                    ? "notification_sent"
+                    : "notification_not_sent",
                 event_type: type,
                 notify_event: eventName,
                 visual_enabled: visual,
