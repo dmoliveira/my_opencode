@@ -63,6 +63,7 @@ def usage() -> int:
     print(
         "usage: /lsp status [--json] | /lsp doctor [--verbose] [--json] | "
         "/lsp diagnostics --scope <glob[,glob...]> [--json] | "
+        "/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
@@ -325,6 +326,75 @@ def _diagnostic_summary(
         "severity": severity_counts,
         "files_with_diagnostics": len(by_file),
     }
+
+
+def _parse_code_actions_args(
+    args: list[str],
+) -> tuple[str, str, list[str], bool] | None:
+    as_json = "--json" in args
+    file_value = ""
+    symbol_value = ""
+    scope_patterns: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--file":
+            if index + 1 >= len(args):
+                return None
+            file_value = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--symbol":
+            if index + 1 >= len(args):
+                return None
+            symbol_value = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--scope":
+            if index + 1 >= len(args):
+                return None
+            scope_patterns = _split_scope(args[index + 1])
+            index += 2
+            continue
+        return None
+
+    if file_value and not symbol_value and not scope_patterns:
+        return file_value, "", [], as_json
+    if symbol_value and scope_patterns and not file_value:
+        return "", symbol_value, scope_patterns, as_json
+    return None
+
+
+def _normalize_code_actions(
+    actions: list[dict[str, Any]], path: Path, root: Path
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    relative = str(path.resolve().relative_to(root))
+    for item in actions:
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        kind = str(item.get("kind") or "").strip() or None
+        preferred = bool(item.get("isPreferred", False))
+        disabled_payload = item.get("disabled")
+        disabled_reason = None
+        if isinstance(disabled_payload, dict):
+            text = str(disabled_payload.get("reason") or "").strip()
+            disabled_reason = text or None
+        normalized.append(
+            {
+                "path": relative,
+                "title": title,
+                "kind": kind,
+                "is_preferred": preferred,
+                "disabled_reason": disabled_reason,
+                "backend": "lsp",
+            }
+        )
+    return normalized
 
 
 def _discover_files(root: Path, patterns: list[str]) -> list[Path]:
@@ -1338,6 +1408,102 @@ def command_diagnostics(args: list[str]) -> int:
     return 0
 
 
+def command_code_actions(args: list[str]) -> int:
+    parsed = _parse_code_actions_args(args)
+    if parsed is None:
+        return usage()
+    file_value, symbol_value, scope_patterns, as_json = parsed
+
+    root = Path.cwd()
+    servers, _ = _collect_servers()
+    target_path: Path | None = None
+    anchor_line0 = 0
+    anchor_char0 = 0
+    scoped_files: list[Path] = []
+
+    if file_value:
+        candidate = (root / file_value).resolve()
+        if candidate.exists() and candidate.is_file():
+            target_path = candidate
+    else:
+        scoped_files = _discover_files(root, scope_patterns)
+        anchor = _resolve_symbol_anchor(symbol_value, scoped_files, root)
+        if anchor is not None:
+            target_path = Path(anchor["path"])
+            anchor_line0 = int(anchor["line"]) - 1
+            anchor_char0 = int(anchor["character"])
+
+    backend = "text"
+    reason_code = "lsp_text_fallback_used"
+    attempted_protocol = False
+    selected_server: dict[str, Any] | None = None
+    lsp_error = ""
+    code_actions: list[dict[str, Any]] = []
+
+    if target_path is not None:
+        server = choose_server_for_path(target_path, servers)
+        if server is not None:
+            attempted_protocol = True
+            selected_server = server
+            try:
+                with LspClient(command=list(server["command"]), root=root) as client:
+                    capability_ok, capability_reason = _preflight_server_capability(
+                        client.server_capabilities, "code-actions"
+                    )
+                    if capability_ok:
+                        raw_actions = client.code_actions(
+                            target_path,
+                            line0=max(anchor_line0, 0),
+                            char0=max(anchor_char0, 0),
+                        )
+                        code_actions = _normalize_code_actions(
+                            raw_actions, target_path, root
+                        )
+                    else:
+                        reason_code = capability_reason
+                if code_actions:
+                    backend = "lsp"
+                    reason_code = "lsp_protocol_success"
+            except Exception as exc:
+                lsp_error = str(exc)
+                reason_code = "lsp_protocol_error_fallback"
+        else:
+            reason_code = "lsp_server_not_available_for_target"
+    else:
+        reason_code = "lsp_target_not_found"
+
+    report = {
+        "result": "PASS" if code_actions else "WARN",
+        "backend": backend,
+        "reason_code": reason_code,
+        "file": file_value or None,
+        "symbol": symbol_value or None,
+        "scope": scope_patterns,
+        "scanned_files": len(scoped_files),
+        "target": str(target_path.resolve().relative_to(root))
+        if isinstance(target_path, Path)
+        else None,
+        "code_actions": code_actions,
+        "lsp_error": lsp_error or None,
+        "backend_details": _backend_details(
+            backend=backend,
+            reason_code=reason_code,
+            server=selected_server,
+            attempted_protocol=attempted_protocol,
+            lsp_error=lsp_error,
+        ),
+    }
+    if as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"result: {report['result']}")
+        print(f"target: {report['target']}")
+        print(f"code_actions: {len(code_actions)}")
+        for item in code_actions[:30]:
+            print(f"- {item['title']} ({item.get('kind') or 'kind:unknown'})")
+    return 0
+
+
 def _parse_rename_args(
     args: list[str], *, allow_apply_flags: bool
 ) -> tuple[str, str, list[str], bool, bool, bool, bool, int, int, bool, bool] | None:
@@ -1754,6 +1920,7 @@ CAPABILITY_MATRIX: list[tuple[str, str]] = [
     ("documentSymbolProvider", "symbols(document)"),
     ("workspaceSymbolProvider", "symbols(workspace)"),
     ("diagnosticProvider", "diagnostics"),
+    ("codeActionProvider", "code-actions"),
     ("renameProvider", "rename"),
     ("prepareRenameProvider", "prepare-rename"),
 ]
@@ -1764,6 +1931,7 @@ COMMAND_CAPABILITY_REQUIREMENTS: dict[str, str] = {
     "symbols-document": "documentSymbolProvider",
     "symbols-workspace": "workspaceSymbolProvider",
     "diagnostics": "diagnosticProvider",
+    "code-actions": "codeActionProvider",
     "prepare-rename": "prepareRenameProvider",
     "rename": "renameProvider",
 }
@@ -2042,6 +2210,8 @@ def main(argv: list[str]) -> int:
         return command_doctor(rest)
     if command == "diagnostics":
         return command_diagnostics(rest)
+    if command == "code-actions":
+        return command_code_actions(rest)
     if command == "goto-definition":
         return command_goto_definition(rest)
     if command == "find-references":

@@ -56,6 +56,7 @@ Tasks:
 7. Expose dry-run `CreateFile`/`DeleteFile` operation visibility in `/lsp rename` planning output. `finished`
 8. Add explicit `CreateFile`/`DeleteFile` policy flags to `/lsp rename` guardrails while keeping apply blocked for those operations. `finished`
 9. Add `/lsp diagnostics --scope` baseline with structured severity summary output. `finished`
+10. Add `/lsp code-actions` dry-run listing baseline for `--file` and `--symbol --scope` targeting. `finished`
 
 ## Validation
 
