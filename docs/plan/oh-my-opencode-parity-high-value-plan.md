@@ -26,7 +26,7 @@ Rules:
 | E3 Built-in skill parity | P1 | 󰄵 [x] finished | Skill contracts + wrappers + tests/docs landed | Start E4 role contracts | - | 2026-02-19T04:20:00Z |
 | E4 Planning specialist tier | P1 | 󰄵 [x] finished | Added planning specialist agent specs + checks/docs | Start E5 tmux constraints | - | 2026-02-19T04:40:00Z |
 | E5 Optional tmux visual mode | P1 | 󰄵 [x] finished | Added `/tmux` status/config/doctor + fallback checks/docs | Start E6 packaged CLI contract | - | 2026-02-19T04:55:00Z |
-| E6 Packaged CLI parity (`install/doctor/run`) | P2 | 󰄱 [ ] backlog | Not started | CLI contract | Waiting on E1 | - |
+| E6 Packaged CLI parity (`install/doctor/run`) | P2 | 󰄵 [x] finished | Added packaged CLI entrypoint + clean-HOME coverage | Plan fully complete | - | 2026-02-19T05:05:00Z |
 
 ## Master checklist
 
@@ -66,16 +66,16 @@ Rules:
   - [x] E5-T3 Add `/tmux` status/config helper surface.
   - [x] E5-T4 Add non-tmux fallback and safety handling.
   - [x] E5-T5 Add docs and selftests.
-- [ ] E6 Packaged CLI parity
-  - [ ] E6-T1 Define packaged CLI contract (`install`, `doctor`, `run`, `version`).
-  - [ ] E6-T2 Implement packaged entrypoint and non-interactive argument parsing.
-  - [ ] E6-T3 Normalize diagnostics/failure reasons.
-  - [ ] E6-T4 Add install/selftest coverage in clean HOME.
-  - [ ] E6-T5 Add docs and CI-safe examples.
+- [x] E6 Packaged CLI parity
+  - [x] E6-T1 Define packaged CLI contract (`install`, `doctor`, `run`, `version`).
+  - [x] E6-T2 Implement packaged entrypoint and non-interactive argument parsing.
+  - [x] E6-T3 Normalize diagnostics/failure reasons.
+  - [x] E6-T4 Add install/selftest coverage in clean HOME.
+  - [x] E6-T5 Add docs and CI-safe examples.
 
 Progress counters:
-- Epics completed: `6/7`
-- Tasks completed: `30/35`
+- Epics completed: `7/7`
+- Tasks completed: `35/35`
 
 ## Parity coverage map
 
@@ -86,7 +86,7 @@ Progress counters:
 | Built-in skill trio | E3 | finished |
 | Planning-specialist roles | E4 | finished |
 | Tmux visual multi-agent mode | E5 | finished |
-| Packaged top-level CLI (`install/doctor/run`) | E6 | planned |
+| Packaged top-level CLI (`install/doctor/run`) | E6 | finished |
 | Local command/hook drift prevention (value-add) | E0 | finished |
 
 Note: MCP OAuth parity is intentionally out-of-scope for this cycle.
@@ -160,5 +160,6 @@ An epic is done only when:
 | 2026-02-19T04:20:00Z | E3-T1..E3-T4 | Added built-in skill contracts for `/playwright`, `/frontend-ui-ux`, `/git-master` with command wiring, selftest coverage, and docs | `scripts/skill_contract_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh` |
 | 2026-02-19T04:40:00Z | E4-T1..E4-T4 | Added planning specialist tier agents (`strategic-planner`, `ambiguity-analyst`, `plan-critic`) with generated docs, `agent-doctor` coverage, and selftest/README updates | `agent/specs/*.json`, `agent/*.md`, `scripts/agent_doctor.py`, `scripts/selftest.py`, `README.md` |
 | 2026-02-19T04:55:00Z | E5-T1..E5-T5 | Added optional tmux visual mode command surface with layered config schema, pane cache visibility, non-tmux fallback diagnostics, and selftest/docs updates | `scripts/tmux_command.py`, `opencode.json`, `scripts/selftest.py`, `install.sh`, `README.md` |
+| 2026-02-19T05:05:00Z | E6-T1..E6-T5 | Added packaged CLI parity entrypoint (`install`, `doctor`, `run`, `version`) with non-interactive defaults, install-test/selftest coverage, and docs examples | `scripts/my_opencode_cli.py`, `Makefile`, `scripts/selftest.py`, `opencode.json`, `install.sh`, `README.md` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |
