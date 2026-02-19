@@ -487,6 +487,7 @@ export function createNotifyEventsHook(options) {
                 return;
             }
             const content = messageForEvent(eventName, eventPayload, options.style);
+            const resolvedImagePath = iconImagePath(eventName, state, directory);
             const result = notifyFn(eventName, visual, sound, content, state, directory);
             lastSent.set(eventName, ts);
             writeGatewayEventAudit(directory, {
@@ -503,6 +504,8 @@ export function createNotifyEventsHook(options) {
                 sound_sent: result.soundSent,
                 icon_mode: state.icons.mode,
                 icon_version: state.icons.version,
+                icon_image_path: resolvedImagePath,
+                icon_image_present: Boolean(resolvedImagePath),
                 sound_theme: state.sound.theme,
             });
         },
