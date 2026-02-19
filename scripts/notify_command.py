@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -29,6 +30,7 @@ EVENTS = ("complete", "error", "permission", "question")
 CHANNELS = ("sound", "visual")
 SOUND_THEMES = ("classic", "minimal", "retro", "urgent", "chime")
 ICON_MODES = ("nerd+emoji", "emoji")
+REPO_ROOT = SCRIPT_DIR.parent
 
 PROFILE_MAP = {
     "all": {
@@ -304,12 +306,34 @@ def save_state(state: dict) -> None:
 
 def usage() -> int:
     print(
-        "usage: /notify status | /notify help | /notify doctor [--json] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
+        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
     )
     return 2
 
 
-def collect_doctor(config_path: Path, state: dict) -> dict:
+def terminal_notifier_path() -> str:
+    return shutil.which("terminal-notifier") or ""
+
+
+def resolve_icon_path(state: dict, event: str) -> Path:
+    return (
+        REPO_ROOT
+        / "assets"
+        / "notify-icons"
+        / state["icons"]["version"]
+        / f"{event}.png"
+    )
+
+
+def resolve_custom_sound_path(raw_path: str, cwd: Path) -> Path:
+    expanded = os.path.expanduser(raw_path)
+    path = Path(expanded)
+    if path.is_absolute():
+        return path
+    return (cwd / path).resolve()
+
+
+def collect_doctor(config_path: Path, state: dict, verbose: bool = False) -> dict:
     problems: list[str] = []
     warnings: list[str] = []
 
@@ -334,7 +358,7 @@ def collect_doctor(config_path: Path, state: dict) -> dict:
                 f"event {event} is enabled but both per-event channels are off"
             )
 
-    return {
+    report = {
         "result": "PASS" if not problems else "FAIL",
         "config": str(config_path),
         "enabled": state["enabled"],
@@ -357,9 +381,50 @@ def collect_doctor(config_path: Path, state: dict) -> dict:
         else [],
     }
 
+    if verbose:
+        icon_files = {}
+        for event in EVENTS:
+            icon_path = resolve_icon_path(state, event)
+            icon_files[event] = {
+                "path": str(icon_path),
+                "exists": icon_path.exists(),
+            }
 
-def print_doctor(config_path: Path, state: dict, json_output: bool) -> int:
-    report = collect_doctor(config_path, state)
+        sound_files = {}
+        cwd = Path.cwd()
+        for event in EVENTS:
+            custom_raw = normalize_label(state["sound"]["customFiles"].get(event, ""))
+            custom_path = (
+                resolve_custom_sound_path(custom_raw, cwd) if custom_raw else None
+            )
+            sound_files[event] = {
+                "theme_override": state["sound"]["eventThemes"].get(event, "default"),
+                "custom": {
+                    "configured": bool(custom_raw),
+                    "path": str(custom_path) if custom_path else "",
+                    "exists": bool(custom_path and custom_path.exists()),
+                },
+            }
+
+        report["runtime"] = {
+            "platform": sys.platform,
+            "terminal_notifier": {
+                "path": terminal_notifier_path(),
+                "available": bool(terminal_notifier_path()),
+            },
+            "osascript_available": bool(shutil.which("osascript")),
+            "notify_send_available": bool(shutil.which("notify-send")),
+            "icon_files": icon_files,
+            "sound_files": sound_files,
+        }
+
+    return report
+
+
+def print_doctor(
+    config_path: Path, state: dict, json_output: bool, verbose: bool
+) -> int:
+    report = collect_doctor(config_path, state, verbose=verbose)
 
     if json_output:
         print(json.dumps(report, indent=2))
@@ -380,6 +445,30 @@ def print_doctor(config_path: Path, state: dict, json_output: bool) -> int:
         print(
             f"- {event}: {'enabled' if state['events'][event] else 'disabled'} [sound={'on' if state['channels'][event]['sound'] else 'off'}, visual={'on' if state['channels'][event]['visual'] else 'off'}]"
         )
+
+    if verbose:
+        runtime = report.get("runtime", {})
+        print("\nruntime:")
+        print(f"- platform: {runtime.get('platform', '')}")
+        notifier = runtime.get("terminal_notifier", {})
+        print(
+            f"- terminal-notifier: {'available' if notifier.get('available') else 'missing'}"
+            + (f" ({notifier.get('path')})" if notifier.get("path") else "")
+        )
+        print(
+            f"- osascript: {'available' if runtime.get('osascript_available') else 'missing'}"
+        )
+        print(
+            f"- notify-send: {'available' if runtime.get('notify_send_available') else 'missing'}"
+        )
+        print("- icon files:")
+        icon_files = runtime.get("icon_files", {})
+        for event in EVENTS:
+            entry = icon_files.get(event, {})
+            print(
+                f"  - {event}: {'present' if entry.get('exists') else 'missing'}"
+                f" [{entry.get('path', '')}]"
+            )
 
     if report["warnings"]:
         print("\nwarnings:")
@@ -513,10 +602,16 @@ def main(argv: list[str]) -> int:
         return usage()
 
     if argv[0] == "doctor":
-        json_output = len(argv) > 1 and argv[1] == "--json"
-        if len(argv) > 1 and not json_output:
+        flags = set(argv[1:])
+        allowed_flags = {"--json", "--verbose"}
+        if not flags.issubset(allowed_flags):
             return usage()
-        return print_doctor(config_path, state, json_output)
+        return print_doctor(
+            config_path,
+            state,
+            json_output="--json" in flags,
+            verbose="--verbose" in flags,
+        )
 
     if argv[0] == "profile":
         if len(argv) < 2:
