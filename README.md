@@ -31,6 +31,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
+- 🧩 Built-in skill contracts via `/playwright`, `/frontend-ui-ux`, and `/git-master` to guide browser, UI, and git workflows.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
 - 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
@@ -1129,6 +1130,23 @@ Wizard support:
 
 - `install_wizard.py` supports `--browser-profile <playwright|agent-browser>`
 - interactive wizard includes the same provider choice during fresh setup and reconfigure
+
+## Skill contract shortcuts
+
+Use:
+```text
+/playwright
+/frontend-ui-ux
+/git-master
+```
+
+What they do:
+- `/playwright`: loads Playwright-first browser automation guardrails and recommends `/browser` readiness checks.
+- `/frontend-ui-ux`: loads frontend implementation quality boundaries (intentional design + responsive validation).
+- `/git-master`: loads safe git workflow boundaries for commit/PR/merge hygiene.
+
+Implementation note:
+- all three shortcuts are thin wrappers over `scripts/skill_contract_command.py` and reuse existing command pathways (no separate runtime engine).
 
 ## Keyword-triggered execution modes
 
