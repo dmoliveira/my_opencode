@@ -26,6 +26,18 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 - `default_agent` remains `build` in `opencode.json`.
 - `orchestrator` is selected manually (Tab menu) for larger, multi-step work.
 - Specialist subagents are read-only and support the active primary agent.
+- Single-writer is the default for code edits; parallel writers are opt-in and gated.
+
+---
+
+## Risk-based review budget 🎚️
+
+`orchestrator` should classify risk at task start and scale review/verification effort:
+
+- low risk (docs/tests/small scoped edit): 1 review/fix pass
+- medium risk (typical feature/refactor): 2 review/fix passes
+- high risk (runtime/security/migration): 3-5 review/fix passes
+- stop review cycling when required checks are green and latest review has no blocker findings
 
 ---
 
@@ -39,6 +51,26 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 - `verifier`: after meaningful code changes and before done claim.
 - `reviewer`: before final response for significant/risky changes.
 - `release-scribe`: when preparing PR description/changelog/release notes.
+
+---
+
+## Subagent budget + parallel write policy ⚖️
+
+- Keep at most 2 concurrent subagents.
+- Avoid duplicate `reviewer`/`verifier` passes on unchanged diffs.
+- Allow parallel writer streams only when file ownership is clearly disjoint and reservations are explicit.
+- Fall back to single-writer flow when overlap risk is non-trivial.
+
+---
+
+## Delegation packet contract 📦
+
+When spawning subagents, include:
+
+- objective and scoped ownership
+- constrained file paths and constraints
+- acceptance criteria and required checks
+- expected output format and required evidence
 
 ---
 
@@ -56,6 +88,7 @@ No done claim unless all are true:
 ## Anti-loop policy 🧯
 
 - Never respond with only another command suggestion when concrete execution is possible.
+- If done criteria are satisfied and blockers are clear, emit completion once and stop.
 - If user asks to continue, continue until completion gates pass or blocker contract triggers.
 
 ---
