@@ -126,6 +126,7 @@ SKILL_CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "skill_contract_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 TASK_GRAPH_SCRIPT = REPO_ROOT / "scripts" / "task_graph_command.py"
+PLAN_HANDOFF_SCRIPT = REPO_ROOT / "scripts" / "plan_handoff_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 LSP_SCRIPT = REPO_ROOT / "scripts" / "lsp_command.py"
@@ -405,6 +406,44 @@ exit 0
                 and f" {skill_name} --json`" in template,
                 f"{skill_name} command should resolve skill contract payload",
             )
+
+        for command_name in ("plan-handoff", "plan-handoff-status"):
+            template = str(
+                (command_map.get(command_name, {}) or {}).get("template", "")
+            )
+            expect(
+                'plan_handoff_command.py"' in template,
+                f"{command_name} command should resolve plan handoff backend",
+            )
+
+        plan_handoff_status = run_script(
+            PLAN_HANDOFF_SCRIPT, cfg_path, home, "status", "--json"
+        )
+        expect(
+            plan_handoff_status.returncode == 0,
+            f"plan-handoff status --json failed: {plan_handoff_status.stderr}",
+        )
+        plan_handoff_status_payload = parse_json_output(plan_handoff_status.stdout)
+        expect(
+            plan_handoff_status_payload.get("result") == "PASS"
+            and plan_handoff_status_payload.get("mode") == "compatibility_profile",
+            "plan-handoff status should return compatibility profile payload",
+        )
+
+        plan_handoff_phase = run_script(
+            PLAN_HANDOFF_SCRIPT, cfg_path, home, "handoff", "--json"
+        )
+        expect(
+            plan_handoff_phase.returncode == 0,
+            f"plan-handoff handoff --json failed: {plan_handoff_phase.stderr}",
+        )
+        plan_handoff_phase_payload = parse_json_output(plan_handoff_phase.stdout)
+        expect(
+            plan_handoff_phase_payload.get("phase") == "handoff"
+            and isinstance(plan_handoff_phase_payload.get("commands"), list)
+            and len(plan_handoff_phase_payload.get("commands", [])) >= 2,
+            "plan-handoff handoff payload should include command sequence",
+        )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
         expect(
@@ -1247,7 +1286,7 @@ exit 0
         (user_cfg_dir / "my_opencode.json").write_text(
             json.dumps(
                 {
-                    "plugin": ["@mohak34/opencode-notifier@latest"],
+                    "plugin": [],
                     "mcp": {"context7": {"enabled": False}},
                 },
                 indent=2,
@@ -1260,7 +1299,6 @@ exit 0
             {
               // project override wins over user
               "plugin": [
-                "@mohak34/opencode-notifier@latest",
                 "github:JRedeker/opencode-morph-fast-apply",
               ],
               "mcp": {
@@ -2260,7 +2298,7 @@ exit 0
             """
             {
               // project layered config for selftest
-              "plugin": ["@mohak34/opencode-notifier@latest"],
+              "plugin": [],
             }
             """,
             encoding="utf-8",
