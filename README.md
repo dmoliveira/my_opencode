@@ -16,7 +16,7 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
-- 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
+- 🔔 Built-in `/notify` command to tune notification behavior by level, sound theme, event sound overrides, and icon pack version.
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
