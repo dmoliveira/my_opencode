@@ -54,6 +54,7 @@ from safe_edit_adapters import (  # type: ignore
 )
 from lsp_command import (  # type: ignore
     _apply_renamefile_operations,
+    _group_resource_operations,
     _validate_renamefile_operations,
     _workspace_edit_text_changes,
 )
@@ -4013,6 +4014,14 @@ index 3333333..4444444 100644
             isinstance(lsp_rename_plan_report.get("backend_details"), dict),
             "lsp rename should include backend details metadata",
         )
+        expect(
+            isinstance(lsp_rename_plan_report.get("createfile_operations"), list)
+            and isinstance(lsp_rename_plan_report.get("deletefile_operations"), list)
+            and isinstance(
+                lsp_rename_plan_report.get("resource_operation_summary"), dict
+            ),
+            "lsp rename planning should expose create/delete operation visibility fields",
+        )
         diff_preview = lsp_rename_plan_report.get("diff_preview")
         expect(
             isinstance(diff_preview, list)
@@ -4276,13 +4285,26 @@ index 3333333..4444444 100644
                             "kind": "delete",
                             "uri": "file:///tmp/obsolete.py",
                         },
+                        {
+                            "kind": "create",
+                            "uri": "file:///tmp/new_file.py",
+                        },
                     ],
                 }
             )
         )
         expect(
-            len(workspace_resource_ops) == 2,
+            len(workspace_resource_ops) == 3,
             "lsp workspace edit helper should extract resource operations from documentChanges",
+        )
+        grouped_workspace_resource_ops = _group_resource_operations(
+            workspace_resource_ops
+        )
+        expect(
+            len(grouped_workspace_resource_ops.get("renamefile", [])) == 1
+            and len(grouped_workspace_resource_ops.get("createfile", [])) == 1
+            and len(grouped_workspace_resource_ops.get("deletefile", [])) == 1,
+            "lsp resource operation grouping should classify rename/create/delete entries",
         )
         expect(
             workspace_annotations_with_policy.get("a1", {}).get("needs_confirmation")
