@@ -3886,8 +3886,10 @@ index 3333333..4444444 100644
         expect(
             isinstance(lsp_diagnostics_report.get("diagnostics"), list)
             and isinstance(summary, dict)
-            and isinstance(summary.get("severity"), dict),
-            "lsp diagnostics should include structured diagnostics list and severity summary",
+            and isinstance(summary.get("severity"), dict)
+            and isinstance(summary.get("sources"), dict)
+            and isinstance(summary.get("top_codes"), list),
+            "lsp diagnostics should include severity/source/code summary metadata",
         )
         expect(
             isinstance(lsp_diagnostics_report.get("backend_details"), dict),
