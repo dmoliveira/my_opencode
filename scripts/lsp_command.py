@@ -63,7 +63,7 @@ def usage() -> int:
     print(
         "usage: /lsp status [--json] | /lsp doctor [--verbose] [--json] | "
         "/lsp diagnostics --scope <glob[,glob...]> [--json] | "
-        "/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--json] | "
+        "/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--index <n>] [--apply] [--json] | "
         "/lsp goto-definition --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
@@ -330,16 +330,27 @@ def _diagnostic_summary(
 
 def _parse_code_actions_args(
     args: list[str],
-) -> tuple[str, str, list[str], bool] | None:
+) -> tuple[str, str, list[str], int, bool, bool] | None:
     as_json = "--json" in args
+    apply_changes = "--apply" in args
     file_value = ""
     symbol_value = ""
     scope_patterns: list[str] = []
+    index_value = 0
     index = 0
     while index < len(args):
         token = args[index]
-        if token == "--json":
+        if token in {"--json", "--apply"}:
             index += 1
+            continue
+        if token == "--index":
+            if index + 1 >= len(args):
+                return None
+            try:
+                index_value = max(0, int(args[index + 1]))
+            except ValueError:
+                return None
+            index += 2
             continue
         if token == "--file":
             if index + 1 >= len(args):
@@ -362,9 +373,9 @@ def _parse_code_actions_args(
         return None
 
     if file_value and not symbol_value and not scope_patterns:
-        return file_value, "", [], as_json
+        return file_value, "", [], index_value, apply_changes, as_json
     if symbol_value and scope_patterns and not file_value:
-        return "", symbol_value, scope_patterns, as_json
+        return "", symbol_value, scope_patterns, index_value, apply_changes, as_json
     return None
 
 
@@ -384,6 +395,7 @@ def _normalize_code_actions(
         if isinstance(disabled_payload, dict):
             text = str(disabled_payload.get("reason") or "").strip()
             disabled_reason = text or None
+        has_edit = isinstance(item.get("edit"), dict)
         normalized.append(
             {
                 "path": relative,
@@ -391,10 +403,42 @@ def _normalize_code_actions(
                 "kind": kind,
                 "is_preferred": preferred,
                 "disabled_reason": disabled_reason,
+                "has_edit": has_edit,
                 "backend": "lsp",
             }
         )
     return normalized
+
+
+def _workspace_edit_apply_plan(
+    workspace_edit: dict[str, Any], root: Path
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    by_uri, resource_operations, change_annotations = _workspace_edit_text_changes(
+        workspace_edit
+    )
+    plan: list[dict[str, Any]] = []
+    for uri, edits in by_uri.items():
+        target_path = uri_to_path(str(uri))
+        if target_path is None:
+            continue
+        try:
+            resolved = target_path.resolve()
+            relative = str(resolved.relative_to(root.resolve()))
+        except Exception:
+            continue
+        before = resolved.read_text(encoding="utf-8", errors="replace")
+        after = _apply_text_edits(before, edits)
+        if before == after:
+            continue
+        plan.append(
+            {
+                "path": relative,
+                "before": before,
+                "after": after,
+                "edits": len(edits),
+            }
+        )
+    return plan, resource_operations, change_annotations
 
 
 def _discover_files(root: Path, patterns: list[str]) -> list[Path]:
@@ -1412,7 +1456,9 @@ def command_code_actions(args: list[str]) -> int:
     parsed = _parse_code_actions_args(args)
     if parsed is None:
         return usage()
-    file_value, symbol_value, scope_patterns, as_json = parsed
+    file_value, symbol_value, scope_patterns, selected_index, apply_changes, as_json = (
+        parsed
+    )
 
     root = Path.cwd()
     servers, _ = _collect_servers()
@@ -1439,6 +1485,7 @@ def command_code_actions(args: list[str]) -> int:
     selected_server: dict[str, Any] | None = None
     lsp_error = ""
     code_actions: list[dict[str, Any]] = []
+    raw_actions: list[dict[str, Any]] = []
 
     if target_path is not None:
         server = choose_server_for_path(target_path, servers)
@@ -1472,13 +1519,70 @@ def command_code_actions(args: list[str]) -> int:
     else:
         reason_code = "lsp_target_not_found"
 
+    blockers: list[str] = []
+    applied = False
+    applied_files: list[str] = []
+    applied_edits = 0
+    selected_action: dict[str, Any] | None = None
+    if apply_changes:
+        if not code_actions:
+            blockers.append("no code actions available to apply")
+        elif selected_index >= len(code_actions):
+            blockers.append(
+                f"selected code action index out of range: {selected_index} >= {len(code_actions)}"
+            )
+        else:
+            selected_action = code_actions[selected_index]
+            raw_selected = (
+                raw_actions[selected_index] if selected_index < len(raw_actions) else {}
+            )
+            workspace_edit = raw_selected.get("edit")
+            if not isinstance(workspace_edit, dict):
+                blockers.append(
+                    "selected code action has no editable workspace edit payload"
+                )
+            else:
+                plan, resource_operations, change_annotations = (
+                    _workspace_edit_apply_plan(
+                        workspace_edit,
+                        root,
+                    )
+                )
+                if resource_operations:
+                    blockers.append("code action apply blocks resource operations")
+                if any(
+                    bool(item.get("needs_confirmation", False))
+                    for item in change_annotations.values()
+                ):
+                    blockers.append(
+                        "code action apply blocks confirmation-required annotations"
+                    )
+                if not plan:
+                    blockers.append("selected code action produced no text edits")
+                if not blockers:
+                    for row in plan:
+                        path = root / str(row["path"])
+                        path.write_text(str(row["after"]), encoding="utf-8")
+                        applied_files.append(str(row["path"]))
+                        applied_edits += int(row["edits"])
+                    applied = True
+
     report = {
-        "result": "PASS" if code_actions else "WARN",
+        "result": "PASS"
+        if (code_actions and (not apply_changes or applied))
+        else "WARN",
         "backend": backend,
         "reason_code": reason_code,
         "file": file_value or None,
         "symbol": symbol_value or None,
         "scope": scope_patterns,
+        "selected_index": selected_index,
+        "apply_requested": apply_changes,
+        "applied": applied,
+        "applied_files": applied_files,
+        "applied_edits": applied_edits,
+        "selected_action": selected_action,
+        "blockers": sorted(set(blockers)),
         "scanned_files": len(scoped_files),
         "target": str(target_path.resolve().relative_to(root))
         if isinstance(target_path, Path)
@@ -1499,6 +1603,9 @@ def command_code_actions(args: list[str]) -> int:
         print(f"result: {report['result']}")
         print(f"target: {report['target']}")
         print(f"code_actions: {len(code_actions)}")
+        print(f"applied: {applied}")
+        for blocker in report["blockers"]:
+            print(f"- blocker: {blocker}")
         for item in code_actions[:30]:
             print(f"- {item['title']} ({item.get('kind') or 'kind:unknown'})")
     return 0

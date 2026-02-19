@@ -94,7 +94,11 @@ def _reply(request_id: Any, result: Any) -> None:
 def _handle_request(method: str, params: dict[str, Any]) -> Any:
     if method == "initialize":
         return {
-            "capabilities": {"renameProvider": True, "documentSymbolProvider": True}
+            "capabilities": {
+                "renameProvider": True,
+                "documentSymbolProvider": True,
+                "codeActionProvider": True,
+            }
         }
 
     if method == "shutdown":
@@ -182,6 +186,42 @@ def _handle_request(method: str, params: dict[str, Any]) -> Any:
             for item in _all_symbol_locations(text, symbol)
         ]
         return {"changes": {doc_uri: edits}}
+
+    if method == "textDocument/codeAction":
+        doc_uri = str(params.get("textDocument", {}).get("uri") or "")
+        text = OPEN_DOCS.get(doc_uri, "")
+        lines = text.splitlines()
+        if not lines:
+            return []
+        line0 = int(params.get("range", {}).get("start", {}).get("line", 0))
+        line0 = max(0, min(line0, len(lines) - 1))
+        line = lines[line0]
+        if not line:
+            return []
+        replacement = f"# action: {line.strip()}"
+        return [
+            {
+                "title": "Mock: comment selected line",
+                "kind": "quickfix.mock",
+                "isPreferred": True,
+                "edit": {
+                    "changes": {
+                        doc_uri: [
+                            {
+                                "range": {
+                                    "start": {"line": line0, "character": 0},
+                                    "end": {
+                                        "line": line0,
+                                        "character": len(line),
+                                    },
+                                },
+                                "newText": replacement,
+                            }
+                        ]
+                    }
+                },
+            }
+        ]
 
     return None
 
