@@ -486,11 +486,16 @@ def _code_action_summary(code_actions: list[dict[str, Any]]) -> dict[str, Any]:
             editable_count += 1
         if bool(row.get("is_preferred")):
             preferred_count += 1
+    total = len(code_actions)
+    preferred_ratio = round((preferred_count / total) * 100, 2) if total else 0.0
+    disabled_ratio = round((disabled_count / total) * 100, 2) if total else 0.0
     return {
-        "total": len(code_actions),
+        "total": total,
         "editable": editable_count,
         "disabled": disabled_count,
         "preferred": preferred_count,
+        "preferred_ratio": preferred_ratio,
+        "disabled_ratio": disabled_ratio,
         "by_kind": dict(sorted(by_kind.items())),
     }
 

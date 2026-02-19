@@ -4045,6 +4045,11 @@ index 3333333..4444444 100644
             "lsp code-actions summary should expose preferred action count",
         )
         expect(
+            isinstance(code_action_summary.get("preferred_ratio"), float)
+            and isinstance(code_action_summary.get("disabled_ratio"), float),
+            "lsp code-actions summary should expose preferred/disabled ratio percentages",
+        )
+        expect(
             isinstance(lsp_code_actions_report.get("backend_details"), dict),
             "lsp code-actions should include backend details metadata",
         )
@@ -4195,7 +4200,8 @@ index 3333333..4444444 100644
                 == 1
                 and isinstance(kind_summary, dict)
                 and kind_summary.get("total") == 1
-                and kind_summary.get("preferred") == 0,
+                and kind_summary.get("preferred") == 0
+                and kind_summary.get("preferred_ratio") == 0.0,
                 "lsp code-actions --kind should deterministically filter action results",
             )
 
