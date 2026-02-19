@@ -29,6 +29,15 @@ function positiveInt(value: unknown, fallback: number): number {
   return parsed;
 }
 
+// Coerces unknown value into a safe positive integer fallback.
+function positiveInt(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value ?? ""), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback
+  }
+  return parsed
+}
+
 // Coerces unknown value into bounded float fallback.
 function boundedFloat(
   value: unknown,
