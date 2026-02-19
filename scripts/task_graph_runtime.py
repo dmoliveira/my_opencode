@@ -28,7 +28,14 @@ def _env_override_path(name: str) -> Path | None:
     value = os.environ.get(name, "").strip()
     if not value:
         return None
-    if value.startswith("{") or value.startswith("["):
+    if (
+        value.startswith("{")
+        or value.startswith("[")
+        or "{" in value
+        or "}" in value
+        or "[" in value
+        or "]" in value
+    ):
         return None
     return Path(value).expanduser()
 

@@ -22,6 +22,22 @@ from task_graph_runtime import (  # type: ignore  # noqa: E402
 )
 
 
+def _write_path() -> Path:
+    def valid_path_text(text: str) -> bool:
+        return all(token not in text for token in ("{", "}", "[", "]"))
+
+    value = resolve_write_path()
+    if isinstance(value, Path):
+        candidate = str(value)
+        if valid_path_text(candidate):
+            return value
+    if isinstance(value, str) and value.strip():
+        candidate = value.strip()
+        if valid_path_text(candidate):
+            return Path(candidate).expanduser()
+    return Path("~/.config/opencode/opencode.json").expanduser()
+
+
 def _csv(value: str | None) -> list[str]:
     if not value:
         return []
@@ -59,7 +75,7 @@ def command_create(args: argparse.Namespace) -> dict[str, Any]:
             "reason_code": "task_subject_required",
             "detail": "provide --subject for task creation",
         }
-    write_path = resolve_write_path()
+    write_path = _write_path()
 
     def mutate(state: dict[str, Any]) -> dict[str, Any]:
         tasks = [item for item in state.get("tasks", []) if isinstance(item, dict)]
@@ -92,7 +108,7 @@ def command_create(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_list(args: argparse.Namespace) -> dict[str, Any]:
-    locked = load_state(resolve_write_path())
+    locked = load_state(_write_path())
     tasks = [item for item in locked.state.get("tasks", []) if isinstance(item, dict)]
     status_filter = (args.status or "").strip().lower()
     if status_filter:
@@ -107,7 +123,7 @@ def command_list(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_get(args: argparse.Namespace) -> dict[str, Any]:
-    locked = load_state(resolve_write_path())
+    locked = load_state(_write_path())
     task = _get_task(locked.state, args.id)
     if not task:
         return {
@@ -148,7 +164,7 @@ def command_update(args: argparse.Namespace) -> dict[str, Any]:
             "detail": "provide at least one update field",
         }
 
-    write_path = resolve_write_path()
+    write_path = _write_path()
 
     def mutate(state: dict[str, Any]) -> dict[str, Any]:
         task = _get_task(state, args.id)
@@ -190,7 +206,7 @@ def command_update(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_ready(args: argparse.Namespace) -> dict[str, Any]:
-    locked = load_state(resolve_write_path())
+    locked = load_state(_write_path())
     tasks = [item for item in locked.state.get("tasks", []) if isinstance(item, dict)]
     ready = ready_tasks(tasks)
     return {
@@ -203,7 +219,7 @@ def command_ready(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_doctor(args: argparse.Namespace) -> dict[str, Any]:
-    locked = load_state(resolve_write_path())
+    locked = load_state(_write_path())
     tasks = [item for item in locked.state.get("tasks", []) if isinstance(item, dict)]
     by_id = {str(task.get("id")): task for task in tasks}
     problems: list[str] = []
