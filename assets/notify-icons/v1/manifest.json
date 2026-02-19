@@ -1,0 +1,47 @@
+{
+  "version": "v1",
+  "model": "gpt-image-1",
+  "size": "1024x1024",
+  "events": {
+    "complete": {
+      "grid": "assets/notify-icons/v1/grids/complete-grid.png",
+      "selected": "assets/notify-icons/v1/candidates/complete-1.png",
+      "candidates": [
+        "assets/notify-icons/v1/candidates/complete-1.png",
+        "assets/notify-icons/v1/candidates/complete-2.png"
+      ],
+      "nerd_icon": "\udb80\udd2c",
+      "emoji_fallback": "\u2705"
+    },
+    "error": {
+      "grid": "assets/notify-icons/v1/grids/error-grid.png",
+      "selected": "assets/notify-icons/v1/candidates/error-1.png",
+      "candidates": [
+        "assets/notify-icons/v1/candidates/error-1.png",
+        "assets/notify-icons/v1/candidates/error-2.png"
+      ],
+      "nerd_icon": "\udb80\udd5a",
+      "emoji_fallback": "\u274c"
+    },
+    "permission": {
+      "grid": "assets/notify-icons/v1/grids/permission-grid.png",
+      "selected": "assets/notify-icons/v1/candidates/permission-1.png",
+      "candidates": [
+        "assets/notify-icons/v1/candidates/permission-1.png",
+        "assets/notify-icons/v1/candidates/permission-2.png"
+      ],
+      "nerd_icon": "\udb80\udf3e",
+      "emoji_fallback": "\ud83d\udd10"
+    },
+    "question": {
+      "grid": "assets/notify-icons/v1/grids/question-grid.png",
+      "selected": "assets/notify-icons/v1/candidates/question-1.png",
+      "candidates": [
+        "assets/notify-icons/v1/candidates/question-1.png",
+        "assets/notify-icons/v1/candidates/question-2.png"
+      ],
+      "nerd_icon": "\udb80\udde2",
+      "emoji_fallback": "\u2753"
+    }
+  }
+}
