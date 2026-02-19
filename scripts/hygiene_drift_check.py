@@ -20,6 +20,7 @@ ALLOWED_DUPLICATE_CLUSTERS = {
     frozenset({"model-routing", "model-profile"}),
     frozenset({"model-routing-status", "model-profile-status"}),
     frozenset({"autopilot-go", "continue-work"}),
+    frozenset({"autoloop", "ulw-loop", "ralph-loop"}),
 }
 
 # Transitional allowlist for hook IDs present in config order but not yet

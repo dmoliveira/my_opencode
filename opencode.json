@@ -342,6 +342,22 @@
       "description": "Compatibility alias for /autopilot-go",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
+    "autoloop": {
+      "description": "Compatibility alias for /autopilot-go",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+    },
+    "init-deep": {
+      "description": "Compatibility alias for /autopilot-objective",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode objective --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse objective done-criteria gates to complete the run. Execute concrete work from current repo context and continue until objective gates pass or a concrete blocker is hit."
+    },
+    "ulw-loop": {
+      "description": "Compatibility alias for /autopilot-go",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+    },
+    "ralph-loop": {
+      "description": "Compatibility alias for /autopilot-go",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+    },
     "autopilot-status": {
       "description": "Show current /autopilot runtime status in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" status --json`\nShow only the command output."

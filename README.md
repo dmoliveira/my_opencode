@@ -542,9 +542,9 @@ Task 28.3 autopilot control-integration notes:
 Task 28.4 autopilot command UX/workflow notes:
 
 - command module: `scripts/autopilot_command.py`
-- alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
+- alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autoloop`, `/init-deep`, `/ulw-loop`, `/ralph-loop`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
 - objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
-- canonical flow is `/autopilot*`; Ralph compatibility aliases were removed to simplify command injection paths.
+- canonical flow is `/autopilot*`; compatibility aliases remain as thin wrappers for migration without adding new runtime engines.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.

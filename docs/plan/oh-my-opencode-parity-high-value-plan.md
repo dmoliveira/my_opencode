@@ -22,7 +22,7 @@ Rules:
 | --- | --- | --- | --- | --- | --- | --- |
 | E0 Command/hook hygiene + naming guard | P0 | 󰄵 [x] finished | Audit + drift checks + naming simplification landed | Start E1 schema and dependency invariants | - | 2026-02-19T01:46:00Z |
 | E1 Persistent task graph | P0 | 󰄵 [x] finished | Runtime + command surface + validation landed | Start E2 contract mapping | - | 2026-02-19T02:40:00Z |
-| E2 Loop command parity | P0 | 󰄱 [ ] backlog | Not started | Command contract mapping | Waiting on E1 | - |
+| E2 Loop command parity | P0 | 󰄵 [x] finished | Compatibility aliases mapped to canonical `/autopilot*` | Start E3 skill contracts | - | 2026-02-19T03:03:00Z |
 | E3 Built-in skill parity | P1 | 󰄱 [ ] backlog | Not started | Skill contracts | Waiting on E2 | - |
 | E4 Planning specialist tier | P1 | 󰄱 [ ] backlog | Not started | Role spec draft | Waiting on E1 | - |
 | E5 Optional tmux visual mode | P1 | 󰄱 [ ] backlog | Not started | Constraint/config draft | Waiting on E1 | - |
@@ -44,12 +44,12 @@ Rules:
   - [x] E1-T4 Wire slash commands in `opencode.json` and doctor/help integration.
   - [x] E1-T5 Add selftests for lifecycle + dependency edge cases.
   - [x] E1-T6 Add docs with examples and failure guidance.
-- [ ] E2 Loop command parity (`/init-deep`, `/ulw-loop`, `/ralph-loop`)
-  - [ ] E2-T1 Define loop contracts mapped to existing autopilot/keyword/continuation runtime.
-  - [ ] E2-T2 Prefer existing loop commands first; add aliases only when strictly needed for parity.
-  - [ ] E2-T3 Add safety/completion semantics to avoid command-only loops.
-  - [ ] E2-T4 Add selftests for run/blocked/no-op scenarios.
-  - [ ] E2-T5 Add docs and migration table.
+- [x] E2 Loop command parity (`/init-deep`, `/ulw-loop`, `/ralph-loop`)
+  - [x] E2-T1 Define loop contracts mapped to existing autopilot/keyword/continuation runtime.
+  - [x] E2-T2 Prefer existing loop commands first; add aliases only when strictly needed for parity.
+  - [x] E2-T3 Add safety/completion semantics to avoid command-only loops.
+  - [x] E2-T4 Add selftests for run/blocked/no-op scenarios.
+  - [x] E2-T5 Add docs and migration table.
 - [ ] E3 Built-in skill parity (`playwright`, `frontend-ui-ux`, `git-master`)
   - [ ] E3-T1 Define trigger contracts and boundaries per skill.
   - [ ] E3-T2 Implement skill assets using current command/tooling pathways.
@@ -74,8 +74,8 @@ Rules:
   - [ ] E6-T5 Add docs and CI-safe examples.
 
 Progress counters:
-- Epics completed: `2/7`
-- Tasks completed: `12/35`
+- Epics completed: `3/7`
+- Tasks completed: `17/35`
 
 ## Parity coverage map
 
@@ -156,5 +156,6 @@ An epic is done only when:
 | --- | --- | --- | --- |
 | 2026-02-19T01:40:00Z | E0 / plan baseline | Created parity plan with checkbox tracking, parity map, and naming accessibility policy | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T02:40:00Z | E1-T1..E1-T6 | Added persistent task graph runtime, `/task` command family, wiring, docs, and coverage | `scripts/task_graph_runtime.py`, `scripts/task_graph_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`, `Makefile` |
+| 2026-02-19T03:03:00Z | E2-T1..E2-T5 | Added loop compatibility aliases as thin wrappers over canonical `/autopilot*`, plus docs and selftest coverage | `opencode.json`, `scripts/selftest.py`, `README.md`, `scripts/hygiene_drift_check.py` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |
