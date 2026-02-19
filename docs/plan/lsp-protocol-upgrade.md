@@ -59,6 +59,7 @@ Tasks:
 10. Add `/lsp code-actions` dry-run listing baseline for `--file` and `--symbol --scope` targeting. `finished`
 11. Add guarded `--apply` path for `/lsp code-actions` when selected action contains safe text edits only. `finished`
 12. Add explicit capability-missing warning hints across `/lsp` command outputs. `finished`
+13. Enhance `/lsp diagnostics` summary with source counts and top diagnostic codes. `finished`
 
 ## Validation
 

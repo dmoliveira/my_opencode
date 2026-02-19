@@ -312,6 +312,8 @@ def _diagnostic_summary(
         "hint": 0,
     }
     by_file: dict[str, int] = {}
+    by_source: dict[str, int] = {}
+    by_code: dict[str, int] = {}
     for item in diagnostics:
         severity = str(item.get("severity") or "information")
         if severity not in severity_counts:
@@ -320,10 +322,24 @@ def _diagnostic_summary(
         path = str(item.get("path") or "")
         if path:
             by_file[path] = by_file.get(path, 0) + 1
+        source = str(item.get("source") or "unknown")
+        by_source[source] = by_source.get(source, 0) + 1
+        code_raw = item.get("code")
+        code = str(code_raw).strip() if code_raw is not None else ""
+        if code:
+            by_code[code] = by_code.get(code, 0) + 1
+    top_codes = [
+        {"code": code, "count": count}
+        for code, count in sorted(by_code.items(), key=lambda row: (-row[1], row[0]))[
+            :10
+        ]
+    ]
     return {
         "total": len(diagnostics),
         "scanned_files": scanned_files,
         "severity": severity_counts,
+        "sources": dict(sorted(by_source.items())),
+        "top_codes": top_codes,
         "files_with_diagnostics": len(by_file),
     }
 
