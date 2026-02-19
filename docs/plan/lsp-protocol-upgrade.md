@@ -57,6 +57,7 @@ Tasks:
 8. Add explicit `CreateFile`/`DeleteFile` policy flags to `/lsp rename` guardrails while keeping apply blocked for those operations. `finished`
 9. Add `/lsp diagnostics --scope` baseline with structured severity summary output. `finished`
 10. Add `/lsp code-actions` dry-run listing baseline for `--file` and `--symbol --scope` targeting. `finished`
+11. Add guarded `--apply` path for `/lsp code-actions` when selected action contains safe text edits only. `finished`
 
 ## Validation
 

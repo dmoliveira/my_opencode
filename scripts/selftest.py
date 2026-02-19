@@ -3926,6 +3926,71 @@ index 3333333..4444444 100644
             "lsp code-actions should include backend details metadata",
         )
 
+        with tempfile.TemporaryDirectory() as lsp_actions_dir:
+            lsp_actions_root = Path(lsp_actions_dir)
+            lsp_actions_file = lsp_actions_root / "sample.py"
+            lsp_actions_file.write_text(
+                "def alpha():\n    return alpha\n",
+                encoding="utf-8",
+            )
+            lsp_actions_config = lsp_actions_root / "opencode-lsp-mock.json"
+            lsp_actions_config.write_text(
+                json.dumps(
+                    {
+                        "lsp": {
+                            "mock-lsp": {
+                                "command": [
+                                    sys.executable,
+                                    str(MOCK_LSP_SERVER_SCRIPT),
+                                ],
+                                "extensions": [".py"],
+                                "priority": 100,
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            lsp_actions_env = os.environ.copy()
+            lsp_actions_env["OPENCODE_CONFIG_PATH"] = str(lsp_actions_config)
+
+            lsp_code_actions_apply = subprocess.run(
+                [
+                    sys.executable,
+                    str(LSP_SCRIPT),
+                    "code-actions",
+                    "--symbol",
+                    "alpha",
+                    "--scope",
+                    "*.py",
+                    "--apply",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=lsp_actions_env,
+                check=False,
+                cwd=lsp_actions_root,
+            )
+            expect(
+                lsp_code_actions_apply.returncode == 0,
+                f"lsp code-actions --apply should succeed: {lsp_code_actions_apply.stderr}",
+            )
+            lsp_code_actions_apply_report = parse_json_output(
+                lsp_code_actions_apply.stdout
+            )
+            expect(
+                lsp_code_actions_apply_report.get("applied") is True
+                and isinstance(lsp_code_actions_apply_report.get("applied_files"), list)
+                and len(lsp_code_actions_apply_report.get("applied_files", [])) >= 1,
+                "lsp code-actions --apply should apply mock text-edit code action",
+            )
+            updated_text = lsp_actions_file.read_text(encoding="utf-8")
+            expect(
+                "# action:" in updated_text,
+                "lsp code-actions apply should mutate file contents with selected edit",
+            )
+
         lsp_doctor_verbose = subprocess.run(
             [sys.executable, str(LSP_SCRIPT), "doctor", "--verbose", "--json"],
             capture_output=True,
