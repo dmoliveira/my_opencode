@@ -1275,6 +1275,30 @@ exit 0
             "notify channel should set permission.visual off",
         )
 
+        result = run_notify("sound-theme", "retro")
+        expect(result.returncode == 0, f"notify sound-theme failed: {result.stderr}")
+        cfg = load_json_file(notify_path)
+        expect(
+            cfg.get("sound", {}).get("theme") == "retro",
+            "notify sound-theme should set sound.theme",
+        )
+
+        result = run_notify("event-sound", "error", "urgent")
+        expect(result.returncode == 0, f"notify event-sound failed: {result.stderr}")
+        cfg = load_json_file(notify_path)
+        expect(
+            cfg.get("sound", {}).get("eventThemes", {}).get("error") == "urgent",
+            "notify event-sound should set error theme override",
+        )
+
+        result = run_notify("icon-version", "v1")
+        expect(result.returncode == 0, f"notify icon-version failed: {result.stderr}")
+        cfg = load_json_file(notify_path)
+        expect(
+            cfg.get("icons", {}).get("version") == "v1",
+            "notify icon-version should set icons.version",
+        )
+
         result = run_notify("status")
         expect(result.returncode == 0, f"notify status failed: {result.stderr}")
         expect("config:" in result.stdout, "notify status should print config path")

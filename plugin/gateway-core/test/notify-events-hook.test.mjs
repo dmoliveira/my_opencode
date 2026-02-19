@@ -13,8 +13,14 @@ test("notify-events maps session.idle to complete notifications", async () => {
     loadState() {
       return {
         enabled: true,
-        sound: { enabled: true },
+        sound: {
+          enabled: true,
+          theme: "classic",
+          eventThemes: { complete: "default", error: "default", permission: "default", question: "default" },
+          customFiles: { complete: "", error: "", permission: "", question: "" },
+        },
         visual: { enabled: true },
+        icons: { enabled: true, version: "v1", mode: "nerd+emoji" },
         events: { complete: true, error: true, permission: true, question: true },
         channels: {
           complete: { sound: true, visual: true },
@@ -58,8 +64,14 @@ test("notify-events respects cooldown and disabled event toggles", async () => {
     loadState() {
       return {
         enabled: true,
-        sound: { enabled: true },
+        sound: {
+          enabled: true,
+          theme: "classic",
+          eventThemes: { complete: "default", error: "default", permission: "default", question: "default" },
+          customFiles: { complete: "", error: "", permission: "", question: "" },
+        },
         visual: { enabled: true },
+        icons: { enabled: true, version: "v1", mode: "nerd+emoji" },
         events: { complete: false, error: true, permission: true, question: true },
         channels: {
           complete: { sound: true, visual: true },
@@ -106,8 +118,14 @@ test("notify-events supports detailed style copy", async () => {
     loadState() {
       return {
         enabled: true,
-        sound: { enabled: true },
+        sound: {
+          enabled: true,
+          theme: "classic",
+          eventThemes: { complete: "default", error: "default", permission: "default", question: "default" },
+          customFiles: { complete: "", error: "", permission: "", question: "" },
+        },
         visual: { enabled: true },
+        icons: { enabled: true, version: "v1", mode: "nerd+emoji" },
         events: { complete: true, error: true, permission: true, question: true },
         channels: {
           complete: { sound: true, visual: true },

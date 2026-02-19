@@ -27,6 +27,8 @@ SECTION = "notify"
 
 EVENTS = ("complete", "error", "permission", "question")
 CHANNELS = ("sound", "visual")
+SOUND_THEMES = ("classic", "minimal", "retro", "urgent", "chime")
+ICON_MODES = ("nerd+emoji", "emoji")
 
 PROFILE_MAP = {
     "all": {
@@ -80,8 +82,14 @@ PROFILE_MAP = {
 def default_state() -> dict:
     return {
         "enabled": True,
-        "sound": {"enabled": True},
+        "sound": {
+            "enabled": True,
+            "theme": "classic",
+            "eventThemes": {name: "default" for name in EVENTS},
+            "customFiles": {name: "" for name in EVENTS},
+        },
         "visual": {"enabled": True},
+        "icons": {"enabled": True, "version": "v1", "mode": "nerd+emoji"},
         "events": {name: True for name in EVENTS},
         "channels": {name: {"sound": True, "visual": True} for name in EVENTS},
     }
@@ -91,6 +99,12 @@ def to_bool(value, fallback: bool) -> bool:
     if isinstance(value, bool):
         return value
     return fallback
+
+
+def normalize_label(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
 
 
 def load_config(config_path: Path) -> dict:
@@ -106,11 +120,63 @@ def load_config(config_path: Path) -> dict:
         state["sound"]["enabled"] = to_bool(
             data["sound"].get("enabled"), state["sound"]["enabled"]
         )
+        theme = normalize_label(data["sound"].get("theme")).lower()
+        if theme in SOUND_THEMES:
+            state["sound"]["theme"] = theme
+        if isinstance(data["sound"].get("eventThemes"), dict):
+            for event in EVENTS:
+                event_theme = normalize_label(
+                    data["sound"]["eventThemes"].get(event)
+                ).lower()
+                if event_theme == "default" or event_theme in SOUND_THEMES:
+                    state["sound"]["eventThemes"][event] = event_theme
+        if isinstance(data["sound"].get("customFiles"), dict):
+            for event in EVENTS:
+                custom = normalize_label(data["sound"]["customFiles"].get(event))
+                if custom or data["sound"]["customFiles"].get(event) == "":
+                    state["sound"]["customFiles"][event] = custom
+        theme = normalize_label(data["sound"].get("theme")).lower()
+        if theme in SOUND_THEMES:
+            state["sound"]["theme"] = theme
+        if isinstance(data["sound"].get("eventThemes"), dict):
+            for event in EVENTS:
+                event_theme = normalize_label(
+                    data["sound"]["eventThemes"].get(event)
+                ).lower()
+                if event_theme == "default" or event_theme in SOUND_THEMES:
+                    state["sound"]["eventThemes"][event] = event_theme
+        if isinstance(data["sound"].get("customFiles"), dict):
+            for event in EVENTS:
+                custom = normalize_label(data["sound"]["customFiles"].get(event))
+                if custom or data["sound"]["customFiles"].get(event) == "":
+                    state["sound"]["customFiles"][event] = custom
 
     if isinstance(data.get("visual"), dict):
         state["visual"]["enabled"] = to_bool(
             data["visual"].get("enabled"), state["visual"]["enabled"]
         )
+
+    if isinstance(data.get("icons"), dict):
+        state["icons"]["enabled"] = to_bool(
+            data["icons"].get("enabled"), state["icons"]["enabled"]
+        )
+        version = normalize_label(data["icons"].get("version"))
+        if version:
+            state["icons"]["version"] = version
+        mode = normalize_label(data["icons"].get("mode")).lower()
+        if mode in ICON_MODES:
+            state["icons"]["mode"] = mode
+
+    if isinstance(data.get("icons"), dict):
+        state["icons"]["enabled"] = to_bool(
+            data["icons"].get("enabled"), state["icons"]["enabled"]
+        )
+        version = normalize_label(data["icons"].get("version"))
+        if version:
+            state["icons"]["version"] = version
+        mode = normalize_label(data["icons"].get("mode")).lower()
+        if mode in ICON_MODES:
+            state["icons"]["mode"] = mode
 
     if isinstance(data.get("events"), dict):
         for event in EVENTS:
@@ -190,8 +256,18 @@ def write_config(config_path: Path, state: dict) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config = {
         "enabled": state["enabled"],
-        "sound": {"enabled": state["sound"]["enabled"]},
+        "sound": {
+            "enabled": state["sound"]["enabled"],
+            "theme": state["sound"]["theme"],
+            "eventThemes": state["sound"]["eventThemes"],
+            "customFiles": state["sound"]["customFiles"],
+        },
         "visual": {"enabled": state["visual"]["enabled"]},
+        "icons": {
+            "enabled": state["icons"]["enabled"],
+            "version": state["icons"]["version"],
+            "mode": state["icons"]["mode"],
+        },
         "events": state["events"],
         "channels": state["channels"],
     }
@@ -208,8 +284,18 @@ def save_state(state: dict) -> None:
     data, _ = load_layered_config()
     data[SECTION] = {
         "enabled": state["enabled"],
-        "sound": {"enabled": state["sound"]["enabled"]},
+        "sound": {
+            "enabled": state["sound"]["enabled"],
+            "theme": state["sound"]["theme"],
+            "eventThemes": state["sound"]["eventThemes"],
+            "customFiles": state["sound"]["customFiles"],
+        },
         "visual": {"enabled": state["visual"]["enabled"]},
+        "icons": {
+            "enabled": state["icons"]["enabled"],
+            "version": state["icons"]["version"],
+            "mode": state["icons"]["mode"],
+        },
         "events": state["events"],
         "channels": state["channels"],
     }
@@ -218,7 +304,7 @@ def save_state(state: dict) -> None:
 
 def usage() -> int:
     print(
-        "usage: /notify status | /notify help | /notify doctor [--json] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|complete|error|permission|question> | /notify disable <all|sound|visual|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off>"
+        "usage: /notify status | /notify help | /notify doctor [--json] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
     )
     return 2
 
@@ -253,7 +339,11 @@ def collect_doctor(config_path: Path, state: dict) -> dict:
         "config": str(config_path),
         "enabled": state["enabled"],
         "sound_enabled": state["sound"]["enabled"],
+        "sound_theme": state["sound"]["theme"],
         "visual_enabled": state["visual"]["enabled"],
+        "icons_enabled": state["icons"]["enabled"],
+        "icon_version": state["icons"]["version"],
+        "icon_mode": state["icons"]["mode"],
         "events": state["events"],
         "channels": state["channels"],
         "warnings": warnings,
@@ -280,7 +370,11 @@ def print_doctor(config_path: Path, state: dict, json_output: bool) -> int:
     print(f"config: {report['config']}")
     print(f"global: {'enabled' if report['enabled'] else 'disabled'}")
     print(f"sound: {'enabled' if report['sound_enabled'] else 'disabled'}")
+    print(f"sound theme: {state['sound']['theme']}")
     print(f"visual: {'enabled' if report['visual_enabled'] else 'disabled'}")
+    print(
+        f"icons: {'enabled' if state['icons']['enabled'] else 'disabled'} [version={state['icons']['version']}, mode={state['icons']['mode']}]"
+    )
     print("events:")
     for event in EVENTS:
         print(
@@ -306,7 +400,11 @@ def print_doctor(config_path: Path, state: dict, json_output: bool) -> int:
 def print_status(config_path: Path, state: dict) -> int:
     print(f"all: {'enabled' if state['enabled'] else 'disabled'}")
     print(f"sound: {'enabled' if state['sound']['enabled'] else 'disabled'}")
+    print(f"sound theme: {state['sound']['theme']}")
     print(f"visual: {'enabled' if state['visual']['enabled'] else 'disabled'}")
+    print(
+        f"icons: {'enabled' if state['icons']['enabled'] else 'disabled'} [version={state['icons']['version']}, mode={state['icons']['mode']}]"
+    )
     print("events:")
     for event in EVENTS:
         enabled = state["events"][event]
@@ -348,6 +446,11 @@ def set_toggle(state: dict, action: str, target: str) -> int:
         print(f"{target}: {'enabled' if value else 'disabled'}")
         return 0
 
+    if target == "icons":
+        state["icons"]["enabled"] = value
+        print(f"icons: {'enabled' if value else 'disabled'}")
+        return 0
+
     if target in EVENTS:
         state["events"][target] = value
         print(f"{target}: {'enabled' if value else 'disabled'}")
@@ -366,6 +469,36 @@ def set_channel(state: dict, event: str, channel: str, value_text: str) -> int:
     value = value_text == "on"
     state["channels"][event][channel] = value
     print(f"{event}.{channel}: {'on' if value else 'off'}")
+    return 0
+
+
+def set_sound_theme(state: dict, theme: str) -> int:
+    normalized = theme.strip().lower()
+    if normalized not in SOUND_THEMES:
+        return usage()
+    state["sound"]["theme"] = normalized
+    print(f"sound.theme: {normalized}")
+    return 0
+
+
+def set_event_sound_theme(state: dict, event: str, theme: str) -> int:
+    normalized_event = event.strip().lower()
+    normalized_theme = theme.strip().lower()
+    if normalized_event not in EVENTS:
+        return usage()
+    if normalized_theme != "default" and normalized_theme not in SOUND_THEMES:
+        return usage()
+    state["sound"]["eventThemes"][normalized_event] = normalized_theme
+    print(f"sound.eventThemes.{normalized_event}: {normalized_theme}")
+    return 0
+
+
+def set_icon_version(state: dict, version: str) -> int:
+    normalized = version.strip()
+    if not normalized:
+        return usage()
+    state["icons"]["version"] = normalized
+    print(f"icons.version: {normalized}")
     return 0
 
 
@@ -409,6 +542,36 @@ def main(argv: list[str]) -> int:
         if len(argv) < 4:
             return usage()
         code = set_channel(state, argv[1], argv[2], argv[3])
+        if code != 0:
+            return code
+        save_state(state)
+        print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
+        return 0
+
+    if argv[0] == "sound-theme":
+        if len(argv) < 2:
+            return usage()
+        code = set_sound_theme(state, argv[1])
+        if code != 0:
+            return code
+        save_state(state)
+        print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
+        return 0
+
+    if argv[0] == "event-sound":
+        if len(argv) < 3:
+            return usage()
+        code = set_event_sound_theme(state, argv[1], argv[2])
+        if code != 0:
+            return code
+        save_state(state)
+        print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
+        return 0
+
+    if argv[0] == "icon-version":
+        if len(argv) < 2:
+            return usage()
+        code = set_icon_version(state, argv[1])
         if code != 0:
             return code
         save_state(state)
