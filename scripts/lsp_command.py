@@ -66,7 +66,7 @@ def usage() -> int:
         "/lsp find-references --symbol <name> --scope <glob[,glob...]> [--json] | "
         "/lsp symbols --view <document|workspace> [--file <path>] [--query <name>] [--scope <glob[,glob...]>] [--json] | "
         "/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--json] | "
-        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--allow-rename-file-ops] [--max-diff-files <n>] [--max-diff-lines <n>] [--apply] [--json]"
+        "/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> [--allow-text-fallback] [--allow-rename-file-ops] [--allow-create-file-ops] [--allow-delete-file-ops] [--max-diff-files <n>] [--max-diff-lines <n>] [--apply] [--json]"
     )
     return 2
 
@@ -491,7 +491,8 @@ def _split_resource_operations(
             else:
                 blocked_ops.append(normalized)
             continue
-        blocked_ops.append(normalized)
+        if kind not in {"createfile", "deletefile"}:
+            blocked_ops.append(normalized)
     return rename_ops, blocked_ops
 
 
@@ -1147,10 +1148,12 @@ def command_symbols(args: list[str]) -> int:
 
 def _parse_rename_args(
     args: list[str], *, allow_apply_flags: bool
-) -> tuple[str, str, list[str], bool, bool, int, int, bool, bool] | None:
+) -> tuple[str, str, list[str], bool, bool, bool, bool, int, int, bool, bool] | None:
     as_json = "--json" in args
     allow_text_fallback = "--allow-text-fallback" in args
     allow_rename_file_ops = "--allow-rename-file-ops" in args
+    allow_create_file_ops = "--allow-create-file-ops" in args
+    allow_delete_file_ops = "--allow-delete-file-ops" in args
     max_diff_files = 25
     max_diff_lines = 1200
     apply_changes = "--apply" in args
@@ -1161,7 +1164,13 @@ def _parse_rename_args(
     index = 0
     while index < len(args):
         token = args[index]
-        if token in {"--json", "--allow-text-fallback", "--allow-rename-file-ops"}:
+        if token in {
+            "--json",
+            "--allow-text-fallback",
+            "--allow-rename-file-ops",
+            "--allow-create-file-ops",
+            "--allow-delete-file-ops",
+        }:
             index += 1
             continue
         if token == "--max-diff-files":
@@ -1213,6 +1222,8 @@ def _parse_rename_args(
         scope_patterns,
         allow_text_fallback,
         allow_rename_file_ops,
+        allow_create_file_ops,
+        allow_delete_file_ops,
         max_diff_files,
         max_diff_lines,
         apply_changes,
@@ -1224,7 +1235,7 @@ def command_prepare_rename(args: list[str]) -> int:
     parsed = _parse_rename_args(args, allow_apply_flags=False)
     if parsed is None:
         return usage()
-    symbol, new_name, scope_patterns, _, _, _, _, _, as_json = parsed
+    symbol, new_name, scope_patterns, _, _, _, _, _, _, _, as_json = parsed
 
     root = Path.cwd()
     files = _discover_files(root, scope_patterns)
@@ -1315,6 +1326,8 @@ def command_rename(args: list[str]) -> int:
         scope_patterns,
         allow_text_fallback,
         allow_rename_file_ops,
+        allow_create_file_ops,
+        allow_delete_file_ops,
         max_diff_files,
         max_diff_lines,
         apply_changes,
@@ -1417,6 +1430,14 @@ def command_rename(args: list[str]) -> int:
         blockers.append("workspace edit includes unsupported resource operations")
     if renamefile_operations and not allow_rename_file_ops:
         blockers.append("renamefile operations require --allow-rename-file-ops")
+    if grouped_resource_ops["createfile"] and not allow_create_file_ops:
+        blockers.append("createfile operations require --allow-create-file-ops")
+    if grouped_resource_ops["deletefile"] and not allow_delete_file_ops:
+        blockers.append("deletefile operations require --allow-delete-file-ops")
+    if apply_changes and grouped_resource_ops["createfile"]:
+        blockers.append("createfile operations are not supported for apply")
+    if apply_changes and grouped_resource_ops["deletefile"]:
+        blockers.append("deletefile operations are not supported for apply")
     if any(
         bool(annotation.get("needs_confirmation", False))
         for annotation in change_annotations.values()
@@ -1459,6 +1480,8 @@ def command_rename(args: list[str]) -> int:
         "new_name": new_name,
         "scope": scope_patterns,
         "allow_rename_file_ops": allow_rename_file_ops,
+        "allow_create_file_ops": allow_create_file_ops,
+        "allow_delete_file_ops": allow_delete_file_ops,
         "max_diff_files": max_diff_files,
         "max_diff_lines": max_diff_lines,
         "diff_file_count": diff_file_count,
