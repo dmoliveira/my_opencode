@@ -2,6 +2,8 @@
 
 This document contains detailed historical implementation notes moved out of the root README to keep the primary guide concise.
 
+Note: this archive includes historical references (for example `/start-work` and `/autoflow`) that may no longer be part of the active slash-command surface. Use `docs/quickstart.md` and `docs/command-handbook.md` for current operator workflows.
+
 ## Roadmap plan 🗺️
 
 - Track upcoming orchestration features in `IMPLEMENTATION_ROADMAP.md`.

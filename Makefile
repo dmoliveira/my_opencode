@@ -10,6 +10,7 @@ validate: ## Validate scripts and JSON config
 	python3 -m json.tool opencode.json >/dev/null
 	python3 scripts/hygiene_drift_check.py
 	python3 scripts/command_doc_check.py
+	python3 scripts/readme_layout_check.py
 	python3 scripts/build_agents.py --profile balanced --check
 
 build-agents: ## Generate agent markdown from JSON specs
