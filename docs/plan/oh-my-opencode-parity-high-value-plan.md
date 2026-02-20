@@ -28,7 +28,7 @@ Rules:
 | E4 Planning specialist tier | P1 | 󰄵 [x] finished | Added planning specialist agent specs + checks/docs | Start E5 tmux constraints | - | 2026-02-19T04:40:00Z |
 | E5 Optional tmux visual mode | P1 | 󰄵 [x] finished | Added `/tmux` status/config/doctor + fallback checks/docs | Start E6 packaged CLI contract | - | 2026-02-19T04:55:00Z |
 | E6 Packaged CLI parity (`install/doctor/run`) | P2 | 󰄵 [x] finished | Added packaged CLI entrypoint + clean-HOME coverage | Start cycle 2 backlog planning | - | 2026-02-19T05:05:00Z |
-| E7 MCP provider parity (`websearch`/OAuth-ready path) | P1 | 󰅚 [ ] blocked | Deferred by owner for this cycle (OAuth path not planned) | Keep out-of-scope note and revisit in future cycle only if needed | Owner decision: skip OAuth scope | 2026-02-19T06:40:00Z |
+| E7 MCP provider parity (`websearch`/OAuth-ready path) | P1 | 󰅚 [x] deferred | Deferred by owner for this cycle (OAuth path not planned) | Reopen only if owner changes scope | Owner decision: skip OAuth scope | 2026-02-19T06:40:00Z |
 | E8 Plan-handoff continuity parity (`@plan`-style flow) | P2 | 󰄵 [x] finished | E8-T1..T4 complete with compatibility command, tests, and migration docs | Re-check parity backlog after owner scope decisions | E7 deferred by owner | 2026-02-19T06:56:00Z |
 | E9 Parity backlog refresh + release-note automation | P1 | 󰄵 [x] finished | Completed parity rescan and milestone-aware release-note automation baseline | Start parity drift watchdog expansion | Scope excludes OAuth/E7 by owner decision | 2026-02-19T07:40:00Z |
 | E10 Parity drift watchdog expansion | P2 | 󰄵 [x] finished | Expanded hygiene drift checks with parity checklist/activity/PR-label snapshot watchdog | Start merged-PR metadata fallback pass | GitHub label audit is best-effort and warning-only when unavailable | 2026-02-19T08:12:00Z |
@@ -80,11 +80,11 @@ Rules:
   - [x] E6-T4 Add install/selftest coverage in clean HOME.
   - [x] E6-T5 Add docs and CI-safe examples.
 
-- [ ] E7 MCP provider parity (`websearch`/OAuth-ready path, deferred this cycle)
-  - [ ] E7-T1 Define provider matrix + security posture (credentials, scopes, failure modes).
-  - [ ] E7-T2 Define minimal config and doctor diagnostics for provider auth readiness.
-  - [ ] E7-T3 Implement opt-in provider wiring that reuses existing MCP and `/mcp` command surfaces.
-  - [ ] E7-T4 Add install/readme docs and smoke validation path.
+- [x] E7 MCP provider parity (`websearch`/OAuth-ready path, deferred by owner)
+  - [x] E7-T1 Define provider matrix + security posture (credentials, scopes, failure modes). (deferred)
+  - [x] E7-T2 Define minimal config and doctor diagnostics for provider auth readiness. (deferred)
+  - [x] E7-T3 Implement opt-in provider wiring that reuses existing MCP and `/mcp` command surfaces. (deferred)
+  - [x] E7-T4 Add install/readme docs and smoke validation path. (deferred)
 - [x] E8 Plan-handoff continuity parity (`@plan`-style flow)
   - [x] E8-T1 Map continuity semantics onto existing `/autopilot`, `/task`, `/resume`, and checkpoint behavior.
   - [x] E8-T2 Add thin compatibility command/profile surface (no second runtime).
@@ -108,8 +108,8 @@ Rules:
   - [x] E12-T3 Close selected high-value hook semantic deltas and wire drift checks.
   - [x] E12-T4 Add compatibility profile docs and doctor readiness output.
 Progress counters:
-- Epics completed: `12/13`
-- Tasks completed: `52/56`
+- Epics completed: `13/13`
+- Tasks completed: `56/56`
 
 ## Parity coverage map
 
@@ -236,5 +236,6 @@ An epic is done only when:
 | 2026-02-20T05:56:00Z | E12-T2 completion | Added upstream role-intent compatibility map diagnostics and command surfaces (`/upstream-agent-map`, `/upstream-agent-map-status`) with selftest coverage | `scripts/upstream_agent_compat_command.py`, `opencode.json`, `install.sh`, `scripts/selftest.py`, `README.md`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-20T06:18:00Z | E12-T3 completion | Added hook semantic bridge diagnostics for selected upstream parity hooks in compatibility status output with selftest coverage | `scripts/upstream_agent_compat_command.py`, `scripts/selftest.py`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-20T06:23:00Z | E12-T4 completion | Added compatibility readiness doctor command and completed docs/install wiring for clean upstream-flexibility UX | `scripts/upstream_compat_doctor_command.py`, `opencode.json`, `install.sh`, `README.md`, `scripts/selftest.py`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-20T06:58:00Z | E7 deferred closure | Marked E7 checklist/tasks as deferred-closed by owner decision to remove pending scope ambiguity | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |
