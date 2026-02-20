@@ -4,6 +4,10 @@ Owner: `br` epic `bd-201`
 Date: 2026-02-19
 Status: `doing`
 
+## Archival note
+
+This plan document preserves historical implementation notes. Some script paths referenced below were later retired during reachability cleanup and are intentionally kept here for delivery traceability.
+
 ## Goal
 
 Add an upstream-compatible interaction layer so teams can execute with either local canonical workflows or upstream-style patterns, without introducing duplicate runtime engines.

@@ -211,6 +211,8 @@ An epic is done only when:
 
 ## Activity log
 
+> Archival note: activity-log rows preserve original implementation evidence, including script paths that may have been retired in later cleanup passes.
+
 | Timestamp (UTC) | Epic/Task | Change | Evidence |
 | --- | --- | --- | --- |
 | 2026-02-19T01:40:00Z | E0 / plan baseline | Created parity plan with checkbox tracking, parity map, and naming accessibility policy | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
