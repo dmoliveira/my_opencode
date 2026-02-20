@@ -102,7 +102,7 @@ Rules:
   - [x] E11-T1 Add merged-PR metadata fetch path (`labels` + `title`) for watchdog checks.
   - [x] E11-T2 Use title-based area markers as fallback when labels are absent.
   - [x] E11-T3 Keep parity watchdog output warning-only and validate behavior via `make validate` + `make selftest`.
-- [ ] E12 Upstream flexibility compatibility layer
+- [x] E12 Upstream flexibility compatibility layer
   - [x] E12-T1 Add upstream-style background delegation/retrieval compatibility facade mapped to local runtime.
   - [x] E12-T2 Add upstream role-intent compatibility map with explicit diagnostics.
   - [x] E12-T3 Close selected high-value hook semantic deltas and wire drift checks.
