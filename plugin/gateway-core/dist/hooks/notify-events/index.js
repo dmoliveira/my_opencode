@@ -269,23 +269,70 @@ function customSoundPath(state, eventName, directory) {
         : resolve(directory, configured);
     return existsSync(absolute) ? absolute : "";
 }
+function isGhosttySender(value) {
+    return value.trim().toLowerCase() === "com.mitchellh.ghostty";
+}
+export function terminalNotifierAttempts(options) {
+    const base = ["-title", options.title, "-message", options.message];
+    const sender = options.sender.trim();
+    const identityVariants = [];
+    if (sender) {
+        if (isGhosttySender(sender)) {
+            identityVariants.push({ activate: sender });
+            identityVariants.push({ sender });
+        }
+        else {
+            identityVariants.push({ sender });
+            identityVariants.push({ activate: sender });
+        }
+    }
+    identityVariants.push({});
+    const includeImageVariants = options.imagePath ? [true, false] : [false];
+    const attempts = [];
+    const seen = new Set();
+    for (const identity of identityVariants) {
+        for (const includeImage of includeImageVariants) {
+            const args = [...base];
+            if (includeImage) {
+                args.push("-appIcon", options.imagePath, "-contentImage", options.imagePath);
+            }
+            if (options.soundName) {
+                args.push("-sound", options.soundName);
+            }
+            if (identity.sender) {
+                args.push("-sender", identity.sender);
+            }
+            if (identity.activate) {
+                args.push("-activate", identity.activate);
+            }
+            const key = args.join("\u0000");
+            if (seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+            attempts.push({ args, soundSent: Boolean(options.soundName) });
+        }
+    }
+    return attempts;
+}
 function notifyVisualMac(options) {
     const notifier = terminalNotifierPath();
     if (notifier) {
-        const args = ["-title", options.title, "-message", options.message];
-        if (options.imagePath) {
-            args.push("-appIcon", options.imagePath);
-            args.push("-contentImage", options.imagePath);
-        }
-        if (options.soundName) {
-            args.push("-sound", options.soundName);
-        }
-        const result = spawnSync(notifier, args, {
-            stdio: ["ignore", "ignore", "ignore"],
-            timeout: 1500,
+        const attempts = terminalNotifierAttempts({
+            title: options.title,
+            message: options.message,
+            imagePath: options.imagePath,
+            soundName: options.soundName,
+            sender: cleanText(process.env.OPENCODE_NOTIFY_SENDER),
         });
-        if (result.status === 0) {
-            return { visualSent: true, soundSent: Boolean(options.soundName) };
+        for (const attempt of attempts) {
+            const result = spawnSync(notifier, attempt.args, {
+                stdio: ["ignore", "ignore", "ignore"],
+                timeout: 1200,
+            });
+            if (result.status === 0) {
+                return { visualSent: true, soundSent: attempt.soundSent };
+            }
         }
     }
     const script = `display notification ${JSON.stringify(options.message)} with title ${JSON.stringify(options.title)}`;
