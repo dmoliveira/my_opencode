@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const NERD_ICON_BY_EVENT = {
@@ -70,7 +70,7 @@ function defaultState() {
         icons: {
             enabled: true,
             version: "v1",
-            mode: "nerd+emoji",
+            mode: "emoji",
         },
         events: {
             complete: true,
@@ -355,7 +355,10 @@ function cleanText(value) {
     if (typeof value !== "string") {
         return "";
     }
-    return value.replace(/\s+/g, " ").trim();
+    return value
+        .replace(/\b(?:undefined|null|nan|none|\(null\))\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 function truncateText(value, maxChars) {
     if (value.length <= maxChars) {
@@ -388,17 +391,69 @@ function contextParts(payload) {
         firstPropertyText(input, ["windowID", "windowId"]);
     const workingDir = cleanText(payload.directory) ||
         firstPropertyText(properties, ["cwd", "working_directory", "workingDirectory", "directory"]);
+    const tmuxLabel = firstPropertyText(properties, ["tmux", "tmux_session", "tmuxSession", "tmux_window", "tmuxWindow"]) ||
+        firstPropertyText(input, ["tmux", "tmuxSession", "tmuxWindow"]) ||
+        cleanText(process.env.OPENCODE_TMUX_LABEL);
+    const tmuxAuto = (() => {
+        if (tmuxLabel) {
+            return "";
+        }
+        const direct = cleanText(process.env.TMUX_SESSION || process.env.TMUX_WINDOW || process.env.TMUX_PANE);
+        if (direct) {
+            return direct;
+        }
+        if (!process.env.TMUX) {
+            return "";
+        }
+        const probe = spawnSync("tmux", ["display-message", "-p", "#S.#I"], {
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: 120,
+        });
+        if (probe.status !== 0) {
+            return "";
+        }
+        return cleanText(probe.stdout.toString("utf8"));
+    })();
     const parts = [];
+    if (workingDir) {
+        const homeProjects = `${homedir()}/Codes/Projects/`;
+        const shortDir = workingDir.startsWith(homeProjects)
+            ? workingDir.slice(homeProjects.length)
+            : basename(workingDir);
+        parts.push(shortDir);
+    }
+    const tmuxContext = tmuxLabel || tmuxAuto;
+    if (tmuxContext) {
+        parts.push(`tmux ${tmuxContext}`);
+    }
     if (sessionId) {
-        parts.push(`session ${sessionId}`);
+        parts.push(`s:${sessionId}`);
     }
     if (windowId) {
-        parts.push(`window ${windowId}`);
-    }
-    if (workingDir) {
-        parts.push(`cwd ${workingDir}`);
+        parts.push(`w:${windowId}`);
     }
     return parts;
+}
+function headlineFromPayload(payload) {
+    const properties = payload.properties && typeof payload.properties === "object"
+        ? payload.properties
+        : {};
+    const input = payload.input && typeof payload.input === "object"
+        ? payload.input
+        : {};
+    const raw = firstPropertyText(properties, [
+        "session_title",
+        "sessionTitle",
+        "task_title",
+        "taskTitle",
+        "title",
+        "summary",
+        "headline",
+    ]) || firstPropertyText(input, ["sessionTitle", "title", "summary"]);
+    if (!raw) {
+        return "";
+    }
+    return raw.split(/\s+/).filter(Boolean).slice(0, 4).join(" ");
 }
 function messageWithContext(baseMessage, payload, style) {
     const parts = contextParts(payload);
@@ -413,25 +468,22 @@ function messageForEvent(eventName, payload, style) {
         ? payload.properties
         : {};
     if (eventName === "complete") {
+        const head = headlineFromPayload(payload);
         return {
-            title: "OpenCode Complete",
-            message: messageWithContext(style === "detailed"
-                ? "Task completed successfully."
-                : "Task completed.", payload, style),
+            title: head ? `OpenCode • ${head}` : "OpenCode Complete",
+            message: messageWithContext("Done.", payload, style),
         };
     }
     if (eventName === "error") {
+        const head = headlineFromPayload(payload);
         const detail = truncateText(firstPropertyText(properties, ["message", "error", "reason", "detail"]), style === "detailed" ? 180 : 120);
         return {
-            title: "OpenCode Error",
-            message: messageWithContext(detail
-                ? style === "detailed"
-                    ? `Session error detected: ${detail}`
-                    : `Session error: ${detail}`
-                : "Session error detected.", payload, style),
+            title: head ? `OpenCode • ${head}` : "OpenCode Needs Attention",
+            message: messageWithContext(detail ? `Needs attention: ${detail}` : "Could not finish task.", payload, style),
         };
     }
     if (eventName === "permission") {
+        const head = headlineFromPayload(payload);
         const detail = truncateText(firstPropertyText(properties, [
             "permission",
             "action",
@@ -439,22 +491,15 @@ function messageForEvent(eventName, payload, style) {
             "tool",
         ]), style === "detailed" ? 140 : 100);
         return {
-            title: "OpenCode Permission",
-            message: messageWithContext(detail
-                ? style === "detailed"
-                    ? `Action required before continuing: ${detail}`
-                    : `Permission required: ${detail}`
-                : "Permission prompt requires input.", payload, style),
+            title: head ? `OpenCode • ${head}` : "OpenCode Permission",
+            message: messageWithContext(detail ? `Action needed: ${detail}` : "Permission prompt requires input.", payload, style),
         };
     }
     const question = truncateText(firstPropertyText(properties, ["question", "prompt", "title", "label"]), style === "detailed" ? 140 : 100);
+    const head = headlineFromPayload(payload);
     return {
-        title: "OpenCode Input Needed",
-        message: messageWithContext(question
-            ? style === "detailed"
-                ? `Response needed to continue: ${question}`
-                : `Question: ${question}`
-            : "Question requires input.", payload, style),
+        title: head ? `OpenCode • ${head}` : "OpenCode Input Needed",
+        message: messageWithContext(question ? `Input needed: ${question}` : "Question requires input.", payload, style),
     };
 }
 export function createNotifyEventsHook(options) {

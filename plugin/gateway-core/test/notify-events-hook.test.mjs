@@ -39,15 +39,11 @@ test("notify-events maps session.idle to complete notifications", async () => {
   await hook.event("session.idle", { directory: process.cwd() })
 
   assert.equal(sent.length, 1)
-  assert.deepEqual(sent[0], {
-    eventName: "complete",
-    visual: true,
-    sound: true,
-    content: {
-      title: "OpenCode Complete",
-      message: `Task completed. [cwd ${process.cwd()}]`,
-    },
-  })
+  assert.equal(sent[0].eventName, "complete")
+  assert.equal(sent[0].visual, true)
+  assert.equal(sent[0].sound, true)
+  assert.equal(sent[0].content.title, "OpenCode Complete")
+  assert.ok(sent[0].content.message.startsWith("Done."))
 })
 
 test("notify-events respects cooldown and disabled event toggles", async () => {
@@ -105,8 +101,7 @@ test("notify-events respects cooldown and disabled event toggles", async () => {
   assert.equal(sent.length, 2)
   assert.equal(sent[1].eventName, "question")
   assert.equal(sent[1].content.title, "OpenCode Input Needed")
-  assert.ok(sent[1].content.message.startsWith("Question: Choose merge strategy"))
-  assert.ok(sent[1].content.message.includes(`[cwd ${process.cwd()}]`))
+  assert.ok(sent[1].content.message.startsWith("Input needed: Choose merge strategy"))
 })
 
 test("notify-events supports detailed style copy", async () => {
@@ -153,8 +148,7 @@ test("notify-events supports detailed style copy", async () => {
   assert.equal(sent.length, 1)
   assert.equal(sent[0].eventName, "question")
   assert.equal(sent[0].content.title, "OpenCode Input Needed")
-  assert.ok(sent[0].content.message.startsWith("Response needed to continue:"))
-  assert.ok(sent[0].content.message.includes(`[cwd ${process.cwd()}]`))
+  assert.ok(sent[0].content.message.startsWith("Input needed:"))
 })
 
 test("notify-events includes session and window context when available", async () => {
@@ -194,13 +188,17 @@ test("notify-events includes session and window context when available", async (
     input: { tool: "question", sessionID: "sess-42", windowId: "w-9" },
     directory: "/tmp/notify-context",
     properties: {
+      sessionTitle: "Refine notification context rendering now",
+      tmux_session: "dev.1",
       question: "Approve deploy?",
     },
   })
 
   assert.equal(sent.length, 1)
   assert.equal(sent[0].eventName, "question")
-  assert.ok(sent[0].content.message.includes("session sess-42"))
-  assert.ok(sent[0].content.message.includes("window w-9"))
-  assert.ok(sent[0].content.message.includes("cwd /tmp/notify-context"))
+  assert.equal(sent[0].content.title, "OpenCode • Refine notification context rendering")
+  assert.ok(sent[0].content.message.includes("tmux dev.1"))
+  assert.ok(sent[0].content.message.includes("s:sess-42"))
+  assert.ok(sent[0].content.message.includes("w:w-9"))
+  assert.ok(sent[0].content.message.includes("notify-context"))
 })
