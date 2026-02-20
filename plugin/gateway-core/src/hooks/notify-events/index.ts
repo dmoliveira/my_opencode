@@ -401,9 +401,7 @@ interface TerminalNotifierAttempt {
   soundSent: boolean;
 }
 
-function isGhosttySender(value: string): boolean {
-  return value.trim().toLowerCase() === "com.mitchellh.ghostty";
-}
+const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
 
 export function terminalNotifierAttempts(options: {
   title: string;
@@ -416,9 +414,8 @@ export function terminalNotifierAttempts(options: {
   const sender = options.sender.trim();
   const identityVariants: Array<{ sender?: string; activate?: string }> = [];
   if (sender) {
-    if (isGhosttySender(sender)) {
+    if (sender.toLowerCase() === GHOSTTY_BUNDLE_ID) {
       identityVariants.push({ activate: sender });
-      identityVariants.push({ sender });
     } else {
       identityVariants.push({ sender });
       identityVariants.push({ activate: sender });

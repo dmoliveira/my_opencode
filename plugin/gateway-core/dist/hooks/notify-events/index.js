@@ -269,17 +269,14 @@ function customSoundPath(state, eventName, directory) {
         : resolve(directory, configured);
     return existsSync(absolute) ? absolute : "";
 }
-function isGhosttySender(value) {
-    return value.trim().toLowerCase() === "com.mitchellh.ghostty";
-}
+const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
 export function terminalNotifierAttempts(options) {
     const base = ["-title", options.title, "-message", options.message];
     const sender = options.sender.trim();
     const identityVariants = [];
     if (sender) {
-        if (isGhosttySender(sender)) {
+        if (sender.toLowerCase() === GHOSTTY_BUNDLE_ID) {
             identityVariants.push({ activate: sender });
-            identityVariants.push({ sender });
         }
         else {
             identityVariants.push({ sender });
