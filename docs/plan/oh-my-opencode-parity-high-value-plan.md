@@ -33,6 +33,7 @@ Rules:
 | E9 Parity backlog refresh + release-note automation | P1 | 󰄵 [x] finished | Completed parity rescan and milestone-aware release-note automation baseline | Start parity drift watchdog expansion | Scope excludes OAuth/E7 by owner decision | 2026-02-19T07:40:00Z |
 | E10 Parity drift watchdog expansion | P2 | 󰄵 [x] finished | Expanded hygiene drift checks with parity checklist/activity/PR-label snapshot watchdog | Start merged-PR metadata fallback pass | GitHub label audit is best-effort and warning-only when unavailable | 2026-02-19T08:12:00Z |
 | E11 Parity watchdog metadata fallback | P2 | 󰄵 [x] finished | Added merged-PR title heuristics fallback when labels are absent | Re-check remaining non-LSP backlog priorities | Metadata checks remain warning-only; no release blocker introduced | 2026-02-19T10:03:00Z |
+| E12 Upstream flexibility compatibility layer | P1 | 󰄵 [x] finished | W1..W4 complete: background facade, role-intent map, hook bridge checks, and compatibility doctor readiness | Revisit only when deferred E7 scope reopens | Keep canonical local runtime as source of truth | 2026-02-20T06:23:00Z |
 
 ## Master checklist
 
@@ -101,9 +102,14 @@ Rules:
   - [x] E11-T1 Add merged-PR metadata fetch path (`labels` + `title`) for watchdog checks.
   - [x] E11-T2 Use title-based area markers as fallback when labels are absent.
   - [x] E11-T3 Keep parity watchdog output warning-only and validate behavior via `make validate` + `make selftest`.
+- [ ] E12 Upstream flexibility compatibility layer
+  - [x] E12-T1 Add upstream-style background delegation/retrieval compatibility facade mapped to local runtime.
+  - [x] E12-T2 Add upstream role-intent compatibility map with explicit diagnostics.
+  - [x] E12-T3 Close selected high-value hook semantic deltas and wire drift checks.
+  - [x] E12-T4 Add compatibility profile docs and doctor readiness output.
 Progress counters:
-- Epics completed: `11/12`
-- Tasks completed: `48/52`
+- Epics completed: `12/13`
+- Tasks completed: `52/56`
 
 ## Parity coverage map
 
@@ -120,20 +126,21 @@ Progress counters:
 | Post-E8 parity backlog refresh + release-note automation | E9 | finished |
 | Parity drift watchdog expansion | E10 | finished |
 | Parity watchdog metadata fallback | E11 | finished |
+| Upstream flexibility compatibility layer | E12 | finished |
 | Local command/hook drift prevention (value-add) | E0 | finished |
 
 Note: MCP OAuth parity was intentionally out-of-scope for cycle 1 and remains deferred by owner decision.
 
 ## Remaining gap backlog (post-parity)
 
-Status: `backlog` (`br`: `bd-hs8` closed)
+Status: `deferred` (no active post-parity backlog by owner decision)
 
 Gaps:
 
-- P2: Add `/lsp diagnostics` text-mode compact table output for large scopes with deterministic truncation controls.
+- None in active scope (remaining candidates are intentionally deferred or owned by separate streams).
 
 Current focus:
-- Next candidate: P2 parity backlog handoff to LSP-focused branch owner.
+- Monitor deferred E7 and revisit only if owner reopens OAuth/provider scope.
 
 No P0 blockers remain from the original parity scope; the above items are follow-on polish and maintainability work.
 
@@ -223,5 +230,11 @@ An epic is done only when:
 | 2026-02-19T08:12:00Z | E10-T1..E10-T3 completion | Expanded parity drift watchdog to validate quick board/checklist/activity consistency and best-effort merged PR label snapshot coverage | `scripts/hygiene_drift_check.py`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T10:03:00Z | E11-T1..E11-T3 completion | Added merged-PR metadata fallback for parity watchdog (title heuristics when labels are absent) and preserved warning-only behavior | `scripts/hygiene_drift_check.py`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T20:32:00Z | Backlog refresh | Removed stale LSP code-actions ratio gap after merged delivery and kept remaining LSP backlog focused on diagnostics compact table output | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T20:58:00Z | Backlog deferred | Removed remaining LSP diagnostics item from active parity backlog per owner decision and set post-parity status to deferred | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T21:06:00Z | E12 start | Opened upstream flexibility layer epic and added execution plan for background UX compatibility, role mapping, and hook bridge workstreams | `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T21:41:00Z | E12-T1 completion | Added upstream-style background compatibility facade mapped to `/bg` with command wiring, installer self-check, selftests, and docs examples | `scripts/upstream_bg_compat_command.py`, `opencode.json`, `install.sh`, `scripts/selftest.py`, `README.md`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-20T05:56:00Z | E12-T2 completion | Added upstream role-intent compatibility map diagnostics and command surfaces (`/upstream-agent-map`, `/upstream-agent-map-status`) with selftest coverage | `scripts/upstream_agent_compat_command.py`, `opencode.json`, `install.sh`, `scripts/selftest.py`, `README.md`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-20T06:18:00Z | E12-T3 completion | Added hook semantic bridge diagnostics for selected upstream parity hooks in compatibility status output with selftest coverage | `scripts/upstream_agent_compat_command.py`, `scripts/selftest.py`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-20T06:23:00Z | E12-T4 completion | Added compatibility readiness doctor command and completed docs/install wiring for clean upstream-flexibility UX | `scripts/upstream_compat_doctor_command.py`, `opencode.json`, `install.sh`, `README.md`, `scripts/selftest.py`, `docs/plan/e12-upstream-flexibility-layer.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |

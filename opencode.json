@@ -114,6 +114,30 @@
       "description": "Show background task status summary in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" status --json`\nShow only the command output."
     },
+    "background-agent-call": {
+      "description": "Run a delegated agent task in background via compatibility facade",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_bg_compat_command.py\" call_omo_agent $ARGUMENTS --json`\nShow only the command output."
+    },
+    "background-output": {
+      "description": "Upstream-style background output retrieval facade",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_bg_compat_command.py\" background_output $ARGUMENTS --json`\nShow only the command output."
+    },
+    "upstream-bg-status": {
+      "description": "Show upstream background compatibility facade status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_bg_compat_command.py\" status --json`\nShow only the command output."
+    },
+    "upstream-agent-map": {
+      "description": "Map upstream role labels to local agents with rationale",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_agent_compat_command.py\" map $ARGUMENTS --json`\nShow only the command output."
+    },
+    "upstream-agent-map-status": {
+      "description": "Show upstream agent compatibility map status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_agent_compat_command.py\" status --json`\nShow only the command output."
+    },
+    "upstream-compat-doctor": {
+      "description": "Run upstream compatibility readiness doctor checks",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_compat_doctor_command.py\" doctor --json`\nShow only the command output."
+    },
     "refactor-lite": {
       "description": "Run safe refactor workflow backend",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" $ARGUMENTS`\nShow only the command output."

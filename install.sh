@@ -186,6 +186,15 @@ fi
 if [ -f "$INSTALL_DIR/scripts/task_graph_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/task_graph_command.py"
 fi
+if [ -f "$INSTALL_DIR/scripts/upstream_bg_compat_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/upstream_bg_compat_command.py"
+fi
+if [ -f "$INSTALL_DIR/scripts/upstream_agent_compat_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/upstream_agent_compat_command.py"
+fi
+if [ -f "$INSTALL_DIR/scripts/upstream_compat_doctor_command.py" ]; then
+	chmod +x "$INSTALL_DIR/scripts/upstream_compat_doctor_command.py"
+fi
 if [ -f "$INSTALL_DIR/scripts/plan_handoff_command.py" ]; then
 	chmod +x "$INSTALL_DIR/scripts/plan_handoff_command.py"
 fi
@@ -313,6 +322,16 @@ if [ "$SKIP_SELF_CHECK" = false ]; then
 	python3 "$INSTALL_DIR/scripts/config_command.py" layers
 	python3 "$INSTALL_DIR/scripts/background_task_manager.py" status
 	python3 "$INSTALL_DIR/scripts/background_task_manager.py" doctor --json
+	if [ -f "$INSTALL_DIR/scripts/upstream_bg_compat_command.py" ]; then
+		python3 "$INSTALL_DIR/scripts/upstream_bg_compat_command.py" status --json
+	fi
+	if [ -f "$INSTALL_DIR/scripts/upstream_agent_compat_command.py" ]; then
+		python3 "$INSTALL_DIR/scripts/upstream_agent_compat_command.py" status --json
+		python3 "$INSTALL_DIR/scripts/upstream_agent_compat_command.py" map --role sisyphus --json
+	fi
+	if [ -f "$INSTALL_DIR/scripts/upstream_compat_doctor_command.py" ]; then
+		python3 "$INSTALL_DIR/scripts/upstream_compat_doctor_command.py" doctor --json
+	fi
 	if [ -f "$INSTALL_DIR/scripts/refactor_lite_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/refactor_lite_command.py" profile --scope "scripts/*.py" --dry-run --json
 	fi
@@ -488,6 +507,11 @@ printf "  /config layers\n"
 printf "  /config backup\n"
 printf "  /bg status\n"
 printf "  /bg doctor --json\n"
+printf "  /background-agent-call --subagent-type explore --prompt \"scan auth\" --command \"python3 scripts/task_graph_command.py ready --json\" --run-in-background true\n"
+printf "  /background-output --task-id bg_<id>\n"
+printf "  /upstream-agent-map --role sisyphus\n"
+printf "  /upstream-agent-map-status\n"
+printf "  /upstream-compat-doctor\n"
 printf "  /refactor-lite profile --scope scripts/*.py --dry-run --json\n"
 printf "  /hooks status\n"
 printf "  /hooks enable\n"
