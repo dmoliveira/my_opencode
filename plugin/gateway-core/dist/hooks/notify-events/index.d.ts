@@ -28,6 +28,7 @@ interface NotifyContent {
     title: string;
     message: string;
 }
+export declare function sendBasicVisualNotification(title: string, message: string): boolean;
 export declare function createNotifyEventsHook(options: {
     directory: string;
     enabled: boolean;

@@ -1,5 +1,6 @@
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { sendBasicVisualNotification } from "../notify-events/index.js";
 const CONTEXT_GUARD_PREFIX = "󰚩 Context Guard:";
 const SESSION_PRESSURE_MARKER = "[SESSION-PRESSURE]";
 function isOpencodeCommand(command) {
@@ -212,22 +213,7 @@ function sampleProcessPressure() {
     };
 }
 function notifyCriticalPressure(title, message) {
-    if (process.platform === "darwin") {
-        const script = `display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}`;
-        const result = spawnSync("osascript", ["-e", script], {
-            stdio: ["ignore", "ignore", "ignore"],
-            timeout: 1000,
-        });
-        return result.status === 0;
-    }
-    if (process.platform === "linux") {
-        const result = spawnSync("notify-send", [title, message], {
-            stdio: ["ignore", "ignore", "ignore"],
-            timeout: 1000,
-        });
-        return result.status === 0;
-    }
-    return false;
+    return sendBasicVisualNotification(title, message);
 }
 function shortSessionId(sessionId) {
     const trimmed = sessionId.trim();

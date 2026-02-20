@@ -332,12 +332,10 @@ function notifyVisualMac(options) {
             }
         }
     }
-    const script = `display notification ${JSON.stringify(options.message)} with title ${JSON.stringify(options.title)}`;
-    const fallback = spawnSync("osascript", ["-e", script], {
-        stdio: ["ignore", "ignore", "ignore"],
-        timeout: 1000,
-    });
-    return { visualSent: fallback.status === 0, soundSent: false };
+    return {
+        visualSent: sendBasicVisualNotification(options.title, options.message),
+        soundSent: false,
+    };
 }
 function notifyVisualLinux(title, message, imagePath) {
     const args = imagePath ? ["-i", imagePath, title, message] : [title, message];
@@ -346,6 +344,24 @@ function notifyVisualLinux(title, message, imagePath) {
         timeout: 1000,
     });
     return result.status === 0;
+}
+export function sendBasicVisualNotification(title, message) {
+    if (process.platform === "darwin") {
+        const script = `display notification ${JSON.stringify(message)} with title ${JSON.stringify(title)}`;
+        const result = spawnSync("osascript", ["-e", script], {
+            stdio: ["ignore", "ignore", "ignore"],
+            timeout: 1000,
+        });
+        return result.status === 0;
+    }
+    if (process.platform === "linux") {
+        const result = spawnSync("notify-send", [title, message], {
+            stdio: ["ignore", "ignore", "ignore"],
+            timeout: 1000,
+        });
+        return result.status === 0;
+    }
+    return false;
 }
 function notifyVisual(options) {
     const title = titleWithIcon(options.eventName, options.state, options.content.title);
