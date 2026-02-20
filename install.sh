@@ -261,14 +261,6 @@ if [ -d "$INSTALL_DIR/agent" ]; then
 	cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/" 2>/dev/null || true
 fi
 
-if [ -d "$INSTALL_DIR/plugin/autopilot-loop" ]; then
-	if command -v npm >/dev/null 2>&1; then
-		(
-			cd "$INSTALL_DIR/plugin/autopilot-loop" && npm install --silent && npm run build --silent
-		) || printf "warning: autopilot-loop plugin build failed (continuing)\n"
-	else
-		printf "warning: npm not found; skipping autopilot-loop plugin build\n"
-	fi
 fi
 
 if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then

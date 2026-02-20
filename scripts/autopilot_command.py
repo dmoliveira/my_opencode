@@ -208,8 +208,6 @@ def infer_touched_paths(cwd: Path) -> list[str]:
             return False
         if path.startswith("node_modules/"):
             return False
-        if path.startswith("plugin/autopilot-loop/node_modules/"):
-            return False
         if path.startswith("plugin/gateway-core/node_modules/"):
             return False
         if "/node_modules/" in path:
@@ -871,9 +869,6 @@ def command_doctor(args: list[str]) -> int:
     if any(arg not in ("--json",) for arg in args):
         return usage()
     as_json = "--json" in args
-    plugin_root = SCRIPT_DIR.parent / "plugin" / "autopilot-loop"
-    plugin_scaffold_exists = (plugin_root / "src" / "index.ts").exists()
-    plugin_dist_exists = (plugin_root / "dist" / "index.js").exists()
     config, _ = load_layered_config()
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     gateway_root = plugin_dir(home)
@@ -886,8 +881,6 @@ def command_doctor(args: list[str]) -> int:
         "contract_exists": (
             SCRIPT_DIR.parent / "instructions" / "autopilot_command_contract.md"
         ).exists(),
-        "hook_plugin_scaffold_exists": plugin_scaffold_exists,
-        "hook_plugin_dist_exists": plugin_dist_exists,
         "gateway_plugin_dir": str(gateway_root),
         "gateway_hook_diagnostics": gateway_hooks,
         "gateway_runtime_mode": gateway_status.get("runtime_mode"),
@@ -912,14 +905,6 @@ def command_doctor(args: list[str]) -> int:
         report["problems"].append("missing scripts/autopilot_integration.py")
     if not report["contract_exists"]:
         report["warnings"].append("missing instructions/autopilot_command_contract.md")
-    if not report["hook_plugin_scaffold_exists"]:
-        report["warnings"].append(
-            "autopilot-loop hook plugin scaffold missing (plugin/autopilot-loop/src/index.ts)"
-        )
-    if report["hook_plugin_scaffold_exists"] and not report["hook_plugin_dist_exists"]:
-        report["warnings"].append(
-            "autopilot-loop plugin not built yet (run install.sh or npm run build in plugin/autopilot-loop)"
-        )
     if gateway_hooks.get("dist_index_exists") is not True:
         report["warnings"].append(
             "gateway-core dist plugin is missing (run npm run build in plugin/gateway-core)"
