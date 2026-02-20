@@ -111,6 +111,13 @@ STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
 NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
+UPSTREAM_BG_COMPAT_SCRIPT = REPO_ROOT / "scripts" / "upstream_bg_compat_command.py"
+UPSTREAM_AGENT_COMPAT_SCRIPT = (
+    REPO_ROOT / "scripts" / "upstream_agent_compat_command.py"
+)
+UPSTREAM_COMPAT_DOCTOR_SCRIPT = (
+    REPO_ROOT / "scripts" / "upstream_compat_doctor_command.py"
+)
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
@@ -416,6 +423,38 @@ exit 0
                 f"{command_name} command should resolve plan handoff backend",
             )
 
+        for command_name in (
+            "background-agent-call",
+            "background-output",
+            "upstream-bg-status",
+        ):
+            template = str(
+                (command_map.get(command_name, {}) or {}).get("template", "")
+            )
+            expect(
+                'upstream_bg_compat_command.py"' in template,
+                f"{command_name} command should resolve upstream background compatibility backend",
+            )
+
+        for command_name in (
+            "upstream-agent-map",
+            "upstream-agent-map-status",
+            "upstream-compat-doctor",
+        ):
+            template = str(
+                (command_map.get(command_name, {}) or {}).get("template", "")
+            )
+            if command_name == "upstream-compat-doctor":
+                expect(
+                    'upstream_compat_doctor_command.py"' in template,
+                    "upstream-compat-doctor command should resolve compatibility doctor backend",
+                )
+            else:
+                expect(
+                    'upstream_agent_compat_command.py"' in template,
+                    f"{command_name} command should resolve upstream agent compatibility backend",
+                )
+
         release_train_milestone_template = str(
             (command_map.get("release-train-draft-milestones", {}) or {}).get(
                 "template", ""
@@ -454,6 +493,63 @@ exit 0
             and isinstance(plan_handoff_phase_payload.get("commands"), list)
             and len(plan_handoff_phase_payload.get("commands", [])) >= 2,
             "plan-handoff handoff payload should include command sequence",
+        )
+
+        upstream_agent_status = run_script(
+            UPSTREAM_AGENT_COMPAT_SCRIPT, cfg_path, home, "status", "--json"
+        )
+        expect(
+            upstream_agent_status.returncode == 0,
+            f"upstream-agent-map status --json failed: {upstream_agent_status.stderr}",
+        )
+        upstream_agent_status_payload = parse_json_output(upstream_agent_status.stdout)
+        expect(
+            upstream_agent_status_payload.get("result") in {"PASS", "WARN"}
+            and isinstance(upstream_agent_status_payload.get("upstream_roles"), list),
+            "upstream-agent-map status should return role inventory",
+        )
+        hook_bridge_payload = upstream_agent_status_payload.get("hook_bridge")
+        expect(
+            isinstance(hook_bridge_payload, dict)
+            and isinstance(hook_bridge_payload.get("missing"), list),
+            "upstream-agent-map status should include hook bridge diagnostics",
+        )
+
+        upstream_agent_map = run_script(
+            UPSTREAM_AGENT_COMPAT_SCRIPT,
+            cfg_path,
+            home,
+            "map",
+            "--role",
+            "prometheus",
+            "--json",
+        )
+        expect(
+            upstream_agent_map.returncode == 0,
+            f"upstream-agent-map map --role prometheus failed: {upstream_agent_map.stderr}",
+        )
+        upstream_agent_map_payload = parse_json_output(upstream_agent_map.stdout)
+        expect(
+            upstream_agent_map_payload.get("local_agent") == "strategic-planner"
+            and upstream_agent_map_payload.get("result") == "PASS",
+            "upstream-agent-map should map prometheus to strategic-planner",
+        )
+
+        upstream_compat_doctor = run_script(
+            UPSTREAM_COMPAT_DOCTOR_SCRIPT, cfg_path, home, "doctor", "--json"
+        )
+        expect(
+            upstream_compat_doctor.returncode == 0,
+            f"upstream-compat-doctor failed: {upstream_compat_doctor.stderr}",
+        )
+        upstream_compat_doctor_payload = parse_json_output(
+            upstream_compat_doctor.stdout
+        )
+        expect(
+            upstream_compat_doctor_payload.get("result") == "PASS"
+            and isinstance(upstream_compat_doctor_payload.get("checks"), list)
+            and len(upstream_compat_doctor_payload.get("checks", [])) >= 3,
+            "upstream-compat-doctor should return PASS with check entries",
         )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")

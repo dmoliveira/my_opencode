@@ -22,6 +22,9 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
+- 🧩 Built-in upstream-style background facade commands `/background-agent-call` and `/background-output` mapped to local `/bg` runtime.
+- 🧭 Built-in `/upstream-agent-map` diagnostics to map upstream role labels to local agent equivalents.
+- 🩺 Built-in `/upstream-compat-doctor` to verify compatibility facade readiness.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🗂️ Built-in `/task` command for persistent dependency-aware task graph tracking.
@@ -1492,6 +1495,17 @@ Autocomplete-friendly shortcuts:
 /bg-status-json
 ```
 
+Upstream compatibility facade:
+
+```text
+/background-agent-call --subagent-type explore --prompt "scan auth" --command "python3 scripts/task_graph_command.py ready --json" --run-in-background true
+/background-output --task-id bg_<id>
+/upstream-bg-status
+/upstream-agent-map --role sisyphus
+/upstream-agent-map-status
+/upstream-compat-doctor
+```
+
 `/bg` uses `~/.config/opencode/my_opencode/bg/` by default with:
 
 - `jobs.json` as authoritative state
@@ -1501,6 +1515,7 @@ Autocomplete-friendly shortcuts:
 Examples:
 
 - Basic async start + read: `/bg start -- make validate` then `/bg list --status running` and `/bg read <job-id>`
+- Upstream-style facade over local runtime: `/background-agent-call ... --run-in-background true` then `/background-output --task-id bg_<id>`
 - Intermediate queue workflow: `/bg enqueue -- make selftest`, `/bg enqueue -- make install-test`, then `/bg run --max-jobs 1`
 - Failure/recovery: `/bg start -- python3 -c "import time; time.sleep(5)" --timeout-seconds 1`, inspect with `/bg doctor --json`, then `/bg cleanup`
 
