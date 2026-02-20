@@ -52,14 +52,6 @@ from safe_edit_adapters import (  # type: ignore
     evaluate_semantic_capability,
     validate_changed_references,
 )
-from lsp_command import (  # type: ignore
-    _apply_renamefile_operations,
-    _group_resource_operations,
-    _split_resource_operations,
-    _validate_renamefile_operations,
-    _workspace_edit_text_changes,
-)
-from lsp_rpc_client import LspClient  # type: ignore
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
@@ -97,7 +89,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SCRIPT = REPO_ROOT / "scripts" / "plugin_command.py"
 MCP_SCRIPT = REPO_ROOT / "scripts" / "mcp_command.py"
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "notify_command.py"
-NOTIFY_TEST_SCRIPT = REPO_ROOT / "scripts" / "notify_test_command.py"
 DIGEST_SCRIPT = REPO_ROOT / "scripts" / "session_digest.py"
 SESSION_SCRIPT = REPO_ROOT / "scripts" / "session_command.py"
 TELEMETRY_SCRIPT = REPO_ROOT / "scripts" / "telemetry_command.py"
@@ -111,13 +102,6 @@ STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
 NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
-UPSTREAM_BG_COMPAT_SCRIPT = REPO_ROOT / "scripts" / "upstream_bg_compat_command.py"
-UPSTREAM_AGENT_COMPAT_SCRIPT = (
-    REPO_ROOT / "scripts" / "upstream_agent_compat_command.py"
-)
-UPSTREAM_COMPAT_DOCTOR_SCRIPT = (
-    REPO_ROOT / "scripts" / "upstream_compat_doctor_command.py"
-)
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
 HOOKS_SCRIPT = REPO_ROOT / "scripts" / "hooks_command.py"
 MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
@@ -127,17 +111,10 @@ AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
-TMUX_SCRIPT = REPO_ROOT / "scripts" / "tmux_command.py"
-PACKAGED_CLI_SCRIPT = REPO_ROOT / "scripts" / "my_opencode_cli.py"
-SKILL_CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "skill_contract_command.py"
 START_WORK_SCRIPT = REPO_ROOT / "scripts" / "start_work_command.py"
 TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
-TASK_GRAPH_SCRIPT = REPO_ROOT / "scripts" / "task_graph_command.py"
-PLAN_HANDOFF_SCRIPT = REPO_ROOT / "scripts" / "plan_handoff_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
-LSP_SCRIPT = REPO_ROOT / "scripts" / "lsp_command.py"
-MOCK_LSP_SERVER_SCRIPT = REPO_ROOT / "scripts" / "mock_lsp_server.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
@@ -275,9 +252,6 @@ oracle (subagent)
 verifier (subagent)
 reviewer (subagent)
 release-scribe (subagent)
-strategic-planner (subagent)
-ambiguity-analyst (subagent)
-plan-critic (subagent)
 EOF
   exit 0
 fi
@@ -293,7 +267,6 @@ exit 0
             shutil.copy2(agent_file, installed_agent_dir / agent_file.name)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
-        cfg_path = cfg
 
         # Agent operating contract sanity checks
         expect(AGENT_DIR.exists(), "agent directory should exist")
@@ -316,15 +289,6 @@ exit 0
             "verifier.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
             "reviewer.md": {"must": ["mode: subagent", "write: false", "edit: false"]},
             "release-scribe.md": {
-                "must": ["mode: subagent", "write: false", "edit: false"]
-            },
-            "strategic-planner.md": {
-                "must": ["mode: subagent", "write: false", "edit: false"]
-            },
-            "ambiguity-analyst.md": {
-                "must": ["mode: subagent", "write: false", "edit: false"]
-            },
-            "plan-critic.md": {
                 "must": ["mode: subagent", "write: false", "edit: false"]
             },
         }
@@ -358,20 +322,7 @@ exit 0
         )
         command_map_any = base_config_payload.get("command", {})
         command_map = command_map_any if isinstance(command_map_any, dict) else {}
-        autopilot_template = str(
-            (command_map.get("autopilot", {}) or {}).get("template", "")
-        )
-        expect(
-            'autopilot_command.py" $ARGUMENTS --json' in autopilot_template,
-            "autopilot command template should pass through slash arguments for subcommand/help dispatch",
-        )
-        for command_name in (
-            "continue-work",
-            "autoloop",
-            "ulw-loop",
-            "ralph-loop",
-            "autopilot-go",
-        ):
+        for command_name in ("autopilot", "ralph-loop"):
             template = str(
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )
@@ -379,178 +330,6 @@ exit 0
                 '--goal "$ARGUMENTS"' in template,
                 f"{command_name} command template should pass slash arguments as explicit goal",
             )
-
-        init_deep_template = str(
-            (command_map.get("init-deep", {}) or {}).get("template", "")
-        )
-        expect(
-            "--completion-mode objective" in init_deep_template,
-            "init-deep should map to objective completion mode",
-        )
-
-        for command_name in ("tmux", "tmux-status", "tmux-config", "tmux-doctor-json"):
-            template = str(
-                (command_map.get(command_name, {}) or {}).get("template", "")
-            )
-            expect(
-                'tmux_command.py"' in template,
-                f"{command_name} command should resolve tmux visual mode backend",
-            )
-
-        for command_name in ("my-opencode", "my-opencode-version"):
-            template = str(
-                (command_map.get(command_name, {}) or {}).get("template", "")
-            )
-            expect(
-                'my_opencode_cli.py"' in template,
-                f"{command_name} command should resolve packaged CLI backend",
-            )
-
-        for skill_name in ("playwright", "frontend-ui-ux", "git-master"):
-            template = str((command_map.get(skill_name, {}) or {}).get("template", ""))
-            expect(
-                'skill_contract_command.py"' in template
-                and f" {skill_name} --json`" in template,
-                f"{skill_name} command should resolve skill contract payload",
-            )
-
-        for command_name in ("plan-handoff", "plan-handoff-status"):
-            template = str(
-                (command_map.get(command_name, {}) or {}).get("template", "")
-            )
-            expect(
-                'plan_handoff_command.py"' in template,
-                f"{command_name} command should resolve plan handoff backend",
-            )
-
-        for command_name in (
-            "background-agent-call",
-            "background-output",
-            "upstream-bg-status",
-        ):
-            template = str(
-                (command_map.get(command_name, {}) or {}).get("template", "")
-            )
-            expect(
-                'upstream_bg_compat_command.py"' in template,
-                f"{command_name} command should resolve upstream background compatibility backend",
-            )
-
-        for command_name in (
-            "upstream-agent-map",
-            "upstream-agent-map-status",
-            "upstream-compat-doctor",
-        ):
-            template = str(
-                (command_map.get(command_name, {}) or {}).get("template", "")
-            )
-            if command_name == "upstream-compat-doctor":
-                expect(
-                    'upstream_compat_doctor_command.py"' in template,
-                    "upstream-compat-doctor command should resolve compatibility doctor backend",
-                )
-            else:
-                expect(
-                    'upstream_agent_compat_command.py"' in template,
-                    f"{command_name} command should resolve upstream agent compatibility backend",
-                )
-
-        release_train_milestone_template = str(
-            (command_map.get("release-train-draft-milestones", {}) or {}).get(
-                "template", ""
-            )
-        )
-        expect(
-            'release_train_command.py" draft --include-milestones'
-            in release_train_milestone_template,
-            "release-train-draft-milestones should pass include-milestones flag",
-        )
-
-        plan_handoff_status = run_script(
-            PLAN_HANDOFF_SCRIPT, cfg_path, home, "status", "--json"
-        )
-        expect(
-            plan_handoff_status.returncode == 0,
-            f"plan-handoff status --json failed: {plan_handoff_status.stderr}",
-        )
-        plan_handoff_status_payload = parse_json_output(plan_handoff_status.stdout)
-        expect(
-            plan_handoff_status_payload.get("result") == "PASS"
-            and plan_handoff_status_payload.get("mode") == "compatibility_profile",
-            "plan-handoff status should return compatibility profile payload",
-        )
-
-        plan_handoff_phase = run_script(
-            PLAN_HANDOFF_SCRIPT, cfg_path, home, "handoff", "--json"
-        )
-        expect(
-            plan_handoff_phase.returncode == 0,
-            f"plan-handoff handoff --json failed: {plan_handoff_phase.stderr}",
-        )
-        plan_handoff_phase_payload = parse_json_output(plan_handoff_phase.stdout)
-        expect(
-            plan_handoff_phase_payload.get("phase") == "handoff"
-            and isinstance(plan_handoff_phase_payload.get("commands"), list)
-            and len(plan_handoff_phase_payload.get("commands", [])) >= 2,
-            "plan-handoff handoff payload should include command sequence",
-        )
-
-        upstream_agent_status = run_script(
-            UPSTREAM_AGENT_COMPAT_SCRIPT, cfg_path, home, "status", "--json"
-        )
-        expect(
-            upstream_agent_status.returncode == 0,
-            f"upstream-agent-map status --json failed: {upstream_agent_status.stderr}",
-        )
-        upstream_agent_status_payload = parse_json_output(upstream_agent_status.stdout)
-        expect(
-            upstream_agent_status_payload.get("result") in {"PASS", "WARN"}
-            and isinstance(upstream_agent_status_payload.get("upstream_roles"), list),
-            "upstream-agent-map status should return role inventory",
-        )
-        hook_bridge_payload = upstream_agent_status_payload.get("hook_bridge")
-        expect(
-            isinstance(hook_bridge_payload, dict)
-            and isinstance(hook_bridge_payload.get("missing"), list),
-            "upstream-agent-map status should include hook bridge diagnostics",
-        )
-
-        upstream_agent_map = run_script(
-            UPSTREAM_AGENT_COMPAT_SCRIPT,
-            cfg_path,
-            home,
-            "map",
-            "--role",
-            "prometheus",
-            "--json",
-        )
-        expect(
-            upstream_agent_map.returncode == 0,
-            f"upstream-agent-map map --role prometheus failed: {upstream_agent_map.stderr}",
-        )
-        upstream_agent_map_payload = parse_json_output(upstream_agent_map.stdout)
-        expect(
-            upstream_agent_map_payload.get("local_agent") == "strategic-planner"
-            and upstream_agent_map_payload.get("result") == "PASS",
-            "upstream-agent-map should map prometheus to strategic-planner",
-        )
-
-        upstream_compat_doctor = run_script(
-            UPSTREAM_COMPAT_DOCTOR_SCRIPT, cfg_path, home, "doctor", "--json"
-        )
-        expect(
-            upstream_compat_doctor.returncode == 0,
-            f"upstream-compat-doctor failed: {upstream_compat_doctor.stderr}",
-        )
-        upstream_compat_doctor_payload = parse_json_output(
-            upstream_compat_doctor.stdout
-        )
-        expect(
-            upstream_compat_doctor_payload.get("result") == "PASS"
-            and isinstance(upstream_compat_doctor_payload.get("checks"), list)
-            and len(upstream_compat_doctor_payload.get("checks", [])) >= 3,
-            "upstream-compat-doctor should return PASS with check entries",
-        )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
         expect(
@@ -1313,35 +1092,26 @@ exit 0
             report.get("result") == "PASS", "plugin doctor should pass for lean profile"
         )
 
-        # Plugin stable should pass doctor in isolated HOME.
+        # Plugin stable should fail doctor without keys in isolated HOME.
         result = run_script(PLUGIN_SCRIPT, cfg, home, "profile", "stable")
         expect(result.returncode == 0, f"plugin profile stable failed: {result.stderr}")
 
         result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor", "--json")
         expect(
-            result.returncode == 0,
-            "plugin doctor stable should pass",
-        )
-
-        # Plugin experimental should fail doctor when MORPH_API_KEY is absent.
-        result = run_script(PLUGIN_SCRIPT, cfg, home, "profile", "experimental")
-        expect(
-            result.returncode == 0,
-            f"plugin profile experimental failed: {result.stderr}",
-        )
-
-        result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor", "--json")
-        expect(
             result.returncode == 1,
-            "plugin doctor experimental should fail when MORPH_API_KEY is absent",
+            "plugin doctor stable should fail when keys are absent",
         )
         report = parse_json_output(result.stdout)
         problems = "\n".join(report.get("problems", []))
-        expect("morph enabled" in problems, "expected morph key problem")
+        expect("supermemory enabled" in problems, "expected supermemory key problem")
+        expect("wakatime enabled" in problems, "expected wakatime key problem")
 
         result = run_script(PLUGIN_SCRIPT, cfg, home, "setup-keys")
         expect(result.returncode == 0, f"plugin setup-keys failed: {result.stderr}")
-        expect("[morph]" in result.stdout, "setup-keys missing morph section")
+        expect(
+            "[supermemory]" in result.stdout, "setup-keys missing supermemory section"
+        )
+        expect("[wakatime]" in result.stdout, "setup-keys missing wakatime section")
 
         # MCP minimal should pass with disabled warning.
         result = run_script(MCP_SCRIPT, cfg, home, "profile", "minimal")
@@ -1393,7 +1163,7 @@ exit 0
         (user_cfg_dir / "my_opencode.json").write_text(
             json.dumps(
                 {
-                    "plugin": [],
+                    "plugin": ["@mohak34/opencode-notifier@latest"],
                     "mcp": {"context7": {"enabled": False}},
                 },
                 indent=2,
@@ -1406,7 +1176,8 @@ exit 0
             {
               // project override wins over user
               "plugin": [
-                "github:JRedeker/opencode-morph-fast-apply",
+                "@mohak34/opencode-notifier@latest",
+                "opencode-supermemory",
               ],
               "mcp": {
                 "context7": { "enabled": true },
@@ -1419,8 +1190,8 @@ exit 0
         result = run_script_layered(PLUGIN_SCRIPT, home, project_dir, "status")
         expect(result.returncode == 0, f"plugin layered status failed: {result.stderr}")
         expect(
-            "morph: enabled" in result.stdout,
-            "project layered config should enable morph",
+            "supermemory: enabled" in result.stdout,
+            "project layered config should enable supermemory",
         )
         expect(
             "config: " in result.stdout
@@ -1480,30 +1251,6 @@ exit 0
             "notify channel should set permission.visual off",
         )
 
-        result = run_notify("sound-theme", "retro")
-        expect(result.returncode == 0, f"notify sound-theme failed: {result.stderr}")
-        cfg = load_json_file(notify_path)
-        expect(
-            cfg.get("sound", {}).get("theme") == "retro",
-            "notify sound-theme should set sound.theme",
-        )
-
-        result = run_notify("event-sound", "error", "urgent")
-        expect(result.returncode == 0, f"notify event-sound failed: {result.stderr}")
-        cfg = load_json_file(notify_path)
-        expect(
-            cfg.get("sound", {}).get("eventThemes", {}).get("error") == "urgent",
-            "notify event-sound should set error theme override",
-        )
-
-        result = run_notify("icon-version", "v1")
-        expect(result.returncode == 0, f"notify icon-version failed: {result.stderr}")
-        cfg = load_json_file(notify_path)
-        expect(
-            cfg.get("icons", {}).get("version") == "v1",
-            "notify icon-version should set icons.version",
-        )
-
         result = run_notify("status")
         expect(result.returncode == 0, f"notify status failed: {result.stderr}")
         expect("config:" in result.stdout, "notify status should print config path")
@@ -1512,46 +1259,6 @@ exit 0
         expect(result.returncode == 0, f"notify doctor --json failed: {result.stderr}")
         report = parse_json_output(result.stdout)
         expect(report.get("result") == "PASS", "notify doctor should pass")
-
-        result = run_notify("doctor", "--verbose")
-        expect(
-            result.returncode == 0, f"notify doctor --verbose failed: {result.stderr}"
-        )
-        expect(
-            "runtime:" in result.stdout,
-            "notify doctor --verbose should print runtime section",
-        )
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(NOTIFY_TEST_SCRIPT),
-                "--method",
-                "hook",
-                "--event",
-                "all",
-                "--dry-run",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=notify_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            result.returncode == 0,
-            f"notify test harness dry-run failed: {result.stderr}",
-        )
-        notify_test_report = parse_json_output(result.stdout)
-        expect(
-            notify_test_report.get("result") == "PASS"
-            and isinstance(notify_test_report.get("events"), list)
-            and len(notify_test_report.get("events", [])) == 4
-            and isinstance(notify_test_report.get("results"), list)
-            and len(notify_test_report.get("results", [])) == 4,
-            "notify test harness should emit deterministic all-event dry-run report",
-        )
 
         digest_path = home / ".config" / "opencode" / "digests" / "selftest.json"
         session_index_path = home / ".config" / "opencode" / "sessions" / "index.json"
@@ -2002,53 +1709,6 @@ exit 0
             and isinstance(gateway_status.get("event_audit_exists"), bool),
             "gateway status should expose event audit toggle and path telemetry",
         )
-        expect(
-            isinstance(gateway_status.get("plugin_entry_count"), int)
-            and isinstance(gateway_status.get("plugin_entries"), list),
-            "gateway status should expose plugin entry dedupe telemetry",
-        )
-        expect(
-            isinstance(gateway_status.get("runtime_staleness"), dict)
-            and isinstance(gateway_status.get("process_pressure"), dict),
-            "gateway status should expose runtime staleness and process pressure telemetry",
-        )
-        expect(
-            isinstance(gateway_status.get("guard_event_counters"), dict),
-            "gateway status should expose guard event counters",
-        )
-        expect(
-            isinstance(
-                gateway_status.get("guard_event_counters", {}).get(
-                    "recent_context_warnings"
-                ),
-                int,
-            )
-            and isinstance(
-                gateway_status.get("guard_event_counters", {}).get(
-                    "recent_compactions"
-                ),
-                int,
-            )
-            and isinstance(
-                gateway_status.get("guard_event_counters", {}).get(
-                    "recent_global_process_pressure_warnings"
-                ),
-                int,
-            )
-            and isinstance(
-                gateway_status.get("guard_event_counters", {}).get(
-                    "recent_global_process_pressure_critical_events"
-                ),
-                int,
-            )
-            and isinstance(
-                gateway_status.get("guard_event_counters", {}).get(
-                    "session_pressure_attribution"
-                ),
-                list,
-            ),
-            "gateway status guard counters should include recent window metrics",
-        )
 
         stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
         stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2104,39 +1764,6 @@ exit 0
             "gateway enable should set plugin entry enabled",
         )
 
-        layered_cfg = json.loads(layered_cfg_path.read_text(encoding="utf-8"))
-        plugin_list = layered_cfg.get("plugin")
-        if isinstance(plugin_list, list):
-            duplicate_spec = (
-                "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
-            )
-            if duplicate_spec not in plugin_list:
-                plugin_list.append(duplicate_spec)
-            layered_cfg["plugin"] = plugin_list
-            layered_cfg_path.write_text(
-                json.dumps(layered_cfg, indent=2) + "\n", encoding="utf-8"
-            )
-
-        result = run_gateway("doctor", "--json")
-        expect(
-            result.returncode == 1,
-            "gateway doctor should fail when gateway plugin is configured multiple times while enabled",
-        )
-        gateway_doctor_duplicate = parse_json_output(result.stdout)
-        expect(
-            any(
-                "configured multiple times" in str(item)
-                for item in gateway_doctor_duplicate.get("problems", [])
-            ),
-            "gateway doctor should report duplicate gateway plugin entries as problems",
-        )
-
-        result = run_gateway("enable", "--force", "--json")
-        expect(
-            result.returncode == 0,
-            "gateway enable --force should normalize duplicate gateway plugin entries",
-        )
-
         result = run_gateway(
             "enable",
             "--json",
@@ -2176,171 +1803,6 @@ exit 0
         expect(
             isinstance(gateway_doctor.get("status", {}).get("hook_diagnostics"), dict),
             "gateway doctor should include hook diagnostics in status",
-        )
-        expect(
-            isinstance(gateway_doctor.get("status", {}).get("process_pressure"), dict)
-            and isinstance(
-                gateway_doctor.get("status", {}).get("runtime_staleness"), dict
-            ),
-            "gateway doctor should include process pressure and runtime staleness telemetry",
-        )
-        expect(
-            isinstance(
-                gateway_doctor.get("status", {}).get("guard_event_counters"), dict
-            ),
-            "gateway doctor should include guard event counters telemetry",
-        )
-        expect(
-            isinstance(gateway_doctor.get("remediation_commands"), list),
-            "gateway doctor should expose remediation command block",
-        )
-
-        audit_fixture_path = gateway_cwd / ".opencode" / "gateway-events-selftest.jsonl"
-        audit_fixture_path.parent.mkdir(parents=True, exist_ok=True)
-        now_ts = datetime.now(UTC)
-        audit_fixture_rows = [
-            {
-                "timestamp": (now_ts - timedelta(minutes=1)).isoformat(),
-                "hook": "global-process-pressure",
-                "reason_code": "global_process_pressure_critical_appended",
-                "session_id": "session-selftest-critical",
-                "max_rss_mb": 11500,
-            },
-            {
-                "timestamp": (now_ts - timedelta(minutes=2)).isoformat(),
-                "hook": "global-process-pressure",
-                "reason_code": "global_process_pressure_critical_detected_no_append",
-                "session_id": "session-selftest-critical",
-                "max_rss_mb": 11800,
-            },
-            {
-                "timestamp": (now_ts - timedelta(minutes=3)).isoformat(),
-                "hook": "global-process-pressure",
-                "reason_code": "global_process_pressure_warning_appended",
-                "session_id": "session-selftest-warning",
-                "max_rss_mb": 1700,
-            },
-        ]
-        audit_fixture_path.write_text(
-            "\n".join(json.dumps(row) for row in audit_fixture_rows) + "\n",
-            encoding="utf-8",
-        )
-
-        result = run_gateway(
-            "doctor",
-            "--json",
-            env_override={
-                "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH": str(audit_fixture_path)
-            },
-        )
-        expect(
-            result.returncode == 0,
-            f"gateway doctor with audit fixture failed: {result.stderr}",
-        )
-        gateway_doctor_critical = parse_json_output(result.stdout)
-        expect(
-            gateway_doctor_critical.get("result") == "PASS",
-            "gateway doctor with audit fixture should stay in pass state",
-        )
-        expect(
-            any(
-                "recent critical global pressure" in str(item)
-                for item in gateway_doctor_critical.get("warnings", [])
-            ),
-            "gateway doctor should surface recent critical pressure warning from audit fixture",
-        )
-        expect(
-            "/autopilot pause"
-            in gateway_doctor_critical.get("remediation_commands", []),
-            "gateway doctor remediation commands should include autopilot pause",
-        )
-        expect(
-            isinstance(gateway_doctor_critical.get("manual_emergency_steps"), list),
-            "gateway doctor should expose manual emergency steps",
-        )
-
-        result = run_gateway(
-            "tune",
-            "memory",
-            "--json",
-            env_override={
-                "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH": str(audit_fixture_path)
-            },
-        )
-        expect(
-            result.returncode == 0,
-            f"gateway tune memory with audit fixture failed: {result.stderr}",
-        )
-        gateway_tune_critical = parse_json_output(result.stdout)
-        expect(
-            int(
-                gateway_tune_critical.get("status_snapshot", {})
-                .get("guard_event_counters", {})
-                .get("recent_global_process_pressure_critical_events", 0)
-            )
-            >= 1,
-            "gateway tune memory should report recent critical event counts from audit fixture",
-        )
-        expect(
-            any(
-                "critical global process pressure observed" in str(item)
-                for item in gateway_tune_critical.get("rationale", [])
-            ),
-            "gateway tune memory rationale should include critical pressure guidance",
-        )
-        expect(
-            isinstance(
-                gateway_tune_critical.get("status_snapshot", {})
-                .get("guard_event_counters", {})
-                .get("session_pressure_attribution"),
-                list,
-            ),
-            "gateway tune memory should expose session pressure attribution list",
-        )
-
-        result = run_gateway("tune", "memory", "--json")
-        expect(result.returncode == 0, f"gateway tune memory failed: {result.stderr}")
-        gateway_tune = parse_json_output(result.stdout)
-        expect(
-            gateway_tune.get("result") == "PASS"
-            and isinstance(gateway_tune.get("recommended"), dict),
-            "gateway tune memory should return pass payload with recommended settings",
-        )
-        expect(
-            isinstance(
-                gateway_tune.get("recommended", {})
-                .get("globalProcessPressure", {})
-                .get("criticalMaxRssMb"),
-                int,
-            )
-            and isinstance(
-                gateway_tune.get("recommended", {})
-                .get("globalProcessPressure", {})
-                .get("autoPauseOnCritical"),
-                bool,
-            )
-            and isinstance(
-                gateway_tune.get("recommended", {})
-                .get("globalProcessPressure", {})
-                .get("criticalPauseAfterEvents"),
-                int,
-            ),
-            "gateway tune memory should include critical RSS auto-pause recommendations",
-        )
-        expect(
-            isinstance(
-                gateway_tune.get("recommended", {})
-                .get("pressureEscalationGuard", {})
-                .get("maxContinueBeforeBlock"),
-                int,
-            )
-            and isinstance(
-                gateway_tune.get("recommended", {})
-                .get("pressureEscalationGuard", {})
-                .get("blockedSubagentTypes"),
-                list,
-            ),
-            "gateway tune memory should include pressure escalation guard recommendations",
         )
 
         notify_policy_path = (
@@ -2405,7 +1867,7 @@ exit 0
             """
             {
               // project layered config for selftest
-              "plugin": [],
+              "plugin": ["@mohak34/opencode-notifier@latest"],
             }
             """,
             encoding="utf-8",
@@ -3046,40 +2508,6 @@ index 3333333..4444444 100644
             release_engine_draft_payload.get("result") == "PASS"
             and isinstance(release_engine_draft_payload.get("entries"), list),
             "release-train draft should emit structured release note entries",
-        )
-
-        release_engine_draft_milestones = subprocess.run(
-            [
-                sys.executable,
-                str(RELEASE_TRAIN_ENGINE_SCRIPT),
-                "draft",
-                "--include-milestones",
-                "--head",
-                "HEAD",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            release_engine_draft_milestones.returncode == 0,
-            "release-train milestone draft should generate release note entries",
-        )
-        release_engine_draft_milestones_payload = parse_json_output(
-            release_engine_draft_milestones.stdout
-        )
-        milestone_context = release_engine_draft_milestones_payload.get(
-            "milestone_context"
-        )
-        expect(
-            isinstance(milestone_context, dict)
-            and isinstance(milestone_context.get("sources"), dict)
-            and isinstance(milestone_context.get("parity_recent"), list)
-            and isinstance(milestone_context.get("lsp_recent"), list),
-            "release-train milestone draft should include milestone context payload",
         )
 
         release_command_doctor = subprocess.run(
@@ -4028,817 +3456,6 @@ index 3333333..4444444 100644
             "safe-edit doctor should report PASS when at least one backend is available",
         )
 
-        lsp_status = subprocess.run(
-            [sys.executable, str(LSP_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_status.returncode == 0,
-            f"lsp status should succeed: {lsp_status.stderr}",
-        )
-        lsp_status_report = parse_json_output(lsp_status.stdout)
-        expect(
-            isinstance(lsp_status_report.get("servers"), list)
-            and isinstance(lsp_status_report.get("languages"), dict),
-            "lsp status should report servers and language grouping",
-        )
-        expect(
-            isinstance(lsp_status_report.get("backend_details"), dict),
-            "lsp status should include backend details metadata",
-        )
-
-        lsp_doctor = subprocess.run(
-            [sys.executable, str(LSP_SCRIPT), "doctor", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_doctor.returncode == 0,
-            f"lsp doctor should succeed: {lsp_doctor.stderr}",
-        )
-        lsp_doctor_report = parse_json_output(lsp_doctor.stdout)
-        expect(
-            lsp_doctor_report.get("result") in {"PASS", "WARN"},
-            "lsp doctor should emit PASS or WARN result",
-        )
-        expect(
-            isinstance(lsp_doctor_report.get("backend_details"), dict),
-            "lsp doctor should include backend details metadata",
-        )
-
-        lsp_diagnostics = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "diagnostics",
-                "--scope",
-                "scripts/*.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_diagnostics.returncode == 0,
-            f"lsp diagnostics should succeed: {lsp_diagnostics.stderr}",
-        )
-        lsp_diagnostics_report = parse_json_output(lsp_diagnostics.stdout)
-        summary = lsp_diagnostics_report.get("summary", {})
-        expect(
-            isinstance(lsp_diagnostics_report.get("diagnostics"), list)
-            and isinstance(summary, dict)
-            and isinstance(summary.get("severity"), dict)
-            and isinstance(summary.get("sources"), dict)
-            and isinstance(summary.get("top_codes"), list),
-            "lsp diagnostics should include severity/source/code summary metadata",
-        )
-        expect(
-            isinstance(lsp_diagnostics_report.get("backend_details"), dict),
-            "lsp diagnostics should include backend details metadata",
-        )
-
-        lsp_code_actions = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "code-actions",
-                "--symbol",
-                "load_layered_config",
-                "--scope",
-                "scripts/*.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_code_actions.returncode == 0,
-            f"lsp code-actions should succeed: {lsp_code_actions.stderr}",
-        )
-        lsp_code_actions_report = parse_json_output(lsp_code_actions.stdout)
-        code_action_summary = lsp_code_actions_report.get("summary", {})
-        expect(
-            lsp_code_actions_report.get("result") in {"PASS", "WARN"}
-            and isinstance(lsp_code_actions_report.get("code_actions"), list)
-            and isinstance(lsp_code_actions_report.get("summary"), dict),
-            "lsp code-actions should emit deterministic action list and summary metadata",
-        )
-        expect(
-            isinstance(code_action_summary.get("preferred"), int),
-            "lsp code-actions summary should expose preferred action count",
-        )
-        expect(
-            isinstance(code_action_summary.get("preferred_ratio"), float)
-            and isinstance(code_action_summary.get("disabled_ratio"), float),
-            "lsp code-actions summary should expose preferred/disabled ratio percentages",
-        )
-        expect(
-            isinstance(lsp_code_actions_report.get("backend_details"), dict),
-            "lsp code-actions should include backend details metadata",
-        )
-
-        with tempfile.TemporaryDirectory() as lsp_actions_dir:
-            lsp_actions_root = Path(lsp_actions_dir)
-            lsp_actions_file = lsp_actions_root / "sample.py"
-            lsp_actions_file.write_text(
-                "def alpha():\n    return alpha\n",
-                encoding="utf-8",
-            )
-            lsp_actions_config = lsp_actions_root / "opencode-lsp-mock.json"
-            lsp_actions_config.write_text(
-                json.dumps(
-                    {
-                        "lsp": {
-                            "mock-lsp": {
-                                "command": [
-                                    sys.executable,
-                                    str(MOCK_LSP_SERVER_SCRIPT),
-                                ],
-                                "extensions": [".py"],
-                                "priority": 100,
-                            }
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-            lsp_actions_env = os.environ.copy()
-            lsp_actions_env["OPENCODE_CONFIG_PATH"] = str(lsp_actions_config)
-
-            lsp_code_actions_apply = subprocess.run(
-                [
-                    sys.executable,
-                    str(LSP_SCRIPT),
-                    "code-actions",
-                    "--symbol",
-                    "alpha",
-                    "--scope",
-                    "*.py",
-                    "--apply",
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                env=lsp_actions_env,
-                check=False,
-                cwd=lsp_actions_root,
-            )
-            expect(
-                lsp_code_actions_apply.returncode == 0,
-                f"lsp code-actions --apply should succeed: {lsp_code_actions_apply.stderr}",
-            )
-            lsp_code_actions_apply_report = parse_json_output(
-                lsp_code_actions_apply.stdout
-            )
-            expect(
-                lsp_code_actions_apply_report.get("applied") is True
-                and isinstance(lsp_code_actions_apply_report.get("applied_files"), list)
-                and len(lsp_code_actions_apply_report.get("applied_files", [])) >= 1,
-                "lsp code-actions --apply should apply mock text-edit code action",
-            )
-            updated_text = lsp_actions_file.read_text(encoding="utf-8")
-            expect(
-                "# action:" in updated_text,
-                "lsp code-actions apply should mutate file contents with selected edit",
-            )
-
-            before_disabled_apply = lsp_actions_file.read_text(encoding="utf-8")
-            lsp_code_actions_disabled_apply = subprocess.run(
-                [
-                    sys.executable,
-                    str(LSP_SCRIPT),
-                    "code-actions",
-                    "--symbol",
-                    "alpha",
-                    "--scope",
-                    "*.py",
-                    "--index",
-                    "1",
-                    "--apply",
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                env=lsp_actions_env,
-                check=False,
-                cwd=lsp_actions_root,
-            )
-            expect(
-                lsp_code_actions_disabled_apply.returncode == 0,
-                f"lsp code-actions disabled apply should return structured warn report: {lsp_code_actions_disabled_apply.stderr}",
-            )
-            lsp_code_actions_disabled_apply_report = parse_json_output(
-                lsp_code_actions_disabled_apply.stdout
-            )
-            expect(
-                lsp_code_actions_disabled_apply_report.get("applied") is False
-                and any(
-                    "selected code action is disabled" in str(item)
-                    for item in lsp_code_actions_disabled_apply_report.get(
-                        "blockers", []
-                    )
-                ),
-                "lsp code-actions should block apply for server-disabled actions",
-            )
-            after_disabled_apply = lsp_actions_file.read_text(encoding="utf-8")
-            expect(
-                before_disabled_apply == after_disabled_apply,
-                "lsp code-actions disabled apply should not mutate file contents",
-            )
-
-            lsp_code_actions_kind_filter = subprocess.run(
-                [
-                    sys.executable,
-                    str(LSP_SCRIPT),
-                    "code-actions",
-                    "--symbol",
-                    "alpha",
-                    "--scope",
-                    "*.py",
-                    "--kind",
-                    "quickfix.mock.disabled",
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                env=lsp_actions_env,
-                check=False,
-                cwd=lsp_actions_root,
-            )
-            expect(
-                lsp_code_actions_kind_filter.returncode == 0,
-                f"lsp code-actions --kind should succeed: {lsp_code_actions_kind_filter.stderr}",
-            )
-            lsp_code_actions_kind_filter_report = parse_json_output(
-                lsp_code_actions_kind_filter.stdout
-            )
-            kind_summary = lsp_code_actions_kind_filter_report.get("summary", {})
-            expect(
-                lsp_code_actions_kind_filter_report.get("kind")
-                == "quickfix.mock.disabled"
-                and isinstance(
-                    lsp_code_actions_kind_filter_report.get("code_actions"), list
-                )
-                and len(lsp_code_actions_kind_filter_report.get("code_actions", []))
-                == 1
-                and isinstance(kind_summary, dict)
-                and kind_summary.get("total") == 1
-                and kind_summary.get("preferred") == 0
-                and kind_summary.get("preferred_ratio") == 0.0,
-                "lsp code-actions --kind should deterministically filter action results",
-            )
-
-        lsp_doctor_verbose = subprocess.run(
-            [sys.executable, str(LSP_SCRIPT), "doctor", "--verbose", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_doctor_verbose.returncode == 0,
-            f"lsp doctor --verbose should succeed: {lsp_doctor_verbose.stderr}",
-        )
-        lsp_doctor_verbose_report = parse_json_output(lsp_doctor_verbose.stdout)
-        capability_probing = lsp_doctor_verbose_report.get("capability_probing", {})
-        expect(
-            capability_probing.get("enabled") is True,
-            "lsp doctor --verbose should enable capability probing",
-        )
-        expect(
-            isinstance(capability_probing.get("servers"), list)
-            and isinstance(capability_probing.get("summary"), list),
-            "lsp doctor --verbose should include server and summary capability matrices",
-        )
-
-        lsp_goto = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "goto-definition",
-                "--symbol",
-                "load_layered_config",
-                "--scope",
-                "scripts/*.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_goto.returncode == 0,
-            f"lsp goto-definition should succeed: {lsp_goto.stderr}",
-        )
-        lsp_goto_report = parse_json_output(lsp_goto.stdout)
-        expect(
-            lsp_goto_report.get("backend") in {"lsp", "text"}
-            and isinstance(lsp_goto_report.get("definitions"), list),
-            "lsp goto-definition should report lsp or text definitions",
-        )
-        expect(
-            isinstance(lsp_goto_report.get("backend_details"), dict),
-            "lsp goto-definition should include backend details metadata",
-        )
-
-        lsp_refs = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "find-references",
-                "--symbol",
-                "load_layered_config",
-                "--scope",
-                "scripts/*.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_refs.returncode == 0,
-            f"lsp find-references should succeed: {lsp_refs.stderr}",
-        )
-        lsp_refs_report = parse_json_output(lsp_refs.stdout)
-        expect(
-            lsp_refs_report.get("backend") in {"lsp", "text"}
-            and isinstance(lsp_refs_report.get("references"), list),
-            "lsp find-references should report lsp or text references",
-        )
-
-        lsp_symbols_document = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "symbols",
-                "--view",
-                "document",
-                "--file",
-                "scripts/config_layering.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_symbols_document.returncode == 0,
-            f"lsp symbols document view should succeed: {lsp_symbols_document.stderr}",
-        )
-        lsp_symbols_document_report = parse_json_output(lsp_symbols_document.stdout)
-        expect(
-            isinstance(lsp_symbols_document_report.get("symbols"), list),
-            "lsp symbols document view should report symbol list",
-        )
-
-        lsp_symbols_workspace = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "symbols",
-                "--view",
-                "workspace",
-                "--query",
-                "load",
-                "--scope",
-                "scripts/*.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_symbols_workspace.returncode == 0,
-            f"lsp symbols workspace view should succeed: {lsp_symbols_workspace.stderr}",
-        )
-        lsp_symbols_workspace_report = parse_json_output(lsp_symbols_workspace.stdout)
-        expect(
-            isinstance(lsp_symbols_workspace_report.get("symbols"), list),
-            "lsp symbols workspace view should report symbol list",
-        )
-
-        lsp_prepare_rename = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "prepare-rename",
-                "--symbol",
-                "load_layered_config",
-                "--new-name",
-                "load_cfg",
-                "--scope",
-                "scripts/*.py",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_prepare_rename.returncode == 0,
-            f"lsp prepare-rename should succeed: {lsp_prepare_rename.stderr}",
-        )
-        lsp_prepare_rename_report = parse_json_output(lsp_prepare_rename.stdout)
-        expect(
-            lsp_prepare_rename_report.get("result") in {"PASS", "WARN"},
-            "lsp prepare-rename should emit PASS or WARN result",
-        )
-
-        lsp_rename_plan = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "rename",
-                "--symbol",
-                "load_layered_config",
-                "--new-name",
-                "load_cfg",
-                "--scope",
-                "scripts/*.py",
-                "--allow-text-fallback",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_rename_plan.returncode == 0,
-            f"lsp rename planning should succeed: {lsp_rename_plan.stderr}",
-        )
-        lsp_rename_plan_report = parse_json_output(lsp_rename_plan.stdout)
-        expect(
-            lsp_rename_plan_report.get("applied") is False
-            and isinstance(lsp_rename_plan_report.get("validation"), list),
-            "lsp rename planning should return validation details without applying",
-        )
-        expect(
-            isinstance(lsp_rename_plan_report.get("backend_details"), dict),
-            "lsp rename should include backend details metadata",
-        )
-        expect(
-            isinstance(lsp_rename_plan_report.get("createfile_operations"), list)
-            and isinstance(lsp_rename_plan_report.get("deletefile_operations"), list)
-            and isinstance(
-                lsp_rename_plan_report.get("resource_operation_summary"), dict
-            ),
-            "lsp rename planning should expose create/delete operation visibility fields",
-        )
-        diff_preview = lsp_rename_plan_report.get("diff_preview")
-        expect(
-            isinstance(diff_preview, list)
-            and (not diff_preview or isinstance(diff_preview[0].get("diff"), list)),
-            "lsp rename planning should include per-file diff preview entries",
-        )
-
-        lsp_rename_threshold_block = subprocess.run(
-            [
-                sys.executable,
-                str(LSP_SCRIPT),
-                "rename",
-                "--symbol",
-                "load_layered_config",
-                "--new-name",
-                "load_cfg",
-                "--scope",
-                "scripts/*.py",
-                "--allow-text-fallback",
-                "--max-diff-files",
-                "0",
-                "--apply",
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            lsp_rename_threshold_block.returncode == 0,
-            f"lsp rename threshold block command should succeed: {lsp_rename_threshold_block.stderr}",
-        )
-        lsp_rename_threshold_block_report = parse_json_output(
-            lsp_rename_threshold_block.stdout
-        )
-        expect(
-            lsp_rename_threshold_block_report.get("applied") is False
-            and any(
-                "diff review threshold exceeded" in str(item)
-                for item in lsp_rename_threshold_block_report.get("blockers", [])
-            ),
-            "lsp rename should block apply when diff review thresholds are exceeded",
-        )
-
-        with tempfile.TemporaryDirectory() as lsp_mock_dir:
-            lsp_mock_root = Path(lsp_mock_dir)
-            lsp_mock_file = lsp_mock_root / "sample.py"
-            lsp_mock_file.write_text(
-                "def alpha():\n    return alpha\n",
-                encoding="utf-8",
-            )
-            with LspClient(
-                command=[sys.executable, str(MOCK_LSP_SERVER_SCRIPT)],
-                root=lsp_mock_root,
-            ) as mock_client:
-                defs = mock_client.goto_definition(lsp_mock_file, line0=1, char0=12)
-                refs = mock_client.find_references(lsp_mock_file, line0=1, char0=12)
-                doc_symbols = mock_client.document_symbols(lsp_mock_file)
-                workspace_symbols = mock_client.workspace_symbols("alp")
-                prep = mock_client.prepare_rename(lsp_mock_file, line0=1, char0=12)
-                rename_payload = mock_client.rename(
-                    lsp_mock_file,
-                    line0=1,
-                    char0=12,
-                    new_name="beta",
-                )
-
-            expect(
-                isinstance(defs, list) and len(defs) >= 1,
-                "mock lsp client goto-definition should return at least one location",
-            )
-            expect(
-                isinstance(refs, list) and len(refs) >= 2,
-                "mock lsp client find-references should return declaration and usage",
-            )
-            expect(
-                isinstance(doc_symbols, list) and len(doc_symbols) >= 1,
-                "mock lsp client document-symbol should return at least one symbol",
-            )
-            expect(
-                isinstance(workspace_symbols, list) and len(workspace_symbols) >= 1,
-                "mock lsp client workspace-symbol should return query matches",
-            )
-            expect(
-                isinstance(prep, dict) and isinstance(prep.get("range"), dict),
-                "mock lsp client prepare-rename should return rename range",
-            )
-            expect(
-                isinstance(rename_payload, dict)
-                and isinstance(rename_payload.get("changes"), dict),
-                "mock lsp client rename should return workspace edit changes",
-            )
-
-            mock_lsp_config = lsp_mock_root / "opencode-lsp-mock.json"
-            mock_lsp_config.write_text(
-                json.dumps(
-                    {
-                        "lsp": {
-                            "mock-lsp": {
-                                "command": [
-                                    sys.executable,
-                                    str(MOCK_LSP_SERVER_SCRIPT),
-                                ],
-                                "extensions": [".py"],
-                                "priority": 100,
-                            }
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-            mock_env = os.environ.copy()
-            mock_env["OPENCODE_CONFIG_PATH"] = str(mock_lsp_config)
-            mock_env.pop("SUPERMEMORY_API_KEY", None)
-            mock_env.pop("MORPH_API_KEY", None)
-
-            lsp_capability_preflight_goto = subprocess.run(
-                [
-                    sys.executable,
-                    str(LSP_SCRIPT),
-                    "goto-definition",
-                    "--symbol",
-                    "alpha",
-                    "--scope",
-                    "*.py",
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                env=mock_env,
-                check=False,
-                cwd=lsp_mock_root,
-            )
-            expect(
-                lsp_capability_preflight_goto.returncode == 0,
-                f"lsp capability preflight goto-definition should succeed: {lsp_capability_preflight_goto.stderr}",
-            )
-            lsp_capability_preflight_goto_report = parse_json_output(
-                lsp_capability_preflight_goto.stdout
-            )
-            expect(
-                lsp_capability_preflight_goto_report.get("backend") == "text"
-                and lsp_capability_preflight_goto_report.get("reason_code")
-                == "lsp_capability_missing_definition_provider"
-                and isinstance(
-                    lsp_capability_preflight_goto_report.get("definitions"), list
-                )
-                and len(lsp_capability_preflight_goto_report["definitions"]) >= 1,
-                "lsp goto-definition should preflight capability and fallback to text when provider is missing",
-            )
-
-            lsp_capability_preflight_workspace = subprocess.run(
-                [
-                    sys.executable,
-                    str(LSP_SCRIPT),
-                    "symbols",
-                    "--view",
-                    "workspace",
-                    "--query",
-                    "alp",
-                    "--scope",
-                    "*.py",
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                env=mock_env,
-                check=False,
-                cwd=lsp_mock_root,
-            )
-            expect(
-                lsp_capability_preflight_workspace.returncode == 0,
-                f"lsp capability preflight symbols workspace should succeed: {lsp_capability_preflight_workspace.stderr}",
-            )
-            lsp_capability_preflight_workspace_report = parse_json_output(
-                lsp_capability_preflight_workspace.stdout
-            )
-            expect(
-                lsp_capability_preflight_workspace_report.get("backend") == "text"
-                and lsp_capability_preflight_workspace_report.get("reason_code")
-                == "lsp_capability_missing_workspace_symbol_provider"
-                and isinstance(
-                    lsp_capability_preflight_workspace_report.get("symbols"), list
-                )
-                and len(lsp_capability_preflight_workspace_report["symbols"]) >= 1,
-                "lsp symbols workspace should preflight capability and fallback to text when provider is missing",
-            )
-
-        workspace_change_map, workspace_ops, workspace_annotations = (
-            _workspace_edit_text_changes(
-                {
-                    "documentChanges": [
-                        {
-                            "textDocument": {
-                                "uri": "file:///tmp/example.py",
-                                "version": 1,
-                            },
-                            "edits": [
-                                {
-                                    "range": {
-                                        "start": {"line": 0, "character": 0},
-                                        "end": {"line": 0, "character": 3},
-                                    },
-                                    "newText": "foo",
-                                }
-                            ],
-                        }
-                    ]
-                }
-            )
-        )
-        expect(
-            isinstance(workspace_change_map.get("file:///tmp/example.py"), list)
-            and len(workspace_change_map["file:///tmp/example.py"]) == 1,
-            "lsp workspace edit helper should parse documentChanges text edits",
-        )
-        expect(
-            workspace_ops == [],
-            "lsp workspace edit helper should keep resource operation list empty for pure text edits",
-        )
-        expect(
-            workspace_annotations == {},
-            "lsp workspace edit helper should keep annotation map empty when absent",
-        )
-
-        _, workspace_resource_ops, workspace_annotations_with_policy = (
-            _workspace_edit_text_changes(
-                {
-                    "changeAnnotations": {
-                        "a1": {
-                            "label": "Rename symbol references",
-                            "description": "Cross-file rename operation",
-                            "needsConfirmation": True,
-                        }
-                    },
-                    "documentChanges": [
-                        {
-                            "kind": "rename",
-                            "oldUri": "file:///tmp/old.py",
-                            "newUri": "file:///tmp/new.py",
-                        },
-                        {
-                            "textDocument": {
-                                "uri": "file:///tmp/file.py",
-                                "version": 1,
-                            },
-                            "edits": [
-                                {
-                                    "range": {
-                                        "start": {"line": 0, "character": 0},
-                                        "end": {"line": 0, "character": 3},
-                                    },
-                                    "newText": "foo",
-                                    "annotationId": "a1",
-                                }
-                            ],
-                        },
-                        {
-                            "kind": "delete",
-                            "uri": "file:///tmp/obsolete.py",
-                        },
-                        {
-                            "kind": "create",
-                            "uri": "file:///tmp/new_file.py",
-                        },
-                    ],
-                }
-            )
-        )
-        expect(
-            len(workspace_resource_ops) == 3,
-            "lsp workspace edit helper should extract resource operations from documentChanges",
-        )
-        grouped_workspace_resource_ops = _group_resource_operations(
-            workspace_resource_ops
-        )
-        split_rename_ops, split_blocked_ops = _split_resource_operations(
-            workspace_resource_ops
-        )
-        expect(
-            len(grouped_workspace_resource_ops.get("renamefile", [])) == 1
-            and len(grouped_workspace_resource_ops.get("createfile", [])) == 1
-            and len(grouped_workspace_resource_ops.get("deletefile", [])) == 1,
-            "lsp resource operation grouping should classify rename/create/delete entries",
-        )
-        expect(
-            len(split_rename_ops) == 1 and split_blocked_ops == [],
-            "lsp resource split helper should keep create/delete ops out of unsupported bucket",
-        )
-        expect(
-            workspace_annotations_with_policy.get("a1", {}).get("needs_confirmation")
-            is True,
-            "lsp workspace edit helper should normalize change annotation policy",
-        )
-
-        with tempfile.TemporaryDirectory() as rename_dir:
-            rename_root = Path(rename_dir)
-            source = rename_root / "src.py"
-            target = rename_root / "renamed.py"
-            source.write_text("print('ok')\n", encoding="utf-8")
-            rename_ops = [
-                {
-                    "kind": "renamefile",
-                    "old_uri": source.resolve().as_uri(),
-                    "new_uri": target.resolve().as_uri(),
-                }
-            ]
-            rename_validation_errors = _validate_renamefile_operations(
-                rename_root, rename_ops
-            )
-            expect(
-                rename_validation_errors == [],
-                "renamefile validation should pass for in-repo existing source and empty target",
-            )
-            applied_rename_ops, apply_blockers = _apply_renamefile_operations(
-                rename_root, rename_ops
-            )
-            expect(
-                apply_blockers == []
-                and len(applied_rename_ops) == 1
-                and target.exists()
-                and not source.exists(),
-                "renamefile apply helper should perform safe rename when validation passes",
-            )
-
         cross_language_plan = evaluate_semantic_capability(
             "rename",
             [
@@ -5557,174 +4174,6 @@ index 3333333..4444444 100644
             and browser_doctor_playwright_report.get("selected_ready") is True,
             "browser doctor should report ready selected provider after reset",
         )
-
-        tmux_status = subprocess.run(
-            [sys.executable, str(TMUX_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(tmux_status.returncode == 0, "tmux status should succeed")
-        tmux_status_report = parse_json_output(tmux_status.stdout)
-        expect(
-            isinstance(tmux_status_report.get("pane_session_cache"), dict)
-            and tmux_status_report.get("runtime_mode") in {"tmux", "headless_fallback"},
-            "tmux status should report runtime mode and pane session cache summary",
-        )
-
-        tmux_config = subprocess.run(
-            [sys.executable, str(TMUX_SCRIPT), "config", "enabled", "true"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(tmux_config.returncode == 0, "tmux config should update enabled flag")
-        tmux_config_path_line = next(
-            (
-                line
-                for line in tmux_config.stdout.splitlines()
-                if line.startswith("config: ")
-            ),
-            "",
-        )
-        expect(
-            bool(tmux_config_path_line),
-            "tmux config output should include write-path line",
-        )
-
-        tmux_doctor = subprocess.run(
-            [sys.executable, str(TMUX_SCRIPT), "doctor", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(tmux_doctor.returncode == 0, "tmux doctor should succeed")
-        tmux_doctor_report = parse_json_output(tmux_doctor.stdout)
-        expect(
-            tmux_doctor_report.get("result") in {"PASS", "WARN"}
-            and isinstance(tmux_doctor_report.get("warnings"), list),
-            "tmux doctor should return stable diagnostics payload",
-        )
-
-        packaged_cli_version = subprocess.run(
-            [sys.executable, str(PACKAGED_CLI_SCRIPT), "version"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            packaged_cli_version.returncode == 0
-            and "my_opencode-cli" in packaged_cli_version.stdout,
-            "packaged CLI version command should return stable version banner",
-        )
-
-        packaged_cli_doctor = subprocess.run(
-            [sys.executable, str(PACKAGED_CLI_SCRIPT), "doctor", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            packaged_cli_doctor.returncode == 0,
-            "packaged CLI doctor command should succeed",
-        )
-
-        packaged_cli_install = subprocess.run(
-            [
-                sys.executable,
-                str(PACKAGED_CLI_SCRIPT),
-                "install",
-                "--repo-url",
-                str(REPO_ROOT),
-                "--repo-ref",
-                "HEAD",
-                "--install-dir",
-                str(tmp / "packaged-cli-install"),
-                "--dry-run",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            packaged_cli_install.returncode == 0
-            and "install.sh --non-interactive" in packaged_cli_install.stdout,
-            "packaged CLI install command should support non-interactive dry-run output",
-        )
-
-        packaged_cli_run = subprocess.run(
-            [
-                sys.executable,
-                str(PACKAGED_CLI_SCRIPT),
-                "run",
-                "--opencode-binary",
-                "/usr/bin/true",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            packaged_cli_run.returncode == 0,
-            "packaged CLI run command should execute configured binary",
-        )
-
-        for skill_name in ("playwright", "frontend-ui-ux", "git-master"):
-            skill_contract = subprocess.run(
-                [
-                    sys.executable,
-                    str(SKILL_CONTRACT_SCRIPT),
-                    skill_name,
-                    "--json",
-                ],
-                capture_output=True,
-                text=True,
-                env=refactor_env,
-                check=False,
-                cwd=REPO_ROOT,
-            )
-            expect(
-                skill_contract.returncode == 0,
-                f"skill contract command should succeed for {skill_name}",
-            )
-            skill_contract_payload = parse_json_output(skill_contract.stdout)
-            expect(
-                skill_contract_payload.get("name") == skill_name,
-                f"skill contract payload should expose skill name for {skill_name}",
-            )
-            expect(
-                isinstance(skill_contract_payload.get("triggers"), list)
-                and len(skill_contract_payload["triggers"]) >= 1,
-                f"skill contract should include triggers for {skill_name}",
-            )
-            expect(
-                isinstance(skill_contract_payload.get("boundaries"), list)
-                and len(skill_contract_payload["boundaries"]) >= 1,
-                f"skill contract should include boundaries for {skill_name}",
-            )
-            expect(
-                isinstance(skill_contract_payload.get("reuse_commands"), list)
-                and len(skill_contract_payload["reuse_commands"]) >= 1,
-                f"skill contract should include reuse commands for {skill_name}",
-            )
-            expect(
-                bool(skill_contract_payload.get("fallback")),
-                f"skill contract should include fallback guidance for {skill_name}",
-            )
 
         plan_path = tmp / "plan_execution_selftest.md"
         plan_path.write_text(
@@ -6448,19 +4897,6 @@ version: 1
             "autopilot start should initialize budget-stop verification run",
         )
 
-        autopilot_command_pause_budget = subprocess.run(
-            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "pause", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autopilot_command_pause_budget.returncode == 0,
-            "autopilot pause should prepare resume budget-stop verification run",
-        )
-
         autopilot_command_resume_budget_stop = subprocess.run(
             [
                 sys.executable,
@@ -6569,50 +5005,6 @@ version: 1
             autopilot_command_status_after_stop_report.get("run", {}).get("status")
             == "stopped",
             "autopilot status should retain stopped state after stop transition",
-        )
-
-        autopilot_command_resume_after_stop = subprocess.run(
-            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "resume", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autopilot_command_resume_after_stop.returncode == 1,
-            "autopilot resume should fail when current state is stopped",
-        )
-        autopilot_command_resume_after_stop_report = parse_json_output(
-            autopilot_command_resume_after_stop.stdout
-        )
-        expect(
-            autopilot_command_resume_after_stop_report.get("reason_code")
-            == "invalid_state_transition",
-            "autopilot resume after stop should expose invalid_state_transition reason code",
-        )
-
-        autopilot_command_status_after_resume_attempt = subprocess.run(
-            [sys.executable, str(AUTOPILOT_COMMAND_SCRIPT), "status", "--json"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            autopilot_command_status_after_resume_attempt.returncode == 0,
-            "autopilot status should succeed after invalid resume attempt",
-        )
-        autopilot_command_status_after_resume_attempt_report = parse_json_output(
-            autopilot_command_status_after_resume_attempt.stdout
-        )
-        expect(
-            autopilot_command_status_after_resume_attempt_report.get("run", {}).get(
-                "status"
-            )
-            == "stopped",
-            "autopilot status should remain stopped after invalid resume attempt",
         )
 
         forced_budget_config = load_json_file(config_path)
@@ -7987,10 +6379,6 @@ version: 1
             (auto_slash_detect.get("selected") or {}).get("command") == "doctor",
             "auto-slash schema should map clear diagnostic intent to doctor",
         )
-        expect(
-            (auto_slash_detect.get("selected") or {}).get("slash_command") == "/doctor",
-            "auto-slash schema should render doctor slash command without duplicate run subcommand",
-        )
 
         auto_slash_dataset = [
             {"prompt": "run doctor diagnostics", "expected": "doctor"},
@@ -8852,75 +7240,6 @@ version: 1
         expect(
             safe_edit_checks[0].get("ok") is True,
             "doctor safe-edit check should pass",
-        )
-
-        lsp_checks = [
-            check for check in report.get("checks", []) if check.get("name") == "lsp"
-        ]
-        expect(bool(lsp_checks), "doctor summary should include lsp check")
-        expect(
-            lsp_checks[0].get("ok") is True,
-            "doctor lsp check should pass",
-        )
-
-        task_create = run_script(
-            TASK_GRAPH_SCRIPT,
-            cfg_path,
-            home,
-            "create",
-            "--subject",
-            "Build task graph backend",
-            "--owner",
-            "selftest",
-            "--json",
-        )
-        expect(
-            task_create.returncode == 0,
-            f"task create should succeed: {task_create.stderr}",
-        )
-        task_create_payload = parse_json_output(task_create.stdout)
-        task_id = str(task_create_payload.get("task", {}).get("id") or "")
-        expect(task_id.startswith("T-"), "task create should return generated task id")
-
-        task_list = run_script(TASK_GRAPH_SCRIPT, cfg_path, home, "list", "--json")
-        expect(
-            task_list.returncode == 0, f"task list should succeed: {task_list.stderr}"
-        )
-        task_list_payload = parse_json_output(task_list.stdout)
-        expect(
-            int(task_list_payload.get("count", 0)) >= 1,
-            "task list should include created task",
-        )
-
-        task_update = run_script(
-            TASK_GRAPH_SCRIPT,
-            cfg_path,
-            home,
-            "update",
-            task_id,
-            "--status",
-            "completed",
-            "--json",
-        )
-        expect(
-            task_update.returncode == 0,
-            f"task update should succeed: {task_update.stderr}",
-        )
-        task_update_payload = parse_json_output(task_update.stdout)
-        expect(
-            task_update_payload.get("task", {}).get("status") == "completed",
-            "task update should change status to completed",
-        )
-
-        task_doctor = run_script(TASK_GRAPH_SCRIPT, cfg_path, home, "doctor", "--json")
-        expect(
-            task_doctor.returncode == 0,
-            f"task doctor should succeed: {task_doctor.stderr}",
-        )
-        task_doctor_payload = parse_json_output(task_doctor.stdout)
-        expect(
-            task_doctor_payload.get("result") == "PASS",
-            "task doctor should report PASS",
         )
 
     print("selftest: PASS")

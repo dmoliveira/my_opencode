@@ -34,10 +34,6 @@
       "description": "Run all diagnostics in one pass",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run $ARGUMENTS`\nShow only the command output."
     },
-    "doctor-help": {
-      "description": "Show unified doctor command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" help`\nShow only the command output."
-    },
     "doctor-json": {
       "description": "Run all diagnostics in JSON",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
@@ -58,964 +54,156 @@
       "description": "Short alias for /complete",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
     },
-    "complete-families": {
-      "description": "List command families and counts",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" families`\nShow only the command output."
-    },
-    "complete-doctor": {
-      "description": "Diagnose autocomplete helper wiring",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" doctor --json`\nShow only the command output."
-    },
     "config": {
       "description": "Backup and restore OpenCode config files",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "config-help": {
-      "description": "Show config backup/restore command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" help`\nShow only the command output."
-    },
-    "config-backup": {
-      "description": "Create a config backup snapshot",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" backup`\nShow only the command output."
-    },
-    "config-list": {
-      "description": "List available config backups",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" list`\nShow only the command output."
-    },
-    "config-layers": {
-      "description": "Show layered config precedence and active paths",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" layers`\nShow only the command output."
-    },
-    "config-layers-json": {
-      "description": "Show layered config precedence in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" layers --json`\nShow only the command output."
     },
     "bg": {
       "description": "Manage background jobs (start|status|list|read|cancel|cleanup|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "bg-help": {
-      "description": "Show background task command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" help`\nShow only the command output."
-    },
-    "bg-list": {
-      "description": "List recent background jobs",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" list`\nShow only the command output."
-    },
-    "bg-running": {
-      "description": "List running background jobs",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" list --status running`\nShow only the command output."
-    },
-    "bg-doctor-json": {
-      "description": "Run background task diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" doctor --json`\nShow only the command output."
-    },
-    "bg-status-json": {
-      "description": "Show background task status summary in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" status --json`\nShow only the command output."
-    },
-    "background-agent-call": {
-      "description": "Run a delegated agent task in background via compatibility facade",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_bg_compat_command.py\" call_omo_agent $ARGUMENTS --json`\nShow only the command output."
-    },
-    "background-output": {
-      "description": "Upstream-style background output retrieval facade",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_bg_compat_command.py\" background_output $ARGUMENTS --json`\nShow only the command output."
-    },
-    "upstream-bg-status": {
-      "description": "Show upstream background compatibility facade status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_bg_compat_command.py\" status --json`\nShow only the command output."
-    },
-    "upstream-agent-map": {
-      "description": "Map upstream role labels to local agents with rationale",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_agent_compat_command.py\" map $ARGUMENTS --json`\nShow only the command output."
-    },
-    "upstream-agent-map-status": {
-      "description": "Show upstream agent compatibility map status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_agent_compat_command.py\" status --json`\nShow only the command output."
-    },
-    "upstream-compat-doctor": {
-      "description": "Run upstream compatibility readiness doctor checks",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/upstream_compat_doctor_command.py\" doctor --json`\nShow only the command output."
-    },
     "refactor-lite": {
       "description": "Run safe refactor workflow backend",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "refactor-lite-help": {
-      "description": "Show /refactor-lite backend command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" --help`\nShow only the command output."
-    },
-    "refactor-lite-dry-run": {
-      "description": "Run /refactor-lite dry-run with JSON output",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" $ARGUMENTS --dry-run --json`\nShow only the command output."
     },
     "hooks": {
       "description": "Manage safety hooks (status|help|enable|disable|run)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "hooks-help": {
-      "description": "Show /hooks command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" help`\nShow only the command output."
-    },
-    "hooks-enable": {
-      "description": "Enable hook execution",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" enable`\nShow only the command output."
-    },
-    "hooks-disable": {
-      "description": "Disable hook execution",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" disable`\nShow only the command output."
-    },
-    "hooks-status": {
-      "description": "Show hook configuration and audit path",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" status`\nShow only the command output."
-    },
-    "hooks-doctor": {
-      "description": "Run hook diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" doctor`\nShow only the command output."
-    },
-    "hooks-doctor-json": {
-      "description": "Run hook diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" doctor --json`\nShow only the command output."
-    },
     "model-routing": {
       "description": "Manage model routing (status|set-category|resolve|trace)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "model-routing-status": {
-      "description": "Show active model routing category",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" status`\nShow only the command output."
-    },
-    "model-profile": {
-      "description": "Compatibility alias for /model-routing (status|set|resolve)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "model-profile-status": {
-      "description": "Compatibility alias for /model-routing-status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" status`\nShow only the command output."
-    },
-    "model-profile-set": {
-      "description": "Set active model profile category",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" set-category $ARGUMENTS`\nShow only the command output."
-    },
-    "model-profile-resolve": {
-      "description": "Resolve effective model settings in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" resolve $ARGUMENTS --json`\nShow only the command output."
-    },
-    "model-routing-trace": {
-      "description": "Show latest routing trace in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" trace --json`\nShow only the command output."
     },
     "routing": {
       "description": "Explain routing outcomes (status|explain)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "routing-status": {
-      "description": "Show compact routing status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" status`\nShow only the command output."
-    },
-    "routing-explain": {
-      "description": "Explain routing selection in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" explain $ARGUMENTS --json`\nShow only the command output."
-    },
     "keyword-mode": {
       "description": "Detect and apply keyword-triggered execution modes",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "keyword-mode-status": {
-      "description": "Show keyword mode status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" status`\nShow only the command output."
-    },
-    "keyword-mode-detect": {
-      "description": "Detect keyword modes for a prompt",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" detect $ARGUMENTS --json`\nShow only the command output."
-    },
-    "keyword-mode-apply": {
-      "description": "Apply keyword modes for a prompt",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" apply $ARGUMENTS --json`\nShow only the command output."
-    },
-    "keyword-mode-enable": {
-      "description": "Enable keyword mode detection globally",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" enable`\nShow only the command output."
-    },
-    "keyword-mode-disable": {
-      "description": "Disable keyword mode detection globally",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" disable`\nShow only the command output."
-    },
-    "keyword-mode-disable-keyword": {
-      "description": "Disable a specific keyword",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" disable-keyword $ARGUMENTS`\nShow only the command output."
-    },
-    "keyword-mode-enable-keyword": {
-      "description": "Re-enable a specific keyword",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" enable-keyword $ARGUMENTS`\nShow only the command output."
-    },
-    "keyword-mode-doctor": {
-      "description": "Run keyword mode diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" doctor --json`\nShow only the command output."
     },
     "auto-slash": {
       "description": "Detect and preview natural-language slash intents",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "auto-slash-status": {
-      "description": "Show auto-slash detector status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" status --json`\nShow only the command output."
-    },
-    "auto-slash-detect": {
-      "description": "Detect best slash command for a prompt",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" detect $ARGUMENTS --json`\nShow only the command output."
-    },
-    "auto-slash-preview": {
-      "description": "Preview slash command mapping and guardrails",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" preview $ARGUMENTS --json`\nShow only the command output."
-    },
-    "auto-slash-execute": {
-      "description": "Execute mapped slash command with force gate",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" execute $ARGUMENTS --json`\nShow only the command output."
-    },
-    "auto-slash-doctor": {
-      "description": "Run auto-slash diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" doctor --json`\nShow only the command output."
-    },
-    "auto-slash-audit": {
-      "description": "Show recent auto-slash execution audit entries",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" audit --json`\nShow only the command output."
-    },
     "rules": {
       "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "rules-status": {
-      "description": "Show rules discovery and config status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" status`\nShow only the command output."
-    },
-    "rules-explain": {
-      "description": "Explain effective rules for a target path",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" explain $ARGUMENTS --json`\nShow only the command output."
-    },
-    "rules-doctor": {
-      "description": "Run rules diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" doctor --json`\nShow only the command output."
     },
     "resilience": {
       "description": "Inspect context resilience health (status|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "resilience-status": {
-      "description": "Show context resilience policy status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" status --json`\nShow only the command output."
-    },
-    "resilience-doctor": {
-      "description": "Run context resilience diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" doctor --json`\nShow only the command output."
-    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "stack-help": {
-      "description": "Show stack profile command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" help`\nShow only the command output."
-    },
-    "stack-focus": {
-      "description": "Apply focus stack profile",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply focus`\nShow only the command output."
-    },
-    "stack-research": {
-      "description": "Apply research stack profile",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply research`\nShow only the command output."
-    },
-    "stack-quiet-ci": {
-      "description": "Apply quiet-ci stack profile",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" apply quiet-ci`\nShow only the command output."
     },
     "browser": {
       "description": "Manage browser automation provider profile (status|profile|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "browser-status": {
-      "description": "Show active browser automation provider",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" status`\nShow only the command output."
-    },
-    "browser-profile": {
-      "description": "Switch browser provider profile",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" profile $ARGUMENTS`\nShow only the command output."
-    },
-    "browser-doctor-json": {
-      "description": "Run browser provider diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json`\nShow only the command output."
-    },
-    "tmux": {
-      "description": "Manage optional tmux visual mode (status|config|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "tmux-status": {
-      "description": "Show tmux visual mode status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" status --json`\nShow only the command output."
-    },
-    "tmux-config": {
-      "description": "Configure tmux visual mode defaults",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" config $ARGUMENTS`\nShow only the command output."
-    },
-    "tmux-doctor-json": {
-      "description": "Run tmux visual mode diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/tmux_command.py\" doctor --json`\nShow only the command output."
-    },
-    "my-opencode": {
-      "description": "Run packaged my_opencode CLI (install|doctor|run|version)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "my-opencode-version": {
-      "description": "Show packaged my_opencode CLI version",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py\" version`\nShow only the command output."
-    },
-    "playwright": {
-      "description": "Skill contract for browser automation with Playwright-first defaults",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" playwright --json`\nUse this skill contract as execution guardrails for the current request. Prefer `/browser profile playwright` and `/browser doctor --json` before browser-driven execution, then continue concrete implementation in this session."
-    },
-    "frontend-ui-ux": {
-      "description": "Skill contract for frontend UI/UX implementation quality",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" frontend-ui-ux --json`\nUse this skill contract as execution guardrails for the current request. Reuse existing frontend patterns, ensure desktop/mobile behavior, and continue concrete implementation now."
-    },
-    "git-master": {
-      "description": "Skill contract for safe git workflow and PR-first delivery",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/skill_contract_command.py\" git-master --json`\nUse this skill contract as execution guardrails for the current request. Follow safe git workflow defaults, gather validation evidence, and continue concrete implementation now."
-    },
     "autopilot": {
       "description": "Continue current task autonomously with autopilot guardrails",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" $ARGUMENTS --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
-    },
-    "autopilot-go": {
-      "description": "One-shot start-or-resume and iterate until terminal state or cycle cap",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
-    },
-    "autopilot-go-verbose": {
-      "description": "Run /autopilot go with full verbose runtime payload",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go $ARGUMENTS --debug-command --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context."
-    },
-    "autopilot-objective": {
-      "description": "Run /autopilot with objective-gate completion mode",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode objective $ARGUMENTS --debug-command --compact --json 2>&1`\nUse objective done-criteria gates to complete the run. Execute concrete work from current repo context and continue until objective gates pass or a concrete blocker is hit."
-    },
-    "continue-work": {
-      "description": "Compatibility alias for /autopilot-go",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
-    },
-    "autoloop": {
-      "description": "Compatibility alias for /autopilot-go",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
-    },
-    "init-deep": {
-      "description": "Compatibility alias for /autopilot-objective",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode objective --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse objective done-criteria gates to complete the run. Execute concrete work from current repo context and continue until objective gates pass or a concrete blocker is hit."
-    },
-    "ulw-loop": {
-      "description": "Compatibility alias for /autopilot-go",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
     "ralph-loop": {
-      "description": "Compatibility alias for /autopilot-go",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --debug-command --compact --json 2>&1`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+      "description": "Compatibility alias for /autopilot go --completion-mode promise",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode promise --goal \"$ARGUMENTS\" --json`\nCompatibility alias: prefer /autopilot-go for canonical usage. Default completion promise is <promise>DONE</promise>. Continue execution until completion token is emitted."
     },
-    "autopilot-status": {
-      "description": "Show current /autopilot runtime status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" status --json`\nShow only the command output."
-    },
-    "autopilot-report": {
-      "description": "Show /autopilot progress and blockers report in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" report --json`\nShow only the command output."
-    },
-    "autopilot-pause": {
-      "description": "Pause /autopilot execution in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" pause --json`\nShow only the command output."
-    },
-    "autopilot-resume": {
-      "description": "Resume /autopilot execution in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" resume $ARGUMENTS --json`\nShow only the command output."
-    },
-    "autopilot-stop": {
-      "description": "Stop /autopilot execution in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" stop $ARGUMENTS --json`\nShow only the command output."
-    },
-    "autopilot-doctor": {
-      "description": "Run /autopilot subsystem diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" doctor --json`\nShow only the command output."
+    "cancel-ralph": {
+      "description": "Compatibility alias for /autopilot-stop",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" stop --reason cancel-ralph --json`\nCompatibility alias: prefer /autopilot-stop for canonical usage. Show only the command output."
     },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "pr-review-json": {
-      "description": "Run PR review analysis in JSON mode",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS --json`\nShow only the command output."
-    },
-    "pr-review-checklist": {
-      "description": "Show pre-merge checklist for current review range",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" checklist $ARGUMENTS --json`\nShow only the command output."
-    },
-    "pr-review-doctor": {
-      "description": "Run PR review subsystem diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" doctor --json`\nShow only the command output."
-    },
     "release-train": {
       "description": "Run release-train workflow controls (status|prepare|draft|publish)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "release-train-json": {
-      "description": "Run release-train command in JSON mode",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS --json`\nShow only the command output."
-    },
-    "release-train-prepare": {
-      "description": "Run release preflight gating checks",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" prepare $ARGUMENTS --json`\nShow only the command output."
-    },
-    "release-train-draft": {
-      "description": "Generate release note draft from git history",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft $ARGUMENTS --json`\nShow only the command output."
-    },
-    "release-train-draft-milestones": {
-      "description": "Generate release note draft with parity and LSP milestone context",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft --include-milestones $ARGUMENTS --json`\nShow only the command output."
-    },
-    "release-train-doctor": {
-      "description": "Run release-train diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" doctor --json`\nShow only the command output."
     },
     "hotfix": {
       "description": "Run incident hotfix controls (start|status|close|remind|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "hotfix-json": {
-      "description": "Run hotfix command path in JSON mode",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS --json`\nShow only the command output."
-    },
-    "hotfix-start": {
-      "description": "Start hotfix incident mode in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" start $ARGUMENTS --json`\nShow only the command output."
-    },
-    "hotfix-status": {
-      "description": "Show hotfix incident status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" status --json`\nShow only the command output."
-    },
-    "hotfix-close": {
-      "description": "Close hotfix incident with follow-up metadata",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" close $ARGUMENTS --json`\nShow only the command output."
-    },
-    "hotfix-remind": {
-      "description": "Show post-incident hardening reminders",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" remind --json`\nShow only the command output."
-    },
-    "hotfix-doctor": {
-      "description": "Run hotfix command diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" doctor --json`\nShow only the command output."
-    },
     "health": {
       "description": "Show repo health score and drift insights",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "health-status": {
-      "description": "Show latest health status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" status --json`\nShow only the command output."
-    },
-    "health-trend": {
-      "description": "Show recent health score trend in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" trend $ARGUMENTS --json`\nShow only the command output."
-    },
-    "health-drift": {
-      "description": "Show current drift findings in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" drift $ARGUMENTS --json`\nShow only the command output."
-    },
-    "health-doctor": {
-      "description": "Run health subsystem diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" doctor --json`\nShow only the command output."
     },
     "learn": {
       "description": "Capture and manage reusable task knowledge (capture|review|publish|search|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "learn-capture": {
-      "description": "Capture draft knowledge entries from merged PRs and digests",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" capture $ARGUMENTS --json`\nShow only the command output."
-    },
-    "learn-review": {
-      "description": "Review/edit draft knowledge entries and apply quality gates",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" review $ARGUMENTS --json`\nShow only the command output."
-    },
-    "learn-publish": {
-      "description": "Publish reviewed knowledge entries with approval metadata",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" publish $ARGUMENTS --json`\nShow only the command output."
-    },
-    "learn-search": {
-      "description": "Search published/review knowledge entries and integration hints",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" search $ARGUMENTS --json`\nShow only the command output."
-    },
-    "learn-doctor": {
-      "description": "Run knowledge capture diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" doctor --json`\nShow only the command output."
-    },
     "budget": {
       "description": "Manage execution budget controls (status|profile|override|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "budget-status": {
-      "description": "Show active execution budget profile and limits in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" status --json`\nShow only the command output."
-    },
-    "budget-profile": {
-      "description": "Set execution budget profile",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" profile $ARGUMENTS`\nShow only the command output."
-    },
-    "budget-override": {
-      "description": "Set or clear execution budget overrides",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" override $ARGUMENTS --json`\nShow only the command output."
-    },
-    "budget-doctor-json": {
-      "description": "Run execution budget diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" doctor --json`\nShow only the command output."
     },
     "todo": {
       "description": "Inspect todo compliance state (status|enforce)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "todo-status": {
-      "description": "Show latest todo compliance status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" status --json`\nShow only the command output."
-    },
-    "todo-enforce": {
-      "description": "Run todo compliance enforcement checks in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" enforce --json`\nShow only the command output."
-    },
-    "task": {
-      "description": "Manage persistent task graph (create|list|get|update|ready|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "task-create": {
-      "description": "Create one task graph entry",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" create $ARGUMENTS --json`\nShow only the command output."
-    },
-    "task-list": {
-      "description": "List task graph entries",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" list $ARGUMENTS --json`\nShow only the command output."
-    },
-    "task-get": {
-      "description": "Show one task graph entry by id",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" get $ARGUMENTS --json`\nShow only the command output."
-    },
-    "task-update": {
-      "description": "Update task graph entry fields",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" update $ARGUMENTS --json`\nShow only the command output."
-    },
-    "task-ready": {
-      "description": "List dependency-unblocked pending tasks",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" ready --json`\nShow only the command output."
-    },
-    "task-doctor": {
-      "description": "Run task graph diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/task_graph_command.py\" doctor --json`\nShow only the command output."
-    },
-    "plan-handoff": {
-      "description": "Thin @plan-style continuity profile over canonical runtime commands",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" $ARGUMENTS --json`\nShow only the command output."
-    },
-    "plan-handoff-status": {
-      "description": "Show plan-handoff compatibility profile status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" status --json`\nShow only the command output."
-    },
     "resume": {
       "description": "Manage runtime recovery controls (status|now|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "resume-status": {
-      "description": "Show current resume eligibility status in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" status --json`\nShow only the command output."
-    },
-    "resume-now": {
-      "description": "Attempt immediate resume from latest checkpoint",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" now --json`\nShow only the command output."
-    },
-    "resume-disable": {
-      "description": "Disable resume automation in runtime state",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" disable --json`\nShow only the command output."
     },
     "safe-edit": {
       "description": "Plan semantic safe-edit execution (status|plan|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "safe-edit-status": {
-      "description": "Show safe-edit backend availability in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" status --json`\nShow only the command output."
-    },
-    "safe-edit-doctor": {
-      "description": "Run safe-edit diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" doctor --json`\nShow only the command output."
-    },
-    "lsp": {
-      "description": "Inspect LSP readiness and diagnostics (status|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "lsp-status": {
-      "description": "Show LSP server readiness in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" status --json`\nShow only the command output."
-    },
-    "lsp-doctor": {
-      "description": "Run LSP diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" doctor --json`\nShow only the command output."
-    },
-    "lsp-goto-definition": {
-      "description": "Find likely symbol definitions within explicit scope",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" goto-definition $ARGUMENTS`\nShow only the command output."
-    },
-    "lsp-find-references": {
-      "description": "Find symbol references within explicit scope",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" find-references $ARGUMENTS`\nShow only the command output."
-    },
-    "lsp-symbols": {
-      "description": "List symbols from a document or workspace scope",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" symbols $ARGUMENTS`\nShow only the command output."
-    },
-    "lsp-prepare-rename": {
-      "description": "Validate scoped rename safety before applying",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" prepare-rename $ARGUMENTS`\nShow only the command output."
-    },
-    "lsp-rename": {
-      "description": "Run guarded rename with explicit text fallback opt-in",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/lsp_command.py\" rename $ARGUMENTS`\nShow only the command output."
-    },
     "checkpoint": {
       "description": "Inspect checkpoint snapshots (list|show|prune|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "checkpoint-list": {
-      "description": "List checkpoint snapshots in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" list --json`\nShow only the command output."
-    },
-    "checkpoint-show": {
-      "description": "Show latest checkpoint snapshot in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" show --snapshot latest --json`\nShow only the command output."
-    },
-    "checkpoint-prune": {
-      "description": "Prune old checkpoint snapshots",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" prune --max-per-run 50 --max-age-days 14 --json`\nShow only the command output."
-    },
-    "checkpoint-doctor-json": {
-      "description": "Run checkpoint health diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" doctor --json`\nShow only the command output."
     },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "nvim-help": {
-      "description": "Show Neovim integration command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" help`\nShow only the command output."
-    },
-    "nvim-status": {
-      "description": "Show Neovim integration status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" status`\nShow only the command output."
-    },
-    "nvim-install-minimal": {
-      "description": "Install minimal Neovim keymap integration",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" install minimal --link-init`\nShow only the command output."
-    },
-    "nvim-install-power": {
-      "description": "Install power Neovim keymap integration",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" install power --link-init`\nShow only the command output."
-    },
-    "nvim-doctor-json": {
-      "description": "Run Neovim integration diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" doctor --json`\nShow only the command output."
-    },
     "devtools": {
       "description": "Manage external productivity tools (status|doctor|install|hooks-install)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "devtools-help": {
-      "description": "Show external devtools command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" help`\nShow only the command output."
-    },
-    "devtools-install": {
-      "description": "Install all recommended external productivity tools",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" install all`\nShow only the command output."
-    },
-    "devtools-doctor-json": {
-      "description": "Run external devtools diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" doctor --json`\nShow only the command output."
-    },
-    "mcp-help": {
-      "description": "Show MCP command usage and examples",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" help`\nShow only the command output."
-    },
-    "mcp-doctor": {
-      "description": "Run MCP diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" doctor`\nShow only the command output."
-    },
-    "mcp-doctor-json": {
-      "description": "Run MCP diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" doctor --json`\nShow only the command output."
-    },
-    "mcp-profile-minimal": {
-      "description": "Disable all MCP servers",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile minimal`\nShow only the command output."
-    },
-    "mcp-profile-research": {
-      "description": "Enable both MCP servers",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile research`\nShow only the command output."
-    },
-    "mcp-profile-context7": {
-      "description": "Enable only context7 MCP",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile context7`\nShow only the command output."
-    },
-    "mcp-profile-ghgrep": {
-      "description": "Enable only gh_grep MCP",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" profile ghgrep`\nShow only the command output."
     },
     "plugin": {
       "description": "Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "setup-keys": {
-      "description": "Show exact key setup snippets for enabled plugins",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" setup-keys`\nShow only the command output."
-    },
-    "plugin-help": {
-      "description": "Show plugin command usage and examples",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" help`\nShow only the command output."
-    },
-    "plugin-doctor-json": {
-      "description": "Show plugin diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" doctor --json`\nShow only the command output."
-    },
-    "plugin-enable-morph": {
-      "description": "Enable morph plugin (experimental)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable morph`\nShow only the command output."
-    },
-    "plugin-enable-worktree": {
-      "description": "Enable worktree plugin (experimental)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" enable worktree`\nShow only the command output."
-    },
-    "plugin-profile-stable": {
-      "description": "Switch plugin profile to stable",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile stable`\nShow only the command output."
-    },
-    "plugin-profile-experimental": {
-      "description": "Switch plugin profile to experimental",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile experimental`\nShow only the command output."
-    },
-    "plugin-profile-lean": {
-      "description": "Switch plugin profile to lean",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" profile lean`\nShow only the command output."
-    },
     "notify": {
-      "description": "Manage notification controls (status|profile|enable|disable|channel|doctor)",
+      "description": "Manage notification controls (status|profile|enable|disable|channel)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "notify-help": {
-      "description": "Show notification command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" help`\nShow only the command output."
-    },
-    "notify-doctor": {
-      "description": "Run notification diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" doctor`\nShow only the command output."
-    },
-    "notify-doctor-json": {
-      "description": "Run notification diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" doctor --json`\nShow only the command output."
-    },
-    "notify-test": {
-      "description": "Send notification test events (hook|terminal-notifier|osascript)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_test_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "notify-profile-all": {
-      "description": "Enable all notification channels and events",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile all`\nShow only the command output."
-    },
-    "notify-profile-focus": {
-      "description": "Keep only visual alerts for important events",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile focus`\nShow only the command output."
-    },
-    "notify-sound-only": {
-      "description": "Switch notifications to sound only",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile sound-only`\nShow only the command output."
-    },
-    "notify-visual-only": {
-      "description": "Switch notifications to visual only",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" profile visual-only`\nShow only the command output."
     },
     "session": {
       "description": "Inspect indexed sessions (list|show|search|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "session-list": {
-      "description": "List recent indexed sessions",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" list --json`\nShow only the command output."
-    },
-    "session-search": {
-      "description": "Search sessions by id/path/reason",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" search $ARGUMENTS --json`\nShow only the command output."
-    },
-    "session-show": {
-      "description": "Show one indexed session by id",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" show $ARGUMENTS --json`\nShow only the command output."
-    },
-    "session-doctor": {
-      "description": "Run session index diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" doctor --json`\nShow only the command output."
-    },
     "digest": {
       "description": "Generate or show session digests (run|show)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "digest-run": {
-      "description": "Generate a manual session digest now",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason manual`\nShow only the command output."
-    },
-    "digest-run-post": {
-      "description": "Generate digest and run configured post-session hook",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason manual --run-post`\nShow only the command output."
-    },
-    "digest-show": {
-      "description": "Show latest saved session digest",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" show`\nShow only the command output."
-    },
-    "digest-doctor": {
-      "description": "Run digest diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" doctor`\nShow only the command output."
-    },
-    "digest-doctor-json": {
-      "description": "Run digest diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" doctor --json`\nShow only the command output."
     },
     "post-session": {
       "description": "Manage post-session hook config (status|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "post-session-help": {
-      "description": "Show post-session command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" help`\nShow only the command output."
-    },
-    "post-session-enable": {
-      "description": "Enable post-session hook execution",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" enable`\nShow only the command output."
-    },
     "policy": {
       "description": "Apply notification policy profiles (strict|balanced|fast)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "policy-help": {
-      "description": "Show policy command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" help`\nShow only the command output."
-    },
-    "policy-profile-strict": {
-      "description": "Apply strict permission-risk policy",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile strict`\nShow only the command output."
-    },
-    "policy-profile-balanced": {
-      "description": "Apply balanced permission-risk policy",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile balanced`\nShow only the command output."
-    },
-    "policy-profile-fast": {
-      "description": "Apply fast permission-risk policy",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" profile fast`\nShow only the command output."
     },
     "quality": {
       "description": "Manage quality profiles and checks (status|profile|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "quality-status": {
-      "description": "Show active quality profile and toggles",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" status --json`\nShow only the command output."
-    },
-    "quality-profile-fast": {
-      "description": "Set quality profile to fast",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" profile fast --json`\nShow only the command output."
-    },
-    "quality-profile-strict": {
-      "description": "Set quality profile to strict",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" profile strict --json`\nShow only the command output."
-    },
-    "quality-profile-off": {
-      "description": "Set quality profile to off",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" profile off --json`\nShow only the command output."
-    },
-    "quality-doctor": {
-      "description": "Run quality profile diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" doctor --json`\nShow only the command output."
-    },
     "gateway": {
-      "description": "Manage plugin gateway mode (status|enable|disable|doctor|tune memory|recover memory)",
+      "description": "Manage plugin gateway mode (status|enable|disable|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "gateway-status": {
-      "description": "Show plugin gateway status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" status --json`\nShow only the command output."
-    },
-    "gateway-enable": {
-      "description": "Enable plugin gateway file plugin entry",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" enable --json`\nShow only the command output."
-    },
-    "gateway-disable": {
-      "description": "Disable plugin gateway file plugin entry",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" disable --json`\nShow only the command output."
-    },
-    "gateway-doctor": {
-      "description": "Run plugin gateway diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" doctor --json`\nShow only the command output."
-    },
-    "gateway-recover-memory": {
-      "description": "Plan or apply memory pressure recovery",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" recover memory $ARGUMENTS --json`\nShow only the command output."
-    },
-    "gateway-recover-watch": {
-      "description": "Run bounded memory recovery watch loop",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" recover memory --watch --apply --resume --compress --force-kill --interval-seconds 20 --max-cycles 6 --json`\nShow only the command output."
-    },
-    "gateway-protection": {
-      "description": "Manage macOS gateway protection launch agent (status|enable|disable)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection $ARGUMENTS --json`\nShow only the command output."
-    },
-    "gateway-protection-status": {
-      "description": "Show gateway protection launch agent status",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection status --json`\nShow only the command output."
-    },
-    "gateway-protection-report": {
-      "description": "Show recent gateway protection watch cycles",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection report --limit 20 --json`\nShow only the command output."
-    },
-    "gateway-protection-cache": {
-      "description": "Show or clear pane-to-session recovery cache",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" protection cache $ARGUMENTS --json`\nShow only the command output."
     },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "telemetry-help": {
-      "description": "Show telemetry command usage",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" help`\nShow only the command output."
-    },
-    "telemetry-doctor": {
-      "description": "Run telemetry diagnostics",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" doctor`\nShow only the command output."
-    },
-    "telemetry-doctor-json": {
-      "description": "Run telemetry diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" doctor --json`\nShow only the command output."
-    },
-    "telemetry-profile-off": {
-      "description": "Disable telemetry forwarding",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" profile off`\nShow only the command output."
-    },
-    "telemetry-profile-local": {
-      "description": "Enable telemetry forwarding to local endpoint",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" profile local`\nShow only the command output."
     }
   },
   "plugin": [
-    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core",
+    "@mohak34/opencode-notifier@latest"
   ],
   "instructions": [
-    "{env:HOME}/Codes/Projects/agents_md/AGENTS.md",
     "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
   ]
 }
