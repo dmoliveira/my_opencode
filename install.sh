@@ -10,6 +10,8 @@ NON_INTERACTIVE=false
 SKIP_SELF_CHECK=false
 RUN_WIZARD=false
 WIZARD_RECONFIGURE=false
+QUIET=false
+VERBOSE=false
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
@@ -25,8 +27,14 @@ while [ "$#" -gt 0 ]; do
 	--reconfigure)
 		WIZARD_RECONFIGURE=true
 		;;
+	--quiet)
+		QUIET=true
+		;;
+	--verbose)
+		VERBOSE=true
+		;;
 	-h | --help)
-		printf "Usage: %s [--non-interactive] [--skip-self-check] [--wizard] [--reconfigure]\n" "$0"
+		printf "Usage: %s [--non-interactive] [--skip-self-check] [--wizard] [--reconfigure] [--quiet] [--verbose]\n" "$0"
 		exit 0
 		;;
 	*)
@@ -36,6 +44,19 @@ while [ "$#" -gt 0 ]; do
 	esac
 	shift
 done
+
+
+log_info() {
+	if [ "$QUIET" = false ]; then
+		printf "%s\n" "$1"
+	fi
+}
+
+log_verbose() {
+	if [ "$VERBOSE" = true ] && [ "$QUIET" = false ]; then
+		printf "%s\n" "$1"
+	fi
+}
 
 if ! command -v git >/dev/null 2>&1; then
 	printf "Error: git is required but not installed.\n" >&2
@@ -50,7 +71,7 @@ fi
 mkdir -p "$CONFIG_DIR"
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-	printf "Updating existing config repo at %s\n" "$INSTALL_DIR"
+	log_info "Updating existing config repo at $INSTALL_DIR"
 	git -C "$INSTALL_DIR" fetch --all --prune
 	git -C "$INSTALL_DIR" pull --ff-only
 else
@@ -58,12 +79,12 @@ else
 		printf "Error: %s exists and is not a git repository.\n" "$INSTALL_DIR" >&2
 		exit 1
 	fi
-	printf "Cloning config repo into %s\n" "$INSTALL_DIR"
+	log_info "Cloning config repo into $INSTALL_DIR"
 	git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
 if [ -n "$REPO_REF" ]; then
-	printf "Checking out repo ref %s\n" "$REPO_REF"
+	log_info "Checking out repo ref $REPO_REF"
 	git -C "$INSTALL_DIR" fetch --all --prune >/dev/null 2>&1 || true
 	git -C "$INSTALL_DIR" checkout "$REPO_REF"
 fi
@@ -148,16 +169,17 @@ if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then
 	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
 		if command -v bun >/dev/null 2>&1; then
 			python3 "$INSTALL_DIR/scripts/gateway_command.py" enable --json >/dev/null 2>&1 || printf "warning: failed to enable gateway plugin mode; bridge fallback remains active\n"
-			printf "gateway mode: plugin_gateway preferred\n"
+			log_info "gateway mode: plugin_gateway preferred"
 		else
 			python3 "$INSTALL_DIR/scripts/gateway_command.py" disable --json >/dev/null 2>&1 || true
-			printf "gateway mode: python_command_bridge fallback (bun unavailable)\n"
+			log_info "gateway mode: python_command_bridge fallback (bun unavailable)"
 		fi
 	fi
 fi
 
 if [ "$RUN_WIZARD" = true ]; then
-	printf "\nRunning install wizard...\n"
+	log_info ""
+	log_info "Running install wizard..."
 	WIZARD_ARGS=()
 	if [ "$WIZARD_RECONFIGURE" = true ]; then
 		WIZARD_ARGS+=("--reconfigure")
@@ -169,7 +191,8 @@ if [ "$RUN_WIZARD" = true ]; then
 fi
 
 if [ "$SKIP_SELF_CHECK" = false ]; then
-	printf "\nRunning self-check...\n"
+	log_info ""
+	log_info "Running self-check..."
 	python3 "$INSTALL_DIR/scripts/mcp_command.py" status
 	python3 "$INSTALL_DIR/scripts/plugin_command.py" status
 	python3 "$INSTALL_DIR/scripts/notify_command.py" status
@@ -310,18 +333,38 @@ p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, inden
 	fi
 fi
 
-printf "\nDone! ✅\n"
-printf "Config linked: %s -> %s\n" "$CONFIG_PATH" "$INSTALL_DIR/opencode.json"
-printf "\nOpen OpenCode quickstart:\n"
-printf "  /doctor run\n"
-printf "  /plugin status\n"
-printf "  /mcp status\n"
-printf "  /notify status\n"
-printf "  /autopilot go --goal 'finish current objective' --json\n"
-printf "  /budget status --json\n"
-printf "  /gateway status\n"
-printf "  /hooks status\n"
-printf "\nCommand references:\n"
-printf "  README.md (quickstart + layout)\n"
-printf "  docs/command-handbook.md (full slash-command catalog)\n"
-printf "  ~/.config/opencode/my_opencode/install.sh --wizard --reconfigure\n"
+if [ "$QUIET" = false ]; then
+	printf "
+Done! ✅
+"
+	printf "Config linked: %s -> %s
+" "$CONFIG_PATH" "$INSTALL_DIR/opencode.json"
+	printf "
+Open OpenCode quickstart:
+"
+	printf "  /doctor run
+"
+	printf "  /plugin status
+"
+	printf "  /mcp status
+"
+	printf "  /notify status
+"
+	printf "  /autopilot go --goal 'finish current objective' --json
+"
+	printf "  /budget status --json
+"
+	printf "  /gateway status
+"
+	printf "  /hooks status
+"
+	printf "
+Command references:
+"
+	printf "  docs/quickstart.md (installation + first run)
+"
+	printf "  docs/command-handbook.md (full slash-command catalog)
+"
+	printf "  ~/.config/opencode/my_opencode/install.sh --wizard --reconfigure
+"
+fi
