@@ -112,9 +112,6 @@ Use `/complete <prefix>` for command discovery and `docs/command-handbook.md` fo
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`
-- `scripts/start_work_command.py` - backend script for `/start-work`
-- `scripts/autoflow_adapter.py` - orchestration adapter for `/autoflow` transition and explain planning
-- `scripts/autoflow_command.py` - unified `/autoflow` command surface with dry-run and kill-switch controls
 - `scripts/budget_command.py` - backend script for `/budget`
 - `scripts/release_train_engine.py` - release-train backend engine for preflight, draft, and publish gating
 - `scripts/release_train_command.py` - `/release-train` command surface and doctor/checklist integration
