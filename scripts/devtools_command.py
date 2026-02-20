@@ -155,18 +155,17 @@ def install_tools(targets: list[str]) -> int:
 
 
 def hooks_install() -> int:
-    if not shutil.which("pre-commit"):
-        print("error: pre-commit is missing; run /devtools install pre-commit")
-        return 1
     if not shutil.which("lefthook"):
         print("error: lefthook is missing; run /devtools install lefthook")
         return 1
-
-    a = subprocess.run(["pre-commit", "install"], check=False)
-    b = subprocess.run(["lefthook", "install"], check=False)
-    if a.returncode != 0 or b.returncode != 0:
+    if not shutil.which("pre-commit"):
+        print("error: pre-commit is missing; run /devtools install pre-commit")
         return 1
-    print("git hooks installed: pre-commit + lefthook")
+
+    installed = subprocess.run(["lefthook", "install"], check=False)
+    if installed.returncode != 0:
+        return 1
+    print("git hooks installed: lefthook (pre-commit managed via lefthook.yml)")
     return 0
 
 

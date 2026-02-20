@@ -133,8 +133,6 @@ if [ -d "$INSTALL_DIR/agent" ]; then
 	cp -f "$INSTALL_DIR"/agent/*.md "$CONFIG_DIR/agent/" 2>/dev/null || true
 fi
 
-fi
-
 if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then
 	if command -v npm >/dev/null 2>&1; then
 		(
@@ -343,7 +341,6 @@ printf "  /hooks status\n"
 printf "  /hooks enable\n"
 printf "  /hooks doctor --json\n"
 printf "  /model-routing status\n"
-printf "  /model-profile status\n"
 printf "  /routing status\n"
 printf "  /routing explain --category deep --json\n"
 printf "  /keyword-mode status\n"
@@ -358,13 +355,12 @@ printf "  /browser profile agent-browser\n"
 printf "  /browser doctor --json\n"
 printf "  /autopilot\n"
 printf "  /autopilot go --goal 'finish current objective' --json\n"
-printf "  /continue-work 'finish current objective end-to-end'\n"
 printf "  /autopilot status --json\n"
 printf "  /autopilot report --json\n"
 printf "  /budget status --json\n"
 printf "  /budget profile conservative\n"
 printf "  /budget override --tool-call-count 120 --reason install-self-check --json\n"
-printf "  /budget-doctor-json\n"
+printf "  /budget doctor --json\n"
 printf "  /autopilot start --goal 'Ship objective' --scope 'scripts/**' --done-criteria 'all checks pass' --max-budget balanced --json\n"
 printf "  /autopilot status --json\n"
 printf "  /autopilot report --json\n"
@@ -411,6 +407,6 @@ printf "  /devtools install all\n"
 printf "  /nvim install minimal --link-init\n"
 printf "  ~/.config/opencode/my_opencode/install.sh --wizard --reconfigure\n"
 printf "  /doctor-json\n"
-printf "  /setup-keys\n"
+printf "  /plugin setup-keys\n"
 printf "  /plugin enable supermemory\n"
 printf "  /plugin disable supermemory\n"

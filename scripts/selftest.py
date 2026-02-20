@@ -322,7 +322,7 @@ exit 0
         )
         command_map_any = base_config_payload.get("command", {})
         command_map = command_map_any if isinstance(command_map_any, dict) else {}
-        for command_name in ("autopilot", "continue-work", "ralph-loop"):
+        for command_name in ("autopilot", "ralph-loop"):
             template = str(
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )

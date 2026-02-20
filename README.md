@@ -480,8 +480,8 @@ Task 28.3 autopilot control-integration notes:
 Task 28.4 autopilot command UX/workflow notes:
 
 - command module: `scripts/autopilot_command.py`
-- alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
-- objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
+- canonical slash command is `/autopilot` with subcommands `start|go|status|pause|resume|stop|report|doctor`
+- objective-mode uses `/autopilot go --completion-mode objective ...` when you want done-criteria gates instead of promise token.
 - compatibility aliases are available as `/ralph-loop` and `/cancel-ralph`; canonical flow remains `/autopilot*`.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
@@ -512,14 +512,13 @@ Autopilot gateway telemetry fields (`--json`):
 
 # Context-first one-shot iteration (start-or-resume and run bounded cycles)
 /autopilot go --goal "continue active docs request" --max-cycles 10 --json
-/continue-work "finish cheatsheet updates and validations"
 
 # Compatibility aliases (canonical flow is /autopilot*)
 /ralph-loop "finish docs checklist end-to-end"
 /cancel-ralph
 
 # Objective-gate completion mode (alternative to promise mode)
-/autopilot-objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
+/autopilot go --completion-mode objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
 
 # Feature objective (multi-step implementation)
 /autopilot start --goal "ship command UX polish" --scope "scripts/*.py, README.md" --done-criteria "code complete;docs updated;validation green" --max-budget balanced --json
@@ -614,15 +613,6 @@ Use OpenCode-native setup and diagnostics:
 /nvim uninstall --unlink-init
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/nvim-help
-/nvim-status
-/nvim-install-minimal
-/nvim-install-power
-/nvim-doctor-json
-```
 
 Profiles:
 - `minimal`: two keymaps (`<leader>oa`, `<leader>os`) for fast ask/select loops.
@@ -680,13 +670,6 @@ Use these directly in OpenCode:
 /devtools hooks-install
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/devtools-help
-/devtools-install
-/devtools-doctor-json
-```
 
 First-time shell setup for direnv (`zsh`):
 
@@ -777,14 +760,6 @@ Use these directly in OpenCode:
 /stack apply quiet-ci
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/stack-help
-/stack-focus
-/stack-research
-/stack-quiet-ci
-```
 
 Profiles:
 - `focus`: notify focus, telemetry off, post-session disabled, policy strict
@@ -805,15 +780,6 @@ Use these directly in OpenCode:
 /config restore <backup-id>
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/config-help
-/config-backup
-/config-list
-/config-layers
-/config-layers-json
-```
 
 `/config` snapshots all `opencode*.json` files under `~/.config/opencode/` into `~/.config/opencode/my_opencode-backups/`.
 
@@ -848,12 +814,6 @@ Use these directly in OpenCode:
 /doctor help
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/doctor-json
-/doctor-help
-```
 
 `/doctor` runs diagnostics across `mcp`, `plugin`, `notify`, `digest`, `telemetry`, `post-session`, `policy`, `bg`, and optional `refactor-lite` checks in one pass.
 
@@ -867,12 +827,6 @@ Use these directly in OpenCode:
 /refactor-lite <target> --scope scripts/*.py --run-selftest --json
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/refactor-lite-help
-/refactor-lite-dry-run <target> --scope scripts/*.py
-```
 
 `/refactor-lite` backend behavior:
 - runs deterministic preflight analysis (target search + file map)
@@ -989,13 +943,6 @@ Troubleshooting unexpected model selection:
 - run `/routing explain --json` and inspect `fallback_reason`
 - confirm `attempted_count` is non-zero and review `resolution_trace.attempted`
 - verify available model set passed to resolve commands matches runtime availability
-
-Model-profile aliases:
-```text
-/model-profile status
-/model-profile set visual
-/model-profile resolve --category writing
-```
 
 Practical routing examples:
 - Fast repo hygiene (`git status`, light checks): `quick`
@@ -1273,15 +1220,6 @@ Use these directly in OpenCode:
 /bg status --json
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/bg-help
-/bg-list
-/bg-running
-/bg-doctor-json
-/bg-status-json
-```
 
 `/bg` uses `~/.config/opencode/my_opencode/bg/` by default with:
 - `jobs.json` as authoritative state
@@ -1318,18 +1256,6 @@ Use these directly in OpenCode:
 /mcp disable all
 ```
 
-MCP autocomplete-friendly shortcuts:
-
-```text
-/mcp-help
-/mcp-doctor
-/mcp-doctor-json
-/mcp-profile-minimal
-/mcp-profile-research
-/mcp-profile-context7
-/mcp-profile-ghgrep
-```
-
 ## Plugin control inside OpenCode 🎛️
 
 Use these directly in OpenCode:
@@ -1339,7 +1265,7 @@ Use these directly in OpenCode:
 /plugin help
 /plugin doctor
 /plugin doctor --json
-/setup-keys
+/plugin setup-keys
 /plugin enable supermemory
 /plugin disable supermemory
 /plugin profile lean
@@ -1351,20 +1277,6 @@ Use these directly in OpenCode:
 /plugin disable all
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/plugin-help
-/plugin-enable-notifier
-/plugin-enable-supermemory
-/plugin-enable-wakatime
-/plugin-enable-morph
-/plugin-enable-worktree
-/plugin-profile-lean
-/plugin-profile-stable
-/plugin-profile-experimental
-/plugin-doctor-json
-```
 
 Global command helper shortcuts:
 
@@ -1373,12 +1285,10 @@ Global command helper shortcuts:
 /complete auto
 /complete autopilot
 /ac resume
-/complete-families
-/complete-doctor
 ```
 
 `/complete <prefix>` returns ranked slash command suggestions with descriptions.
-`/ac` is a short alias for `/complete`.
+`/ac` remains a short alias for `/complete`.
 
 Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatime`.
 
@@ -1386,12 +1296,12 @@ Supported plugin names: `notifier`, `supermemory`, `morph`, `worktree`, `wakatim
 
 `/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
 
-`/plugin doctor --json` (or `/plugin-doctor-json`) prints machine-readable diagnostics for automation.
+`/plugin doctor --json` prints machine-readable diagnostics for automation.
 
-`/setup-keys` prints exact environment/file snippets for missing API keys.
+`/plugin setup-keys` prints exact environment/file snippets for missing API keys.
 
 Profiles:
-- `lean` -> `notifier`
+- `lean` -> no managed plugins (gateway-only baseline)
 - `stable` -> `notifier`, `supermemory`, `wakatime`
 - `experimental` -> `stable` + `morph`, `worktree`
 
@@ -1423,17 +1333,6 @@ Use these directly in OpenCode:
 /notify channel error visual on
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/notify-help
-/notify-doctor
-/notify-doctor-json
-/notify-profile-all
-/notify-profile-focus
-/notify-sound-only
-/notify-visual-only
-```
 
 `/notify` writes preferences into layered config under `notify` (or `OPENCODE_NOTIFICATIONS_PATH` when explicitly set):
 - global: `enabled`
@@ -1453,15 +1352,6 @@ Use these directly in OpenCode:
 /digest doctor --json
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/digest-run
-/digest-run-post
-/digest-show
-/digest-doctor
-/digest-doctor-json
-```
 
 The digest command writes to `~/.config/opencode/digests/last-session.json` by default.
 
@@ -1491,12 +1381,6 @@ Use these directly in OpenCode:
 /post-session set run-on exit,manual
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/post-session-help
-/post-session-enable
-```
 
 `/post-session` writes to layered config under `post_session` (or `MY_OPENCODE_SESSION_CONFIG_PATH` when explicitly set):
 - `post_session.enabled`
@@ -1522,14 +1406,6 @@ Use these directly in OpenCode:
 /policy profile fast
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/policy-help
-/policy-profile-strict
-/policy-profile-balanced
-/policy-profile-fast
-```
 
 `/policy` writes profile metadata to layered config under `policy` and applies notification posture under `notify` (legacy path env overrides remain supported).
 
@@ -1550,15 +1426,6 @@ Use these directly in OpenCode:
 /quality doctor
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/quality-status
-/quality-profile-fast
-/quality-profile-strict
-/quality-profile-off
-/quality-doctor
-```
 
 `/quality` writes profile metadata to layered config under `quality` with toggles for TS lint/typecheck/tests and Python selftest.
 
@@ -1576,15 +1443,6 @@ Use these directly in OpenCode:
 /gateway enable
 /gateway disable
 /gateway doctor
-```
-
-Shortcuts:
-
-```text
-/gateway-status
-/gateway-enable
-/gateway-disable
-/gateway-doctor
 ```
 
 Notes:
@@ -1633,15 +1491,6 @@ Use these directly in OpenCode:
 /telemetry disable question
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/telemetry-help
-/telemetry-doctor
-/telemetry-doctor-json
-/telemetry-profile-off
-/telemetry-profile-local
-```
 
 `/telemetry` writes to layered config under `telemetry` (or `OPENCODE_TELEMETRY_PATH` when explicitly set) and supports:
 - global on/off (`enabled`)

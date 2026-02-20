@@ -17,10 +17,20 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate scripts and config
+      - name: Validate scripts and generated agent contracts
         run: |
-          python -m py_compile scripts/*.py
-          python -m json.tool opencode.json > /dev/null
+          make validate
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate gateway-core plugin build and tests
+        run: |
+          npm --prefix plugin/gateway-core ci --no-audit --no-fund
+          npm --prefix plugin/gateway-core run lint
+          npm --prefix plugin/gateway-core run test
 
       - name: Run deterministic self-tests
         run: |
