@@ -4,6 +4,8 @@ Welcome to my OpenCode command center! ✨
 
 This repo gives you a clean, portable OpenCode setup with fast MCP controls inside OpenCode itself. Keep autonomous coding smooth, and only turn on external context when you actually need it. ⚡
 
+Start here: `docs/quickstart.md`
+
 ## Why this setup rocks 🎯
 
 - **One source of truth** for global OpenCode config.
