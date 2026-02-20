@@ -206,7 +206,7 @@ test("notify-events includes session and window context when available", async (
   assert.ok(sent[0].content.message.includes("notify-context"))
 })
 
-test("notify-events prefers activate before sender for Ghostty", () => {
+test("notify-events skips sender attempts for Ghostty", () => {
   const attempts = terminalNotifierAttempts({
     title: "OpenCode",
     message: "Ghostty sender fallback",
@@ -215,10 +215,13 @@ test("notify-events prefers activate before sender for Ghostty", () => {
     sender: "com.mitchellh.ghostty",
   })
 
-  assert.equal(attempts.length, 6)
+  assert.equal(attempts.length, 4)
   assert.equal(attempts[0].args.includes("-activate"), true)
   assert.equal(attempts[0].args.includes("-sender"), false)
-  assert.equal(attempts[2].args.includes("-sender"), true)
+  assert.equal(
+    attempts.some((attempt) => attempt.args.includes("-sender")),
+    false,
+  )
 })
 
 test("notify-events keeps sender-first attempts for non-Ghostty", () => {
