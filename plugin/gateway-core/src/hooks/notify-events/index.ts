@@ -640,7 +640,7 @@ function contextParts(payload: EventPayload): string[] {
     firstPropertyText(properties, ["tmux", "tmux_session", "tmuxSession", "tmux_window", "tmuxWindow"]) ||
     firstPropertyText(input, ["tmux", "tmuxSession", "tmuxWindow"]) ||
     cleanText(process.env.OPENCODE_TMUX_LABEL);
-  const tmuxAuto = (() => {
+  const tmuxAuto = ((): string => {
     if (tmuxLabel) {
       return "";
     }

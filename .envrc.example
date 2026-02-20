@@ -1,7 +1,6 @@
 # Copy this file to .envrc, customize values, then run: direnv allow
 
 # OpenCode plugin keys
-export SUPERMEMORY_API_KEY=""
 export MORPH_API_KEY=""
 
 # Optional digest/post-session overrides

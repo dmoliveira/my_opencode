@@ -197,6 +197,14 @@
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "plan-handoff": {
+      "description": "Thin @plan-style continuity profile over canonical runtime commands",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" $ARGUMENTS --json`\nShow only the command output."
+    },
+    "release-train-draft-milestones": {
+      "description": "Generate release note draft with parity and LSP milestone context",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft --include-milestones $ARGUMENTS --json`\nShow only the command output."
     }
   },
   "plugin": [
