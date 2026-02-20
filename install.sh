@@ -136,10 +136,14 @@ fi
 if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then
 	if command -v npm >/dev/null 2>&1; then
 		(
-			cd "$INSTALL_DIR/plugin/gateway-core" && npm install --silent && npm run build --silent
-		) || printf "warning: gateway-core plugin build failed (continuing)\n"
+			cd "$INSTALL_DIR/plugin/gateway-core" && npm ci --yes --no-audit --no-fund --silent && npm run build --silent
+		) || {
+			printf "error: gateway-core plugin build failed; installation aborted\n" >&2
+			exit 1
+		}
 	else
-		printf "warning: npm not found; skipping gateway-core plugin build\n"
+		printf "error: npm not found; gateway-core plugin build is required\n" >&2
+		exit 1
 	fi
 	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
 		if command -v bun >/dev/null 2>&1; then
