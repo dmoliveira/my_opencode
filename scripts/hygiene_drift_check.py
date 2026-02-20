@@ -29,6 +29,7 @@ ALLOWED_DUPLICATE_CLUSTERS = {
 # guaranteed in every branch snapshot. Keep this list short and temporary.
 ALLOWED_MISSING_HOOK_IDS = {"mistake-ledger"}
 MAX_COMMAND_SURFACE = 50
+MAX_COMMANDS_PER_SCRIPT = 3
 
 
 @dataclass
@@ -41,6 +42,7 @@ class DriftReport:
     parity_plan_issues: list[str]
     parity_plan_warnings: list[str]
     command_surface_issues: list[str]
+    script_alias_issues: list[str]
 
     def ok(self) -> bool:
         return not (
@@ -50,6 +52,7 @@ class DriftReport:
             or self.extra_hook_ids
             or self.parity_plan_issues
             or self.command_surface_issues
+            or self.script_alias_issues
         )
 
 
@@ -328,6 +331,27 @@ def _command_surface_audit(commands: dict[str, dict[str, object]]) -> list[str]:
         )
     return issues
 
+
+def _script_alias_audit(commands: dict[str, dict[str, object]]) -> list[str]:
+    pattern = re.compile(r"scripts/([A-Za-z0-9_\-]+\.py)")
+    by_script: dict[str, list[str]] = {}
+    for command_name, meta in commands.items():
+        template = str(meta.get("template", "")) if isinstance(meta, dict) else ""
+        match = pattern.search(template)
+        if not match:
+            continue
+        script_name = match.group(1)
+        by_script.setdefault(script_name, []).append(command_name)
+
+    issues: list[str] = []
+    for script_name, command_names in sorted(by_script.items()):
+        if len(command_names) > MAX_COMMANDS_PER_SCRIPT:
+            sorted_names = ", ".join(sorted(command_names))
+            issues.append(
+                f"script alias sprawl: {script_name} has {len(command_names)} commands ({sorted_names}); max is {MAX_COMMANDS_PER_SCRIPT}"
+            )
+    return issues
+
 def run() -> int:
     commands = _load_commands()
     missing_script_refs = _script_reference_audit(commands)
@@ -336,6 +360,7 @@ def run() -> int:
     parity_plan_issues = _parity_plan_watchdog(commands)
     parity_plan_warnings = _parity_plan_warning_audit(commands)
     command_surface_issues = _command_surface_audit(commands)
+    script_alias_issues = _script_alias_audit(commands)
 
     report = DriftReport(
         missing_script_refs=missing_script_refs,
@@ -346,6 +371,7 @@ def run() -> int:
         parity_plan_issues=parity_plan_issues,
         parity_plan_warnings=parity_plan_warnings,
         command_surface_issues=command_surface_issues,
+        script_alias_issues=script_alias_issues,
     )
 
     if report.ok():
@@ -382,6 +408,10 @@ def run() -> int:
     if report.command_surface_issues:
         print("command surface issues:")
         for issue in report.command_surface_issues:
+            print(f"- {issue}")
+    if report.script_alias_issues:
+        print("script alias issues:")
+        for issue in report.script_alias_issues:
             print(f"- {issue}")
     if report.parity_plan_warnings:
         print("parity plan watchdog warnings:")
