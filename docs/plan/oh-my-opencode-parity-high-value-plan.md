@@ -130,7 +130,6 @@ Status: `backlog` (`br`: `bd-hs8` closed)
 
 Gaps:
 
-- P2: Add richer `/lsp code-actions` triage metadata (per-source counts and preferred/disabled ratio percentages).
 - P2: Add `/lsp diagnostics` text-mode compact table output for large scopes with deterministic truncation controls.
 
 Current focus:
@@ -223,5 +222,6 @@ An epic is done only when:
 | 2026-02-19T07:40:00Z | E9-T1..E9-T3 completion | Added milestone-aware release-note draft automation (`--include-milestones`) with command wiring, docs, install smoke, and selftest coverage | `scripts/release_train_engine.py`, `scripts/release_train_command.py`, `opencode.json`, `scripts/selftest.py`, `README.md`, `install.sh`, `docs/plan/e9-release-note-automation.md`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T08:12:00Z | E10-T1..E10-T3 completion | Expanded parity drift watchdog to validate quick board/checklist/activity consistency and best-effort merged PR label snapshot coverage | `scripts/hygiene_drift_check.py`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T10:03:00Z | E11-T1..E11-T3 completion | Added merged-PR metadata fallback for parity watchdog (title heuristics when labels are absent) and preserved warning-only behavior | `scripts/hygiene_drift_check.py`, `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
+| 2026-02-19T20:32:00Z | Backlog refresh | Removed stale LSP code-actions ratio gap after merged delivery and kept remaining LSP backlog focused on diagnostics compact table output | `docs/plan/oh-my-opencode-parity-high-value-plan.md` |
 | 2026-02-19T01:44:00Z | E0-T1..E0-T5 | Added hygiene rubric, alias/hook audit, naming simplification, and migration guidance | `docs/plan/e0-command-hook-hygiene-audit.md`, `opencode.json` |
 | 2026-02-19T01:46:00Z | E0-T6 | Added automated drift checks and wired into validation target | `scripts/hygiene_drift_check.py`, `Makefile` |
