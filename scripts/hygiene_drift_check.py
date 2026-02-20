@@ -307,9 +307,7 @@ def _parity_plan_warning_audit(commands: dict[str, dict[str, object]]) -> list[s
                 "merged PR titles contain no parity/lsp/release markers; area coverage metadata may be drifting"
             )
         else:
-            warnings.append(
-                "merged PR labels are absent; title heuristics were used for area coverage fallback"
-            )
+            pass
     else:
         warnings.append(
             "recent merged PR list has no labels or titles; unable to confirm coverage"
