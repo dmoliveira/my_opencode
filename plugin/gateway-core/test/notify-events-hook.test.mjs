@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { createNotifyEventsHook } from "../dist/hooks/notify-events/index.js"
+import {
+  createNotifyEventsHook,
+  terminalNotifierAttempts,
+} from "../dist/hooks/notify-events/index.js"
 
 test("notify-events maps session.idle to complete notifications", async () => {
   const sent = []
@@ -201,4 +204,33 @@ test("notify-events includes session and window context when available", async (
   assert.ok(sent[0].content.message.includes("s:sess-42"))
   assert.ok(sent[0].content.message.includes("w:w-9"))
   assert.ok(sent[0].content.message.includes("notify-context"))
+})
+
+test("notify-events prefers activate before sender for Ghostty", () => {
+  const attempts = terminalNotifierAttempts({
+    title: "OpenCode",
+    message: "Ghostty sender fallback",
+    imagePath: "/tmp/icon.png",
+    soundName: "Glass",
+    sender: "com.mitchellh.ghostty",
+  })
+
+  assert.equal(attempts.length, 6)
+  assert.equal(attempts[0].args.includes("-activate"), true)
+  assert.equal(attempts[0].args.includes("-sender"), false)
+  assert.equal(attempts[2].args.includes("-sender"), true)
+})
+
+test("notify-events keeps sender-first attempts for non-Ghostty", () => {
+  const attempts = terminalNotifierAttempts({
+    title: "OpenCode",
+    message: "Generic sender fallback",
+    imagePath: "",
+    soundName: "Glass",
+    sender: "com.apple.Terminal",
+  })
+
+  assert.equal(attempts[0].args.includes("-sender"), true)
+  assert.equal(attempts[0].args.includes("-activate"), false)
+  assert.equal(attempts[1].args.includes("-activate"), true)
 })
