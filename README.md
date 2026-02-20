@@ -16,28 +16,19 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 - 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
-- 🔔 Built-in `/notify` command to tune notification behavior by level, sound theme, event sound overrides, icon pack version, and runtime diagnostics (`/notify doctor --verbose`), plus `/notify-test` for cross-backend event smoke tests.
+- 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
-- 🧩 Built-in upstream-style background facade commands `/background-agent-call` and `/background-output` mapped to local `/bg` runtime.
-- 🧭 Built-in `/upstream-agent-map` diagnostics to map upstream role labels to local agent equivalents.
-- 🩺 Built-in `/upstream-compat-doctor` to verify compatibility facade readiness.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
-- 🗂️ Built-in `/task` command for persistent dependency-aware task graph tracking.
-- 🔁 Built-in `/plan-handoff` compatibility profile for `@plan`-style continuity over `/autopilot`, `/task`, `/resume`, and `/checkpoint`.
-- 🧭 Built-in `/lsp` command for language-server readiness and install diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
-- 🤖 Built-in `/agent-doctor` command for custom agent contract, orchestration policy marker, and runtime checks.
+- 🤖 Built-in `/agent-doctor` command for custom agent contract and runtime checks.
 - 💾 Built-in `/config` command for backup/restore snapshots.
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
-- 🧭 Built-in `/tmux` command for optional visual-mode status/config/doctor with headless fallback.
-- 🧩 Built-in skill contracts via `/playwright`, `/frontend-ui-ux`, and `/git-master` to guide browser, UI, and git workflows.
-- 📦 Packaged CLI backend at `scripts/my_opencode_cli.py` for `install`, `doctor`, `run`, and `version` flows.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
 - 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
@@ -52,16 +43,13 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 This setup keeps `build` as the default agent, and adds focused specialists for manual selection via `Tab`:
 
-- `orchestrator` (primary): execution lead for complex tasks, with risk-based review budgets, explicit delegation, and completion gates.
+- `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
 - `explore` (subagent): read-only internal codebase scout.
 - `librarian` (subagent): read-only external docs and OSS evidence researcher.
 - `oracle` (subagent): read-only architecture/debug advisor for hard tradeoffs.
 - `verifier` (subagent): read-only validation runner for test/lint/build checks.
 - `reviewer` (subagent): read-only quality/risk review pass before final delivery.
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
-- `strategic-planner` (subagent): read-only planning specialist for sequencing and milestone structure.
-- `ambiguity-analyst` (subagent): read-only analyst for assumptions, unknowns, and default decision paths.
-- `plan-critic` (subagent): read-only plan reviewer for feasibility, risk coverage, and exit criteria.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
 Agent source-of-truth specs live in `agent/specs/*.json` and generate markdown via `scripts/build_agents.py`.
@@ -78,8 +66,6 @@ Detailed guide: `docs/agents-playbook.md` 📘
 Operating contract: `instructions/agent_operating_contract.md` 🛡️
 
 Autopilot hook migration plan: `docs/autopilot-hook-roadmap.md` 🔁
-
-Mistake ledger capture/report guide: `plugin/gateway-core/docs/mistake-ledger-report.md` 🧾
 
 ## Roadmap plan 🗺️
 
@@ -143,71 +129,6 @@ Verification notes:
 - selftest now covers cross-language rename/reference validation samples (`python`, `typescript`, `go`, `rust`).
 - fallback tests cover explicit-scope gating and unsupported-language failure paths.
 - install smoke now exercises `/safe-edit plan` in addition to status/doctor checks.
-
-## LSP readiness baseline
-
-Current scope includes:
-
-- command module: `scripts/lsp_command.py`
-- diagnostics: `/lsp status --json`, `/lsp doctor [--verbose] --json`, `/lsp diagnostics --scope <glob[,glob...]> --json`
-- protocol-first execution using configured language servers (JSON-RPC over stdio) with deterministic text fallback when unavailable
-- JSON responses include `backend_details` metadata (backend mode, reason code, attempted protocol, selected server details)
-- scoped navigation helpers: `/lsp goto-definition --symbol <name> --scope <glob[,glob...]> --json`, `/lsp find-references --symbol <name> --scope <glob[,glob...]> --json`
-- symbol index helpers: `/lsp symbols --view document --file <path> --json`, `/lsp symbols --view workspace --query <name> --scope <glob[,glob...]> --json`
-- code-action helpers: `/lsp code-actions (--file <path> | --symbol <name> --scope <glob[,glob...]>) [--kind <prefix>] [--index <n>] [--apply] --json`
-- guarded rename helpers: `/lsp prepare-rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --json`, `/lsp rename --symbol <old> --new-name <new> --scope <glob[,glob...]> --allow-text-fallback [--allow-rename-file-ops] [--apply] --json`
-- safety note: protocol rename plans that include resource operations are blocked unless operations are safe `RenameFile` entries and `--allow-rename-file-ops` is explicitly enabled.
-- safety note: protocol rename plans with `changeAnnotations` requiring confirmation are reported and blocked from apply.
-- dry-run rename output includes per-file unified diff preview under `diff_preview` before apply.
-- `/lsp code-actions` reports deterministic summary metadata (`total`, `editable`, `disabled`, `by_kind`) and blocks apply for server-disabled actions.
-- `/lsp doctor --verbose` probes initialize-time server capabilities and reports a command-level support matrix for `goto-definition`, `find-references`, `symbols`, `prepare-rename`, and `rename`.
-- layered config support via `lsp` object in `.opencode/my_opencode.json` or `~/.config/opencode/my_opencode.json`
-- deterministic precedence from existing layered config merge (`project` overrides `user` overrides bundled defaults)
-
-Supported config keys per server entry:
-
-- `command` (array, required)
-- `extensions` (array, required)
-- `priority` (number, optional; higher wins)
-- `disabled` (boolean, optional)
-- `env` (object, optional)
-- `initialization` (object, optional)
-
-Example:
-
-```json
-{
-  "lsp": {
-    "typescript-language-server": {
-      "command": ["typescript-language-server", "--stdio"],
-      "extensions": [".ts", ".tsx", ".js", ".jsx"],
-      "priority": 10
-    },
-    "pylsp": {
-      "command": ["pylsp"],
-      "extensions": [".py"],
-      "disabled": true
-    }
-  }
-}
-```
-
-Examples:
-
-```text
-/lsp status --json
-/lsp doctor --json
-/lsp doctor --verbose --json
-/lsp diagnostics --scope scripts/*.py --json
-/lsp goto-definition --symbol load_layered_config --scope scripts/*.py --json
-/lsp find-references --symbol load_layered_config --scope scripts/*.py --json
-/lsp symbols --view document --file scripts/config_layering.py --json
-/lsp symbols --view workspace --query load --scope scripts/*.py --json
-/lsp code-actions --symbol load_layered_config --scope scripts/*.py --kind quickfix --json
-/lsp code-actions --symbol load_layered_config --scope scripts/*.py --index 0 --apply --json
-/lsp prepare-rename --symbol load_layered_config --new-name load_cfg --scope scripts/*.py --json
-/lsp rename --symbol load_layered_config --new-name load_cfg --scope scripts/*.py --allow-text-fallback --json
-```
 
 ## Checkpoint snapshot baseline
 
@@ -400,13 +321,12 @@ Task 24.2 release assistant engine notes:
 - backend module: `scripts/release_train_engine.py` with `status`, `prepare`, `draft`, `publish`, and `doctor` command flows.
 - `prepare` emits deterministic `reason_codes` and remediation for clean-tree, branch, validation, changelog, and semver gating checks.
 - `draft` composes release-note entries from git history since the latest (or provided) tag.
-- `draft --include-milestones` appends parity/LSP milestone context from plan docs for consolidated wave summaries.
 - `publish` enforces readiness and explicit confirmation, with dry-run and rollback action metadata.
 
 Task 24.3 command integration notes:
 
 - command module: `scripts/release_train_command.py`
-- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-draft-milestones`, `/release-train-doctor`
+- command surface: `/release-train`, `/release-train-json`, `/release-train-prepare`, `/release-train-draft`, `/release-train-doctor`
 - doctor integration: unified `/doctor run --json` now includes `release-train` subsystem readiness checks.
 - release-check integration: `make release-check VERSION=x.y.z` now invokes release-train preflight gating.
 
@@ -416,7 +336,6 @@ Examples:
 /release-train status --json
 /release-train prepare --version 0.3.0 --json
 /release-train draft --head HEAD --json
-/release-train-draft-milestones --head HEAD
 /release-train doctor --json
 ```
 
@@ -424,7 +343,7 @@ Task 24.4 verification notes:
 
 - selftest validates breaking-change/changelog mismatch blocking with `version_mismatch_breaking_change` reason codes.
 - selftest validates publish behavior split between `--dry-run` pass and confirmation-required blocking for live publish.
-- install smoke validates `/release-train` status, prepare, draft, milestone draft, and doctor command paths.
+- install smoke validates `/release-train` status, prepare, draft, and doctor command paths.
 
 Task 25.1 hotfix policy contract notes:
 
@@ -561,9 +480,9 @@ Task 28.3 autopilot control-integration notes:
 Task 28.4 autopilot command UX/workflow notes:
 
 - command module: `scripts/autopilot_command.py`
-- alias set in `opencode.json`: `/autopilot`, `/autopilot-go`, `/continue-work`, `/autoloop`, `/init-deep`, `/ulw-loop`, `/ralph-loop`, `/autopilot-status`, `/autopilot-report`, `/autopilot-pause`, `/autopilot-resume`, `/autopilot-stop`, `/autopilot-doctor`
-- objective-mode alias is available as `/autopilot-objective` when you want completion from done-criteria gates instead of promise token.
-- canonical flow is `/autopilot*`; compatibility aliases remain as thin wrappers for migration without adding new runtime engines.
+- canonical slash command is `/autopilot` with subcommands `start|go|status|pause|resume|stop|report|doctor`
+- objective-mode uses `/autopilot go --completion-mode objective ...` when you want done-criteria gates instead of promise token.
+- compatibility aliases are available as `/ralph-loop` and `/cancel-ralph`; canonical flow remains `/autopilot*`.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
@@ -571,28 +490,21 @@ Task 28.4 autopilot command UX/workflow notes:
 
 Autopilot gateway telemetry fields (`--json`):
 
-| Field                               | Type       | Meaning                                                                                                                                           |
-| ----------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `gateway_runtime_mode`              | `string`   | Active routing mode for autopilot controls: `plugin_gateway` when gateway plugin is enabled and hook-complete, otherwise `python_command_bridge`. |
-| `gateway_runtime_reason_code`       | `string`   | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_runtime_unavailable`, `gateway_plugin_not_ready`).    |
-| `gateway_plugin_enabled`            | `boolean`  | Whether gateway-core file plugin is currently enabled in layered config.                                                                          |
-| `gateway_bun_available`             | `boolean`  | Whether `bun` is currently available for host-side file plugin runtime support.                                                                   |
-| `gateway_missing_hook_capabilities` | `string[]` | Missing required dist hook capabilities when plugin mode cannot be selected.                                                                      |
-| `gateway_loop_state`                | `object    | null`                                                                                                                                             | Current loop state for the active runtime mode; bridge state is hidden when plugin mode is active. |
-| `gateway_loop_state_reason_code`    | `string`   | Loop state selection reason (`loop_state_available`, `bridge_state_ignored_in_plugin_mode`).                                                      |
-| `gateway_orphan_cleanup.attempted`  | `boolean`  | Always `true` when status snapshot runs cleanup check.                                                                                            |
-| `gateway_orphan_cleanup.changed`    | `boolean`  | `true` when stale/invalid active loop was deactivated and state file was updated.                                                                 |
-| `gateway_orphan_cleanup.reason`     | `string`   | Cleanup outcome reason: `state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, or `stale_loop_deactivated`.                     |
-| `gateway_orphan_cleanup.state_path` | `string    | null`                                                                                                                                             | State file path only when cleanup mutated persisted bridge state.                                  |
+| Field | Type | Meaning |
+|---|---|---|
+| `gateway_runtime_mode` | `string` | Active routing mode for autopilot controls: `plugin_gateway` when gateway plugin is enabled and hook-complete, otherwise `python_command_bridge`. |
+| `gateway_runtime_reason_code` | `string` | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_runtime_unavailable`, `gateway_plugin_not_ready`). |
+| `gateway_plugin_enabled` | `boolean` | Whether gateway-core file plugin is currently enabled in layered config. |
+| `gateway_bun_available` | `boolean` | Whether `bun` is currently available for host-side file plugin runtime support. |
+| `gateway_missing_hook_capabilities` | `string[]` | Missing required dist hook capabilities when plugin mode cannot be selected. |
+| `gateway_loop_state` | `object|null` | Current loop state for the active runtime mode; bridge state is hidden when plugin mode is active. |
+| `gateway_loop_state_reason_code` | `string` | Loop state selection reason (`loop_state_available`, `bridge_state_ignored_in_plugin_mode`). |
+| `gateway_orphan_cleanup.attempted` | `boolean` | Always `true` when status snapshot runs cleanup check. |
+| `gateway_orphan_cleanup.changed` | `boolean` | `true` when stale/invalid active loop was deactivated and state file was updated. |
+| `gateway_orphan_cleanup.reason` | `string` | Cleanup outcome reason: `state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, or `stale_loop_deactivated`. |
+| `gateway_orphan_cleanup.state_path` | `string|null` | State file path only when cleanup mutated persisted bridge state. |
 
 ```bash
-# Help/control subcommands (no execution loop)
-/autopilot help
-/autopilot status --json
-
-# Execution runner (start-or-resume bounded cycles)
-/autopilot-go --goal "continue active docs request" --max-cycles 10 --json
-
 # Quick-fix objective (single-script scope)
 /autopilot start --goal "patch failing smoke check" --scope "scripts/install.sh" --done-criteria "install-test passes" --max-budget conservative --json
 /autopilot status --json
@@ -600,15 +512,13 @@ Autopilot gateway telemetry fields (`--json`):
 
 # Context-first one-shot iteration (start-or-resume and run bounded cycles)
 /autopilot go --goal "continue active docs request" --max-cycles 10 --json
-/autopilot-go-verbose --goal "continue active docs request" --max-cycles 10 --json
-/continue-work "finish cheatsheet updates and validations"
 
-# Canonical command surface
-/autopilot-go --goal "finish docs checklist end-to-end"
-/autopilot-stop --reason "manual"
+# Compatibility aliases (canonical flow is /autopilot*)
+/ralph-loop "finish docs checklist end-to-end"
+/cancel-ralph
 
 # Objective-gate completion mode (alternative to promise mode)
-/autopilot-objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
+/autopilot go --completion-mode objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
 
 # Feature objective (multi-step implementation)
 /autopilot start --goal "ship command UX polish" --scope "scripts/*.py, README.md" --done-criteria "code complete;docs updated;validation green" --max-budget balanced --json
@@ -625,13 +535,6 @@ Autopilot gateway telemetry fields (`--json`):
 ```
 
 - troubleshooting guide:
-  - quote multi-word flag values (`--goal`, `--scope`, `--done-criteria`, `--completion-promise`) using `"..."`.
-  - unquoted multi-word values are parsed as extra positional tokens and may fall back to usage output.
-  - `/autopilot start` initializes a dry-run-backed objective state; `/autopilot-go` executes bounded cycles.
-  - `/autopilot-go --max-cycles <n>` sets an upper bound, not a guaranteed count; runs may finish earlier when completion gates are met.
-  - compact output is enabled by default for `/autopilot-go`, `/autopilot-objective`, and `/continue-work`; use `/autopilot-go-verbose` for full cycle payloads.
-  - go-style aliases print a debug command line before JSON payloads for traceability.
-  - `/autopilot` without a subcommand defaults to go-style execution with inferred fields.
   - `autopilot_runtime_missing`: initialize objective with `/autopilot start ...`.
   - `confidence_drop_requires_handoff`: operator review required before calling `/autopilot resume`.
   - `budget_*`: reduce scope or lower cycle load, then resume with conservative increments.
@@ -646,8 +549,7 @@ Task 28.5 autopilot verification notes:
 
 ## Installed plugin stack 🔌
 
-- `file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core` - core hook/runtime plugin, including built-in notification events for completion/errors/prompts.
-- `plugin/gateway-core/docs/mistake-ledger-report.md` - how to capture assistant mistake logs and generate top/digest/session reports (text, JSON, CSV).
+- `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
 
 ### Experimental plugin options 🧪
 
@@ -709,27 +611,15 @@ Use OpenCode-native setup and diagnostics:
 /nvim uninstall --unlink-init
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/nvim-help
-/nvim-status
-/nvim-install-minimal
-/nvim-install-power
-/nvim-doctor-json
-```
 
 Profiles:
-
 - `minimal`: two keymaps (`<leader>oa`, `<leader>os`) for fast ask/select loops.
 - `power`: adds draft ask and health shortcuts for heavier editor-driven workflows.
 
 Installed integration file path:
-
 - `~/.config/nvim/lua/my_opencode/opencode.lua`
 
 When `--link-init` is used, the command appends:
-
 - `require("my_opencode.opencode")` to `~/.config/nvim/init.lua`.
 
 ### 2) Rich desktop/web UI: `OpenChamber`
@@ -778,13 +668,6 @@ Use these directly in OpenCode:
 /devtools hooks-install
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/devtools-help
-/devtools-install
-/devtools-doctor-json
-```
 
 First-time shell setup for direnv (`zsh`):
 
@@ -800,7 +683,6 @@ direnv allow
 ```
 
 Notes:
-
 - This repo ships `lefthook.yml` and `.pre-commit-config.yaml`.
 - `gh-dash` is installed as a GitHub CLI extension (`gh extension install dlvhdr/gh-dash`).
 - For Node-only repositories, Husky is also a valid alternative to Lefthook.
@@ -836,22 +718,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- enable gateway memory protection defaults in your shell profile (`gw-recover-now`, `gw-recover-watch` aliases)
-- install a macOS LaunchAgent (`com.my_opencode.gateway-protection`) for always-on memory recovery (disable with `--no-protection-forever`)
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/lsp status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
-
-Protection forever controls:
-
-```bash
-# default installer behavior already enables forever protection
-curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash -s -- --protection-forever
-
-# opt out of launch agent installation
-curl -fsSL https://raw.githubusercontent.com/dmoliveira/my_opencode/main/install.sh | bash -s -- --no-protection-forever
-
-# inspect running agent
-launchctl print gui/$(id -u)/com.my_opencode.gateway-protection
-```
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -863,26 +730,8 @@ chmod +x ~/.config/opencode/my_opencode/scripts/plugin_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/notify_command.py ~/.config/opencode/my_opencode/scripts/session_digest.py ~/.config/opencode/my_opencode/scripts/session_command.py ~/.config/opencode/my_opencode/scripts/opencode_session.sh ~/.config/opencode/my_opencode/scripts/telemetry_command.py ~/.config/opencode/my_opencode/scripts/post_session_command.py ~/.config/opencode/my_opencode/scripts/policy_command.py ~/.config/opencode/my_opencode/scripts/doctor_command.py ~/.config/opencode/my_opencode/scripts/config_command.py ~/.config/opencode/my_opencode/scripts/stack_profile_command.py ~/.config/opencode/my_opencode/scripts/browser_command.py ~/.config/opencode/my_opencode/scripts/start_work_command.py ~/.config/opencode/my_opencode/scripts/install_wizard.py ~/.config/opencode/my_opencode/scripts/nvim_integration_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/devtools_command.py
 chmod +x ~/.config/opencode/my_opencode/scripts/background_task_manager.py
-chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py ~/.config/opencode/my_opencode/scripts/lsp_command.py
-chmod +x ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py
+chmod +x ~/.config/opencode/my_opencode/scripts/todo_command.py ~/.config/opencode/my_opencode/scripts/resume_command.py ~/.config/opencode/my_opencode/scripts/safe_edit_command.py
 ```
-
-## Packaged CLI parity
-
-Use:
-
-```bash
-python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py version
-python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py doctor --json
-python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py install --dry-run
-python3 ~/.config/opencode/my_opencode/scripts/my_opencode_cli.py run --opencode-binary /usr/bin/true
-```
-
-Notes:
-
-- `install` is non-interactive by default and supports `--repo-url`, `--repo-ref`, and `--install-dir` overrides.
-- `doctor` delegates to the same diagnostics pipeline as `/doctor`.
-- `run` supports a binary override for deterministic automation tests.
 
 ## Install wizard flow 🧭
 
@@ -909,17 +758,8 @@ Use these directly in OpenCode:
 /stack apply quiet-ci
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/stack-help
-/stack-focus
-/stack-research
-/stack-quiet-ci
-```
 
 Profiles:
-
 - `focus`: notify focus, telemetry off, post-session disabled, policy strict
 - `research`: notify all, telemetry local, post-session enabled with `make selftest`, policy balanced
 - `quiet-ci`: notify quiet + no complete event, telemetry off, post-session manual `make validate`, policy strict
@@ -938,15 +778,6 @@ Use these directly in OpenCode:
 /config restore <backup-id>
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/config-help
-/config-backup
-/config-list
-/config-layers
-/config-layers-json
-```
 
 `/config` snapshots all `opencode*.json` files under `~/.config/opencode/` into `~/.config/opencode/my_opencode-backups/`.
 
@@ -966,7 +797,6 @@ Autocomplete-friendly shortcuts:
 8. bundled `opencode.json` from this repo (base)
 
 Notes:
-
 - Merge behavior is deep for objects and replace-on-write for arrays.
 - JSONC files support comments and trailing commas.
 - Writes target the highest-precedence existing config path (or `~/.config/opencode/opencode.json` when no override exists).
@@ -982,12 +812,6 @@ Use these directly in OpenCode:
 /doctor help
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/doctor-json
-/doctor-help
-```
 
 `/doctor` runs diagnostics across `mcp`, `plugin`, `notify`, `digest`, `telemetry`, `post-session`, `policy`, `bg`, and optional `refactor-lite` checks in one pass.
 
@@ -1001,27 +825,18 @@ Use these directly in OpenCode:
 /refactor-lite <target> --scope scripts/*.py --run-selftest --json
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/refactor-lite-help
-/refactor-lite-dry-run <target> --scope scripts/*.py
-```
 
 `/refactor-lite` backend behavior:
-
 - runs deterministic preflight analysis (target search + file map)
 - defaults to `--strategy safe` guardrails
 - executes verification hooks on non-dry runs (`make validate`, optional `make selftest`)
 
 Strategies:
-
 - `safe` (default): blocks ambiguous broad targets unless scope is narrowed.
 - `balanced`: broader analysis with the same verification expectations.
 - `aggressive`: explicit opt-in for broad target analysis when ambiguity is acceptable.
 
 Recommended flow:
-
 1. Start with `--dry-run --json` and inspect `preflight.file_map`.
 2. Narrow with `--scope` until safe mode is deterministic.
 3. Run without `--dry-run` to enforce verification hooks.
@@ -1068,13 +883,11 @@ Autocomplete-friendly shortcut:
 ```
 
 Hook behavior:
-
 - `continuation-reminder` triggers when checklist items remain unfinished.
 - `truncate-safety` clips oversized output and returns warnings with limits used.
 - `error-hints` maps common failures (missing command/path, permission, git context, timeout) to actionable hints.
 
 Governance controls:
-
 - global toggle in config: `hooks.enabled`
 - per-hook opt-out list: `hooks.disabled`
 - telemetry-safe audit log: `~/.config/opencode/hooks/actions.jsonl`
@@ -1086,7 +899,6 @@ Epic 5 starts with a schema contract in `scripts/model_routing_schema.py` and do
 `instructions/model_routing_schema.md`.
 
 Baseline categories:
-
 - `quick`
 - `deep`
 - `visual`
@@ -1094,26 +906,22 @@ Baseline categories:
 
 Each category includes `model`, `temperature`, `reasoning`, `verbosity`, and `description`.
 Fallback behavior is deterministic:
-
 - unknown category -> `default_category`
 - unavailable model -> `default_category`
 
 Fallback explanation contract (Epic 12 Task 12.1):
-
 - `instructions/model_fallback_explanation_model.md`
 - trace stages: `requested -> attempted -> selected`
 - output levels: `compact` and `verbose`
 - redaction policy for sensitive provider details
 
 Resolution precedence (Task 5.2):
-
 1. `system_defaults`
 2. selected category defaults
 3. explicit user overrides
 4. model availability fallback (category -> system default)
 
 Use:
-
 ```text
 /model-routing status
 /model-routing set-category deep
@@ -1124,42 +932,29 @@ Use:
 `/model-routing resolve` now emits a structured fallback trace (`requested -> attempted -> selected`) and persists the latest trace for `/model-routing trace` debug introspection.
 
 Routing command surface (Epic 12 Task 12.3):
-
 ```text
 /routing status
 /routing explain --category deep --available-models openai/gpt-5-mini --json
 ```
 
 Troubleshooting unexpected model selection:
-
 - run `/routing explain --json` and inspect `fallback_reason`
 - confirm `attempted_count` is non-zero and review `resolution_trace.attempted`
 - verify available model set passed to resolve commands matches runtime availability
 
-Model-profile aliases:
-
-```text
-/model-profile status
-/model-profile set visual
-/model-profile resolve --category writing
-```
-
 Practical routing examples:
-
 - Fast repo hygiene (`git status`, light checks): `quick`
 - Architecture/debug planning and complex refactors: `deep`
 - UI polish and design-heavy implementation notes: `visual`
 - Changelogs, release notes, and long-form docs: `writing`
 
 Integration points:
-
 - `/stack apply <profile>` now sets a routing category (`focus/research -> deep`, `quiet-ci -> quick`).
 - install wizard supports `--model-profile <quick|deep|visual|writing>`.
 
 ## Browser profile switching
 
 Use:
-
 ```text
 /browser status
 /browser profile playwright
@@ -1168,57 +963,17 @@ Use:
 ```
 
 Provider trade-offs:
-
 - `playwright`: stable-first default and broad compatibility.
 - `agent-browser`: optional path when your workflow depends on agent-browser tooling.
 
 Recommended defaults:
-
 - start with `playwright`
 - switch to `agent-browser` only when you need those capabilities
 - run `/browser doctor --json` after changes to confirm dependency readiness
 
 Wizard support:
-
 - `install_wizard.py` supports `--browser-profile <playwright|agent-browser>`
 - interactive wizard includes the same provider choice during fresh setup and reconfigure
-
-## Optional tmux visual mode
-
-Use:
-
-```text
-/tmux status --json
-/tmux config enabled true
-/tmux config layout split-3
-/tmux doctor --json
-```
-
-Behavior:
-
-- reuses existing pane/session runtime cache at `~/.config/opencode/my_opencode/runtime/gateway-pane-session-cache.json`
-- reports `headless_fallback` when tmux is unavailable or explicitly disabled
-- keeps non-tmux fallback behavior explicit via `runtime_mode` and `reason_code`
-
-## Skill contract shortcuts
-
-Use:
-
-```text
-/playwright
-/frontend-ui-ux
-/git-master
-```
-
-What they do:
-
-- `/playwright`: loads Playwright-first browser automation guardrails and recommends `/browser` readiness checks.
-- `/frontend-ui-ux`: loads frontend implementation quality boundaries (intentional design + responsive validation).
-- `/git-master`: loads safe git workflow boundaries for commit/PR/merge hygiene.
-
-Implementation note:
-
-- all three shortcuts are thin wrappers over `scripts/skill_contract_command.py` and reuse existing command pathways (no separate runtime engine).
 
 ## Keyword-triggered execution modes
 
@@ -1229,7 +984,6 @@ Epic 8 Task 8.2 adds a deterministic keyword detector engine:
 - dictionary contract: `instructions/keyword_execution_modes.md`
 
 Use:
-
 ```text
 /keyword-mode status
 /keyword-mode detect --prompt "safe-apply deep-analyze review this migration" --json
@@ -1242,20 +996,17 @@ Use:
 ```
 
 Detector behavior:
-
 - case-insensitive keyword token matching (`ulw`, `deep-analyze`, `parallel-research`, `safe-apply`)
 - deterministic precedence for conflicts (`safe-apply` > `deep-analyze` > `parallel-research` > `ulw`)
 - prompt-level opt-out support (`no-keyword-mode` and `no-<keyword>` tokens)
 - persisted runtime context via `keyword_modes` config section (`active_modes`, `effective_flags`)
 
 Examples:
-
 - basic: `/keyword-mode apply --prompt "safe-apply review this migration" --json`
 - intermediate: `/keyword-mode disable-keyword ulw` then `/keyword-mode detect --prompt "ulw deep-analyze audit" --json`
 - override path: `/keyword-mode detect --prompt "no-keyword-mode safe-apply deep-analyze" --json`
 
 Anti-patterns:
-
 - avoid mixing contradictory intent keywords casually (`ulw` + `deep-analyze`) unless you expect precedence conflict resolution.
 - avoid relying on partial words (`deep` or `safe`) because matching is exact-token only.
 - avoid forgetting local opt-outs in copied prompts; `no-keyword-mode` intentionally disables all activation for that request.
@@ -1269,7 +1020,6 @@ Epic 10 introduces an intent-mapping detector for common command families:
 - contract guide: `instructions/auto_slash_detector.md`
 
 Use:
-
 ```text
 /auto-slash status --json
 /auto-slash preview --prompt "run doctor diagnostics" --json
@@ -1281,7 +1031,6 @@ Use:
 ```
 
 Detector behavior:
-
 - maps natural-language prompts to `/doctor`, `/stack`, `/nvim`, or `/devtools`
 - enforces confidence + ambiguity thresholds before selecting a command
 - defaults to preview-first execution (`execute` requires `--force`)
@@ -1289,13 +1038,11 @@ Detector behavior:
 - appends forced execution events to runtime audit log for traceability
 
 Examples:
-
 - basic: `/auto-slash preview --prompt "please run doctor diagnostics" --json`
 - intermediate: `/auto-slash preview --prompt "switch to focus mode" --json`
 - safety path: `/auto-slash execute --prompt "run doctor diagnostics" --json` then rerun with `--force`
 
 Limitations:
-
 - intentionally limited command set to reduce misfire risk
 - does not auto-dispatch when prompts already include explicit slash commands
 - low-confidence or ambiguous prompts return explicit no-op reasons
@@ -1310,7 +1057,6 @@ Epic 9 introduces a rules engine for conditional instruction injection:
 - command wrapper: `scripts/rules_command.py`
 
 Use:
-
 ```text
 /rules status
 /rules explain scripts/selftest.py --json
@@ -1320,14 +1066,12 @@ Use:
 ```
 
 Rules are discovered from:
-
 - user scope: `~/.config/opencode/rules/**/*.md`
 - project scope: `.opencode/rules/**/*.md`
 
 Precedence is deterministic: priority desc, then scope (`project` before `user`), then lexical rule id.
 
 Recommended workflow:
-
 - create project rules under `.opencode/rules/`
 - run `/rules status` after edits to validate discovery
 - use `/rules explain <path> --json` to verify effective rule stack before relying on behavior
@@ -1344,7 +1088,6 @@ Epic 14 Task 14.1 defines the baseline plan format and execution-state rules for
 - state model scope: `pending/in_progress/done/skipped` with strict transition semantics
 
 Use:
-
 ```text
 /start-work path/to/plan.md --json
 /start-work-bg path/to/plan.md
@@ -1355,7 +1098,6 @@ Use:
 ```
 
 Integration notes:
-
 - use `/start-work-bg` when you want queued, reviewable execution via the background subsystem before running `/bg run`
 - `/digest run` now includes a `plan_execution` recap block (status, plan id, step counts, deviation count)
 - `/doctor run` includes `start-work` health diagnostics for execution-state visibility
@@ -1376,14 +1118,12 @@ Epic 15 Task 15.2 implements the enforcement backend:
 - compliance violations now emit deterministic remediation prompts and persisted audit events
 
 Use:
-
 ```text
 /todo status --json
 /todo enforce --json
 ```
 
 Compliant workflow pattern:
-
 - run `/start-work path/to/plan.md --json`
 - inspect `/todo status --json` for current state counts
 - gate handoff/closure with `/todo enforce --json`
@@ -1413,7 +1153,6 @@ Epic 17 Task 17.3 adds operator-facing resume controls:
 - actionable guidance: `resume_hints.next_actions` describes the next safe recovery command for the current reason code
 
 Use:
-
 ```text
 /resume status --json
 /resume now --interruption-class tool_failure --json
@@ -1422,19 +1161,16 @@ Use:
 ```
 
 Recovery playbooks:
-
 - `resume_blocked_cooldown`: wait for cooldown and rerun `/resume status --json` until eligible.
 - `resume_non_idempotent_step`: explicitly approve only the needed step with `--approve-step <ordinal>`.
 - `resume_attempt_limit_reached`: escalate to manual review and restart from `/start-work <plan.md>` after inspection.
 - `resume_disabled`: keep disabled during high-risk runs; re-enable by updating runtime `plan_execution.resume.enabled` to `true`.
 
 Digest integration:
-
 - `plan_execution.resume_hints` includes the latest resume eligibility state, reason code, and suggested next actions.
 - use `/digest show` after interrupted runs to get lightweight recovery cues without loading full runtime state.
 
 Verification notes:
-
 - selftest now covers all interruption classes (`tool_failure`, `timeout`, `context_reset`, `process_crash`) plus cooldown and disable safeguards.
 - install smoke includes interrupted-flow replay with expected non-idempotent block and explicit approval retry.
 
@@ -1448,13 +1184,11 @@ Epic 11 Task 11.1 defines the baseline policy schema for context-window resilien
 - command diagnostics: `scripts/context_resilience_command.py`
 
 Initial schema covers:
-
 - truncation modes (`default`, `aggressive`)
 - protected tools/messages to preserve critical evidence
 - pruning/recovery notification levels (`quiet`, `normal`, `verbose`)
 
 Engine behavior currently includes:
-
 - duplicate message pruning for repeated non-protected context entries
 - superseded write pruning (older writes to same target path)
 - stale error purging once newer successful command outcomes exist beyond threshold
@@ -1462,7 +1196,6 @@ Engine behavior currently includes:
 - recovery planning with automatic resume hints, safe fallback steps, and pruning diagnostics
 
 Use:
-
 ```text
 /resilience status --json
 /resilience doctor --json
@@ -1485,42 +1218,18 @@ Use these directly in OpenCode:
 /bg status --json
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/bg-help
-/bg-list
-/bg-running
-/bg-doctor-json
-/bg-status-json
-```
-
-Upstream compatibility facade:
-
-```text
-/background-agent-call --subagent-type explore --prompt "scan auth" --command "python3 scripts/task_graph_command.py ready --json" --run-in-background true
-/background-output --task-id bg_<id>
-/upstream-bg-status
-/upstream-agent-map --role sisyphus
-/upstream-agent-map-status
-/upstream-compat-doctor
-```
 
 `/bg` uses `~/.config/opencode/my_opencode/bg/` by default with:
-
 - `jobs.json` as authoritative state
 - `runs/<job-id>.log` for combined stdout/stderr
 - `runs/<job-id>.meta.json` for execution metadata
 
 Examples:
-
 - Basic async start + read: `/bg start -- make validate` then `/bg list --status running` and `/bg read <job-id>`
-- Upstream-style facade over local runtime: `/background-agent-call ... --run-in-background true` then `/background-output --task-id bg_<id>`
 - Intermediate queue workflow: `/bg enqueue -- make selftest`, `/bg enqueue -- make install-test`, then `/bg run --max-jobs 1`
 - Failure/recovery: `/bg start -- python3 -c "import time; time.sleep(5)" --timeout-seconds 1`, inspect with `/bg doctor --json`, then `/bg cleanup`
 
 Notification behavior:
-
 - Background terminal states emit optional alerts through the existing notify stack (`notify` config event/channel rules).
 - Set `MY_OPENCODE_BG_NOTIFICATIONS_ENABLED=0` to suppress background notifications without changing global notify settings.
 
@@ -1545,18 +1254,6 @@ Use these directly in OpenCode:
 /mcp disable all
 ```
 
-MCP autocomplete-friendly shortcuts:
-
-```text
-/mcp-help
-/mcp-doctor
-/mcp-doctor-json
-/mcp-profile-minimal
-/mcp-profile-research
-/mcp-profile-context7
-/mcp-profile-ghgrep
-```
-
 ## Plugin control inside OpenCode 🎛️
 
 Use these directly in OpenCode:
@@ -1566,29 +1263,16 @@ Use these directly in OpenCode:
 /plugin help
 /plugin doctor
 /plugin doctor --json
-/setup-keys
+/plugin setup-keys
 /plugin profile lean
 /plugin profile stable
 /plugin profile experimental
-/plugin enable morph
-/plugin disable morph
-/plugin enable worktree
-/plugin disable worktree
+/plugin enable notifier
+/plugin disable notifier
 /plugin enable all
 /plugin disable all
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/plugin-help
-/plugin-enable-morph
-/plugin-enable-worktree
-/plugin-profile-lean
-/plugin-profile-stable
-/plugin-profile-experimental
-/plugin-doctor-json
-```
 
 Global command helper shortcuts:
 
@@ -1597,32 +1281,28 @@ Global command helper shortcuts:
 /complete auto
 /complete autopilot
 /ac resume
-/complete-families
-/complete-doctor
 ```
 
 `/complete <prefix>` returns ranked slash command suggestions with descriptions.
-`/ac` is a short alias for `/complete`.
+`/ac` remains a short alias for `/complete`.
 
-Supported plugin names: `morph`, `worktree`.
+Supported plugin names: `notifier`, `morph`, `worktree`.
 
-`all` currently applies only to the stable set (none). Notification behavior is now internal via gateway hooks and `/notify` config.
-
-Migration note: `supermemory` and `wakatime` were removed from this repo. If either still exists in a layered config override, remove those plugin entries manually or run `/plugin profile lean`.
+`all` applies only to the stable set: `notifier`.
 
 `/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
 
-`/plugin doctor --json` (or `/plugin-doctor-json`) prints machine-readable diagnostics for automation.
+`/plugin doctor --json` prints machine-readable diagnostics for automation.
 
-`/setup-keys` prints exact environment/file snippets for missing API keys.
+`/plugin setup-keys` prints exact environment/file snippets for missing API keys.
 
 Profiles:
-
-- `lean` -> no optional external plugins
-- `stable` -> no optional external plugins
-- `experimental` -> `morph`, `worktree`
+- `lean` -> no managed plugins (gateway-only baseline)
+- `stable` -> `notifier`
+- `experimental` -> `stable` + `morph`, `worktree`
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
+
 
 ## Notification control inside OpenCode 🔔
 
@@ -1633,9 +1313,6 @@ Use these directly in OpenCode:
 /notify help
 /notify doctor
 /notify doctor --json
-/notify-test --method hook --event all
-/notify-test --method terminal-notifier --event all --list
-/notify-test --method osascript --event question
 /notify profile all
 /notify profile quiet
 /notify profile focus
@@ -1651,20 +1328,8 @@ Use these directly in OpenCode:
 /notify channel error visual on
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/notify-help
-/notify-doctor
-/notify-doctor-json
-/notify-profile-all
-/notify-profile-focus
-/notify-sound-only
-/notify-visual-only
-```
 
 `/notify` writes preferences into layered config under `notify` (or `OPENCODE_NOTIFICATIONS_PATH` when explicitly set):
-
 - global: `enabled`
 - channel: `sound.enabled`, `visual.enabled`
 - event: `events.<type>`
@@ -1682,15 +1347,6 @@ Use these directly in OpenCode:
 /digest doctor --json
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/digest-run
-/digest-run-post
-/digest-show
-/digest-doctor
-/digest-doctor-json
-```
 
 The digest command writes to `~/.config/opencode/digests/last-session.json` by default.
 
@@ -1701,7 +1357,6 @@ For automatic digest-on-exit behavior (including `Ctrl+C`), launch OpenCode thro
 ```
 
 Optional environment variables:
-
 - `MY_OPENCODE_DIGEST_PATH` custom output path
 - `MY_OPENCODE_DIGEST_HOOK` command to run after digest is written
 - `DIGEST_REASON_ON_EXIT` custom reason label (default `exit`)
@@ -1721,22 +1376,14 @@ Use these directly in OpenCode:
 /post-session set run-on exit,manual
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/post-session-help
-/post-session-enable
-```
 
 `/post-session` writes to layered config under `post_session` (or `MY_OPENCODE_SESSION_CONFIG_PATH` when explicitly set):
-
 - `post_session.enabled`
 - `post_session.command`
 - `post_session.timeout_ms`
 - `post_session.run_on` (`exit`, `manual`, `idle`)
 
 Typical flow:
-
 1. Configure command with `/post-session set command <your-test-or-lint-command>`
 2. Enable with `/post-session enable`
 3. Use wrapper `opencode_session.sh` so command runs automatically on exit/Ctrl+C
@@ -1754,19 +1401,10 @@ Use these directly in OpenCode:
 /policy profile fast
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/policy-help
-/policy-profile-strict
-/policy-profile-balanced
-/policy-profile-fast
-```
 
 `/policy` writes profile metadata to layered config under `policy` and applies notification posture under `notify` (legacy path env overrides remain supported).
 
 Profiles:
-
 - `strict`: visual alerts for high-risk events, minimal noise
 - `balanced`: visual for all events, sound on risk-heavy events
 - `fast`: all channels and events enabled for immediate feedback
@@ -1783,20 +1421,10 @@ Use these directly in OpenCode:
 /quality doctor
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/quality-status
-/quality-profile-fast
-/quality-profile-strict
-/quality-profile-off
-/quality-doctor
-```
 
 `/quality` writes profile metadata to layered config under `quality` with toggles for TS lint/typecheck/tests and Python selftest.
 
 Profiles:
-
 - `off`: disable quality checks for local rapid iteration
 - `fast`: lint+typecheck+selftest, skip heavier test passes
 - `strict`: run full quality gates (including TS tests)
@@ -1812,66 +1440,33 @@ Use these directly in OpenCode:
 /gateway doctor
 ```
 
-Shortcuts:
-
-```text
-/gateway-status
-/gateway-enable
-/gateway-disable
-/gateway-doctor
-```
-
 Notes:
-
 - `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
 - `/gateway enable` now runs a safety preflight (bun + dist + required hook capabilities) and auto-reverts to disabled when preflight fails.
 - use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
 - `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
-- `/gateway doctor --json` now includes `hook_diagnostics`, plugin entry dedupe telemetry, and process/runtime pressure diagnostics; it still fails when gateway is enabled without a valid built hook surface.
+- `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
 - set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
-- trigger-only context warnings now include a Nerd Font marker (`󰚩 Context Guard:`) so pressure events stand out without adding steady-state noise.
-- context guard markers now support dual fallback mode (`󰚩 Context Guard [Context Guard]:`) and configurable verbosity (`minimal`, `normal`, `debug`) in gateway hook config.
-- context and compaction safeguards now apply across providers (not Anthropic-only), using a configurable default context limit for non-Anthropic providers.
-- global multi-session pressure warnings now trigger via `global-process-pressure` when concurrent `--continue` sessions/process counts or RSS exceed thresholds.
-- critical global RSS pressure (`>= 10GB` by default) now emits a critical guard event and auto-pauses continuation for the current session.
-- critical response now supports a configurable escalation ladder (window + pause/escalation event thresholds) before stronger repeated-critical messaging.
-- critical events can trigger local desktop notifications (best effort on macOS/Linux), with audit reason codes for sent/failed notification attempts.
-- `/gateway status --json` now reports `guard_event_counters` including session-correlated pressure observations (`session_pressure_attribution`, non-causal) and critical trigger timestamps.
-- `/gateway doctor --json` now exposes `remediation_commands` when critical pressure signals are detected.
-- `/gateway tune memory --json` now suggests a balanced memory profile based on current pressure/counter telemetry.
-- `pressure-escalation-guard` now blocks non-essential reviewer/verifier/explore/librarian/general task escalations while high continuation pressure is active (override via blocker/critical prompt patterns).
-- gateway event audit now supports bounded rotation via `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES` and `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`.
-- see `docs/memory-incident-playbook.md` for a fast detect/stabilize/recover/verify incident flow.
-
-Gateway event audit baseline (recommended before memory tuning):
-
-```bash
-MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 /gateway status --json
-MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 /gateway doctor --json
-```
-
-- Keep a normal 20-30 minute coding session and compare `process_pressure` plus `runtime_staleness` from `/gateway status --json` before/after.
-- Review `.opencode/gateway-events.jsonl` for recurring `context-window-monitor` and `preemptive-compaction` events to confirm cadence is controlled but recurring.
 
 Gateway orphan cleanup report fields (`--json`):
 
-| Field                       | Type      | Meaning                                                                                                                    |
-| --------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `orphan_cleanup.attempted`  | `boolean` | `true` when cleanup check was evaluated.                                                                                   |
-| `orphan_cleanup.changed`    | `boolean` | `true` when active orphan loop was deactivated.                                                                            |
-| `orphan_cleanup.reason`     | `string`  | Cleanup result reason (`state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, `stale_loop_deactivated`). |
-| `orphan_cleanup.state_path` | `string   | null`                                                                                                                      | Updated state path when cleanup changes were persisted. |
+| Field | Type | Meaning |
+|---|---|---|
+| `orphan_cleanup.attempted` | `boolean` | `true` when cleanup check was evaluated. |
+| `orphan_cleanup.changed` | `boolean` | `true` when active orphan loop was deactivated. |
+| `orphan_cleanup.reason` | `string` | Cleanup result reason (`state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, `stale_loop_deactivated`). |
+| `orphan_cleanup.state_path` | `string|null` | Updated state path when cleanup changes were persisted. |
 
 Gateway hook diagnostics fields (`--json`):
 
-| Field                                                     | Type      | Meaning                                                                     |
-| --------------------------------------------------------- | --------- | --------------------------------------------------------------------------- |
-| `hook_diagnostics.source_hooks_exist`                     | `boolean` | Source hook modules exist for autopilot-loop, continuation, and safety.     |
-| `hook_diagnostics.dist_hooks_exist`                       | `boolean` | Built dist hook modules exist for autopilot-loop, continuation, and safety. |
-| `hook_diagnostics.dist_exposes_tool_execute_before`       | `boolean` | Built plugin exports slash-command interception handler.                    |
-| `hook_diagnostics.dist_exposes_chat_message`              | `boolean` | Built plugin exports chat-message lifecycle handler.                        |
-| `hook_diagnostics.dist_continuation_handles_session_idle` | `boolean` | Continuation hook handles idle-cycle progression logic.                     |
+| Field | Type | Meaning |
+|---|---|---|
+| `hook_diagnostics.source_hooks_exist` | `boolean` | Source hook modules exist for autopilot-loop, continuation, and safety. |
+| `hook_diagnostics.dist_hooks_exist` | `boolean` | Built dist hook modules exist for autopilot-loop, continuation, and safety. |
+| `hook_diagnostics.dist_exposes_tool_execute_before` | `boolean` | Built plugin exports slash-command interception handler. |
+| `hook_diagnostics.dist_exposes_chat_message` | `boolean` | Built plugin exports chat-message lifecycle handler. |
+| `hook_diagnostics.dist_continuation_handles_session_idle` | `boolean` | Continuation hook handles idle-cycle progression logic. |
 
 ## Telemetry forwarding inside OpenCode 📡
 
@@ -1891,18 +1486,8 @@ Use these directly in OpenCode:
 /telemetry disable question
 ```
 
-Autocomplete-friendly shortcuts:
-
-```text
-/telemetry-help
-/telemetry-doctor
-/telemetry-doctor-json
-/telemetry-profile-off
-/telemetry-profile-local
-```
 
 `/telemetry` writes to layered config under `telemetry` (or `OPENCODE_TELEMETRY_PATH` when explicitly set) and supports:
-
 - global on/off (`enabled`)
 - endpoint URL (`endpoint`)
 - timeout (`timeout_ms`)
@@ -1934,7 +1519,6 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `scripts/release_train_command.py` - `/release-train` command surface and doctor/checklist integration
 - `scripts/hotfix_runtime.py` - incident hotfix runtime profile with checkpoint and timeline capture
 - `scripts/todo_command.py` - backend script for `/todo`
-- `scripts/task_graph_command.py` - backend script for `/task` persistent dependency graph controls
 - `scripts/resume_command.py` - backend script for `/resume`
 - `scripts/safe_edit_adapters.py` - semantic safe-edit adapter and validation helpers
 - `scripts/safe_edit_command.py` - `/safe-edit` command surface for semantic adapter planning and diagnostics

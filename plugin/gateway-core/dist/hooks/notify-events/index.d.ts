@@ -28,6 +28,17 @@ interface NotifyContent {
     title: string;
     message: string;
 }
+interface TerminalNotifierAttempt {
+    args: string[];
+    soundSent: boolean;
+}
+export declare function terminalNotifierAttempts(options: {
+    title: string;
+    message: string;
+    imagePath: string;
+    soundName: string;
+    sender: string;
+}): TerminalNotifierAttempt[];
 export declare function sendBasicVisualNotification(title: string, message: string): boolean;
 export declare function createNotifyEventsHook(options: {
     directory: string;

@@ -238,6 +238,8 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
   assert.equal(config.codexHeaderInjector.enabled, true)
   assert.equal(config.planHandoffReminder.enabled, true)
+})
+
 test("loadGatewayConfig keeps default maxIgnoredCompletionCycles", () => {
   const config = loadGatewayConfig({})
   assert.equal(config.autopilotLoop.maxIgnoredCompletionCycles, 1)
