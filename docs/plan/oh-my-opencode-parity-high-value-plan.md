@@ -51,7 +51,7 @@ Rules:
   - [x] E1-T4 Wire slash commands in `opencode.json` and doctor/help integration.
   - [x] E1-T5 Add selftests for lifecycle + dependency edge cases.
   - [x] E1-T6 Add docs with examples and failure guidance.
-- [x] E2 Loop command parity (`/init-deep`, `/ulw-loop`, `/ralph-loop`)
+- [x] E2 Loop command parity (`/init-deep`, `/ulw-loop`, legacy ralph-loop alias retired)
   - [x] E2-T1 Define loop contracts mapped to existing autopilot/keyword/continuation runtime.
   - [x] E2-T2 Prefer existing loop commands first; add aliases only when strictly needed for parity.
   - [x] E2-T3 Add safety/completion semantics to avoid command-only loops.

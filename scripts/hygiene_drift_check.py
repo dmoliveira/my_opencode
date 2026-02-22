@@ -18,11 +18,9 @@ HOOKS_DIR = REPO_ROOT / "plugin/gateway-core/src/hooks"
 PARITY_PLAN = REPO_ROOT / "docs/plan/oh-my-opencode-parity-high-value-plan.md"
 
 ALLOWED_DUPLICATE_CLUSTERS = {
-    frozenset({"complete", "ac"}),
     frozenset({"model-routing", "model-profile"}),
     frozenset({"model-routing-status", "model-profile-status"}),
     frozenset({"autopilot-go", "continue-work"}),
-    frozenset({"autoloop", "ulw-loop", "ralph-loop"}),
 }
 
 # Transitional allowlist for hook IDs present in config order but not yet
@@ -144,10 +142,8 @@ def _parity_plan_watchdog(commands: dict[str, dict[str, object]]) -> list[str]:
         "| E9 Parity backlog refresh + release-note automation" in text
         and "| 󰄵 [x] finished |" in text
     ):
-        if "release-train-draft-milestones" not in command_names:
-            issues.append(
-                "E9 marked finished but 'release-train-draft-milestones' command is missing"
-            )
+        if "release-train" not in command_names:
+            issues.append("E9 marked finished but 'release-train' command is missing")
         if "| E9-T1..E9-T3 completion |" not in text:
             issues.append(
                 "E9 marked finished but E9 completion activity-log row is missing"
@@ -316,11 +312,7 @@ def _parity_plan_warning_audit(commands: dict[str, dict[str, object]]) -> list[s
             "recent merged PR list has no labels or titles; unable to confirm coverage"
         )
 
-    if "release-train-draft-milestones" not in commands:
-        warnings.append("milestone draft command missing from command surface")
-
     return warnings
-
 
 
 def _command_surface_audit(commands: dict[str, dict[str, object]]) -> list[str]:
@@ -351,6 +343,7 @@ def _script_alias_audit(commands: dict[str, dict[str, object]]) -> list[str]:
                 f"script alias sprawl: {script_name} has {len(command_names)} commands ({sorted_names}); max is {MAX_COMMANDS_PER_SCRIPT}"
             )
     return issues
+
 
 def run() -> int:
     commands = _load_commands()

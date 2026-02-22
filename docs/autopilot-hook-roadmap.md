@@ -12,7 +12,7 @@ Autopilot now runs through `gateway-core` hook events plus Python command orches
 
 ## Compatibility
 
-- `/ralph-loop` and `/cancel-ralph` remain compatibility aliases
+- no compatibility slash aliases are maintained; use `/autopilot` subcommands directly
 - no standalone `plugin/autopilot-loop` package is maintained
 
 ## Safety invariants

@@ -175,7 +175,6 @@ def command_doctor(args: list[str]) -> int:
         "result": "PASS" if commands else "FAIL",
         "command_count": len(commands),
         "has_complete": "complete" in commands,
-        "has_ac": "ac" in commands,
         "warnings": [] if commands else ["no commands loaded from layered config"],
         "quick_fixes": [
             "/complete suggest au",
@@ -189,7 +188,6 @@ def command_doctor(args: list[str]) -> int:
 
     print(f"command_count: {payload['command_count']}")
     print(f"complete_command_registered: {'yes' if payload['has_complete'] else 'no'}")
-    print(f"ac_alias_registered: {'yes' if payload['has_ac'] else 'no'}")
     if payload["warnings"]:
         print("warnings:")
         for warning in payload["warnings"]:

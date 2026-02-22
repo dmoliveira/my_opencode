@@ -60,7 +60,7 @@ Quick validation:
 
 ```text
 /agent-doctor
-/agent-doctor-json
+/agent-doctor --json
 ```
 
 Detailed guide: `docs/agents-playbook.md` 📘

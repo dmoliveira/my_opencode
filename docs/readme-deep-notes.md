@@ -419,7 +419,7 @@ Task 28.4 autopilot command UX/workflow notes:
 - command module: `scripts/autopilot_command.py`
 - canonical slash command is `/autopilot` with subcommands `start|go|status|pause|resume|stop|report|doctor`
 - objective-mode uses `/autopilot go --completion-mode objective ...` when you want done-criteria gates instead of promise token.
-- compatibility aliases are available as `/ralph-loop` and `/cancel-ralph`; canonical flow remains `/autopilot*`.
+- compatibility aliases were removed to keep the command surface canonical (`/autopilot*`).
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
@@ -450,9 +450,8 @@ Autopilot gateway telemetry fields (`--json`):
 # Context-first one-shot iteration (start-or-resume and run bounded cycles)
 /autopilot go --goal "continue active docs request" --max-cycles 10 --json
 
-# Compatibility aliases (canonical flow is /autopilot*)
-/ralph-loop "finish docs checklist end-to-end"
-/cancel-ralph
+# Canonical stop flow
+/autopilot stop --reason "finish docs checklist end-to-end" --json
 
 # Objective-gate completion mode (alternative to promise mode)
 /autopilot go --completion-mode objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
