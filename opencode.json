@@ -208,8 +208,7 @@
     }
   },
   "plugin": [
-    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core",
-    "@mohak34/opencode-notifier@latest"
+    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
   ],
   "instructions": [
     "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
