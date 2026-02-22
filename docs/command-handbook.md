@@ -263,3 +263,55 @@ Use these directly in OpenCode:
 - per-event toggles (`events.complete|error|permission|question`)
 
 For your LangGraph setup, default endpoint target is `http://localhost:3000/opencode/events`.
+
+## Complete slash-command index
+
+This index is sourced from `opencode.json` and is used as the complete catalog reference.
+
+```text
+/ac - Short alias for /complete
+/agent-doctor - Validate custom agent contracts and runtime discovery
+/agent-doctor-json - Validate custom agent contracts in JSON
+/auto-slash - Detect and preview natural-language slash intents
+/autopilot - Continue current task autonomously with autopilot guardrails
+/bg - Manage background jobs (start|status|list|read|cancel|cleanup|doctor)
+/browser - Manage browser automation provider profile (status|profile|doctor)
+/budget - Manage execution budget controls (status|profile|override|doctor)
+/cancel-ralph - Compatibility alias for /autopilot-stop
+/checkpoint - Inspect checkpoint snapshots (list|show|prune|doctor)
+/complete - Suggest slash commands by prefix (autocomplete helper)
+/config - Backup and restore OpenCode config files
+/devtools - Manage external productivity tools (status|doctor|install|hooks-install)
+/digest - Generate or show session digests (run|show)
+/doctor - Run all diagnostics in one pass
+/doctor-json - Run all diagnostics in JSON
+/gateway - Manage plugin gateway mode (status|enable|disable|doctor)
+/health - Show repo health score and drift insights
+/hooks - Manage safety hooks (status|help|enable|disable|run)
+/hotfix - Run incident hotfix controls (start|status|close|remind|doctor)
+/keyword-mode - Detect and apply keyword-triggered execution modes
+/learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
+/mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
+/model-routing - Manage model routing (status|set-category|resolve|trace)
+/notify - Manage notification controls (status|profile|enable|disable|channel)
+/nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
+/plan-handoff - Thin @plan-style continuity profile over canonical runtime commands
+/plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
+/policy - Apply notification policy profiles (strict|balanced|fast)
+/post-session - Manage post-session hook config (status|enable|disable|set)
+/pr-review - Run PR review copilot analysis with checklist output
+/quality - Manage quality profiles and checks (status|profile|doctor)
+/ralph-loop - Compatibility alias for /autopilot go --completion-mode promise
+/refactor-lite - Run safe refactor workflow backend
+/release-train - Run release-train workflow controls (status|prepare|draft|publish)
+/release-train-draft-milestones - Generate release note draft with parity and LSP milestone context
+/resilience - Inspect context resilience health (status|doctor)
+/resume - Manage runtime recovery controls (status|now|disable)
+/routing - Explain routing outcomes (status|explain)
+/rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
+/safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
+/session - Inspect indexed sessions (list|show|search|doctor)
+/stack - Apply cross-command profile bundles
+/telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
+/todo - Inspect todo compliance state (status|enforce)
+```
