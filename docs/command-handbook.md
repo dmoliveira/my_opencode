@@ -263,23 +263,28 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /auto-slash - Detect and preview natural-language slash intents
 /autopilot - Continue current task autonomously with autopilot guardrails
 /autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)
+/agent-pool - Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)
 /continuation-stop - Stop active continuation loops and disable auto-resume
 /bg - Manage background jobs (start|status|list|read|cancel|cleanup|doctor)
 /browser - Manage browser automation provider profile (status|profile|doctor)
 /budget - Manage execution budget controls (status|profile|override|doctor)
+/claims - Manage collaborative issue claims and handoffs (claim|handoff|release|status|list|doctor)
 /checkpoint - Inspect checkpoint snapshots (list|show|prune|doctor)
 /complete - Suggest slash commands by prefix (autocomplete helper)
 /config - Backup and restore OpenCode config files
+/daemon - Manage observability daemon controls (start|stop|status|summary|doctor)
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run all diagnostics in one pass
 /gateway - Manage plugin gateway mode (status|enable|disable|doctor)
 /health - Show repo health score and drift insights
+/hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
 /hooks - Manage safety hooks (status|help|enable|disable|run)
 /hotfix - Run incident hotfix controls (start|status|close|remind|doctor)
 /init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
+/memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)
 /model-routing - Manage model routing (status|set-category|resolve|trace)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
@@ -295,4 +300,5 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)
+/workflow - Run reusable workflow templates (run|validate|list|status|stop|template|doctor)
 ```

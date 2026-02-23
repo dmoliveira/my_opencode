@@ -42,6 +42,30 @@
       "description": "Suggest slash commands by prefix (autocomplete helper)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
     },
+    "claims": {
+      "description": "Manage collaborative issue claims and handoffs (claim|handoff|release|status|list|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "workflow": {
+      "description": "Run reusable workflow templates (run|validate|list|status|stop|template|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "daemon": {
+      "description": "Manage observability daemon controls (start|stop|status|summary|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/daemon_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "agent-pool": {
+      "description": "Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_pool_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "memory-lifecycle": {
+      "description": "Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/memory_lifecycle_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "hook-learning": {
+      "description": "Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hook_learning_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "init-deep": {
       "description": "Initialize hierarchical AGENTS.md scaffolding for current repo",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/init_deep_command.py\" $ARGUMENTS`\nShow only the command output."
