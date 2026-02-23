@@ -82,6 +82,10 @@
       "description": "Continue current task autonomously with autopilot guardrails",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
+    "autoflow": {
+      "description": "Run deterministic plan execution flow (start|status|report|resume|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."

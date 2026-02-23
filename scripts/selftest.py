@@ -7227,6 +7227,17 @@ version: 1
             "doctor budget check should pass",
         )
 
+        autoflow_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "autoflow"
+        ]
+        expect(bool(autoflow_checks), "doctor summary should include autoflow check")
+        expect(
+            autoflow_checks[0].get("ok") is True,
+            "doctor autoflow check should pass",
+        )
+
         todo_checks = [
             check for check in report.get("checks", []) if check.get("name") == "todo"
         ]

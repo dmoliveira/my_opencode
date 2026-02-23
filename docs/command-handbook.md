@@ -246,6 +246,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /agent-doctor - Validate custom agent contracts and runtime discovery
 /auto-slash - Detect and preview natural-language slash intents
 /autopilot - Continue current task autonomously with autopilot guardrails
+/autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)
 /bg - Manage background jobs (start|status|list|read|cancel|cleanup|doctor)
 /browser - Manage browser automation provider profile (status|profile|doctor)
 /budget - Manage execution budget controls (status|profile|override|doctor)
