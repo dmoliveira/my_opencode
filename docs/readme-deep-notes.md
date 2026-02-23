@@ -869,12 +869,12 @@ Use:
 
 Routing command surface (Epic 12 Task 12.3):
 ```text
-/routing status
-/routing explain --category deep --available-models openai/gpt-5-mini --json
+/model-routing status --json
+/model-routing resolve --category deep --available-models openai/gpt-5-mini --json
 ```
 
 Troubleshooting unexpected model selection:
-- run `/routing explain --json` and inspect `fallback_reason`
+- run `/model-routing resolve --json` and inspect `trace` and `resolution_trace`
 - confirm `attempted_count` is non-zero and review `resolution_trace.attempted`
 - verify available model set passed to resolve commands matches runtime availability
 

@@ -62,10 +62,6 @@
       "description": "Manage model routing (status|set-category|resolve|trace)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "routing": {
-      "description": "Explain routing outcomes (status|explain)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
     "keyword-mode": {
       "description": "Detect and apply keyword-triggered execution modes",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -161,10 +157,6 @@
     "policy": {
       "description": "Apply notification policy profiles (strict|balanced|fast)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "quality": {
-      "description": "Manage quality profiles and checks (status|profile|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "gateway": {
       "description": "Manage plugin gateway mode (status|enable|disable|doctor)",

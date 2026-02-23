@@ -177,26 +177,6 @@ Profiles:
 - `balanced`: visual for all events, sound on risk-heavy events
 - `fast`: all channels and events enabled for immediate feedback
 
-## Quality profiles inside OpenCode 🧪
-
-Use these directly in OpenCode:
-
-```text
-/quality status
-/quality profile fast
-/quality profile strict
-/quality profile off
-/quality doctor
-```
-
-
-`/quality` writes profile metadata to layered config under `quality` with toggles for TS lint/typecheck/tests and Python selftest.
-
-Profiles:
-- `off`: disable quality checks for local rapid iteration
-- `fast`: lint+typecheck+selftest, skip heavier test passes
-- `strict`: run full quality gates (including TS tests)
-
 ## Plugin gateway controls 🔌
 
 Use these directly in OpenCode:
@@ -294,11 +274,9 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /policy - Apply notification policy profiles (strict|balanced|fast)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output
-/quality - Manage quality profiles and checks (status|profile|doctor)
 /refactor-lite - Run safe refactor workflow backend
 /release-train - Run release-train workflow controls (status|prepare|draft|publish)
 /resume - Manage runtime recovery controls (status|now|disable)
-/routing - Explain routing outcomes (status|explain)
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
 /session - Inspect indexed sessions (list|show|search|doctor)
