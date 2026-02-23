@@ -25,8 +25,9 @@ def usage() -> int:
     print(
         "usage: /claims claim <issue_id> --by <human:name|agent:type> [--json] | "
         "/claims handoff <issue_id> --to <human:name|agent:type> [--json] | "
+        "/claims accept-handoff <issue_id> [--json] | /claims reject-handoff <issue_id> [--reason <text>] [--json] | "
         "/claims release <issue_id> [--json] | /claims status [--id <issue_id>] [--json] | "
-        "/claims list [--json] | /claims doctor [--json]"
+        "/claims list [--json] | /claims expire-stale [--hours <n>] [--apply] [--json] | /claims doctor [--json]"
     )
     return 2
 
@@ -44,6 +45,14 @@ def load_state(path: Path) -> dict[str, Any]:
 def save_state(path: Path, state: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def claims_map(state: dict[str, Any]) -> dict[str, Any]:
+    raw_claims = state.get("claims")
+    if isinstance(raw_claims, dict):
+        return raw_claims
+    state["claims"] = {}
+    return state["claims"]
 
 
 def parse_flag_value(argv: list[str], flag: str) -> str | None:
@@ -92,7 +101,7 @@ def normalize_claimant(raw: str) -> str:
 
 
 def stale_claims(state: dict[str, Any], stale_hours: int = 48) -> list[str]:
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     cutoff = datetime.now(UTC) - timedelta(hours=stale_hours)
     stale: list[str] = []
     for issue_id, item in claims.items():
@@ -127,10 +136,7 @@ def cmd_claim(argv: list[str], path: Path) -> int:
     if not owner:
         return usage()
     state = load_state(path)
-    claims = state.get("claims")
-    if not isinstance(claims, dict):
-        claims = {}
-        state["claims"] = claims
+    claims = claims_map(state)
     current = claims.get(issue_id)
     if isinstance(current, dict) and str(current.get("status")) == "active":
         return emit(
@@ -168,7 +174,7 @@ def cmd_handoff(argv: list[str], path: Path) -> int:
     if not to_owner:
         return usage()
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     item = claims.get(issue_id)
     if not isinstance(item, dict):
         return emit(
@@ -193,7 +199,7 @@ def cmd_release(argv: list[str], path: Path) -> int:
         return usage()
     issue_id = argv[0]
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     item = claims.get(issue_id)
     if not isinstance(item, dict):
         return emit(
@@ -210,6 +216,131 @@ def cmd_release(argv: list[str], path: Path) -> int:
     return emit({"result": "PASS", "command": "release", **item}, as_json)
 
 
+def cmd_accept_handoff(argv: list[str], path: Path) -> int:
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+    if not argv:
+        return usage()
+    issue_id = argv[0]
+    state = load_state(path)
+    claims = claims_map(state)
+    item = claims.get(issue_id)
+    if not isinstance(item, dict):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "accept-handoff",
+                "error": f"issue not found: {issue_id}",
+            },
+            as_json,
+        )
+    handoff_to = str(item.get("handoff_to") or "").strip()
+    if str(item.get("status") or "") != "handoff-pending" or not handoff_to:
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "accept-handoff",
+                "error": "no pending handoff to accept",
+                "issue_id": issue_id,
+                "status": item.get("status"),
+            },
+            as_json,
+        )
+    item["owner"] = handoff_to
+    item["handoff_to"] = None
+    item["status"] = "active"
+    item["updated_at"] = now_iso()
+    save_state(path, state)
+    return emit({"result": "PASS", "command": "accept-handoff", **item}, as_json)
+
+
+def cmd_reject_handoff(argv: list[str], path: Path) -> int:
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+    if not argv:
+        return usage()
+    issue_id = argv.pop(0)
+    reason = "handoff rejected"
+    try:
+        reason_arg = parse_flag_value(argv, "--reason")
+    except ValueError:
+        return usage()
+    if reason_arg:
+        reason = reason_arg
+    state = load_state(path)
+    claims = claims_map(state)
+    item = claims.get(issue_id)
+    if not isinstance(item, dict):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "reject-handoff",
+                "error": f"issue not found: {issue_id}",
+            },
+            as_json,
+        )
+    if str(item.get("status") or "") != "handoff-pending":
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "reject-handoff",
+                "error": "no pending handoff to reject",
+                "issue_id": issue_id,
+                "status": item.get("status"),
+            },
+            as_json,
+        )
+    item["status"] = "active"
+    item["handoff_to"] = None
+    item["handoff_rejected_reason"] = reason
+    item["updated_at"] = now_iso()
+    save_state(path, state)
+    return emit({"result": "PASS", "command": "reject-handoff", **item}, as_json)
+
+
+def cmd_expire_stale(argv: list[str], path: Path) -> int:
+    as_json = "--json" in argv
+    apply_mode = "--apply" in argv
+    argv = [a for a in argv if a not in {"--json", "--apply"}]
+    stale_hours = 48
+    try:
+        hours_arg = parse_flag_value(argv, "--hours")
+    except ValueError:
+        return usage()
+    if hours_arg is not None:
+        try:
+            stale_hours = max(1, int(hours_arg))
+        except ValueError:
+            return usage()
+
+    state = load_state(path)
+    stale = stale_claims(state, stale_hours=stale_hours)
+    updated: list[str] = []
+    if apply_mode and stale:
+        claims = claims_map(state)
+        for issue_id in stale:
+            item = claims.get(issue_id)
+            if not isinstance(item, dict):
+                continue
+            item["status"] = "expired"
+            item["updated_at"] = now_iso()
+            updated.append(issue_id)
+        save_state(path, state)
+
+    return emit(
+        {
+            "result": "PASS",
+            "command": "expire-stale",
+            "hours": stale_hours,
+            "apply": apply_mode,
+            "stale": stale,
+            "updated": updated,
+            "count": len(stale),
+        },
+        as_json,
+    )
+
+
 def cmd_status(argv: list[str], path: Path) -> int:
     as_json = "--json" in argv
     argv = [a for a in argv if a != "--json"]
@@ -219,7 +350,7 @@ def cmd_status(argv: list[str], path: Path) -> int:
     except ValueError:
         return usage()
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     if issue_id:
         item = claims.get(issue_id)
         if not isinstance(item, dict):
@@ -258,7 +389,7 @@ def cmd_status(argv: list[str], path: Path) -> int:
 def cmd_list(argv: list[str], path: Path) -> int:
     as_json = "--json" in argv
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     rows: list[dict[str, Any]] = []
     for item in claims.values():
         if isinstance(item, dict):
@@ -304,8 +435,14 @@ def main(argv: list[str]) -> int:
         return cmd_claim(rest, DEFAULT_STATE_PATH)
     if command == "handoff":
         return cmd_handoff(rest, DEFAULT_STATE_PATH)
+    if command == "accept-handoff":
+        return cmd_accept_handoff(rest, DEFAULT_STATE_PATH)
+    if command == "reject-handoff":
+        return cmd_reject_handoff(rest, DEFAULT_STATE_PATH)
     if command == "release":
         return cmd_release(rest, DEFAULT_STATE_PATH)
+    if command == "expire-stale":
+        return cmd_expire_stale(rest, DEFAULT_STATE_PATH)
     if command == "status":
         return cmd_status(rest, DEFAULT_STATE_PATH)
     if command == "list":

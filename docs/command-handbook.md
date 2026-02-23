@@ -147,6 +147,26 @@ Use these directly in OpenCode:
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions.
 
+## Claims and workflow coordination 🧩
+
+Use these directly in OpenCode:
+
+```text
+/claims claim issue-101 --by agent:orchestrator --json
+/claims handoff issue-101 --to human:alex --json
+/claims accept-handoff issue-101 --json
+/claims reject-handoff issue-101 --reason "needs context" --json
+/claims expire-stale --hours 48 --apply --json
+
+/workflow validate --file workflows/ship.json --json
+/workflow run --file workflows/ship.json --json
+/workflow status --json
+/workflow stop --reason "manual intervention" --json
+```
+
+
+`/workflow run` now records per-step execution results (status, timestamps, failure reason codes) in workflow history.
+
 ## Post-session hook inside OpenCode ✅
 
 Use these directly in OpenCode:
@@ -268,7 +288,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /bg - Manage background jobs (start|status|list|read|cancel|cleanup|doctor)
 /browser - Manage browser automation provider profile (status|profile|doctor)
 /budget - Manage execution budget controls (status|profile|override|doctor)
-/claims - Manage collaborative issue claims and handoffs (claim|handoff|release|status|list|doctor)
+/claims - Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)
 /checkpoint - Inspect checkpoint snapshots (list|show|prune|doctor)
 /complete - Suggest slash commands by prefix (autocomplete helper)
 /config - Backup and restore OpenCode config files

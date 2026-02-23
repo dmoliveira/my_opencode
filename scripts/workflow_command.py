@@ -50,6 +50,22 @@ def save_json_file(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def history_list(state: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_history = state.get("history")
+    if not isinstance(raw_history, list):
+        state["history"] = []
+        return state["history"]
+    return [item for item in raw_history if isinstance(item, dict)]
+
+
+def active_record(state: dict[str, Any]) -> dict[str, Any]:
+    raw_active = state.get("active")
+    if isinstance(raw_active, dict):
+        return raw_active
+    state["active"] = {}
+    return state["active"]
+
+
 def parse_flag_value(argv: list[str], flag: str) -> str | None:
     if flag not in argv:
         return None
@@ -99,6 +115,46 @@ def validate_workflow(workflow: dict[str, Any]) -> tuple[bool, list[str]]:
             ):
                 issues.append(f"step {idx} missing action")
     return (not issues, issues)
+
+
+def execute_steps(
+    steps: list[dict[str, Any]],
+) -> tuple[str, list[dict[str, Any]], str | None]:
+    results: list[dict[str, Any]] = []
+    failed_step_id: str | None = None
+    for step in steps:
+        step_id = str(step.get("id") or "unknown-step")
+        action = str(step.get("action") or "")
+        started_at = now_iso()
+        status = "passed"
+        reason_code = None
+        detail = "executed"
+        if action in {"fail", "error"} or str(step.get("simulate") or "") == "fail":
+            status = "failed"
+            reason_code = "step_failed"
+            detail = "step requested failure"
+            failed_step_id = step_id
+        elif not action:
+            status = "failed"
+            reason_code = "missing_step_action"
+            detail = "step action is required"
+            failed_step_id = step_id
+        results.append(
+            {
+                "id": step_id,
+                "action": action,
+                "status": status,
+                "reason_code": reason_code,
+                "detail": detail,
+                "started_at": started_at,
+                "finished_at": now_iso(),
+            }
+        )
+        if status == "failed":
+            break
+    if failed_step_id:
+        return "failed", results, failed_step_id
+    return "completed", results, None
 
 
 def load_workflow_file(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
@@ -161,18 +217,42 @@ def cmd_run(argv: list[str]) -> int:
             {"result": "FAIL", "command": "run", "issues": issues, "error": issues[0]},
             as_json,
         )
+
     state = load_json_file(DEFAULT_STATE_PATH)
-    history = state.get("history") if isinstance(state.get("history"), list) else []
+    active = active_record(state)
+    if active and str(active.get("status") or "") == "running":
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "run",
+                "error": "workflow run already active",
+                "reason_code": "workflow_already_running",
+                "active_run_id": active.get("run_id"),
+            },
+            as_json,
+        )
+
+    history = history_list(state)
     run_id = f"wf-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    raw_steps = workflow.get("steps")
+    steps = raw_steps if isinstance(raw_steps, list) else []
+    normalized_steps = [step for step in steps if isinstance(step, dict)]
+    status, step_results, failed_step_id = execute_steps(normalized_steps)
     run_record = {
         "run_id": run_id,
         "name": workflow.get("name"),
         "path": str(workflow_path),
-        "status": "running",
-        "step_count": len(workflow.get("steps", [])),
+        "status": status,
+        "step_count": len(normalized_steps),
+        "completed_steps": sum(
+            1 for step in step_results if step.get("status") == "passed"
+        ),
+        "failed_step_id": failed_step_id,
+        "steps": step_results,
         "started_at": now_iso(),
+        "finished_at": now_iso(),
     }
-    state["active"] = run_record
+    state["active"] = {}
     history.insert(0, run_record)
     state["history"] = history[:50]
     save_json_file(DEFAULT_STATE_PATH, state)
@@ -182,14 +262,17 @@ def cmd_run(argv: list[str]) -> int:
 def cmd_status(argv: list[str]) -> int:
     as_json = "--json" in argv
     state = load_json_file(DEFAULT_STATE_PATH)
-    active = state.get("active") if isinstance(state.get("active"), dict) else {}
+    active = active_record(state)
     if not active:
+        history = history_list(state)
+        latest = history[0] if history and isinstance(history[0], dict) else {}
         return emit(
             {
                 "result": "PASS",
                 "command": "status",
                 "status": "idle",
                 "warnings": ["no active workflow run"],
+                "latest": latest,
             },
             as_json,
         )
@@ -207,7 +290,7 @@ def cmd_stop(argv: list[str]) -> int:
     if reason_arg:
         reason = reason_arg
     state = load_json_file(DEFAULT_STATE_PATH)
-    active = state.get("active") if isinstance(state.get("active"), dict) else {}
+    active = active_record(state)
     if not active:
         return emit(
             {
@@ -222,7 +305,7 @@ def cmd_stop(argv: list[str]) -> int:
     active["stopped_at"] = now_iso()
     active["stop_reason"] = reason
     state["active"] = {}
-    history = state.get("history") if isinstance(state.get("history"), list) else []
+    history = history_list(state)
     if (
         history
         and isinstance(history[0], dict)
@@ -237,7 +320,7 @@ def cmd_stop(argv: list[str]) -> int:
 def cmd_list(argv: list[str]) -> int:
     as_json = "--json" in argv
     state = load_json_file(DEFAULT_STATE_PATH)
-    history = state.get("history") if isinstance(state.get("history"), list) else []
+    history = history_list(state)
     return emit(
         {
             "result": "PASS",
@@ -313,7 +396,7 @@ def cmd_doctor(argv: list[str]) -> int:
     warnings: list[str] = []
     if not DEFAULT_TEMPLATE_DIR.exists():
         warnings.append("workflow template directory does not exist yet")
-    history = state.get("history") if isinstance(state.get("history"), list) else []
+    history = history_list(state)
     return emit(
         {
             "result": "PASS",
