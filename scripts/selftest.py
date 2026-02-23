@@ -111,6 +111,12 @@ AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
 CONTINUATION_STOP_SCRIPT = REPO_ROOT / "scripts" / "continuation_stop_command.py"
 COMPLETE_SCRIPT = REPO_ROOT / "scripts" / "command_completion_command.py"
+CLAIMS_SCRIPT = REPO_ROOT / "scripts" / "claims_command.py"
+WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "workflow_command.py"
+DAEMON_SCRIPT = REPO_ROOT / "scripts" / "daemon_command.py"
+AGENT_POOL_SCRIPT = REPO_ROOT / "scripts" / "agent_pool_command.py"
+MEMORY_LIFECYCLE_SCRIPT = REPO_ROOT / "scripts" / "memory_lifecycle_command.py"
+HOOK_LEARNING_SCRIPT = REPO_ROOT / "scripts" / "hook_learning_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
@@ -1511,6 +1517,176 @@ exit 0
             complete_payload.get("legacy_redirect", {}).get("to")
             == "/autoflow start <plan.md> --json",
             "complete should provide redirect hint for retired command",
+        )
+
+        productivity_env = digest_env.copy()
+        productivity_env["HOME"] = str(home)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "claim",
+                "issue-101",
+                "--by",
+                "agent:orchestrator",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims claim failed: {result.stderr}")
+        claims_payload = parse_json_output(result.stdout)
+        expect(
+            claims_payload.get("result") == "PASS"
+            and claims_payload.get("status") == "active",
+            "claims claim should create active claim",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "handoff",
+                "issue-101",
+                "--to",
+                "human:alex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims handoff failed: {result.stderr}")
+        claims_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            claims_handoff_payload.get("status") == "handoff-pending",
+            "claims handoff should set handoff-pending state",
+        )
+
+        wf_path = tmp / "wf-selftest.json"
+        wf_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {"id": "run", "action": "execute"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow run failed: {result.stderr}")
+        wf_payload = parse_json_output(result.stdout)
+        expect(
+            wf_payload.get("result") == "PASS"
+            and wf_payload.get("status") == "running",
+            "workflow run should start active run",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(DAEMON_SCRIPT), "start", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"daemon start failed: {result.stderr}")
+        daemon_payload = parse_json_output(result.stdout)
+        expect(
+            daemon_payload.get("status") == "running",
+            "daemon start should set running status",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(AGENT_POOL_SCRIPT),
+                "spawn",
+                "--type",
+                "coder",
+                "--count",
+                "2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"agent-pool spawn failed: {result.stderr}")
+        pool_payload = parse_json_output(result.stdout)
+        expect(
+            pool_payload.get("count") == 2,
+            "agent-pool spawn should create requested count",
+        )
+
+        memory_export = tmp / "memory-export.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "export",
+                "--path",
+                str(memory_export),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory-lifecycle export failed: {result.stderr}",
+        )
+        expect(memory_export.exists(), "memory-lifecycle export should create file")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(HOOK_LEARNING_SCRIPT),
+                "route",
+                "review security risks",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"hook-learning route failed: {result.stderr}")
+        hook_payload = parse_json_output(result.stdout)
+        expect(
+            hook_payload.get("recommended_agent") == "reviewer",
+            "hook-learning route should map risk review tasks to reviewer",
         )
 
         result = subprocess.run(
@@ -7336,6 +7512,70 @@ version: 1
         expect(
             autoflow_checks[0].get("ok") is True,
             "doctor autoflow check should pass",
+        )
+
+        claims_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "claims"
+        ]
+        expect(bool(claims_checks), "doctor summary should include claims check")
+        expect(claims_checks[0].get("ok") is True, "doctor claims check should pass")
+
+        workflow_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "workflow"
+        ]
+        expect(bool(workflow_checks), "doctor summary should include workflow check")
+        expect(
+            workflow_checks[0].get("ok") is True,
+            "doctor workflow check should pass",
+        )
+
+        daemon_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "daemon"
+        ]
+        expect(bool(daemon_checks), "doctor summary should include daemon check")
+        expect(daemon_checks[0].get("ok") is True, "doctor daemon check should pass")
+
+        agent_pool_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "agent-pool"
+        ]
+        expect(
+            bool(agent_pool_checks), "doctor summary should include agent-pool check"
+        )
+        expect(
+            agent_pool_checks[0].get("ok") is True,
+            "doctor agent-pool check should pass",
+        )
+
+        memory_lifecycle_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "memory-lifecycle"
+        ]
+        expect(
+            bool(memory_lifecycle_checks),
+            "doctor summary should include memory-lifecycle check",
+        )
+        expect(
+            memory_lifecycle_checks[0].get("ok") is True,
+            "doctor memory-lifecycle check should pass",
+        )
+
+        hook_learning_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "hook-learning"
+        ]
+        expect(
+            bool(hook_learning_checks),
+            "doctor summary should include hook-learning check",
+        )
+        expect(
+            hook_learning_checks[0].get("ok") is True,
+            "doctor hook-learning check should pass",
         )
 
         todo_checks = [
