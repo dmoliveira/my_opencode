@@ -1704,6 +1704,16 @@ exit 0
             "gateway status hook diagnostics should include dist tool hook marker",
         )
         expect(
+            "dist_exposes_command_execute_before"
+            in gateway_status.get("hook_diagnostics", {}),
+            "gateway status hook diagnostics should include dist command hook marker",
+        )
+        expect(
+            "dist_exposes_messages_transform"
+            in gateway_status.get("hook_diagnostics", {}),
+            "gateway status hook diagnostics should include dist messages transform marker",
+        )
+        expect(
             isinstance(gateway_status.get("event_audit_enabled"), bool)
             and isinstance(gateway_status.get("event_audit_path"), str)
             and isinstance(gateway_status.get("event_audit_exists"), bool),
@@ -7143,18 +7153,18 @@ version: 1
             "doctor model-routing check should pass",
         )
 
-        keyword_mode_checks = [
+        auto_slash_keyword_checks = [
             check
             for check in report.get("checks", [])
-            if check.get("name") == "keyword-mode"
+            if check.get("name") == "auto-slash-keyword"
         ]
         expect(
-            bool(keyword_mode_checks),
-            "doctor summary should include keyword-mode check",
+            bool(auto_slash_keyword_checks),
+            "doctor summary should include auto-slash-keyword check",
         )
         expect(
-            keyword_mode_checks[0].get("ok") is True,
-            "doctor keyword-mode check should pass",
+            auto_slash_keyword_checks[0].get("ok") is True,
+            "doctor auto-slash-keyword check should pass",
         )
 
         auto_slash_checks = [

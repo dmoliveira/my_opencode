@@ -138,37 +138,11 @@ def load_config(config_path: Path) -> dict:
                 custom = normalize_label(data["sound"]["customFiles"].get(event))
                 if custom or data["sound"]["customFiles"].get(event) == "":
                     state["sound"]["customFiles"][event] = custom
-        theme = normalize_label(data["sound"].get("theme")).lower()
-        if theme in SOUND_THEMES:
-            state["sound"]["theme"] = theme
-        if isinstance(data["sound"].get("eventThemes"), dict):
-            for event in EVENTS:
-                event_theme = normalize_label(
-                    data["sound"]["eventThemes"].get(event)
-                ).lower()
-                if event_theme == "default" or event_theme in SOUND_THEMES:
-                    state["sound"]["eventThemes"][event] = event_theme
-        if isinstance(data["sound"].get("customFiles"), dict):
-            for event in EVENTS:
-                custom = normalize_label(data["sound"]["customFiles"].get(event))
-                if custom or data["sound"]["customFiles"].get(event) == "":
-                    state["sound"]["customFiles"][event] = custom
 
     if isinstance(data.get("visual"), dict):
         state["visual"]["enabled"] = to_bool(
             data["visual"].get("enabled"), state["visual"]["enabled"]
         )
-
-    if isinstance(data.get("icons"), dict):
-        state["icons"]["enabled"] = to_bool(
-            data["icons"].get("enabled"), state["icons"]["enabled"]
-        )
-        version = normalize_label(data["icons"].get("version"))
-        if version:
-            state["icons"]["version"] = version
-        mode = normalize_label(data["icons"].get("mode")).lower()
-        if mode in ICON_MODES:
-            state["icons"]["mode"] = mode
 
     if isinstance(data.get("icons"), dict):
         state["icons"]["enabled"] = to_bool(

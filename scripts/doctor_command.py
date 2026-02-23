@@ -75,11 +75,12 @@ CHECKS = [
         ],
     },
     {
-        "name": "policy",
+        "name": "notify-policy",
         "kind": "status-only",
         "command": [
             sys.executable,
-            str(script_path("policy_command.py")),
+            str(script_path("notify_command.py")),
+            "policy",
             "status",
         ],
     },
@@ -133,13 +134,14 @@ CHECKS = [
         ],
     },
     {
-        "name": "keyword-mode",
+        "name": "auto-slash-keyword",
         "kind": "doctor-json",
         "optional": True,
         "required_path": str(script_path("keyword_mode_command.py")),
         "command": [
             sys.executable,
-            str(script_path("keyword_mode_command.py")),
+            str(script_path("auto_slash_command.py")),
+            "keyword",
             "doctor",
             "--json",
         ],
