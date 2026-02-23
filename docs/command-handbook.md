@@ -157,25 +157,20 @@ Typical flow:
 3. Use wrapper `opencode_session.sh` so command runs automatically on exit/Ctrl+C
 4. Optionally run now with `/digest run --reason manual --run-post`
 
-## Permission policy profiles inside OpenCode 🛡️
+## Notification policy profiles inside OpenCode 🛡️
 
 Use these directly in OpenCode:
 
 ```text
-/policy status
-/policy help
-/policy profile strict
-/policy profile balanced
-/policy profile fast
+/notify policy status
+/notify policy help
+/notify policy profile strict
+/notify policy profile balanced
+/notify policy profile fast
 ```
 
 
-`/policy` writes profile metadata to layered config under `policy` and applies notification posture under `notify` (legacy path env overrides remain supported).
-
-Profiles:
-- `strict`: visual alerts for high-risk events, minimal noise
-- `balanced`: visual for all events, sound on risk-heavy events
-- `fast`: all channels and events enabled for immediate feedback
+`/notify policy` applies policy presets while writing policy metadata under `policy` and channel posture under `notify`.
 
 ## Plugin gateway controls 🔌
 
@@ -264,14 +259,12 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /health - Show repo health score and drift insights
 /hooks - Manage safety hooks (status|help|enable|disable|run)
 /hotfix - Run incident hotfix controls (start|status|close|remind|doctor)
-/keyword-mode - Detect and apply keyword-triggered execution modes
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
 /model-routing - Manage model routing (status|set-category|resolve|trace)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
-/policy - Apply notification policy profiles (strict|balanced|fast)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output
 /refactor-lite - Run safe refactor workflow backend

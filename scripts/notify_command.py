@@ -15,6 +15,7 @@ from config_layering import (  # type: ignore
     resolve_write_path,
     save_config as save_config_file,
 )
+from policy_command import main as policy_main  # type: ignore
 
 
 DEFAULT_CONFIG_PATH = Path(
@@ -306,7 +307,7 @@ def save_state(state: dict) -> None:
 
 def usage() -> int:
     print(
-        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
+        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify policy <status|help|profile <strict|balanced|fast>> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
     )
     return 2
 
@@ -622,6 +623,9 @@ def main(argv: list[str]) -> int:
         save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
+
+    if argv[0] == "policy":
+        return policy_main(argv[1:])
 
     if argv[0] in ("enable", "disable"):
         if len(argv) < 2:

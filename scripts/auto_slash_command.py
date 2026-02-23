@@ -19,6 +19,7 @@ from config_layering import (  # type: ignore
     resolve_write_path,
     save_config as save_config_file,
 )
+from keyword_mode_command import main as keyword_mode_main  # type: ignore
 
 
 SECTION = "auto_slash_detector"
@@ -29,7 +30,7 @@ AUDIT_DEFAULT = Path(
 
 def usage() -> int:
     print(
-        "usage: /auto-slash status [--json] | /auto-slash detect --prompt <text> [--json] | /auto-slash preview --prompt <text> [--json] | /auto-slash execute --prompt <text> [--force] [--json] | /auto-slash enable | /auto-slash disable | /auto-slash enable-command <doctor|stack|nvim|devtools> | /auto-slash disable-command <doctor|stack|nvim|devtools> | /auto-slash doctor [--json] | /auto-slash audit [--limit <n>] [--json]"
+        "usage: /auto-slash status [--json] | /auto-slash detect --prompt <text> [--json] | /auto-slash preview --prompt <text> [--json] | /auto-slash execute --prompt <text> [--force] [--json] | /auto-slash enable | /auto-slash disable | /auto-slash enable-command <doctor|stack|nvim|devtools> | /auto-slash disable-command <doctor|stack|nvim|devtools> | /auto-slash keyword <status|detect|apply|enable|disable|disable-keyword|enable-keyword|doctor> ... | /auto-slash doctor [--json] | /auto-slash audit [--limit <n>] [--json]"
     )
     return 2
 
@@ -465,6 +466,8 @@ def main(argv: list[str]) -> int:
         return command_toggle_per_command(argv[1:], True)
     if argv[0] == "disable-command":
         return command_toggle_per_command(argv[1:], False)
+    if argv[0] == "keyword":
+        return keyword_mode_main(argv[1:])
     if argv[0] == "doctor":
         return command_doctor(argv[1:])
     if argv[0] == "audit":

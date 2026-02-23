@@ -62,10 +62,6 @@
       "description": "Manage model routing (status|set-category|resolve|trace)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "keyword-mode": {
-      "description": "Detect and apply keyword-triggered execution modes",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
     "auto-slash": {
       "description": "Detect and preview natural-language slash intents",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -153,10 +149,6 @@
     "post-session": {
       "description": "Manage post-session hook config (status|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "policy": {
-      "description": "Apply notification policy profiles (strict|balanced|fast)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "gateway": {
       "description": "Manage plugin gateway mode (status|enable|disable|doctor)",

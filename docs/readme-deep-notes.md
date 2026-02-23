@@ -654,7 +654,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/notify policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -721,7 +721,7 @@ Use these directly in OpenCode:
 
 ## Layered config precedence 🧩
 
-`/mcp`, `/plugin`, `/notify`, `/telemetry`, `/post-session`, `/policy`, and `/stack` now resolve configuration with stable layered precedence:
+`/mcp`, `/plugin`, `/notify`, `/telemetry`, `/post-session`, and `/stack` now resolve configuration with stable layered precedence:
 
 1. `OPENCODE_CONFIG_PATH` (runtime override, highest priority)
 2. `.opencode/my_opencode.jsonc` (project override)
@@ -919,16 +919,16 @@ Epic 8 Task 8.2 adds a deterministic keyword detector engine:
 - command wrapper: `scripts/keyword_mode_command.py`
 - dictionary contract: `instructions/keyword_execution_modes.md`
 
-Use:
+Use via `/auto-slash keyword`:
 ```text
-/keyword-mode status
-/keyword-mode detect --prompt "safe-apply deep-analyze review this migration" --json
-/keyword-mode apply --prompt "parallel-research deep-analyze inspect API usage" --json
-/keyword-mode disable-keyword ulw
-/keyword-mode enable-keyword ulw
-/keyword-mode disable
-/keyword-mode enable
-/keyword-mode doctor --json
+/auto-slash keyword status
+/auto-slash keyword detect --prompt "safe-apply deep-analyze review this migration" --json
+/auto-slash keyword apply --prompt "parallel-research deep-analyze inspect API usage" --json
+/auto-slash keyword disable-keyword ulw
+/auto-slash keyword enable-keyword ulw
+/auto-slash keyword disable
+/auto-slash keyword enable
+/auto-slash keyword doctor --json
 ```
 
 Detector behavior:
@@ -938,9 +938,9 @@ Detector behavior:
 - persisted runtime context via `keyword_modes` config section (`active_modes`, `effective_flags`)
 
 Examples:
-- basic: `/keyword-mode apply --prompt "safe-apply review this migration" --json`
-- intermediate: `/keyword-mode disable-keyword ulw` then `/keyword-mode detect --prompt "ulw deep-analyze audit" --json`
-- override path: `/keyword-mode detect --prompt "no-keyword-mode safe-apply deep-analyze" --json`
+- basic: `/auto-slash keyword apply --prompt "safe-apply review this migration" --json`
+- intermediate: `/auto-slash keyword disable-keyword ulw` then `/auto-slash keyword detect --prompt "ulw deep-analyze audit" --json`
+- override path: `/auto-slash keyword detect --prompt "no-keyword-mode safe-apply deep-analyze" --json`
 
 Anti-patterns:
 - avoid mixing contradictory intent keywords casually (`ulw` + `deep-analyze`) unless you expect precedence conflict resolution.
