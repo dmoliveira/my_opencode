@@ -86,6 +86,10 @@
       "description": "Run deterministic plan execution flow (start|status|report|resume|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
     },
+    "continuation-stop": {
+      "description": "Stop active continuation loops and disable auto-resume",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/continuation_stop_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
