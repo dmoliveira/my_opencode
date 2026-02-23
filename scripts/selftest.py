@@ -1569,6 +1569,112 @@ exit 0
             "claims handoff should set handoff-pending state",
         )
 
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "accept-handoff",
+                "issue-101",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims accept-handoff failed: {result.stderr}",
+        )
+        claims_accept_payload = parse_json_output(result.stdout)
+        expect(
+            claims_accept_payload.get("status") == "active"
+            and claims_accept_payload.get("owner") == "human:alex",
+            "claims accept-handoff should transfer ownership",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "handoff",
+                "issue-101",
+                "--to",
+                "human:sam",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims second handoff failed: {result.stderr}")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "reject-handoff",
+                "issue-101",
+                "--reason",
+                "needs more context",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims reject-handoff failed: {result.stderr}",
+        )
+        claims_reject_payload = parse_json_output(result.stdout)
+        expect(
+            claims_reject_payload.get("status") == "active"
+            and claims_reject_payload.get("owner") == "human:alex",
+            "claims reject-handoff should keep current owner active",
+        )
+
+        claims_state_path = (
+            home / ".config" / "opencode" / "my_opencode" / "runtime" / "claims.json"
+        )
+        claims_state = load_json_file(claims_state_path)
+        claims_state_claims = claims_state.get("claims")
+        if isinstance(claims_state_claims, dict):
+            claims_state_claims["issue-101"]["updated_at"] = "2000-01-01T00:00:00Z"
+            claims_state_claims["issue-101"]["status"] = "active"
+            claims_state_path.parent.mkdir(parents=True, exist_ok=True)
+            claims_state_path.write_text(
+                json.dumps(claims_state, indent=2) + "\n", encoding="utf-8"
+            )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "expire-stale",
+                "--hours",
+                "1",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims expire-stale failed: {result.stderr}")
+        claims_expire_payload = parse_json_output(result.stdout)
+        expect(
+            "issue-101" in claims_expire_payload.get("updated", []),
+            "claims expire-stale should expire stale claims in apply mode",
+        )
+
         wf_path = tmp / "wf-selftest.json"
         wf_path.write_text(
             json.dumps(
@@ -1603,8 +1709,13 @@ exit 0
         wf_payload = parse_json_output(result.stdout)
         expect(
             wf_payload.get("result") == "PASS"
-            and wf_payload.get("status") == "running",
-            "workflow run should start active run",
+            and wf_payload.get("status") == "completed",
+            "workflow run should execute steps and finish completed",
+        )
+        expect(
+            wf_payload.get("completed_steps") == 2
+            and len(wf_payload.get("steps", [])) == 2,
+            "workflow run should record per-step execution results",
         )
 
         result = subprocess.run(
