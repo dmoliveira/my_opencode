@@ -11,6 +11,11 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 AUTOPILOT_SCRIPT = SCRIPT_DIR / "autopilot_command.py"
 RESUME_SCRIPT = SCRIPT_DIR / "resume_command.py"
+BENIGN_AUTOPILOT_REASON_CODES = {
+    "autopilot_runtime_missing",
+    "autopilot_not_running",
+    "autopilot_already_stopped",
+}
 
 
 def usage() -> int:
@@ -68,7 +73,11 @@ def main(argv: list[str]) -> int:
     )
 
     problems: list[str] = []
-    if autopilot_code != 0 or autopilot_payload.get("result") not in {"PASS", "WARN"}:
+    autopilot_reason_code = str(autopilot_payload.get("reason_code") or "")
+    autopilot_ok = (
+        autopilot_code == 0 and autopilot_payload.get("result") in {"PASS", "WARN"}
+    ) or autopilot_reason_code in BENIGN_AUTOPILOT_REASON_CODES
+    if not autopilot_ok:
         problems.append("autopilot stop did not complete successfully")
     if resume_code != 0 or resume_payload.get("result") not in {"PASS", "WARN"}:
         problems.append("resume disable did not complete successfully")
