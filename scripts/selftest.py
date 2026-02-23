@@ -109,6 +109,8 @@ ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
+CONTINUATION_STOP_SCRIPT = REPO_ROOT / "scripts" / "continuation_stop_command.py"
+COMPLETE_SCRIPT = REPO_ROOT / "scripts" / "command_completion_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
@@ -1462,6 +1464,53 @@ exit 0
             (init_workspace / "AGENTS.md").exists()
             and (src_dir / "AGENTS.md").exists(),
             "init-deep should create AGENTS files at root and nested code scope",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CONTINUATION_STOP_SCRIPT),
+                "--reason",
+                "selftest cleanup",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"continuation-stop --json failed: {result.stderr}",
+        )
+        continuation_payload = parse_json_output(result.stdout)
+        expect(
+            continuation_payload.get("result") == "PASS"
+            and continuation_payload.get("actions", {})
+            .get("resume_disable", {})
+            .get("enabled")
+            is False,
+            "continuation-stop should stop continuation and disable resume",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(COMPLETE_SCRIPT), "suggest", "start-work", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"complete suggest start-work --json failed: {result.stderr}",
+        )
+        complete_payload = parse_json_output(result.stdout)
+        expect(
+            complete_payload.get("legacy_redirect", {}).get("to")
+            == "/autoflow start <plan.md> --json",
+            "complete should provide redirect hint for retired command",
         )
 
         result = subprocess.run(

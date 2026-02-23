@@ -14,6 +14,25 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import load_layered_config  # type: ignore
 
 
+LEGACY_REDIRECTS = {
+    "ac": "/complete",
+    "doctor-json": "/doctor run --json",
+    "agent-doctor-json": "/agent-doctor --json",
+    "ralph-loop": '/autopilot go --goal "<objective>" --json',
+    "cancel-ralph": "/continuation-stop --json",
+    "release-train-draft-milestones": "/release-train draft --include-milestones --json",
+    "policy": "/notify policy help",
+    "keyword-mode": "/auto-slash keyword help",
+    "routing": "/model-routing status --json",
+    "quality": "/doctor run",
+    "plan-handoff": "/session handoff --json",
+    "resilience": "/health status --json",
+    "start-work": "/autoflow start <plan.md> --json",
+    "stop-continuation": "/continuation-stop --json",
+    "refactor": "/refactor-lite <target>",
+}
+
+
 def usage() -> int:
     print(
         "usage: /complete [suggest <prefix>] [--limit <n>] [--json] | "
@@ -120,11 +139,20 @@ def command_suggest(args: list[str]) -> int:
         "count": len(suggestions),
         "suggestions": suggestions,
     }
+    redirect = LEGACY_REDIRECTS.get(prefix.lower()) if prefix else None
+    if redirect:
+        payload["legacy_redirect"] = {
+            "from": f"/{prefix}",
+            "to": redirect,
+        }
     if as_json:
         emit(payload, as_json=True)
         return 0
 
     if not suggestions:
+        if redirect:
+            print(f"legacy command '/{prefix}' has moved to: {redirect}")
+            return 0
         print(f"no command matches '{prefix}'")
         return 0
     print(f"matches ({len(suggestions)}):")

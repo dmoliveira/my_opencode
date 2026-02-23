@@ -53,6 +53,7 @@ Global command helper shortcuts:
 ```
 
 `/complete <prefix>` returns ranked slash command suggestions with descriptions.
+When a retired command name is entered, `/complete` returns a canonical replacement hint.
 
 Supported plugin names: `notifier`, `morph`, `worktree`.
 
