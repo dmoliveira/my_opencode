@@ -36,6 +36,10 @@ Start here: `docs/quickstart.md`
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
+- 🗺️ Built-in `/autoflow` command for deterministic plan execution (status/report/resume/doctor).
+- 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
+- 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
+- 🛑 Built-in `/continuation-stop` for one-shot continuation shutdown (autopilot stop + resume disable).
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -90,6 +94,8 @@ Quickstart commands:
 /plugin status
 /mcp status
 /notify status
+/autoflow status --json
+/session handoff --json
 /autopilot go --goal "finish current objective" --json
 /gateway status
 ```
@@ -104,6 +110,9 @@ Use `/complete <prefix>` for command discovery and `docs/command-handbook.md` fo
 - `scripts/notify_command.py` - backend script for `/notify`
 - `scripts/session_digest.py` - backend script for `/digest`
 - `scripts/session_command.py` - backend script for `/session`
+- `scripts/autoflow_command.py` - backend script for `/autoflow`
+- `scripts/init_deep_command.py` - backend script for `/init-deep`
+- `scripts/continuation_stop_command.py` - backend script for `/continuation-stop`
 - `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
 - `scripts/telemetry_command.py` - backend script for `/telemetry`
 - `scripts/post_session_command.py` - backend script for `/post-session`
