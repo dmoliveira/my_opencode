@@ -78,10 +78,6 @@
       "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "resilience": {
-      "description": "Inspect context resilience health (status|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -177,10 +173,6 @@
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "plan-handoff": {
-      "description": "Thin @plan-style continuity profile over canonical runtime commands",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" $ARGUMENTS --json`\nShow only the command output."
     }
   },
   "plugin": [

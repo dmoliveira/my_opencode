@@ -134,10 +134,6 @@ def _parity_plan_watchdog(commands: dict[str, dict[str, object]]) -> list[str]:
     text = PARITY_PLAN.read_text(encoding="utf-8")
     command_names = set(commands.keys())
 
-    if "| E8 Plan-handoff continuity parity" in text and "| 󰄵 [x] finished |" in text:
-        if "plan-handoff" not in command_names:
-            issues.append("E8 marked finished but 'plan-handoff' command is missing")
-
     if (
         "| E9 Parity backlog refresh + release-note automation" in text
         and "| 󰄵 [x] finished |" in text

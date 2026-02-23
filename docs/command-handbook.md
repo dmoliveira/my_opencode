@@ -290,7 +290,6 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /model-routing - Manage model routing (status|set-category|resolve|trace)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
-/plan-handoff - Thin @plan-style continuity profile over canonical runtime commands
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /policy - Apply notification policy profiles (strict|balanced|fast)
 /post-session - Manage post-session hook config (status|enable|disable|set)
@@ -298,7 +297,6 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /quality - Manage quality profiles and checks (status|profile|doctor)
 /refactor-lite - Run safe refactor workflow backend
 /release-train - Run release-train workflow controls (status|prepare|draft|publish)
-/resilience - Inspect context resilience health (status|doctor)
 /resume - Manage runtime recovery controls (status|now|disable)
 /routing - Explain routing outcomes (status|explain)
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)

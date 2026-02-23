@@ -1133,8 +1133,8 @@ Engine behavior currently includes:
 
 Use:
 ```text
-/resilience status --json
-/resilience doctor --json
+/doctor run --json
+/health status --json
 ```
 
 ## Background jobs inside OpenCode 🧵
