@@ -108,6 +108,7 @@ MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
+INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
@@ -1411,6 +1412,56 @@ exit 0
         expect(
             session_doctor_payload.get("result") == "PASS",
             "session doctor should pass when index is readable",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "handoff", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"session handoff --json failed: {result.stderr}"
+        )
+        session_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            session_handoff_payload.get("result") == "PASS"
+            and session_handoff_payload.get("session_id") == "selftest-session",
+            "session handoff should resolve latest indexed session",
+        )
+        expect(
+            isinstance(session_handoff_payload.get("next_actions"), list)
+            and len(session_handoff_payload.get("next_actions", [])) >= 2,
+            "session handoff should include actionable next steps",
+        )
+
+        init_workspace = tmp / "init-deep-workspace"
+        src_dir = init_workspace / "src"
+        pkg_dir = src_dir / "pkg"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        (src_dir / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        (pkg_dir / "util.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(INIT_DEEP_SCRIPT), "--max-depth", "2", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=init_workspace,
+        )
+        expect(result.returncode == 0, f"init-deep --json failed: {result.stderr}")
+        init_payload = parse_json_output(result.stdout)
+        expect(
+            init_payload.get("result") == "PASS"
+            and init_payload.get("created_count", 0) >= 2,
+            "init-deep should create AGENTS scaffolding for code directories",
+        )
+        expect(
+            (init_workspace / "AGENTS.md").exists()
+            and (src_dir / "AGENTS.md").exists(),
+            "init-deep should create AGENTS files at root and nested code scope",
         )
 
         result = subprocess.run(

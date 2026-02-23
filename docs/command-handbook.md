@@ -131,6 +131,21 @@ Optional environment variables:
 
 When `--run-post` is used, digest also evaluates `post_session` config and stores hook results in the digest JSON.
 
+## Session index and handoff inside OpenCode 📚
+
+Use these directly in OpenCode:
+
+```text
+/session list --json
+/session show <session-id> --json
+/session search <query> --json
+/session handoff --json
+/session doctor --json
+```
+
+
+`/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions.
+
 ## Post-session hook inside OpenCode ✅
 
 Use these directly in OpenCode:
@@ -261,6 +276,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /health - Show repo health score and drift insights
 /hooks - Manage safety hooks (status|help|enable|disable|run)
 /hotfix - Run incident hotfix controls (start|status|close|remind|doctor)
+/init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
 /model-routing - Manage model routing (status|set-category|resolve|trace)
@@ -274,7 +290,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /resume - Manage runtime recovery controls (status|now|disable)
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
-/session - Inspect indexed sessions (list|show|search|doctor)
+/session - Inspect indexed sessions (list|show|search|handoff|doctor)
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)
