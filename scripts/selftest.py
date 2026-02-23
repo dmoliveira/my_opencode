@@ -108,6 +108,15 @@ MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
+INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
+CONTINUATION_STOP_SCRIPT = REPO_ROOT / "scripts" / "continuation_stop_command.py"
+COMPLETE_SCRIPT = REPO_ROOT / "scripts" / "command_completion_command.py"
+CLAIMS_SCRIPT = REPO_ROOT / "scripts" / "claims_command.py"
+WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "workflow_command.py"
+DAEMON_SCRIPT = REPO_ROOT / "scripts" / "daemon_command.py"
+AGENT_POOL_SCRIPT = REPO_ROOT / "scripts" / "agent_pool_command.py"
+MEMORY_LIFECYCLE_SCRIPT = REPO_ROOT / "scripts" / "memory_lifecycle_command.py"
+HOOK_LEARNING_SCRIPT = REPO_ROOT / "scripts" / "hook_learning_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
 BROWSER_SCRIPT = REPO_ROOT / "scripts" / "browser_command.py"
@@ -325,7 +334,7 @@ exit 0
         )
         command_map_any = base_config_payload.get("command", {})
         command_map = command_map_any if isinstance(command_map_any, dict) else {}
-        for command_name in ("autopilot", "ralph-loop"):
+        for command_name in ("autopilot",):
             template = str(
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )
@@ -1414,6 +1423,273 @@ exit 0
         )
 
         result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "handoff", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"session handoff --json failed: {result.stderr}"
+        )
+        session_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            session_handoff_payload.get("result") == "PASS"
+            and session_handoff_payload.get("session_id") == "selftest-session",
+            "session handoff should resolve latest indexed session",
+        )
+        expect(
+            isinstance(session_handoff_payload.get("next_actions"), list)
+            and len(session_handoff_payload.get("next_actions", [])) >= 2,
+            "session handoff should include actionable next steps",
+        )
+
+        init_workspace = tmp / "init-deep-workspace"
+        src_dir = init_workspace / "src"
+        pkg_dir = src_dir / "pkg"
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        (src_dir / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        (pkg_dir / "util.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(INIT_DEEP_SCRIPT), "--max-depth", "2", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=init_workspace,
+        )
+        expect(result.returncode == 0, f"init-deep --json failed: {result.stderr}")
+        init_payload = parse_json_output(result.stdout)
+        expect(
+            init_payload.get("result") == "PASS"
+            and init_payload.get("created_count", 0) >= 2,
+            "init-deep should create AGENTS scaffolding for code directories",
+        )
+        expect(
+            (init_workspace / "AGENTS.md").exists()
+            and (src_dir / "AGENTS.md").exists(),
+            "init-deep should create AGENTS files at root and nested code scope",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CONTINUATION_STOP_SCRIPT),
+                "--reason",
+                "selftest cleanup",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"continuation-stop --json failed: {result.stderr}",
+        )
+        continuation_payload = parse_json_output(result.stdout)
+        expect(
+            continuation_payload.get("result") == "PASS"
+            and continuation_payload.get("actions", {})
+            .get("resume_disable", {})
+            .get("enabled")
+            is False,
+            "continuation-stop should stop continuation and disable resume",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(COMPLETE_SCRIPT), "suggest", "start-work", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"complete suggest start-work --json failed: {result.stderr}",
+        )
+        complete_payload = parse_json_output(result.stdout)
+        expect(
+            complete_payload.get("legacy_redirect", {}).get("to")
+            == "/autoflow start <plan.md> --json",
+            "complete should provide redirect hint for retired command",
+        )
+
+        productivity_env = digest_env.copy()
+        productivity_env["HOME"] = str(home)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "claim",
+                "issue-101",
+                "--by",
+                "agent:orchestrator",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims claim failed: {result.stderr}")
+        claims_payload = parse_json_output(result.stdout)
+        expect(
+            claims_payload.get("result") == "PASS"
+            and claims_payload.get("status") == "active",
+            "claims claim should create active claim",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "handoff",
+                "issue-101",
+                "--to",
+                "human:alex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims handoff failed: {result.stderr}")
+        claims_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            claims_handoff_payload.get("status") == "handoff-pending",
+            "claims handoff should set handoff-pending state",
+        )
+
+        wf_path = tmp / "wf-selftest.json"
+        wf_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {"id": "run", "action": "execute"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow run failed: {result.stderr}")
+        wf_payload = parse_json_output(result.stdout)
+        expect(
+            wf_payload.get("result") == "PASS"
+            and wf_payload.get("status") == "running",
+            "workflow run should start active run",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(DAEMON_SCRIPT), "start", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"daemon start failed: {result.stderr}")
+        daemon_payload = parse_json_output(result.stdout)
+        expect(
+            daemon_payload.get("status") == "running",
+            "daemon start should set running status",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(AGENT_POOL_SCRIPT),
+                "spawn",
+                "--type",
+                "coder",
+                "--count",
+                "2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"agent-pool spawn failed: {result.stderr}")
+        pool_payload = parse_json_output(result.stdout)
+        expect(
+            pool_payload.get("count") == 2,
+            "agent-pool spawn should create requested count",
+        )
+
+        memory_export = tmp / "memory-export.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "export",
+                "--path",
+                str(memory_export),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory-lifecycle export failed: {result.stderr}",
+        )
+        expect(memory_export.exists(), "memory-lifecycle export should create file")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(HOOK_LEARNING_SCRIPT),
+                "route",
+                "review security risks",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"hook-learning route failed: {result.stderr}")
+        hook_payload = parse_json_output(result.stdout)
+        expect(
+            hook_payload.get("recommended_agent") == "reviewer",
+            "hook-learning route should map risk review tasks to reviewer",
+        )
+
+        result = subprocess.run(
             [sys.executable, str(DIGEST_SCRIPT), "show", "--path", str(digest_path)],
             capture_output=True,
             text=True,
@@ -1702,6 +1978,16 @@ exit 0
             "dist_exposes_tool_execute_before"
             in gateway_status.get("hook_diagnostics", {}),
             "gateway status hook diagnostics should include dist tool hook marker",
+        )
+        expect(
+            "dist_exposes_command_execute_before"
+            in gateway_status.get("hook_diagnostics", {}),
+            "gateway status hook diagnostics should include dist command hook marker",
+        )
+        expect(
+            "dist_exposes_messages_transform"
+            in gateway_status.get("hook_diagnostics", {}),
+            "gateway status hook diagnostics should include dist messages transform marker",
         )
         expect(
             isinstance(gateway_status.get("event_audit_enabled"), bool)
@@ -7143,18 +7429,18 @@ version: 1
             "doctor model-routing check should pass",
         )
 
-        keyword_mode_checks = [
+        auto_slash_keyword_checks = [
             check
             for check in report.get("checks", [])
-            if check.get("name") == "keyword-mode"
+            if check.get("name") == "auto-slash-keyword"
         ]
         expect(
-            bool(keyword_mode_checks),
-            "doctor summary should include keyword-mode check",
+            bool(auto_slash_keyword_checks),
+            "doctor summary should include auto-slash-keyword check",
         )
         expect(
-            keyword_mode_checks[0].get("ok") is True,
-            "doctor keyword-mode check should pass",
+            auto_slash_keyword_checks[0].get("ok") is True,
+            "doctor auto-slash-keyword check should pass",
         )
 
         auto_slash_checks = [
@@ -7215,6 +7501,81 @@ version: 1
         expect(
             budget_checks[0].get("ok") is True,
             "doctor budget check should pass",
+        )
+
+        autoflow_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "autoflow"
+        ]
+        expect(bool(autoflow_checks), "doctor summary should include autoflow check")
+        expect(
+            autoflow_checks[0].get("ok") is True,
+            "doctor autoflow check should pass",
+        )
+
+        claims_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "claims"
+        ]
+        expect(bool(claims_checks), "doctor summary should include claims check")
+        expect(claims_checks[0].get("ok") is True, "doctor claims check should pass")
+
+        workflow_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "workflow"
+        ]
+        expect(bool(workflow_checks), "doctor summary should include workflow check")
+        expect(
+            workflow_checks[0].get("ok") is True,
+            "doctor workflow check should pass",
+        )
+
+        daemon_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "daemon"
+        ]
+        expect(bool(daemon_checks), "doctor summary should include daemon check")
+        expect(daemon_checks[0].get("ok") is True, "doctor daemon check should pass")
+
+        agent_pool_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "agent-pool"
+        ]
+        expect(
+            bool(agent_pool_checks), "doctor summary should include agent-pool check"
+        )
+        expect(
+            agent_pool_checks[0].get("ok") is True,
+            "doctor agent-pool check should pass",
+        )
+
+        memory_lifecycle_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "memory-lifecycle"
+        ]
+        expect(
+            bool(memory_lifecycle_checks),
+            "doctor summary should include memory-lifecycle check",
+        )
+        expect(
+            memory_lifecycle_checks[0].get("ok") is True,
+            "doctor memory-lifecycle check should pass",
+        )
+
+        hook_learning_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "hook-learning"
+        ]
+        expect(
+            bool(hook_learning_checks),
+            "doctor summary should include hook-learning check",
+        )
+        expect(
+            hook_learning_checks[0].get("ok") is True,
+            "doctor hook-learning check should pass",
         )
 
         todo_checks = [

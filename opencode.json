@@ -34,25 +34,41 @@
       "description": "Run all diagnostics in one pass",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run $ARGUMENTS`\nShow only the command output."
     },
-    "doctor-json": {
-      "description": "Run all diagnostics in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run --json`\nShow only the command output."
-    },
     "agent-doctor": {
       "description": "Validate custom agent contracts and runtime discovery",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run $ARGUMENTS`\nShow only the command output."
-    },
-    "agent-doctor-json": {
-      "description": "Validate custom agent contracts in JSON",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run --json`\nShow only the command output."
     },
     "complete": {
       "description": "Suggest slash commands by prefix (autocomplete helper)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
     },
-    "ac": {
-      "description": "Short alias for /complete",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/command_completion_command.py\" suggest $ARGUMENTS`\nShow only the command output."
+    "claims": {
+      "description": "Manage collaborative issue claims and handoffs (claim|handoff|release|status|list|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "workflow": {
+      "description": "Run reusable workflow templates (run|validate|list|status|stop|template|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "daemon": {
+      "description": "Manage observability daemon controls (start|stop|status|summary|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/daemon_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "agent-pool": {
+      "description": "Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_pool_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "memory-lifecycle": {
+      "description": "Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/memory_lifecycle_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "hook-learning": {
+      "description": "Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hook_learning_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "init-deep": {
+      "description": "Initialize hierarchical AGENTS.md scaffolding for current repo",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/init_deep_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "config": {
       "description": "Backup and restore OpenCode config files",
@@ -74,14 +90,6 @@
       "description": "Manage model routing (status|set-category|resolve|trace)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "routing": {
-      "description": "Explain routing outcomes (status|explain)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "keyword-mode": {
-      "description": "Detect and apply keyword-triggered execution modes",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
     "auto-slash": {
       "description": "Detect and preview natural-language slash intents",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -89,10 +97,6 @@
     "rules": {
       "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "resilience": {
-      "description": "Inspect context resilience health (status|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "stack": {
       "description": "Apply cross-command profile bundles",
@@ -106,13 +110,13 @@
       "description": "Continue current task autonomously with autopilot guardrails",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
-    "ralph-loop": {
-      "description": "Compatibility alias for /autopilot go --completion-mode promise",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --completion-mode promise --goal \"$ARGUMENTS\" --json`\nCompatibility alias: prefer /autopilot-go for canonical usage. Default completion promise is <promise>DONE</promise>. Continue execution until completion token is emitted."
+    "autoflow": {
+      "description": "Run deterministic plan execution flow (start|status|report|resume|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "cancel-ralph": {
-      "description": "Compatibility alias for /autopilot-stop",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" stop --reason cancel-ralph --json`\nCompatibility alias: prefer /autopilot-stop for canonical usage. Show only the command output."
+    "continuation-stop": {
+      "description": "Stop active continuation loops and disable auto-resume",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/continuation_stop_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
@@ -171,7 +175,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "session": {
-      "description": "Inspect indexed sessions (list|show|search|doctor)",
+      "description": "Inspect indexed sessions (list|show|search|handoff|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "digest": {
@@ -182,14 +186,6 @@
       "description": "Manage post-session hook config (status|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
-    "policy": {
-      "description": "Apply notification policy profiles (strict|balanced|fast)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/policy_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "quality": {
-      "description": "Manage quality profiles and checks (status|profile|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/quality_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
     "gateway": {
       "description": "Manage plugin gateway mode (status|enable|disable|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -197,14 +193,6 @@
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "plan-handoff": {
-      "description": "Thin @plan-style continuity profile over canonical runtime commands",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_handoff_command.py\" $ARGUMENTS --json`\nShow only the command output."
-    },
-    "release-train-draft-milestones": {
-      "description": "Generate release note draft with parity and LSP milestone context",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" draft --include-milestones $ARGUMENTS --json`\nShow only the command output."
     }
   },
   "plugin": [

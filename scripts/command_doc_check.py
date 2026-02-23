@@ -44,15 +44,19 @@ def main() -> int:
     known = load_known_commands()
     referenced = parse_referenced_heads()
     unknown = sorted(item for item in referenced if item not in known)
+    missing = sorted(item for item in known if item not in referenced)
 
-    if unknown:
+    if unknown or missing:
         print("command-doc-check: FAIL")
         for item in unknown:
             print(f"- unknown command in handbook: /{item}")
+        for item in missing:
+            print(f"- missing command in handbook: /{item}")
         return 1
 
     print("command-doc-check: PASS")
     print(f"references_checked: {len(referenced)}")
+    print(f"commands_covered: {len(known)}")
     return 0
 
 

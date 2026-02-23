@@ -49,11 +49,11 @@ Global command helper shortcuts:
 /complete
 /complete auto
 /complete autopilot
-/ac resume
+/complete resume
 ```
 
 `/complete <prefix>` returns ranked slash command suggestions with descriptions.
-`/ac` remains a short alias for `/complete`.
+When a retired command name is entered, `/complete` returns a canonical replacement hint.
 
 Supported plugin names: `notifier`, `morph`, `worktree`.
 
@@ -132,6 +132,21 @@ Optional environment variables:
 
 When `--run-post` is used, digest also evaluates `post_session` config and stores hook results in the digest JSON.
 
+## Session index and handoff inside OpenCode 📚
+
+Use these directly in OpenCode:
+
+```text
+/session list --json
+/session show <session-id> --json
+/session search <query> --json
+/session handoff --json
+/session doctor --json
+```
+
+
+`/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions.
+
 ## Post-session hook inside OpenCode ✅
 
 Use these directly in OpenCode:
@@ -158,45 +173,20 @@ Typical flow:
 3. Use wrapper `opencode_session.sh` so command runs automatically on exit/Ctrl+C
 4. Optionally run now with `/digest run --reason manual --run-post`
 
-## Permission policy profiles inside OpenCode 🛡️
+## Notification policy profiles inside OpenCode 🛡️
 
 Use these directly in OpenCode:
 
 ```text
-/policy status
-/policy help
-/policy profile strict
-/policy profile balanced
-/policy profile fast
+/notify policy status
+/notify policy help
+/notify policy profile strict
+/notify policy profile balanced
+/notify policy profile fast
 ```
 
 
-`/policy` writes profile metadata to layered config under `policy` and applies notification posture under `notify` (legacy path env overrides remain supported).
-
-Profiles:
-- `strict`: visual alerts for high-risk events, minimal noise
-- `balanced`: visual for all events, sound on risk-heavy events
-- `fast`: all channels and events enabled for immediate feedback
-
-## Quality profiles inside OpenCode 🧪
-
-Use these directly in OpenCode:
-
-```text
-/quality status
-/quality profile fast
-/quality profile strict
-/quality profile off
-/quality doctor
-```
-
-
-`/quality` writes profile metadata to layered config under `quality` with toggles for TS lint/typecheck/tests and Python selftest.
-
-Profiles:
-- `off`: disable quality checks for local rapid iteration
-- `fast`: lint+typecheck+selftest, skip heavier test passes
-- `strict`: run full quality gates (including TS tests)
+`/notify policy` applies policy presets while writing policy metadata under `policy` and channel posture under `notify`.
 
 ## Plugin gateway controls 🔌
 
@@ -263,3 +253,52 @@ Use these directly in OpenCode:
 - per-event toggles (`events.complete|error|permission|question`)
 
 For your LangGraph setup, default endpoint target is `http://localhost:3000/opencode/events`.
+
+## Complete slash-command index
+
+This index is sourced from `opencode.json` and is used as the complete catalog reference.
+
+```text
+/agent-doctor - Validate custom agent contracts and runtime discovery
+/auto-slash - Detect and preview natural-language slash intents
+/autopilot - Continue current task autonomously with autopilot guardrails
+/autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)
+/agent-pool - Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)
+/continuation-stop - Stop active continuation loops and disable auto-resume
+/bg - Manage background jobs (start|status|list|read|cancel|cleanup|doctor)
+/browser - Manage browser automation provider profile (status|profile|doctor)
+/budget - Manage execution budget controls (status|profile|override|doctor)
+/claims - Manage collaborative issue claims and handoffs (claim|handoff|release|status|list|doctor)
+/checkpoint - Inspect checkpoint snapshots (list|show|prune|doctor)
+/complete - Suggest slash commands by prefix (autocomplete helper)
+/config - Backup and restore OpenCode config files
+/daemon - Manage observability daemon controls (start|stop|status|summary|doctor)
+/devtools - Manage external productivity tools (status|doctor|install|hooks-install)
+/digest - Generate or show session digests (run|show)
+/doctor - Run all diagnostics in one pass
+/gateway - Manage plugin gateway mode (status|enable|disable|doctor)
+/health - Show repo health score and drift insights
+/hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
+/hooks - Manage safety hooks (status|help|enable|disable|run)
+/hotfix - Run incident hotfix controls (start|status|close|remind|doctor)
+/init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
+/learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
+/mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
+/memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)
+/model-routing - Manage model routing (status|set-category|resolve|trace)
+/notify - Manage notification controls (status|profile|enable|disable|channel)
+/nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
+/plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
+/post-session - Manage post-session hook config (status|enable|disable|set)
+/pr-review - Run PR review copilot analysis with checklist output
+/refactor-lite - Run safe refactor workflow backend
+/release-train - Run release-train workflow controls (status|prepare|draft|publish)
+/resume - Manage runtime recovery controls (status|now|disable)
+/rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
+/safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
+/session - Inspect indexed sessions (list|show|search|handoff|doctor)
+/stack - Apply cross-command profile bundles
+/telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
+/todo - Inspect todo compliance state (status|enforce)
+/workflow - Run reusable workflow templates (run|validate|list|status|stop|template|doctor)
+```

@@ -22,7 +22,7 @@ Start here: `docs/quickstart.md`
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
-- 🛡️ Built-in `/policy` command for strict/balanced/fast permission-risk presets.
+- 🛡️ Policy profiles available via `/notify policy profile <strict|balanced|fast>`.
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
@@ -36,6 +36,10 @@ Start here: `docs/quickstart.md`
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
+- 🗺️ Built-in `/autoflow` command for deterministic plan execution (status/report/resume/doctor).
+- 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
+- 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
+- 🛑 Built-in `/continuation-stop` for one-shot continuation shutdown (autopilot stop + resume disable).
 - 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -60,7 +64,7 @@ Quick validation:
 
 ```text
 /agent-doctor
-/agent-doctor-json
+/agent-doctor --json
 ```
 
 Detailed guide: `docs/agents-playbook.md` 📘
@@ -90,6 +94,8 @@ Quickstart commands:
 /plugin status
 /mcp status
 /notify status
+/autoflow status --json
+/session handoff --json
 /autopilot go --goal "finish current objective" --json
 /gateway status
 ```
@@ -104,10 +110,13 @@ Use `/complete <prefix>` for command discovery and `docs/command-handbook.md` fo
 - `scripts/notify_command.py` - backend script for `/notify`
 - `scripts/session_digest.py` - backend script for `/digest`
 - `scripts/session_command.py` - backend script for `/session`
+- `scripts/autoflow_command.py` - backend script for `/autoflow`
+- `scripts/init_deep_command.py` - backend script for `/init-deep`
+- `scripts/continuation_stop_command.py` - backend script for `/continuation-stop`
 - `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
 - `scripts/telemetry_command.py` - backend script for `/telemetry`
 - `scripts/post_session_command.py` - backend script for `/post-session`
-- `scripts/policy_command.py` - backend script for `/policy`
+- `scripts/policy_command.py` - policy profile helper used by `/notify policy ...` and stack presets
 - `scripts/doctor_command.py` - backend script for `/doctor`
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`

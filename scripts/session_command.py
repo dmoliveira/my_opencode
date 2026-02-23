@@ -14,11 +14,17 @@ DEFAULT_INDEX_PATH = Path(
     )
 ).expanduser()
 
+DEFAULT_DIGEST_PATH = Path(
+    os.environ.get(
+        "MY_OPENCODE_DIGEST_PATH", "~/.config/opencode/digests/last-session.json"
+    )
+).expanduser()
+
 
 def _usage() -> int:
     print(
         "usage: /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session doctor [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--json] | /session doctor [--json]"
     )
     return 2
 
@@ -105,7 +111,31 @@ def _emit(payload: dict, json_output: bool) -> int:
                 print(f"- {warning}")
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("command") == "handoff":
+        print("session handoff")
+        print("---------------")
+        print(f"session_id: {payload.get('session_id')}")
+        print(f"cwd: {payload.get('cwd')}")
+        print(f"last_event_at: {payload.get('last_event_at')}")
+        print(f"event_count: {payload.get('event_count')}")
+        print(f"last_reason: {payload.get('last_reason')}")
+        if payload.get("git_branch"):
+            print(f"git_branch: {payload.get('git_branch')}")
+        if isinstance(payload.get("next_actions"), list) and payload.get(
+            "next_actions"
+        ):
+            print("next_actions:")
+            for action in payload.get("next_actions", []):
+                print(f"- {action}")
+        return 0
     return 0
+
+
+def _load_digest(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _command_list(argv: list[str], index_path: Path) -> int:
@@ -260,6 +290,90 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     )
 
 
+def _command_handoff(argv: list[str], index_path: Path) -> int:
+    json_output = "--json" in argv
+    args = [arg for arg in argv if arg != "--json"]
+    target_id: str | None = None
+    if args:
+        if len(args) == 2 and args[0] == "--id":
+            target_id = args[1]
+        else:
+            return _usage()
+
+    try:
+        rows = _session_rows(_load_index(index_path))
+    except Exception as exc:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "handoff",
+                "error": f"failed to load session index: {exc}",
+                "index_path": str(index_path),
+            },
+            json_output,
+        )
+
+    if not rows:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "handoff",
+                "error": "no indexed sessions found; run /digest run first",
+                "index_path": str(index_path),
+            },
+            json_output,
+        )
+
+    selected: dict = rows[0]
+    if target_id:
+        selected_match = next(
+            (row for row in rows if str(row.get("session_id")) == target_id),
+            None,
+        )
+        if not isinstance(selected_match, dict):
+            return _emit(
+                {
+                    "result": "FAIL",
+                    "command": "handoff",
+                    "error": f"session not found: {target_id}",
+                    "index_path": str(index_path),
+                },
+                json_output,
+            )
+        selected = selected_match
+
+    digest = _load_digest(DEFAULT_DIGEST_PATH)
+    raw_git = digest.get("git")
+    git: dict = raw_git if isinstance(raw_git, dict) else {}
+    raw_plan = digest.get("plan_execution")
+    plan: dict = raw_plan if isinstance(raw_plan, dict) else {}
+    plan_status = str(plan.get("status") or "idle")
+
+    next_actions = [
+        "/doctor run",
+        "/session show <session_id> --json",
+    ]
+    if plan_status not in {"idle", "completed"}:
+        next_actions.insert(0, "/autoflow status --json")
+
+    payload = {
+        "result": "PASS",
+        "command": "handoff",
+        "session_id": selected.get("session_id"),
+        "cwd": selected.get("cwd"),
+        "started_at": selected.get("started_at"),
+        "last_event_at": selected.get("last_event_at"),
+        "event_count": selected.get("event_count"),
+        "last_reason": selected.get("last_reason"),
+        "digest_path": str(DEFAULT_DIGEST_PATH),
+        "git_branch": git.get("branch"),
+        "git_status_count": git.get("status_count"),
+        "plan_status": plan_status,
+        "next_actions": next_actions,
+    }
+    return _emit(payload, json_output)
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return _usage()
@@ -275,6 +389,8 @@ def main(argv: list[str]) -> int:
         return _command_show(rest, index_path)
     if command == "search":
         return _command_search(rest, index_path)
+    if command == "handoff":
+        return _command_handoff(rest, index_path)
     if command == "doctor":
         return _command_doctor(rest, index_path)
     return _usage()

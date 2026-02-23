@@ -419,7 +419,7 @@ Task 28.4 autopilot command UX/workflow notes:
 - command module: `scripts/autopilot_command.py`
 - canonical slash command is `/autopilot` with subcommands `start|go|status|pause|resume|stop|report|doctor`
 - objective-mode uses `/autopilot go --completion-mode objective ...` when you want done-criteria gates instead of promise token.
-- compatibility aliases are available as `/ralph-loop` and `/cancel-ralph`; canonical flow remains `/autopilot*`.
+- compatibility aliases were removed to keep the command surface canonical (`/autopilot*`).
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
 - legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
@@ -450,9 +450,8 @@ Autopilot gateway telemetry fields (`--json`):
 # Context-first one-shot iteration (start-or-resume and run bounded cycles)
 /autopilot go --goal "continue active docs request" --max-cycles 10 --json
 
-# Compatibility aliases (canonical flow is /autopilot*)
-/ralph-loop "finish docs checklist end-to-end"
-/cancel-ralph
+# Canonical stop flow
+/autopilot stop --reason "finish docs checklist end-to-end" --json
 
 # Objective-gate completion mode (alternative to promise mode)
 /autopilot go --completion-mode objective --goal "close all docs checklists" --scope "docs/**" --done-criteria "all docs updated;checks green" --max-budget balanced
@@ -655,7 +654,7 @@ This will:
 - clone or update this repo into `~/.config/opencode/my_opencode`
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
-- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+- run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/notify policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
 
 ## Manual install 🛠️
 
@@ -722,7 +721,7 @@ Use these directly in OpenCode:
 
 ## Layered config precedence 🧩
 
-`/mcp`, `/plugin`, `/notify`, `/telemetry`, `/post-session`, `/policy`, and `/stack` now resolve configuration with stable layered precedence:
+`/mcp`, `/plugin`, `/notify`, `/telemetry`, `/post-session`, and `/stack` now resolve configuration with stable layered precedence:
 
 1. `OPENCODE_CONFIG_PATH` (runtime override, highest priority)
 2. `.opencode/my_opencode.jsonc` (project override)
@@ -870,12 +869,12 @@ Use:
 
 Routing command surface (Epic 12 Task 12.3):
 ```text
-/routing status
-/routing explain --category deep --available-models openai/gpt-5-mini --json
+/model-routing status --json
+/model-routing resolve --category deep --available-models openai/gpt-5-mini --json
 ```
 
 Troubleshooting unexpected model selection:
-- run `/routing explain --json` and inspect `fallback_reason`
+- run `/model-routing resolve --json` and inspect `trace` and `resolution_trace`
 - confirm `attempted_count` is non-zero and review `resolution_trace.attempted`
 - verify available model set passed to resolve commands matches runtime availability
 
@@ -920,16 +919,16 @@ Epic 8 Task 8.2 adds a deterministic keyword detector engine:
 - command wrapper: `scripts/keyword_mode_command.py`
 - dictionary contract: `instructions/keyword_execution_modes.md`
 
-Use:
+Use via `/auto-slash keyword`:
 ```text
-/keyword-mode status
-/keyword-mode detect --prompt "safe-apply deep-analyze review this migration" --json
-/keyword-mode apply --prompt "parallel-research deep-analyze inspect API usage" --json
-/keyword-mode disable-keyword ulw
-/keyword-mode enable-keyword ulw
-/keyword-mode disable
-/keyword-mode enable
-/keyword-mode doctor --json
+/auto-slash keyword status
+/auto-slash keyword detect --prompt "safe-apply deep-analyze review this migration" --json
+/auto-slash keyword apply --prompt "parallel-research deep-analyze inspect API usage" --json
+/auto-slash keyword disable-keyword ulw
+/auto-slash keyword enable-keyword ulw
+/auto-slash keyword disable
+/auto-slash keyword enable
+/auto-slash keyword doctor --json
 ```
 
 Detector behavior:
@@ -939,9 +938,9 @@ Detector behavior:
 - persisted runtime context via `keyword_modes` config section (`active_modes`, `effective_flags`)
 
 Examples:
-- basic: `/keyword-mode apply --prompt "safe-apply review this migration" --json`
-- intermediate: `/keyword-mode disable-keyword ulw` then `/keyword-mode detect --prompt "ulw deep-analyze audit" --json`
-- override path: `/keyword-mode detect --prompt "no-keyword-mode safe-apply deep-analyze" --json`
+- basic: `/auto-slash keyword apply --prompt "safe-apply review this migration" --json`
+- intermediate: `/auto-slash keyword disable-keyword ulw` then `/auto-slash keyword detect --prompt "ulw deep-analyze audit" --json`
+- override path: `/auto-slash keyword detect --prompt "no-keyword-mode safe-apply deep-analyze" --json`
 
 Anti-patterns:
 - avoid mixing contradictory intent keywords casually (`ulw` + `deep-analyze`) unless you expect precedence conflict resolution.
@@ -1134,8 +1133,8 @@ Engine behavior currently includes:
 
 Use:
 ```text
-/resilience status --json
-/resilience doctor --json
+/doctor run --json
+/health status --json
 ```
 
 ## Background jobs inside OpenCode 🧵

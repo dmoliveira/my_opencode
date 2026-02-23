@@ -15,6 +15,7 @@ from config_layering import (  # type: ignore
     resolve_write_path,
     save_config as save_config_file,
 )
+from policy_command import main as policy_main  # type: ignore
 
 
 DEFAULT_CONFIG_PATH = Path(
@@ -137,37 +138,11 @@ def load_config(config_path: Path) -> dict:
                 custom = normalize_label(data["sound"]["customFiles"].get(event))
                 if custom or data["sound"]["customFiles"].get(event) == "":
                     state["sound"]["customFiles"][event] = custom
-        theme = normalize_label(data["sound"].get("theme")).lower()
-        if theme in SOUND_THEMES:
-            state["sound"]["theme"] = theme
-        if isinstance(data["sound"].get("eventThemes"), dict):
-            for event in EVENTS:
-                event_theme = normalize_label(
-                    data["sound"]["eventThemes"].get(event)
-                ).lower()
-                if event_theme == "default" or event_theme in SOUND_THEMES:
-                    state["sound"]["eventThemes"][event] = event_theme
-        if isinstance(data["sound"].get("customFiles"), dict):
-            for event in EVENTS:
-                custom = normalize_label(data["sound"]["customFiles"].get(event))
-                if custom or data["sound"]["customFiles"].get(event) == "":
-                    state["sound"]["customFiles"][event] = custom
 
     if isinstance(data.get("visual"), dict):
         state["visual"]["enabled"] = to_bool(
             data["visual"].get("enabled"), state["visual"]["enabled"]
         )
-
-    if isinstance(data.get("icons"), dict):
-        state["icons"]["enabled"] = to_bool(
-            data["icons"].get("enabled"), state["icons"]["enabled"]
-        )
-        version = normalize_label(data["icons"].get("version"))
-        if version:
-            state["icons"]["version"] = version
-        mode = normalize_label(data["icons"].get("mode")).lower()
-        if mode in ICON_MODES:
-            state["icons"]["mode"] = mode
 
     if isinstance(data.get("icons"), dict):
         state["icons"]["enabled"] = to_bool(
@@ -306,7 +281,7 @@ def save_state(state: dict) -> None:
 
 def usage() -> int:
     print(
-        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
+        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify policy <status|help|profile <strict|balanced|fast>> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
     )
     return 2
 
@@ -622,6 +597,9 @@ def main(argv: list[str]) -> int:
         save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
+
+    if argv[0] == "policy":
+        return policy_main(argv[1:])
 
     if argv[0] in ("enable", "disable"):
         if len(argv) < 2:

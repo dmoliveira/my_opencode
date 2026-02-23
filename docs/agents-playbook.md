@@ -54,7 +54,7 @@ This now also verifies orchestration policy markers in the nearest `AGENTS.md` (
 
 ```text
 /agent-doctor
-/agent-doctor-json
+/agent-doctor --json
 ```
 
 ---
