@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from runtime_audit import DEFAULT_AUDIT_PATH, append_event, load_audit  # type: ignore
@@ -11,7 +12,7 @@ from runtime_audit import DEFAULT_AUDIT_PATH, append_event, load_audit  # type: 
 
 def usage() -> int:
     print(
-        "usage: /audit status [--json] | /audit list [--limit <n>] [--json] | /audit export --path <file> [--json] | /audit doctor [--json]"
+        "usage: /audit status [--json] | /audit list [--limit <n>] [--json] | /audit report [--days <n>] [--json] | /audit export --path <file> [--json] | /audit doctor [--json]"
     )
     return 2
 
@@ -43,7 +44,8 @@ def parse_flag_value(argv: list[str], flag: str) -> str | None:
 def cmd_status(argv: list[str]) -> int:
     as_json = "--json" in argv
     state = load_audit(DEFAULT_AUDIT_PATH)
-    events = state.get("events") if isinstance(state.get("events"), list) else []
+    raw_events = state.get("events")
+    events = raw_events if isinstance(raw_events, list) else []
     latest = events[0] if events and isinstance(events[0], dict) else {}
     return emit(
         {
@@ -70,7 +72,8 @@ def cmd_list(argv: list[str]) -> int:
         except ValueError:
             return usage()
     state = load_audit(DEFAULT_AUDIT_PATH)
-    events = state.get("events") if isinstance(state.get("events"), list) else []
+    raw_events = state.get("events")
+    events = raw_events if isinstance(raw_events, list) else []
     return emit(
         {
             "result": "PASS",
@@ -107,10 +110,70 @@ def cmd_export(argv: list[str]) -> int:
     )
 
 
+def cmd_report(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+    days = 7
+    if "--days" in argv:
+        idx = argv.index("--days")
+        if idx + 1 >= len(argv):
+            return usage()
+        try:
+            days = max(1, int(argv[idx + 1]))
+        except ValueError:
+            return usage()
+
+    state = load_audit(DEFAULT_AUDIT_PATH)
+    raw_events = state.get("events")
+    events = raw_events if isinstance(raw_events, list) else []
+    horizon_cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    within_horizon: list[dict] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        raw_at = str(event.get("at") or "")
+        try:
+            event_at = datetime.fromisoformat(raw_at.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if event_at >= horizon_cutoff:
+            within_horizon.append(event)
+
+    by_command: dict[str, int] = {}
+    by_action: dict[str, int] = {}
+    by_result: dict[str, int] = {}
+    failures: list[dict] = []
+    for event in within_horizon:
+        command = str(event.get("command") or "unknown")
+        action = str(event.get("action") or "unknown")
+        result = str(event.get("result") or "UNKNOWN")
+        by_command[command] = by_command.get(command, 0) + 1
+        by_action[action] = by_action.get(action, 0) + 1
+        by_result[result] = by_result.get(result, 0) + 1
+        if result not in {"PASS", "WARN"}:
+            failures.append(event)
+
+    report = {
+        "result": "PASS",
+        "command": "report",
+        "days": days,
+        "total_events": len(events),
+        "events_in_window": len(within_horizon),
+        "by_command": by_command,
+        "by_action": by_action,
+        "by_result": by_result,
+        "failure_count": len(failures),
+        "recent_failures": failures[:10],
+    }
+    return emit(report, as_json)
+
+
 def cmd_doctor(argv: list[str]) -> int:
     as_json = "--json" in argv
     state = load_audit(DEFAULT_AUDIT_PATH)
-    events = state.get("events") if isinstance(state.get("events"), list) else []
+    raw_events = state.get("events")
+    events = raw_events if isinstance(raw_events, list) else []
     warnings: list[str] = []
     if not events:
         warnings.append("audit log is empty; run mutating commands to populate it")
@@ -124,6 +187,7 @@ def cmd_doctor(argv: list[str]) -> int:
             "quick_fixes": [
                 "/claims claim issue-1 --by human:alex --json",
                 "/audit list --json",
+                "/audit report --days 7 --json",
             ],
         },
         as_json,
@@ -141,6 +205,8 @@ def main(argv: list[str]) -> int:
         return cmd_status(rest)
     if command == "list":
         return cmd_list(rest)
+    if command == "report":
+        return cmd_report(rest)
     if command == "export":
         return cmd_export(rest)
     if command == "doctor":

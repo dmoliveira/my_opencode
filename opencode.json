@@ -39,7 +39,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run $ARGUMENTS`\nShow only the command output."
     },
     "audit": {
-      "description": "Inspect runtime audit trail (status|list|export|doctor)",
+      "description": "Inspect runtime audit trail (status|list|report|export|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/audit_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "governance": {

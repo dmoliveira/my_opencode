@@ -175,6 +175,7 @@ Use these directly in OpenCode:
 
 /audit status --json
 /audit list --limit 20 --json
+/audit report --days 7 --json
 /audit export --path ./runtime-audit-export.json --json
 
 /governance profile strict --json
@@ -299,7 +300,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 
 ```text
 /agent-doctor - Validate custom agent contracts and runtime discovery
-/audit - Inspect runtime audit trail (status|list|export|doctor)
+/audit - Inspect runtime audit trail (status|list|report|export|doctor)
 /auto-slash - Detect and preview natural-language slash intents
 /autopilot - Continue current task autonomously with autopilot guardrails
 /autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)

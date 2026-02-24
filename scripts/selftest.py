@@ -2226,6 +2226,41 @@ exit 0
             [
                 sys.executable,
                 str(AUDIT_SCRIPT),
+                "report",
+                "--days",
+                "30",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"audit report failed: {result.stderr}")
+        audit_report_payload = parse_json_output(result.stdout)
+        expect(
+            audit_report_payload.get("result") == "PASS"
+            and audit_report_payload.get("command") == "report"
+            and int(audit_report_payload.get("days", 0) or 0) == 30,
+            "audit report should return command metadata and selected horizon",
+        )
+        expect(
+            isinstance(audit_report_payload.get("by_result"), dict)
+            and isinstance(audit_report_payload.get("by_command"), dict)
+            and isinstance(audit_report_payload.get("by_action"), dict),
+            "audit report should include trend breakdown maps",
+        )
+        expect(
+            int(audit_report_payload.get("events_in_window", 0) or 0)
+            <= int(audit_report_payload.get("total_events", 0) or 0),
+            "audit report window count should not exceed total event count",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(AUDIT_SCRIPT),
                 "export",
                 "--path",
                 str(audit_export),
