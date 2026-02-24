@@ -56,6 +56,9 @@ from lsp_command import (  # type: ignore
     _capability_matrix,
     _command_warnings,
     _preflight_server_capability,
+    _resource_operation_policy_blockers,
+    _validate_renamefile_operations,
+    _validate_single_uri_resource_operations,
 )
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
@@ -4332,6 +4335,115 @@ index 3333333..4444444 100644
             and by_capability.get("documentSymbolProvider") is True
             and by_capability.get("workspaceSymbolProvider") is True,
             "lsp capability matrix should deterministically represent provider support",
+        )
+
+        lsp_ops_root = (tmp / "lsp-ops").resolve()
+        lsp_ops_root.mkdir(parents=True, exist_ok=True)
+        existing_source = lsp_ops_root / "source.py"
+        existing_source.write_text("print('x')\n", encoding="utf-8")
+        existing_target = lsp_ops_root / "target.py"
+        existing_target.write_text("print('y')\n", encoding="utf-8")
+
+        rename_missing_errors = _validate_renamefile_operations(
+            lsp_ops_root,
+            [
+                {
+                    "kind": "renamefile",
+                    "old_uri": (lsp_ops_root / "missing.py").as_uri(),
+                    "new_uri": (lsp_ops_root / "missing-renamed.py").as_uri(),
+                }
+            ],
+        )
+        expect(
+            any("renamefile source missing" in item for item in rename_missing_errors),
+            "lsp rename validation should reject missing rename source files",
+        )
+
+        rename_existing_target_errors = _validate_renamefile_operations(
+            lsp_ops_root,
+            [
+                {
+                    "kind": "renamefile",
+                    "old_uri": existing_source.as_uri(),
+                    "new_uri": existing_target.as_uri(),
+                }
+            ],
+        )
+        expect(
+            any(
+                "renamefile target already exists" in item
+                for item in rename_existing_target_errors
+            ),
+            "lsp rename validation should reject rename targets that already exist",
+        )
+
+        rename_outside_root_errors = _validate_renamefile_operations(
+            lsp_ops_root,
+            [
+                {
+                    "kind": "renamefile",
+                    "old_uri": existing_source.as_uri(),
+                    "new_uri": tmp.resolve().as_uri(),
+                }
+            ],
+        )
+        expect(
+            any(
+                "renamefile operation points outside repository root" in item
+                for item in rename_outside_root_errors
+            ),
+            "lsp rename validation should reject operations outside repository root",
+        )
+
+        createfile_validation_errors = _validate_single_uri_resource_operations(
+            lsp_ops_root,
+            [{"kind": "createfile", "uri": existing_target.as_uri()}],
+            kind="createfile",
+        )
+        expect(
+            any(
+                "createfile target already exists" in item
+                for item in createfile_validation_errors
+            ),
+            "lsp resource validation should reject createfile when target already exists",
+        )
+
+        deletefile_validation_errors = _validate_single_uri_resource_operations(
+            lsp_ops_root,
+            [{"kind": "deletefile", "uri": (lsp_ops_root / "ghost.py").as_uri()}],
+            kind="deletefile",
+        )
+        expect(
+            any(
+                "deletefile target missing" in item
+                for item in deletefile_validation_errors
+            ),
+            "lsp resource validation should reject deletefile when target is missing",
+        )
+
+        policy_blockers = _resource_operation_policy_blockers(
+            grouped_resource_ops={
+                "renamefile": [{"kind": "renamefile"}],
+                "createfile": [{"kind": "createfile"}],
+                "deletefile": [{"kind": "deletefile"}],
+                "other": [],
+            },
+            renamefile_operations=[{"kind": "renamefile"}],
+            blocked_resource_ops=[],
+            allow_rename_file_ops=False,
+            allow_create_file_ops=False,
+            allow_delete_file_ops=False,
+            apply_changes=True,
+        )
+        expect(
+            "renamefile operations require --allow-rename-file-ops" in policy_blockers
+            and "createfile operations require --allow-create-file-ops"
+            in policy_blockers
+            and "deletefile operations require --allow-delete-file-ops"
+            in policy_blockers
+            and "createfile operations are not supported for apply" in policy_blockers
+            and "deletefile operations are not supported for apply" in policy_blockers,
+            "lsp rename policy should require explicit opt-in and keep create/delete apply blocked",
         )
 
         ref_validation_pass = validate_changed_references(
