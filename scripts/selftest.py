@@ -1717,6 +1717,62 @@ exit 0
             and len(wf_payload.get("steps", [])) == 2,
             "workflow run should record per-step execution results",
         )
+        expect(
+            wf_payload.get("execution_mode") == "dry-run",
+            "workflow run should default to dry-run execution mode",
+        )
+
+        wf_exec_path = tmp / "wf-selftest-exec.json"
+        wf_exec_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-exec",
+                    "steps": [
+                        {
+                            "id": "verify",
+                            "action": "run-check",
+                            "depends_on": ["prep"],
+                            "command": [
+                                "python3",
+                                "scripts/claims_command.py",
+                                "doctor",
+                                "--json",
+                            ],
+                        },
+                        {"id": "prep", "action": "gather-context"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_exec_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow execute run failed: {result.stderr}",
+        )
+        wf_exec_payload = parse_json_output(result.stdout)
+        expect(
+            wf_exec_payload.get("execution_mode") == "execute"
+            and wf_exec_payload.get("ordered_step_ids") == ["prep", "verify"],
+            "workflow execute should respect dependency ordering",
+        )
 
         result = subprocess.run(
             [sys.executable, str(DAEMON_SCRIPT), "start", "--json"],
@@ -1755,6 +1811,61 @@ exit 0
         expect(
             pool_payload.get("count") == 2,
             "agent-pool spawn should create requested count",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "claim",
+                "issue-202",
+                "--role",
+                "coder",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims role claim failed: {result.stderr}")
+        claims_role_payload = parse_json_output(result.stdout)
+        expect(
+            str(claims_role_payload.get("owner", "")).startswith("agent:coder-"),
+            "claims role claim should auto-assign least-loaded active pool agent",
+        )
+
+        claims_state = load_json_file(claims_state_path)
+        claims_state_claims = claims_state.get("claims")
+        if isinstance(claims_state_claims, dict):
+            claims_state_claims["issue-202"]["updated_at"] = "2000-01-01T00:00:00Z"
+            claims_state_claims["issue-202"]["status"] = "active"
+            claims_state_path.write_text(
+                json.dumps(claims_state, indent=2) + "\n", encoding="utf-8"
+            )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DAEMON_SCRIPT),
+                "tick",
+                "--claims-hours",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"daemon tick failed: {result.stderr}")
+        daemon_tick_payload = parse_json_output(result.stdout)
+        expect(
+            "issue-202"
+            in daemon_tick_payload.get("last_tick_summary", {}).get("updated", []),
+            "daemon tick should apply stale claims expiration",
         )
 
         memory_export = tmp / "memory-export.json"
