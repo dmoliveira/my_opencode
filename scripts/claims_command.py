@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from runtime_audit import append_event  # type: ignore
+
 
 DEFAULT_STATE_PATH = Path(
     os.environ.get(
@@ -262,6 +264,7 @@ def cmd_claim(argv: list[str], path: Path) -> int:
     adjust_pool_load(pool_state, owner, 1)
     save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
     save_state(path, state)
+    append_event("claims", "claim", "PASS", {"issue_id": issue_id, "owner": owner})
     return emit(
         {
             "result": "PASS",
@@ -301,6 +304,7 @@ def cmd_handoff(argv: list[str], path: Path) -> int:
     item["status"] = "handoff-pending"
     item["updated_at"] = now_iso()
     save_state(path, state)
+    append_event("claims", "handoff", "PASS", {"issue_id": issue_id, "to": to_owner})
     return emit({"result": "PASS", "command": "handoff", **item}, as_json)
 
 
@@ -328,6 +332,7 @@ def cmd_release(argv: list[str], path: Path) -> int:
     adjust_pool_load(pool_state, str(item.get("owner") or ""), -1)
     save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
     save_state(path, state)
+    append_event("claims", "release", "PASS", {"issue_id": issue_id})
     return emit(
         {
             "result": "PASS",
@@ -379,6 +384,12 @@ def cmd_accept_handoff(argv: list[str], path: Path) -> int:
     adjust_pool_load(pool_state, str(item.get("owner") or ""), 1)
     save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
     save_state(path, state)
+    append_event(
+        "claims",
+        "accept-handoff",
+        "PASS",
+        {"issue_id": issue_id, "owner": item.get("owner")},
+    )
     return emit(
         {
             "result": "PASS",
@@ -431,6 +442,9 @@ def cmd_reject_handoff(argv: list[str], path: Path) -> int:
     item["handoff_rejected_reason"] = reason
     item["updated_at"] = now_iso()
     save_state(path, state)
+    append_event(
+        "claims", "reject-handoff", "PASS", {"issue_id": issue_id, "reason": reason}
+    )
     return emit({"result": "PASS", "command": "reject-handoff", **item}, as_json)
 
 
@@ -462,6 +476,9 @@ def cmd_expire_stale(argv: list[str], path: Path) -> int:
             item["updated_at"] = now_iso()
             updated.append(issue_id)
         save_state(path, state)
+        append_event(
+            "claims", "expire-stale", "PASS", {"updated": updated, "hours": stale_hours}
+        )
 
     return emit(
         {

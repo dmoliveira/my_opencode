@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime_audit import append_event  # type: ignore
+
 
 DEFAULT_STATE_PATH = Path(
     os.environ.get(
@@ -498,6 +500,7 @@ def cmd_run(argv: list[str]) -> int:
     state["history"] = history[:50]
     state["active"] = {}
     save_json_file(DEFAULT_STATE_PATH, state)
+    append_event("workflow", "run", "PASS", {"run_id": run_id, "status": status})
     return emit({"result": "PASS", "command": "run", **run_record}, as_json)
 
 
@@ -599,6 +602,12 @@ def cmd_resume(argv: list[str]) -> int:
     state["history"] = history[:50]
     state["active"] = {}
     save_json_file(DEFAULT_STATE_PATH, state)
+    append_event(
+        "workflow",
+        "resume",
+        "PASS",
+        {"run_id": new_run_id, "resumed_from": run_id, "status": status},
+    )
     return emit({"result": "PASS", "command": "resume", **run_record}, as_json)
 
 
@@ -653,6 +662,9 @@ def cmd_stop(argv: list[str]) -> int:
         history[0] = active
     state["history"] = history
     save_json_file(DEFAULT_STATE_PATH, state)
+    append_event(
+        "workflow", "stop", "PASS", {"run_id": active.get("run_id"), "reason": reason}
+    )
     return emit({"result": "PASS", "command": "stop", **active}, as_json)
 
 

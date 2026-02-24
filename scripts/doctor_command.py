@@ -243,6 +243,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "audit",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("audit_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("audit_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "workflow",
         "kind": "doctor-json",
         "optional": True,
