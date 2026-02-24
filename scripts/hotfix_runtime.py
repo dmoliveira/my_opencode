@@ -13,6 +13,16 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from flow_reason_codes import (  # type: ignore
+    HOTFIX_DEFERRED_VALIDATION_REQUIRED,
+    HOTFIX_FOLLOWUP_REQUIRED,
+    HOTFIX_NOT_ACTIVE,
+    HOTFIX_POSTMORTEM_REQUIRED,
+    HOTFIX_RISK_ACK_REQUIRED,
+    HOTFIX_ROLLBACK_CHECKPOINT_MISSING,
+    HOTFIX_TIMELINE_EVENT_MISSING,
+    HOTFIX_VALIDATE_FAILED,
+)
 
 
 RUNTIME_FILE_NAME = "hotfix_mode.json"
@@ -140,7 +150,7 @@ def usage() -> int:
         "/hotfix-runtime checkpoint [--label <name>] [--json] | "
         "/hotfix-runtime mark-patch --summary <text> [--json] | "
         "/hotfix-runtime validate --target <name> --result <pass|fail> [--json] | "
-        "/hotfix-runtime close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> [--json] | "
+        "/hotfix-runtime close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json] | "
         "/hotfix-runtime doctor [--json]"
     )
     return 2
@@ -278,7 +288,7 @@ def command_checkpoint(args: list[str], write_path: Path, repo_root: Path) -> in
 
     state = load_runtime(write_path)
     if not state.get("active"):
-        emit({"result": "FAIL", "reason_codes": ["hotfix_not_active"]}, as_json)
+        emit({"result": "FAIL", "reason_codes": [HOTFIX_NOT_ACTIVE]}, as_json)
         return 1
 
     _, head = run_git(repo_root, ["rev-parse", "HEAD"])
@@ -314,7 +324,7 @@ def command_mark_patch(args: list[str], write_path: Path) -> int:
         return usage()
     state = load_runtime(write_path)
     if not state.get("active"):
-        emit({"result": "FAIL", "reason_codes": ["hotfix_not_active"]}, as_json)
+        emit({"result": "FAIL", "reason_codes": [HOTFIX_NOT_ACTIVE]}, as_json)
         return 1
     event = "rollback_applied" if state.get("scope") == "rollback" else "patch_applied"
     append_event(state, event=event, actor=actor, details={"summary": summary})
@@ -335,7 +345,7 @@ def command_validate(args: list[str], write_path: Path) -> int:
         return usage()
     state = load_runtime(write_path)
     if not state.get("active"):
-        emit({"result": "FAIL", "reason_codes": ["hotfix_not_active"]}, as_json)
+        emit({"result": "FAIL", "reason_codes": [HOTFIX_NOT_ACTIVE]}, as_json)
         return 1
     validation_any = state.get("validation")
     validation = validation_any if isinstance(validation_any, dict) else {}
@@ -361,6 +371,8 @@ def command_close(args: list[str], write_path: Path) -> int:
         followup_issue = pop_value(args, "--followup-issue")
         deferred_owner = pop_value(args, "--deferred-validation-owner")
         deferred_due = pop_value(args, "--deferred-validation-due")
+        postmortem_id = pop_value(args, "--postmortem-id")
+        risk_ack = pop_value(args, "--risk-ack")
         actor = pop_value(args, "--actor", "operator") or "operator"
     except ValueError:
         return usage()
@@ -369,14 +381,14 @@ def command_close(args: list[str], write_path: Path) -> int:
 
     state = load_runtime(write_path)
     if not state.get("active"):
-        emit({"result": "FAIL", "reason_codes": ["hotfix_not_active"]}, as_json)
+        emit({"result": "FAIL", "reason_codes": [HOTFIX_NOT_ACTIVE]}, as_json)
         return 1
 
     reason_codes: list[str] = []
     remediation: list[str] = []
 
     if not state.get("rollback_checkpoint"):
-        reason_codes.append("rollback_checkpoint_missing")
+        reason_codes.append(HOTFIX_ROLLBACK_CHECKPOINT_MISSING)
         remediation.append("create rollback checkpoint before closing hotfix")
 
     timeline = (
@@ -386,7 +398,7 @@ def command_close(args: list[str], write_path: Path) -> int:
     required = set(REQUIRED_CLOSE_EVENTS)
     required.discard("closed")
     if not required.issubset(seen_events):
-        reason_codes.append("timeline_event_missing")
+        reason_codes.append(HOTFIX_TIMELINE_EVENT_MISSING)
         remediation.append("ensure started/checkpoint/validation events are present")
 
     validation = (
@@ -394,17 +406,23 @@ def command_close(args: list[str], write_path: Path) -> int:
     )
     validate_report = validation.get("validate")
     if not isinstance(validate_report, dict) or validate_report.get("result") != "pass":
-        reason_codes.append("validate_failed")
+        reason_codes.append(HOTFIX_VALIDATE_FAILED)
         remediation.append(
             "record successful validate check with /hotfix-runtime validate"
         )
 
     if not followup_issue:
-        reason_codes.append("followup_issue_required")
+        reason_codes.append(HOTFIX_FOLLOWUP_REQUIRED)
         remediation.append("provide --followup-issue for post-incident hardening")
     if not deferred_owner or not deferred_due:
-        reason_codes.append("deferred_validation_plan_required")
+        reason_codes.append(HOTFIX_DEFERRED_VALIDATION_REQUIRED)
         remediation.append("provide deferred validation owner and due date")
+    if not postmortem_id:
+        reason_codes.append(HOTFIX_POSTMORTEM_REQUIRED)
+        remediation.append("provide --postmortem-id to link incident write-up")
+    if not risk_ack:
+        reason_codes.append(HOTFIX_RISK_ACK_REQUIRED)
+        remediation.append("provide --risk-ack to acknowledge residual incident risk")
 
     if reason_codes:
         emit(
@@ -424,6 +442,8 @@ def command_close(args: list[str], write_path: Path) -> int:
         details={
             "outcome": outcome,
             "followup_issue": followup_issue,
+            "postmortem_id": postmortem_id,
+            "risk_ack": risk_ack,
             "deferred_validation": {"owner": deferred_owner, "due": deferred_due},
         },
     )
@@ -435,6 +455,7 @@ def command_close(args: list[str], write_path: Path) -> int:
             "result": "PASS",
             "outcome": outcome,
             "followup_issue": followup_issue,
+            "postmortem_id": postmortem_id,
             "runtime": str(runtime_path(write_path)),
         },
         as_json,

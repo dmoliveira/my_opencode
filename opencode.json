@@ -55,7 +55,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "changes": {
-      "description": "Explain local change narrative for handoff/release notes (explain)",
+      "description": "Explain local change narrative for handoff/release notes (explain|--since)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/changes_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "workflow": {
@@ -123,7 +123,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "ship": {
-      "description": "Run release intent preflight with safety gates (--version required)",
+      "description": "Run release intent preflight with safety gates and PR scaffolding",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/ship_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "browser": {
@@ -147,7 +147,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "review": {
-      "description": "Run local review pass with risk/test/docs diagnostics (local|doctor)",
+      "description": "Run local review pass with risk/test/docs diagnostics (local|apply-checklist|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "release-train": {
@@ -155,7 +155,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "hotfix": {
-      "description": "Run incident hotfix controls (start|status|close|remind|doctor)",
+      "description": "Run incident hotfix controls with strict close gating (start|status|close|remind|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "health": {

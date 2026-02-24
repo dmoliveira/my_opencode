@@ -3321,6 +3321,32 @@ index 3333333..4444444 100644
             "review local should emit deterministic remediation hints",
         )
 
+        review_checklist_report = subprocess.run(
+            [
+                sys.executable,
+                str(REVIEW_COMMAND_SCRIPT),
+                "apply-checklist",
+                "--diff-file",
+                str(analyzer_missing_evidence_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            review_checklist_report.returncode == 0,
+            "review apply-checklist should generate checklist output",
+        )
+        review_checklist_payload = parse_json_output(review_checklist_report.stdout)
+        expect(
+            review_checklist_payload.get("reason_code") == "review_checklist_generated"
+            and isinstance(review_checklist_payload.get("checklist_markdown"), str),
+            "review apply-checklist should emit deterministic markdown checklist",
+        )
+
         review_doctor_report = subprocess.run(
             [sys.executable, str(REVIEW_COMMAND_SCRIPT), "doctor", "--json"],
             capture_output=True,
@@ -3384,6 +3410,32 @@ index 3333333..4444444 100644
             and isinstance(changes_explain_payload.get("risk"), list)
             and isinstance(changes_explain_payload.get("verify"), list),
             "changes explain should emit why/risk/verify narrative sections",
+        )
+
+        changes_explain_since = subprocess.run(
+            [
+                sys.executable,
+                str(CHANGES_COMMAND_SCRIPT),
+                "explain",
+                "--since",
+                "v0.3.0",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            changes_explain_since.returncode == 0,
+            "changes explain should support release-window diff via --since",
+        )
+        changes_explain_since_payload = parse_json_output(changes_explain_since.stdout)
+        expect(
+            changes_explain_since_payload.get("result") == "PASS"
+            and changes_explain_since_payload.get("base") == "v0.3.0",
+            "changes explain --since should report selected tag as base",
         )
 
         analyzer_docs_only_diff = tmp / "pr_review_docs_only.diff"
@@ -3640,6 +3692,39 @@ index 3333333..4444444 100644
             in {"ship_ready", "ship_prepare_blocked"}
             and isinstance(ship_preflight_payload.get("required_evidence"), list),
             "ship command should emit safety-gated reason code and evidence checklist",
+        )
+
+        ship_preflight_template = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "--version",
+                "0.0.1",
+                "--emit-pr-template",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_preflight_template.returncode in (0, 1),
+            "ship command should support PR template emission",
+        )
+        ship_preflight_template_payload = parse_json_output(
+            ship_preflight_template.stdout
+        )
+        expect(
+            isinstance(ship_preflight_template_payload.get("pr_template"), dict)
+            and isinstance(
+                ship_preflight_template_payload.get("pr_template", {}).get(
+                    "body_markdown"
+                ),
+                str,
+            ),
+            "ship command should emit deterministic PR template scaffolding",
         )
 
         release_repo = tmp / "release_repo"
@@ -4003,6 +4088,10 @@ index 3333333..4444444 100644
                 "oncall",
                 "--deferred-validation-due",
                 "2026-02-20",
+                "--postmortem-id",
+                "pm-123",
+                "--risk-ack",
+                "accepted for emergency patch",
                 "--json",
             ],
             capture_output=True,
@@ -4155,6 +4244,42 @@ index 3333333..4444444 100644
             "hotfix command close should emit followup_issue_required reason code",
         )
 
+        hotfix_close_missing_postmortem = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_RUNTIME_SCRIPT),
+                "close",
+                "--outcome",
+                "resolved",
+                "--followup-issue",
+                "bd-followup",
+                "--deferred-validation-owner",
+                "incident-lead",
+                "--deferred-validation-due",
+                "2026-03-01",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_close_missing_postmortem.returncode == 1,
+            "hotfix runtime close should require postmortem id and risk ack",
+        )
+        hotfix_close_missing_postmortem_payload = parse_json_output(
+            hotfix_close_missing_postmortem.stdout
+        )
+        expect(
+            "postmortem_id_required"
+            in set(hotfix_close_missing_postmortem_payload.get("reason_codes", []))
+            and "risk_ack_required"
+            in set(hotfix_close_missing_postmortem_payload.get("reason_codes", [])),
+            "hotfix runtime close should emit postmortem and risk-ack reason codes",
+        )
+
         hotfix_rollback_start = subprocess.run(
             [
                 sys.executable,
@@ -4240,6 +4365,10 @@ index 3333333..4444444 100644
                 "incident-commander",
                 "--deferred-validation-due",
                 "2026-03-02",
+                "--postmortem-id",
+                "pm-rollback-1",
+                "--risk-ack",
+                "residual rollback risk accepted",
                 "--json",
             ],
             capture_output=True,
