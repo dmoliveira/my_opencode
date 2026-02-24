@@ -26,6 +26,9 @@ This document is the consolidated changelog for the LSP delivery stream in `my_o
 | Disabled code-action apply guard    | Blocked `/lsp code-actions --apply` for server-disabled actions with explicit blockers           | [#268](https://github.com/dmoliveira/my_opencode/pull/268) | 2026-02-19T05:49:40Z | `794bfec54be5595e498762cb48cd1765d9e2e73b` |
 | Code-actions summary metadata       | Added code-action summary fields (`total`, `editable`, `disabled`, `by_kind`)                    | [#269](https://github.com/dmoliveira/my_opencode/pull/269) | 2026-02-19T05:57:45Z | `c9eb6ea09df6f59952e3032297f503b9d77c0518` |
 | Code-actions kind filtering         | Added optional `/lsp code-actions --kind <prefix>` deterministic filtering                       | [#270](https://github.com/dmoliveira/my_opencode/pull/270) | 2026-02-19T06:05:27Z | `e23c285f705513e926207fde7e292ceb885b0028` |
+| Capability preflight diagnostics    | Added deterministic selftest coverage for capability preflight reason codes and warning guidance | [#303](https://github.com/dmoliveira/my_opencode/pull/303) | 2026-02-24T10:10:52Z | `1f1ea642c6e1b5e821c93b279d6a4897b27ba9d7` |
+| Resource operation guardrails       | Hardened rename resource-op policy/validation and added create/delete target previews            | [#304](https://github.com/dmoliveira/my_opencode/pull/304) | 2026-02-24T10:15:49Z | `ece4d9db4e0af94d2e31e3505388243b73fdaee4` |
+| Diagnostics and actions schemas     | Added deterministic diagnostics/code-actions schema assertions in selftest                        | [#305](https://github.com/dmoliveira/my_opencode/pull/305) | 2026-02-24T10:20:06Z | `cec91bc2ad55a0d8a8aa8ca94854340869b29ec6` |
 
 ## Notes
 
