@@ -29,4 +29,5 @@
 ## References
 
 - Full command catalog: `docs/command-handbook.md`
+- Operator runbook: `docs/operator-playbook.md`
 - Deeper architecture notes: `docs/readme-deep-notes.md`
