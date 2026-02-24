@@ -40,14 +40,14 @@ Tasks:
 4. Add validation and docs for non-interactive usage. `finished`
 
 ## Epic E4 (P1): Capability-Aware Execution and UX
-Status: `planned`
+Status: `finished`
 Value: High
 
 Tasks:
-1. Use `/lsp doctor --verbose` capability matrix to preflight command readiness before protocol execution. `planned`
-2. Add explicit reason codes when a server is installed but lacks required capability for a command. `planned`
-3. Add command-level warnings to nudge users toward supported operations and safer fallbacks. `planned`
-4. Extend selftest with deterministic capability-mismatch fixtures using the mock LSP server. `planned`
+1. Use `/lsp doctor --verbose` capability matrix to preflight command readiness before protocol execution. `finished`
+2. Add explicit reason codes when a server is installed but lacks required capability for a command. `finished`
+3. Add command-level warnings to nudge users toward supported operations and safer fallbacks. `finished`
+4. Extend selftest with deterministic capability-mismatch fixtures for capability preflight and warning behavior. `finished`
 
 ## Epic E5 (P1): Safe WorkspaceEdit Expansion
 Status: `planned`
