@@ -114,6 +114,7 @@ COMPLETE_SCRIPT = REPO_ROOT / "scripts" / "command_completion_command.py"
 CLAIMS_SCRIPT = REPO_ROOT / "scripts" / "claims_command.py"
 WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "workflow_command.py"
 DAEMON_SCRIPT = REPO_ROOT / "scripts" / "daemon_command.py"
+DELIVERY_SCRIPT = REPO_ROOT / "scripts" / "delivery_command.py"
 AGENT_POOL_SCRIPT = REPO_ROOT / "scripts" / "agent_pool_command.py"
 MEMORY_LIFECYCLE_SCRIPT = REPO_ROOT / "scripts" / "memory_lifecycle_command.py"
 HOOK_LEARNING_SCRIPT = REPO_ROOT / "scripts" / "hook_learning_command.py"
@@ -1774,6 +1775,175 @@ exit 0
             "workflow execute should respect dependency ordering",
         )
 
+        wf_retry_path = tmp / "wf-selftest-retry.json"
+        wf_retry_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-retry",
+                    "steps": [
+                        {
+                            "id": "unstable",
+                            "action": "check",
+                            "simulate": "fail-once",
+                            "retry": 1,
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_retry_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow retry run failed: {result.stderr}")
+        wf_retry_payload = parse_json_output(result.stdout)
+        unstable = (wf_retry_payload.get("steps") or [{}])[0]
+        expect(
+            unstable.get("status") == "passed" and unstable.get("attempts") == 2,
+            "workflow retry should recover fail-once step on second attempt",
+        )
+
+        wf_when_path = tmp / "wf-selftest-when.json"
+        wf_when_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-when",
+                    "steps": [
+                        {"id": "fail-step", "action": "fail"},
+                        {
+                            "id": "cleanup",
+                            "action": "run-cleanup",
+                            "when": "on_failure",
+                        },
+                        {
+                            "id": "post-success",
+                            "action": "run-post",
+                            "when": "on_success",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_when_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow when run failed: {result.stderr}")
+        wf_when_payload = parse_json_output(result.stdout)
+        step_map = {
+            str(step.get("id") or ""): step
+            for step in (wf_when_payload.get("steps") or [])
+            if isinstance(step, dict)
+        }
+        expect(
+            step_map.get("cleanup", {}).get("status") == "passed"
+            and step_map.get("post-success", {}).get("status") == "skipped",
+            "workflow when should run on_failure step and skip on_success after failure",
+        )
+
+        wf_resume_path = tmp / "wf-selftest-resume.json"
+        wf_resume_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-resume",
+                    "steps": [
+                        {"id": "blocking", "action": "fail"},
+                        {"id": "after", "action": "run-after", "when": "on_success"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_resume_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow initial fail run failed: {result.stderr}"
+        )
+        wf_fail_payload = parse_json_output(result.stdout)
+        expect(
+            wf_fail_payload.get("status") == "failed",
+            "workflow resume setup run should fail first",
+        )
+        wf_resume_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-resume",
+                    "steps": [
+                        {"id": "blocking", "action": "run-fixed"},
+                        {"id": "after", "action": "run-after", "when": "on_success"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "resume",
+                "--run-id",
+                str(wf_fail_payload.get("run_id") or ""),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow resume failed: {result.stderr}")
+        wf_resume_payload = parse_json_output(result.stdout)
+        expect(
+            wf_resume_payload.get("status") == "completed"
+            and wf_resume_payload.get("resumed_from") == wf_fail_payload.get("run_id"),
+            "workflow resume should continue from failed run context",
+        )
+
         result = subprocess.run(
             [sys.executable, str(DAEMON_SCRIPT), "start", "--json"],
             capture_output=True,
@@ -1866,6 +2036,81 @@ exit 0
             "issue-202"
             in daemon_tick_payload.get("last_tick_summary", {}).get("updated", []),
             "daemon tick should apply stale claims expiration",
+        )
+
+        wf_delivery_path = tmp / "wf-delivery.json"
+        wf_delivery_path.write_text(
+            json.dumps(
+                {
+                    "name": "delivery-workflow",
+                    "steps": [
+                        {
+                            "id": "verify-claims",
+                            "action": "run-check",
+                            "command": [
+                                "python3",
+                                "scripts/claims_command.py",
+                                "doctor",
+                                "--json",
+                            ],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "start",
+                "--issue",
+                "issue-303",
+                "--role",
+                "coder",
+                "--workflow",
+                str(wf_delivery_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery start failed: {result.stderr}")
+        delivery_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_payload.get("status") == "completed"
+            and delivery_payload.get("final_step") == "release",
+            "delivery start should complete workflow and release claim",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "status",
+                "--id",
+                "issue-303",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"claims status issue-303 failed: {result.stderr}"
+        )
+        issue_303 = parse_json_output(result.stdout)
+        expect(
+            issue_303.get("status") == "completed",
+            "delivery flow should leave claimed issue in completed status",
         )
 
         memory_export = tmp / "memory-export.json"
@@ -7758,6 +8003,16 @@ version: 1
         ]
         expect(bool(daemon_checks), "doctor summary should include daemon check")
         expect(daemon_checks[0].get("ok") is True, "doctor daemon check should pass")
+
+        delivery_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "delivery"
+        ]
+        expect(bool(delivery_checks), "doctor summary should include delivery check")
+        expect(
+            delivery_checks[0].get("ok") is True, "doctor delivery check should pass"
+        )
 
         agent_pool_checks = [
             check
