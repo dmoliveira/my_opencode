@@ -54,6 +54,10 @@
       "description": "Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
     },
+    "changes": {
+      "description": "Explain local change narrative for handoff/release notes (explain)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/changes_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "workflow": {
       "description": "Run reusable workflow templates (run|validate|list|status|resume|stop|template|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."

@@ -148,6 +148,7 @@ AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "review_command.py"
+CHANGES_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "changes_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
@@ -3332,6 +3333,55 @@ index 3333333..4444444 100644
             review_doctor_payload.get("result") == "PASS"
             and review_doctor_payload.get("analyzer_exists") is True,
             "review doctor should report analyzer readiness",
+        )
+
+        changes_explain_diff = tmp / "changes_explain.diff"
+        changes_explain_diff.write_text(
+            """diff --git a/opencode.json b/opencode.json
+index 1111111..2222222 100644
+--- a/opencode.json
++++ b/opencode.json
+@@ -1,3 +1,6 @@
++  \"command\": {
++    \"changes\": {
++      \"description\": \"example\"
++    }
++  }
+diff --git a/docs/command-handbook.md b/docs/command-handbook.md
+index 3333333..4444444 100644
+--- a/docs/command-handbook.md
++++ b/docs/command-handbook.md
+@@ -1,0 +1,1 @@
++/changes - Explain local change narrative
+""",
+            encoding="utf-8",
+        )
+        changes_explain_report = subprocess.run(
+            [
+                sys.executable,
+                str(CHANGES_COMMAND_SCRIPT),
+                "explain",
+                "--diff-file",
+                str(changes_explain_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            changes_explain_report.returncode == 0,
+            "changes explain should succeed for synthetic diff file",
+        )
+        changes_explain_payload = parse_json_output(changes_explain_report.stdout)
+        expect(
+            changes_explain_payload.get("result") == "PASS"
+            and isinstance(changes_explain_payload.get("why"), list)
+            and isinstance(changes_explain_payload.get("risk"), list)
+            and isinstance(changes_explain_payload.get("verify"), list),
+            "changes explain should emit why/risk/verify narrative sections",
         )
 
         analyzer_docs_only_diff = tmp / "pr_review_docs_only.diff"
