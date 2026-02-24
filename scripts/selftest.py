@@ -3347,6 +3347,37 @@ index 3333333..4444444 100644
             "review apply-checklist should emit deterministic markdown checklist",
         )
 
+        review_checklist_path = tmp / "review_checklist.md"
+        review_checklist_write = subprocess.run(
+            [
+                sys.executable,
+                str(REVIEW_COMMAND_SCRIPT),
+                "apply-checklist",
+                "--diff-file",
+                str(analyzer_missing_evidence_diff),
+                "--write",
+                str(review_checklist_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            review_checklist_write.returncode == 0,
+            "review apply-checklist should support writing checklist artifact",
+        )
+        review_checklist_write_payload = parse_json_output(
+            review_checklist_write.stdout
+        )
+        expect(
+            isinstance(review_checklist_write_payload.get("written_path"), str)
+            and review_checklist_path.exists(),
+            "review apply-checklist should report and write checklist path",
+        )
+
         review_doctor_report = subprocess.run(
             [sys.executable, str(REVIEW_COMMAND_SCRIPT), "doctor", "--json"],
             capture_output=True,
@@ -3725,6 +3756,35 @@ index 3333333..4444444 100644
                 str,
             ),
             "ship command should emit deterministic PR template scaffolding",
+        )
+
+        ship_create_pr_preview = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "create-pr",
+                "--version",
+                "0.0.1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_create_pr_preview.returncode == 1,
+            "ship create-pr should require explicit confirmation",
+        )
+        ship_create_pr_preview_payload = parse_json_output(
+            ship_create_pr_preview.stdout
+        )
+        expect(
+            ship_create_pr_preview_payload.get("reason_code")
+            in {"confirmation_required", "ship_prepare_blocked"}
+            and isinstance(ship_create_pr_preview_payload.get("pr_template"), dict),
+            "ship create-pr preview should emit confirmation gate and template",
         )
 
         release_repo = tmp / "release_repo"
@@ -4146,6 +4206,30 @@ index 3333333..4444444 100644
             isinstance(hotfix_command_remind_payload.get("reminders"), list)
             and len(hotfix_command_remind_payload.get("reminders", [])) >= 2,
             "hotfix command remind should emit reminder list",
+        )
+
+        hotfix_command_postmortem = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "postmortem", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_postmortem.returncode == 0,
+            "hotfix command postmortem should return template output",
+        )
+        hotfix_command_postmortem_payload = parse_json_output(
+            hotfix_command_postmortem.stdout
+        )
+        expect(
+            hotfix_command_postmortem_payload.get("reason_code")
+            == "hotfix_postmortem_template"
+            and isinstance(
+                hotfix_command_postmortem_payload.get("template_markdown"), str
+            ),
+            "hotfix command postmortem should emit deterministic template markdown",
         )
 
         hotfix_command_doctor = subprocess.run(
@@ -8958,6 +9042,26 @@ version: 1
         expect(
             auto_slash_checks[0].get("ok") is True,
             "doctor auto-slash check should pass",
+        )
+
+        doctor_reason_codes = subprocess.run(
+            [sys.executable, str(DOCTOR_SCRIPT), "reason-codes", "--json"],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            doctor_reason_codes.returncode == 0,
+            "doctor reason-codes should succeed",
+        )
+        doctor_reason_codes_payload = parse_json_output(doctor_reason_codes.stdout)
+        expect(
+            doctor_reason_codes_payload.get("result") == "PASS"
+            and int(doctor_reason_codes_payload.get("total_codes", 0) or 0) > 0
+            and isinstance(doctor_reason_codes_payload.get("registry"), dict),
+            "doctor reason-codes should export non-empty reason-code registry",
         )
 
         rules_checks = [

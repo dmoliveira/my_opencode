@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import importlib
 import json
 import os
 import subprocess
@@ -474,8 +475,54 @@ CHECKS = [
 
 
 def usage() -> int:
-    print("usage: /doctor status | /doctor help | /doctor run [--json]")
+    print(
+        "usage: /doctor status | /doctor help | /doctor run [--json] | /doctor reason-codes [--json]"
+    )
     return 2
+
+
+def _module_reason_codes(module_name: str) -> dict[str, str]:
+    module = importlib.import_module(module_name)
+    codes: dict[str, str] = {}
+    for name in dir(module):
+        if not name.isupper():
+            continue
+        value = getattr(module, name)
+        if isinstance(value, str):
+            codes[name] = value
+    return codes
+
+
+def command_reason_codes(argv: list[str]) -> int:
+    json_output = "--json" in argv
+    if any(arg not in ("--json",) for arg in argv):
+        return usage()
+
+    modules = ["flow_reason_codes", "gateway_reason_codes"]
+    registry: dict[str, dict[str, str]] = {}
+    problems: list[str] = []
+    for module_name in modules:
+        try:
+            registry[module_name] = _module_reason_codes(module_name)
+        except Exception as exc:
+            problems.append(f"{module_name}: {exc}")
+            registry[module_name] = {}
+
+    payload = {
+        "result": "PASS" if not problems else "FAIL",
+        "module_count": len(modules),
+        "total_codes": sum(len(values) for values in registry.values()),
+        "registry": registry,
+        "problems": problems,
+    }
+    if json_output:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"result: {payload['result']}")
+        print(f"total_codes: {payload['total_codes']}")
+        for module_name, values in registry.items():
+            print(f"- {module_name}: {len(values)}")
+    return 0 if payload["result"] == "PASS" else 1
 
 
 def run_check(entry: dict) -> dict:
@@ -586,6 +633,8 @@ def main(argv: list[str]) -> int:
         return usage()
     if argv[0] == "run":
         return command_run(argv[1:])
+    if argv[0] == "reason-codes":
+        return command_reason_codes(argv[1:])
     return usage()
 
 
