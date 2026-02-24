@@ -8,10 +8,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from flow_reason_codes import DIFF_FILE_NOT_FOUND, GIT_DIFF_FAILED  # type: ignore
+
 
 def usage() -> int:
     print(
-        "usage: /changes explain [--base <ref>] [--head <ref>] [--diff-file <path>] [--json]"
+        "usage: /changes explain [--base <ref>] [--head <ref>] [--since <tag>] [--diff-file <path>] [--json]"
     )
     return 2
 
@@ -107,6 +109,7 @@ def command_explain(args: list[str]) -> int:
     as_json = "--json" in args
     base_ref = "main"
     head_ref = "HEAD"
+    since_tag = ""
     diff_file: Path | None = None
 
     index = 0
@@ -123,6 +126,10 @@ def command_explain(args: list[str]) -> int:
             head_ref = args[index + 1].strip()
             index += 2
             continue
+        if token == "--since" and index + 1 < len(args):
+            since_tag = args[index + 1].strip()
+            index += 2
+            continue
         if token == "--diff-file" and index + 1 < len(args):
             diff_file = Path(args[index + 1]).expanduser()
             index += 2
@@ -133,18 +140,21 @@ def command_explain(args: list[str]) -> int:
         if not diff_file.exists():
             payload = {
                 "result": "FAIL",
-                "reason_code": "diff_file_not_found",
+                "reason_code": DIFF_FILE_NOT_FOUND,
                 "path": str(diff_file),
             }
             print(json.dumps(payload, indent=2) if as_json else payload["reason_code"])
             return 1
         diff_text = diff_file.read_text(encoding="utf-8", errors="replace")
     else:
+        if since_tag:
+            base_ref = since_tag
+            head_ref = "HEAD"
         code, out, err = _run_git(["diff", f"{base_ref}...{head_ref}"])
         if code != 0:
             payload = {
                 "result": "FAIL",
-                "reason_code": "git_diff_failed",
+                "reason_code": GIT_DIFF_FAILED,
                 "detail": err.strip() or "unable to build diff",
             }
             print(json.dumps(payload, indent=2) if as_json else payload["reason_code"])

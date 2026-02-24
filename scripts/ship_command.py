@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from flow_reason_codes import SHIP_PREPARE_BLOCKED, SHIP_READY  # type: ignore
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RELEASE_TRAIN_SCRIPT = SCRIPT_DIR / "release_train_command.py"
@@ -15,7 +17,7 @@ RELEASE_TRAIN_SCRIPT = SCRIPT_DIR / "release_train_command.py"
 
 def usage() -> int:
     print(
-        "usage: /ship --version <x.y.z> [--allow-version-jump] [--breaking-change] [--json]"
+        "usage: /ship --version <x.y.z> [--allow-version-jump] [--breaking-change] [--emit-pr-template] [--json]"
     )
     return 2
 
@@ -48,6 +50,7 @@ def main(argv: list[str]) -> int:
         return 2
     allow_jump = _pop_flag(args, "--allow-version-jump")
     breaking = _pop_flag(args, "--breaking-change")
+    emit_pr_template = _pop_flag(args, "--emit-pr-template")
 
     if args or not version:
         return usage()
@@ -86,7 +89,7 @@ def main(argv: list[str]) -> int:
     ready = bool(prepare_payload.get("ready"))
     payload: dict[str, Any] = {
         "result": "PASS" if ready else "FAIL",
-        "reason_code": "ship_ready" if ready else "ship_prepare_blocked",
+        "reason_code": SHIP_READY if ready else SHIP_PREPARE_BLOCKED,
         "version": version,
         "prepare": prepare_payload,
         "required_evidence": [
@@ -103,6 +106,28 @@ def main(argv: list[str]) -> int:
         if ready
         else ["fix prepare blockers then re-run /ship --version <x.y.z> --json"],
     }
+    if emit_pr_template:
+        payload["pr_template"] = {
+            "title": f"ship {version}",
+            "body_markdown": "\n".join(
+                [
+                    "## Summary",
+                    "- <1-3 bullets on why this release is shipping>",
+                    "",
+                    "## Risk",
+                    "- <known risk or 'none'>",
+                    "",
+                    "## Validation Evidence",
+                    "- make validate",
+                    "- make selftest",
+                    "- make install-test",
+                    "- pre-commit run --all-files",
+                    "",
+                    "## Migration Notes",
+                    "- <operator migration notes or 'none'>",
+                ]
+            ),
+        }
 
     if as_json:
         print(json.dumps(payload, indent=2))
@@ -110,6 +135,8 @@ def main(argv: list[str]) -> int:
         print(f"result: {payload['result']}")
         print(f"reason_code: {payload['reason_code']}")
         print(f"version: {payload['version']}")
+        if emit_pr_template:
+            print("pr_template: enabled")
         print("next_actions:")
         for action in payload["next_actions"]:
             print(f"- {action}")

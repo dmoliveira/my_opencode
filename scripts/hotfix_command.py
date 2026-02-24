@@ -22,7 +22,7 @@ def usage() -> int:
     print(
         "usage: /hotfix [start|status|close|remind|doctor] [args] [--json] | "
         "/hotfix start --incident-id <id> --scope <patch|rollback|config_only> --impact <sev1|sev2|sev3> [--json] | "
-        "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> [--json]"
+        "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json]"
     )
     return 2
 
