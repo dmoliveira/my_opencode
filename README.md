@@ -100,7 +100,7 @@ Quickstart commands:
 /gateway status
 ```
 
-Use `/complete <prefix>` for command discovery and `docs/command-handbook.md` for complete examples.
+Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, and `docs/operator-playbook.md` for canonical operator flows.
 
 ## Repo layout 📦
 
