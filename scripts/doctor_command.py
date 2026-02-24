@@ -255,6 +255,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "governance",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("governance_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("governance_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "workflow",
         "kind": "doctor-json",
         "optional": True,

@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from governance_policy import check_operation  # type: ignore
+
 
 DEFAULT_POOL_PATH = Path(
     os.environ.get(
@@ -25,7 +27,7 @@ def now_iso() -> str:
 def usage() -> int:
     print(
         "usage: /agent-pool spawn --type <role> [--count <n>] [--json] | "
-        "/agent-pool list [--json] | /agent-pool health [--json] | /agent-pool drain --id <agent_id> [--json] | "
+        "/agent-pool list [--json] | /agent-pool health [--json] | /agent-pool drain --id <agent_id> [--override] [--json] | "
         "/agent-pool logs [--limit <n>] [--json] | /agent-pool doctor [--json]"
     )
     return 2
@@ -152,7 +154,20 @@ def cmd_health(argv: list[str]) -> int:
 
 def cmd_drain(argv: list[str]) -> int:
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    override_flag = "--override" in argv
+    argv = [a for a in argv if a not in {"--json", "--override"}]
+    guard = check_operation("agent-pool.drain", override_flag=override_flag)
+    if not bool(guard.get("allowed")):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "drain",
+                "error": "operation blocked by governance policy",
+                "reason_code": guard.get("reason_code"),
+                "governance": guard,
+            },
+            as_json,
+        )
     try:
         agent_id = parse_flag_value(argv, "--id")
     except ValueError:
