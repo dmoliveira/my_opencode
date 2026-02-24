@@ -267,6 +267,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "delivery",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("delivery_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("delivery_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "agent-pool",
         "kind": "doctor-json",
         "optional": True,

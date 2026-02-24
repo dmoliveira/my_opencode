@@ -163,9 +163,15 @@ Use these directly in OpenCode:
 /workflow run --file workflows/ship.json --json
 /workflow run --file workflows/ship.json --execute --json
 /workflow status --json
+/workflow resume --run-id wf-20260224091500 --execute --json
 /workflow stop --reason "manual intervention" --json
 
 /daemon tick --claims-hours 24 --json
+
+/delivery start --issue issue-900 --role coder --workflow workflows/ship.json --execute --json
+/delivery status --json
+/delivery handoff --issue issue-900 --to human:alex --json
+/delivery close --issue issue-900 --json
 ```
 
 
@@ -298,6 +304,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /complete - Suggest slash commands by prefix (autocomplete helper)
 /config - Backup and restore OpenCode config files
 /daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
+/delivery - Run unified delivery transactions (start|status|handoff|close|doctor)
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run all diagnostics in one pass
@@ -325,5 +332,5 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)
-/workflow - Run reusable workflow templates (run|validate|list|status|stop|template|doctor)
+/workflow - Run reusable workflow templates (run|validate|list|status|resume|stop|template|doctor)
 ```
