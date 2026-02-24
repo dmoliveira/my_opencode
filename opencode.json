@@ -51,7 +51,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "daemon": {
-      "description": "Manage observability daemon controls (start|stop|status|summary|doctor)",
+      "description": "Manage observability daemon controls (start|stop|status|tick|summary|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/daemon_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "agent-pool": {

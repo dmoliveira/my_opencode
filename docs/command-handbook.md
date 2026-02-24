@@ -153,6 +153,7 @@ Use these directly in OpenCode:
 
 ```text
 /claims claim issue-101 --by agent:orchestrator --json
+/claims claim issue-202 --role coder --json
 /claims handoff issue-101 --to human:alex --json
 /claims accept-handoff issue-101 --json
 /claims reject-handoff issue-101 --reason "needs context" --json
@@ -160,12 +161,16 @@ Use these directly in OpenCode:
 
 /workflow validate --file workflows/ship.json --json
 /workflow run --file workflows/ship.json --json
+/workflow run --file workflows/ship.json --execute --json
 /workflow status --json
 /workflow stop --reason "manual intervention" --json
+
+/daemon tick --claims-hours 24 --json
 ```
 
 
-`/workflow run` now records per-step execution results (status, timestamps, failure reason codes) in workflow history.
+`/claims claim --role <role>` auto-assigns the least-loaded active agent from `/agent-pool` for that role.
+`/workflow run` now supports dependency-aware step ordering (`depends_on`) and records per-step execution results (status, timestamps, failure reason codes). Use `--execute` to run guarded command steps.
 
 ## Post-session hook inside OpenCode ✅
 
@@ -292,7 +297,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /checkpoint - Inspect checkpoint snapshots (list|show|prune|doctor)
 /complete - Suggest slash commands by prefix (autocomplete helper)
 /config - Backup and restore OpenCode config files
-/daemon - Manage observability daemon controls (start|stop|status|summary|doctor)
+/daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run all diagnostics in one pass
