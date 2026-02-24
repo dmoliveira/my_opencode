@@ -147,6 +147,7 @@ BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
+REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "review_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
@@ -3279,6 +3280,58 @@ index 3333333..4444444 100644
             pr_review_doctor_payload.get("result") == "PASS"
             and pr_review_doctor_payload.get("analyzer_exists") is True,
             "pr-review doctor should confirm analyzer readiness",
+        )
+
+        review_local_report = subprocess.run(
+            [
+                sys.executable,
+                str(REVIEW_COMMAND_SCRIPT),
+                "local",
+                "--diff-file",
+                str(analyzer_missing_evidence_diff),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            review_local_report.returncode == 0,
+            "review local should succeed for synthetic diff analysis",
+        )
+        review_local_payload = parse_json_output(review_local_report.stdout)
+        review_sections = review_local_payload.get("sections", {})
+        expect(
+            isinstance(review_sections, dict)
+            and isinstance(review_sections.get("correctness"), dict)
+            and isinstance(review_sections.get("risk"), dict)
+            and isinstance(review_sections.get("tests"), dict)
+            and isinstance(review_sections.get("docs"), dict)
+            and isinstance(review_sections.get("migration"), dict),
+            "review local should emit structured section diagnostics",
+        )
+        expect(
+            isinstance(review_local_payload.get("remediation_hints"), list)
+            and bool(review_local_payload.get("remediation_hints")),
+            "review local should emit deterministic remediation hints",
+        )
+
+        review_doctor_report = subprocess.run(
+            [sys.executable, str(REVIEW_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(review_doctor_report.returncode == 0, "review doctor should succeed")
+        review_doctor_payload = parse_json_output(review_doctor_report.stdout)
+        expect(
+            review_doctor_payload.get("result") == "PASS"
+            and review_doctor_payload.get("analyzer_exists") is True,
+            "review doctor should report analyzer readiness",
         )
 
         analyzer_docs_only_diff = tmp / "pr_review_docs_only.diff"
