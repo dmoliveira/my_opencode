@@ -116,6 +116,7 @@ WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "workflow_command.py"
 DAEMON_SCRIPT = REPO_ROOT / "scripts" / "daemon_command.py"
 DELIVERY_SCRIPT = REPO_ROOT / "scripts" / "delivery_command.py"
 AUDIT_SCRIPT = REPO_ROOT / "scripts" / "audit_command.py"
+GOVERNANCE_SCRIPT = REPO_ROOT / "scripts" / "governance_command.py"
 AGENT_POOL_SCRIPT = REPO_ROOT / "scripts" / "agent_pool_command.py"
 MEMORY_LIFECYCLE_SCRIPT = REPO_ROOT / "scripts" / "memory_lifecycle_command.py"
 HOOK_LEARNING_SCRIPT = REPO_ROOT / "scripts" / "hook_learning_command.py"
@@ -1774,6 +1775,97 @@ exit 0
             wf_exec_payload.get("execution_mode") == "execute"
             and wf_exec_payload.get("ordered_step_ids") == ["prep", "verify"],
             "workflow execute should respect dependency ordering",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(GOVERNANCE_SCRIPT), "profile", "strict", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"governance strict profile failed: {result.stderr}"
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_exec_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow execute should be blocked in strict governance without authorization",
+        )
+        wf_blocked_payload = parse_json_output(result.stdout)
+        expect(
+            wf_blocked_payload.get("reason_code")
+            == "governance_strict_requires_authorize",
+            "workflow execute block should expose strict governance reason code",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(GOVERNANCE_SCRIPT),
+                "authorize",
+                "workflow.execute",
+                "--ttl-minutes",
+                "30",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"governance authorize failed: {result.stderr}")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_exec_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            "workflow execute should pass after governance authorization",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(GOVERNANCE_SCRIPT), "profile", "balanced", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"governance profile balanced failed: {result.stderr}",
         )
 
         wf_retry_path = tmp / "wf-selftest-retry.json"
@@ -8027,6 +8119,20 @@ version: 1
         ]
         expect(bool(audit_checks), "doctor summary should include audit check")
         expect(audit_checks[0].get("ok") is True, "doctor audit check should pass")
+
+        governance_checks = [
+            check
+            for check in report.get("checks", [])
+            if check.get("name") == "governance"
+        ]
+        expect(
+            bool(governance_checks),
+            "doctor summary should include governance check",
+        )
+        expect(
+            governance_checks[0].get("ok") is True,
+            "doctor governance check should pass",
+        )
 
         workflow_checks = [
             check
