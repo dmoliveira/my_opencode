@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime_audit import append_event  # type: ignore
+from governance_policy import check_operation  # type: ignore
 
 
 DEFAULT_STATE_PATH = Path(
@@ -35,8 +36,8 @@ def now_iso() -> str:
 
 def usage() -> int:
     print(
-        "usage: /workflow run --file <path> [--execute] [--json] | /workflow validate --file <path> [--json] | "
-        "/workflow list [--json] | /workflow status [--json] | /workflow resume --run-id <id> [--execute] [--json] | "
+        "usage: /workflow run --file <path> [--execute] [--override] [--json] | /workflow validate --file <path> [--json] | "
+        "/workflow list [--json] | /workflow status [--json] | /workflow resume --run-id <id> [--execute] [--override] [--json] | "
         "/workflow stop [--reason <text>] [--json] | /workflow template list [--json] | /workflow template init <name> [--json] | /workflow doctor [--json]"
     )
     return 2
@@ -424,13 +425,28 @@ def cmd_validate(argv: list[str]) -> int:
 def cmd_run(argv: list[str]) -> int:
     as_json = "--json" in argv
     execute_commands = "--execute" in argv
-    argv = [a for a in argv if a not in {"--json", "--execute"}]
+    override_flag = "--override" in argv
+    argv = [a for a in argv if a not in {"--json", "--execute", "--override"}]
     try:
         file_arg = parse_flag_value(argv, "--file")
     except ValueError:
         return usage()
     if not file_arg:
         return usage()
+
+    if execute_commands:
+        guard = check_operation("workflow.execute", override_flag=override_flag)
+        if not bool(guard.get("allowed")):
+            return emit(
+                {
+                    "result": "FAIL",
+                    "command": "run",
+                    "error": "operation blocked by governance policy",
+                    "reason_code": guard.get("reason_code"),
+                    "governance": guard,
+                },
+                as_json,
+            )
 
     workflow_path = Path(file_arg).expanduser()
     workflow, issues = load_workflow_file(workflow_path)
@@ -507,13 +523,28 @@ def cmd_run(argv: list[str]) -> int:
 def cmd_resume(argv: list[str]) -> int:
     as_json = "--json" in argv
     execute_commands = "--execute" in argv
-    argv = [a for a in argv if a not in {"--json", "--execute"}]
+    override_flag = "--override" in argv
+    argv = [a for a in argv if a not in {"--json", "--execute", "--override"}]
     try:
         run_id = parse_flag_value(argv, "--run-id")
     except ValueError:
         return usage()
     if not run_id:
         return usage()
+
+    if execute_commands:
+        guard = check_operation("workflow.resume_execute", override_flag=override_flag)
+        if not bool(guard.get("allowed")):
+            return emit(
+                {
+                    "result": "FAIL",
+                    "command": "resume",
+                    "error": "operation blocked by governance policy",
+                    "reason_code": guard.get("reason_code"),
+                    "governance": guard,
+                },
+                as_json,
+            )
 
     state = load_json_file(DEFAULT_STATE_PATH)
     history = history_list(state)

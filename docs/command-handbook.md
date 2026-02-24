@@ -176,6 +176,10 @@ Use these directly in OpenCode:
 /audit status --json
 /audit list --limit 20 --json
 /audit export --path ./runtime-audit-export.json --json
+
+/governance profile strict --json
+/governance authorize workflow.execute --ttl-minutes 30 --json
+/governance status --json
 ```
 
 
@@ -314,6 +318,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /digest - Generate or show session digests (run|show)
 /doctor - Run all diagnostics in one pass
 /gateway - Manage plugin gateway mode (status|enable|disable|doctor)
+/governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
 /health - Show repo health score and drift insights
 /hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
 /hooks - Manage safety hooks (status|help|enable|disable|run)

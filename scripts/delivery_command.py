@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime_audit import append_event  # type: ignore
+from governance_policy import check_operation  # type: ignore
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -31,9 +32,9 @@ def now_iso() -> str:
 
 def usage() -> int:
     print(
-        "usage: /delivery start --issue <id> --workflow <file> [--role <role>|--by <owner>] [--execute] [--handoff-to <owner>] [--json] | "
+        "usage: /delivery start --issue <id> --workflow <file> [--role <role>|--by <owner>] [--execute] [--override] [--handoff-to <owner>] [--json] | "
         "/delivery status [--id <run_id>] [--json] | /delivery handoff --issue <id> --to <owner> [--json] | "
-        "/delivery close --issue <id> [--json] | /delivery doctor [--json]"
+        "/delivery close --issue <id> [--override] [--json] | /delivery doctor [--json]"
     )
     return 2
 
@@ -99,7 +100,8 @@ def emit(payload: dict[str, Any], as_json: bool) -> int:
 def cmd_start(argv: list[str]) -> int:
     as_json = "--json" in argv
     execute = "--execute" in argv
-    argv = [a for a in argv if a not in {"--json", "--execute"}]
+    override_flag = "--override" in argv
+    argv = [a for a in argv if a not in {"--json", "--execute", "--override"}]
 
     try:
         issue_id = parse_flag_value(argv, "--issue")
@@ -112,6 +114,20 @@ def cmd_start(argv: list[str]) -> int:
 
     if not issue_id or not workflow_file:
         return usage()
+
+    if execute:
+        guard = check_operation("delivery.execute", override_flag=override_flag)
+        if not bool(guard.get("allowed")):
+            return emit(
+                {
+                    "result": "FAIL",
+                    "command": "start",
+                    "error": "operation blocked by governance policy",
+                    "reason_code": guard.get("reason_code"),
+                    "governance": guard,
+                },
+                as_json,
+            )
 
     claim_cmd = [sys.executable, str(CLAIMS_SCRIPT), "claim", issue_id]
     if role:
@@ -315,13 +331,26 @@ def cmd_handoff(argv: list[str]) -> int:
 
 def cmd_close(argv: list[str]) -> int:
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    override_flag = "--override" in argv
+    argv = [a for a in argv if a not in {"--json", "--override"}]
     try:
         issue_id = parse_flag_value(argv, "--issue")
     except ValueError:
         return usage()
     if not issue_id:
         return usage()
+    guard = check_operation("delivery.close", override_flag=override_flag)
+    if not bool(guard.get("allowed")):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "close",
+                "error": "operation blocked by governance policy",
+                "reason_code": guard.get("reason_code"),
+                "governance": guard,
+            },
+            as_json,
+        )
     code, payload = run_json(
         [sys.executable, str(CLAIMS_SCRIPT), "release", issue_id, "--json"]
     )
