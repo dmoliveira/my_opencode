@@ -47,6 +47,10 @@ def _run_id(runtime: dict[str, Any]) -> str:
     return f"{plan_id}-{stamp}"
 
 
+def runtime_run_id(runtime: dict[str, Any]) -> str:
+    return _run_id(runtime)
+
+
 def _snapshot_paths(
     config_write_path: Path, run_id: str, snapshot_id: str
 ) -> dict[str, Path]:
@@ -108,6 +112,7 @@ def build_snapshot(
             "policy_profile": "default",
         },
         "command_outcomes": command_outcomes or [],
+        "runtime_state": runtime,
     }
 
     steps_any = runtime.get("steps")
@@ -128,6 +133,15 @@ def build_snapshot(
         "checksum_sha256": checksum,
     }
     return snapshot_core
+
+
+def restore_runtime_from_snapshot(
+    snapshot_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    runtime_any = snapshot_payload.get("runtime_state")
+    if not isinstance(runtime_any, dict):
+        return None
+    return runtime_any
 
 
 def write_snapshot(

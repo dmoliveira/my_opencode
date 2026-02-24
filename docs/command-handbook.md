@@ -310,7 +310,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /browser - Manage browser automation provider profile (status|profile|doctor)
 /budget - Manage execution budget controls (status|profile|override|doctor)
 /claims - Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)
-/checkpoint - Inspect checkpoint snapshots (list|show|prune|doctor)
+/checkpoint - Manage checkpoint snapshots and runtime rollback (create|restore|list|show|prune|doctor)
 /complete - Suggest slash commands by prefix (autocomplete helper)
 /config - Backup and restore OpenCode config files
 /daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
