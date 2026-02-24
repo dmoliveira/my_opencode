@@ -60,14 +60,14 @@ Tasks:
 4. Add helper tests for policy edge cases (existing target, missing source, out-of-root paths). `finished`
 
 ## Epic E6 (P2): Diagnostics and Code Actions Surface
-Status: `planned`
+Status: `finished`
 Value: Medium-High
 
 Tasks:
-1. Add `/lsp diagnostics --scope <glob[,glob...]>` with structured severity/count output. `planned`
-2. Add `/lsp code-actions --symbol <name>|--file <path>` dry-run listing with stable JSON schema. `planned`
-3. Add guarded apply path for safe code-action edits with the same validation model used by rename. `planned`
-4. Document command contracts and add selftest coverage for diagnostics/action payload parsing. `planned`
+1. Add `/lsp diagnostics --scope <glob[,glob...]>` with structured severity/count output. `finished`
+2. Add `/lsp code-actions --symbol <name>|--file <path>` dry-run listing with stable JSON schema. `finished`
+3. Add guarded apply path for safe code-action edits with the same validation model used by rename. `finished`
+4. Document command contracts and add selftest coverage for diagnostics/action payload parsing. `finished`
 
 ## Execution Order
 1. E1

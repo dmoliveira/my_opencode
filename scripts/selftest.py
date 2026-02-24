@@ -54,7 +54,12 @@ from safe_edit_adapters import (  # type: ignore
 )
 from lsp_command import (  # type: ignore
     _capability_matrix,
+    _code_action_summary,
     _command_warnings,
+    _diagnostic_summary,
+    _normalize_code_actions,
+    _normalize_protocol_diagnostics,
+    _parse_code_actions_args,
     _preflight_server_capability,
     _resource_operation_policy_blockers,
     _validate_renamefile_operations,
@@ -4444,6 +4449,142 @@ index 3333333..4444444 100644
             and "createfile operations are not supported for apply" in policy_blockers
             and "deletefile operations are not supported for apply" in policy_blockers,
             "lsp rename policy should require explicit opt-in and keep create/delete apply blocked",
+        )
+
+        lsp_diag_path = lsp_ops_root / "diagnostics.py"
+        lsp_diag_path.write_text("print('diagnostics')\n", encoding="utf-8")
+        normalized_diagnostics = _normalize_protocol_diagnostics(
+            [
+                {
+                    "range": {"start": {"line": 1, "character": 4}},
+                    "severity": 1,
+                    "message": "hard failure",
+                    "code": "E100",
+                    "source": "pyright",
+                },
+                {
+                    "range": {"start": {"line": 2, "character": 1}},
+                    "severity": 2,
+                    "message": "be careful",
+                    "code": "W200",
+                    "source": "ruff",
+                },
+            ],
+            lsp_diag_path,
+            lsp_ops_root,
+        )
+        expect(
+            len(normalized_diagnostics) == 2
+            and normalized_diagnostics[0].get("path") == "diagnostics.py"
+            and normalized_diagnostics[0].get("line") == 2
+            and normalized_diagnostics[0].get("severity") == "error"
+            and normalized_diagnostics[1].get("severity") == "warning",
+            "lsp diagnostics normalization should preserve path/position and severity mapping",
+        )
+
+        diagnostic_summary = _diagnostic_summary(
+            normalized_diagnostics, scanned_files=5
+        )
+        expect(
+            int(diagnostic_summary.get("total", 0)) == 2
+            and int(diagnostic_summary.get("scanned_files", 0)) == 5
+            and int(diagnostic_summary.get("files_with_diagnostics", 0)) == 1,
+            "lsp diagnostics summary should expose total/scanned/files_with_diagnostics counts",
+        )
+        expect(
+            diagnostic_summary.get("severity", {}).get("error") == 1
+            and diagnostic_summary.get("severity", {}).get("warning") == 1,
+            "lsp diagnostics summary should include deterministic severity counts",
+        )
+        expect(
+            diagnostic_summary.get("sources", {}).get("pyright") == 1
+            and diagnostic_summary.get("sources", {}).get("ruff") == 1
+            and diagnostic_summary.get("top_codes", [{}])[0].get("code")
+            in {"E100", "W200"},
+            "lsp diagnostics summary should report source counts and top diagnostic codes",
+        )
+
+        code_actions_file_args = _parse_code_actions_args(
+            ["--file", "scripts/selftest.py", "--kind", "quickfix", "--json"]
+        )
+        expect(
+            code_actions_file_args
+            == (
+                "scripts/selftest.py",
+                "",
+                [],
+                "quickfix",
+                0,
+                False,
+                True,
+            ),
+            "lsp code-actions parser should support file-targeted dry-run args",
+        )
+
+        code_actions_symbol_args = _parse_code_actions_args(
+            [
+                "--symbol",
+                "foo",
+                "--scope",
+                "scripts/*.py",
+                "--index",
+                "2",
+                "--apply",
+                "--json",
+            ]
+        )
+        expect(
+            code_actions_symbol_args
+            == (
+                "",
+                "foo",
+                ["scripts/*.py"],
+                "",
+                2,
+                True,
+                True,
+            ),
+            "lsp code-actions parser should support symbol scope apply args",
+        )
+
+        normalized_actions = _normalize_code_actions(
+            [
+                {
+                    "title": "Apply fix",
+                    "kind": "quickfix.import",
+                    "isPreferred": True,
+                    "edit": {"changes": {}},
+                },
+                {
+                    "title": "Refactor rename",
+                    "kind": "refactor.rename",
+                    "disabled": {"reason": "needs project context"},
+                },
+            ],
+            lsp_diag_path,
+            lsp_ops_root,
+        )
+        expect(
+            len(normalized_actions) == 2
+            and normalized_actions[0].get("path") == "diagnostics.py"
+            and normalized_actions[0].get("is_preferred") is True
+            and normalized_actions[0].get("has_edit") is True
+            and normalized_actions[1].get("disabled_reason") == "needs project context",
+            "lsp code-actions normalization should expose stable dry-run schema fields",
+        )
+
+        code_action_summary = _code_action_summary(normalized_actions)
+        expect(
+            code_action_summary.get("total") == 2
+            and code_action_summary.get("editable") == 1
+            and code_action_summary.get("disabled") == 1
+            and code_action_summary.get("preferred") == 1,
+            "lsp code-actions summary should count editable/disabled/preferred actions",
+        )
+        expect(
+            code_action_summary.get("by_kind", {}).get("quickfix.import") == 1
+            and code_action_summary.get("by_kind", {}).get("refactor.rename") == 1,
+            "lsp code-actions summary should aggregate deterministic kind counts",
         )
 
         ref_validation_pass = validate_changed_references(
