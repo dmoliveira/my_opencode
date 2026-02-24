@@ -16,6 +16,13 @@ DEFAULT_STATE_PATH = Path(
     )
 ).expanduser()
 
+DEFAULT_AGENT_POOL_PATH = Path(
+    os.environ.get(
+        "MY_OPENCODE_AGENT_POOL_PATH",
+        "~/.config/opencode/my_opencode/runtime/agent_pool.json",
+    )
+).expanduser()
+
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -23,10 +30,11 @@ def now_iso() -> str:
 
 def usage() -> int:
     print(
-        "usage: /claims claim <issue_id> --by <human:name|agent:type> [--json] | "
+        "usage: /claims claim <issue_id> [--by <human:name|agent:id>] [--role <role>] [--json] | "
         "/claims handoff <issue_id> --to <human:name|agent:type> [--json] | "
+        "/claims accept-handoff <issue_id> [--json] | /claims reject-handoff <issue_id> [--reason <text>] [--json] | "
         "/claims release <issue_id> [--json] | /claims status [--id <issue_id>] [--json] | "
-        "/claims list [--json] | /claims doctor [--json]"
+        "/claims list [--json] | /claims expire-stale [--hours <n>] [--apply] [--json] | /claims doctor [--json]"
     )
     return 2
 
@@ -44,6 +52,90 @@ def load_state(path: Path) -> dict[str, Any]:
 def save_state(path: Path, state: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def claims_map(state: dict[str, Any]) -> dict[str, Any]:
+    raw_claims = state.get("claims")
+    if isinstance(raw_claims, dict):
+        return raw_claims
+    state["claims"] = {}
+    return state["claims"]
+
+
+def load_agent_pool(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"agents": [], "events": []}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return {"agents": [], "events": []}
+    if not isinstance(raw.get("agents"), list):
+        raw["agents"] = []
+    if not isinstance(raw.get("events"), list):
+        raw["events"] = []
+    return raw
+
+
+def save_agent_pool(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def pool_agents_list(pool_state: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_agents = pool_state.get("agents")
+    if not isinstance(raw_agents, list):
+        pool_state["agents"] = []
+        return []
+    return [item for item in raw_agents if isinstance(item, dict)]
+
+
+def adjust_pool_load(pool_state: dict[str, Any], owner: str, delta: int) -> None:
+    if not owner.startswith("agent:"):
+        return
+    agent_id = owner.split(":", 1)[1]
+    agents = pool_agents_list(pool_state)
+    target = next(
+        (
+            item
+            for item in agents
+            if isinstance(item, dict) and str(item.get("agent_id") or "") == agent_id
+        ),
+        None,
+    )
+    if not isinstance(target, dict):
+        return
+    current = int(target.get("load", 0) or 0)
+    target["load"] = max(0, current + delta)
+
+
+def select_pool_agent(pool_state: dict[str, Any], role: str) -> dict[str, Any] | None:
+    agents = pool_agents_list(pool_state)
+    candidates: list[dict[str, Any]] = []
+    for item in agents:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("status") or "") != "active":
+            continue
+        if str(item.get("role") or "") != role:
+            continue
+        candidates.append(item)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda row: int(row.get("load", 0) or 0))
+    return candidates[0]
+
+
+def pool_status_summary(pool_state: dict[str, Any]) -> dict[str, Any]:
+    agents = pool_agents_list(pool_state)
+    active = [a for a in agents if isinstance(a, dict) and a.get("status") == "active"]
+    by_role: dict[str, int] = {}
+    for item in active:
+        role = str(item.get("role") or "unknown")
+        by_role[role] = by_role.get(role, 0) + int(item.get("load", 0) or 0)
+    return {
+        "pool_agents": len(agents),
+        "pool_active": len(active),
+        "pool_load_by_role": by_role,
+    }
 
 
 def parse_flag_value(argv: list[str], flag: str) -> str | None:
@@ -92,7 +184,7 @@ def normalize_claimant(raw: str) -> str:
 
 
 def stale_claims(state: dict[str, Any], stale_hours: int = 48) -> list[str]:
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     cutoff = datetime.now(UTC) - timedelta(hours=stale_hours)
     stale: list[str] = []
     for issue_id, item in claims.items():
@@ -120,17 +212,33 @@ def cmd_claim(argv: list[str], path: Path) -> int:
     if not argv:
         return usage()
     issue_id = argv.pop(0)
+    role: str | None = None
     try:
-        owner = normalize_claimant(parse_flag_value(argv, "--by") or "")
+        owner_raw = parse_flag_value(argv, "--by")
+        role = parse_flag_value(argv, "--role")
     except ValueError:
         return usage()
+    owner = normalize_claimant(owner_raw) if owner_raw else ""
+
+    pool_state = load_agent_pool(DEFAULT_AGENT_POOL_PATH)
+    if not owner and role:
+        selected = select_pool_agent(pool_state, role)
+        if not isinstance(selected, dict):
+            return emit(
+                {
+                    "result": "FAIL",
+                    "command": "claim",
+                    "error": f"no active agent available for role: {role}",
+                },
+                as_json,
+            )
+        owner = f"agent:{selected.get('agent_id')}"
+
     if not owner:
         return usage()
+
     state = load_state(path)
-    claims = state.get("claims")
-    if not isinstance(claims, dict):
-        claims = {}
-        state["claims"] = claims
+    claims = claims_map(state)
     current = claims.get(issue_id)
     if isinstance(current, dict) and str(current.get("status")) == "active":
         return emit(
@@ -151,8 +259,18 @@ def cmd_claim(argv: list[str], path: Path) -> int:
         "updated_at": now_iso(),
         "handoff_to": None,
     }
+    adjust_pool_load(pool_state, owner, 1)
+    save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
     save_state(path, state)
-    return emit({"result": "PASS", "command": "claim", **claims[issue_id]}, as_json)
+    return emit(
+        {
+            "result": "PASS",
+            "command": "claim",
+            **claims[issue_id],
+            **pool_status_summary(pool_state),
+        },
+        as_json,
+    )
 
 
 def cmd_handoff(argv: list[str], path: Path) -> int:
@@ -168,7 +286,7 @@ def cmd_handoff(argv: list[str], path: Path) -> int:
     if not to_owner:
         return usage()
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     item = claims.get(issue_id)
     if not isinstance(item, dict):
         return emit(
@@ -193,7 +311,7 @@ def cmd_release(argv: list[str], path: Path) -> int:
         return usage()
     issue_id = argv[0]
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     item = claims.get(issue_id)
     if not isinstance(item, dict):
         return emit(
@@ -206,8 +324,157 @@ def cmd_release(argv: list[str], path: Path) -> int:
         )
     item["status"] = "completed"
     item["updated_at"] = now_iso()
+    pool_state = load_agent_pool(DEFAULT_AGENT_POOL_PATH)
+    adjust_pool_load(pool_state, str(item.get("owner") or ""), -1)
+    save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
     save_state(path, state)
-    return emit({"result": "PASS", "command": "release", **item}, as_json)
+    return emit(
+        {
+            "result": "PASS",
+            "command": "release",
+            **item,
+            **pool_status_summary(pool_state),
+        },
+        as_json,
+    )
+
+
+def cmd_accept_handoff(argv: list[str], path: Path) -> int:
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+    if not argv:
+        return usage()
+    issue_id = argv[0]
+    state = load_state(path)
+    claims = claims_map(state)
+    item = claims.get(issue_id)
+    if not isinstance(item, dict):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "accept-handoff",
+                "error": f"issue not found: {issue_id}",
+            },
+            as_json,
+        )
+    handoff_to = str(item.get("handoff_to") or "").strip()
+    if str(item.get("status") or "") != "handoff-pending" or not handoff_to:
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "accept-handoff",
+                "error": "no pending handoff to accept",
+                "issue_id": issue_id,
+                "status": item.get("status"),
+            },
+            as_json,
+        )
+    pool_state = load_agent_pool(DEFAULT_AGENT_POOL_PATH)
+    previous_owner = str(item.get("owner") or "")
+    adjust_pool_load(pool_state, previous_owner, -1)
+    item["owner"] = handoff_to
+    item["handoff_to"] = None
+    item["status"] = "active"
+    item["updated_at"] = now_iso()
+    adjust_pool_load(pool_state, str(item.get("owner") or ""), 1)
+    save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
+    save_state(path, state)
+    return emit(
+        {
+            "result": "PASS",
+            "command": "accept-handoff",
+            **item,
+            **pool_status_summary(pool_state),
+        },
+        as_json,
+    )
+
+
+def cmd_reject_handoff(argv: list[str], path: Path) -> int:
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+    if not argv:
+        return usage()
+    issue_id = argv.pop(0)
+    reason = "handoff rejected"
+    try:
+        reason_arg = parse_flag_value(argv, "--reason")
+    except ValueError:
+        return usage()
+    if reason_arg:
+        reason = reason_arg
+    state = load_state(path)
+    claims = claims_map(state)
+    item = claims.get(issue_id)
+    if not isinstance(item, dict):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "reject-handoff",
+                "error": f"issue not found: {issue_id}",
+            },
+            as_json,
+        )
+    if str(item.get("status") or "") != "handoff-pending":
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "reject-handoff",
+                "error": "no pending handoff to reject",
+                "issue_id": issue_id,
+                "status": item.get("status"),
+            },
+            as_json,
+        )
+    item["status"] = "active"
+    item["handoff_to"] = None
+    item["handoff_rejected_reason"] = reason
+    item["updated_at"] = now_iso()
+    save_state(path, state)
+    return emit({"result": "PASS", "command": "reject-handoff", **item}, as_json)
+
+
+def cmd_expire_stale(argv: list[str], path: Path) -> int:
+    as_json = "--json" in argv
+    apply_mode = "--apply" in argv
+    argv = [a for a in argv if a not in {"--json", "--apply"}]
+    stale_hours = 48
+    try:
+        hours_arg = parse_flag_value(argv, "--hours")
+    except ValueError:
+        return usage()
+    if hours_arg is not None:
+        try:
+            stale_hours = max(1, int(hours_arg))
+        except ValueError:
+            return usage()
+
+    state = load_state(path)
+    stale = stale_claims(state, stale_hours=stale_hours)
+    updated: list[str] = []
+    if apply_mode and stale:
+        claims = claims_map(state)
+        for issue_id in stale:
+            item = claims.get(issue_id)
+            if not isinstance(item, dict):
+                continue
+            item["status"] = "expired"
+            item["updated_at"] = now_iso()
+            updated.append(issue_id)
+        save_state(path, state)
+
+    return emit(
+        {
+            "result": "PASS",
+            "command": "expire-stale",
+            "hours": stale_hours,
+            "apply": apply_mode,
+            "stale": stale,
+            "updated": updated,
+            "count": len(stale),
+        },
+        as_json,
+    )
 
 
 def cmd_status(argv: list[str], path: Path) -> int:
@@ -219,7 +486,7 @@ def cmd_status(argv: list[str], path: Path) -> int:
     except ValueError:
         return usage()
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     if issue_id:
         item = claims.get(issue_id)
         if not isinstance(item, dict):
@@ -242,6 +509,7 @@ def cmd_status(argv: list[str], path: Path) -> int:
         for v in claims.values()
         if isinstance(v, dict) and v.get("status") == "handoff-pending"
     )
+    pool_state = load_agent_pool(DEFAULT_AGENT_POOL_PATH)
     return emit(
         {
             "result": "PASS",
@@ -250,6 +518,7 @@ def cmd_status(argv: list[str], path: Path) -> int:
             "active": active,
             "handoff_pending": pending,
             "stale": stale_claims(state),
+            **pool_status_summary(pool_state),
         },
         as_json,
     )
@@ -258,7 +527,7 @@ def cmd_status(argv: list[str], path: Path) -> int:
 def cmd_list(argv: list[str], path: Path) -> int:
     as_json = "--json" in argv
     state = load_state(path)
-    claims = state.get("claims") if isinstance(state.get("claims"), dict) else {}
+    claims = claims_map(state)
     rows: list[dict[str, Any]] = []
     for item in claims.values():
         if isinstance(item, dict):
@@ -304,8 +573,14 @@ def main(argv: list[str]) -> int:
         return cmd_claim(rest, DEFAULT_STATE_PATH)
     if command == "handoff":
         return cmd_handoff(rest, DEFAULT_STATE_PATH)
+    if command == "accept-handoff":
+        return cmd_accept_handoff(rest, DEFAULT_STATE_PATH)
+    if command == "reject-handoff":
+        return cmd_reject_handoff(rest, DEFAULT_STATE_PATH)
     if command == "release":
         return cmd_release(rest, DEFAULT_STATE_PATH)
+    if command == "expire-stale":
+        return cmd_expire_stale(rest, DEFAULT_STATE_PATH)
     if command == "status":
         return cmd_status(rest, DEFAULT_STATE_PATH)
     if command == "list":
