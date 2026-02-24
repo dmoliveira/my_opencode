@@ -163,7 +163,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "resume": {
-      "description": "Manage runtime recovery controls (status|now|disable)",
+      "description": "Manage runtime recovery controls (status|now|smart|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "safe-edit": {
