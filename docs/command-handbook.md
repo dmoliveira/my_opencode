@@ -335,6 +335,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output
+/review - Run local review pass with risk/test/docs diagnostics (local|doctor)
 /refactor-lite - Run safe refactor workflow backend
 /release-train - Run release-train workflow controls (status|prepare|draft|publish)
 /resume - Manage runtime recovery controls (status|now|disable)
