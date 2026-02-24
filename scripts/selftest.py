@@ -52,6 +52,11 @@ from safe_edit_adapters import (  # type: ignore
     evaluate_semantic_capability,
     validate_changed_references,
 )
+from lsp_command import (  # type: ignore
+    _capability_matrix,
+    _command_warnings,
+    _preflight_server_capability,
+)
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
@@ -4281,6 +4286,52 @@ index 3333333..4444444 100644
             and semantic_fallback_ambiguous.get("reason_code")
             == "safe_edit_fallback_blocked_ambiguity",
             "safe-edit adapter should block fallback for ambiguous targets",
+        )
+
+        lsp_preflight_ok, lsp_preflight_reason = _preflight_server_capability(
+            {"definitionProvider": True}, "goto-definition"
+        )
+        expect(
+            lsp_preflight_ok and not lsp_preflight_reason,
+            "lsp preflight should pass when required capability is available",
+        )
+
+        lsp_preflight_missing, lsp_missing_reason = _preflight_server_capability(
+            {"referencesProvider": True}, "goto-definition"
+        )
+        expect(
+            (not lsp_preflight_missing)
+            and lsp_missing_reason == "lsp_capability_missing_definition_provider",
+            "lsp preflight should emit capability reason code when definition support is missing",
+        )
+
+        lsp_missing_warnings = _command_warnings(lsp_missing_reason, "")
+        expect(
+            any(
+                "definitionProvider" in str(item) or "definition" in str(item)
+                for item in lsp_missing_warnings
+            ),
+            "lsp warnings should guide fallback when definition capability is missing",
+        )
+
+        capability_matrix = _capability_matrix(
+            {
+                "definitionProvider": True,
+                "referencesProvider": False,
+                "documentSymbolProvider": {"label": "document"},
+                "workspaceSymbolProvider": {"label": "workspace"},
+            }
+        )
+        by_capability = {
+            str(item.get("capability")): bool(item.get("supported"))
+            for item in capability_matrix
+        }
+        expect(
+            by_capability.get("definitionProvider") is True
+            and by_capability.get("referencesProvider") is False
+            and by_capability.get("documentSymbolProvider") is True
+            and by_capability.get("workspaceSymbolProvider") is True,
+            "lsp capability matrix should deterministically represent provider support",
         )
 
         ref_validation_pass = validate_changed_references(
