@@ -68,6 +68,7 @@ from lsp_command import (  # type: ignore
 from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
+    restore_runtime_from_snapshot,
     show_snapshot,
     write_snapshot,
 )
@@ -7070,6 +7071,104 @@ version: 1
             checkpoint_show_report.get("result") == "PASS"
             and isinstance(checkpoint_show_report.get("snapshot"), dict),
             "checkpoint show should return latest snapshot payload",
+        )
+
+        checkpoint_create = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKPOINT_SCRIPT),
+                "create",
+                "--source",
+                "selftest_manual",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(checkpoint_create.returncode == 0, "checkpoint create should succeed")
+        checkpoint_create_report = parse_json_output(checkpoint_create.stdout)
+        created_snapshot_any = checkpoint_create_report.get("snapshot")
+        created_snapshot = (
+            created_snapshot_any if isinstance(created_snapshot_any, dict) else {}
+        )
+        expect(
+            checkpoint_create_report.get("result") == "PASS"
+            and isinstance(created_snapshot.get("runtime_state"), dict),
+            "checkpoint create should persist runtime state for restore safety",
+        )
+        restored_runtime = restore_runtime_from_snapshot(created_snapshot)
+        expect(
+            isinstance(restored_runtime, dict),
+            "checkpoint manager should extract runtime state from persisted snapshots",
+        )
+
+        runtime_before_restore = load_plan_runtime(recover_config_path)
+        runtime_modified = dict(runtime_before_restore)
+        runtime_modified["status"] = "failed"
+        save_plan_runtime(recover_config_path, runtime_modified)
+
+        checkpoint_restore_requires_force = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKPOINT_SCRIPT),
+                "restore",
+                "--run-id",
+                str(created_snapshot.get("run_id") or ""),
+                "--snapshot",
+                str(created_snapshot.get("snapshot_id") or "latest"),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            checkpoint_restore_requires_force.returncode == 1,
+            "checkpoint restore should require explicit --force when overwriting runtime",
+        )
+        checkpoint_restore_requires_force_report = parse_json_output(
+            checkpoint_restore_requires_force.stdout
+        )
+        expect(
+            checkpoint_restore_requires_force_report.get("reason_code")
+            == "checkpoint_restore_force_required",
+            "checkpoint restore should emit deterministic force-required reason code",
+        )
+
+        checkpoint_restore = subprocess.run(
+            [
+                sys.executable,
+                str(CHECKPOINT_SCRIPT),
+                "restore",
+                "--run-id",
+                str(created_snapshot.get("run_id") or ""),
+                "--snapshot",
+                str(created_snapshot.get("snapshot_id") or "latest"),
+                "--force",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(checkpoint_restore.returncode == 0, "checkpoint restore should succeed")
+        checkpoint_restore_report = parse_json_output(checkpoint_restore.stdout)
+        expect(
+            checkpoint_restore_report.get("result") == "PASS"
+            and checkpoint_restore_report.get("reason_code") == "checkpoint_restored",
+            "checkpoint restore should emit restored status payload",
+        )
+        runtime_after_restore = load_plan_runtime(recover_config_path)
+        expect(
+            runtime_after_restore.get("status") == runtime_before_restore.get("status"),
+            "checkpoint restore should recover previous runtime status",
         )
 
         checkpoint_prune = subprocess.run(

@@ -167,7 +167,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "checkpoint": {
-      "description": "Inspect checkpoint snapshots (list|show|prune|doctor)",
+      "description": "Manage checkpoint snapshots and runtime rollback (create|restore|list|show|prune|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "nvim": {
