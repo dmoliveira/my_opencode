@@ -331,6 +331,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /model-routing - Manage model routing (status|set-category|resolve|trace)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
+/plan - Run contract-enforced plan execution flows (run|status|doctor)
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output
