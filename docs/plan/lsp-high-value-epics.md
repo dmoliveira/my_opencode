@@ -50,14 +50,14 @@ Tasks:
 4. Extend selftest with deterministic capability-mismatch fixtures for capability preflight and warning behavior. `finished`
 
 ## Epic E5 (P1): Safe WorkspaceEdit Expansion
-Status: `planned`
+Status: `finished`
 Value: High
 
 Tasks:
-1. Add explicit dry-run visibility for `CreateFile` and `DeleteFile` resource operations in rename plans. `planned`
-2. Add policy guardrails for resource-op classes (`renamefile`, `createfile`, `deletefile`) with opt-in flags. `planned`
-3. Keep apply path blocked by default for destructive file operations until policy and validation gates pass. `planned`
-4. Add helper tests for policy edge cases (existing target, missing source, out-of-root paths). `planned`
+1. Add explicit dry-run visibility for `CreateFile` and `DeleteFile` resource operations in rename plans. `finished`
+2. Add policy guardrails for resource-op classes (`renamefile`, `createfile`, `deletefile`) with opt-in flags. `finished`
+3. Keep apply path blocked by default for destructive file operations until policy and validation gates pass. `finished`
+4. Add helper tests for policy edge cases (existing target, missing source, out-of-root paths). `finished`
 
 ## Epic E6 (P2): Diagnostics and Code Actions Surface
 Status: `planned`

@@ -898,6 +898,80 @@ def _validate_renamefile_operations(
     return validation_errors
 
 
+def _validate_single_uri_resource_operations(
+    root: Path,
+    operations: list[dict[str, Any]],
+    *,
+    kind: str,
+) -> list[str]:
+    validation_errors: list[str] = []
+    root_resolved = root.resolve()
+    for operation in operations:
+        uri = str(operation.get("uri") or "")
+        target_path = uri_to_path(uri)
+        if target_path is None:
+            validation_errors.append(f"{kind} operation has invalid file URI")
+            continue
+        target_resolved = target_path.resolve()
+        try:
+            target_resolved.relative_to(root_resolved)
+        except Exception:
+            validation_errors.append(f"{kind} operation points outside repository root")
+            continue
+        if kind == "createfile" and target_resolved.exists():
+            validation_errors.append(
+                f"createfile target already exists: {target_resolved}"
+            )
+        if kind == "deletefile" and not target_resolved.exists():
+            validation_errors.append(f"deletefile target missing: {target_resolved}")
+    return validation_errors
+
+
+def _resource_operation_policy_blockers(
+    *,
+    grouped_resource_ops: dict[str, list[dict[str, Any]]],
+    renamefile_operations: list[dict[str, Any]],
+    blocked_resource_ops: list[dict[str, Any]],
+    allow_rename_file_ops: bool,
+    allow_create_file_ops: bool,
+    allow_delete_file_ops: bool,
+    apply_changes: bool,
+) -> list[str]:
+    blockers: list[str] = []
+    if blocked_resource_ops:
+        blockers.append("workspace edit includes unsupported resource operations")
+    if renamefile_operations and not allow_rename_file_ops:
+        blockers.append("renamefile operations require --allow-rename-file-ops")
+    if grouped_resource_ops["createfile"] and not allow_create_file_ops:
+        blockers.append("createfile operations require --allow-create-file-ops")
+    if grouped_resource_ops["deletefile"] and not allow_delete_file_ops:
+        blockers.append("deletefile operations require --allow-delete-file-ops")
+    if apply_changes and grouped_resource_ops["createfile"]:
+        blockers.append("createfile operations are not supported for apply")
+    if apply_changes and grouped_resource_ops["deletefile"]:
+        blockers.append("deletefile operations are not supported for apply")
+    return blockers
+
+
+def _resource_operation_targets(
+    root: Path,
+    operations: list[dict[str, Any]],
+) -> list[str]:
+    targets: list[str] = []
+    root_resolved = root.resolve()
+    for operation in operations:
+        uri = str(operation.get("uri") or "")
+        path = uri_to_path(uri)
+        if path is None:
+            continue
+        resolved = path.resolve()
+        try:
+            targets.append(str(resolved.relative_to(root_resolved)))
+        except Exception:
+            targets.append(str(resolved))
+    return targets
+
+
 def _definition_patterns(symbol: str, suffix: str) -> list[re.Pattern[str]]:
     escaped = re.escape(symbol)
     if suffix == ".py":
@@ -2000,18 +2074,17 @@ def command_rename(args: list[str]) -> int:
         blockers.append("symbol has no references in scope")
     if symbol == new_name:
         blockers.append("new name must differ from current symbol")
-    if blocked_resource_ops:
-        blockers.append("workspace edit includes unsupported resource operations")
-    if renamefile_operations and not allow_rename_file_ops:
-        blockers.append("renamefile operations require --allow-rename-file-ops")
-    if grouped_resource_ops["createfile"] and not allow_create_file_ops:
-        blockers.append("createfile operations require --allow-create-file-ops")
-    if grouped_resource_ops["deletefile"] and not allow_delete_file_ops:
-        blockers.append("deletefile operations require --allow-delete-file-ops")
-    if apply_changes and grouped_resource_ops["createfile"]:
-        blockers.append("createfile operations are not supported for apply")
-    if apply_changes and grouped_resource_ops["deletefile"]:
-        blockers.append("deletefile operations are not supported for apply")
+    blockers.extend(
+        _resource_operation_policy_blockers(
+            grouped_resource_ops=grouped_resource_ops,
+            renamefile_operations=renamefile_operations,
+            blocked_resource_ops=blocked_resource_ops,
+            allow_rename_file_ops=allow_rename_file_ops,
+            allow_create_file_ops=allow_create_file_ops,
+            allow_delete_file_ops=allow_delete_file_ops,
+            apply_changes=apply_changes,
+        )
+    )
     if any(
         bool(annotation.get("needs_confirmation", False))
         for annotation in change_annotations.values()
@@ -2019,6 +2092,22 @@ def command_rename(args: list[str]) -> int:
         blockers.append("change annotations require confirmation; apply is blocked")
     if renamefile_operations:
         blockers.extend(_validate_renamefile_operations(root, renamefile_operations))
+    if grouped_resource_ops["createfile"]:
+        blockers.extend(
+            _validate_single_uri_resource_operations(
+                root,
+                grouped_resource_ops["createfile"],
+                kind="createfile",
+            )
+        )
+    if grouped_resource_ops["deletefile"]:
+        blockers.extend(
+            _validate_single_uri_resource_operations(
+                root,
+                grouped_resource_ops["deletefile"],
+                kind="deletefile",
+            )
+        )
     if apply_changes and diff_file_count > max_diff_files:
         blockers.append(
             f"diff review threshold exceeded: files {diff_file_count}>{max_diff_files}"
@@ -2077,7 +2166,13 @@ def command_rename(args: list[str]) -> int:
         "change_annotations": change_annotations,
         "renamefile_operations": renamefile_operations,
         "createfile_operations": grouped_resource_ops["createfile"],
+        "createfile_targets": _resource_operation_targets(
+            root, grouped_resource_ops["createfile"]
+        ),
         "deletefile_operations": grouped_resource_ops["deletefile"],
+        "deletefile_targets": _resource_operation_targets(
+            root, grouped_resource_ops["deletefile"]
+        ),
         "resource_operation_summary": {
             "total": len(resource_operations),
             "renamefile": len(grouped_resource_ops["renamefile"]),
