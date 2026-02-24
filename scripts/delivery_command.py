@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime_audit import append_event  # type: ignore
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CLAIMS_SCRIPT = SCRIPT_DIR / "claims_command.py"
@@ -205,7 +207,12 @@ def cmd_start(argv: list[str]) -> int:
     }
 
     state = load_state(DEFAULT_STATE_PATH)
-    runs = state.get("runs") if isinstance(state.get("runs"), list) else []
+    raw_runs = state.get("runs")
+    runs = (
+        [row for row in raw_runs if isinstance(row, dict)]
+        if isinstance(raw_runs, list)
+        else []
+    )
     runs.insert(0, run_record)
     state["runs"] = runs[:100]
     save_state(DEFAULT_STATE_PATH, state)
@@ -213,6 +220,13 @@ def cmd_start(argv: list[str]) -> int:
     result_value = "PASS"
     if status in {"workflow-error"}:
         result_value = "FAIL"
+    append_event(
+        "delivery",
+        "start",
+        result_value,
+        {"run_id": run_id, "issue_id": issue_id, "status": status},
+    )
+
     return emit({"result": result_value, "command": "start", **run_record}, as_json)
 
 
@@ -225,7 +239,12 @@ def cmd_status(argv: list[str]) -> int:
     except ValueError:
         return usage()
     state = load_state(DEFAULT_STATE_PATH)
-    runs = state.get("runs") if isinstance(state.get("runs"), list) else []
+    raw_runs = state.get("runs")
+    runs = (
+        [row for row in raw_runs if isinstance(row, dict)]
+        if isinstance(raw_runs, list)
+        else []
+    )
     if not runs:
         return emit(
             {
@@ -290,6 +309,7 @@ def cmd_handoff(argv: list[str]) -> int:
             },
             as_json,
         )
+    append_event("delivery", "handoff", "PASS", {"issue_id": issue_id, "to": to})
     return emit({"result": "PASS", "command": "handoff", **payload}, as_json)
 
 
@@ -315,6 +335,7 @@ def cmd_close(argv: list[str]) -> int:
             },
             as_json,
         )
+    append_event("delivery", "close", "PASS", {"issue_id": issue_id})
     return emit({"result": "PASS", "command": "close", **payload}, as_json)
 
 
@@ -326,7 +347,12 @@ def cmd_doctor(argv: list[str]) -> int:
     if not WORKFLOW_SCRIPT.exists():
         warnings.append("workflow command backend missing")
     state = load_state(DEFAULT_STATE_PATH)
-    runs = state.get("runs") if isinstance(state.get("runs"), list) else []
+    raw_runs = state.get("runs")
+    runs = (
+        [row for row in raw_runs if isinstance(row, dict)]
+        if isinstance(raw_runs, list)
+        else []
+    )
     return emit(
         {
             "result": "PASS",

@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime_audit import append_event  # type: ignore
+
 
 DEFAULT_STATE_PATH = Path(
     os.environ.get(
@@ -162,6 +164,7 @@ def cmd_start(argv: list[str]) -> int:
         },
     }
     save_state(DEFAULT_STATE_PATH, state)
+    append_event("daemon", "start", "PASS", {"intervals": state.get("intervals", {})})
     return emit({"result": "PASS", "command": "start", **state}, as_json)
 
 
@@ -181,6 +184,7 @@ def cmd_stop(argv: list[str]) -> int:
     state["status"] = "stopped"
     state["stopped_at"] = now_iso()
     save_state(DEFAULT_STATE_PATH, state)
+    append_event("daemon", "stop", "PASS", {"status": "stopped"})
     return emit({"result": "PASS", "command": "stop", **state}, as_json)
 
 
@@ -235,6 +239,7 @@ def cmd_tick(argv: list[str]) -> int:
         "claims_hours": claims_hours,
     }
     save_state(DEFAULT_STATE_PATH, state)
+    append_event("daemon", "tick", "PASS", state.get("last_tick_summary", {}))
     return emit(
         {
             "result": "PASS",

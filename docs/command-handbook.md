@@ -172,6 +172,10 @@ Use these directly in OpenCode:
 /delivery status --json
 /delivery handoff --issue issue-900 --to human:alex --json
 /delivery close --issue issue-900 --json
+
+/audit status --json
+/audit list --limit 20 --json
+/audit export --path ./runtime-audit-export.json --json
 ```
 
 
@@ -291,6 +295,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 
 ```text
 /agent-doctor - Validate custom agent contracts and runtime discovery
+/audit - Inspect runtime audit trail (status|list|export|doctor)
 /auto-slash - Detect and preview natural-language slash intents
 /autopilot - Continue current task autonomously with autopilot guardrails
 /autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)
