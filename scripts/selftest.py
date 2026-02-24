@@ -149,6 +149,8 @@ PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
 REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "review_command.py"
 CHANGES_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "changes_command.py"
+DO_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "do_command.py"
+SHIP_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "ship_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
@@ -3589,6 +3591,55 @@ index 3333333..4444444 100644
         expect(
             "reason_codes" in release_command_prepare_payload,
             "release-train command prepare should emit reason codes",
+        )
+
+        do_usage = subprocess.run(
+            [sys.executable, str(DO_COMMAND_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(do_usage.returncode == 2, "do command should require a goal argument")
+
+        ship_missing_version = subprocess.run(
+            [sys.executable, str(SHIP_COMMAND_SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_missing_version.returncode == 2,
+            "ship command should require explicit version input",
+        )
+
+        ship_preflight = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "--version",
+                "0.0.1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_preflight.returncode in (0, 1),
+            "ship command should execute release preflight deterministically",
+        )
+        ship_preflight_payload = parse_json_output(ship_preflight.stdout)
+        expect(
+            ship_preflight_payload.get("reason_code")
+            in {"ship_ready", "ship_prepare_blocked"}
+            and isinstance(ship_preflight_payload.get("required_evidence"), list),
+            "ship command should emit safety-gated reason code and evidence checklist",
         )
 
         release_repo = tmp / "release_repo"

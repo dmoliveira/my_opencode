@@ -70,6 +70,10 @@
       "description": "Run unified delivery transactions (start|status|handoff|close|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delivery_command.py\" $ARGUMENTS`\nShow only the command output."
     },
+    "do": {
+      "description": "Route high-level execution intent to autopilot go",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/do_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "agent-pool": {
       "description": "Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_pool_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -117,6 +121,10 @@
     "stack": {
       "description": "Apply cross-command profile bundles",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "ship": {
+      "description": "Run release intent preflight with safety gates (--version required)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/ship_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "browser": {
       "description": "Manage browser automation provider profile (status|profile|doctor)",

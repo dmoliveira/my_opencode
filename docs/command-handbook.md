@@ -316,6 +316,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /config - Backup and restore OpenCode config files
 /daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
 /delivery - Run unified delivery transactions (start|status|handoff|close|doctor)
+/do - Route high-level execution intent to autopilot go
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run all diagnostics in one pass
@@ -343,6 +344,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
 /session - Inspect indexed sessions (list|show|search|handoff|doctor)
+/ship - Run release intent preflight with safety gates (--version required)
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)
