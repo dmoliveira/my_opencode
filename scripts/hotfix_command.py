@@ -20,7 +20,7 @@ HOTFIX_RUNTIME_SCRIPT = SCRIPT_DIR / "hotfix_runtime.py"
 
 def usage() -> int:
     print(
-        "usage: /hotfix [start|status|close|remind|doctor] [args] [--json] | "
+        "usage: /hotfix [start|status|close|postmortem|remind|doctor] [args] [--json] | "
         "/hotfix start --incident-id <id> --scope <patch|rollback|config_only> --impact <sev1|sev2|sev3> [--json] | "
         "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json]"
     )
@@ -116,6 +116,70 @@ def command_doctor(args: list[str]) -> int:
     return 0 if report["result"] == "PASS" else 1
 
 
+def command_postmortem(args: list[str]) -> int:
+    as_json = "--json" in args
+    if any(arg not in ("--json",) for arg in args):
+        return usage()
+
+    write_path = resolve_write_path()
+    state = load_runtime(write_path)
+    timeline = (
+        state.get("timeline", []) if isinstance(state.get("timeline"), list) else []
+    )
+    closed_events = [
+        entry
+        for entry in timeline
+        if isinstance(entry, dict) and entry.get("event") == "closed"
+    ]
+    latest = closed_events[-1] if closed_events else None
+    details = latest.get("details", {}) if isinstance(latest, dict) else {}
+    if not isinstance(details, dict):
+        details = {}
+
+    deferred = details.get("deferred_validation")
+    if not isinstance(deferred, dict):
+        deferred = {}
+
+    postmortem_id = str(details.get("postmortem_id") or "")
+    followup_issue = str(details.get("followup_issue") or "")
+    risk_ack = str(details.get("risk_ack") or "")
+
+    payload = {
+        "result": "PASS",
+        "reason_code": "hotfix_postmortem_template",
+        "incident_id": state.get("incident_id"),
+        "postmortem_id": postmortem_id or None,
+        "followup_issue": followup_issue or None,
+        "risk_ack": risk_ack or None,
+        "template_markdown": "\n".join(
+            [
+                f"# Postmortem {postmortem_id or '<postmortem-id>'}",
+                "",
+                "## Incident Linkback",
+                f"- Incident: {state.get('incident_id') or '<incident-id>'}",
+                f"- Follow-up issue: {followup_issue or '<followup-issue>'}",
+                f"- Risk acknowledgement: {risk_ack or '<risk-ack>'}",
+                "",
+                "## Timeline",
+                "- <impact start>",
+                "- <mitigation>",
+                "- <validation>",
+                "- <closure>",
+                "",
+                "## Deferred Validation",
+                f"- Owner: {deferred.get('owner') or '<owner>'}",
+                f"- Due: {deferred.get('due') or '<date>'}",
+                "",
+                "## Preventive Actions",
+                "- <tests/hardening/tasks>",
+            ]
+        ),
+        "runtime": str(runtime_path(write_path)),
+    }
+    emit(payload, as_json)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return command_passthrough(["status", "--json"])
@@ -131,6 +195,8 @@ def main(argv: list[str]) -> int:
         return command_passthrough(["close", *rest])
     if cmd == "doctor":
         return command_doctor(rest)
+    if cmd == "postmortem":
+        return command_postmortem(rest)
     if cmd == "remind":
         return command_remind(rest)
     return usage()

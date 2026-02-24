@@ -319,13 +319,13 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /do - Route high-level execution intent to autopilot go
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
-/doctor - Run all diagnostics in one pass
+/doctor - Run diagnostics and reason-code registry export
 /gateway - Manage plugin gateway mode (status|enable|disable|doctor)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
 /health - Show repo health score and drift insights
 /hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
 /hooks - Manage safety hooks (status|help|enable|disable|run)
-/hotfix - Run incident hotfix controls with strict close gating (start|status|close|remind|doctor)
+/hotfix - Run incident hotfix controls with strict close gating (start|status|close|postmortem|remind|doctor)
 /init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
@@ -337,14 +337,14 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output
-/review - Run local review pass with risk/test/docs diagnostics (local|apply-checklist|doctor)
+/review - Run local review pass with diagnostics and checklist artifacts (local|apply-checklist|doctor)
 /refactor-lite - Run safe refactor workflow backend
 /release-train - Run release-train workflow controls (status|prepare|draft|publish)
 /resume - Manage runtime recovery controls (status|now|smart|disable)
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
 /session - Inspect indexed sessions (list|show|search|handoff|doctor)
-/ship - Run release intent preflight with safety gates and PR scaffolding
+/ship - Run release intent preflight with safety gates, scaffolding, and create-pr flow
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)

@@ -31,8 +31,8 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "doctor": {
-      "description": "Run all diagnostics in one pass",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" run $ARGUMENTS`\nShow only the command output."
+      "description": "Run diagnostics and reason-code registry export",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "agent-doctor": {
       "description": "Validate custom agent contracts and runtime discovery",
@@ -123,7 +123,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "ship": {
-      "description": "Run release intent preflight with safety gates and PR scaffolding",
+      "description": "Run release intent preflight with safety gates, scaffolding, and create-pr flow",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/ship_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "browser": {
@@ -147,7 +147,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "review": {
-      "description": "Run local review pass with risk/test/docs diagnostics (local|apply-checklist|doctor)",
+      "description": "Run local review pass with diagnostics and checklist artifacts (local|apply-checklist|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "release-train": {
@@ -155,7 +155,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "hotfix": {
-      "description": "Run incident hotfix controls with strict close gating (start|status|close|remind|doctor)",
+      "description": "Run incident hotfix controls with strict close gating (start|status|close|postmortem|remind|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "health": {

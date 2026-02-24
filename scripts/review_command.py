@@ -23,7 +23,7 @@ from flow_reason_codes import (  # type: ignore
 def usage() -> int:
     print(
         "usage: /review local [--base <ref>] [--head <ref>] [--diff-file <path>] [--json] | "
-        "/review apply-checklist [--base <ref>] [--head <ref>] [--diff-file <path>] [--json] | "
+        "/review apply-checklist [--base <ref>] [--head <ref>] [--diff-file <path>] [--write <path>] [--json] | "
         "/review doctor [--json]"
     )
     return 2
@@ -214,7 +214,21 @@ def command_doctor(args: list[str]) -> int:
 
 
 def command_apply_checklist(args: list[str]) -> int:
-    parsed = _parse_local_args(args)
+    write_path: Path | None = None
+    filtered_args: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--write":
+            if index + 1 >= len(args):
+                return usage()
+            write_path = Path(args[index + 1]).expanduser()
+            index += 2
+            continue
+        filtered_args.append(token)
+        index += 1
+
+    parsed = _parse_local_args(filtered_args)
     if parsed is None:
         return usage()
     payload, code = parsed
@@ -248,11 +262,15 @@ def command_apply_checklist(args: list[str]) -> int:
         f"- [{'x' if sections['migration']['status'] == 'pass' else ' '}] Migration: {sections['migration']['detail']}",
     ]
     checklist_markdown = "\n".join(checklist_lines)
+    if write_path is not None:
+        write_path.parent.mkdir(parents=True, exist_ok=True)
+        write_path.write_text(checklist_markdown + "\n", encoding="utf-8")
     output = {
         "result": "PASS",
         "reason_code": REVIEW_CHECKLIST_GENERATED,
         "checklist_markdown": checklist_markdown,
         "sections": sections,
+        "written_path": str(write_path.resolve()) if write_path is not None else None,
     }
     if as_json:
         print(json.dumps(output, indent=2))
