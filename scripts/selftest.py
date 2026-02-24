@@ -115,6 +115,7 @@ CLAIMS_SCRIPT = REPO_ROOT / "scripts" / "claims_command.py"
 WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "workflow_command.py"
 DAEMON_SCRIPT = REPO_ROOT / "scripts" / "daemon_command.py"
 DELIVERY_SCRIPT = REPO_ROOT / "scripts" / "delivery_command.py"
+AUDIT_SCRIPT = REPO_ROOT / "scripts" / "audit_command.py"
 AGENT_POOL_SCRIPT = REPO_ROOT / "scripts" / "agent_pool_command.py"
 MEMORY_LIFECYCLE_SCRIPT = REPO_ROOT / "scripts" / "memory_lifecycle_command.py"
 HOOK_LEARNING_SCRIPT = REPO_ROOT / "scripts" / "hook_learning_command.py"
@@ -2112,6 +2113,40 @@ exit 0
             issue_303.get("status") == "completed",
             "delivery flow should leave claimed issue in completed status",
         )
+
+        audit_export = tmp / "audit-export.json"
+        result = subprocess.run(
+            [sys.executable, str(AUDIT_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"audit status failed: {result.stderr}")
+        audit_status_payload = parse_json_output(result.stdout)
+        expect(
+            int(audit_status_payload.get("count", 0) or 0) >= 3,
+            "audit status should include events from mutating runtime commands",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(AUDIT_SCRIPT),
+                "export",
+                "--path",
+                str(audit_export),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"audit export failed: {result.stderr}")
+        expect(audit_export.exists(), "audit export should create output file")
 
         memory_export = tmp / "memory-export.json"
         result = subprocess.run(
@@ -7986,6 +8021,12 @@ version: 1
         ]
         expect(bool(claims_checks), "doctor summary should include claims check")
         expect(claims_checks[0].get("ok") is True, "doctor claims check should pass")
+
+        audit_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "audit"
+        ]
+        expect(bool(audit_checks), "doctor summary should include audit check")
+        expect(audit_checks[0].get("ok") is True, "doctor audit check should pass")
 
         workflow_checks = [
             check
