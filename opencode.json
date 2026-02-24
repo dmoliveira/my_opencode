@@ -47,12 +47,16 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "workflow": {
-      "description": "Run reusable workflow templates (run|validate|list|status|stop|template|doctor)",
+      "description": "Run reusable workflow templates (run|validate|list|status|resume|stop|template|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "daemon": {
       "description": "Manage observability daemon controls (start|stop|status|tick|summary|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/daemon_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "delivery": {
+      "description": "Run unified delivery transactions (start|status|handoff|close|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delivery_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "agent-pool": {
       "description": "Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)",

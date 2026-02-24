@@ -34,8 +34,8 @@ def now_iso() -> str:
 def usage() -> int:
     print(
         "usage: /workflow run --file <path> [--execute] [--json] | /workflow validate --file <path> [--json] | "
-        "/workflow list [--json] | /workflow status [--json] | /workflow stop [--reason <text>] [--json] | "
-        "/workflow template list [--json] | /workflow template init <name> [--json] | /workflow doctor [--json]"
+        "/workflow list [--json] | /workflow status [--json] | /workflow resume --run-id <id> [--execute] [--json] | "
+        "/workflow stop [--reason <text>] [--json] | /workflow template list [--json] | /workflow template init <name> [--json] | /workflow doctor [--json]"
     )
     return 2
 
@@ -125,6 +125,20 @@ def validate_workflow(workflow: dict[str, Any]) -> tuple[bool, list[str]]:
             depends_on = step.get("depends_on")
             if depends_on is not None and not isinstance(depends_on, list):
                 issues.append(f"step {idx} depends_on must be list")
+            when = step.get("when")
+            if when is not None and str(when) not in {
+                "always",
+                "on_success",
+                "on_failure",
+            }:
+                issues.append(f"step {idx} has invalid when value")
+            retry = step.get("retry")
+            if retry is not None:
+                try:
+                    if int(retry) < 0:
+                        issues.append(f"step {idx} retry must be >= 0")
+                except (TypeError, ValueError):
+                    issues.append(f"step {idx} retry must be integer")
     return (not issues, issues)
 
 
@@ -135,14 +149,16 @@ def resolve_step_order(
     deps: dict[str, set[str]] = {}
     reverse_edges: dict[str, set[str]] = {}
     issues: list[str] = []
+    order_index: dict[str, int] = {}
 
-    for step in steps:
+    for idx, step in enumerate(steps):
         step_id = str(step.get("id") or "").strip()
         if not step_id:
             continue
         by_id[step_id] = step
         deps[step_id] = set()
         reverse_edges[step_id] = set()
+        order_index[step_id] = idx
 
     for step_id, step in by_id.items():
         raw_depends = step.get("depends_on")
@@ -164,12 +180,17 @@ def resolve_step_order(
     if issues:
         return [], issues
 
-    queue = sorted(step_id for step_id, d in deps.items() if not d)
+    queue = sorted(
+        (step_id for step_id, d in deps.items() if not d),
+        key=lambda sid: order_index.get(sid, 0),
+    )
     ordered_ids: list[str] = []
     while queue:
         current = queue.pop(0)
         ordered_ids.append(current)
-        for dependent in sorted(reverse_edges[current]):
+        for dependent in sorted(
+            reverse_edges[current], key=lambda sid: order_index.get(sid, 0)
+        ):
             if current in deps[dependent]:
                 deps[dependent].remove(current)
             if (
@@ -181,7 +202,6 @@ def resolve_step_order(
 
     if len(ordered_ids) != len(by_id):
         return [], ["workflow dependency cycle detected"]
-
     return [by_id[step_id] for step_id in ordered_ids], []
 
 
@@ -242,29 +262,96 @@ def execute_steps(
 ) -> tuple[str, list[dict[str, Any]], str | None]:
     results: list[dict[str, Any]] = []
     failed_step_id: str | None = None
+    failure_seen = False
+
     for step in steps:
         step_id = str(step.get("id") or "unknown-step")
         action = str(step.get("action") or "")
+        when = str(step.get("when") or "always")
         started_at = now_iso()
+
+        if when == "on_success" and failure_seen:
+            results.append(
+                {
+                    "id": step_id,
+                    "action": action,
+                    "status": "skipped",
+                    "reason_code": "skipped_on_failure",
+                    "detail": "skipped because a previous step failed",
+                    "depends_on": step.get("depends_on")
+                    if isinstance(step.get("depends_on"), list)
+                    else [],
+                    "when": when,
+                    "retry": int(step.get("retry", 0) or 0),
+                    "attempts": 0,
+                    "started_at": started_at,
+                    "finished_at": now_iso(),
+                }
+            )
+            continue
+        if when == "on_failure" and not failure_seen:
+            results.append(
+                {
+                    "id": step_id,
+                    "action": action,
+                    "status": "skipped",
+                    "reason_code": "skipped_on_success",
+                    "detail": "skipped because no previous step failed",
+                    "depends_on": step.get("depends_on")
+                    if isinstance(step.get("depends_on"), list)
+                    else [],
+                    "when": when,
+                    "retry": int(step.get("retry", 0) or 0),
+                    "attempts": 0,
+                    "started_at": started_at,
+                    "finished_at": now_iso(),
+                }
+            )
+            continue
+
+        retry_count = 0
+        try:
+            retry_count = max(0, int(step.get("retry", 0) or 0))
+        except (TypeError, ValueError):
+            retry_count = 0
+
         status = "passed"
         reason_code = None
         detail = "executed"
-        if not action:
-            status = "failed"
-            reason_code = "missing_step_action"
-            detail = "step action is required"
-            failed_step_id = step_id
-        elif execute_commands and step.get("command") is not None:
-            status, reason_code, detail, _ = run_command_step(step)
-            if status == "failed":
+        attempts = 0
+        for _ in range(retry_count + 1):
+            attempts += 1
+            status = "passed"
+            reason_code = None
+            detail = "executed"
+
+            if not action:
+                status = "failed"
+                reason_code = "missing_step_action"
+                detail = "step action is required"
+            elif execute_commands and step.get("command") is not None:
+                status, reason_code, detail, _ = run_command_step(step)
+            elif (
+                action in {"fail", "error"} or str(step.get("simulate") or "") == "fail"
+            ):
+                status = "failed"
+                reason_code = "step_failed"
+                detail = "step requested failure"
+            elif str(step.get("simulate") or "") == "fail-once" and attempts == 1:
+                status = "failed"
+                reason_code = "step_failed_once"
+                detail = "step requested one-time failure"
+            elif step.get("command") is not None:
+                detail = "dry-run command step (use --execute)"
+
+            if status != "failed":
+                break
+
+        if status == "failed":
+            failure_seen = True
+            if failed_step_id is None:
                 failed_step_id = step_id
-        elif action in {"fail", "error"} or str(step.get("simulate") or "") == "fail":
-            status = "failed"
-            reason_code = "step_failed"
-            detail = "step requested failure"
-            failed_step_id = step_id
-        elif step.get("command") is not None:
-            detail = "dry-run command step (use --execute)"
+
         results.append(
             {
                 "id": step_id,
@@ -275,12 +362,14 @@ def execute_steps(
                 "depends_on": step.get("depends_on")
                 if isinstance(step.get("depends_on"), list)
                 else [],
+                "when": when,
+                "retry": retry_count,
+                "attempts": attempts,
                 "started_at": started_at,
                 "finished_at": now_iso(),
             }
         )
-        if status == "failed":
-            break
+
     if failed_step_id:
         return "failed", results, failed_step_id
     return "completed", results, None
@@ -340,11 +429,17 @@ def cmd_run(argv: list[str]) -> int:
         return usage()
     if not file_arg:
         return usage()
+
     workflow_path = Path(file_arg).expanduser()
     workflow, issues = load_workflow_file(workflow_path)
     if issues or not isinstance(workflow, dict):
         return emit(
-            {"result": "FAIL", "command": "run", "issues": issues, "error": issues[0]},
+            {
+                "result": "FAIL",
+                "command": "run",
+                "issues": issues,
+                "error": issues[0],
+            },
             as_json,
         )
 
@@ -362,8 +457,6 @@ def cmd_run(argv: list[str]) -> int:
             as_json,
         )
 
-    history = history_list(state)
-    run_id = f"wf-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     raw_steps = workflow.get("steps")
     steps = raw_steps if isinstance(raw_steps, list) else []
     normalized_steps = [step for step in steps if isinstance(step, dict)]
@@ -383,13 +476,14 @@ def cmd_run(argv: list[str]) -> int:
     status, step_results, failed_step_id = execute_steps(
         ordered_steps, execute_commands
     )
+    run_id = f"wf-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     run_record = {
         "run_id": run_id,
         "name": workflow.get("name"),
         "path": str(workflow_path),
         "status": status,
         "execution_mode": "execute" if execute_commands else "dry-run",
-        "step_count": len(normalized_steps),
+        "step_count": len(ordered_steps),
         "completed_steps": sum(
             1 for step in step_results if step.get("status") == "passed"
         ),
@@ -399,11 +493,113 @@ def cmd_run(argv: list[str]) -> int:
         "started_at": now_iso(),
         "finished_at": now_iso(),
     }
-    state["active"] = {}
+    history = history_list(state)
     history.insert(0, run_record)
     state["history"] = history[:50]
+    state["active"] = {}
     save_json_file(DEFAULT_STATE_PATH, state)
     return emit({"result": "PASS", "command": "run", **run_record}, as_json)
+
+
+def cmd_resume(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    execute_commands = "--execute" in argv
+    argv = [a for a in argv if a not in {"--json", "--execute"}]
+    try:
+        run_id = parse_flag_value(argv, "--run-id")
+    except ValueError:
+        return usage()
+    if not run_id:
+        return usage()
+
+    state = load_json_file(DEFAULT_STATE_PATH)
+    history = history_list(state)
+    source_run = next(
+        (row for row in history if str(row.get("run_id") or "") == run_id), None
+    )
+    if not isinstance(source_run, dict):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "resume",
+                "error": f"run not found: {run_id}",
+                "reason_code": "workflow_run_not_found",
+            },
+            as_json,
+        )
+    if str(source_run.get("status") or "") != "failed":
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "resume",
+                "error": "run is not failed",
+                "reason_code": "workflow_resume_not_failed",
+            },
+            as_json,
+        )
+
+    workflow_path = Path(str(source_run.get("path") or "")).expanduser()
+    workflow, issues = load_workflow_file(workflow_path)
+    if issues or not isinstance(workflow, dict):
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "resume",
+                "error": issues[0] if issues else "workflow load failed",
+                "reason_code": "workflow_resume_load_failed",
+            },
+            as_json,
+        )
+
+    raw_steps = workflow.get("steps")
+    steps = raw_steps if isinstance(raw_steps, list) else []
+    normalized_steps = [step for step in steps if isinstance(step, dict)]
+    ordered_steps, order_issues = resolve_step_order(normalized_steps)
+    if order_issues:
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "resume",
+                "error": order_issues[0],
+                "issues": order_issues,
+                "reason_code": "workflow_dependency_error",
+            },
+            as_json,
+        )
+
+    failed_step_id = str(source_run.get("failed_step_id") or "")
+    start_index = 0
+    if failed_step_id:
+        for idx, step in enumerate(ordered_steps):
+            if str(step.get("id") or "") == failed_step_id:
+                start_index = idx
+                break
+    resumed_steps = ordered_steps[start_index:]
+
+    status, step_results, new_failed = execute_steps(resumed_steps, execute_commands)
+    new_run_id = f"wf-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    run_record = {
+        "run_id": new_run_id,
+        "name": workflow.get("name"),
+        "path": str(workflow_path),
+        "status": status,
+        "execution_mode": "execute" if execute_commands else "dry-run",
+        "resumed_from": run_id,
+        "step_count": len(resumed_steps),
+        "completed_steps": sum(
+            1 for step in step_results if step.get("status") == "passed"
+        ),
+        "failed_step_id": new_failed,
+        "ordered_step_ids": [str(step.get("id") or "") for step in resumed_steps],
+        "steps": step_results,
+        "started_at": now_iso(),
+        "finished_at": now_iso(),
+    }
+    history.insert(0, run_record)
+    state["history"] = history[:50]
+    state["active"] = {}
+    save_json_file(DEFAULT_STATE_PATH, state)
+    return emit({"result": "PASS", "command": "resume", **run_record}, as_json)
 
 
 def cmd_status(argv: list[str]) -> int:
@@ -453,11 +649,7 @@ def cmd_stop(argv: list[str]) -> int:
     active["stop_reason"] = reason
     state["active"] = {}
     history = history_list(state)
-    if (
-        history
-        and isinstance(history[0], dict)
-        and history[0].get("run_id") == active.get("run_id")
-    ):
+    if history and history[0].get("run_id") == active.get("run_id"):
         history[0] = active
     state["history"] = history
     save_json_file(DEFAULT_STATE_PATH, state)
@@ -574,6 +766,8 @@ def main(argv: list[str]) -> int:
         return cmd_run(rest)
     if command == "status":
         return cmd_status(rest)
+    if command == "resume":
+        return cmd_resume(rest)
     if command == "stop":
         return cmd_stop(rest)
     if command == "list":
