@@ -142,6 +142,7 @@ TODO_SCRIPT = REPO_ROOT / "scripts" / "todo_command.py"
 RESUME_SCRIPT = REPO_ROOT / "scripts" / "resume_command.py"
 SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
+PLAN_SCRIPT = REPO_ROOT / "scripts" / "plan_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
@@ -6621,6 +6622,147 @@ version: 1
         expect(
             invalid_start_work_report.get("code") == "validation_failed",
             "start-work should report validation_failed for invalid plan format",
+        )
+
+        contract_missing_plan = tmp / "contract_missing_sections_plan.md"
+        contract_missing_plan.write_text(
+            """---
+id: contract-missing-plan
+title: Contract Missing Plan
+owner: selftest
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+## Objective
+
+Validate plan run command.
+
+- [ ] 1. Execute plan contract checks
+""",
+            encoding="utf-8",
+        )
+        plan_run_missing_contract = subprocess.run(
+            [
+                sys.executable,
+                str(PLAN_SCRIPT),
+                "run",
+                str(contract_missing_plan),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            plan_run_missing_contract.returncode == 1,
+            "plan run should fail when required contract sections are missing",
+        )
+        plan_run_missing_contract_report = parse_json_output(
+            plan_run_missing_contract.stdout
+        )
+        expect(
+            plan_run_missing_contract_report.get("reason_code")
+            == "plan_contract_missing_sections"
+            and isinstance(
+                plan_run_missing_contract_report.get("missing_sections"), list
+            ),
+            "plan run should emit deterministic contract-missing reason code and section list",
+        )
+
+        contract_valid_plan = tmp / "contract_valid_plan.md"
+        contract_valid_plan.write_text(
+            """---
+id: contract-valid-plan
+title: Contract Valid Plan
+owner: selftest
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+## Objective
+
+Validate that `/plan run` delegates to deterministic plan runtime.
+
+## Scope
+
+- command wrapper checks
+- runtime delegation
+
+## Acceptance Criteria
+
+- contract headings are present
+- runtime execution completes
+
+## Stop Conditions
+
+- validation failure blocks run
+
+- [ ] 1. Run contract plan
+""",
+            encoding="utf-8",
+        )
+        plan_run_valid = subprocess.run(
+            [
+                sys.executable,
+                str(PLAN_SCRIPT),
+                "run",
+                str(contract_valid_plan),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            plan_run_valid.returncode == 0,
+            "plan run should succeed for valid contract plan",
+        )
+        plan_run_valid_report = parse_json_output(plan_run_valid.stdout)
+        expect(
+            plan_run_valid_report.get("result") == "PASS"
+            and plan_run_valid_report.get("status") in {"in_progress", "completed"},
+            "plan run should delegate to start-work and return runtime status payload",
+        )
+
+        plan_status = subprocess.run(
+            [sys.executable, str(PLAN_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(plan_status.returncode == 0, "plan status should succeed")
+        plan_status_report = parse_json_output(plan_status.stdout)
+        expect(
+            plan_status_report.get("result") == "PASS"
+            and isinstance(plan_status_report.get("plan"), dict),
+            "plan status should proxy runtime status output",
+        )
+
+        plan_doctor = subprocess.run(
+            [sys.executable, str(PLAN_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(plan_doctor.returncode == 0, "plan doctor should succeed")
+        plan_doctor_report = parse_json_output(plan_doctor.stdout)
+        expect(
+            plan_doctor_report.get("result") == "PASS"
+            and isinstance(plan_doctor_report.get("required_contract_sections"), list),
+            "plan doctor should report required contract sections",
         )
 
         malformed_frontmatter_plan = tmp / "invalid_frontmatter_plan.md"

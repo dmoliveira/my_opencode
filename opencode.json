@@ -170,6 +170,10 @@
       "description": "Manage checkpoint snapshots and runtime rollback (create|restore|list|show|prune|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
     },
+    "plan": {
+      "description": "Run contract-enforced plan execution flows (run|status|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."
