@@ -7574,6 +7574,23 @@ version: 1
             "resume status should expose actionable resume hints when eligible",
         )
 
+        resume_smart_ok = subprocess.run(
+            [sys.executable, str(RESUME_SCRIPT), "smart", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(resume_smart_ok.returncode == 0, "resume smart should succeed")
+        resume_smart_ok_report = parse_json_output(resume_smart_ok.stdout)
+        expect(
+            resume_smart_ok_report.get("result") == "PASS"
+            and isinstance(resume_smart_ok_report.get("likely_fix_paths"), list)
+            and isinstance(resume_smart_ok_report.get("diagnostics"), dict),
+            "resume smart should emit triage bundle with likely fix paths and diagnostics",
+        )
+
         resume_disable = subprocess.run(
             [sys.executable, str(RESUME_SCRIPT), "disable", "--json"],
             capture_output=True,
@@ -7609,6 +7626,35 @@ version: 1
                 ).get("next_actions", [])
             ),
             "resume status should expose enablement playbook when automation is disabled",
+        )
+
+        resume_smart_disabled = subprocess.run(
+            [
+                sys.executable,
+                str(RESUME_SCRIPT),
+                "smart",
+                "--interruption-class",
+                "tool_failure",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            resume_smart_disabled.returncode == 0,
+            "resume smart should still return triage diagnostics when resume is disabled",
+        )
+        resume_smart_disabled_report = parse_json_output(resume_smart_disabled.stdout)
+        expect(
+            resume_smart_disabled_report.get("triage_result") == "action_required"
+            and resume_smart_disabled_report.get("reason_code") == "resume_disabled"
+            and isinstance(
+                resume_smart_disabled_report.get("recommended_next_steps"), list
+            ),
+            "resume smart should surface disabled-state reason and actionable recovery hints",
         )
 
         resume_now_disabled = subprocess.run(

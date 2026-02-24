@@ -34,6 +34,7 @@ def usage() -> int:
     print(
         "usage: /resume status [--interruption-class <class>] [--json] | "
         "/resume now [--interruption-class <class>] [--approve-step <ordinal> ...] [--json] | "
+        "/resume smart [--interruption-class <class>] [--json] | "
         "/resume disable [--json]"
     )
     return 2
@@ -298,6 +299,115 @@ def command_disable(args: list[str]) -> int:
     return 0
 
 
+def command_smart(args: list[str]) -> int:
+    json_output = "--json" in args
+    interruption_class = ""
+
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--interruption-class":
+            if index + 1 >= len(args):
+                return usage()
+            interruption_class = args[index + 1].strip()
+            index += 2
+            continue
+        return usage()
+
+    _, runtime, write_path = _load_runtime()
+    interruption = (
+        interruption_class or _default_interruption_class(runtime)
+        if isinstance(runtime, dict)
+        else DEFAULT_INTERRUPTION_CLASS
+    )
+
+    if not runtime:
+        reason_code = "resume_missing_checkpoint"
+        report = {
+            "result": "PASS",
+            "triage_result": "action_required",
+            "reason_code": reason_code,
+            "summary": explain_resume_reason(reason_code),
+            "failing_command": None,
+            "likely_fix_paths": [
+                "scripts/autopilot_command.py",
+                "scripts/start_work_command.py",
+            ],
+            "recommended_next_steps": build_resume_hints(
+                reason_code,
+                interruption_class=interruption,
+            ).get("next_actions", []),
+            "diagnostics": {
+                "cooldown_remaining": 0,
+                "attempt_count": 0,
+                "max_attempts": 3,
+                "checkpoint_status": "missing",
+            },
+            "config": str(write_path),
+        }
+        print(json.dumps(report, indent=2) if json_output else report["summary"])
+        return 0
+
+    eligibility = evaluate_resume_eligibility(runtime, interruption)
+    reason_code = str(
+        eligibility.get("reason_code") or "resume_missing_runtime_artifacts"
+    )
+    resume_meta_any = runtime.get("resume")
+    resume_meta = resume_meta_any if isinstance(resume_meta_any, dict) else {}
+    trail_any = resume_meta.get("trail")
+    trail = trail_any if isinstance(trail_any, list) else []
+    latest_decision = trail[-1] if trail and isinstance(trail[-1], dict) else {}
+
+    fix_paths = [
+        "scripts/recovery_engine.py",
+        "scripts/resume_command.py",
+        "scripts/start_work_command.py",
+    ]
+    checkpoint_any = eligibility.get("checkpoint")
+    checkpoint = checkpoint_any if isinstance(checkpoint_any, dict) else {}
+    report = {
+        "result": "PASS",
+        "triage_result": "ready"
+        if bool(eligibility.get("eligible"))
+        else "action_required",
+        "reason_code": reason_code,
+        "summary": explain_resume_reason(
+            reason_code,
+            cooldown_remaining=int(eligibility.get("cooldown_remaining", 0) or 0),
+        ),
+        "failing_command": latest_decision.get("interruption_class") or interruption,
+        "likely_fix_paths": fix_paths,
+        "recommended_next_steps": build_resume_hints(
+            reason_code,
+            interruption_class=interruption,
+            checkpoint=checkpoint if checkpoint else None,
+            cooldown_remaining=int(eligibility.get("cooldown_remaining", 0) or 0),
+        ).get("next_actions", []),
+        "diagnostics": {
+            "cooldown_remaining": int(eligibility.get("cooldown_remaining", 0) or 0),
+            "attempt_count": int(eligibility.get("attempt_count", 0) or 0),
+            "max_attempts": int(eligibility.get("max_attempts", 0) or 0),
+            "checkpoint_status": checkpoint.get("status") if checkpoint else "unknown",
+            "next_step_ordinal": checkpoint.get("next_step_ordinal"),
+        },
+        "config": str(write_path),
+    }
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"triage_result: {report['triage_result']}")
+        print(f"summary: {report['summary']}")
+        print(f"reason_code: {report['reason_code']}")
+        print("recommended_next_steps:")
+        for item in report["recommended_next_steps"]:
+            print(f"- {item}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return usage()
@@ -311,6 +421,8 @@ def main(argv: list[str]) -> int:
         return command_now(rest)
     if command == "disable":
         return command_disable(rest)
+    if command == "smart":
+        return command_smart(rest)
     return usage()
 
 
