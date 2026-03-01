@@ -1,0 +1,131 @@
+name: Docs Automation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "docs/**"
+      - ".github/workflows/docs-automation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate wiki pages
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path.cwd()
+          out = root / ".docs_build" / "wiki"
+          out.mkdir(parents=True, exist_ok=True)
+
+          readme = (root / "README.md").read_text(encoding="utf-8", errors="replace")
+          quickstart = "https://github.com/dmoliveira/my_opencode/blob/main/docs/quickstart.md"
+          handbook = "https://github.com/dmoliveira/my_opencode/blob/main/docs/command-handbook.md"
+          plans = "https://github.com/dmoliveira/my_opencode/tree/main/docs/plan"
+          support = "https://buy.stripe.com/8x200i8bSgVe3Vl3g8bfO00"
+
+          intro = []
+          for line in readme.splitlines():
+              if line.startswith("#"):
+                  continue
+              if line.strip():
+                  intro.append(line.strip())
+              if len(intro) >= 4:
+                  break
+
+          home = "\n".join(
+              [
+                  "# my_opencode Wiki",
+                  "",
+                  "Welcome! This wiki is updated automatically from docs changes on `main`.",
+                  "",
+                  *intro,
+                  "",
+                  "## Start Here",
+                  f"- [Quickstart]({quickstart})",
+                  f"- [Command Handbook]({handbook})",
+                  f"- [Flow Plans]({plans})",
+                  "",
+                  "## Support",
+                  f"- If this project helps your workflow, consider supporting it here: {support}",
+              ]
+          )
+
+          automation = "\n".join(
+              [
+                  "# Docs Automation",
+                  "",
+                  "This repository publishes docs artifacts automatically:",
+                  "",
+                  "- GitHub Wiki pages are synced from generated markdown.",
+                  "- GitHub Pages serves the docs hub from `docs/pages/index.html`.",
+                  "",
+                  "## Trigger",
+                  "- Push to `main` affecting `README.md`, `docs/**`, or workflow files.",
+                  "- Manual run via workflow dispatch.",
+              ]
+          )
+
+          (out / "Home.md").write_text(home + "\n", encoding="utf-8")
+          (out / "Docs-Automation.md").write_text(automation + "\n", encoding="utf-8")
+          PY
+
+      - name: Sync generated pages to repository wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .docs_build
+          if git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" .docs_build/wiki-repo; then
+            echo "Cloned existing wiki repository"
+          else
+            echo "Wiki repository not initialized yet; creating local wiki checkout"
+            mkdir -p .docs_build/wiki-repo
+            git -C .docs_build/wiki-repo init
+            git -C .docs_build/wiki-repo checkout -b master
+            git -C .docs_build/wiki-repo remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          fi
+          rsync -av --delete .docs_build/wiki/ .docs_build/wiki-repo/
+          git -C .docs_build/wiki-repo config user.name "github-actions[bot]"
+          git -C .docs_build/wiki-repo config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git -C .docs_build/wiki-repo status --porcelain)" ]; then
+            git -C .docs_build/wiki-repo add .
+            git -C .docs_build/wiki-repo commit -m "docs: sync automated wiki pages"
+            git -C .docs_build/wiki-repo push origin HEAD:master
+          else
+            echo "No wiki changes to publish"
+          fi
+
+  deploy-pages:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

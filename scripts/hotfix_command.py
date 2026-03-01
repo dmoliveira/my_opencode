@@ -257,9 +257,30 @@ def command_postmortem(args: list[str]) -> int:
             body=generated_followup_body,
         )
 
+    linkage_missing: list[str] = []
+    if not postmortem_id:
+        linkage_missing.append("postmortem_id")
+    if not followup_issue and not opened_followup_url:
+        linkage_missing.append("followup_reference")
+    followup_status_summary = {
+        "linkage_status": "complete" if not linkage_missing else "incomplete",
+        "linkage_complete": not linkage_missing,
+        "linkage_missing": linkage_missing,
+        "followup_reference": followup_issue or opened_followup_url,
+        "followup_url": opened_followup_url or followup_url,
+        "followup_link_status": followup_link_status,
+        "open_followup_status": open_followup_status,
+    }
+
     payload = {
         "result": "PASS",
         "reason_code": "hotfix_postmortem_template",
+        "reason_codes": [
+            "hotfix_postmortem_template",
+            "followup_linkage_complete"
+            if not linkage_missing
+            else "followup_linkage_incomplete",
+        ],
         "incident_id": state.get("incident_id"),
         "postmortem_id": postmortem_id or None,
         "followup_issue": followup_issue or None,
@@ -272,6 +293,7 @@ def command_postmortem(args: list[str]) -> int:
             "body": generated_followup_body,
             "confirm_required": bool(open_followup and not confirm_followup),
         },
+        "followup_status_summary": followup_status_summary,
         "risk_ack": risk_ack or None,
         "template_markdown": "\n".join(
             [

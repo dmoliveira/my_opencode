@@ -4632,6 +4632,18 @@ index 3333333..4444444 100644
             ),
             "hotfix command postmortem should emit deterministic template markdown",
         )
+        expect(
+            "followup_linkage_complete"
+            in set(hotfix_command_postmortem_payload.get("reason_codes", []))
+            and isinstance(
+                hotfix_command_postmortem_payload.get("followup_status_summary"), dict
+            )
+            and hotfix_command_postmortem_payload.get(
+                "followup_status_summary", {}
+            ).get("linkage_complete")
+            is True,
+            "hotfix command postmortem should report complete follow-up linkage summary when closure metadata is present",
+        )
 
         hotfix_command_postmortem_link = subprocess.run(
             [
@@ -4726,6 +4738,64 @@ index 3333333..4444444 100644
             isinstance(hotfix_command_postmortem_write_payload.get("written_path"), str)
             and hotfix_postmortem_path.exists(),
             "hotfix command postmortem should report and write artifact path",
+        )
+
+        hotfix_unlinked_repo = tmp / "hotfix_unlinked_repo"
+        hotfix_unlinked_repo.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init", "-b", "main"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_unlinked_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "selftest@example.com"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_unlinked_repo,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Selftest"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=hotfix_unlinked_repo,
+        )
+        hotfix_unlinked_config = tmp / "hotfix_unlinked_opencode.json"
+        hotfix_unlinked_config.write_text("{}\n", encoding="utf-8")
+        hotfix_unlinked_env = dict(refactor_env)
+        hotfix_unlinked_env["OPENCODE_CONFIG_PATH"] = str(hotfix_unlinked_config)
+        hotfix_command_postmortem_unlinked = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "postmortem", "--json"],
+            capture_output=True,
+            text=True,
+            env=hotfix_unlinked_env,
+            check=False,
+            cwd=hotfix_unlinked_repo,
+        )
+        expect(
+            hotfix_command_postmortem_unlinked.returncode == 0,
+            "hotfix command postmortem should still emit template output when runtime linkage metadata is absent",
+        )
+        hotfix_command_postmortem_unlinked_payload = parse_json_output(
+            hotfix_command_postmortem_unlinked.stdout
+        )
+        expect(
+            "followup_linkage_incomplete"
+            in set(hotfix_command_postmortem_unlinked_payload.get("reason_codes", []))
+            and isinstance(
+                hotfix_command_postmortem_unlinked_payload.get(
+                    "followup_status_summary"
+                ),
+                dict,
+            )
+            and hotfix_command_postmortem_unlinked_payload.get(
+                "followup_status_summary", {}
+            ).get("linkage_status")
+            == "incomplete",
+            "hotfix command postmortem should report incomplete linkage when follow-up metadata is missing",
         )
 
         hotfix_command_doctor = subprocess.run(
