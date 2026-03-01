@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import time
+from hashlib import sha256
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -4068,6 +4069,22 @@ index 3333333..4444444 100644
             ),
             "release-train publish should expose summary schema and checksum metadata",
         )
+        dry_run_summary_payload = json.loads(
+            (tmp / "publish-summary-dry-run.json").read_text(encoding="utf-8")
+        )
+        dry_run_summary_checksum = dry_run_summary_payload.get("summary_checksum")
+        dry_run_summary_payload.pop("summary_checksum", None)
+        dry_run_recomputed_checksum = sha256(
+            json.dumps(dry_run_summary_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        expect(
+            dry_run_summary_payload.get("summary_schema_version") == "1.0"
+            and isinstance(dry_run_summary_checksum, str)
+            and dry_run_summary_checksum == dry_run_recomputed_checksum
+            and release_publish_dry_run_payload.get("summary_checksum")
+            == dry_run_summary_checksum,
+            "release-train publish dry-run summary should include verifiable schema checksum",
+        )
 
         release_publish_release_missing_notes = subprocess.run(
             [
@@ -4206,6 +4223,24 @@ index 3333333..4444444 100644
                 release_publish_confirmation_payload.get("summary_checksum"), str
             ),
             "release-train publish confirmation response should include summary metadata",
+        )
+        confirmation_summary_payload = json.loads(
+            (tmp / "publish-summary-confirmation.json").read_text(encoding="utf-8")
+        )
+        confirmation_summary_checksum = confirmation_summary_payload.get(
+            "summary_checksum"
+        )
+        confirmation_summary_payload.pop("summary_checksum", None)
+        confirmation_recomputed_checksum = sha256(
+            json.dumps(confirmation_summary_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        expect(
+            confirmation_summary_payload.get("summary_schema_version") == "1.0"
+            and isinstance(confirmation_summary_checksum, str)
+            and confirmation_summary_checksum == confirmation_recomputed_checksum
+            and release_publish_confirmation_payload.get("summary_checksum")
+            == confirmation_summary_checksum,
+            "release-train publish confirmation summary should include verifiable schema checksum",
         )
 
         hotfix_repo = tmp / "hotfix_repo"
