@@ -146,6 +146,18 @@ def command_draft(args: list[str]) -> int:
 
 def command_publish(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
+    write_summary_raw = pop_value(args, "--write-summary")
+    write_summary = Path(write_summary_raw).expanduser() if write_summary_raw else None
+
+    def emit_with_summary(payload: dict[str, Any]) -> None:
+        if write_summary is not None:
+            write_summary.parent.mkdir(parents=True, exist_ok=True)
+            write_summary.write_text(
+                json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+            )
+            payload["summary_path"] = str(write_summary.resolve())
+        emit(payload, as_json=as_json)
+
     try:
         repo_root = Path(
             pop_value(args, "--repo-root", str(REPO_ROOT)) or str(REPO_ROOT)
@@ -183,7 +195,7 @@ def command_publish(args: list[str]) -> int:
             "remediation": prepare.get("remediation", []),
             "prepare": prepare,
         }
-        emit(payload, as_json=as_json)
+        emit_with_summary(payload)
         return 1
 
     reason_codes: list[str] = []
@@ -203,7 +215,7 @@ def command_publish(args: list[str]) -> int:
             "dry_run": dry_run,
             "confirmed": confirm,
         }
-        emit(payload, as_json=as_json)
+        emit_with_summary(payload)
         return 1
 
     tag_name = f"v{version}"
@@ -228,7 +240,7 @@ def command_publish(args: list[str]) -> int:
             "reason_codes": [],
             "remediation": [],
         }
-        emit(payload, as_json=as_json)
+        emit_with_summary(payload)
         return 0
 
     if not dry_run and not confirm:
@@ -240,7 +252,7 @@ def command_publish(args: list[str]) -> int:
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
         }
-        emit(payload, as_json=as_json)
+        emit_with_summary(payload)
         return 1
 
     executed_actions: list[str] = []
@@ -329,7 +341,7 @@ def command_publish(args: list[str]) -> int:
             "broadcast release announcement",
         ],
     }
-    emit(payload, as_json=as_json)
+    emit_with_summary(payload)
     return 0 if payload["result"] == "PASS" else 1
 
 
