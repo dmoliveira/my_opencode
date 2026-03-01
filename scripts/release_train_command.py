@@ -27,12 +27,16 @@ from release_train_engine import (  # type: ignore
 
 PR_PATTERN = re.compile(r"/pull/(\d+)")
 PUBLISH_SUMMARY_SCHEMA_VERSION = "1.0"
+PUBLISH_PROFILE_PRESETS: dict[str, dict[str, bool]] = {
+    "docs-only": {"create_tag": True, "create_release": False},
+    "runtime": {"create_tag": True, "create_release": True},
+}
 
 
 def usage() -> int:
     print(
         "usage: /release-train [status|prepare|draft|rollup|publish|doctor] "
-        "[--json] [--version <x.y.z>]"
+        "[--json] [--version <x.y.z>] [--profile docs-only|runtime]"
     )
     return 2
 
@@ -72,6 +76,28 @@ def _local_tag_exists(repo_root: Path, tag_name: str) -> bool:
         cwd=repo_root,
     )
     return proc.returncode == 0
+
+
+def _resolve_publish_profile(
+    *,
+    profile: str | None,
+    create_tag: bool,
+    create_release: bool,
+    explicit_create_tag: bool,
+    explicit_create_release: bool,
+) -> tuple[bool, bool, str]:
+    if profile is None:
+        return create_tag, create_release, "custom"
+    preset = PUBLISH_PROFILE_PRESETS.get(profile)
+    if preset is None:
+        raise ValueError(
+            "--profile must be one of: " + ", ".join(sorted(PUBLISH_PROFILE_PRESETS))
+        )
+    resolved_create_tag = create_tag if explicit_create_tag else preset["create_tag"]
+    resolved_create_release = (
+        create_release if explicit_create_release else preset["create_release"]
+    )
+    return resolved_create_tag, resolved_create_release, profile
 
 
 def command_status(args: list[str]) -> int:
@@ -188,8 +214,18 @@ def command_publish(args: list[str]) -> int:
             return 2
         dry_run = pop_flag(args, "--dry-run")
         confirm = pop_flag(args, "--confirm")
+        explicit_create_tag = "--create-tag" in args
+        explicit_create_release = "--create-release" in args
         create_tag = pop_flag(args, "--create-tag")
         create_release = pop_flag(args, "--create-release")
+        publish_profile = pop_value(args, "--profile")
+        create_tag, create_release, publish_profile = _resolve_publish_profile(
+            profile=publish_profile,
+            create_tag=create_tag,
+            create_release=create_release,
+            explicit_create_tag=explicit_create_tag,
+            explicit_create_release=explicit_create_release,
+        )
         notes_file_raw = pop_value(args, "--notes-file")
         notes_file = Path(notes_file_raw).expanduser() if notes_file_raw else None
         prepare = evaluate_prepare(
@@ -235,6 +271,7 @@ def command_publish(args: list[str]) -> int:
             "reason_codes": merged_reason_codes,
             "remediation": merged_remediation,
             "prepare": prepare,
+            "publish_profile": publish_profile,
         }
         emit_with_summary(payload)
         return 1
@@ -255,6 +292,7 @@ def command_publish(args: list[str]) -> int:
             "version": version,
             "dry_run": dry_run,
             "confirmed": confirm,
+            "publish_profile": publish_profile,
         }
         emit_with_summary(payload)
         return 1
@@ -274,6 +312,7 @@ def command_publish(args: list[str]) -> int:
             "dry_run": dry_run,
             "confirmed": confirm,
             "publish_stage": "preflight_failed",
+            "publish_profile": publish_profile,
             "publish_plan": publish_plan,
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
@@ -310,6 +349,7 @@ def command_publish(args: list[str]) -> int:
             "version": version,
             "dry_run": True,
             "confirmed": confirm,
+            "publish_profile": publish_profile,
             "publish_stage": "dry_run_plan",
             "publish_plan": publish_plan,
             "tag_name": tag_name,
@@ -326,6 +366,7 @@ def command_publish(args: list[str]) -> int:
             "result": "FAIL",
             "reason_codes": ["confirmation_required"],
             "remediation": ["re-run with --confirm or add --dry-run"],
+            "publish_profile": publish_profile,
             "publish_plan": publish_plan,
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
@@ -403,6 +444,7 @@ def command_publish(args: list[str]) -> int:
         "version": version,
         "dry_run": False,
         "confirmed": True,
+        "publish_profile": publish_profile,
         "publish_stage": "executed",
         "publish_plan": publish_plan,
         "tag_name": tag_name,

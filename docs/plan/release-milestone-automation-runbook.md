@@ -79,6 +79,12 @@ python3 scripts/release_train_command.py publish \
 - This check is useful for validating deterministic reason codes and publish planning behavior.
 - For docs-only release repackaging where changelog/version gates are intentionally not advanced, `gh release create` remains the canonical publish path.
 
+Profile presets for publish planning:
+
+- `--profile docs-only`: preconfigures tag planning without release creation
+- `--profile runtime`: preconfigures tag + release planning (use `--notes-file`)
+- Explicit `--create-tag` / `--create-release` flags override profile defaults when needed
+
 ## Lightweight Checklist (Docs-Only Milestones)
 
 - milestone changelog file added and reviewed

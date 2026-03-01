@@ -873,6 +873,8 @@ exit 0
             and len(e27_draft.get("evidence_sources", [])) >= 2,
             "knowledge pipeline should generate grouped draft entries with source links",
         )
+        if not isinstance(e27_draft, dict):
+            raise RuntimeError("knowledge pipeline draft entry missing")
 
         reviewed_entry, review_failures = transition_entry(
             e27_draft,
@@ -4215,6 +4217,112 @@ index 3333333..4444444 100644
                 if isinstance(entry, dict)
             ),
             "release-train publish dry-run should expose explicit action matrix when no external actions are selected",
+        )
+
+        release_publish_profile_docs_only = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--profile",
+                "docs-only",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_profile_docs_only.returncode == 0,
+            "release-train publish docs-only profile should produce a valid dry-run plan",
+        )
+        release_publish_profile_docs_only_payload = parse_json_output(
+            release_publish_profile_docs_only.stdout
+        )
+        docs_only_action_matrix = release_publish_profile_docs_only_payload.get(
+            "action_matrix"
+        )
+        expect(
+            release_publish_profile_docs_only_payload.get("publish_profile")
+            == "docs-only"
+            and isinstance(docs_only_action_matrix, list)
+            and any(
+                entry.get("action") == "create_tag" and entry.get("status") == "planned"
+                for entry in docs_only_action_matrix
+                if isinstance(entry, dict)
+            )
+            and any(
+                entry.get("action") == "create_release"
+                and entry.get("status") == "skipped"
+                for entry in docs_only_action_matrix
+                if isinstance(entry, dict)
+            ),
+            "release-train publish docs-only profile should map to tag-only publish planning",
+        )
+
+        release_notes_profile_path = tmp / "release-notes-profile.md"
+        release_notes_profile_path.write_text(
+            "# Release Notes Profile Fixture\n\n- Runtime release fixture\n",
+            encoding="utf-8",
+        )
+        release_publish_profile_runtime = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--profile",
+                "runtime",
+                "--notes-file",
+                str(release_notes_profile_path),
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_profile_runtime.returncode == 0,
+            "release-train publish runtime profile should produce a valid dry-run plan",
+        )
+        release_publish_profile_runtime_payload = parse_json_output(
+            release_publish_profile_runtime.stdout
+        )
+        runtime_action_matrix = release_publish_profile_runtime_payload.get(
+            "action_matrix"
+        )
+        expect(
+            release_publish_profile_runtime_payload.get("publish_profile") == "runtime"
+            and isinstance(runtime_action_matrix, list)
+            and any(
+                entry.get("action") == "create_tag" and entry.get("status") == "planned"
+                for entry in runtime_action_matrix
+                if isinstance(entry, dict)
+            )
+            and any(
+                entry.get("action") == "create_release"
+                and entry.get("status") == "planned"
+                for entry in runtime_action_matrix
+                if isinstance(entry, dict)
+            ),
+            "release-train publish runtime profile should map to tag and release planning",
         )
 
         subprocess.run(
