@@ -278,6 +278,27 @@ def command_publish(args: list[str]) -> int:
         emit_with_summary(payload)
         return 1
 
+    action_matrix = [
+        {
+            "action": "create_tag",
+            "requested": create_tag,
+            "status": "planned" if create_tag else "skipped",
+        },
+        {
+            "action": "create_release",
+            "requested": create_release,
+            "status": "planned" if create_release else "skipped",
+        },
+    ]
+    if not create_tag and not create_release:
+        action_matrix.append(
+            {
+                "action": "external_publish",
+                "requested": False,
+                "status": "none_selected",
+            }
+        )
+
     if dry_run:
         payload = {
             "result": "PASS",
@@ -288,6 +309,7 @@ def command_publish(args: list[str]) -> int:
             "publish_plan": publish_plan,
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+            "action_matrix": action_matrix,
             "reason_codes": [],
             "remediation": [],
         }
@@ -380,6 +402,7 @@ def command_publish(args: list[str]) -> int:
         "publish_plan": publish_plan,
         "tag_name": tag_name,
         "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+        "action_matrix": action_matrix,
         "executed_actions": executed_actions,
         "reason_codes": failure_reason_codes,
         "remediation": remediation_actions,
