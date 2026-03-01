@@ -3765,6 +3765,10 @@ index 3333333..4444444 100644
                 "create-pr",
                 "--version",
                 "0.0.1",
+                "--reviewer",
+                "alice",
+                "--reviewer",
+                "@bob",
                 "--json",
             ],
             capture_output=True,
@@ -3785,6 +3789,12 @@ index 3333333..4444444 100644
             in {"confirmation_required", "ship_prepare_blocked"}
             and isinstance(ship_create_pr_preview_payload.get("pr_template"), dict),
             "ship create-pr preview should emit confirmation gate and template",
+        )
+        expect(
+            isinstance(ship_create_pr_preview_payload.get("requested_reviewers"), list)
+            and "alice" in ship_create_pr_preview_payload.get("requested_reviewers", [])
+            and "bob" in ship_create_pr_preview_payload.get("requested_reviewers", []),
+            "ship create-pr preview should include normalized requested reviewers",
         )
 
         release_repo = tmp / "release_repo"

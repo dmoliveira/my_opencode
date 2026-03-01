@@ -3,22 +3,39 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from flow_reason_codes import SHIP_PREPARE_BLOCKED, SHIP_READY  # type: ignore
+from flow_reason_codes import (  # type: ignore
+    SHIP_PREPARE_BLOCKED,
+    SHIP_READY,
+)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RELEASE_TRAIN_SCRIPT = SCRIPT_DIR / "release_train_command.py"
 
 
+def _repo_root() -> Path:
+    completed = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return Path.cwd()
+    return Path(completed.stdout.strip()).resolve()
+
+
 def usage() -> int:
     print(
         "usage: /ship --version <x.y.z> [--allow-version-jump] [--breaking-change] [--emit-pr-template] [--json] | "
-        "/ship create-pr --version <x.y.z> [--base <ref>] [--head <ref>] [--confirm] [--json]"
+        "/ship create-pr --version <x.y.z> [--base <ref>] [--head <ref>] "
+        "[--reviewer <login> ...] [--auto-assign-reviewers] [--confirm] [--json]"
     )
     return 2
 
@@ -63,6 +80,64 @@ def _build_pr_template(version: str) -> dict[str, str]:
             ]
         ),
     }
+
+
+def _parse_reviewers(args: list[str]) -> list[str]:
+    reviewers: list[str] = []
+    while True:
+        value = _pop_value(args, "--reviewer")
+        if value is None:
+            break
+        reviewer = value.strip().lstrip("@")
+        if reviewer:
+            reviewers.append(reviewer)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for reviewer in reviewers:
+        key = reviewer.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(reviewer)
+    return deduped
+
+
+def _codeowners_reviewers(repo_root: Path) -> list[str]:
+    codeowners = repo_root / "CODEOWNERS"
+    if not codeowners.exists():
+        return []
+    matches: list[str] = []
+    for raw in codeowners.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        matches.extend(re.findall(r"@([A-Za-z0-9_.-]+)", line))
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for reviewer in matches:
+        key = reviewer.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(reviewer)
+    return deduped
+
+
+def _assign_reviewers(pr_url: str, reviewers: list[str]) -> tuple[bool, str]:
+    if not reviewers:
+        return True, "no_reviewers_requested"
+    completed = subprocess.run(
+        ["gh", "pr", "edit", pr_url, "--add-reviewer", ",".join(reviewers)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode == 0:
+        return True, "reviewers_assigned"
+    detail = (
+        completed.stderr.strip() or completed.stdout.strip() or "reviewer_assign_failed"
+    )
+    return False, detail
 
 
 def _prepare_payload(
@@ -133,9 +208,18 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         return 2
     base_ref = _pop_value(args, "--base") or "main"
     head_ref = _pop_value(args, "--head") or "HEAD"
+    auto_assign_reviewers = _pop_flag(args, "--auto-assign-reviewers")
+    explicit_reviewers = _parse_reviewers(args)
     confirm = _pop_flag(args, "--confirm")
     if args or not version:
         return usage()
+
+    repo_root = _repo_root()
+    auto_reviewers = _codeowners_reviewers(repo_root) if auto_assign_reviewers else []
+    reviewers = explicit_reviewers[:]
+    for reviewer in auto_reviewers:
+        if reviewer.lower() not in {item.lower() for item in reviewers}:
+            reviewers.append(reviewer)
 
     payload, code = _prepare_payload(
         version=version,
@@ -148,6 +232,11 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         template = _build_pr_template(version)
 
     if code != 0:
+        payload["requested_reviewers"] = explicit_reviewers
+        payload["auto_assign_reviewers"] = auto_assign_reviewers
+        payload["resolved_reviewers"] = reviewers
+        if "pr_template" not in payload:
+            payload["pr_template"] = template
         if as_json:
             print(json.dumps(payload, indent=2))
         else:
@@ -162,6 +251,9 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
             "version": version,
             "base": base_ref,
             "head": head_ref,
+            "requested_reviewers": explicit_reviewers,
+            "auto_assign_reviewers": auto_assign_reviewers,
+            "resolved_reviewers": reviewers,
             "pr_template": template,
             "next_actions": ["re-run with --confirm to create PR"],
         }
@@ -212,13 +304,26 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         "title": title,
         "base": base_ref,
         "head": head_ref,
+        "requested_reviewers": explicit_reviewers,
+        "auto_assign_reviewers": auto_assign_reviewers,
+        "resolved_reviewers": reviewers,
     }
+
+    assign_ok, assign_detail = _assign_reviewers(success["url"], reviewers)
+    success["reviewer_assignment"] = {
+        "result": "PASS" if assign_ok else "FAIL",
+        "detail": assign_detail,
+    }
+    if not assign_ok:
+        success["result"] = "FAIL"
+        success["reason_code"] = "ship_reviewer_assign_failed"
+
     if as_json:
         print(json.dumps(success, indent=2))
     else:
         print(f"result: {success['result']}")
         print(f"url: {success['url']}")
-    return 0
+    return 0 if success["result"] == "PASS" else 1
 
 
 def main(argv: list[str]) -> int:
