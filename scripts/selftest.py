@@ -4030,6 +4030,99 @@ index 3333333..4444444 100644
             "release-train publish dry-run should emit pass payload",
         )
 
+        release_publish_release_missing_notes = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--create-release",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_release_missing_notes.returncode == 1,
+            "release-train publish should require notes file for create-release",
+        )
+        release_publish_release_missing_notes_payload = parse_json_output(
+            release_publish_release_missing_notes.stdout
+        )
+        expect(
+            "release_notes_required_for_create_release"
+            in set(
+                release_publish_release_missing_notes_payload.get("reason_codes", [])
+            ),
+            "release-train publish should emit release-notes-required reason code",
+        )
+
+        release_notes_path = release_repo / "release-notes.md"
+        release_notes_path.write_text(
+            "# Release Notes\n\n- Fixture release\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "add", "release-notes.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "add release notes fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        release_publish_release_dry_run = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--create-release",
+                "--notes-file",
+                str(release_notes_path),
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_release_dry_run.returncode == 0,
+            "release-train publish dry-run should accept create-release with notes file",
+        )
+        release_publish_release_dry_run_payload = parse_json_output(
+            release_publish_release_dry_run.stdout
+        )
+        expect(
+            release_publish_release_dry_run_payload.get("publish_stage")
+            == "dry_run_plan"
+            and isinstance(
+                release_publish_release_dry_run_payload.get("publish_plan"), list
+            ),
+            "release-train publish dry-run should emit publish action plan",
+        )
+
         release_publish_confirmation = subprocess.run(
             [
                 sys.executable,
