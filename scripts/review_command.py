@@ -18,13 +18,19 @@ from flow_reason_codes import (  # type: ignore
     REVIEW_CHECKLIST_GENERATED,
     REVIEW_REPORT_INVALID,
 )
+from reviewer_policy import (  # type: ignore
+    diagnose_reviewer_policy,
+    env_reviewer_values,
+    parse_reviewer_flags,
+    resolve_reviewer_policy,
+)
 
 
 def usage() -> int:
     print(
         "usage: /review local [--base <ref>] [--head <ref>] [--diff-file <path>] [--json] | "
         "/review apply-checklist [--base <ref>] [--head <ref>] [--diff-file <path>] [--write <path>] [--include-findings] [--json] | "
-        "/review doctor [--json]"
+        "/review doctor [--allow-reviewer <login> ...] [--deny-reviewer <login> ...] [--json]"
     )
     return 2
 
@@ -193,17 +199,45 @@ def command_local(args: list[str]) -> int:
 
 
 def command_doctor(args: list[str]) -> int:
-    if any(arg not in ("--json",) for arg in args):
-        return usage()
     as_json = "--json" in args
+    args = [arg for arg in args if arg != "--json"]
+    allow_cli = parse_reviewer_flags(args, "--allow-reviewer")
+    deny_cli = parse_reviewer_flags(args, "--deny-reviewer")
+    if args:
+        return usage()
+
+    allow_env = env_reviewer_values("MY_OPENCODE_SHIP_REVIEWER_ALLOW")
+    deny_env = env_reviewer_values("MY_OPENCODE_SHIP_REVIEWER_DENY")
+    allow_reviewers, deny_reviewers, source = resolve_reviewer_policy(
+        allow_cli,
+        deny_cli,
+        allow_env,
+        deny_env,
+    )
+    policy_diagnostics = diagnose_reviewer_policy(
+        allow_list=allow_reviewers,
+        deny_list=deny_reviewers,
+        source=source,
+    )
+
     analyzer_exists = (SCRIPT_DIR / "pr_review_analyzer.py").exists()
+    warnings_any = policy_diagnostics.get("warnings", [])
+    warnings = warnings_any if isinstance(warnings_any, list) else []
+    quick_fixes = [
+        "/review local --base main --head HEAD --json",
+        "/review doctor --json",
+    ]
+    if warnings:
+        quick_fixes.append(
+            "remove overlap between --allow-reviewer and --deny-reviewer (deny wins on conflicts)"
+        )
+
     report = {
         "result": "PASS" if analyzer_exists else "FAIL",
         "analyzer_exists": analyzer_exists,
-        "quick_fixes": [
-            "/review local --base main --head HEAD --json",
-            "/review doctor --json",
-        ],
+        "policy_diagnostics": policy_diagnostics,
+        "warnings": warnings,
+        "quick_fixes": quick_fixes,
     }
     if as_json:
         print(json.dumps(report, indent=2))

@@ -12,6 +12,8 @@ REVIEW_CHECKLIST_GENERATED = "review_checklist_generated"
 
 SHIP_READY = "ship_ready"
 SHIP_PREPARE_BLOCKED = "ship_prepare_blocked"
+REVIEWER_POLICY_OK = "reviewer_policy_ok"
+REVIEWER_POLICY_CONFLICT = "reviewer_policy_conflict"
 
 HOTFIX_NOT_ACTIVE = "hotfix_not_active"
 HOTFIX_ROLLBACK_CHECKPOINT_MISSING = "rollback_checkpoint_missing"
