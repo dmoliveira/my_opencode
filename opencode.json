@@ -151,7 +151,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "release-train": {
-      "description": "Run release-train workflow controls (status|prepare|draft|publish)",
+      "description": "Run release-train workflow controls (status|prepare|draft|rollup|publish)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "hotfix": {

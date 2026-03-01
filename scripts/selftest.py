@@ -3682,6 +3682,86 @@ index 3333333..4444444 100644
             "release-train command prepare should emit reason codes",
         )
 
+        rollup_milestone_a = tmp / "rollup_milestone_a.md"
+        rollup_milestone_a.write_text(
+            """# Milestone A
+
+| Milestone | PR |
+| --- | --- |
+| A | [#101](https://github.com/org/repo/pull/101) |
+| B | [#102](https://github.com/org/repo/pull/102) |
+""",
+            encoding="utf-8",
+        )
+        rollup_milestone_b = tmp / "rollup_milestone_b.md"
+        rollup_milestone_b.write_text(
+            """# Milestone B
+
+| Milestone | PR |
+| --- | --- |
+| C | [#102](https://github.com/org/repo/pull/102) |
+| D | [#103](https://github.com/org/repo/pull/103) |
+""",
+            encoding="utf-8",
+        )
+        rollup_output_path = tmp / "release_rollup.md"
+        release_rollup_draft = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "rollup",
+                "--title",
+                "Selftest Rollup",
+                "--milestone",
+                str(rollup_milestone_a),
+                "--milestone",
+                str(rollup_milestone_b),
+                "--write",
+                str(rollup_output_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_rollup_draft.returncode == 0,
+            "release-rollup draft should generate deterministic rollup output",
+        )
+        release_rollup_draft_payload = parse_json_output(release_rollup_draft.stdout)
+        expect(
+            release_rollup_draft_payload.get("result") == "PASS"
+            and release_rollup_draft_payload.get("pr_numbers") == [101, 102, 103]
+            and isinstance(release_rollup_draft_payload.get("markdown"), str),
+            "release-rollup draft should emit deduped PR list and markdown payload",
+        )
+        expect(
+            rollup_output_path.exists()
+            and isinstance(release_rollup_draft_payload.get("written_path"), str),
+            "release-rollup draft should support artifact writing",
+        )
+
+        release_rollup_doctor = subprocess.run(
+            [sys.executable, str(RELEASE_TRAIN_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_rollup_doctor.returncode == 0,
+            "release-rollup doctor should succeed",
+        )
+        release_rollup_doctor_payload = parse_json_output(release_rollup_doctor.stdout)
+        expect(
+            release_rollup_doctor_payload.get("result") == "PASS"
+            and release_rollup_doctor_payload.get("engine_exists") is True,
+            "release-rollup doctor should confirm command availability",
+        )
+
         do_usage = subprocess.run(
             [sys.executable, str(DO_COMMAND_SCRIPT)],
             capture_output=True,
