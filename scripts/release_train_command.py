@@ -216,6 +216,11 @@ def command_publish(args: list[str]) -> int:
         preflight_remediation.append(
             f"delete or bump version before publishing: git tag -d {tag_name}"
         )
+    if create_release and not create_tag and not _local_tag_exists(repo_root, tag_name):
+        preflight_reason_codes.append("publish_release_tag_missing")
+        preflight_remediation.append(
+            "create and push the release tag first, or add --create-tag for one-step publish"
+        )
 
     if not prepare.get("ready"):
         merged_reason_codes = sorted(
