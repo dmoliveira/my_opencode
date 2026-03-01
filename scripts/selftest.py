@@ -4085,6 +4085,22 @@ index 3333333..4444444 100644
             == dry_run_summary_checksum,
             "release-train publish dry-run summary should include verifiable schema checksum",
         )
+        dry_run_action_matrix = release_publish_dry_run_payload.get("action_matrix")
+        expect(
+            isinstance(dry_run_action_matrix, list)
+            and any(
+                entry.get("action") == "create_tag" and entry.get("status") == "skipped"
+                for entry in dry_run_action_matrix
+                if isinstance(entry, dict)
+            )
+            and any(
+                entry.get("action") == "create_release"
+                and entry.get("status") == "skipped"
+                for entry in dry_run_action_matrix
+                if isinstance(entry, dict)
+            ),
+            "release-train publish dry-run should expose explicit action matrix when no external actions are selected",
+        )
 
         subprocess.run(
             ["git", "tag", "v1.0.1"],
@@ -4225,6 +4241,19 @@ index 3333333..4444444 100644
                 release_publish_release_dry_run_payload.get("publish_plan"), list
             ),
             "release-train publish dry-run should emit publish action plan",
+        )
+        release_dry_run_action_matrix = release_publish_release_dry_run_payload.get(
+            "action_matrix"
+        )
+        expect(
+            isinstance(release_dry_run_action_matrix, list)
+            and any(
+                entry.get("action") == "create_release"
+                and entry.get("status") == "planned"
+                for entry in release_dry_run_action_matrix
+                if isinstance(entry, dict)
+            ),
+            "release-train publish dry-run should mark create-release as planned in action matrix",
         )
 
         release_publish_confirmation = subprocess.run(
