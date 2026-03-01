@@ -63,6 +63,17 @@ def emit(payload: dict[str, Any], *, as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
+def _local_tag_exists(repo_root: Path, tag_name: str) -> bool:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag_name}"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=repo_root,
+    )
+    return proc.returncode == 0
+
+
 def command_status(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
     repo_root = Path(pop_value(args, "--repo-root", str(REPO_ROOT)) or str(REPO_ROOT))
@@ -197,11 +208,27 @@ def command_publish(args: list[str]) -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
+    tag_name = f"v{version}"
+    preflight_reason_codes: list[str] = []
+    preflight_remediation: list[str] = []
+    if create_tag and _local_tag_exists(repo_root, tag_name):
+        preflight_reason_codes.append("publish_tag_already_exists")
+        preflight_remediation.append(
+            f"delete or bump version before publishing: git tag -d {tag_name}"
+        )
+
     if not prepare.get("ready"):
+        merged_reason_codes = sorted(
+            set([*prepare.get("reason_codes", []), *preflight_reason_codes])
+        )
+        merged_remediation = [
+            *prepare.get("remediation", []),
+            *preflight_remediation,
+        ]
         payload = {
             "result": "FAIL",
-            "reason_codes": prepare.get("reason_codes", []),
-            "remediation": prepare.get("remediation", []),
+            "reason_codes": merged_reason_codes,
+            "remediation": merged_remediation,
             "prepare": prepare,
         }
         emit_with_summary(payload)
@@ -227,7 +254,6 @@ def command_publish(args: list[str]) -> int:
         emit_with_summary(payload)
         return 1
 
-    tag_name = f"v{version}"
     publish_plan: list[str] = []
     if create_tag:
         publish_plan.append(f"create and push annotated tag {tag_name}")
@@ -235,6 +261,22 @@ def command_publish(args: list[str]) -> int:
         publish_plan.append(f"create GitHub release {tag_name} from notes file")
     if not publish_plan:
         publish_plan.append("no external publish actions selected")
+
+    if preflight_reason_codes:
+        payload = {
+            "result": "FAIL",
+            "version": version,
+            "dry_run": dry_run,
+            "confirmed": confirm,
+            "publish_stage": "preflight_failed",
+            "publish_plan": publish_plan,
+            "tag_name": tag_name,
+            "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+            "reason_codes": preflight_reason_codes,
+            "remediation": preflight_remediation,
+        }
+        emit_with_summary(payload)
+        return 1
 
     if dry_run:
         payload = {

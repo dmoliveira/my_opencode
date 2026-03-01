@@ -4086,6 +4086,54 @@ index 3333333..4444444 100644
             "release-train publish dry-run summary should include verifiable schema checksum",
         )
 
+        subprocess.run(
+            ["git", "tag", "v1.0.1"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        release_publish_conflicting_tag = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--create-tag",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_conflicting_tag.returncode == 1,
+            "release-train publish should fail preflight when tag already exists",
+        )
+        release_publish_conflicting_tag_payload = parse_json_output(
+            release_publish_conflicting_tag.stdout
+        )
+        expect(
+            "publish_tag_already_exists"
+            in set(release_publish_conflicting_tag_payload.get("reason_codes", [])),
+            "release-train publish should report deterministic reason code for tag conflicts",
+        )
+        subprocess.run(
+            ["git", "tag", "-d", "v1.0.1"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+
         release_publish_release_missing_notes = subprocess.run(
             [
                 sys.executable,
