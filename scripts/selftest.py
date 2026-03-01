@@ -154,6 +154,7 @@ DO_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "do_command.py"
 SHIP_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "ship_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
+RELEASE_INDEX_UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update_release_index.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -3830,6 +3831,26 @@ index 3333333..4444444 100644
             release_rollup_doctor_payload.get("result") == "PASS"
             and release_rollup_doctor_payload.get("engine_exists") is True,
             "release-rollup doctor should confirm command availability",
+        )
+
+        release_index_update = subprocess.run(
+            [sys.executable, str(RELEASE_INDEX_UPDATE_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_index_update.returncode == 0,
+            "release index update helper should regenerate index without errors",
+        )
+        release_index_text = (
+            REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
+        ).read_text(encoding="utf-8")
+        expect(
+            "| v0.4.8 |" in release_index_text,
+            "release index update helper should preserve latest v0.4.8 index entry",
         )
 
         do_usage = subprocess.run(
