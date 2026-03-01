@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from release_train_engine import (  # type: ignore
 
 
 PR_PATTERN = re.compile(r"/pull/(\d+)")
+PUBLISH_SUMMARY_SCHEMA_VERSION = "1.0"
 
 
 def usage() -> int:
@@ -150,12 +152,19 @@ def command_publish(args: list[str]) -> int:
     write_summary = Path(write_summary_raw).expanduser() if write_summary_raw else None
 
     def emit_with_summary(payload: dict[str, Any]) -> None:
+        payload["summary_schema_version"] = PUBLISH_SUMMARY_SCHEMA_VERSION
         if write_summary is not None:
+            serializable_payload = dict(payload)
+            summary_checksum = sha256(
+                json.dumps(serializable_payload, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            serializable_payload["summary_checksum"] = summary_checksum
             write_summary.parent.mkdir(parents=True, exist_ok=True)
             write_summary.write_text(
-                json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+                json.dumps(serializable_payload, indent=2) + "\n", encoding="utf-8"
             )
             payload["summary_path"] = str(write_summary.resolve())
+            payload["summary_checksum"] = summary_checksum
         emit(payload, as_json=as_json)
 
     try:

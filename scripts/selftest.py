@@ -4039,6 +4039,13 @@ index 3333333..4444444 100644
             and (tmp / "publish-summary-dry-run.json").exists(),
             "release-train publish should persist dry-run summary when requested",
         )
+        expect(
+            release_publish_dry_run_payload.get("summary_schema_version") == "1.0"
+            and isinstance(
+                release_publish_dry_run_payload.get("summary_checksum"), str
+            ),
+            "release-train publish should expose summary schema and checksum metadata",
+        )
 
         release_publish_release_missing_notes = subprocess.run(
             [
@@ -4170,6 +4177,13 @@ index 3333333..4444444 100644
             isinstance(release_publish_confirmation_payload.get("summary_path"), str)
             and (tmp / "publish-summary-confirmation.json").exists(),
             "release-train publish confirmation response should persist summary when requested",
+        )
+        expect(
+            release_publish_confirmation_payload.get("summary_schema_version") == "1.0"
+            and isinstance(
+                release_publish_confirmation_payload.get("summary_checksum"), str
+            ),
+            "release-train publish confirmation response should include summary metadata",
         )
 
         hotfix_repo = tmp / "hotfix_repo"
