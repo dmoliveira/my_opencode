@@ -4467,6 +4467,39 @@ index 3333333..4444444 100644
             "hotfix command postmortem should expose deterministic followup link status",
         )
 
+        hotfix_command_postmortem_open_preview = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_COMMAND_SCRIPT),
+                "postmortem",
+                "--open-followup",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_postmortem_open_preview.returncode == 0,
+            "hotfix command postmortem open-followup preview should succeed",
+        )
+        hotfix_command_postmortem_open_preview_payload = parse_json_output(
+            hotfix_command_postmortem_open_preview.stdout
+        )
+        expect(
+            hotfix_command_postmortem_open_preview_payload.get("open_followup_status")
+            == "confirmation_required"
+            and isinstance(
+                hotfix_command_postmortem_open_preview_payload.get(
+                    "followup_preview", {}
+                ).get("title"),
+                str,
+            ),
+            "hotfix command postmortem should require explicit confirmation before opening follow-up issue",
+        )
+
         hotfix_postmortem_path = tmp / "hotfix_postmortem.md"
         hotfix_command_postmortem_write = subprocess.run(
             [

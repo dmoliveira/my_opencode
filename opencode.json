@@ -155,7 +155,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "hotfix": {
-      "description": "Run incident hotfix controls with strict close gating and followup linking (start|status|close|postmortem|remind|doctor)",
+      "description": "Run incident hotfix controls with strict close gating, followup linking, and followup-open previews (start|status|close|postmortem|remind|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "health": {
