@@ -97,6 +97,7 @@ python3 scripts/release_train_command.py publish \
 - `v0.4.6`: `docs/plan/v0.4.6-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-6.md`
 - `v0.4.7`: `docs/plan/v0.4.7-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-7.md`
 - `v0.4.8`: `docs/plan/v0.4.8-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-8.md`
+- `v0.4.9`: `docs/plan/v0.4.9-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-9.md`
 
 Reference index for all v0.4.x milestones: `docs/plan/v0.4-release-index.md`.
 
