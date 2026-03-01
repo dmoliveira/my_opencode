@@ -81,12 +81,12 @@ python3 scripts/release_train_command.py publish \
 
 ## Lightweight Checklist (Docs-Only Milestones)
 
-- [ ] milestone changelog file added and reviewed
-- [ ] release-notes draft generated from milestone sources
-- [ ] full validation gates passed (`validate`, `selftest`, `install-test`, `pre-commit`)
-- [ ] docs PR merged to `main`
-- [ ] release tag published with release-notes file
-- [ ] local `main` synced and clean after publish
+- milestone changelog file added and reviewed
+- release-notes draft generated from milestone sources
+- full validation gates passed (`validate`, `selftest`, `install-test`, `pre-commit`)
+- docs PR merged to `main`
+- release tag published with release-notes file
+- local `main` synced and clean after publish
 
 ## v0.4.x Cadence Examples
 
