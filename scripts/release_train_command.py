@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -155,6 +156,10 @@ def command_publish(args: list[str]) -> int:
             return 2
         dry_run = pop_flag(args, "--dry-run")
         confirm = pop_flag(args, "--confirm")
+        create_tag = pop_flag(args, "--create-tag")
+        create_release = pop_flag(args, "--create-release")
+        notes_file_raw = pop_value(args, "--notes-file")
+        notes_file = Path(notes_file_raw).expanduser() if notes_file_raw else None
         prepare = evaluate_prepare(
             repo_root,
             version=version,
@@ -165,6 +170,8 @@ def command_publish(args: list[str]) -> int:
             )
             or DEFAULT_ALLOWED_BRANCH_RE,
         )
+        if args:
+            return usage()
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -179,21 +186,140 @@ def command_publish(args: list[str]) -> int:
         emit(payload, as_json=as_json)
         return 1
 
+    reason_codes: list[str] = []
+    remediation: list[str] = []
+    if create_release and notes_file is None:
+        reason_codes.append("release_notes_required_for_create_release")
+        remediation.append("provide --notes-file <path> when using --create-release")
+    if notes_file is not None and not notes_file.exists():
+        reason_codes.append("release_notes_missing_file")
+        remediation.append("ensure --notes-file path exists")
+    if reason_codes:
+        payload = {
+            "result": "FAIL",
+            "reason_codes": reason_codes,
+            "remediation": remediation,
+            "version": version,
+            "dry_run": dry_run,
+            "confirmed": confirm,
+        }
+        emit(payload, as_json=as_json)
+        return 1
+
+    tag_name = f"v{version}"
+    publish_plan: list[str] = []
+    if create_tag:
+        publish_plan.append(f"create and push annotated tag {tag_name}")
+    if create_release:
+        publish_plan.append(f"create GitHub release {tag_name} from notes file")
+    if not publish_plan:
+        publish_plan.append("no external publish actions selected")
+
+    if dry_run:
+        payload = {
+            "result": "PASS",
+            "version": version,
+            "dry_run": True,
+            "confirmed": confirm,
+            "publish_stage": "dry_run_plan",
+            "publish_plan": publish_plan,
+            "tag_name": tag_name,
+            "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+            "reason_codes": [],
+            "remediation": [],
+        }
+        emit(payload, as_json=as_json)
+        return 0
+
     if not dry_run and not confirm:
         payload = {
             "result": "FAIL",
             "reason_codes": ["confirmation_required"],
             "remediation": ["re-run with --confirm or add --dry-run"],
+            "publish_plan": publish_plan,
+            "tag_name": tag_name,
+            "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
         }
         emit(payload, as_json=as_json)
         return 1
 
+    executed_actions: list[str] = []
+    failure_reason_codes: list[str] = []
+    remediation_actions: list[str] = []
+
+    if create_tag:
+        create_tag_proc = subprocess.run(
+            ["git", "tag", "-a", tag_name, "-m", f"release {tag_name}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=repo_root,
+        )
+        if create_tag_proc.returncode != 0:
+            failure_reason_codes.append("tag_create_failed")
+            remediation_actions.append(
+                create_tag_proc.stderr.strip()
+                or create_tag_proc.stdout.strip()
+                or "verify tag does not already exist"
+            )
+        else:
+            executed_actions.append(f"tag_created:{tag_name}")
+            push_tag_proc = subprocess.run(
+                ["git", "push", "origin", tag_name],
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=repo_root,
+            )
+            if push_tag_proc.returncode != 0:
+                failure_reason_codes.append("tag_push_failed")
+                remediation_actions.append(
+                    push_tag_proc.stderr.strip()
+                    or push_tag_proc.stdout.strip()
+                    or "verify remote origin and push permissions"
+                )
+            else:
+                executed_actions.append(f"tag_pushed:{tag_name}")
+
+    if create_release and notes_file is not None:
+        release_proc = subprocess.run(
+            [
+                "gh",
+                "release",
+                "create",
+                tag_name,
+                "--title",
+                tag_name,
+                "--notes-file",
+                str(notes_file.resolve()),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=repo_root,
+        )
+        if release_proc.returncode != 0:
+            failure_reason_codes.append("release_create_failed")
+            remediation_actions.append(
+                release_proc.stderr.strip()
+                or release_proc.stdout.strip()
+                or "verify gh auth and release permissions"
+            )
+        else:
+            executed_actions.append(f"release_created:{tag_name}")
+
     payload = {
-        "result": "PASS",
+        "result": "PASS" if not failure_reason_codes else "FAIL",
         "version": version,
-        "dry_run": dry_run,
-        "confirmed": confirm,
-        "publish_stage": "pre_publish_checks",
+        "dry_run": False,
+        "confirmed": True,
+        "publish_stage": "executed",
+        "publish_plan": publish_plan,
+        "tag_name": tag_name,
+        "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+        "executed_actions": executed_actions,
+        "reason_codes": failure_reason_codes,
+        "remediation": remediation_actions,
         "rollback_actions": [
             "if publish fails after tag creation, delete local and remote tag",
             "if publish succeeded, keep tag and open post-release follow-up issue",
@@ -202,10 +328,9 @@ def command_publish(args: list[str]) -> int:
             "confirm generated release notes",
             "broadcast release announcement",
         ],
-        "reason_codes": [],
     }
     emit(payload, as_json=as_json)
-    return 0
+    return 0 if payload["result"] == "PASS" else 1
 
 
 def _extract_pr_numbers(text: str) -> list[int]:
