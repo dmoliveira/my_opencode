@@ -23,7 +23,7 @@ from flow_reason_codes import (  # type: ignore
 def usage() -> int:
     print(
         "usage: /review local [--base <ref>] [--head <ref>] [--diff-file <path>] [--json] | "
-        "/review apply-checklist [--base <ref>] [--head <ref>] [--diff-file <path>] [--write <path>] [--json] | "
+        "/review apply-checklist [--base <ref>] [--head <ref>] [--diff-file <path>] [--write <path>] [--include-findings] [--json] | "
         "/review doctor [--json]"
     )
     return 2
@@ -215,6 +215,7 @@ def command_doctor(args: list[str]) -> int:
 
 def command_apply_checklist(args: list[str]) -> int:
     write_path: Path | None = None
+    include_findings = False
     filtered_args: list[str] = []
     index = 0
     while index < len(args):
@@ -224,6 +225,10 @@ def command_apply_checklist(args: list[str]) -> int:
                 return usage()
             write_path = Path(args[index + 1]).expanduser()
             index += 2
+            continue
+        if token == "--include-findings":
+            include_findings = True
+            index += 1
             continue
         filtered_args.append(token)
         index += 1
@@ -261,6 +266,22 @@ def command_apply_checklist(args: list[str]) -> int:
         f"- [{'x' if sections['docs']['status'] == 'pass' else ' '}] Docs: {sections['docs']['detail']}",
         f"- [{'x' if sections['migration']['status'] == 'pass' else ' '}] Migration: {sections['migration']['detail']}",
     ]
+    finding_summaries: list[str] = []
+    if include_findings:
+        findings_any = report.get("findings", [])
+        findings = findings_any if isinstance(findings_any, list) else []
+        if findings:
+            checklist_lines.extend(["", "## Findings"])
+            for finding in findings[:8]:
+                if not isinstance(finding, dict):
+                    continue
+                severity = str(finding.get("severity") or "info")
+                area = str(finding.get("area") or "general")
+                message = str(finding.get("message") or "")
+                if message:
+                    line = f"- [{severity}] {area}: {message}"
+                    checklist_lines.append(line)
+                    finding_summaries.append(line)
     checklist_markdown = "\n".join(checklist_lines)
     if write_path is not None:
         write_path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,6 +291,8 @@ def command_apply_checklist(args: list[str]) -> int:
         "reason_code": REVIEW_CHECKLIST_GENERATED,
         "checklist_markdown": checklist_markdown,
         "sections": sections,
+        "include_findings": include_findings,
+        "finding_summaries": finding_summaries,
         "written_path": str(write_path.resolve()) if write_path is not None else None,
     }
     if as_json:
