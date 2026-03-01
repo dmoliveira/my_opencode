@@ -3454,7 +3454,7 @@ index 3333333..4444444 100644
 
         changes_explain_since_tag = "selftest-since-tag"
         create_since_tag = subprocess.run(
-            ["git", "tag", "-f", changes_explain_since_tag, "HEAD~1"],
+            ["git", "tag", "-f", changes_explain_since_tag, "HEAD"],
             capture_output=True,
             text=True,
             env=refactor_env,
