@@ -3811,6 +3811,14 @@ index 3333333..4444444 100644
             "release-rollup draft should emit deduped PR list and markdown payload",
         )
         expect(
+            isinstance(release_rollup_draft_payload.get("provenance"), dict)
+            and release_rollup_draft_payload.get("provenance", {}).get("generated_by")
+            == "release_train_command.rollup"
+            and "## Provenance"
+            in str(release_rollup_draft_payload.get("markdown", "")),
+            "release-rollup draft should emit provenance metadata in payload and markdown",
+        )
+        expect(
             rollup_output_path.exists()
             and isinstance(release_rollup_draft_payload.get("written_path"), str),
             "release-rollup draft should support artifact writing",

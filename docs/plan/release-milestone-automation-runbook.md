@@ -79,6 +79,9 @@ python3 scripts/release_train_command.py publish \
 - This check is useful for validating deterministic reason codes and publish planning behavior.
 - For docs-only release repackaging where changelog/version gates are intentionally not advanced, `gh release create` remains the canonical publish path.
 
+Release rollup artifacts now include a `## Provenance` block (`generated_by`, `generated_at_utc`, source counts).
+Downstream consumers should treat this as additive metadata and avoid strict section-order assumptions in parsers.
+
 Profile presets for publish planning:
 
 - `--profile docs-only`: preconfigures tag planning without release creation

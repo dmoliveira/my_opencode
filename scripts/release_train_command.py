@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -513,6 +514,13 @@ def command_rollup(args: list[str]) -> int:
                 pr_numbers.append(pr)
         source_lines.append(f"- {path}")
 
+    provenance = {
+        "generated_by": "release_train_command.rollup",
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source_milestone_count": len(milestone_paths),
+        "source_pr_count": len(pr_numbers),
+    }
+
     markdown = "\n".join(
         [
             f"# {title}",
@@ -522,6 +530,12 @@ def command_rollup(args: list[str]) -> int:
             "",
             "## Included PRs",
             *([f"- #{pr}" for pr in pr_numbers] or ["- <none detected>"]),
+            "",
+            "## Provenance",
+            f"- generated_by: {provenance['generated_by']}",
+            f"- generated_at_utc: {provenance['generated_at_utc']}",
+            f"- source_milestone_count: {provenance['source_milestone_count']}",
+            f"- source_pr_count: {provenance['source_pr_count']}",
             "",
             "## Validation Evidence",
             "- make validate",
@@ -541,6 +555,7 @@ def command_rollup(args: list[str]) -> int:
         "title": title,
         "milestones": [str(path) for path in milestone_paths],
         "pr_numbers": pr_numbers,
+        "provenance": provenance,
         "markdown": markdown,
         "written_path": str(write_path.resolve()) if write_path is not None else None,
     }
