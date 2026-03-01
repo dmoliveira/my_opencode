@@ -339,7 +339,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /pr-review - Run PR review copilot analysis with checklist output
 /review - Run local review pass with diagnostics and checklist artifacts/findings (local|apply-checklist|doctor)
 /refactor-lite - Run safe refactor workflow backend
-/release-train - Run release-train workflow controls (status|prepare|draft|publish)
+/release-train - Run release-train workflow controls (status|prepare|draft|rollup|publish)
 /resume - Manage runtime recovery controls (status|now|smart|disable)
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)

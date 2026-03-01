@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,9 +23,12 @@ from release_train_engine import (  # type: ignore
 )
 
 
+PR_PATTERN = re.compile(r"/pull/(\d+)")
+
+
 def usage() -> int:
     print(
-        "usage: /release-train [status|prepare|draft|publish|doctor] "
+        "usage: /release-train [status|prepare|draft|rollup|publish|doctor] "
         "[--json] [--version <x.y.z>]"
     )
     return 2
@@ -204,6 +208,88 @@ def command_publish(args: list[str]) -> int:
     return 0
 
 
+def _extract_pr_numbers(text: str) -> list[int]:
+    values = [int(match.group(1)) for match in PR_PATTERN.finditer(text)]
+    deduped: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
+def command_rollup(args: list[str]) -> int:
+    as_json = pop_flag(args, "--json")
+    title = pop_value(args, "--title", "Release Rollup Draft") or "Release Rollup Draft"
+    write_path_raw = pop_value(args, "--write")
+    write_path = Path(write_path_raw).expanduser() if write_path_raw else None
+
+    milestone_paths: list[Path] = []
+    while True:
+        value = pop_value(args, "--milestone")
+        if value is None:
+            break
+        milestone_paths.append(Path(value).expanduser())
+
+    if args or not milestone_paths:
+        return usage()
+
+    missing = [str(path) for path in milestone_paths if not path.exists()]
+    if missing:
+        payload = {
+            "result": "FAIL",
+            "reason_codes": ["rollup_milestone_missing"],
+            "missing": missing,
+        }
+        emit(payload, as_json=as_json)
+        return 1
+
+    pr_numbers: list[int] = []
+    source_lines: list[str] = []
+    for path in milestone_paths:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for pr in _extract_pr_numbers(text):
+            if pr not in pr_numbers:
+                pr_numbers.append(pr)
+        source_lines.append(f"- {path}")
+
+    markdown = "\n".join(
+        [
+            f"# {title}",
+            "",
+            "## Milestone Sources",
+            *source_lines,
+            "",
+            "## Included PRs",
+            *([f"- #{pr}" for pr in pr_numbers] or ["- <none detected>"]),
+            "",
+            "## Validation Evidence",
+            "- make validate",
+            "- make selftest",
+            "- make install-test",
+            "- pre-commit run --all-files",
+        ]
+    )
+
+    if write_path is not None:
+        write_path.parent.mkdir(parents=True, exist_ok=True)
+        write_path.write_text(markdown + "\n", encoding="utf-8")
+
+    payload = {
+        "result": "PASS",
+        "reason_codes": ["rollup_draft_generated"],
+        "title": title,
+        "milestones": [str(path) for path in milestone_paths],
+        "pr_numbers": pr_numbers,
+        "markdown": markdown,
+        "written_path": str(write_path.resolve()) if write_path is not None else None,
+    }
+    emit(payload, as_json=as_json)
+    return 0
+
+
 def command_doctor(args: list[str]) -> int:
     if any(arg not in ("--json",) for arg in args):
         return usage()
@@ -241,6 +327,8 @@ def main(argv: list[str]) -> int:
         return command_prepare(rest)
     if cmd == "draft":
         return command_draft(rest)
+    if cmd == "rollup":
+        return command_rollup(rest)
     if cmd == "publish":
         return command_publish(rest)
     if cmd == "doctor":
