@@ -135,6 +135,7 @@ Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for f
 - `scripts/post_session_command.py` - backend script for `/post-session`
 - `scripts/policy_command.py` - policy profile helper used by `/notify policy ...` and stack presets
 - `scripts/doctor_command.py` - backend script for `/doctor`
+- `scripts/update_release_index.py` - helper script to regenerate `docs/plan/v0.4-release-index.md`
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`
