@@ -4204,6 +4204,42 @@ index 3333333..4444444 100644
             check=False,
             cwd=release_repo,
         )
+        release_publish_release_missing_tag = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "publish",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--create-release",
+                "--notes-file",
+                str(release_notes_path),
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_publish_release_missing_tag.returncode == 1,
+            "release-train publish should fail preflight when create-release is requested without an existing tag",
+        )
+        release_publish_release_missing_tag_payload = parse_json_output(
+            release_publish_release_missing_tag.stdout
+        )
+        expect(
+            "publish_release_tag_missing"
+            in set(release_publish_release_missing_tag_payload.get("reason_codes", [])),
+            "release-train publish should report deterministic reason code when release tag is missing",
+        )
+
         release_publish_release_dry_run = subprocess.run(
             [
                 sys.executable,
@@ -4215,6 +4251,7 @@ index 3333333..4444444 100644
                 "1.0.1",
                 "--allowed-branch-re",
                 ".*",
+                "--create-tag",
                 "--create-release",
                 "--notes-file",
                 str(release_notes_path),
