@@ -476,7 +476,7 @@ CHECKS = [
 
 def usage() -> int:
     print(
-        "usage: /doctor status | /doctor help | /doctor run [--json] | /doctor reason-codes [--json]"
+        "usage: /doctor status | /doctor help | /doctor run [--json] | /doctor reason-codes [--diff <path>] [--json]"
     )
     return 2
 
@@ -495,7 +495,19 @@ def _module_reason_codes(module_name: str) -> dict[str, str]:
 
 def command_reason_codes(argv: list[str]) -> int:
     json_output = "--json" in argv
-    if any(arg not in ("--json",) for arg in argv):
+    baseline_path: Path | None = None
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--diff":
+            if index + 1 >= len(argv):
+                return usage()
+            baseline_path = Path(argv[index + 1]).expanduser()
+            index += 2
+            continue
         return usage()
 
     modules = ["flow_reason_codes", "gateway_reason_codes"]
@@ -515,6 +527,60 @@ def command_reason_codes(argv: list[str]) -> int:
         "registry": registry,
         "problems": problems,
     }
+
+    if baseline_path is not None:
+        if not baseline_path.exists():
+            payload["result"] = "FAIL"
+            payload["problems"].append(f"baseline_not_found: {baseline_path}")
+        else:
+            try:
+                baseline_raw = json.loads(
+                    baseline_path.read_text(encoding="utf-8", errors="replace")
+                )
+            except Exception as exc:
+                payload["result"] = "FAIL"
+                payload["problems"].append(f"baseline_parse_failed: {exc}")
+            else:
+                baseline_registry = baseline_raw.get("registry", baseline_raw)
+                baseline_registry = (
+                    baseline_registry if isinstance(baseline_registry, dict) else {}
+                )
+                added: list[str] = []
+                removed: list[str] = []
+                changed: list[str] = []
+
+                module_names = sorted(
+                    set(registry.keys()) | set(str(k) for k in baseline_registry.keys())
+                )
+                for module_name in module_names:
+                    current_values = registry.get(module_name, {})
+                    current_values = (
+                        current_values if isinstance(current_values, dict) else {}
+                    )
+                    baseline_values_any = baseline_registry.get(module_name, {})
+                    baseline_values = (
+                        baseline_values_any
+                        if isinstance(baseline_values_any, dict)
+                        else {}
+                    )
+                    current_keys = {str(k) for k in current_values.keys()}
+                    baseline_keys = {str(k) for k in baseline_values.keys()}
+                    for key in sorted(current_keys - baseline_keys):
+                        added.append(f"{module_name}.{key}")
+                    for key in sorted(baseline_keys - current_keys):
+                        removed.append(f"{module_name}.{key}")
+                    for key in sorted(current_keys & baseline_keys):
+                        if str(current_values.get(key)) != str(
+                            baseline_values.get(key)
+                        ):
+                            changed.append(f"{module_name}.{key}")
+
+                payload["diff"] = {
+                    "baseline_path": str(baseline_path.resolve()),
+                    "added": added,
+                    "removed": removed,
+                    "changed": changed,
+                }
     if json_output:
         print(json.dumps(payload, indent=2))
     else:
@@ -522,6 +588,12 @@ def command_reason_codes(argv: list[str]) -> int:
         print(f"total_codes: {payload['total_codes']}")
         for module_name, values in registry.items():
             print(f"- {module_name}: {len(values)}")
+        diff = payload.get("diff")
+        if isinstance(diff, dict):
+            print("diff:")
+            print(f"- added: {len(diff.get('added', []))}")
+            print(f"- removed: {len(diff.get('removed', []))}")
+            print(f"- changed: {len(diff.get('changed', []))}")
     return 0 if payload["result"] == "PASS" else 1
 
 
