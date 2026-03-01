@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -13,6 +12,14 @@ from typing import Any
 from flow_reason_codes import (  # type: ignore
     SHIP_PREPARE_BLOCKED,
     SHIP_READY,
+)
+from reviewer_policy import (  # type: ignore
+    apply_reviewer_policy,
+    diagnose_reviewer_policy,
+    env_reviewer_values,
+    normalize_reviewers,
+    parse_reviewer_flags,
+    resolve_reviewer_policy,
 )
 
 
@@ -85,51 +92,15 @@ def _build_pr_template(version: str) -> dict[str, str]:
 
 
 def _parse_reviewers(args: list[str]) -> list[str]:
-    reviewers: list[str] = []
-    while True:
-        value = _pop_value(args, "--reviewer")
-        if value is None:
-            break
-        reviewer = value.strip().lstrip("@")
-        if reviewer:
-            reviewers.append(reviewer)
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for reviewer in reviewers:
-        key = reviewer.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(reviewer)
-    return deduped
+    return parse_reviewer_flags(args, "--reviewer")
 
 
 def _parse_policy_reviewers(args: list[str], flag: str) -> list[str]:
-    values: list[str] = []
-    while True:
-        value = _pop_value(args, flag)
-        if value is None:
-            break
-        normalized = value.strip().lstrip("@")
-        if normalized:
-            values.append(normalized)
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        key = value.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(value)
-    return deduped
+    return parse_reviewer_flags(args, flag)
 
 
 def _env_policy_reviewers(env_key: str) -> list[str]:
-    raw = os.environ.get(env_key, "")
-    if not raw:
-        return []
-    values = [item.strip().lstrip("@") for item in raw.split(",")]
-    return [item for item in values if item]
+    return env_reviewer_values(env_key)
 
 
 def _apply_reviewer_policy(
@@ -138,20 +109,9 @@ def _apply_reviewer_policy(
     allow_list: list[str],
     deny_list: list[str],
 ) -> tuple[list[str], list[str]]:
-    allow_set = {item.lower() for item in allow_list}
-    deny_set = {item.lower() for item in deny_list}
-    filtered: list[str] = []
-    filtered_out: list[str] = []
-    for reviewer in reviewers:
-        key = reviewer.lower()
-        if key in deny_set:
-            filtered_out.append(reviewer)
-            continue
-        if allow_set and key not in allow_set:
-            filtered_out.append(reviewer)
-            continue
-        filtered.append(reviewer)
-    return filtered, filtered_out
+    return apply_reviewer_policy(
+        normalize_reviewers(reviewers), allow_list=allow_list, deny_list=deny_list
+    )
 
 
 def _codeowners_reviewers(repo_root: Path) -> list[str]:
@@ -270,12 +230,14 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
 
     env_allow = _env_policy_reviewers("MY_OPENCODE_SHIP_REVIEWER_ALLOW")
     env_deny = _env_policy_reviewers("MY_OPENCODE_SHIP_REVIEWER_DENY")
-    allow_reviewers = policy_allow or env_allow
-    deny_reviewers = policy_deny + [
-        item
-        for item in env_deny
-        if item.lower() not in {v.lower() for v in policy_deny}
-    ]
+    allow_reviewers, deny_reviewers, policy_source = resolve_reviewer_policy(
+        policy_allow, policy_deny, env_allow, env_deny
+    )
+    policy_diagnostics = diagnose_reviewer_policy(
+        allow_list=allow_reviewers,
+        deny_list=deny_reviewers,
+        source=policy_source,
+    )
 
     repo_root = _repo_root()
     auto_reviewers = _codeowners_reviewers(repo_root) if auto_assign_reviewers else []
@@ -308,6 +270,7 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
             "allow_reviewers": allow_reviewers,
             "deny_reviewers": deny_reviewers,
         }
+        payload["policy_diagnostics"] = policy_diagnostics
         if "pr_template" not in payload:
             payload["pr_template"] = template
         if as_json:
@@ -332,6 +295,7 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
                 "allow_reviewers": allow_reviewers,
                 "deny_reviewers": deny_reviewers,
             },
+            "policy_diagnostics": policy_diagnostics,
             "pr_template": template,
             "next_actions": ["re-run with --confirm to create PR"],
         }
@@ -390,6 +354,7 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
             "allow_reviewers": allow_reviewers,
             "deny_reviewers": deny_reviewers,
         },
+        "policy_diagnostics": policy_diagnostics,
     }
 
     assign_ok, assign_detail = _assign_reviewers(success["url"], resolved_reviewers)

@@ -3403,6 +3403,50 @@ index 3333333..4444444 100644
             and review_doctor_payload.get("analyzer_exists") is True,
             "review doctor should report analyzer readiness",
         )
+        expect(
+            isinstance(review_doctor_payload.get("policy_diagnostics"), dict)
+            and review_doctor_payload.get("policy_diagnostics", {}).get("status")
+            == "pass",
+            "review doctor should include reviewer policy diagnostics payload",
+        )
+
+        review_doctor_policy_conflict = subprocess.run(
+            [
+                sys.executable,
+                str(REVIEW_COMMAND_SCRIPT),
+                "doctor",
+                "--allow-reviewer",
+                "alice",
+                "--deny-reviewer",
+                "alice",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            review_doctor_policy_conflict.returncode == 0,
+            "review doctor should succeed while surfacing reviewer policy misconfiguration warnings",
+        )
+        review_doctor_policy_conflict_payload = parse_json_output(
+            review_doctor_policy_conflict.stdout
+        )
+        expect(
+            review_doctor_policy_conflict_payload.get("policy_diagnostics", {}).get(
+                "status"
+            )
+            == "warn"
+            and "reviewer_policy_conflict"
+            in set(
+                review_doctor_policy_conflict_payload.get("policy_diagnostics", {}).get(
+                    "reason_codes", []
+                )
+            ),
+            "review doctor should report deterministic conflict diagnostics for overlapping allow/deny policies",
+        )
 
         changes_explain_diff = tmp / "changes_explain.diff"
         changes_explain_diff.write_text(
@@ -3917,6 +3961,56 @@ index 3333333..4444444 100644
             and "bob"
             in ship_create_pr_preview_payload.get("filtered_out_reviewers", []),
             "ship create-pr preview should apply allow/deny reviewer policy filtering",
+        )
+        expect(
+            isinstance(ship_create_pr_preview_payload.get("policy_diagnostics"), dict)
+            and ship_create_pr_preview_payload.get("policy_diagnostics", {}).get(
+                "status"
+            )
+            == "pass",
+            "ship create-pr preview should include reviewer policy diagnostics",
+        )
+
+        ship_create_pr_policy_conflict = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "create-pr",
+                "--version",
+                "0.0.1",
+                "--reviewer",
+                "alice",
+                "--allow-reviewer",
+                "alice",
+                "--deny-reviewer",
+                "alice",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_create_pr_policy_conflict.returncode == 1,
+            "ship create-pr should still require confirmation under reviewer policy conflicts",
+        )
+        ship_create_pr_policy_conflict_payload = parse_json_output(
+            ship_create_pr_policy_conflict.stdout
+        )
+        expect(
+            ship_create_pr_policy_conflict_payload.get("policy_diagnostics", {}).get(
+                "status"
+            )
+            == "warn"
+            and "reviewer_policy_conflict"
+            in set(
+                ship_create_pr_policy_conflict_payload.get(
+                    "policy_diagnostics", {}
+                ).get("reason_codes", [])
+            ),
+            "ship create-pr should expose deterministic reviewer policy conflict diagnostics",
         )
 
         release_repo = tmp / "release_repo"
