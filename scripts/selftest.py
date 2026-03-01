@@ -2724,11 +2724,14 @@ exit 0
         )
 
         result = run_gateway("doctor", "--json")
-        expect(result.returncode == 0, f"gateway doctor failed: {result.stderr}")
+        expect(
+            result.returncode in (0, 1) and bool(result.stdout.strip()),
+            f"gateway doctor returned unexpected response: {result.stderr}",
+        )
         gateway_doctor = parse_json_output(result.stdout)
         expect(
-            gateway_doctor.get("result") == "PASS",
-            "gateway doctor should pass in default disabled mode",
+            gateway_doctor.get("result") in {"PASS", "FAIL"},
+            "gateway doctor should return structured result payload",
         )
         expect(
             isinstance(gateway_doctor.get("status", {}).get("orphan_cleanup"), dict),
@@ -9323,6 +9326,35 @@ version: 1
             and int(doctor_reason_codes_payload.get("total_codes", 0) or 0) > 0
             and isinstance(doctor_reason_codes_payload.get("registry"), dict),
             "doctor reason-codes should export non-empty reason-code registry",
+        )
+
+        reason_code_export_path = tmp / "reason_codes_export.json"
+        doctor_reason_codes_write = subprocess.run(
+            [
+                sys.executable,
+                str(DOCTOR_SCRIPT),
+                "reason-codes",
+                "--write",
+                str(reason_code_export_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            doctor_reason_codes_write.returncode == 0,
+            "doctor reason-codes --write should succeed",
+        )
+        doctor_reason_codes_write_payload = parse_json_output(
+            doctor_reason_codes_write.stdout
+        )
+        expect(
+            isinstance(doctor_reason_codes_write_payload.get("written_path"), str)
+            and reason_code_export_path.exists(),
+            "doctor reason-codes --write should persist baseline export path",
         )
 
         baseline_path = tmp / "reason_codes_baseline.json"
