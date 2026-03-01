@@ -9109,6 +9109,52 @@ version: 1
             "doctor reason-codes should export non-empty reason-code registry",
         )
 
+        baseline_path = tmp / "reason_codes_baseline.json"
+        baseline_payload = dict(doctor_reason_codes_payload)
+        baseline_registry_any = baseline_payload.get("registry")
+        baseline_registry = (
+            dict(baseline_registry_any)
+            if isinstance(baseline_registry_any, dict)
+            else {}
+        )
+        flow_registry_any = baseline_registry.get("flow_reason_codes")
+        if isinstance(flow_registry_any, dict) and flow_registry_any:
+            first_key = sorted(flow_registry_any.keys())[0]
+            flow_registry_any.pop(first_key, None)
+        baseline_payload["registry"] = baseline_registry
+        baseline_path.write_text(
+            json.dumps(baseline_payload, indent=2) + "\n", encoding="utf-8"
+        )
+        doctor_reason_codes_diff = subprocess.run(
+            [
+                sys.executable,
+                str(DOCTOR_SCRIPT),
+                "reason-codes",
+                "--diff",
+                str(baseline_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            doctor_reason_codes_diff.returncode == 0,
+            "doctor reason-codes --diff should succeed with valid baseline",
+        )
+        doctor_reason_codes_diff_payload = parse_json_output(
+            doctor_reason_codes_diff.stdout
+        )
+        diff_section = doctor_reason_codes_diff_payload.get("diff", {})
+        expect(
+            isinstance(diff_section, dict)
+            and isinstance(diff_section.get("added"), list)
+            and len(diff_section.get("added", [])) >= 1,
+            "doctor reason-codes --diff should report added codes against baseline",
+        )
+
         rules_checks = [
             check for check in report.get("checks", []) if check.get("name") == "rules"
         ]
