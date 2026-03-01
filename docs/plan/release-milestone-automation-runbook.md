@@ -71,5 +71,8 @@ gh release create vX.Y.Z \
 - `v0.4.2`: `docs/plan/v0.4.2-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-2.md`
 - `v0.4.3`: `docs/plan/v0.4.3-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-3.md`
 - `v0.4.4`: `docs/plan/v0.4.4-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-4.md`
+- `v0.4.5`: `docs/plan/v0.4.5-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-5.md`
+
+Reference index for all v0.4.x milestones: `docs/plan/v0.4-release-index.md`.
 
 These examples model the expected flow: consolidate merged PR milestones first, then generate release notes, validate, merge docs PR, and publish the milestone tag.
