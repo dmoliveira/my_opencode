@@ -4,6 +4,13 @@
 ![Latest Release](https://img.shields.io/github/v/release/dmoliveira/my_opencode?label=latest%20release)
 ![License](https://img.shields.io/github/license/dmoliveira/my_opencode)
 
+> ## Build fast, ship confidently, stay in flow
+>
+> OpenCode command center for high-signal automation, deterministic validation, and release-ready workflows.
+>
+> Docs hub: `docs/pages/index.html`
+> Support: https://buy.stripe.com/8x200i8bSgVe3Vl3g8bfO00
+
 Welcome to my OpenCode command center! ✨
 
 This repo gives you a clean, portable OpenCode setup with fast MCP controls inside OpenCode itself. Keep autonomous coding smooth, and only turn on external context when you actually need it. ⚡
