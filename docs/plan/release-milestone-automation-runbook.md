@@ -57,6 +57,22 @@ gh release create vX.Y.Z \
   --notes-file docs/plan/release-notes-YYYY-MM-DD-vX-Y-Z.md
 ```
 
+6) Optional release-train dry-run verification (no publish side effects)
+
+```bash
+python3 scripts/release_train_command.py publish \
+  --version X.Y.Z \
+  --create-tag \
+  --create-release \
+  --notes-file docs/plan/release-notes-YYYY-MM-DD-vX-Y-Z.md \
+  --allowed-branch-re ".*" \
+  --dry-run \
+  --json
+```
+
+- This check is useful for validating deterministic reason codes and publish planning behavior.
+- For docs-only release repackaging where changelog/version gates are intentionally not advanced, `gh release create` remains the canonical publish path.
+
 ## Lightweight Checklist (Docs-Only Milestones)
 
 - [ ] milestone changelog file added and reviewed
@@ -74,5 +90,7 @@ gh release create vX.Y.Z \
 - `v0.4.5`: `docs/plan/v0.4.5-flow-milestones-changelog.md` + `docs/plan/release-notes-2026-03-01-v0-4-5.md`
 
 Reference index for all v0.4.x milestones: `docs/plan/v0.4-release-index.md`.
+
+Example dry-run verification evidence: `docs/plan/release-train-dry-run-verification-2026-03-01.md`.
 
 These examples model the expected flow: consolidate merged PR milestones first, then generate release notes, validate, merge docs PR, and publish the milestone tag.
