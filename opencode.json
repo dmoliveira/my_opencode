@@ -147,7 +147,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "review": {
-      "description": "Run local review pass with diagnostics and checklist artifacts (local|apply-checklist|doctor)",
+      "description": "Run local review pass with diagnostics and checklist artifacts/findings (local|apply-checklist|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/review_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "release-train": {

@@ -3328,6 +3328,7 @@ index 3333333..4444444 100644
                 "apply-checklist",
                 "--diff-file",
                 str(analyzer_missing_evidence_diff),
+                "--include-findings",
                 "--json",
             ],
             capture_output=True,
@@ -3345,6 +3346,11 @@ index 3333333..4444444 100644
             review_checklist_payload.get("reason_code") == "review_checklist_generated"
             and isinstance(review_checklist_payload.get("checklist_markdown"), str),
             "review apply-checklist should emit deterministic markdown checklist",
+        )
+        expect(
+            review_checklist_payload.get("include_findings") is True
+            and isinstance(review_checklist_payload.get("finding_summaries"), list),
+            "review apply-checklist should include finding summaries when requested",
         )
 
         review_checklist_path = tmp / "review_checklist.md"
