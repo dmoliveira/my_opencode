@@ -21,6 +21,12 @@ This runbook targets release-documentation milestones where code is already merg
 - Include a timeline table with: milestone, scope, PR link, merged timestamp, merge commit
 - Source merge metadata from `gh pr view <number> --json number,title,mergedAt,mergeCommit,url`
 
+- Refresh v0.4 index after adding milestone docs:
+
+```bash
+python3 scripts/update_release_index.py
+```
+
 2) Generate release-notes draft from milestone sources
 
 - Use `/release-train rollup` via script:

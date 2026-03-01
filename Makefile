@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -20,6 +20,9 @@ build-agents: ## Generate agent markdown from JSON specs
 
 build-agents-check: ## Verify generated agents are up-to-date
 	python3 scripts/build_agents.py --profile balanced --check
+
+release-index-update: ## Regenerate v0.4 release index doc
+	python3 scripts/update_release_index.py
 
 quality-fast: ## Set quality profile to fast
 	python3 scripts/quality_command.py profile fast --json
