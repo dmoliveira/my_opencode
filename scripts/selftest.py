@@ -3452,13 +3452,27 @@ index 3333333..4444444 100644
             "changes explain should emit why/risk/verify narrative sections",
         )
 
+        changes_explain_since_tag = "selftest-since-tag"
+        create_since_tag = subprocess.run(
+            ["git", "tag", "-f", changes_explain_since_tag, "HEAD"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            create_since_tag.returncode == 0,
+            "selftest should create a temporary tag for changes explain --since coverage",
+        )
+
         changes_explain_since = subprocess.run(
             [
                 sys.executable,
                 str(CHANGES_COMMAND_SCRIPT),
                 "explain",
                 "--since",
-                "v0.3.0",
+                changes_explain_since_tag,
                 "--json",
             ],
             capture_output=True,
@@ -3474,8 +3488,16 @@ index 3333333..4444444 100644
         changes_explain_since_payload = parse_json_output(changes_explain_since.stdout)
         expect(
             changes_explain_since_payload.get("result") == "PASS"
-            and changes_explain_since_payload.get("base") == "v0.3.0",
+            and changes_explain_since_payload.get("base") == changes_explain_since_tag,
             "changes explain --since should report selected tag as base",
+        )
+        subprocess.run(
+            ["git", "tag", "-d", changes_explain_since_tag],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
         )
 
         analyzer_docs_only_diff = tmp / "pr_review_docs_only.diff"
@@ -4039,6 +4061,13 @@ index 3333333..4444444 100644
             and (tmp / "publish-summary-dry-run.json").exists(),
             "release-train publish should persist dry-run summary when requested",
         )
+        expect(
+            release_publish_dry_run_payload.get("summary_schema_version") == "1.0"
+            and isinstance(
+                release_publish_dry_run_payload.get("summary_checksum"), str
+            ),
+            "release-train publish should expose summary schema and checksum metadata",
+        )
 
         release_publish_release_missing_notes = subprocess.run(
             [
@@ -4170,6 +4199,13 @@ index 3333333..4444444 100644
             isinstance(release_publish_confirmation_payload.get("summary_path"), str)
             and (tmp / "publish-summary-confirmation.json").exists(),
             "release-train publish confirmation response should persist summary when requested",
+        )
+        expect(
+            release_publish_confirmation_payload.get("summary_schema_version") == "1.0"
+            and isinstance(
+                release_publish_confirmation_payload.get("summary_checksum"), str
+            ),
+            "release-train publish confirmation response should include summary metadata",
         )
 
         hotfix_repo = tmp / "hotfix_repo"
