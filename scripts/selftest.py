@@ -3855,6 +3855,10 @@ index 3333333..4444444 100644
                 "alice",
                 "--reviewer",
                 "@bob",
+                "--allow-reviewer",
+                "alice",
+                "--deny-reviewer",
+                "bob",
                 "--json",
             ],
             capture_output=True,
@@ -3881,6 +3885,12 @@ index 3333333..4444444 100644
             and "alice" in ship_create_pr_preview_payload.get("requested_reviewers", [])
             and "bob" in ship_create_pr_preview_payload.get("requested_reviewers", []),
             "ship create-pr preview should include normalized requested reviewers",
+        )
+        expect(
+            ship_create_pr_preview_payload.get("resolved_reviewers") == ["alice"]
+            and "bob"
+            in ship_create_pr_preview_payload.get("filtered_out_reviewers", []),
+            "ship create-pr preview should apply allow/deny reviewer policy filtering",
         )
 
         release_repo = tmp / "release_repo"

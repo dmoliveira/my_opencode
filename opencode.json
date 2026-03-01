@@ -123,7 +123,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "ship": {
-      "description": "Run release intent preflight with safety gates, scaffolding, and reviewer-aware create-pr flow",
+      "description": "Run release intent preflight with safety gates and policy-aware reviewer routing",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/ship_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "browser": {
