@@ -22,7 +22,8 @@ def usage() -> int:
     print(
         "usage: /hotfix [start|status|close|postmortem|remind|doctor] [args] [--json] | "
         "/hotfix start --incident-id <id> --scope <patch|rollback|config_only> --impact <sev1|sev2|sev3> [--json] | "
-        "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json]"
+        "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json] | "
+        "/hotfix postmortem [--write <path>] [--json]"
     )
     return 2
 
@@ -118,7 +119,19 @@ def command_doctor(args: list[str]) -> int:
 
 def command_postmortem(args: list[str]) -> int:
     as_json = "--json" in args
-    if any(arg not in ("--json",) for arg in args):
+    write_path_arg: Path | None = None
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--json":
+            index += 1
+            continue
+        if token == "--write":
+            if index + 1 >= len(args):
+                return usage()
+            write_path_arg = Path(args[index + 1]).expanduser()
+            index += 2
+            continue
         return usage()
 
     write_path = resolve_write_path()
@@ -176,6 +189,13 @@ def command_postmortem(args: list[str]) -> int:
         ),
         "runtime": str(runtime_path(write_path)),
     }
+
+    if write_path_arg is not None:
+        write_path_arg.parent.mkdir(parents=True, exist_ok=True)
+        template_body = str(payload.get("template_markdown") or "")
+        write_path_arg.write_text(template_body + "\n", encoding="utf-8")
+        payload["written_path"] = str(write_path_arg.resolve())
+
     emit(payload, as_json)
     return 0
 

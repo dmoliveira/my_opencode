@@ -4242,6 +4242,35 @@ index 3333333..4444444 100644
             "hotfix command postmortem should emit deterministic template markdown",
         )
 
+        hotfix_postmortem_path = tmp / "hotfix_postmortem.md"
+        hotfix_command_postmortem_write = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_COMMAND_SCRIPT),
+                "postmortem",
+                "--write",
+                str(hotfix_postmortem_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_postmortem_write.returncode == 0,
+            "hotfix command postmortem should support writing artifact output",
+        )
+        hotfix_command_postmortem_write_payload = parse_json_output(
+            hotfix_command_postmortem_write.stdout
+        )
+        expect(
+            isinstance(hotfix_command_postmortem_write_payload.get("written_path"), str)
+            and hotfix_postmortem_path.exists(),
+            "hotfix command postmortem should report and write artifact path",
+        )
+
         hotfix_command_doctor = subprocess.run(
             [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "doctor", "--json"],
             capture_output=True,
