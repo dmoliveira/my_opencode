@@ -4338,6 +4338,39 @@ index 3333333..4444444 100644
             "hotfix command postmortem should emit deterministic template markdown",
         )
 
+        hotfix_command_postmortem_link = subprocess.run(
+            [
+                sys.executable,
+                str(HOTFIX_COMMAND_SCRIPT),
+                "postmortem",
+                "--link-followup",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_postmortem_link.returncode == 0,
+            "hotfix command postmortem should support followup link resolution",
+        )
+        hotfix_command_postmortem_link_payload = parse_json_output(
+            hotfix_command_postmortem_link.stdout
+        )
+        expect(
+            hotfix_command_postmortem_link_payload.get("followup_link_status")
+            in {
+                "followup_link_resolved",
+                "followup_lookup_failed",
+                "followup_lookup_invalid_json",
+                "followup_lookup_empty",
+                "followup_missing",
+            },
+            "hotfix command postmortem should expose deterministic followup link status",
+        )
+
         hotfix_postmortem_path = tmp / "hotfix_postmortem.md"
         hotfix_command_postmortem_write = subprocess.run(
             [

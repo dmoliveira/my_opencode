@@ -23,7 +23,7 @@ def usage() -> int:
         "usage: /hotfix [start|status|close|postmortem|remind|doctor] [args] [--json] | "
         "/hotfix start --incident-id <id> --scope <patch|rollback|config_only> --impact <sev1|sev2|sev3> [--json] | "
         "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json] | "
-        "/hotfix postmortem [--write <path>] [--json]"
+        "/hotfix postmortem [--write <path>] [--link-followup] [--json]"
     )
     return 2
 
@@ -43,6 +43,27 @@ def run_runtime(args: list[str]) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+def resolve_followup_url(followup_issue: str) -> tuple[str | None, str]:
+    if not followup_issue:
+        return None, "followup_missing"
+    completed = subprocess.run(
+        ["gh", "issue", "view", followup_issue, "--json", "url"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None, "followup_lookup_failed"
+    try:
+        payload = json.loads(completed.stdout)
+    except Exception:
+        return None, "followup_lookup_invalid_json"
+    url = str(payload.get("url") or "").strip()
+    if not url:
+        return None, "followup_lookup_empty"
+    return url, "followup_link_resolved"
 
 
 def command_passthrough(args: list[str]) -> int:
@@ -120,6 +141,7 @@ def command_doctor(args: list[str]) -> int:
 def command_postmortem(args: list[str]) -> int:
     as_json = "--json" in args
     write_path_arg: Path | None = None
+    link_followup = False
     index = 0
     while index < len(args):
         token = args[index]
@@ -131,6 +153,10 @@ def command_postmortem(args: list[str]) -> int:
                 return usage()
             write_path_arg = Path(args[index + 1]).expanduser()
             index += 2
+            continue
+        if token == "--link-followup":
+            link_followup = True
+            index += 1
             continue
         return usage()
 
@@ -156,6 +182,10 @@ def command_postmortem(args: list[str]) -> int:
     postmortem_id = str(details.get("postmortem_id") or "")
     followup_issue = str(details.get("followup_issue") or "")
     risk_ack = str(details.get("risk_ack") or "")
+    followup_url: str | None = None
+    followup_link_status = "followup_link_skipped"
+    if link_followup:
+        followup_url, followup_link_status = resolve_followup_url(followup_issue)
 
     payload = {
         "result": "PASS",
@@ -163,6 +193,8 @@ def command_postmortem(args: list[str]) -> int:
         "incident_id": state.get("incident_id"),
         "postmortem_id": postmortem_id or None,
         "followup_issue": followup_issue or None,
+        "followup_url": followup_url,
+        "followup_link_status": followup_link_status,
         "risk_ack": risk_ack or None,
         "template_markdown": "\n".join(
             [

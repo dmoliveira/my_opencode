@@ -325,7 +325,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /health - Show repo health score and drift insights
 /hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
 /hooks - Manage safety hooks (status|help|enable|disable|run)
-/hotfix - Run incident hotfix controls with strict close gating (start|status|close|postmortem|remind|doctor)
+/hotfix - Run incident hotfix controls with strict close gating and followup linking (start|status|close|postmortem|remind|doctor)
 /init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
