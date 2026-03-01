@@ -476,7 +476,8 @@ CHECKS = [
 
 def usage() -> int:
     print(
-        "usage: /doctor status | /doctor help | /doctor run [--json] | /doctor reason-codes [--diff <path>] [--json]"
+        "usage: /doctor status | /doctor help | /doctor run [--json] | "
+        "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 2
 
@@ -496,6 +497,7 @@ def _module_reason_codes(module_name: str) -> dict[str, str]:
 def command_reason_codes(argv: list[str]) -> int:
     json_output = "--json" in argv
     baseline_path: Path | None = None
+    write_path: Path | None = None
     index = 0
     while index < len(argv):
         token = argv[index]
@@ -506,6 +508,12 @@ def command_reason_codes(argv: list[str]) -> int:
             if index + 1 >= len(argv):
                 return usage()
             baseline_path = Path(argv[index + 1]).expanduser()
+            index += 2
+            continue
+        if token == "--write":
+            if index + 1 >= len(argv):
+                return usage()
+            write_path = Path(argv[index + 1]).expanduser()
             index += 2
             continue
         return usage()
@@ -581,6 +589,11 @@ def command_reason_codes(argv: list[str]) -> int:
                     "removed": removed,
                     "changed": changed,
                 }
+
+    if write_path is not None:
+        write_path.parent.mkdir(parents=True, exist_ok=True)
+        write_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        payload["written_path"] = str(write_path.resolve())
     if json_output:
         print(json.dumps(payload, indent=2))
     else:
@@ -588,6 +601,8 @@ def command_reason_codes(argv: list[str]) -> int:
         print(f"total_codes: {payload['total_codes']}")
         for module_name, values in registry.items():
             print(f"- {module_name}: {len(values)}")
+        if write_path is not None:
+            print(f"- written_path: {payload.get('written_path')}")
         diff = payload.get("diff")
         if isinstance(diff, dict):
             print("diff:")
