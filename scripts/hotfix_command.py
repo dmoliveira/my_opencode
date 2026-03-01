@@ -23,7 +23,7 @@ def usage() -> int:
         "usage: /hotfix [start|status|close|postmortem|remind|doctor] [args] [--json] | "
         "/hotfix start --incident-id <id> --scope <patch|rollback|config_only> --impact <sev1|sev2|sev3> [--json] | "
         "/hotfix close --outcome <resolved|mitigated|rolled_back> --followup-issue <id> --deferred-validation-owner <owner> --deferred-validation-due <date> --postmortem-id <id> --risk-ack <text> [--json] | "
-        "/hotfix postmortem [--write <path>] [--link-followup] [--json]"
+        "/hotfix postmortem [--write <path>] [--link-followup] [--open-followup] [--confirm-followup] [--followup-title <text>] [--followup-body <text>] [--json]"
     )
     return 2
 
@@ -64,6 +64,26 @@ def resolve_followup_url(followup_issue: str) -> tuple[str | None, str]:
     if not url:
         return None, "followup_lookup_empty"
     return url, "followup_link_resolved"
+
+
+def open_followup_issue(
+    *,
+    title: str,
+    body: str,
+) -> tuple[str | None, str]:
+    completed = subprocess.run(
+        ["gh", "issue", "create", "--title", title, "--body", body],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None, "followup_open_failed"
+    url = (completed.stdout or "").strip().splitlines()
+    issue_url = url[-1].strip() if url else ""
+    if not issue_url:
+        return None, "followup_open_missing_url"
+    return issue_url, "followup_opened"
 
 
 def command_passthrough(args: list[str]) -> int:
@@ -142,6 +162,10 @@ def command_postmortem(args: list[str]) -> int:
     as_json = "--json" in args
     write_path_arg: Path | None = None
     link_followup = False
+    open_followup = False
+    confirm_followup = False
+    followup_title_override = ""
+    followup_body_override = ""
     index = 0
     while index < len(args):
         token = args[index]
@@ -157,6 +181,26 @@ def command_postmortem(args: list[str]) -> int:
         if token == "--link-followup":
             link_followup = True
             index += 1
+            continue
+        if token == "--open-followup":
+            open_followup = True
+            index += 1
+            continue
+        if token == "--confirm-followup":
+            confirm_followup = True
+            index += 1
+            continue
+        if token == "--followup-title":
+            if index + 1 >= len(args):
+                return usage()
+            followup_title_override = args[index + 1].strip()
+            index += 2
+            continue
+        if token == "--followup-body":
+            if index + 1 >= len(args):
+                return usage()
+            followup_body_override = args[index + 1]
+            index += 2
             continue
         return usage()
 
@@ -187,6 +231,32 @@ def command_postmortem(args: list[str]) -> int:
     if link_followup:
         followup_url, followup_link_status = resolve_followup_url(followup_issue)
 
+    generated_followup_title = (
+        followup_title_override
+        or f"Hotfix follow-up: {state.get('incident_id') or 'incident'}"
+    )
+    generated_followup_body = followup_body_override or "\n".join(
+        [
+            "## Follow-up Summary",
+            f"- Incident: {state.get('incident_id') or '<incident-id>'}",
+            f"- Postmortem: {postmortem_id or '<postmortem-id>'}",
+            f"- Existing follow-up reference: {followup_issue or '<none>'}",
+            "",
+            "## Action Items",
+            "- <hardening task 1>",
+            "- <hardening task 2>",
+        ]
+    )
+    opened_followup_url: str | None = None
+    open_followup_status = "followup_open_skipped"
+    if open_followup and not confirm_followup:
+        open_followup_status = "confirmation_required"
+    elif open_followup and confirm_followup:
+        opened_followup_url, open_followup_status = open_followup_issue(
+            title=generated_followup_title,
+            body=generated_followup_body,
+        )
+
     payload = {
         "result": "PASS",
         "reason_code": "hotfix_postmortem_template",
@@ -195,6 +265,13 @@ def command_postmortem(args: list[str]) -> int:
         "followup_issue": followup_issue or None,
         "followup_url": followup_url,
         "followup_link_status": followup_link_status,
+        "open_followup_status": open_followup_status,
+        "opened_followup_url": opened_followup_url,
+        "followup_preview": {
+            "title": generated_followup_title,
+            "body": generated_followup_body,
+            "confirm_required": bool(open_followup and not confirm_followup),
+        },
         "risk_ack": risk_ack or None,
         "template_markdown": "\n".join(
             [
