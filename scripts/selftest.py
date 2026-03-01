@@ -4012,6 +4012,8 @@ index 3333333..4444444 100644
                 "--allowed-branch-re",
                 ".*",
                 "--dry-run",
+                "--write-summary",
+                str(tmp / "publish-summary-dry-run.json"),
                 "--json",
             ],
             capture_output=True,
@@ -4031,6 +4033,11 @@ index 3333333..4444444 100644
             release_publish_dry_run_payload.get("result") == "PASS"
             and release_publish_dry_run_payload.get("dry_run") is True,
             "release-train publish dry-run should emit pass payload",
+        )
+        expect(
+            isinstance(release_publish_dry_run_payload.get("summary_path"), str)
+            and (tmp / "publish-summary-dry-run.json").exists(),
+            "release-train publish should persist dry-run summary when requested",
         )
 
         release_publish_release_missing_notes = subprocess.run(
@@ -4137,6 +4144,8 @@ index 3333333..4444444 100644
                 "1.0.1",
                 "--allowed-branch-re",
                 ".*",
+                "--write-summary",
+                str(tmp / "publish-summary-confirmation.json"),
                 "--json",
             ],
             capture_output=True,
@@ -4156,6 +4165,11 @@ index 3333333..4444444 100644
             "confirmation_required"
             in set(release_publish_confirmation_payload.get("reason_codes", [])),
             "release-train publish should emit confirmation_required reason code",
+        )
+        expect(
+            isinstance(release_publish_confirmation_payload.get("summary_path"), str)
+            and (tmp / "publish-summary-confirmation.json").exists(),
+            "release-train publish confirmation response should persist summary when requested",
         )
 
         hotfix_repo = tmp / "hotfix_repo"
