@@ -15,6 +15,7 @@ WORKLOG_ROW_RE = re.compile(
 )
 EVIDENCE_RE = re.compile(r"(https?://\S+|#[0-9]+)")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+PLAN_VERSION_RE = re.compile(r"v(\d+)\.(\d+)")
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,15 @@ def parse_utc(value: str) -> datetime | None:
         return datetime.strptime(candidate, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError:
         return None
+
+
+def plan_priority(path: Path) -> tuple[int, int, str]:
+    match = PLAN_VERSION_RE.search(path.name)
+    if not match:
+        return (-1, -1, path.name)
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    return (major, minor, path.name)
 
 
 def collect_findings(path: Path, *, stale_cutoff: datetime) -> list[Finding]:
@@ -123,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
             candidates = active
             skipped_completed.extend(str(path) for path, _, _ in completed)
         elif completed:
-            most_recent = max(completed, key=lambda item: item[0].stat().st_mtime)
+            most_recent = max(completed, key=lambda item: plan_priority(item[0]))
             candidates = [most_recent]
             fallback_completed_path = str(most_recent[0])
             skipped_completed.extend(
