@@ -55,6 +55,12 @@ If release-train readiness reports plan hygiene findings, run:
 python3 scripts/plan_hygiene_check.py --json
 ```
 
+For archived/legacy plan files that should not block current-wave readiness, use scoped ignores explicitly:
+
+```bash
+python3 scripts/plan_hygiene_check.py --json --ignore-plan "*v0.9-claude-flow-upgrades-plan.md"
+```
+
 Add closure evidence links (for example `#123` or full PR URLs) to stale done worklog rows before re-running `/release-train doctor --json` and `/release-train prepare --version X.Y.Z --json`.
 
 4) Open small PR for release docs
