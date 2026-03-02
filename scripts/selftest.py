@@ -3995,6 +3995,49 @@ index 3333333..4444444 100644
             "plan hygiene checker should fall back to latest completed plan when no active plans exist",
         )
 
+        ignored_plan = tmp / "ignored_plan.md"
+        ignored_plan.write_text(
+            """# Ignored Plan
+
+## Worklog
+
+| UTC | Task | Status | Notes |
+|---|---|---|---|
+| 2026-02-01T00:00:00Z | E1 complete | done | missing closure link |
+
+## Epics
+
+- [ ] Follow-up task
+""",
+            encoding="utf-8",
+        )
+        plan_hygiene_ignored = subprocess.run(
+            [
+                sys.executable,
+                str(PLAN_HYGIENE_CHECK_SCRIPT),
+                "--plan",
+                str(ignored_plan),
+                "--ignore-plan",
+                "*ignored_plan.md",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            plan_hygiene_ignored.returncode == 0,
+            "plan hygiene checker should allow ignored plan paths",
+        )
+        plan_hygiene_ignored_payload = parse_json_output(plan_hygiene_ignored.stdout)
+        expect(
+            str(ignored_plan.resolve())
+            in set(plan_hygiene_ignored_payload.get("ignored_paths", [])),
+            "plan hygiene checker should report ignored plan paths",
+        )
+
         do_usage = subprocess.run(
             [sys.executable, str(DO_COMMAND_SCRIPT)],
             capture_output=True,

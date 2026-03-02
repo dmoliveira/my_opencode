@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import re
 from dataclasses import dataclass
@@ -85,6 +86,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--plan", action="append", default=[])
+    parser.add_argument(
+        "--ignore-plan",
+        action="append",
+        default=[],
+        help="glob pattern for plan paths to skip (can be repeated)",
+    )
     parser.add_argument("--stale-hours", type=int, default=12)
     parser.add_argument("--include-completed", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -102,13 +109,31 @@ def main(argv: list[str] | None = None) -> int:
         plan_paths = [Path(item).resolve() for item in args.plan]
     else:
         plan_paths = discover_plan_files(repo_root)
+    ignore_patterns = [
+        str(item).strip() for item in args.ignore_plan if str(item).strip()
+    ]
 
     stale_cutoff = datetime.now(tz=UTC) - timedelta(hours=max(args.stale_hours, 0))
     findings: list[Finding] = []
     scanned_paths: list[str] = []
     skipped_completed: list[str] = []
+    ignored_paths: list[str] = []
     loaded: list[tuple[Path, str, bool]] = []
     for plan_path in plan_paths:
+        path_value = str(plan_path)
+        rel_value = (
+            str(plan_path.relative_to(repo_root))
+            if plan_path.is_relative_to(repo_root)
+            else path_value
+        )
+        if ignore_patterns and any(
+            fnmatch.fnmatch(path_value, pattern)
+            or fnmatch.fnmatch(rel_value, pattern)
+            or fnmatch.fnmatch(plan_path.name, pattern)
+            for pattern in ignore_patterns
+        ):
+            ignored_paths.append(path_value)
+            continue
         if not plan_path.exists():
             findings.append(
                 Finding(
@@ -161,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
         "scanned_plan_count": len(scanned_paths),
         "scanned_paths": scanned_paths,
         "skipped_completed_paths": skipped_completed,
+        "ignored_paths": ignored_paths,
+        "ignore_patterns": ignore_patterns,
         "stale_cutoff_utc": stale_cutoff.isoformat().replace("+00:00", "Z"),
         "fallback_completed_scan": fallback_completed_path,
         "quick_fixes": [
