@@ -32,6 +32,7 @@ PUBLISH_PROFILE_PRESETS: dict[str, dict[str, bool]] = {
     "docs-only": {"create_tag": True, "create_release": False},
     "runtime": {"create_tag": True, "create_release": True},
 }
+PLAN_HYGIENE_CHECK_SCRIPT = SCRIPT_DIR / "plan_hygiene_check.py"
 
 
 def usage() -> int:
@@ -66,6 +67,73 @@ def emit(payload: dict[str, Any], *, as_json: bool) -> None:
         return
     for key, value in payload.items():
         print(f"{key}: {value}")
+
+
+def run_plan_hygiene_check(repo_root: Path) -> dict[str, Any]:
+    if not PLAN_HYGIENE_CHECK_SCRIPT.exists():
+        return {
+            "result": "FAIL",
+            "reason_codes": ["plan_hygiene_checker_missing"],
+            "findings": [
+                {
+                    "path": str(PLAN_HYGIENE_CHECK_SCRIPT),
+                    "line": 1,
+                    "reason_code": "plan_hygiene_checker_missing",
+                    "message": "missing scripts/plan_hygiene_check.py",
+                }
+            ],
+            "quick_fixes": ["restore scripts/plan_hygiene_check.py"],
+        }
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(PLAN_HYGIENE_CHECK_SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=repo_root,
+    )
+    if not completed.stdout.strip():
+        detail = (
+            completed.stderr.strip() or "plan hygiene checker returned empty output"
+        )
+        return {
+            "result": "FAIL",
+            "reason_codes": ["plan_hygiene_checker_unparseable"],
+            "findings": [
+                {
+                    "path": str(PLAN_HYGIENE_CHECK_SCRIPT),
+                    "line": 1,
+                    "reason_code": "plan_hygiene_checker_unparseable",
+                    "message": detail,
+                }
+            ],
+            "quick_fixes": ["python3 scripts/plan_hygiene_check.py --json"],
+        }
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        return {
+            "result": "FAIL",
+            "reason_codes": ["plan_hygiene_checker_unparseable"],
+            "findings": [
+                {
+                    "path": str(PLAN_HYGIENE_CHECK_SCRIPT),
+                    "line": 1,
+                    "reason_code": "plan_hygiene_checker_unparseable",
+                    "message": detail,
+                }
+            ],
+            "quick_fixes": ["python3 scripts/plan_hygiene_check.py --json"],
+        }
+    if "result" not in payload:
+        payload["result"] = "FAIL"
+    return payload
 
 
 def _local_tag_exists(repo_root: Path, tag_name: str) -> bool:
@@ -139,6 +207,19 @@ def command_prepare(args: list[str]) -> int:
         return 2
 
     checks = payload.get("checks", {})
+    plan_hygiene = run_plan_hygiene_check(repo_root)
+    plan_hygiene_pass = plan_hygiene.get("result") == "PASS"
+    payload["plan_hygiene"] = plan_hygiene
+    if not plan_hygiene_pass:
+        reason_codes = list(payload.get("reason_codes", []))
+        if "plan_hygiene_findings_present" not in reason_codes:
+            reason_codes.append("plan_hygiene_findings_present")
+        payload["reason_codes"] = reason_codes
+        payload["ready"] = False
+        next_actions = list(payload.get("next_actions", []))
+        if "/release-train doctor --json" not in next_actions:
+            next_actions.append("/release-train doctor --json")
+        payload["next_actions"] = next_actions
     payload["checklist"] = [
         {
             "id": "clean_worktree",
@@ -155,6 +236,10 @@ def command_prepare(args: list[str]) -> int:
         {
             "id": "changelog_evidence",
             "status": "pass" if checks.get("changelog_has_version") else "fail",
+        },
+        {
+            "id": "plan_hygiene",
+            "status": "pass" if plan_hygiene_pass else "fail",
         },
     ]
     emit(payload, as_json=as_json)
@@ -571,18 +656,34 @@ def command_doctor(args: list[str]) -> int:
     contract_exists = (
         SCRIPT_DIR.parent / "instructions" / "release_train_policy_contract.md"
     ).exists()
+    plan_hygiene = run_plan_hygiene_check(REPO_ROOT)
+    plan_hygiene_pass = plan_hygiene.get("result") == "PASS"
+    plan_hygiene_reason_codes = [
+        str(code)
+        for code in plan_hygiene.get("reason_codes", [])
+        if isinstance(code, str)
+    ]
+    warnings = [] if contract_exists else ["missing release policy contract"]
+    if not plan_hygiene_pass:
+        warnings.append("plan hygiene findings detected")
+    problems = [] if engine_exists else ["missing scripts/release_train_engine.py"]
+    if not plan_hygiene_pass:
+        problems.append("stale done plan entries missing closure evidence links")
+    quick_fixes = [
+        "/release-train status --json",
+        "/release-train prepare --version 0.0.0 --json",
+    ]
+    if not plan_hygiene_pass:
+        quick_fixes.append("python3 scripts/plan_hygiene_check.py --json")
     report = {
-        "result": "PASS" if engine_exists else "FAIL",
+        "result": "PASS" if (engine_exists and plan_hygiene_pass) else "FAIL",
         "engine_exists": engine_exists,
         "contract_exists": contract_exists,
-        "warnings": [] if contract_exists else ["missing release policy contract"],
-        "problems": []
-        if engine_exists
-        else ["missing scripts/release_train_engine.py"],
-        "quick_fixes": [
-            "/release-train status --json",
-            "/release-train prepare --version 0.0.0 --json",
-        ],
+        "plan_hygiene_pass": plan_hygiene_pass,
+        "plan_hygiene_reason_codes": plan_hygiene_reason_codes,
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": quick_fixes,
     }
     emit(report, as_json=as_json)
     return 0 if report["result"] == "PASS" else 1
