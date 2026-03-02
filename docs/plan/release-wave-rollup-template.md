@@ -30,6 +30,7 @@ Use this template to summarize a grouped release wave (for example multiple `v0.
 - `make validate`
 - `make selftest`
 - `make install-test`
+- `npm --prefix plugin/gateway-core run lint`
 - `pre-commit run --all-files`
 
 ## Follow-ups
