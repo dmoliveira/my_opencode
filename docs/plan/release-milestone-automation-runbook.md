@@ -63,6 +63,18 @@ python3 scripts/plan_hygiene_check.py --json --ignore-plan "*v0.9-claude-flow-up
 
 Add closure evidence links (for example `#123` or full PR URLs) to stale done worklog rows before re-running `/release-train doctor --json` and `/release-train prepare --version X.Y.Z --json`.
 
+When `/release-train doctor` warns that a wave completion artifact is recommended, generate the completion doc scaffold from merged PR metadata:
+
+```bash
+python3 scripts/update_wave_completion_doc.py --wave v2.2 --pr 373 --pr 374 --json
+```
+
+Equivalent make helper:
+
+```bash
+make wave-completion-update WAVE=v2.2 PRS="373 374"
+```
+
 4) Open small PR for release docs
 
 - Branch naming: `feat/vX-Y-Z-release-docs`

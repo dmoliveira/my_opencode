@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check plan-hygiene-check quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check plan-hygiene-check wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -34,6 +34,10 @@ docs-automation-check: ## Check docs automation workflow/pages/summary synchroni
 
 plan-hygiene-check: ## Check stale done worklog rows for closure evidence links
 	python3 scripts/plan_hygiene_check.py --json
+
+wave-completion-update: ## Generate wave completion doc (WAVE=vX.Y, PRS="123 124")
+	@if [ -z "$(WAVE)" ]; then echo "WAVE is required (for example WAVE=v2.2)"; exit 2; fi
+	@ARGS=""; for pr in $(PRS); do ARGS="$$ARGS --pr $$pr"; done; python3 scripts/update_wave_completion_doc.py --wave "$(WAVE)" $$ARGS --json
 
 quality-fast: ## Set quality profile to fast
 	python3 scripts/quality_command.py profile fast --json
