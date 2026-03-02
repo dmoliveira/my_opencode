@@ -161,6 +161,7 @@ DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT = (
 DOCS_AUTOMATION_SYNC_CHECK_SCRIPT = (
     REPO_ROOT / "scripts" / "docs_automation_sync_check.py"
 )
+PLAN_HYGIENE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "plan_hygiene_check.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -3730,7 +3731,8 @@ index 3333333..4444444 100644
         )
         expect(
             release_command_doctor_payload.get("result") == "PASS"
-            and release_command_doctor_payload.get("engine_exists") is True,
+            and release_command_doctor_payload.get("engine_exists") is True
+            and release_command_doctor_payload.get("plan_hygiene_pass") is True,
             "release-train command doctor should confirm engine availability",
         )
 
@@ -3759,6 +3761,15 @@ index 3333333..4444444 100644
         expect(
             "reason_codes" in release_command_prepare_payload,
             "release-train command prepare should emit reason codes",
+        )
+        checklist_ids = {
+            item.get("id")
+            for item in release_command_prepare_payload.get("checklist", [])
+            if isinstance(item, dict)
+        }
+        expect(
+            "plan_hygiene" in checklist_ids,
+            "release-train prepare should include plan hygiene checklist status",
         )
 
         rollup_milestone_a = tmp / "rollup_milestone_a.md"
@@ -3900,6 +3911,88 @@ index 3333333..4444444 100644
         expect(
             docs_automation_sync_check.returncode == 0,
             "docs automation sync check should pass when workflow/pages/summary are synchronized",
+        )
+
+        active_plan = tmp / "active_plan.md"
+        active_plan.write_text(
+            """# Active Plan
+
+## Worklog
+
+| UTC | Task | Status | Notes |
+|---|---|---|---|
+| 2026-02-01T00:00:00Z | E1 complete | done | completed rollout |
+
+## Epics
+
+- [ ] Follow-up task
+""",
+            encoding="utf-8",
+        )
+        plan_hygiene_fail = subprocess.run(
+            [
+                sys.executable,
+                str(PLAN_HYGIENE_CHECK_SCRIPT),
+                "--plan",
+                str(active_plan),
+                "--stale-hours",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            plan_hygiene_fail.returncode == 1,
+            "plan hygiene checker should fail for stale done rows without evidence links",
+        )
+        plan_hygiene_fail_payload = parse_json_output(plan_hygiene_fail.stdout)
+        expect(
+            "plan_hygiene_missing_closure_evidence"
+            in set(plan_hygiene_fail_payload.get("reason_codes", [])),
+            "plan hygiene checker should emit closure evidence reason code",
+        )
+
+        completed_plan = tmp / "completed_plan.md"
+        completed_plan.write_text(
+            """# Completed Plan
+
+## Worklog
+
+| UTC | Task | Status | Notes |
+|---|---|---|---|
+| 2026-02-01T00:00:00Z | E1 complete | done | #999 |
+""",
+            encoding="utf-8",
+        )
+        plan_hygiene_completed_skip = subprocess.run(
+            [
+                sys.executable,
+                str(PLAN_HYGIENE_CHECK_SCRIPT),
+                "--plan",
+                str(completed_plan),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            plan_hygiene_completed_skip.returncode == 0,
+            "plan hygiene checker should pass completed plans with closure evidence",
+        )
+        plan_hygiene_completed_skip_payload = parse_json_output(
+            plan_hygiene_completed_skip.stdout
+        )
+        expect(
+            plan_hygiene_completed_skip_payload.get("fallback_completed_scan")
+            == str(completed_plan.resolve()),
+            "plan hygiene checker should fall back to latest completed plan when no active plans exist",
         )
 
         do_usage = subprocess.run(
