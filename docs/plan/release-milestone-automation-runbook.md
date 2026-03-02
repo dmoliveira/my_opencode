@@ -172,4 +172,14 @@ Wave-transition policy:
 - Publish a closure artifact before opening the next minor plan scaffold.
 - Start the next wave in a fresh plan doc (for example `v2.1-...`) to avoid mixing scope across waves.
 
+Wave-closure checklist template: `docs/plan/wave-closure-checklist-template.md`.
+
+Wave linkage integrity check:
+
+```bash
+python3 scripts/wave_linkage_check.py --json
+```
+
+Open the next-wave scaffold only after the linkage check passes and the current wave completion artifact is committed on `main`.
+
 These examples model the expected flow: consolidate merged PR milestones first, then generate release notes, validate, merge docs PR, and publish the milestone tag.

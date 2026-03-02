@@ -166,6 +166,7 @@ WAVE_COMPLETION_UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update_wave_completion_
 RELEASE_NOTE_VALIDATION_CHECK_SCRIPT = (
     REPO_ROOT / "scripts" / "release_note_validation_check.py"
 )
+WAVE_LINKAGE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "wave_linkage_check.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -4191,7 +4192,10 @@ index 3333333..4444444 100644
         closure_completion = (
             closure_repo / "docs" / "plan" / "v9.9-flow-wave-completion.md"
         )
-        closure_completion.write_text("# v9.9 Flow Wave Completion\n", encoding="utf-8")
+        closure_completion.write_text(
+            "# v9.9 Flow Wave Completion\n\nLinked plan: docs/plan/v9.9-flow-wave-plan.md\n",
+            encoding="utf-8",
+        )
         release_doctor_no_recommend = subprocess.run(
             [
                 sys.executable,
@@ -4218,6 +4222,53 @@ index 3333333..4444444 100644
             release_doctor_no_recommend_payload.get("wave_closure_recommended")
             is False,
             "release-train doctor should clear closure recommendation after completion artifact exists",
+        )
+
+        wave_linkage_check_pass = subprocess.run(
+            [
+                sys.executable,
+                str(WAVE_LINKAGE_CHECK_SCRIPT),
+                "--repo-root",
+                str(closure_repo),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            wave_linkage_check_pass.returncode == 0,
+            "wave linkage checker should pass when completed wave and completion doc are linked",
+        )
+
+        closure_completion.write_text("# v9.9 Flow Wave Completion\n", encoding="utf-8")
+        wave_linkage_check_fail = subprocess.run(
+            [
+                sys.executable,
+                str(WAVE_LINKAGE_CHECK_SCRIPT),
+                "--repo-root",
+                str(closure_repo),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            wave_linkage_check_fail.returncode == 1,
+            "wave linkage checker should fail when completion docs omit plan references",
+        )
+        wave_linkage_check_fail_payload = parse_json_output(
+            wave_linkage_check_fail.stdout
+        )
+        expect(
+            "wave_completion_missing_plan_reference"
+            in set(wave_linkage_check_fail_payload.get("reason_codes", [])),
+            "wave linkage checker should emit missing plan reference reason code",
         )
 
         do_usage = subprocess.run(

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check plan-hygiene-check wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check plan-hygiene-check wave-linkage-check wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -16,6 +16,7 @@ validate: ## Validate scripts and JSON config
 	python3 scripts/docs_automation_sync_check.py
 	python3 scripts/release_note_validation_check.py
 	python3 scripts/plan_hygiene_check.py --json
+	python3 scripts/wave_linkage_check.py --json
 	python3 scripts/build_agents.py --profile balanced --check
 
 build-agents: ## Generate agent markdown from JSON specs
@@ -38,6 +39,9 @@ release-note-validation-check: ## Check release-note docs include validation evi
 
 plan-hygiene-check: ## Check stale done worklog rows for closure evidence links
 	python3 scripts/plan_hygiene_check.py --json
+
+wave-linkage-check: ## Check completed wave plans map to completion docs
+	python3 scripts/wave_linkage_check.py --json
 
 wave-completion-update: ## Generate wave completion doc (WAVE=vX.Y, PRS="123 124")
 	@if [ -z "$(WAVE)" ]; then echo "WAVE is required (for example WAVE=v2.2)"; exit 2; fi
