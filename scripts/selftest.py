@@ -3908,6 +3908,11 @@ index 3333333..4444444 100644
             "latest_indexed_release: v0.4.19" in docs_automation_summary_text,
             "docs automation summary should include latest indexed release marker",
         )
+        expect(
+            "generated_at_utc:" in docs_automation_summary_text
+            and "publication_target_coverage:" in docs_automation_summary_text,
+            "docs automation summary should include generation timestamp and publication coverage fields",
+        )
 
         docs_automation_sync_check = subprocess.run(
             [sys.executable, str(DOCS_AUTOMATION_SYNC_CHECK_SCRIPT)],
@@ -3920,6 +3925,13 @@ index 3333333..4444444 100644
         expect(
             docs_automation_sync_check.returncode == 0,
             "docs automation sync check should pass when workflow/pages/summary are synchronized",
+        )
+        docs_automation_sync_payload = parse_json_output(
+            docs_automation_sync_check.stdout
+        )
+        expect(
+            isinstance(docs_automation_sync_payload.get("reason_code_map"), dict),
+            "docs automation sync check should emit reason-code map metadata",
         )
 
         release_note_validation_check = subprocess.run(
