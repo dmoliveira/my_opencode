@@ -163,6 +163,9 @@ DOCS_AUTOMATION_SYNC_CHECK_SCRIPT = (
 )
 PLAN_HYGIENE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "plan_hygiene_check.py"
 WAVE_COMPLETION_UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update_wave_completion_doc.py"
+RELEASE_NOTE_VALIDATION_CHECK_SCRIPT = (
+    REPO_ROOT / "scripts" / "release_note_validation_check.py"
+)
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -3837,6 +3840,11 @@ index 3333333..4444444 100644
             "release-rollup draft should emit provenance metadata in payload and markdown",
         )
         expect(
+            "npm --prefix plugin/gateway-core run lint"
+            in str(release_rollup_draft_payload.get("markdown", "")),
+            "release-rollup draft should include lint evidence in validation section",
+        )
+        expect(
             rollup_output_path.exists()
             and isinstance(release_rollup_draft_payload.get("written_path"), str),
             "release-rollup draft should support artifact writing",
@@ -3912,6 +3920,29 @@ index 3333333..4444444 100644
         expect(
             docs_automation_sync_check.returncode == 0,
             "docs automation sync check should pass when workflow/pages/summary are synchronized",
+        )
+
+        release_note_validation_check = subprocess.run(
+            [sys.executable, str(RELEASE_NOTE_VALIDATION_CHECK_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_note_validation_check.returncode == 0,
+            "release note validation checker should pass for repository release-note artifacts",
+        )
+        release_note_validation_payload = parse_json_output(
+            release_note_validation_check.stdout
+        )
+        expect(
+            release_note_validation_payload.get("result") == "PASS"
+            and isinstance(
+                release_note_validation_payload.get("checked_file_count"), int
+            ),
+            "release note validation checker should emit structured validation payload",
         )
 
         active_plan = tmp / "active_plan.md"

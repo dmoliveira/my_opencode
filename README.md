@@ -140,6 +140,7 @@ Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for f
 - `scripts/docs_automation_sync_check.py` - checker script for docs automation workflow/pages/summary synchronization
 - `scripts/plan_hygiene_check.py` - checker script for stale plan worklog rows missing closure evidence links
 - `scripts/update_wave_completion_doc.py` - helper script to generate wave completion docs from merged PR metadata
+- `scripts/release_note_validation_check.py` - checker script for release-note validation heading consistency
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`

@@ -46,6 +46,7 @@ python3 scripts/release_train_command.py rollup \
 make validate
 make selftest
 make install-test
+npm --prefix plugin/gateway-core run lint
 pre-commit run --all-files
 ```
 
@@ -73,6 +74,12 @@ Equivalent make helper:
 
 ```bash
 make wave-completion-update WAVE=v2.2 PRS="373 374"
+```
+
+Release-note artifact hygiene checker:
+
+```bash
+python3 scripts/release_note_validation_check.py
 ```
 
 4) Open small PR for release docs

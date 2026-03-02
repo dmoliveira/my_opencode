@@ -694,6 +694,7 @@ def command_rollup(args: list[str]) -> int:
             "- make validate",
             "- make selftest",
             "- make install-test",
+            "- npm --prefix plugin/gateway-core run lint",
             "- pre-commit run --all-files",
         ]
     )
