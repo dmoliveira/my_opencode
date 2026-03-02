@@ -7,6 +7,30 @@ import re
 from pathlib import Path
 
 
+REASON_CODE_MAP: dict[str, dict[str, str]] = {
+    "docs_automation_workflow_jobs_missing": {
+        "severity": "high",
+        "hint": "restore sync-wiki and deploy-pages jobs in docs automation workflow",
+    },
+    "docs_automation_pages_path_missing": {
+        "severity": "high",
+        "hint": "ensure docs/pages artifact path is uploaded by docs automation workflow",
+    },
+    "docs_hub_wiki_link_missing": {
+        "severity": "medium",
+        "hint": "add repository wiki link to docs/pages/index.html",
+    },
+    "docs_hub_support_link_missing": {
+        "severity": "medium",
+        "hint": "add support link to docs/pages/index.html",
+    },
+    "docs_automation_summary_out_of_sync": {
+        "severity": "medium",
+        "hint": "regenerate docs automation summary via make docs-automation-summary-update",
+    },
+}
+
+
 def version_key(value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in value.split("."))
 
@@ -60,6 +84,15 @@ def main() -> int:
     payload = {
         "result": "PASS" if not reason_codes else "FAIL",
         "reason_codes": reason_codes,
+        "reason_code_map": {
+            code: REASON_CODE_MAP.get(
+                code,
+                {"severity": "unknown", "hint": "inspect checker output"},
+            )
+            for code in reason_codes
+        }
+        if reason_codes
+        else REASON_CODE_MAP,
         "remediation": remediation,
         "latest_indexed_release": f"v{latest}" if latest is not None else None,
         "summary_path": str(summary_path),
