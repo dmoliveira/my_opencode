@@ -82,6 +82,18 @@ Release-note artifact hygiene checker:
 python3 scripts/release_note_validation_check.py
 ```
 
+Release-note quality score triage:
+
+```bash
+python3 scripts/release_note_quality_check.py --json
+```
+
+Interpreting regressions:
+
+- `average_score` drops usually indicate missing lint evidence or missing validation headings in newly generated notes.
+- `release_note_missing_lint_evidence` means add `npm --prefix plugin/gateway-core run lint` under `## Validation Evidence`.
+- `release_note_quality_below_threshold` means at least one note lacks core quality signals (sections or PR entries).
+
 4) Open small PR for release docs
 
 - Branch naming: `feat/vX-Y-Z-release-docs`
