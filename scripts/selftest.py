@@ -162,6 +162,7 @@ DOCS_AUTOMATION_SYNC_CHECK_SCRIPT = (
     REPO_ROOT / "scripts" / "docs_automation_sync_check.py"
 )
 PLAN_HYGIENE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "plan_hygiene_check.py"
+WAVE_COMPLETION_UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update_wave_completion_doc.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -4036,6 +4037,144 @@ index 3333333..4444444 100644
             str(ignored_plan.resolve())
             in set(plan_hygiene_ignored_payload.get("ignored_paths", [])),
             "plan hygiene checker should report ignored plan paths",
+        )
+
+        wave_plan = tmp / "v9.9-flow-wave-plan.md"
+        wave_plan.write_text(
+            """# v9.9 Flow Wave Plan
+
+### E1 Reliability
+
+- [x] task
+
+### E2 Throughput
+
+- [x] task
+""",
+            encoding="utf-8",
+        )
+        pr_metadata_file = tmp / "wave_prs.json"
+        pr_metadata_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "number": 900,
+                        "title": "Synthetic wave change",
+                        "mergedAt": "2026-03-02T00:00:00Z",
+                        "url": "https://github.com/example/repo/pull/900",
+                        "mergeCommit": {"oid": "abc123def456"},
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        wave_completion_output = tmp / "v9.9-flow-wave-completion.md"
+        wave_completion_generate = subprocess.run(
+            [
+                sys.executable,
+                str(WAVE_COMPLETION_UPDATE_SCRIPT),
+                "--wave",
+                "v9.9",
+                "--plan",
+                str(wave_plan),
+                "--output",
+                str(wave_completion_output),
+                "--pr-metadata-file",
+                str(pr_metadata_file),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            wave_completion_generate.returncode == 0,
+            "wave completion updater should generate completion docs from PR metadata",
+        )
+        wave_completion_text = wave_completion_output.read_text(encoding="utf-8")
+        expect(
+            "[#900](https://github.com/example/repo/pull/900)" in wave_completion_text
+            and "Synthetic wave change" in wave_completion_text,
+            "wave completion updater should include merged PR rows in generated completion docs",
+        )
+
+        closure_repo = tmp / "closure_repo"
+        (closure_repo / "docs" / "plan").mkdir(parents=True, exist_ok=True)
+        closure_plan = closure_repo / "docs" / "plan" / "v9.9-flow-wave-plan.md"
+        closure_plan.write_text(
+            """# v9.9 Flow Wave Plan
+
+### E1 Reliability
+
+- [x] done
+
+### E2 Throughput
+
+- [x] done
+""",
+            encoding="utf-8",
+        )
+        release_doctor_closure = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "doctor",
+                "--repo-root",
+                str(closure_repo),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_doctor_closure.returncode == 0,
+            "release-train doctor should still pass when only closure artifact is recommended",
+        )
+        release_doctor_closure_payload = parse_json_output(
+            release_doctor_closure.stdout
+        )
+        expect(
+            release_doctor_closure_payload.get("wave_closure_recommended") is True
+            and "wave_completion_artifact_recommended"
+            in set(release_doctor_closure_payload.get("wave_closure_reason_codes", [])),
+            "release-train doctor should emit closure-artifact recommendation reason code",
+        )
+
+        closure_completion = (
+            closure_repo / "docs" / "plan" / "v9.9-flow-wave-completion.md"
+        )
+        closure_completion.write_text("# v9.9 Flow Wave Completion\n", encoding="utf-8")
+        release_doctor_no_recommend = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_COMMAND_SCRIPT),
+                "doctor",
+                "--repo-root",
+                str(closure_repo),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_doctor_no_recommend.returncode == 0,
+            "release-train doctor should pass when completion artifact exists",
+        )
+        release_doctor_no_recommend_payload = parse_json_output(
+            release_doctor_no_recommend.stdout
+        )
+        expect(
+            release_doctor_no_recommend_payload.get("wave_closure_recommended")
+            is False,
+            "release-train doctor should clear closure recommendation after completion artifact exists",
         )
 
         do_usage = subprocess.run(

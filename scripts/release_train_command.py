@@ -27,6 +27,7 @@ from release_train_engine import (  # type: ignore
 
 
 PR_PATTERN = re.compile(r"/pull/(\d+)")
+WAVE_PLAN_RE = re.compile(r"^(v(\d+)\.(\d+))-flow-wave-plan\.md$")
 PUBLISH_SUMMARY_SCHEMA_VERSION = "1.0"
 PUBLISH_PROFILE_PRESETS: dict[str, dict[str, bool]] = {
     "docs-only": {"create_tag": True, "create_release": False},
@@ -38,7 +39,7 @@ PLAN_HYGIENE_CHECK_SCRIPT = SCRIPT_DIR / "plan_hygiene_check.py"
 def usage() -> int:
     print(
         "usage: /release-train [status|prepare|draft|rollup|publish|doctor] "
-        "[--json] [--version <x.y.z>] [--profile docs-only|runtime]"
+        "[--json] [--version <x.y.z>] [--profile docs-only|runtime] [--repo-root <path>]"
     )
     return 2
 
@@ -136,6 +137,61 @@ def run_plan_hygiene_check(repo_root: Path) -> dict[str, Any]:
     return payload
 
 
+def run_wave_closure_readiness(repo_root: Path) -> dict[str, Any]:
+    plan_dir = repo_root / "docs" / "plan"
+    candidates: list[tuple[int, int, str, Path]] = []
+    for path in sorted(plan_dir.glob("*-flow-wave-plan.md")):
+        match = WAVE_PLAN_RE.match(path.name)
+        if not match:
+            continue
+        wave = match.group(1)
+        major = int(match.group(2))
+        minor = int(match.group(3))
+        candidates.append((major, minor, wave, path))
+
+    if not candidates:
+        return {
+            "recommended": False,
+            "reason_codes": [],
+            "quick_fixes": [],
+            "active_wave": None,
+            "active_plan_path": None,
+            "completion_path": None,
+            "all_epics_complete": False,
+            "completion_exists": False,
+        }
+
+    _, _, wave, plan_path = max(candidates)
+    plan_text = plan_path.read_text(encoding="utf-8", errors="replace")
+    has_done_checkbox = bool(
+        re.search(r"^\s*- \[[xX]\]", plan_text, flags=re.MULTILINE)
+    )
+    has_pending_checkbox = bool(
+        re.search(r"^\s*- \[ \]", plan_text, flags=re.MULTILINE)
+    )
+    all_epics_complete = has_done_checkbox and not has_pending_checkbox
+    completion_path = plan_path.with_name(
+        plan_path.name.replace("-plan.md", "-completion.md")
+    )
+    completion_exists = completion_path.exists()
+    recommended = all_epics_complete and not completion_exists
+    quick_fixes = []
+    if recommended:
+        quick_fixes.append(
+            f"python3 scripts/update_wave_completion_doc.py --wave {wave} --pr <number>"
+        )
+    return {
+        "recommended": recommended,
+        "reason_codes": ["wave_completion_artifact_recommended"] if recommended else [],
+        "quick_fixes": quick_fixes,
+        "active_wave": wave,
+        "active_plan_path": str(plan_path),
+        "completion_path": str(completion_path),
+        "all_epics_complete": all_epics_complete,
+        "completion_exists": completion_exists,
+    }
+
+
 def _local_tag_exists(repo_root: Path, tag_name: str) -> bool:
     proc = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag_name}"],
@@ -209,7 +265,9 @@ def command_prepare(args: list[str]) -> int:
     checks = payload.get("checks", {})
     plan_hygiene = run_plan_hygiene_check(repo_root)
     plan_hygiene_pass = plan_hygiene.get("result") == "PASS"
+    wave_closure = run_wave_closure_readiness(repo_root)
     payload["plan_hygiene"] = plan_hygiene
+    payload["wave_closure_readiness"] = wave_closure
     if not plan_hygiene_pass:
         reason_codes = list(payload.get("reason_codes", []))
         if "plan_hygiene_findings_present" not in reason_codes:
@@ -219,6 +277,12 @@ def command_prepare(args: list[str]) -> int:
         next_actions = list(payload.get("next_actions", []))
         if "/release-train doctor --json" not in next_actions:
             next_actions.append("/release-train doctor --json")
+        payload["next_actions"] = next_actions
+    if wave_closure.get("recommended"):
+        next_actions = list(payload.get("next_actions", []))
+        recommendation = f"python3 scripts/update_wave_completion_doc.py --wave {wave_closure.get('active_wave')} --pr <number>"
+        if recommendation not in next_actions:
+            next_actions.append(recommendation)
         payload["next_actions"] = next_actions
     payload["checklist"] = [
         {
@@ -240,6 +304,10 @@ def command_prepare(args: list[str]) -> int:
         {
             "id": "plan_hygiene",
             "status": "pass" if plan_hygiene_pass else "fail",
+        },
+        {
+            "id": "wave_completion_artifact",
+            "status": "fail" if wave_closure.get("recommended") else "pass",
         },
     ]
     emit(payload, as_json=as_json)
@@ -649,23 +717,39 @@ def command_rollup(args: list[str]) -> int:
 
 
 def command_doctor(args: list[str]) -> int:
-    if any(arg not in ("--json",) for arg in args):
+    as_json = pop_flag(args, "--json")
+    try:
+        repo_root = Path(
+            pop_value(args, "--repo-root", str(REPO_ROOT)) or str(REPO_ROOT)
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if args:
         return usage()
-    as_json = "--json" in args
     engine_exists = (SCRIPT_DIR / "release_train_engine.py").exists()
     contract_exists = (
         SCRIPT_DIR.parent / "instructions" / "release_train_policy_contract.md"
     ).exists()
-    plan_hygiene = run_plan_hygiene_check(REPO_ROOT)
+    plan_hygiene = run_plan_hygiene_check(repo_root)
     plan_hygiene_pass = plan_hygiene.get("result") == "PASS"
+    wave_closure = run_wave_closure_readiness(repo_root)
+    wave_closure_recommended = bool(wave_closure.get("recommended"))
     plan_hygiene_reason_codes = [
         str(code)
         for code in plan_hygiene.get("reason_codes", [])
         if isinstance(code, str)
     ]
+    wave_closure_reason_codes = [
+        str(code)
+        for code in wave_closure.get("reason_codes", [])
+        if isinstance(code, str)
+    ]
     warnings = [] if contract_exists else ["missing release policy contract"]
     if not plan_hygiene_pass:
         warnings.append("plan hygiene findings detected")
+    if wave_closure_recommended:
+        warnings.append("wave completion artifact is recommended")
     problems = [] if engine_exists else ["missing scripts/release_train_engine.py"]
     if not plan_hygiene_pass:
         problems.append("stale done plan entries missing closure evidence links")
@@ -675,12 +759,23 @@ def command_doctor(args: list[str]) -> int:
     ]
     if not plan_hygiene_pass:
         quick_fixes.append("python3 scripts/plan_hygiene_check.py --json")
+    if wave_closure_recommended:
+        quick_fixes.extend(
+            [
+                f"python3 scripts/update_wave_completion_doc.py --wave {wave_closure.get('active_wave')} --pr <number>",
+                f"create {wave_closure.get('completion_path')}",
+            ]
+        )
     report = {
         "result": "PASS" if (engine_exists and plan_hygiene_pass) else "FAIL",
         "engine_exists": engine_exists,
         "contract_exists": contract_exists,
+        "repo_root": str(repo_root),
         "plan_hygiene_pass": plan_hygiene_pass,
         "plan_hygiene_reason_codes": plan_hygiene_reason_codes,
+        "wave_closure_recommended": wave_closure_recommended,
+        "wave_closure_reason_codes": wave_closure_reason_codes,
+        "wave_closure": wave_closure,
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": quick_fixes,
