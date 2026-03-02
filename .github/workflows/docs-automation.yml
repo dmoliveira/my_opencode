@@ -24,6 +24,7 @@ jobs:
       - name: Generate wiki pages
         run: |
           set -euo pipefail
+          python3 scripts/update_docs_automation_summary.py
           python3 - <<'PY'
           from pathlib import Path
 
@@ -36,6 +37,9 @@ jobs:
           handbook = "https://github.com/dmoliveira/my_opencode/blob/main/docs/command-handbook.md"
           plans = "https://github.com/dmoliveira/my_opencode/tree/main/docs/plan"
           support = "https://buy.stripe.com/8x200i8bSgVe3Vl3g8bfO00"
+          summary = (root / "docs" / "plan" / "docs-automation-summary.md").read_text(
+              encoding="utf-8", errors="replace"
+          )
 
           intro = []
           for line in readme.splitlines():
@@ -58,6 +62,7 @@ jobs:
                   f"- [Quickstart]({quickstart})",
                   f"- [Command Handbook]({handbook})",
                   f"- [Flow Plans]({plans})",
+                  "- [Docs Automation Summary](Docs-Automation-Summary)",
                   "",
                   "## Support",
                   f"- If this project helps your workflow, consider supporting it here: {support}",
@@ -81,6 +86,7 @@ jobs:
 
           (out / "Home.md").write_text(home + "\n", encoding="utf-8")
           (out / "Docs-Automation.md").write_text(automation + "\n", encoding="utf-8")
+          (out / "Docs-Automation-Summary.md").write_text(summary + "\n", encoding="utf-8")
           PY
 
       - name: Sync generated pages to repository wiki

@@ -136,6 +136,8 @@ Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for f
 - `scripts/policy_command.py` - policy profile helper used by `/notify policy ...` and stack presets
 - `scripts/doctor_command.py` - backend script for `/doctor`
 - `scripts/update_release_index.py` - helper script to regenerate `docs/plan/v0.4-release-index.md`
+- `scripts/update_docs_automation_summary.py` - helper script to regenerate `docs/plan/docs-automation-summary.md`
+- `scripts/docs_automation_sync_check.py` - checker script for docs automation workflow/pages/summary synchronization
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`

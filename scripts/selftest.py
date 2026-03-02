@@ -155,6 +155,12 @@ SHIP_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "ship_command.py"
 RELEASE_TRAIN_ENGINE_SCRIPT = REPO_ROOT / "scripts" / "release_train_engine.py"
 RELEASE_TRAIN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "release_train_command.py"
 RELEASE_INDEX_UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update_release_index.py"
+DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT = (
+    REPO_ROOT / "scripts" / "update_docs_automation_summary.py"
+)
+DOCS_AUTOMATION_SYNC_CHECK_SCRIPT = (
+    REPO_ROOT / "scripts" / "docs_automation_sync_check.py"
+)
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -3859,8 +3865,41 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
         ).read_text(encoding="utf-8")
         expect(
-            "| v0.4.8 |" in release_index_text,
-            "release index update helper should preserve latest v0.4.8 index entry",
+            "| v0.4.19 |" in release_index_text,
+            "release index update helper should preserve latest v0.4.19 index entry",
+        )
+
+        docs_automation_summary_update = subprocess.run(
+            [sys.executable, str(DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            docs_automation_summary_update.returncode == 0,
+            "docs automation summary updater should regenerate summary without errors",
+        )
+        docs_automation_summary_text = (
+            REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
+        ).read_text(encoding="utf-8")
+        expect(
+            "latest_indexed_release: v0.4.19" in docs_automation_summary_text,
+            "docs automation summary should include latest indexed release marker",
+        )
+
+        docs_automation_sync_check = subprocess.run(
+            [sys.executable, str(DOCS_AUTOMATION_SYNC_CHECK_SCRIPT)],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            docs_automation_sync_check.returncode == 0,
+            "docs automation sync check should pass when workflow/pages/summary are synchronized",
         )
 
         do_usage = subprocess.run(
