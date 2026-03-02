@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -13,6 +13,7 @@ validate: ## Validate scripts and JSON config
 	python3 scripts/readme_layout_check.py
 	python3 scripts/active_doc_script_ref_check.py
 	python3 scripts/script_reachability_check.py
+	python3 scripts/docs_automation_sync_check.py
 	python3 scripts/build_agents.py --profile balanced --check
 
 build-agents: ## Generate agent markdown from JSON specs
@@ -23,6 +24,12 @@ build-agents-check: ## Verify generated agents are up-to-date
 
 release-index-update: ## Regenerate v0.4 release index doc
 	python3 scripts/update_release_index.py
+
+docs-automation-summary-update: ## Regenerate docs automation summary artifact
+	python3 scripts/update_docs_automation_summary.py
+
+docs-automation-check: ## Check docs automation workflow/pages/summary synchronization
+	python3 scripts/docs_automation_sync_check.py
 
 quality-fast: ## Set quality profile to fast
 	python3 scripts/quality_command.py profile fast --json
