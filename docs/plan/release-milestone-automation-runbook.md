@@ -122,4 +122,21 @@ Reference index for all v0.4.x milestones: `docs/plan/v0.4-release-index.md`.
 
 Example dry-run verification evidence: `docs/plan/release-train-dry-run-verification-2026-03-01.md`.
 
+`release-index-update` verification snippet:
+
+```bash
+make release-index-update
+git --no-pager diff -- docs/plan/v0.4-release-index.md
+```
+
+If no new milestone files were added, the diff should be empty.
+
+Wave-level consolidation template: `docs/plan/release-wave-rollup-template.md`.
+
+Wave-transition policy:
+
+- Close current wave only after all planned checklist items are complete and validation evidence is recorded.
+- Publish a closure artifact before opening the next minor plan scaffold.
+- Start the next wave in a fresh plan doc (for example `v2.1-...`) to avoid mixing scope across waves.
+
 These examples model the expected flow: consolidate merged PR milestones first, then generate release notes, validate, merge docs PR, and publish the milestone tag.
