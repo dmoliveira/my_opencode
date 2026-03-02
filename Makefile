@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check plan-hygiene-check wave-linkage-check wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -36,6 +36,9 @@ docs-automation-check: ## Check docs automation workflow/pages/summary synchroni
 
 release-note-validation-check: ## Check release-note docs include validation evidence headings
 	python3 scripts/release_note_validation_check.py
+
+release-note-quality-check: ## Score release-note quality signals for operator triage
+	python3 scripts/release_note_quality_check.py --json
 
 plan-hygiene-check: ## Check stale done worklog rows for closure evidence links
 	python3 scripts/plan_hygiene_check.py --json

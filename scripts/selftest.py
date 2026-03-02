@@ -166,6 +166,9 @@ WAVE_COMPLETION_UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update_wave_completion_
 RELEASE_NOTE_VALIDATION_CHECK_SCRIPT = (
     REPO_ROOT / "scripts" / "release_note_validation_check.py"
 )
+RELEASE_NOTE_QUALITY_CHECK_SCRIPT = (
+    REPO_ROOT / "scripts" / "release_note_quality_check.py"
+)
 WAVE_LINKAGE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "wave_linkage_check.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
@@ -3956,6 +3959,91 @@ index 3333333..4444444 100644
                 release_note_validation_payload.get("checked_file_count"), int
             ),
             "release note validation checker should emit structured validation payload",
+        )
+
+        quality_fixture = tmp / "quality_release_note.md"
+        quality_fixture.write_text(
+            """# Release Notes Draft (2026-03-02) - v9.9.9
+
+## Milestone Sources
+- docs/plan/v9.9.9-flow-milestones-changelog.md
+
+## Included PRs
+- #900
+
+## Validation Evidence
+- make validate
+- make selftest
+- make install-test
+- npm --prefix plugin/gateway-core run lint
+- pre-commit run --all-files
+""",
+            encoding="utf-8",
+        )
+        quality_check = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_NOTE_QUALITY_CHECK_SCRIPT),
+                "--note",
+                str(quality_fixture),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            quality_check.returncode == 0,
+            "release note quality checker should execute successfully",
+        )
+        quality_payload = parse_json_output(quality_check.stdout)
+        expect(
+            quality_payload.get("average_score") == 100
+            and quality_payload.get("below_threshold_count") == 0,
+            "release note quality checker should emit deterministic high-score snapshot for complete fixtures",
+        )
+
+        quality_fixture_regressed = tmp / "quality_release_note_regressed.md"
+        quality_fixture_regressed.write_text(
+            """# Release Notes Draft (2026-03-02) - v9.9.10
+
+## Milestone Sources
+- docs/plan/v9.9.10-flow-milestones-changelog.md
+
+## Included PRs
+- #901
+
+## Validation Evidence
+- make validate
+""",
+            encoding="utf-8",
+        )
+        quality_regressed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_NOTE_QUALITY_CHECK_SCRIPT),
+                "--note",
+                str(quality_fixture_regressed),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            quality_regressed.returncode == 0,
+            "release note quality checker should still return pass in triage mode",
+        )
+        quality_regressed_payload = parse_json_output(quality_regressed.stdout)
+        expect(
+            "release_note_missing_lint_evidence"
+            in set(quality_regressed_payload.get("reason_codes", []))
+            and quality_regressed_payload.get("average_score") == 80,
+            "release note quality checker should emit deterministic regression reason codes and score snapshots",
         )
 
         active_plan = tmp / "active_plan.md"
