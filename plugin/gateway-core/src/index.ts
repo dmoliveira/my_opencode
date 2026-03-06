@@ -2,6 +2,9 @@ import { loadGatewayConfig } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
+import { createAgentContextShaperHook } from "./hooks/agent-context-shaper/index.js";
+import { createAgentDeniedToolEnforcerHook } from "./hooks/agent-denied-tool-enforcer/index.js";
+import { createAgentModelResolverHook } from "./hooks/agent-model-resolver/index.js";
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
 import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js";
 import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
@@ -9,6 +12,7 @@ import { createCompactionContextInjectorHook } from "./hooks/compaction-context-
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
+import { createDelegationDecisionAuditHook } from "./hooks/delegation-decision-audit/index.js";
 import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
 import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
@@ -308,6 +312,18 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
       allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
     }),
+    createAgentDeniedToolEnforcerHook({
+      directory,
+      enabled: true,
+    }),
+    createAgentModelResolverHook({
+      directory,
+      enabled: true,
+    }),
+    createDelegationDecisionAuditHook({
+      directory,
+      enabled: true,
+    }),
     createSessionRecoveryHook({
       directory,
       client: ctx.client,
@@ -316,6 +332,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     }),
     createDelegateTaskRetryHook({
       enabled: cfg.delegateTaskRetry.enabled,
+    }),
+    createAgentContextShaperHook({
+      directory,
+      enabled: true,
     }),
     createValidationEvidenceLedgerHook({
       directory,
