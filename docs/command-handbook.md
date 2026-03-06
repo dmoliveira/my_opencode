@@ -330,7 +330,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
 /memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)
-/model-routing - Manage model routing (status|set-category|resolve|trace)
+/model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
 /plan - Run contract-enforced plan execution flows (run|status|doctor)

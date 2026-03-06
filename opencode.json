@@ -107,7 +107,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "model-routing": {
-      "description": "Manage model routing (status|set-category|resolve|trace)",
+      "description": "Manage model routing (status|set-category|resolve|trace|recommend)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "auto-slash": {

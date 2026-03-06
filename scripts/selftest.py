@@ -6993,6 +6993,70 @@ index 3333333..4444444 100644
             "routing explain should report explicit no-fallback reason when first candidate is accepted",
         )
 
+        model_routing_recommend_catalog = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "recommend", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_recommend_catalog.returncode == 0,
+            "model-routing recommend catalog should succeed",
+        )
+        model_routing_recommend_catalog_report = parse_json_output(
+            model_routing_recommend_catalog.stdout
+        )
+        expect(
+            model_routing_recommend_catalog_report.get("agent_count", 0) >= 10,
+            "model-routing recommend catalog should include expected agent recommendations",
+        )
+
+        model_routing_recommend_apply = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "recommend",
+                "--agent",
+                "reviewer",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_recommend_apply.returncode == 0,
+            "model-routing recommend apply should succeed for known agent",
+        )
+        model_routing_recommend_apply_report = parse_json_output(
+            model_routing_recommend_apply.stdout
+        )
+        expect(
+            model_routing_recommend_apply_report.get("recommended_category")
+            == "critical"
+            and model_routing_recommend_apply_report.get("active_category")
+            == "critical",
+            "model-routing recommend apply should switch active category to agent-recommended category",
+        )
+
+        model_routing_reset = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "set-category", "visual"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_reset.returncode == 0,
+            "model-routing reset to original category should succeed after recommend-apply test",
+        )
+
         deterministic_trace_a = resolve_model_settings(
             schema=routing_schema,
             requested_category="deep",
