@@ -100,7 +100,10 @@ export function createDelegationConcurrencyGuardHook(options: {
           : options.directory
       const metadata = subagentType ? loadAgentMetadata(directory).get(subagentType) : undefined
       const costTier = String(metadata?.cost_tier ?? "cheap").toLowerCase()
-      const recommendedCategory = String(metadata?.default_category ?? category || "balanced").toLowerCase()
+      const fallbackCategory = category.length > 0 ? category : "balanced"
+      const recommendedCategory = String(
+        metadata?.default_category ?? fallbackCategory,
+      ).toLowerCase()
 
       const values = [...activeBySession.values()]
       const total = values.length

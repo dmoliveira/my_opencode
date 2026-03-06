@@ -36,6 +36,7 @@ import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/inde
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createLongTurnWatchdogHook } from "./hooks/long-turn-watchdog/index.js";
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
+import { createProviderModelBudgetEnforcerHook } from "./hooks/provider-model-budget-enforcer/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
@@ -64,6 +65,7 @@ import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabl
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
 import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js";
+import { createSubagentLifecycleSupervisorHook } from "./hooks/subagent-lifecycle-supervisor/index.js";
 import { createThinkModeHook } from "./hooks/think-mode/index.js";
 import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validator/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
@@ -314,6 +316,17 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
       allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
     }),
+    createProviderModelBudgetEnforcerHook({
+      directory,
+      enabled: cfg.providerModelBudgetEnforcer.enabled,
+      windowMs: cfg.providerModelBudgetEnforcer.windowMs,
+      maxDelegationsPerWindow:
+        cfg.providerModelBudgetEnforcer.maxDelegationsPerWindow,
+      maxEstimatedTokensPerWindow:
+        cfg.providerModelBudgetEnforcer.maxEstimatedTokensPerWindow,
+      maxPerModelDelegationsPerWindow:
+        cfg.providerModelBudgetEnforcer.maxPerModelDelegationsPerWindow,
+    }),
     createDelegationConcurrencyGuardHook({
       directory,
       enabled: cfg.delegationConcurrencyGuard.enabled,
@@ -337,6 +350,13 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createDelegationDecisionAuditHook({
       directory,
       enabled: true,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory,
+      enabled: cfg.subagentLifecycleSupervisor.enabled,
+      maxRetriesPerSession: cfg.subagentLifecycleSupervisor.maxRetriesPerSession,
+      staleRunningMs: cfg.subagentLifecycleSupervisor.staleRunningMs,
+      blockOnExhausted: cfg.subagentLifecycleSupervisor.blockOnExhausted,
     }),
     createSessionRecoveryHook({
       directory,

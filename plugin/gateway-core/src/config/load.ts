@@ -157,6 +157,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
       ? (source.delegateTaskRetry as Record<string, unknown>)
       : {};
+  const providerModelBudgetEnforcerSource =
+    source.providerModelBudgetEnforcer &&
+    typeof source.providerModelBudgetEnforcer === "object"
+      ? (source.providerModelBudgetEnforcer as Record<string, unknown>)
+      : {};
   const delegationConcurrencyGuardSource =
     source.delegationConcurrencyGuard &&
     typeof source.delegationConcurrencyGuard === "object"
@@ -166,6 +171,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.delegationFallbackOrchestrator &&
     typeof source.delegationFallbackOrchestrator === "object"
       ? (source.delegationFallbackOrchestrator as Record<string, unknown>)
+      : {};
+  const subagentLifecycleSupervisorSource =
+    source.subagentLifecycleSupervisor &&
+    typeof source.subagentLifecycleSupervisor === "object"
+      ? (source.subagentLifecycleSupervisor as Record<string, unknown>)
       : {};
   const validationEvidenceLedgerSource =
     source.validationEvidenceLedger &&
@@ -739,6 +749,31 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? delegateTaskRetrySource.enabled
           : DEFAULT_GATEWAY_CONFIG.delegateTaskRetry.enabled,
     },
+    providerModelBudgetEnforcer: {
+      enabled:
+        typeof providerModelBudgetEnforcerSource.enabled === "boolean"
+          ? providerModelBudgetEnforcerSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer.enabled,
+      windowMs: positiveInt(
+        providerModelBudgetEnforcerSource.windowMs,
+        DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer.windowMs,
+      ),
+      maxDelegationsPerWindow: positiveInt(
+        providerModelBudgetEnforcerSource.maxDelegationsPerWindow,
+        DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer
+          .maxDelegationsPerWindow,
+      ),
+      maxEstimatedTokensPerWindow: positiveInt(
+        providerModelBudgetEnforcerSource.maxEstimatedTokensPerWindow,
+        DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer
+          .maxEstimatedTokensPerWindow,
+      ),
+      maxPerModelDelegationsPerWindow: positiveInt(
+        providerModelBudgetEnforcerSource.maxPerModelDelegationsPerWindow,
+        DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer
+          .maxPerModelDelegationsPerWindow,
+      ),
+    },
     delegationConcurrencyGuard: {
       enabled:
         typeof delegationConcurrencyGuardSource.enabled === "boolean"
@@ -766,6 +801,24 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof delegationFallbackOrchestratorSource.enabled === "boolean"
           ? delegationFallbackOrchestratorSource.enabled
           : DEFAULT_GATEWAY_CONFIG.delegationFallbackOrchestrator.enabled,
+    },
+    subagentLifecycleSupervisor: {
+      enabled:
+        typeof subagentLifecycleSupervisorSource.enabled === "boolean"
+          ? subagentLifecycleSupervisorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.enabled,
+      maxRetriesPerSession: positiveInt(
+        subagentLifecycleSupervisorSource.maxRetriesPerSession,
+        DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.maxRetriesPerSession,
+      ),
+      staleRunningMs: positiveInt(
+        subagentLifecycleSupervisorSource.staleRunningMs,
+        DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.staleRunningMs,
+      ),
+      blockOnExhausted:
+        typeof subagentLifecycleSupervisorSource.blockOnExhausted === "boolean"
+          ? subagentLifecycleSupervisorSource.blockOnExhausted
+          : DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.blockOnExhausted,
     },
     validationEvidenceLedger: {
       enabled:

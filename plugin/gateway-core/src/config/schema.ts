@@ -127,6 +127,23 @@ export interface DelegateTaskRetryConfig {
   enabled: boolean;
 }
 
+// Declares provider/model budget enforcement settings for delegation runtime.
+export interface ProviderModelBudgetEnforcerConfig {
+  enabled: boolean;
+  windowMs: number;
+  maxDelegationsPerWindow: number;
+  maxEstimatedTokensPerWindow: number;
+  maxPerModelDelegationsPerWindow: number;
+}
+
+// Declares subagent lifecycle supervisor settings for retries and stale sessions.
+export interface SubagentLifecycleSupervisorConfig {
+  enabled: boolean;
+  maxRetriesPerSession: number;
+  staleRunningMs: number;
+  blockOnExhausted: boolean;
+}
+
 // Declares delegation concurrency guard settings for budget-aware runtime limits.
 export interface DelegationConcurrencyGuardConfig {
   enabled: boolean;
@@ -500,8 +517,10 @@ export interface GatewayConfig {
   pressureEscalationGuard: PressureEscalationGuardConfig;
   sessionRecovery: SessionRecoveryConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
+  providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
   delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
   delegationFallbackOrchestrator: DelegationFallbackOrchestratorConfig;
+  subagentLifecycleSupervisor: SubagentLifecycleSupervisorConfig;
   validationEvidenceLedger: ValidationEvidenceLedgerConfig;
   mistakeLedger: MistakeLedgerConfig;
   parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
@@ -577,11 +596,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "long-turn-watchdog",
       "notify-events",
       "pressure-escalation-guard",
+      "provider-model-budget-enforcer",
       "delegation-concurrency-guard",
       "agent-denied-tool-enforcer",
       "agent-model-resolver",
       "delegation-fallback-orchestrator",
       "delegation-decision-audit",
+      "subagent-lifecycle-supervisor",
       "session-recovery",
       "delegate-task-retry",
       "agent-context-shaper",
@@ -757,6 +778,13 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   delegateTaskRetry: {
     enabled: true,
   },
+  providerModelBudgetEnforcer: {
+    enabled: true,
+    windowMs: 300000,
+    maxDelegationsPerWindow: 24,
+    maxEstimatedTokensPerWindow: 24000,
+    maxPerModelDelegationsPerWindow: 16,
+  },
   delegationConcurrencyGuard: {
     enabled: true,
     maxTotalConcurrent: 8,
@@ -766,6 +794,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   delegationFallbackOrchestrator: {
     enabled: true,
+  },
+  subagentLifecycleSupervisor: {
+    enabled: true,
+    maxRetriesPerSession: 3,
+    staleRunningMs: 300000,
+    blockOnExhausted: true,
   },
   validationEvidenceLedger: {
     enabled: true,
