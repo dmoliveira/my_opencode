@@ -836,7 +836,9 @@ Epic 5 starts with a schema contract in `scripts/model_routing_schema.py` and do
 
 Baseline categories:
 - `quick`
+- `balanced`
 - `deep`
+- `critical`
 - `visual`
 - `writing`
 
@@ -870,7 +872,7 @@ Use:
 Routing command surface (Epic 12 Task 12.3):
 ```text
 /model-routing status --json
-/model-routing resolve --category deep --available-models openai/gpt-5-mini --json
+/model-routing resolve --category deep --available-models openai/gpt-5.1-codex-mini --json
 ```
 
 Troubleshooting unexpected model selection:
@@ -880,13 +882,15 @@ Troubleshooting unexpected model selection:
 
 Practical routing examples:
 - Fast repo hygiene (`git status`, light checks): `quick`
+- Default implementation and planning work: `balanced`
 - Architecture/debug planning and complex refactors: `deep`
+- Critical release/security sign-off: `critical`
 - UI polish and design-heavy implementation notes: `visual`
 - Changelogs, release notes, and long-form docs: `writing`
 
 Integration points:
 - `/stack apply <profile>` now sets a routing category (`focus/research -> deep`, `quiet-ci -> quick`).
-- install wizard supports `--model-profile <quick|deep|visual|writing>`.
+- install wizard supports `--model-profile <quick|balanced|deep|critical|visual|writing>`.
 
 ## Browser profile switching
 

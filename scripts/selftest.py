@@ -170,6 +170,7 @@ RELEASE_NOTE_QUALITY_CHECK_SCRIPT = (
     REPO_ROOT / "scripts" / "release_note_quality_check.py"
 )
 WAVE_LINKAGE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "wave_linkage_check.py"
+WAVE_HANDOFF_SUMMARY_SCRIPT = REPO_ROOT / "scripts" / "wave_handoff_summary.py"
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -4359,6 +4360,83 @@ index 3333333..4444444 100644
             "wave linkage checker should emit missing plan reference reason code",
         )
 
+        active_a = closure_repo / "docs" / "plan" / "v9.10-flow-wave-plan.md"
+        active_a.write_text(
+            """# v9.10 Flow Wave Plan
+
+### E1 Reliability
+
+- [ ] ongoing
+""",
+            encoding="utf-8",
+        )
+        active_b = closure_repo / "docs" / "plan" / "v9.11-flow-wave-plan.md"
+        active_b.write_text(
+            """# v9.11 Flow Wave Plan
+
+### E1 Throughput
+
+- [ ] ongoing
+""",
+            encoding="utf-8",
+        )
+        wave_linkage_conflict = subprocess.run(
+            [
+                sys.executable,
+                str(WAVE_LINKAGE_CHECK_SCRIPT),
+                "--repo-root",
+                str(closure_repo),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            wave_linkage_conflict.returncode == 1,
+            "wave linkage checker should fail when multiple active wave plans exist",
+        )
+        wave_linkage_conflict_payload = parse_json_output(wave_linkage_conflict.stdout)
+        expect(
+            wave_linkage_conflict_payload.get("transition", {}).get("status")
+            == "conflict"
+            and "wave_multiple_active_plans_detected"
+            in set(wave_linkage_conflict_payload.get("reason_codes", [])),
+            "wave linkage checker should emit conflict transition metadata for multi-wave edge cases",
+        )
+
+        active_a.unlink()
+        active_b.unlink()
+        handoff_summary = subprocess.run(
+            [
+                sys.executable,
+                str(WAVE_HANDOFF_SUMMARY_SCRIPT),
+                "--repo-root",
+                str(closure_repo),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            handoff_summary.returncode == 0,
+            "wave handoff summary helper should execute successfully",
+        )
+        handoff_summary_payload = parse_json_output(handoff_summary.stdout)
+        expect(
+            any(
+                isinstance(item, str)
+                and item.startswith("scaffold docs/plan/v9.10-flow-wave-plan.md")
+                for item in handoff_summary_payload.get("next_actions", [])
+            ),
+            "wave handoff summary should recommend next-wave scaffold when no active wave remains",
+        )
+
         do_usage = subprocess.run(
             [sys.executable, str(DO_COMMAND_SCRIPT)],
             capture_output=True,
@@ -6700,6 +6778,19 @@ index 3333333..4444444 100644
         routing_schema = default_schema()
         schema_problems = validate_schema(routing_schema)
         expect(not schema_problems, "default model routing schema should validate")
+        expect(
+            routing_schema.get("default_category") == "balanced",
+            "default model routing category should be balanced",
+        )
+        routing_categories = routing_schema.get("categories", {})
+        expect(
+            isinstance(routing_categories, dict)
+            and "balanced" in routing_categories
+            and "critical" in routing_categories
+            and routing_categories.get("quick", {}).get("model")
+            == "openai/gpt-5.1-codex-mini",
+            "model routing schema should define balanced/critical categories and quick mini profile",
+        )
 
         resolved_requested = resolve_category(routing_schema, "deep")
         expect(
@@ -6718,7 +6809,7 @@ index 3333333..4444444 100644
         resolved_unavailable = resolve_category(
             routing_schema,
             "deep",
-            available_models={"openai/gpt-5-mini"},
+            available_models={"openai/gpt-5.1-codex-mini"},
         )
         expect(
             resolved_unavailable.get("category")
@@ -6737,7 +6828,7 @@ index 3333333..4444444 100644
                 "reasoning": "medium",
                 "verbosity": "low",
             },
-            available_models={"openai/gpt-5-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.1-codex-mini", "openai/gpt-5.3-codex"},
         )
         expect(
             resolved_with_precedence.get("settings", {}).get("model")
@@ -6775,7 +6866,7 @@ index 3333333..4444444 100644
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.1-codex-mini,openai/gpt-5.3-codex",
                 "--json",
             ],
             capture_output=True,
@@ -6848,7 +6939,7 @@ index 3333333..4444444 100644
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.1-codex-mini,openai/gpt-5.3-codex",
                 "--json",
             ],
             capture_output=True,
@@ -6881,7 +6972,7 @@ index 3333333..4444444 100644
                 "--category",
                 "quick",
                 "--available-models",
-                "openai/gpt-5-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.1-codex-mini,openai/gpt-5.3-codex",
                 "--json",
             ],
             capture_output=True,
@@ -6912,7 +7003,7 @@ index 3333333..4444444 100644
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.1-codex-mini", "openai/gpt-5.3-codex"},
         )
         deterministic_trace_b = resolve_model_settings(
             schema=routing_schema,
@@ -6924,7 +7015,7 @@ index 3333333..4444444 100644
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.1-codex-mini", "openai/gpt-5.3-codex"},
         )
         expect(
             deterministic_trace_a.get("resolution_trace")

@@ -5,7 +5,7 @@ Epic 5 Task 5.2 implements deterministic settings resolution and integration poi
 ## Precedence order
 
 1. `system_defaults`
-2. category defaults (`quick`, `deep`, `visual`, `writing`)
+2. category defaults (`quick`, `balanced`, `deep`, `critical`, `visual`, `writing`)
 3. explicit user overrides
 4. availability fallback for `model`
 
@@ -25,7 +25,7 @@ Epic 5 Task 5.2 implements deterministic settings resolution and integration poi
   - `research` -> `set-category deep`
   - `quiet-ci` -> `set-category quick`
 - `install_wizard.py`
-  - new `--model-profile <quick|deep|visual|writing>` option
+  - new `--model-profile <quick|balanced|deep|critical|visual|writing>` option
 
 ## Command wrapper
 

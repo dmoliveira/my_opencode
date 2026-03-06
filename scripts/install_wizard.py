@@ -208,7 +208,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=["disabled", "manual-validate", "exit-selftest"],
     )
     parser.add_argument(
-        "--model-profile", choices=["quick", "deep", "visual", "writing"]
+        "--model-profile",
+        choices=["quick", "balanced", "deep", "critical", "visual", "writing"],
     )
     parser.add_argument("--browser-profile", choices=["playwright", "agent-browser"])
     parser.add_argument("--opencode-nvim", choices=["install", "uninstall", "skip"])
@@ -285,8 +286,8 @@ def main(argv: list[str]) -> int:
     )
     model_profile = args.model_profile or choose(
         "Model routing profile",
-        ["quick", "deep", "visual", "writing"],
-        prev_profiles.get("model_routing", "quick"),
+        ["quick", "balanced", "deep", "critical", "visual", "writing"],
+        prev_profiles.get("model_routing", "balanced"),
         args.non_interactive,
     )
     browser_profile = args.browser_profile or choose(

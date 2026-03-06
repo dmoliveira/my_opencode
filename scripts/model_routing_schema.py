@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-DEFAULT_CATEGORY = "quick"
+DEFAULT_CATEGORY = "balanced"
 SYSTEM_DEFAULTS = {
     "model": "openai/gpt-5.3-codex",
     "temperature": 0.2,
@@ -31,16 +31,30 @@ def default_schema() -> dict[str, Any]:
         "categories": {
             "quick": {
                 "description": "Fast responses for routine operational tasks",
-                "model": "openai/gpt-5-mini",
+                "model": "openai/gpt-5.1-codex-mini",
                 "temperature": 0.1,
                 "reasoning": "low",
                 "verbosity": "low",
+            },
+            "balanced": {
+                "description": "Default balanced profile for most engineering work",
+                "model": "openai/gpt-5.3-codex",
+                "temperature": 0.2,
+                "reasoning": "medium",
+                "verbosity": "medium",
             },
             "deep": {
                 "description": "Higher-reliability analysis for complex engineering work",
                 "model": "openai/gpt-5.3-codex",
                 "temperature": 0.1,
                 "reasoning": "high",
+                "verbosity": "medium",
+            },
+            "critical": {
+                "description": "Critical-risk analysis and final safety review",
+                "model": "openai/gpt-5.3-codex",
+                "temperature": 0.0,
+                "reasoning": "xhigh",
                 "verbosity": "medium",
             },
             "visual": {

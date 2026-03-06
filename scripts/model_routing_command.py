@@ -26,7 +26,7 @@ from model_routing_schema import (  # type: ignore
 
 SECTION = "model_routing"
 DEFAULT_STATE = {
-    "active_category": "quick",
+    "active_category": "balanced",
     "system_defaults": {
         "model": "openai/gpt-5.3-codex",
         "temperature": 0.2,
@@ -39,7 +39,7 @@ DEFAULT_STATE = {
 
 def usage() -> int:
     print(
-        "usage: /model-routing status [--json] | /model-routing set-category <quick|deep|visual|writing> | /model-routing resolve [--category <name>] [--override-model <id>] [--override-temperature <value>] [--override-reasoning <value>] [--override-verbosity <value>] [--available-models <csv>] [--json] | /model-routing trace [--json]"
+        "usage: /model-routing status [--json] | /model-routing set-category <quick|balanced|deep|critical|visual|writing> | /model-routing resolve [--category <name>] [--override-model <id>] [--override-temperature <value>] [--override-reasoning <value>] [--override-verbosity <value>] [--available-models <csv>] [--json] | /model-routing trace [--json]"
     )
     return 2
 
@@ -59,7 +59,7 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
 
 def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
     config[SECTION] = {
-        "active_category": state.get("active_category", "quick"),
+        "active_category": state.get("active_category", "balanced"),
         "system_defaults": state.get("system_defaults", {}),
         "latest_trace": state.get("latest_trace", {}),
     }

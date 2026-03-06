@@ -5,7 +5,9 @@ Epic 5 Task 5.1 defines the baseline category model for routing behavior.
 ## Categories
 
 - `quick`: low-latency operational tasks
+- `balanced`: default engineering profile for most implementation work
 - `deep`: complex engineering analysis
+- `critical`: high-assurance review for security/release sign-off
 - `visual`: UI/UX and presentation-heavy work
 - `writing`: docs and communication-focused output
 

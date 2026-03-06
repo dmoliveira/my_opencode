@@ -35,14 +35,14 @@ Reference shape:
     },
     {
       "rank": 2,
-      "model": "openai/gpt-5-mini",
+      "model": "openai/gpt-5.1-codex-mini",
       "provider": "openai",
       "result": "accepted",
       "reason": "category_default_fallback"
     }
   ],
   "selected": {
-    "model": "openai/gpt-5-mini",
+    "model": "openai/gpt-5.1-codex-mini",
     "provider": "openai",
     "reason": "fallback_unavailable_model_to_category"
   }

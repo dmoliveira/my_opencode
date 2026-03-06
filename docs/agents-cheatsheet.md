@@ -47,6 +47,8 @@ For medium/large tasks:
 
 Escalate to `oracle` after repeated failures or hard tradeoffs.
 
+Model allocation reference: `agent/model-allocation-policy.md`.
+
 ---
 
 ## Prompt examples 💬
