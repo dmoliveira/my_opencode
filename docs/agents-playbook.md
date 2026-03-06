@@ -29,6 +29,11 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 - Completion should only happen after implementation + validation + review gates pass.
 - Model allocation defaults and fallbacks are documented in `agent/model-allocation-policy.md`.
 
+Architecture and safety contracts:
+
+- `docs/agent-architecture.md`
+- `docs/agent-tool-restrictions.md`
+
 Think of it as:
 
 `orchestrator` -> delegates research/review tasks -> executes changes -> validates -> reports
@@ -188,6 +193,23 @@ For non-trivial work:
 Escalate to `oracle` when:
 - 2+ failed fix attempts
 - architecture/security/performance tradeoff is ambiguous
+
+---
+
+## When not to use each agent 🚫
+
+| Agent | Avoid when |
+|---|---|
+| `orchestrator` | task is trivial and single-file with no delegation need |
+| `explore` | external documentation research is primary |
+| `librarian` | only internal code discovery is needed |
+| `oracle` | straightforward implementation is already clear |
+| `verifier` | design/architecture decisions are needed instead of command execution |
+| `reviewer` | no meaningful diff exists to review |
+| `release-scribe` | implementation/debugging is needed rather than communication output |
+| `strategic-planner` | immediate coding is required and plan is already concrete |
+| `ambiguity-analyst` | scope is already unambiguous and execution can proceed directly |
+| `plan-critic` | task is too early for critique (no concrete plan exists yet) |
 
 ---
 

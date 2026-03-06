@@ -39,6 +39,23 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 - Prefer a Copilot low-latency model for `quick` fallback.
 - Return to OpenAI Codex as soon as available.
 
+## Effort-Band Fallback Chains
+
+| Category | Primary | Fallback 1 | Fallback 2 |
+| --- | --- | --- | --- |
+| `quick` | `openai/gpt-5.1-codex-mini` | Copilot low-latency coding model | Copilot balanced coding model |
+| `balanced` | `openai/gpt-5.3-codex` (`medium`) | Copilot balanced reasoning model | Copilot high-reasoning model |
+| `deep` | `openai/gpt-5.3-codex` (`high`) | Copilot high-reasoning model | Copilot balanced reasoning model |
+| `critical` | `openai/gpt-5.3-codex` (`xhigh`) | Copilot highest-reasoning available model | Copilot high-reasoning model |
+| `visual` | `openai/gpt-5.3-codex` (`medium`) | Copilot visual-capable reasoning model | Copilot balanced model |
+| `writing` | `openai/gpt-5.3-codex` (`medium`) | Copilot strong writing/reasoning model | Copilot balanced model |
+
+## Provider Outage Behavior
+
+- OpenAI partial outage: keep current category, switch to category-equivalent Copilot fallback, and mark output as fallback-sourced for review.
+- OpenAI full outage: continue with Copilot fallback chains and enforce an extra `reviewer` pass before done claims.
+- Recovery state: once OpenAI is healthy, switch back on the next task boundary (avoid mid-task model churn).
+
 ## Operator Commands
 
 ```text
