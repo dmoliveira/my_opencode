@@ -157,6 +157,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
       ? (source.delegateTaskRetry as Record<string, unknown>)
       : {};
+  const delegationConcurrencyGuardSource =
+    source.delegationConcurrencyGuard &&
+    typeof source.delegationConcurrencyGuard === "object"
+      ? (source.delegationConcurrencyGuard as Record<string, unknown>)
+      : {};
+  const delegationFallbackOrchestratorSource =
+    source.delegationFallbackOrchestrator &&
+    typeof source.delegationFallbackOrchestrator === "object"
+      ? (source.delegationFallbackOrchestrator as Record<string, unknown>)
+      : {};
   const validationEvidenceLedgerSource =
     source.validationEvidenceLedger &&
     typeof source.validationEvidenceLedger === "object"
@@ -728,6 +738,34 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof delegateTaskRetrySource.enabled === "boolean"
           ? delegateTaskRetrySource.enabled
           : DEFAULT_GATEWAY_CONFIG.delegateTaskRetry.enabled,
+    },
+    delegationConcurrencyGuard: {
+      enabled:
+        typeof delegationConcurrencyGuardSource.enabled === "boolean"
+          ? delegationConcurrencyGuardSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.enabled,
+      maxTotalConcurrent: positiveInt(
+        delegationConcurrencyGuardSource.maxTotalConcurrent,
+        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxTotalConcurrent,
+      ),
+      maxExpensiveConcurrent: positiveInt(
+        delegationConcurrencyGuardSource.maxExpensiveConcurrent,
+        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxExpensiveConcurrent,
+      ),
+      maxDeepConcurrent: positiveInt(
+        delegationConcurrencyGuardSource.maxDeepConcurrent,
+        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxDeepConcurrent,
+      ),
+      maxCriticalConcurrent: positiveInt(
+        delegationConcurrencyGuardSource.maxCriticalConcurrent,
+        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxCriticalConcurrent,
+      ),
+    },
+    delegationFallbackOrchestrator: {
+      enabled:
+        typeof delegationFallbackOrchestratorSource.enabled === "boolean"
+          ? delegationFallbackOrchestratorSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.delegationFallbackOrchestrator.enabled,
     },
     validationEvidenceLedger: {
       enabled:

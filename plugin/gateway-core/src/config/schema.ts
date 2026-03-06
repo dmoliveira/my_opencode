@@ -127,6 +127,20 @@ export interface DelegateTaskRetryConfig {
   enabled: boolean;
 }
 
+// Declares delegation concurrency guard settings for budget-aware runtime limits.
+export interface DelegationConcurrencyGuardConfig {
+  enabled: boolean;
+  maxTotalConcurrent: number;
+  maxExpensiveConcurrent: number;
+  maxDeepConcurrent: number;
+  maxCriticalConcurrent: number;
+}
+
+// Declares delegation fallback orchestrator settings for retry route adjustments.
+export interface DelegationFallbackOrchestratorConfig {
+  enabled: boolean;
+}
+
 // Declares continuation stop guard settings for loop stop persistence.
 export interface StopContinuationGuardConfig {
   enabled: boolean;
@@ -486,6 +500,8 @@ export interface GatewayConfig {
   pressureEscalationGuard: PressureEscalationGuardConfig;
   sessionRecovery: SessionRecoveryConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
+  delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
+  delegationFallbackOrchestrator: DelegationFallbackOrchestratorConfig;
   validationEvidenceLedger: ValidationEvidenceLedgerConfig;
   mistakeLedger: MistakeLedgerConfig;
   parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
@@ -561,8 +577,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "long-turn-watchdog",
       "notify-events",
       "pressure-escalation-guard",
+      "delegation-concurrency-guard",
       "agent-denied-tool-enforcer",
       "agent-model-resolver",
+      "delegation-fallback-orchestrator",
       "delegation-decision-audit",
       "session-recovery",
       "delegate-task-retry",
@@ -737,6 +755,16 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     autoResume: true,
   },
   delegateTaskRetry: {
+    enabled: true,
+  },
+  delegationConcurrencyGuard: {
+    enabled: true,
+    maxTotalConcurrent: 8,
+    maxExpensiveConcurrent: 2,
+    maxDeepConcurrent: 3,
+    maxCriticalConcurrent: 1,
+  },
+  delegationFallbackOrchestrator: {
     enabled: true,
   },
   validationEvidenceLedger: {

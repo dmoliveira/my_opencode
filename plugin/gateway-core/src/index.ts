@@ -12,7 +12,9 @@ import { createCompactionContextInjectorHook } from "./hooks/compaction-context-
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
+import { createDelegationConcurrencyGuardHook } from "./hooks/delegation-concurrency-guard/index.js";
 import { createDelegationDecisionAuditHook } from "./hooks/delegation-decision-audit/index.js";
+import { createDelegationFallbackOrchestratorHook } from "./hooks/delegation-fallback-orchestrator/index.js";
 import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
 import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
@@ -312,6 +314,14 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
       allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
     }),
+    createDelegationConcurrencyGuardHook({
+      directory,
+      enabled: cfg.delegationConcurrencyGuard.enabled,
+      maxTotalConcurrent: cfg.delegationConcurrencyGuard.maxTotalConcurrent,
+      maxExpensiveConcurrent: cfg.delegationConcurrencyGuard.maxExpensiveConcurrent,
+      maxDeepConcurrent: cfg.delegationConcurrencyGuard.maxDeepConcurrent,
+      maxCriticalConcurrent: cfg.delegationConcurrencyGuard.maxCriticalConcurrent,
+    }),
     createAgentDeniedToolEnforcerHook({
       directory,
       enabled: true,
@@ -319,6 +329,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAgentModelResolverHook({
       directory,
       enabled: true,
+    }),
+    createDelegationFallbackOrchestratorHook({
+      directory,
+      enabled: cfg.delegationFallbackOrchestrator.enabled,
     }),
     createDelegationDecisionAuditHook({
       directory,
