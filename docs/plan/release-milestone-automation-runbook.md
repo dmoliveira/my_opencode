@@ -192,6 +192,14 @@ Wave linkage integrity check:
 python3 scripts/wave_linkage_check.py --json
 ```
 
+Wave transition handoff summary helper:
+
+```bash
+python3 scripts/wave_handoff_summary.py --json
+```
+
+Use `findings_by_reason` and `reason_code_map` from `wave_linkage_check.py` output for remediation drilldowns (severity/hint plus grouped paths/messages).
+
 Open the next-wave scaffold only after the linkage check passes and the current wave completion artifact is committed on `main`.
 
 These examples model the expected flow: consolidate merged PR milestones first, then generate release notes, validate, merge docs PR, and publish the milestone tag.

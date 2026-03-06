@@ -143,6 +143,7 @@ Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for f
 - `scripts/release_note_validation_check.py` - checker script for release-note validation heading consistency
 - `scripts/release_note_quality_check.py` - checker script for release-note quality scoring and triage signals
 - `scripts/wave_linkage_check.py` - checker script for completed-wave plan/completion linkage integrity
+- `scripts/wave_handoff_summary.py` - helper script for wave transition handoff action summaries
 - `scripts/config_command.py` - backend script for `/config`
 - `scripts/stack_profile_command.py` - backend script for `/stack`
 - `scripts/browser_command.py` - backend script for `/browser`
