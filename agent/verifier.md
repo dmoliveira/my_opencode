@@ -14,6 +14,24 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: cheap
+  default_category: quick
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - run tests or lint
+    - triage failing checks
+    - verify gate evidence
+  avoid_when:
+    - design strategy decisions
+    - source code edits required
+  denied_tools:
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Verifier, a read-only validation and diagnostics specialist.
 

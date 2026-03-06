@@ -14,6 +14,25 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: free
+  default_category: quick
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - find implementation location
+    - map patterns across modules
+    - inventory usages quickly
+  avoid_when:
+    - external docs research
+    - code edits required
+  denied_tools:
+    - bash
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Explore, a read-only codebase discovery specialist.
 

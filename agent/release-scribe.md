@@ -14,6 +14,24 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: cheap
+  default_category: quick
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - draft PR summary
+    - compose changelog bullets
+    - prepare release notes
+  avoid_when:
+    - source implementation changes
+    - architecture decision making
+  denied_tools:
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Release-Scribe, a read-only release communication specialist.
 

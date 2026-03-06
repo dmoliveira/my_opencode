@@ -15,7 +15,36 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 SOURCE_AGENT_DIR = REPO_ROOT / "agent"
+SPEC_DIR = SOURCE_AGENT_DIR / "specs"
 INSTALLED_AGENT_DIR = Path.home() / ".config" / "opencode" / "agent"
+
+REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
+    "agent/model-allocation-policy.md": [
+        "## Effort-Band Fallback Chains",
+        "## Provider Outage Behavior",
+    ],
+    "docs/agent-architecture.md": [
+        "## Inventory",
+        "## Execution Workflow",
+    ],
+    "docs/agent-tool-restrictions.md": [
+        "## Contract",
+        "## Deny Lists (Current)",
+    ],
+    "docs/agents-playbook.md": [
+        "## When not to use each agent",
+    ],
+}
+
+ALLOWED_COST_TIERS = {"free", "cheap", "expensive"}
+ALLOWED_DEFAULT_CATEGORIES = {
+    "quick",
+    "balanced",
+    "deep",
+    "critical",
+    "visual",
+    "writing",
+}
 
 REQUIRED_AGENTS: dict[str, dict[str, str]] = {
     "orchestrator": {"mode": "primary"},
@@ -217,6 +246,163 @@ def _check_orchestration_contract(path: Path) -> list[dict[str, Any]]:
     return checks
 
 
+def _check_agent_spec_metadata() -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    checks.append(
+        {
+            "name": "spec_directory_exists",
+            "ok": SPEC_DIR.exists() and SPEC_DIR.is_dir(),
+            "reason": ""
+            if SPEC_DIR.exists()
+            else f"missing spec directory: {SPEC_DIR}",
+            "path": str(SPEC_DIR),
+        }
+    )
+    if not SPEC_DIR.exists() or not SPEC_DIR.is_dir():
+        return checks
+
+    for agent, expected in REQUIRED_AGENTS.items():
+        path = SPEC_DIR / f"{agent}.json"
+        checks.append(
+            {
+                "name": f"spec_{agent}_exists",
+                "ok": path.exists() and path.is_file(),
+                "reason": "" if path.exists() else f"missing spec file: {path}",
+                "path": str(path),
+            }
+        )
+        if not path.exists() or not path.is_file():
+            continue
+
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            checks.append(
+                {
+                    "name": f"spec_{agent}_parseable",
+                    "ok": False,
+                    "reason": f"invalid json: {exc}",
+                    "path": str(path),
+                }
+            )
+            continue
+
+        checks.append(
+            {
+                "name": f"spec_{agent}_mode",
+                "ok": spec.get("mode") == expected["mode"],
+                "reason": ""
+                if spec.get("mode") == expected["mode"]
+                else f"expected {expected['mode']} got {spec.get('mode')}",
+                "path": str(path),
+            }
+        )
+
+        metadata = spec.get("metadata")
+        checks.append(
+            {
+                "name": f"spec_{agent}_metadata_exists",
+                "ok": isinstance(metadata, dict),
+                "reason": ""
+                if isinstance(metadata, dict)
+                else "missing metadata object",
+                "path": str(path),
+            }
+        )
+        if not isinstance(metadata, dict):
+            continue
+
+        cost_tier = metadata.get("cost_tier")
+        checks.append(
+            {
+                "name": f"spec_{agent}_cost_tier",
+                "ok": isinstance(cost_tier, str) and cost_tier in ALLOWED_COST_TIERS,
+                "reason": ""
+                if isinstance(cost_tier, str) and cost_tier in ALLOWED_COST_TIERS
+                else f"invalid cost_tier: {cost_tier}",
+                "path": str(path),
+            }
+        )
+
+        category = metadata.get("default_category")
+        checks.append(
+            {
+                "name": f"spec_{agent}_default_category",
+                "ok": isinstance(category, str)
+                and category in ALLOWED_DEFAULT_CATEGORIES,
+                "reason": ""
+                if isinstance(category, str) and category in ALLOWED_DEFAULT_CATEGORIES
+                else f"invalid default_category: {category}",
+                "path": str(path),
+            }
+        )
+
+        for list_key in ("triggers", "avoid_when", "denied_tools"):
+            value = metadata.get(list_key)
+            valid_list = isinstance(value, list) and all(
+                isinstance(item, str) and item.strip() for item in value
+            )
+            checks.append(
+                {
+                    "name": f"spec_{agent}_{list_key}",
+                    "ok": valid_list,
+                    "reason": ""
+                    if valid_list
+                    else f"metadata.{list_key} must be list of non-empty strings",
+                    "path": str(path),
+                }
+            )
+
+        tools = spec.get("tools")
+        denied_tools = metadata.get("denied_tools")
+        if isinstance(tools, dict) and isinstance(denied_tools, list):
+            inconsistent = [
+                tool
+                for tool in denied_tools
+                if isinstance(tool, str) and tools.get(tool) is not False
+            ]
+            checks.append(
+                {
+                    "name": f"spec_{agent}_denied_tools_match",
+                    "ok": not inconsistent,
+                    "reason": ""
+                    if not inconsistent
+                    else f"denied tools not disabled: {', '.join(inconsistent)}",
+                    "path": str(path),
+                }
+            )
+
+    return checks
+
+
+def _check_agent_reference_docs() -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for relative_path, markers in REQUIRED_AGENT_DOCS.items():
+        path = REPO_ROOT / relative_path
+        exists = path.exists() and path.is_file()
+        checks.append(
+            {
+                "name": f"agent_doc_{relative_path}_exists",
+                "ok": exists,
+                "reason": "" if exists else f"missing file: {path}",
+                "path": str(path),
+            }
+        )
+        if not exists:
+            continue
+        content = path.read_text(encoding="utf-8")
+        for marker in markers:
+            checks.append(
+                {
+                    "name": f"agent_doc_{relative_path}_{marker}",
+                    "ok": marker in content,
+                    "reason": "" if marker in content else f"missing marker: {marker}",
+                    "path": str(path),
+                }
+            )
+    return checks
+
+
 def _resolve_orchestration_contract_path() -> Path | None:
     override = os.environ.get("MY_OPENCODE_ORCHESTRATION_CONTRACT_PATH", "").strip()
     if override:
@@ -245,6 +431,8 @@ def command_run(*, as_json: bool) -> int:
         )
     checks.extend(_check_agent_files(INSTALLED_AGENT_DIR, "installed"))
     checks.extend(_check_runtime_discovery())
+    checks.extend(_check_agent_spec_metadata())
+    checks.extend(_check_agent_reference_docs())
     contract_path = _resolve_orchestration_contract_path()
     if contract_path is None:
         checks.append(

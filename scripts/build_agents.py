@@ -36,6 +36,38 @@ def _validate_tools(name: str, tools: Any) -> dict[str, bool]:
     return normalized
 
 
+def _validate_metadata(name: str, metadata: Any) -> dict[str, Any]:
+    """Validate optional routing metadata for an agent spec."""
+    if metadata is None:
+        return {}
+    if not isinstance(metadata, dict):
+        raise ValueError(f"{name}: metadata must be an object")
+    result: dict[str, Any] = {}
+    for key in (
+        "cost_tier",
+        "default_category",
+        "fallback_policy",
+    ):
+        value = metadata.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name}: metadata.{key} must be a non-empty string")
+        result[key] = value.strip()
+    for key in ("triggers", "avoid_when", "denied_tools"):
+        value = metadata.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item.strip() for item in value
+        ):
+            raise ValueError(
+                f"{name}: metadata.{key} must be a list of non-empty strings"
+            )
+        result[key] = [str(item).strip() for item in value]
+    return result
+
+
 def _collect_vars(spec: dict[str, Any], profile: str) -> dict[str, str]:
     """Merge default and profile-specific template variables."""
     default_vars_any = spec.get("default_vars", {})
@@ -91,6 +123,7 @@ def _render_agent(spec: dict[str, Any], profile: str) -> tuple[str, str]:
         raise ValueError(f"{name}: body_template is required")
 
     tools = _validate_tools(name, spec.get("tools"))
+    metadata = _validate_metadata(name, spec.get("metadata"))
     vars_map = _collect_vars(spec, profile)
     description = _render_template(description_template, vars_map, name=name)
     body = _render_template(body_template, vars_map, name=name)
@@ -104,6 +137,18 @@ def _render_agent(spec: dict[str, Any], profile: str) -> tuple[str, str]:
     ]
     for tool_name, enabled in tools.items():
         header_lines.append(f"  {tool_name}: {'true' if enabled else 'false'}")
+    if metadata:
+        header_lines.append("routing:")
+        for key in ("cost_tier", "default_category", "fallback_policy"):
+            value = metadata.get(key)
+            if isinstance(value, str):
+                header_lines.append(f"  {key}: {value}")
+        for key in ("triggers", "avoid_when", "denied_tools"):
+            values = metadata.get(key)
+            if isinstance(values, list) and values:
+                header_lines.append(f"  {key}:")
+                for item in values:
+                    header_lines.append(f"    - {item}")
     header_lines.append("---")
     header_lines.append(body.rstrip())
     content = "\n".join(header_lines).rstrip() + "\n"

@@ -14,6 +14,25 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: cheap
+  default_category: balanced
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - surface assumptions
+    - classify blockers
+    - resolve ambiguity with defaults
+  avoid_when:
+    - already unambiguous scoped task
+    - code edits and tests are primary need
+  denied_tools:
+    - bash
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Ambiguity Analyst, a read-only planning analyst.
 

@@ -14,6 +14,17 @@ tools:
   task: true
   todowrite: true
   todoread: true
+routing:
+  cost_tier: expensive
+  default_category: balanced
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - multi-step delivery
+    - cross-module implementation
+    - end-to-end ownership needed
+  avoid_when:
+    - single-file trivial change
+    - pure lookup or grep-only task
 ---
 You are Orchestrator, the primary delivery lead.
 

@@ -14,6 +14,24 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: cheap
+  default_category: balanced
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - official docs needed
+    - upstream behavior unclear
+    - external references requested
+  avoid_when:
+    - internal code-only discovery
+    - file modifications required
+  denied_tools:
+    - bash
+    - write
+    - edit
+    - task
+    - todowrite
+    - todoread
 ---
 You are Librarian, an external evidence and documentation specialist.
 

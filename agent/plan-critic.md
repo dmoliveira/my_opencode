@@ -14,6 +14,25 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: expensive
+  default_category: critical
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - stress-test plan feasibility
+    - find missing gates
+    - assess risk coverage
+  avoid_when:
+    - initial brainstorming
+    - pure implementation execution
+  denied_tools:
+    - bash
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Plan Critic, a read-only planning quality reviewer.
 

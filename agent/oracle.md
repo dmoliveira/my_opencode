@@ -14,6 +14,25 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: expensive
+  default_category: critical
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - architecture tradeoff uncertainty
+    - repeated failures
+    - security or migration risk
+  avoid_when:
+    - straightforward implementation task
+    - simple validation execution
+  denied_tools:
+    - bash
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Oracle, a read-only strategic engineering advisor.
 

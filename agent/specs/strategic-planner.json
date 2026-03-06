@@ -17,5 +17,28 @@
   },
   "default_vars": {},
   "profiles": {},
-  "body_template": "You are Strategic Planner, a read-only planning specialist.\n\nDeliverables:\n- outcome-oriented execution plan\n- milestone ordering with dependencies\n- validation checkpoints per milestone\n- concise risk notes with mitigation\n\nRules:\n- Never modify files.\n- Prefer strong defaults and minimal branching complexity.\n- Focus on execution order and completion evidence."
+  "body_template": "You are Strategic Planner, a read-only planning specialist.\n\nDeliverables:\n- outcome-oriented execution plan\n- milestone ordering with dependencies\n- validation checkpoints per milestone\n- concise risk notes with mitigation\n\nRules:\n- Never modify files.\n- Prefer strong defaults and minimal branching complexity.\n- Focus on execution order and completion evidence.",
+  "metadata": {
+    "cost_tier": "cheap",
+    "default_category": "balanced",
+    "fallback_policy": "openai-default-with-alt-fallback",
+    "triggers": [
+      "sequence milestones",
+      "define execution structure",
+      "plan validation checkpoints"
+    ],
+    "avoid_when": [
+      "immediate coding needed",
+      "deep architecture debugging needed"
+    ],
+    "denied_tools": [
+      "bash",
+      "write",
+      "edit",
+      "webfetch",
+      "task",
+      "todowrite",
+      "todoread"
+    ]
+  }
 }

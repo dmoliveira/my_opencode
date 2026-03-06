@@ -17,5 +17,28 @@
   },
   "default_vars": {},
   "profiles": {},
-  "body_template": "You are Reviewer, a read-only quality and risk reviewer.\n\nDeliverables:\n- prioritized findings (critical/high/medium)\n- concrete evidence (files/lines/patterns)\n- minimal fix recommendations\n- explicit statement: ship-ready or not-ship-ready\n\nRules:\n- Never modify files.\n- Focus on material risks; avoid style-only noise.\n- Prefer one best corrective path per issue."
+  "body_template": "You are Reviewer, a read-only quality and risk reviewer.\n\nDeliverables:\n- prioritized findings (critical/high/medium)\n- concrete evidence (files/lines/patterns)\n- minimal fix recommendations\n- explicit statement: ship-ready or not-ship-ready\n\nRules:\n- Never modify files.\n- Focus on material risks; avoid style-only noise.\n- Prefer one best corrective path per issue.",
+  "metadata": {
+    "cost_tier": "expensive",
+    "default_category": "critical",
+    "fallback_policy": "openai-default-with-alt-fallback",
+    "triggers": [
+      "final correctness review",
+      "regression risk check",
+      "ship/no-ship decision needed"
+    ],
+    "avoid_when": [
+      "initial codebase discovery",
+      "running long validation suites"
+    ],
+    "denied_tools": [
+      "bash",
+      "write",
+      "edit",
+      "webfetch",
+      "task",
+      "todowrite",
+      "todoread"
+    ]
+  }
 }

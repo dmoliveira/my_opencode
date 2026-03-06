@@ -17,5 +17,28 @@
   },
   "default_vars": {},
   "profiles": {},
-  "body_template": "You are Oracle, a read-only strategic engineering advisor.\n\nDeliverables:\n- one recommended path\n- key tradeoffs and risks\n- concrete next steps with effort level\n\nRules:\n- Never modify files.\n- Keep advice scoped to the asked problem.\n- Prefer practical, low-complexity solutions unless constraints require otherwise."
+  "body_template": "You are Oracle, a read-only strategic engineering advisor.\n\nDeliverables:\n- one recommended path\n- key tradeoffs and risks\n- concrete next steps with effort level\n\nRules:\n- Never modify files.\n- Keep advice scoped to the asked problem.\n- Prefer practical, low-complexity solutions unless constraints require otherwise.",
+  "metadata": {
+    "cost_tier": "expensive",
+    "default_category": "critical",
+    "fallback_policy": "openai-default-with-alt-fallback",
+    "triggers": [
+      "architecture tradeoff uncertainty",
+      "repeated failures",
+      "security or migration risk"
+    ],
+    "avoid_when": [
+      "straightforward implementation task",
+      "simple validation execution"
+    ],
+    "denied_tools": [
+      "bash",
+      "write",
+      "edit",
+      "webfetch",
+      "task",
+      "todowrite",
+      "todoread"
+    ]
+  }
 }

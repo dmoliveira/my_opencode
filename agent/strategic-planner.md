@@ -14,6 +14,25 @@ tools:
   task: false
   todowrite: false
   todoread: false
+routing:
+  cost_tier: cheap
+  default_category: balanced
+  fallback_policy: openai-default-with-alt-fallback
+  triggers:
+    - sequence milestones
+    - define execution structure
+    - plan validation checkpoints
+  avoid_when:
+    - immediate coding needed
+    - deep architecture debugging needed
+  denied_tools:
+    - bash
+    - write
+    - edit
+    - webfetch
+    - task
+    - todowrite
+    - todoread
 ---
 You are Strategic Planner, a read-only planning specialist.
 
