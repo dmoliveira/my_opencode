@@ -271,6 +271,11 @@ Notes:
 - set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
 - set `MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE=<n>` to reduce noisy dispatch audit events (`message.*`, `session.*`, transform dispatch); `1` logs every event, default is `20`.
 
+Debug and troubleshooting guidance:
+- keep gateway event audit off by default during normal work; enable it for time-boxed diagnosis windows (for example, 30-120 minutes).
+- with audit enabled, expect small extra CPU/file-I/O overhead and log growth; this is not a direct model token-cost increase by itself.
+- after diagnosis, disable audit again to reduce background noise and disk churn.
+
 ## Delegation health summary 🧪
 
 Use these directly in OpenCode:
