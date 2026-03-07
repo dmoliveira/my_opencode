@@ -19,6 +19,7 @@ CONFIG_DIR = Path(
 ).expanduser()
 BACKUP_DIR = CONFIG_DIR / "my_opencode-backups"
 MANIFEST_PATH = BACKUP_DIR / "manifest.json"
+UNSUPPORTED_TOP_LEVEL_KEYS = {"observability", "model_routing"}
 
 
 def now_stamp() -> str:
@@ -27,7 +28,7 @@ def now_stamp() -> str:
 
 def usage() -> int:
     print(
-        "usage: /config status | /config layers [--json] | /config help | /config backup [--name <label>] | /config list | /config restore <backup-id>"
+        "usage: /config status | /config layers [--json] | /config help | /config backup [--name <label>] | /config list | /config restore <backup-id> | /config sanitize [--apply] [--json]"
     )
     return 2
 
@@ -63,6 +64,84 @@ def command_status() -> int:
     print("- /config layers")
     print("- /config backup")
     print("- /config list")
+    print("- /config sanitize --apply")
+    return 0
+
+
+def command_sanitize(argv: list[str]) -> int:
+    apply_changes = "--apply" in argv
+    json_output = "--json" in argv
+    if any(arg not in ("--apply", "--json") for arg in argv):
+        return usage()
+
+    files = discover_files()
+    findings: list[dict[str, object]] = []
+    removed_total = 0
+
+    for file_path in files:
+        try:
+            payload = json.loads(file_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            findings.append(
+                {
+                    "file": str(file_path),
+                    "result": "invalid_json",
+                    "error": str(exc),
+                    "removed_keys": [],
+                }
+            )
+            continue
+
+        if not isinstance(payload, dict):
+            findings.append(
+                {
+                    "file": str(file_path),
+                    "result": "not_object",
+                    "removed_keys": [],
+                }
+            )
+            continue
+
+        removed_keys = sorted(
+            [key for key in UNSUPPORTED_TOP_LEVEL_KEYS if key in payload]
+        )
+        if removed_keys and apply_changes:
+            for key in removed_keys:
+                payload.pop(key, None)
+            file_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+        removed_total += len(removed_keys)
+        findings.append(
+            {
+                "file": str(file_path),
+                "result": "updated" if removed_keys and apply_changes else "ok",
+                "removed_keys": removed_keys,
+            }
+        )
+
+    result = "PASS"
+    payload = {
+        "result": result,
+        "apply": apply_changes,
+        "files_checked": len(files),
+        "removed_keys_total": removed_total,
+        "findings": findings,
+        "unsupported_keys": sorted(UNSUPPORTED_TOP_LEVEL_KEYS),
+    }
+
+    if json_output:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"result: {result}")
+        print(f"apply: {'yes' if apply_changes else 'no'}")
+        print(f"files_checked: {len(files)}")
+        print(f"removed_keys_total: {removed_total}")
+        for item in findings:
+            removed = item.get("removed_keys", [])
+            removed_text = (
+                ",".join(removed) if isinstance(removed, list) and removed else "(none)"
+            )
+            print(f"- {item.get('file')}: {item.get('result')} removed={removed_text}")
     return 0
 
 
@@ -194,6 +273,8 @@ def main(argv: list[str]) -> int:
         return command_list()
     if argv[0] == "restore":
         return command_restore(argv[1:])
+    if argv[0] == "sanitize":
+        return command_sanitize(argv[1:])
     return usage()
 
 

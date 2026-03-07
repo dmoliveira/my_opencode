@@ -98,6 +98,26 @@ test("agent-denied-tool-enforcer does not block generic word mentions", async ()
   }
 })
 
+test("agent-denied-tool-enforcer allows negated mutating instructions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
+  try {
+    seedExploreSpec(directory)
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "Without editing files, find where model routing state is persisted.",
+        prompt: "Read-only discovery only; avoid writing code or docs.",
+      },
+    }
+
+    await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-negated-mutation" }, output)
+    assert.equal(output.args.subagent_type, "explore")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("agent-denied-tool-enforcer blocks explicit denied tool invocation patterns", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
   try {
