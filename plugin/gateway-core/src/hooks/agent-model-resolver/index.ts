@@ -55,11 +55,6 @@ function prependHint(original: string, hint: string): string {
   return `${hint}\n\n${original}`
 }
 
-function withThinkingEffortLabel(original: string, reasoning: string): string {
-  const label = `[THINKING EFFORT] ${reasoning}`
-  return prependHint(original, label)
-}
-
 function formatSubagentLabel(subagentType: string, reasoning: string): string {
   const icon = SUBAGENT_ICON_BY_TYPE[subagentType] ?? {
     nerd: "󰚩",
@@ -111,7 +106,7 @@ export function createAgentModelResolverHook(options: {
       const subagentLabel = formatSubagentLabel(subagentType, model.reasoning)
       args.prompt = prependHint(String(args.prompt ?? ""), hint)
       args.description = prependHint(
-        withThinkingEffortLabel(prependHint(String(args.description ?? ""), hint), model.reasoning),
+        prependHint(String(args.description ?? ""), hint),
         subagentLabel,
       )
       writeGatewayEventAudit(directory, {

@@ -42,7 +42,7 @@ test("agent-model-resolver prepends thinking effort label for task descriptions"
       String(output.args.description ?? ""),
       /^\[SUBAGENT\].*explore.*\[scan\].*effort=low/m,
     )
-    assert.match(String(output.args.description ?? ""), /^\[THINKING EFFORT\] low/m)
+    assert.doesNotMatch(String(output.args.description ?? ""), /^\[THINKING EFFORT\]/m)
     assert.match(String(output.args.description ?? ""), /\[MODEL ROUTING\].*reasoning=low/i)
   } finally {
     rmSync(directory, { recursive: true, force: true })
