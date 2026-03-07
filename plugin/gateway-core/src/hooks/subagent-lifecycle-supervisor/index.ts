@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
@@ -22,6 +24,13 @@ interface ToolPayload {
   directory?: string
 }
 
+interface DelegationArgs {
+  subagent_type?: string
+  category?: string
+  prompt?: string
+  description?: string
+}
+
 interface SessionDeletedPayload {
   properties?: {
     info?: {
@@ -39,8 +48,23 @@ interface LifecycleState {
   lastReasonCode?: string
 }
 
-function lifecycleKey(sid: string, traceId: string): string {
-  return traceId ? `${sid}:${traceId}` : sid
+function fallbackDelegationKey(sid: string, args: DelegationArgs | undefined): string {
+  const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
+  const category = String(args?.category ?? "").toLowerCase().trim()
+  const prompt = String(args?.prompt ?? "").trim()
+  const description = String(args?.description ?? "").trim()
+  const fingerprintSource = [subagentType, category, prompt, description]
+    .filter(Boolean)
+    .join("\n")
+  if (fingerprintSource) {
+    const fingerprint = createHash("sha1").update(fingerprintSource).digest("hex").slice(0, 12)
+    return `${sid}:fp:${fingerprint}`
+  }
+  return `${sid}:agent:${subagentType || "unknown"}`
+}
+
+function lifecycleKey(sid: string, traceId: string, args?: DelegationArgs): string {
+  return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args)
 }
 
 function sessionId(payload: {
@@ -54,9 +78,26 @@ function nowMs(): number {
   return Date.now()
 }
 
+function sessionLifecycleKeys(
+  byDelegation: Map<string, LifecycleState>,
+  sid: string,
+): string[] {
+  const matches: string[] = []
+  for (const key of byDelegation.keys()) {
+    if (key === sid || key.startsWith(`${sid}:`)) {
+      matches.push(key)
+    }
+  }
+  return matches
+}
+
 function isFailureOutput(output: string): boolean {
-  return /(\[error\]|invalid arguments|failed|exception|traceback|unknown\s+agent|unknown\s+category|blocked delegation)/i.test(
-    output,
+  const trimmed = output.trim()
+  if (!trimmed) {
+    return false
+  }
+  return /(^\[error\]|^error:|^exception:|^traceback\b|invalid arguments|unknown\s+agent|unknown\s+category|blocked delegation)/im.test(
+    trimmed,
   )
 }
 
@@ -101,7 +142,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           return
         }
         const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {})
-        const key = lifecycleKey(sid, traceId)
+        const key = lifecycleKey(sid, traceId, eventPayload.output?.args)
         const directory =
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
@@ -172,17 +213,28 @@ export function createSubagentLifecycleSupervisorHook(options: {
         return
       }
       const traceId = extractDelegationTraceId(eventPayload.output?.args)
-      const key = lifecycleKey(sid, traceId)
+      const key = lifecycleKey(sid, traceId, eventPayload.output?.args)
       let activeKey = key
       let state = byDelegation.get(activeKey)
       if (!state) {
         if (!traceId) {
-          for (const candidate of byDelegation.keys()) {
-            if (candidate === sid || candidate.startsWith(`${sid}:`)) {
-              activeKey = candidate
-              state = byDelegation.get(candidate)
-              break
+          const matches = sessionLifecycleKeys(byDelegation, sid)
+          if (matches.length === 1) {
+            activeKey = matches[0]
+            state = byDelegation.get(activeKey)
+          } else if (matches.length > 1) {
+            writeGatewayEventAudit(options.directory, {
+              hook: "subagent-lifecycle-supervisor",
+              stage: "skip",
+              reason_code: "subagent_lifecycle_after_ambiguous_skip",
+              session_id: sid,
+              concurrent_total: String(matches.length),
+            })
+            if (typeof eventPayload.output?.output === "string") {
+              eventPayload.output.output +=
+                "\n[subagent-lifecycle-supervisor] ambiguous trace-less completion observed; running state preserved until an exact delegation match arrives or stale timeout expires."
             }
+            return
           }
         }
       }

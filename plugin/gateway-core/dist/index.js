@@ -246,6 +246,7 @@ function configuredHooks(ctx) {
             maxExpensiveConcurrent: cfg.delegationConcurrencyGuard.maxExpensiveConcurrent,
             maxDeepConcurrent: cfg.delegationConcurrencyGuard.maxDeepConcurrent,
             maxCriticalConcurrent: cfg.delegationConcurrencyGuard.maxCriticalConcurrent,
+            staleReservationMs: cfg.subagentLifecycleSupervisor.staleRunningMs,
         }),
         createAgentDeniedToolEnforcerHook({
             directory,
