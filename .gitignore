@@ -5,4 +5,5 @@ __pycache__/
 plugin/gateway-core/node_modules/
 plugin/gateway-core@latest
 runtime/
+bg/
 .opencode/
