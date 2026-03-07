@@ -208,6 +208,15 @@ function normalizeToolList(value: unknown): string[] {
     .filter((item) => item.length > 0)
 }
 
+const MUTATION_TOOL_MARKERS = new Set(["bash", "write", "edit", "task"])
+
+const MUTATING_DELEGATION_INTENT_PATTERN =
+  /\bgit\s+commit\b|\bcommit\s+(changes?|code|files?)\b|\b(create|open|file|submit|merge|close|update)\s+(a\s+)?(pr|pull\s*request)\b|\bgh\s+pr\s+(create|merge)\b|\bgit\s+push\b|\bpush\s+(to\s+)?(origin|remote)\b|\bgit\s+(rebase|cherry-pick|reset|amend)\b|\b(edit|modify|rewrite|refactor|implement|apply\s+patch|write)\s+(the\s+)?(code|file|files|docs?|documentation)\b/i
+
+function enforcesReadOnlySurface(deniedTools: string[]): boolean {
+  return deniedTools.some((tool) => MUTATION_TOOL_MARKERS.has(String(tool).toLowerCase().trim()))
+}
+
 interface AgentRuntimePolicy {
   overrideDelta?: number
   intentThreshold?: number
@@ -317,6 +326,21 @@ export function createAgentModelResolverHook(options: {
       }
 
       const metadata = metadataByAgent.get(subagentType)
+      const deniedTools = normalizeToolList(metadata?.denied_tools)
+      if (MUTATING_DELEGATION_INTENT_PATTERN.test(combinedText) && enforcesReadOnlySurface(deniedTools)) {
+        writeGatewayEventAudit(directory, {
+          hook: "agent-model-resolver",
+          stage: "guard",
+          reason_code: "delegation_mutation_intent_blocked",
+          session_id: sid,
+          trace_id: traceId,
+          subagent_type: subagentType,
+          route_source: routeSource,
+        })
+        throw new Error(
+          `Blocked task delegation for ${subagentType}: prompt requests mutating work but this subagent is read-only. Run commit/PR/edit actions directly with the primary agent.`,
+        )
+      }
       const explicitCategory = String(args.category ?? "").toLowerCase().trim()
       const requestedCategory =
         explicitCategory && MODEL_BY_CATEGORY[explicitCategory] ? explicitCategory : ""
@@ -339,7 +363,6 @@ export function createAgentModelResolverHook(options: {
         `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
       )
       const allowedTools = normalizeToolList(metadata?.allowed_tools)
-      const deniedTools = normalizeToolList(metadata?.denied_tools)
       const toolSurface = formatHeader(
         "TOOL SURFACE",
         `subagent=${subagentType}; allowed=${allowedTools.join(",") || "none"}; denied=${deniedTools.join(",") || "none"}.`,
