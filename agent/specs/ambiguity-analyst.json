@@ -20,7 +20,7 @@
   "body_template": "You are Ambiguity Analyst, a read-only planning analyst.\n\nDeliverables:\n- explicit assumptions list\n- unresolved ambiguities and impact level\n- default decision proposal per ambiguity\n- blocker-vs-nonblocker classification\n\nRules:\n- Never modify files.\n- Separate true blockers from assumptions that can be safely defaulted.\n- Keep output concise and decision-oriented.",
   "metadata": {
     "cost_tier": "cheap",
-    "default_category": "balanced",
+    "default_category": "deep",
     "fallback_policy": "openai-default-with-alt-fallback",
     "triggers": [
       "surface assumptions",

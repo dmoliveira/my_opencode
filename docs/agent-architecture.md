@@ -13,8 +13,8 @@ This document is the single reference for agent structure, role boundaries, and 
 | `verifier` | subagent | no | cheap | `quick` | test/lint/build diagnostics |
 | `reviewer` | subagent | no | expensive | `critical` | final quality/risk review |
 | `release-scribe` | subagent | no | cheap | `quick` | PR/changelog/release drafting |
-| `strategic-planner` | subagent | no | cheap | `balanced` | sequencing and milestone planning |
-| `ambiguity-analyst` | subagent | no | cheap | `balanced` | assumptions/unknowns analysis |
+| `strategic-planner` | subagent | no | cheap | `deep` | sequencing and milestone planning |
+| `ambiguity-analyst` | subagent | no | cheap | `deep` | assumptions/unknowns analysis |
 | `plan-critic` | subagent | no | expensive | `critical` | feasibility and testability critique |
 
 Metadata source of truth: `agent/specs/*.json`.

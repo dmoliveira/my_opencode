@@ -38,6 +38,13 @@ Task 5.2 adds deterministic settings resolution:
 
 - `resolve_model_settings(schema, requested_category, user_overrides, system_defaults, available_models)`
 
+Current default model targets:
+
+- `quick` -> `openai/gpt-5.1-codex-mini`
+- `balanced` -> `openai/gpt-5.3-codex`
+- `deep` -> `openai/gpt-5.4-codex`
+- `critical` -> `openai/gpt-5.4-codex`
+
 Resolution order is:
 
 1. system defaults

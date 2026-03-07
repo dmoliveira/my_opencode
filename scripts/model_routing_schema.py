@@ -45,14 +45,14 @@ def default_schema() -> dict[str, Any]:
             },
             "deep": {
                 "description": "Higher-reliability analysis for complex engineering work",
-                "model": "openai/gpt-5.3-codex",
+                "model": "openai/gpt-5.4-codex",
                 "temperature": 0.1,
                 "reasoning": "high",
                 "verbosity": "medium",
             },
             "critical": {
                 "description": "Critical-risk analysis and final safety review",
-                "model": "openai/gpt-5.3-codex",
+                "model": "openai/gpt-5.4-codex",
                 "temperature": 0.0,
                 "reasoning": "xhigh",
                 "verbosity": "medium",

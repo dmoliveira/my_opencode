@@ -3,8 +3,8 @@ import { loadAgentMetadata } from "../shared/agent-metadata.js";
 const MODEL_BY_CATEGORY = {
     quick: "openai/gpt-5.1-codex-mini",
     balanced: "openai/gpt-5.3-codex",
-    deep: "openai/gpt-5.3-codex",
-    critical: "openai/gpt-5.3-codex",
+    deep: "openai/gpt-5.4-codex",
+    critical: "openai/gpt-5.4-codex",
     visual: "openai/gpt-5.3-codex",
     writing: "openai/gpt-5.3-codex",
 };
@@ -45,7 +45,8 @@ export function createProviderModelBudgetEnforcerHook(options) {
                 : options.directory;
             const metadata = subagentType ? loadAgentMetadata(directory).get(subagentType) : undefined;
             const fallbackCategory = categoryArg.length > 0 ? categoryArg : "balanced";
-            const category = String(metadata?.default_category ?? fallbackCategory).toLowerCase();
+            const metadataCategory = String(metadata?.default_category ?? "").toLowerCase().trim();
+            const category = (categoryArg || metadataCategory || fallbackCategory).toLowerCase();
             const model = MODEL_BY_CATEGORY[category] ?? "openai/gpt-5.3-codex";
             const provider = model.split("/", 1)[0] || "openai";
             const estimatedTokens = estimateTokens(`${String(args.prompt ?? "")}\n${String(args.description ?? "")}`);
