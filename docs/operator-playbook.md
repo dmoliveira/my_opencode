@@ -7,7 +7,7 @@ Canonical operational flows for day-to-day delivery with the current command sur
 - Start every implementation task in a dedicated git worktree branch created from the current root branch.
 - Keep the main project folder on `main`; use it for sync/inspection, not for task edits.
 - Never `git checkout` or `git switch` the main project folder onto a task branch.
-- Protected branches (`main`, `master`) are edit-blocked by default even in linked worktrees, and bash there is limited to inspection, validation, and sync flows.
+- Protected branches (`main`, `master`) are edit-blocked by default even in linked worktrees, and bash there is limited to inspection, validation, and exact sync commands: `git fetch`, `git fetch --prune`, and `git pull --rebase`.
 - Use `docs/parallel-wt-playbook.md` as the checklist before delegating or editing.
 
 ## Choose the right surface

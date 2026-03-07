@@ -3,7 +3,7 @@
 ## Orchestration quickplay
 
 - Start every implementation task in a dedicated git worktree branch.
-- Keep the primary project folder on `main`; use it for sync, inspection, and cleanup only.
+- Keep the primary project folder on `main`; use it for sync and inspection only.
 - Never `git checkout` or `git switch` the primary project folder onto a task branch.
 - If you need parallel work, create additional linked worktrees instead of branching in place.
 
