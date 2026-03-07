@@ -124,10 +124,10 @@ Enable MCPs only when the task benefits from extra context, for example with `/m
 Recommended command split:
 - `/delivery` for day-to-day issue delivery and closeout
 - `/workflow` for lower-level workflow validation and resume control
-- `/autopilot` for open-ended autonomous execution; use `/do` as shorthand
+- `/autopilot` for open-ended autonomous execution
 - `/autoflow` for explicit plan-file execution
 
-Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, and `docs/operator-playbook.md` for canonical operator flows.
+Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, `docs/operator-playbook.md` for canonical operator flows, and `docs/parallel-wt-playbook.md` for reservation-first parallel worktree execution.
 
 Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
 

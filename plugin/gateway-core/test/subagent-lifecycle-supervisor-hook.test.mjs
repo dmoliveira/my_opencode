@@ -86,3 +86,37 @@ test("subagent-lifecycle-supervisor blocks exhausted retry sessions", async () =
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("subagent-lifecycle-supervisor allows parallel delegations in one session when trace ids differ", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-3" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-a] first" } },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-3" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-b] second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

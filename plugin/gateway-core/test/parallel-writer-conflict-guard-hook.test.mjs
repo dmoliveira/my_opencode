@@ -119,3 +119,52 @@ test("parallel-writer-conflict-guard blocks overlap with active reservation", as
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("parallel-writer-conflict-guard checks Move to destination paths in apply_patch", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-parallel-writer-"))
+  process.env.MY_OPENCODE_ACTIVE_WRITERS = "1"
+  process.env.MY_OPENCODE_FILE_RESERVATION_PATHS = "src/owned/**"
+  process.env.MY_OPENCODE_ACTIVE_RESERVATION_PATHS = "src/shared/**"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["parallel-writer-conflict-guard"],
+          disabled: [],
+        },
+        parallelWriterConflictGuard: {
+          enabled: true,
+          maxConcurrentWriters: 2,
+          writerCountEnvKeys: ["MY_OPENCODE_ACTIVE_WRITERS"],
+          reservationPathsEnvKeys: ["MY_OPENCODE_FILE_RESERVATION_PATHS"],
+          activeReservationPathsEnvKeys: ["MY_OPENCODE_ACTIVE_RESERVATION_PATHS"],
+          enforceReservationCoverage: false,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "apply_patch", sessionID: "session-parallel-writer" },
+        {
+          args: {
+            patchText: [
+              "*** Begin Patch",
+              "*** Update File: src/owned/a.ts",
+              "*** Move to: src/shared/a.ts",
+              "*** End Patch",
+            ].join("\n"),
+          },
+        },
+      ),
+      /overlaps an active reservation/,
+    )
+  } finally {
+    delete process.env.MY_OPENCODE_ACTIVE_WRITERS
+    delete process.env.MY_OPENCODE_FILE_RESERVATION_PATHS
+    delete process.env.MY_OPENCODE_ACTIVE_RESERVATION_PATHS
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
