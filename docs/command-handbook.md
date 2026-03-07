@@ -302,7 +302,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /changes - Explain local change narrative for handoff/release notes (explain|--since)
 /claims - Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)
 /checkpoint - Manage checkpoint snapshots and runtime rollback (create|restore|list|show|prune|doctor)
-/config - Backup and restore OpenCode config files
+/config - Backup/restore and sanitize OpenCode config files (status|layers|backup|list|restore|sanitize)
 /daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
 /delivery - Run unified delivery transactions (start|status|handoff|close|doctor)
 /do - Route high-level execution intent to autopilot go

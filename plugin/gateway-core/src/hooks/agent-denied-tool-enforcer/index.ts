@@ -56,8 +56,17 @@ const MUTATING_INTENT_RULES: Array<{ label: string; pattern: RegExp }> = [
 
 const MUTATION_TOOL_MARKERS = new Set(["bash", "write", "edit", "task"])
 
+const NEGATED_MUTATION_PATTERNS: RegExp[] = [
+  /\b(without|do\s+not|don't|avoid)\s+(editing|modifying|rewriting|refactoring|implementing|writing)\s+(the\s+)?(code|file|files|docs?|documentation)\b/gi,
+  /\b(read-?only|non-?mutating)\b/gi,
+]
+
 function detectMutatingIntent(text: string): string[] {
-  return MUTATING_INTENT_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.label)
+  const normalized = NEGATED_MUTATION_PATTERNS.reduce(
+    (acc, pattern) => acc.replace(pattern, " "),
+    text,
+  )
+  return MUTATING_INTENT_RULES.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.label)
 }
 
 function enforcesReadOnlySurface(deniedTools: string[]): boolean {
