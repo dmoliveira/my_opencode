@@ -20,6 +20,10 @@ function prependHint(original, hint) {
     }
     return `${hint}\n\n${original}`;
 }
+function withThinkingEffortLabel(original, reasoning) {
+    const label = `[THINKING EFFORT] ${reasoning}`;
+    return prependHint(original, label);
+}
 export function createAgentModelResolverHook(options) {
     return {
         id: "agent-model-resolver",
@@ -52,7 +56,7 @@ export function createAgentModelResolverHook(options) {
             const model = MODEL_BY_CATEGORY[category];
             const hint = `[MODEL ROUTING] Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`;
             args.prompt = prependHint(String(args.prompt ?? ""), hint);
-            args.description = prependHint(String(args.description ?? ""), hint);
+            args.description = withThinkingEffortLabel(prependHint(String(args.description ?? ""), hint), model.reasoning);
             writeGatewayEventAudit(directory, {
                 hook: "agent-model-resolver",
                 stage: "state",
