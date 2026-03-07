@@ -255,3 +255,176 @@ test("todo-continuation-enforcer handles probe failures without throwing", async
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("todo-continuation-enforcer does not auto-continue soft next-steps cues without continue intent", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when marker is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-6" },
+      output: {
+        output:
+          "Task is finished. Natural next steps:\n1. Run focused tests\nIf you want, I can do this next.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-6" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer auto-continues soft next-steps cues when continue intent is armed", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when marker is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-7", prompt: "yes, let's do it" },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-7" },
+      output: {
+        output:
+          "Task is finished. Natural next steps:\n1. Run focused tests\nIf you want, I can do this next.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-7" },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer disarms continuation after explicit stop intent", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when marker is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-8", prompt: "yes, let's do it" },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-8" },
+      output: { output: "work remains\n<CONTINUE-LOOP>" },
+    })
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-8", prompt: "stop for now" },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-8" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer ignores negated continue intent", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when marker is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-9", prompt: "please do not continue yet" },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-9" },
+      output: {
+        output:
+          "Task is finished. Natural next steps:\n1. Run focused tests\nIf you want, I can do this next.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-9" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

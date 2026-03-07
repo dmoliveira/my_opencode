@@ -9,6 +9,90 @@ const TODO_CONTINUATION_PROMPT = [
     "- Do not ask for extra confirmation",
     "- Keep executing until all pending tasks are complete",
 ].join("\n");
+const CONTINUE_INTENT_PATTERN = /\b(continue|keep going|go ahead|proceed|carry on|let'?s do (it|this)|do it now|yes[,! ]*let'?s do)\b/i;
+const STOP_INTENT_PATTERN = /\b(stop|pause|hold|that'?s all|no thanks|done for now)\b/i;
+const NEGATED_CONTINUE_INTENT_PATTERN = /\b(do not|don't|dont|not)\s+(continue|proceed|go ahead|keep going|carry on)\b/i;
+const NEGATED_STOP_INTENT_PATTERN = /\b(do not|don't|dont|not)\s+stop\b/i;
+function isContinueIntent(prompt) {
+    if (NEGATED_CONTINUE_INTENT_PATTERN.test(prompt)) {
+        return false;
+    }
+    return CONTINUE_INTENT_PATTERN.test(prompt);
+}
+function isStopIntent(prompt) {
+    if (NEGATED_STOP_INTENT_PATTERN.test(prompt)) {
+        return false;
+    }
+    return STOP_INTENT_PATTERN.test(prompt);
+}
+function assistantText(message) {
+    if (message?.info?.role !== "assistant") {
+        return "";
+    }
+    return (message.parts ?? [])
+        .filter((part) => part?.type === "text" && typeof part.text === "string")
+        .filter((part) => !part.synthetic)
+        .map((part) => part.text?.trim() ?? "")
+        .filter(Boolean)
+        .join("\n");
+}
+function promptText(payload) {
+    const props = payload.properties ?? {};
+    const direct = [props.prompt, props.message, props.text];
+    for (const candidate of direct) {
+        if (typeof candidate === "string" && candidate.trim()) {
+            return candidate.trim();
+        }
+    }
+    const partSources = [payload.output?.parts, props.parts];
+    for (const parts of partSources) {
+        if (!Array.isArray(parts)) {
+            continue;
+        }
+        const text = parts
+            .filter((part) => part?.type === "text" && typeof part.text === "string")
+            .filter((part) => !part.synthetic)
+            .map((part) => part.text?.trim() ?? "")
+            .filter(Boolean)
+            .join("\n");
+        if (text) {
+            return text;
+        }
+    }
+    return "";
+}
+function hasHardContinuationCue(text) {
+    const normalized = text.toLowerCase();
+    if (text.includes(CONTINUE_LOOP_MARKER)) {
+        return true;
+    }
+    return (normalized.includes("still left to do") ||
+        normalized.includes("remaining actionable") ||
+        normalized.includes("in-progress right now") ||
+        normalized.includes("still left to do (next") ||
+        normalized.includes("need finish"));
+}
+function hasSoftContinuationCue(text) {
+    const normalized = text.toLowerCase();
+    const hasNextSteps = normalized.includes("next steps") ||
+        normalized.includes("natural next") ||
+        normalized.includes("if you want");
+    const hasOfferToExecute = normalized.includes("i can") &&
+        (normalized.includes("now") || normalized.includes("next") || normalized.includes("run"));
+    return hasNextSteps && hasOfferToExecute;
+}
+function hasPendingCueText(text, continueIntentArmed) {
+    if (!text.trim()) {
+        return false;
+    }
+    if (hasHardContinuationCue(text)) {
+        return true;
+    }
+    if (continueIntentArmed && hasSoftContinuationCue(text)) {
+        return true;
+    }
+    return false;
+}
 function resolveSessionId(payload) {
     const candidates = [
         payload.properties?.sessionID,
@@ -27,17 +111,13 @@ function resolveSessionId(payload) {
 function resolveDirectory(payload, fallback) {
     return typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : fallback;
 }
-function hasPendingMarker(messages) {
+function hasPendingCue(messages, continueIntentArmed) {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
-        const message = messages[i];
-        if (message?.info?.role !== "assistant") {
+        const text = assistantText(messages[i]);
+        if (!text) {
             continue;
         }
-        const text = (message.parts ?? [])
-            .filter((part) => part.type === "text")
-            .map((part) => part.text ?? "")
-            .join("\n");
-        return text.includes(CONTINUE_LOOP_MARKER);
+        return hasPendingCueText(text, continueIntentArmed);
     }
     return false;
 }
@@ -52,6 +132,7 @@ function getSessionState(store, sessionId) {
         consecutiveFailures: 0,
         inFlight: false,
         markerProbeAttempted: false,
+        continueIntentArmed: false,
     };
     store.set(sessionId, created);
     return created;
@@ -73,6 +154,27 @@ export function createTodoContinuationEnforcerHook(options) {
                 }
                 return;
             }
+            if (type === "chat.message") {
+                const eventPayload = (payload ?? {});
+                const sessionId = resolveSessionId(eventPayload);
+                if (!sessionId) {
+                    return;
+                }
+                const state = getSessionState(sessionState, sessionId);
+                const prompt = promptText(eventPayload);
+                if (!prompt) {
+                    return;
+                }
+                if (isStopIntent(prompt)) {
+                    state.continueIntentArmed = false;
+                    state.pendingContinuation = false;
+                    return;
+                }
+                if (isContinueIntent(prompt)) {
+                    state.continueIntentArmed = true;
+                }
+                return;
+            }
             if (type === "tool.execute.after") {
                 const eventPayload = (payload ?? {});
                 const sessionId = resolveSessionId(eventPayload);
@@ -81,7 +183,7 @@ export function createTodoContinuationEnforcerHook(options) {
                     return;
                 }
                 const state = getSessionState(sessionState, sessionId);
-                state.pendingContinuation = eventPayload.output.output.includes(CONTINUE_LOOP_MARKER);
+                state.pendingContinuation = hasPendingCueText(eventPayload.output.output, state.continueIntentArmed);
                 state.markerProbeAttempted = true;
                 return;
             }
@@ -148,7 +250,7 @@ export function createTodoContinuationEnforcerHook(options) {
                         path: { id: sessionId },
                         query: { directory },
                     });
-                    pending = hasPendingMarker(Array.isArray(response.data) ? response.data : []);
+                    pending = hasPendingCue(Array.isArray(response.data) ? response.data : [], state.continueIntentArmed);
                     state.markerProbeAttempted = true;
                 }
                 catch {
