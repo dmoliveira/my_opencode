@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PulseDesk News Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow bg-glow-a"></div>
+    <div class="bg-glow bg-glow-b"></div>
+
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">DEMO</p>
+        <h1>PulseDesk News Search</h1>
+        <p>
+          Explore indexed news briefs with topic filters, ranked search, and
+          quick previews.
+        </p>
+      </header>
+
+      <section class="search-panel">
+        <form id="search-form" class="search-row">
+          <input
+            id="query"
+            name="q"
+            type="search"
+            placeholder="Search headline or body text"
+            autocomplete="off"
+          />
+          <select id="topic" name="topic">
+            <option value="">All topics</option>
+          </select>
+          <button type="submit">Search</button>
+        </form>
+
+        <div class="search-meta">
+          <span id="status-text">Loading index...</span>
+          <span id="result-count" class="pill">0 results</span>
+        </div>
+      </section>
+
+      <section id="results" class="results-grid" aria-live="polite"></section>
+    </main>
+
+    <template id="result-card-template">
+      <article class="result-card">
+        <div class="card-top">
+          <span class="topic-pill"></span>
+          <time></time>
+        </div>
+        <h2></h2>
+        <p class="preview"></p>
+        <footer>
+          <span class="source"></span>
+          <a target="_blank" rel="noreferrer">Open</a>
+        </footer>
+      </article>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
