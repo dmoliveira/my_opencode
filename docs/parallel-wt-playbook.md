@@ -30,7 +30,7 @@ Use this when running multi-agent work in dedicated worktrees.
 1. Lane checks after each meaningful slice (targeted lint/tests).
 2. Shared integration gate before PR:
    - `npm --prefix plugin/gateway-core run lint`
-   - `npm --prefix plugin/gateway-core test`
+   - `npm --prefix plugin/gateway-core run test`
    - `make validate`
    - `pre-commit run --all-files`
 
@@ -48,8 +48,10 @@ Use this when running multi-agent work in dedicated worktrees.
 ## Pilot evidence (Wave 2)
 
 - Reservation state set successfully via `scripts/reservation_command.py` and verified with `--json`.
-- Parallel subagent launch attempt (`explore` + `strategic-planner` in one call) hit runtime blocker:
+- Gateway hook simulations now confirm same-session fan-out is allowed when delegations are differentiated:
+  - mixed subagents in one session without explicit traces are allowed by `subagent-lifecycle-supervisor`
+  - `delegation-concurrency-guard` counts mixed subagents separately instead of collapsing them into one session slot
+- Live tool-layer fan-out can still block a second concurrent subagent launch with:
   - `Blocked delegation: subagent session ... is already running for explore.`
-- Sequential retry of `strategic-planner` succeeded and produced a 4-step parallel-write workflow.
 
-This confirms the reservation workflow is operational and documents current runtime concurrency behavior for subagent fan-out.
+This means reservation-first parallel worktree flow is operational, gateway runtime guards now better distinguish different delegations, and the remaining live blocker still needs deeper tracing at the task-runner boundary before we can claim a single root cause.

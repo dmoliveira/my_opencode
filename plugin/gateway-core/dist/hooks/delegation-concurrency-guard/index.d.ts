@@ -6,4 +6,5 @@ export declare function createDelegationConcurrencyGuardHook(options: {
     maxExpensiveConcurrent: number;
     maxDeepConcurrent: number;
     maxCriticalConcurrent: number;
+    staleReservationMs: number;
 }): GatewayHook;

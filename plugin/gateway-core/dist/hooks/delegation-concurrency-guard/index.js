@@ -1,22 +1,60 @@
+import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
-function delegationKey(sid, traceId) {
-    return traceId ? `${sid}:${traceId}` : sid;
+function nowMs() {
+    return Date.now();
 }
-function firstSessionDelegationKey(activeByDelegation, sid) {
+function fallbackDelegationKey(sid, args) {
+    const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
+    const category = String(args?.category ?? "").toLowerCase().trim();
+    const prompt = String(args?.prompt ?? "").trim();
+    const description = String(args?.description ?? "").trim();
+    const fingerprintSource = [subagentType, category, prompt, description]
+        .filter(Boolean)
+        .join("\n");
+    if (fingerprintSource) {
+        const fingerprint = createHash("sha1").update(fingerprintSource).digest("hex").slice(0, 12);
+        return `${sid}:fp:${fingerprint}`;
+    }
+    return `${sid}:agent:${subagentType || "unknown"}`;
+}
+function delegationKey(sid, traceId, args) {
+    return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args);
+}
+function sessionDelegationKeys(activeByDelegation, sid) {
+    const matches = [];
     for (const key of activeByDelegation.keys()) {
         if (key === sid || key.startsWith(`${sid}:`)) {
-            return key;
+            matches.push(key);
         }
     }
-    return "";
+    return matches;
 }
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
 export function createDelegationConcurrencyGuardHook(options) {
     const activeByDelegation = new Map();
+    function pruneStaleDelegations(directory, referenceTime) {
+        for (const [key, active] of activeByDelegation.entries()) {
+            if (referenceTime - active.startedAt < options.staleReservationMs) {
+                continue;
+            }
+            activeByDelegation.delete(key);
+            const [sessionKey, traceKey] = key.split(":", 2);
+            writeGatewayEventAudit(directory, {
+                hook: "delegation-concurrency-guard",
+                stage: "state",
+                reason_code: "delegation_concurrency_stale_pruned",
+                session_id: sessionKey,
+                trace_id: active.traceId || (traceKey && !traceKey.startsWith("fp") ? traceKey : undefined),
+                subagent_type: active.subagentType || undefined,
+                category: active.category || undefined,
+                cost_tier: active.costTier || undefined,
+            });
+        }
+    }
     return {
         id: "delegation-concurrency-guard",
         priority: 319,
@@ -48,9 +86,18 @@ export function createDelegationConcurrencyGuardHook(options) {
                         activeByDelegation.delete(key);
                     }
                     else {
-                        const fallbackKey = firstSessionDelegationKey(activeByDelegation, sid);
-                        if (fallbackKey) {
-                            activeByDelegation.delete(fallbackKey);
+                        const fallbackKeys = sessionDelegationKeys(activeByDelegation, sid);
+                        if (fallbackKeys.length === 1) {
+                            activeByDelegation.delete(fallbackKeys[0]);
+                        }
+                        else if (fallbackKeys.length > 1) {
+                            writeGatewayEventAudit(options.directory, {
+                                hook: "delegation-concurrency-guard",
+                                stage: "skip",
+                                reason_code: "delegation_concurrency_after_ambiguous_skip",
+                                session_id: sid,
+                                concurrent_total: String(fallbackKeys.length),
+                            });
                         }
                     }
                 }
@@ -75,13 +122,15 @@ export function createDelegationConcurrencyGuardHook(options) {
             const subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
             const category = String(args.category ?? "").toLowerCase().trim();
             const traceId = resolveDelegationTraceId(args ?? {});
-            const key = delegationKey(sid, traceId);
+            const key = delegationKey(sid, traceId, args);
             if (!subagentType && !category) {
                 return;
             }
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
+            const now = nowMs();
+            pruneStaleDelegations(directory, now);
             const metadata = subagentType ? loadAgentMetadata(directory).get(subagentType) : undefined;
             const costTier = String(metadata?.cost_tier ?? "cheap").toLowerCase();
             const fallbackCategory = category.length > 0 ? category : "balanced";
@@ -136,6 +185,7 @@ export function createDelegationConcurrencyGuardHook(options) {
                 category: recommendedCategory,
                 costTier,
                 traceId,
+                startedAt: now,
             });
             writeGatewayEventAudit(directory, {
                 hook: "delegation-concurrency-guard",
