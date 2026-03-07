@@ -81,6 +81,14 @@ interface CommandBeforeOutput {
         text?: string;
     }>;
 }
+interface CommandAfterInput {
+    command: string;
+    arguments?: string;
+    sessionID?: string;
+}
+interface CommandAfterOutput {
+    output?: unknown;
+}
 interface ToolAfterOutput {
     output?: unknown;
     metadata?: unknown;
@@ -118,6 +126,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     event(input: GatewayEventPayload): Promise<void>;
     "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>;
     "command.execute.before"(input: CommandBeforeInput, output: CommandBeforeOutput): Promise<void>;
+    "command.execute.after"(input: CommandAfterInput, output: CommandAfterOutput): Promise<void>;
     "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>;
     "chat.message"(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void>;
     "experimental.chat.messages.transform"(input: {
