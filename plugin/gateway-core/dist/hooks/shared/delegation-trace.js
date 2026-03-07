@@ -37,3 +37,10 @@ export function resolveDelegationTraceId(args) {
     args.description = prependHint(String(args.description ?? ""), marker);
     return traceId;
 }
+export function extractDelegationTraceId(args) {
+    if (!args) {
+        return "";
+    }
+    const combined = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
+    return parseTrace(combined) ?? "";
+}

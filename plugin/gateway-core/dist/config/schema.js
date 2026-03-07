@@ -341,6 +341,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "AGENTMAIL_RESERVATION_ACTIVE",
             "MY_OPENCODE_FILE_RESERVATION_ACTIVE",
         ],
+        stateFile: ".opencode/reservation-state.json",
     },
     subagentQuestionBlocker: {
         enabled: true,
@@ -556,6 +557,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "AGENTMAIL_ACTIVE_RESERVATION_PATHS",
         ],
         enforceReservationCoverage: true,
+        stateFile: ".opencode/reservation-state.json",
     },
     secretCommitGuard: {
         enabled: true,

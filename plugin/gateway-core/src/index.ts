@@ -521,6 +521,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       enabled: cfg.agentReservationGuard.enabled,
       enforce: cfg.agentReservationGuard.enforce,
       reservationEnvKeys: cfg.agentReservationGuard.reservationEnvKeys,
+      stateFile: cfg.agentReservationGuard.stateFile,
     }),
     createSubagentQuestionBlockerHook({
       directory,
@@ -686,6 +687,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         cfg.parallelWriterConflictGuard.activeReservationPathsEnvKeys,
       enforceReservationCoverage:
         cfg.parallelWriterConflictGuard.enforceReservationCoverage,
+      stateFile: cfg.parallelWriterConflictGuard.stateFile,
     }),
     createBranchFreshnessGuardHook({
       directory,

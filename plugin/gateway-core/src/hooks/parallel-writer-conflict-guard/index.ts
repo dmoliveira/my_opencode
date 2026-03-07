@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 
@@ -59,6 +62,33 @@ function activeWriterCount(keys: string[]): number {
   return max
 }
 
+interface ReservationState {
+  writerCount?: number
+  writer_count?: number
+  ownPaths?: string[]
+  own_paths?: string[]
+  activePaths?: string[]
+  active_paths?: string[]
+}
+
+function readReservationState(directory: string, stateFile: string): ReservationState {
+  try {
+    const content = readFileSync(resolve(directory, stateFile), "utf-8")
+    const parsed = JSON.parse(content)
+    return parsed && typeof parsed === "object" ? (parsed as ReservationState) : {}
+  } catch {
+    return {}
+  }
+}
+
+function statePathList(state: ReservationState, keys: Array<keyof ReservationState>): string[] {
+  const values = keys.flatMap((key) => {
+    const value = state[key]
+    return Array.isArray(value) ? value : []
+  })
+  return values.map((item) => normalizePath(String(item))).filter(Boolean)
+}
+
 // Resolves target paths touched by write-like operation.
 function touchedPaths(tool: string, payload: ToolBeforePayload): string[] {
   const args = payload.output?.args
@@ -75,8 +105,13 @@ function touchedPaths(tool: string, payload: ToolBeforePayload): string[] {
   }
   const paths = patch
     .split(/\r?\n/)
-    .filter((line) => /^\*\*\* (Add|Update|Delete) File: /i.test(line))
-    .map((line) => line.replace(/^\*\*\* (Add|Update|Delete) File: /i, "").trim())
+    .filter((line) => /^\*\*\* (Add|Update|Delete) File: /i.test(line) || /^\*\*\* Move to: /i.test(line))
+    .map((line) =>
+      line
+        .replace(/^\*\*\* (Add|Update|Delete) File: /i, "")
+        .replace(/^\*\*\* Move to: /i, "")
+        .trim(),
+    )
     .map((line) => normalizePath(line))
     .filter(Boolean)
   return Array.from(new Set(paths))
@@ -102,6 +137,7 @@ export function createParallelWriterConflictGuardHook(options: {
   reservationPathsEnvKeys: string[]
   activeReservationPathsEnvKeys: string[]
   enforceReservationCoverage: boolean
+  stateFile: string
 }): GatewayHook {
   const maxConcurrentWriters =
     Number.isFinite(options.maxConcurrentWriters) && options.maxConcurrentWriters > 0
@@ -124,8 +160,15 @@ export function createParallelWriterConflictGuardHook(options: {
           ? eventPayload.directory
           : options.directory
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
+      const reservationState = readReservationState(directory, options.stateFile)
 
-      const writerCount = activeWriterCount(options.writerCountEnvKeys)
+      const stateWriterCount = Number(
+        reservationState.writerCount ?? reservationState.writer_count ?? 0,
+      )
+      const writerCount = Math.max(
+        activeWriterCount(options.writerCountEnvKeys),
+        Number.isFinite(stateWriterCount) ? stateWriterCount : 0,
+      )
       if (writerCount > maxConcurrentWriters) {
         writeGatewayEventAudit(directory, {
           hook: "parallel-writer-conflict-guard",
@@ -144,8 +187,18 @@ export function createParallelWriterConflictGuardHook(options: {
       if (paths.length === 0) {
         return
       }
-      const ownReservations = envPathList(options.reservationPathsEnvKeys)
-      const activeReservations = envPathList(options.activeReservationPathsEnvKeys)
+      const ownReservations = Array.from(
+        new Set([
+          ...envPathList(options.reservationPathsEnvKeys),
+          ...statePathList(reservationState, ["ownPaths", "own_paths"]),
+        ]),
+      )
+      const activeReservations = Array.from(
+        new Set([
+          ...envPathList(options.activeReservationPathsEnvKeys),
+          ...statePathList(reservationState, ["activePaths", "active_paths"]),
+        ]),
+      )
 
       if (options.enforceReservationCoverage && ownReservations.length > 0) {
         const uncovered = paths.filter((path) => !matchesAny(path, ownReservations))

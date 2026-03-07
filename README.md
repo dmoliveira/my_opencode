@@ -42,6 +42,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - 🛡️ Policy profiles available via `/notify policy profile <strict|balanced|fast>`.
 - 🧵 Built-in `/bg` command for minimal background job orchestration and retrieval.
 - 🧱 Built-in `/refactor-lite` command for preflighted, safe-first refactor workflows.
+- 🗂️ Built-in `/reservation` command to manage file reservation state for parallel writer guardrails.
 - 🧠 Built-in `/safe-edit` command for semantic adapter planning and readiness diagnostics.
 - 🩺 Built-in `/doctor` umbrella command for one-shot health checks.
 - 🤖 Built-in `/agent-doctor` command for custom agent contract and runtime checks.

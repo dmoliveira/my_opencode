@@ -73,14 +73,14 @@ function classifyValidationCommand(command: string): ValidationEvidenceCategory[
   }
   const categories = new Set<ValidationEvidenceCategory>()
   if (
-    /\b(eslint|ruff\s+check|ruff\s+format\s+--check|npm\s+run\s+lint|pnpm\s+lint|yarn\s+lint|biome\s+check|golangci-lint|cargo\s+clippy)\b/i.test(
+    /\b(eslint|ruff\s+check|ruff\s+format\s+--check|npm(?:\s+--prefix\s+\S+)?\s+run\s+lint|pnpm(?:\s+--filter\s+\S+)?\s+lint|yarn\s+lint|biome\s+check|golangci-lint|cargo\s+clippy|make\s+validate)\b/i.test(
       value,
     )
   ) {
     categories.add("lint")
   }
   if (
-    /\b(npm\s+(run\s+)?test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run)\b/i.test(
+    /\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|python\d?\s+-m\s+unittest)\b/i.test(
       value,
     )
   ) {
@@ -107,7 +107,7 @@ export function createValidationEvidenceLedgerHook(options: {
   directory: string
   enabled: boolean
 }): GatewayHook {
-  const commandBySession = new Map<string, string>()
+  const pendingCommandsBySession = new Map<string, string[]>()
   return {
     id: "validation-evidence-ledger",
     priority: 330,
@@ -121,7 +121,7 @@ export function createValidationEvidenceLedgerHook(options: {
         if (!sid) {
           return
         }
-        commandBySession.delete(sid)
+        pendingCommandsBySession.delete(sid)
         clearValidationEvidence(sid)
         return
       }
@@ -137,10 +137,11 @@ export function createValidationEvidenceLedgerHook(options: {
         }
         const command = String(eventPayload.output?.args?.command ?? "").trim()
         if (!command) {
-          commandBySession.delete(sid)
           return
         }
-        commandBySession.set(sid, command)
+        const queue = pendingCommandsBySession.get(sid) ?? []
+        queue.push(command)
+        pendingCommandsBySession.set(sid, queue)
         return
       }
       if (type !== "tool.execute.after") {
@@ -155,7 +156,13 @@ export function createValidationEvidenceLedgerHook(options: {
       if (!sid) {
         return
       }
-      const command = commandBySession.get(sid) ?? ""
+      const queue = pendingCommandsBySession.get(sid) ?? []
+      const command = queue.shift() ?? ""
+      if (queue.length > 0) {
+        pendingCommandsBySession.set(sid, queue)
+      } else {
+        pendingCommandsBySession.delete(sid)
+      }
       if (!command) {
         return
       }

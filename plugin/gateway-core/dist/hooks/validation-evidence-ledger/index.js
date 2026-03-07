@@ -28,10 +28,10 @@ function classifyValidationCommand(command) {
         return [];
     }
     const categories = new Set();
-    if (/\b(eslint|ruff\s+check|ruff\s+format\s+--check|npm\s+run\s+lint|pnpm\s+lint|yarn\s+lint|biome\s+check|golangci-lint|cargo\s+clippy)\b/i.test(value)) {
+    if (/\b(eslint|ruff\s+check|ruff\s+format\s+--check|npm(?:\s+--prefix\s+\S+)?\s+run\s+lint|pnpm(?:\s+--filter\s+\S+)?\s+lint|yarn\s+lint|biome\s+check|golangci-lint|cargo\s+clippy|make\s+validate)\b/i.test(value)) {
         categories.add("lint");
     }
-    if (/\b(npm\s+(run\s+)?test|pnpm\s+test|yarn\s+test|bun\s+test|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run)\b/i.test(value)) {
+    if (/\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|python\d?\s+-m\s+unittest)\b/i.test(value)) {
         categories.add("test");
     }
     if (/\b(tsc\b|npm\s+run\s+typecheck|pnpm\s+typecheck|yarn\s+typecheck|pyright|mypy|cargo\s+check|go\s+vet)\b/i.test(value)) {
@@ -47,7 +47,7 @@ function classifyValidationCommand(command) {
 }
 // Creates validation evidence ledger hook to track successful validation commands.
 export function createValidationEvidenceLedgerHook(options) {
-    const commandBySession = new Map();
+    const pendingCommandsBySession = new Map();
     return {
         id: "validation-evidence-ledger",
         priority: 330,
@@ -61,7 +61,7 @@ export function createValidationEvidenceLedgerHook(options) {
                 if (!sid) {
                     return;
                 }
-                commandBySession.delete(sid);
+                pendingCommandsBySession.delete(sid);
                 clearValidationEvidence(sid);
                 return;
             }
@@ -77,10 +77,11 @@ export function createValidationEvidenceLedgerHook(options) {
                 }
                 const command = String(eventPayload.output?.args?.command ?? "").trim();
                 if (!command) {
-                    commandBySession.delete(sid);
                     return;
                 }
-                commandBySession.set(sid, command);
+                const queue = pendingCommandsBySession.get(sid) ?? [];
+                queue.push(command);
+                pendingCommandsBySession.set(sid, queue);
                 return;
             }
             if (type !== "tool.execute.after") {
@@ -95,7 +96,14 @@ export function createValidationEvidenceLedgerHook(options) {
             if (!sid) {
                 return;
             }
-            const command = commandBySession.get(sid) ?? "";
+            const queue = pendingCommandsBySession.get(sid) ?? [];
+            const command = queue.shift() ?? "";
+            if (queue.length > 0) {
+                pendingCommandsBySession.set(sid, queue);
+            }
+            else {
+                pendingCommandsBySession.delete(sid);
+            }
             if (!command) {
                 return;
             }

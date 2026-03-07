@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select reservation-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -90,6 +90,9 @@ notify-icons-generate: ## Generate versioned notification icon candidates (OpenA
 notify-icons-select: ## Select candidate for event (EVENT, CANDIDATE, VERSION)
 	@if [ -z "$(EVENT)" ] || [ -z "$(CANDIDATE)" ]; then echo "EVENT and CANDIDATE are required"; exit 2; fi
 	python3 scripts/notify_icon_select.py --version "$${NOTIFY_ICON_VERSION:-v1}" --event "$(EVENT)" --candidate-index "$(CANDIDATE)"
+
+reservation-status: ## Show file reservation state used by parallel writer guards
+	python3 scripts/reservation_command.py status --json
 
 selftest: ## Run deterministic command self-tests
 	python3 scripts/selftest.py

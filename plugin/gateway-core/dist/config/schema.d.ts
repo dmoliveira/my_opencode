@@ -321,6 +321,7 @@ export interface AgentReservationGuardConfig {
     enabled: boolean;
     enforce: boolean;
     reservationEnvKeys: string[];
+    stateFile: string;
 }
 export interface PrReadinessGuardConfig {
     enabled: boolean;
@@ -366,6 +367,7 @@ export interface ParallelWriterConflictGuardConfig {
     reservationPathsEnvKeys: string[];
     activeReservationPathsEnvKeys: string[];
     enforceReservationCoverage: boolean;
+    stateFile: string;
 }
 export interface PostMergeSyncGuardConfig {
     enabled: boolean;

@@ -7,4 +7,5 @@ export declare function createParallelWriterConflictGuardHook(options: {
     reservationPathsEnvKeys: string[];
     activeReservationPathsEnvKeys: string[];
     enforceReservationCoverage: boolean;
+    stateFile: string;
 }): GatewayHook;
