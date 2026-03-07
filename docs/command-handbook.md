@@ -15,13 +15,43 @@ Use these directly in OpenCode:
 /mcp profile research
 /mcp profile context7
 /mcp profile ghgrep
+/mcp profile playwright
+/mcp profile exa
+/mcp profile firecrawl
+/mcp profile github
+/mcp profile web
+/mcp profile all
 /mcp enable context7
 /mcp disable context7
 /mcp enable gh_grep
 /mcp disable gh_grep
+/mcp enable playwright
+/mcp disable playwright
+/mcp enable exa_search
+/mcp disable exa_search
+/mcp enable firecrawl
+/mcp disable firecrawl
+/mcp enable github
+/mcp disable github
 /mcp enable all
 /mcp disable all
 ```
+
+Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
+
+Alias shortcuts: `ghgrep` -> `gh_grep`, `exa` -> `exa_search`.
+
+Profiles:
+- `minimal` -> disables all managed MCPs
+- `research` -> `context7`, `gh_grep`
+- `context7` -> `context7`
+- `ghgrep` -> `gh_grep`
+- `playwright` -> `playwright`
+- `exa` -> `exa_search`
+- `firecrawl` -> `firecrawl`
+- `github` -> `github`
+- `web` -> `playwright`, `exa_search`, `firecrawl`
+- `all` -> enables all managed MCPs
 
 ## Plugin control inside OpenCode 🎛️
 
