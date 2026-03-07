@@ -8,6 +8,8 @@
 
 ## Canonical first-run commands
 
+Managed MCPs start disabled by default; opt into a focused profile only when you need extra context.
+
 ```text
 /doctor run
 /plugin status
@@ -16,6 +18,12 @@
 /autoflow status --json
 /session handoff --json
 /gateway status
+```
+
+Optional next step when you want lightweight repo or docs context:
+
+```text
+/mcp profile research
 ```
 
 ## Common productivity flows

@@ -39,6 +39,8 @@ Use these directly in OpenCode:
 
 Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
 
+Default posture: all managed MCPs start disabled until you enable a targeted profile or individual server.
+
 Alias shortcuts: `ghgrep` -> `gh_grep`, `exa` -> `exa_search`.
 
 Profiles:

@@ -123,12 +123,13 @@ def usage() -> int:
 
 def print_next_steps() -> None:
     print("\nnext:")
+    print("- /mcp profile research")
+    print("- /mcp profile web")
     print("- /mcp enable context7")
     print("- /mcp enable gh_grep")
     print("- /mcp enable exa_search")
     print("- /mcp enable firecrawl")
     print("- /mcp enable github")
-    print("- /mcp profile web")
     print("- /mcp profile all")
     print("- /mcp disable all")
     print(f"- /mcp profile {profile_names_text()}")
@@ -179,9 +180,6 @@ def collect_doctor(mcp: dict) -> dict:
             problems.append(f"{name} type is invalid: {kind}")
 
     enabled_count = sum(1 for name in SUPPORTED if servers[name]["status"] == "enabled")
-    if enabled_count == 0:
-        warnings.append("all MCP servers are disabled")
-
     return {
         "result": "PASS" if not problems else "FAIL",
         "config": str(CONFIG_PATH),
@@ -189,9 +187,9 @@ def collect_doctor(mcp: dict) -> dict:
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": [
-            "run /mcp profile all or enable only the MCPs you need",
+            "run /mcp profile research, /mcp profile web, or enable only the MCPs you need",
             "set remote MCP URLs and local MCP commands in ~/.config/opencode/opencode.json under mcp",
-            "use /mcp profile research for lightweight context MCP defaults",
+            "use /mcp status to stay minimal until extra context is worth the cost",
         ]
         if problems or warnings
         else [],

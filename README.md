@@ -26,7 +26,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 ## Why this setup rocks 🎯
 
 - **One source of truth** for global OpenCode config.
-- **Token-aware workflow** by keeping heavy MCPs disabled by default.
+- **Token-aware workflow** by keeping managed MCPs disabled by default.
 - **Instant MCP toggling** with `/mcp` commands in the OpenCode prompt.
 - **Portable install** with a one-liner script and symlinked default config path.
 - **Worktree-friendly repo** so you can iterate on config safely in feature branches.
@@ -58,7 +58,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
 - 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
 - 🛑 Built-in `/continuation-stop` for one-shot continuation shutdown (autopilot stop + resume disable).
-- 💸 Better token control with MCP profiles (`minimal`, `research`, `web`, `all`) and on-demand toggling.
+- 💸 Better token control with managed MCPs off by default plus MCP profiles (`minimal`, `research`, `web`, `all`) and on-demand toggling.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
 - 🧩 Clear, versioned config for experiments and rollbacks.
@@ -112,13 +112,14 @@ Quickstart commands:
 /doctor run
 /plugin status
 /mcp status
-/mcp profile research
 /notify status
 /autoflow status --json
 /session handoff --json
 /autopilot go --goal "finish current objective" --json
 /gateway status
 ```
+
+Enable MCPs only when the task benefits from extra context, for example with `/mcp profile research`.
 
 Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, and `docs/operator-playbook.md` for canonical operator flows.
 
