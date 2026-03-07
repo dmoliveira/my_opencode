@@ -1,18 +1,20 @@
 # Parallel WT Playbook
 
-Use this when running multi-agent work in dedicated worktrees.
+Use this as the default task-start checklist. Parallel delegation adds reservations on top of the same worktree-first rule.
 
 ## 1) Prepare branch and reservations
 
-1. Create a dedicated worktree branch for the wave.
-2. Split planned edits into disjoint path reservations.
-3. Set reservation state:
+1. Create a dedicated worktree branch for the task from the current root branch.
+2. Leave the main project folder on `main`; do not edit task files there.
+3. Never `git checkout` or `git switch` the main project folder onto a task branch.
+4. For parallel work, split planned edits into disjoint path reservations.
+5. Set reservation state:
 
 ```text
 /reservation set --own-paths "plugin/gateway-core/src/**" --active-paths "plugin/gateway-core/src/**,docs/**" --writer-count 2
 ```
 
-4. Confirm:
+6. Confirm:
 
 ```text
 /reservation status --json
@@ -38,7 +40,7 @@ Use this when running multi-agent work in dedicated worktrees.
 
 1. Open PR with summary + validation evidence.
 2. Merge with delete branch.
-3. Pull/rebase active main worktree.
+3. Sync the main worktree only from a checkout that is already on `main`.
 4. Clear reservation state:
 
 ```text

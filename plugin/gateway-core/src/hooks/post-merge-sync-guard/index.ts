@@ -54,12 +54,12 @@ function mainWorktreePath(directory: string): string {
     })
     const blocks = output
       .split(/\n\n+/)
-      .map((block) => block.trim())
+      .map((block: string) => block.trim())
       .filter(Boolean)
     for (const block of blocks) {
       const lines = block.split(/\r?\n/)
-      const worktreeLine = lines.find((line) => line.startsWith("worktree "))
-      const branchLine = lines.find((line) => line.startsWith("branch "))
+      const worktreeLine = lines.find((line: string) => line.startsWith("worktree "))
+      const branchLine = lines.find((line: string) => line.startsWith("branch "))
       if (!worktreeLine || !branchLine) {
         continue
       }
@@ -74,19 +74,38 @@ function mainWorktreePath(directory: string): string {
   return ""
 }
 
-function resolveReminderCommands(directory: string, defaults: string[]): string[] {
+function resolveReminder(directory: string, defaults: string[]): { intro: string; commands: string[] } {
   const branch = currentBranch(directory)
   const mainPath = mainWorktreePath(directory)
   if (!mainPath) {
-    return defaults
+    if (branch !== "main") {
+      return {
+        intro: "Merge complete. No checked-out main worktree was found; inspect worktrees before syncing:",
+        commands: ["git worktree list", "git status --short --branch"],
+      }
+    }
+    return {
+      intro: "Merge complete. Run cleanup sync:",
+      commands: defaults,
+    }
   }
-  if (branch === "main") {
-    return ["git pull --rebase"]
+  const mainBranch = currentBranch(mainPath)
+  if (branch === "main" && mainPath === directory) {
+    return {
+      intro: "Merge complete. Run cleanup sync:",
+      commands: ["git pull --rebase"],
+    }
   }
-  if (mainPath !== directory) {
-    return [`git -C "${mainPath}" pull --rebase`]
+  if (mainBranch === "main") {
+    return {
+      intro: "Merge complete. Run cleanup sync:",
+      commands: [`git -C "${mainPath}" pull --rebase`],
+    }
   }
-  return defaults
+  return {
+    intro: "Merge complete. Main worktree is not on 'main'; inspect it before syncing:",
+    commands: ["git worktree list", `git -C "${mainPath}" status --short --branch`],
+  }
 }
 
 // Creates post-merge sync guard with cleanup enforcement and reminder injection.
@@ -163,8 +182,8 @@ export function createPostMergeSyncGuardHook(options: {
       if (reminderCommands.length === 0) {
         return
       }
-      const recommendedCommands = resolveReminderCommands(directory, reminderCommands)
-      const reminder = `\n\n[post-merge-sync-guard] Merge complete. Run cleanup sync:\n${recommendedCommands.map((cmd) => `- ${cmd}`).join("\n")}`
+      const reminderState = resolveReminder(directory, reminderCommands)
+      const reminder = `\n\n[post-merge-sync-guard] ${reminderState.intro}\n${reminderState.commands.map((cmd) => `- ${cmd}`).join("\n")}`
       toolOutput.output = `${toolOutput.output}${reminder}`
       writeGatewayEventAudit(directory, {
         hook: "post-merge-sync-guard",

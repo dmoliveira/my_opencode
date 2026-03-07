@@ -50,6 +50,7 @@ import { createNoninteractiveShellGuardHook } from "./hooks/noninteractive-shell
 import { createParallelOpportunityDetectorHook } from "./hooks/parallel-opportunity-detector/index.js";
 import { createParallelWriterConflictGuardHook } from "./hooks/parallel-writer-conflict-guard/index.js";
 import { createPostMergeSyncGuardHook } from "./hooks/post-merge-sync-guard/index.js";
+import { createPrimaryWorktreeGuardHook } from "./hooks/primary-worktree-guard/index.js";
 import { createPrBodyEvidenceGuardHook } from "./hooks/pr-body-evidence-guard/index.js";
 import { createPreemptiveCompactionHook } from "./hooks/preemptive-compaction/index.js";
 import { createPrReadinessGuardHook } from "./hooks/pr-readiness-guard/index.js";
@@ -487,6 +488,13 @@ function configuredHooks(ctx) {
             enabled: cfg.secretLeakGuard.enabled,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
+        }),
+        createPrimaryWorktreeGuardHook({
+            directory,
+            enabled: cfg.primaryWorktreeGuard.enabled,
+            allowedBranches: cfg.primaryWorktreeGuard.allowedBranches,
+            blockEdits: cfg.primaryWorktreeGuard.blockEdits,
+            blockBranchSwitches: cfg.primaryWorktreeGuard.blockBranchSwitches,
         }),
         createSecretCommitGuardHook({
             directory,

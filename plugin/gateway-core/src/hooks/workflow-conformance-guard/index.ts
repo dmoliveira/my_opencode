@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { isAllowedProtectedShellCommand } from "../protected-shell-policy.js"
 import type { GatewayHook } from "../registry.js"
 
 interface ToolBeforePayload {
@@ -18,6 +19,13 @@ function currentBranch(directory: string): string {
   } catch {
     return ""
   }
+}
+
+const PROTECTED_GIT_MUTATION_PATTERN =
+  /(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:[^\s;&|]*\/)?git\s+(commit|merge|rebase|cherry-pick)\b/i
+
+function isProtectedGitMutationCommand(command: string): boolean {
+  return PROTECTED_GIT_MUTATION_PATTERN.test(command)
 }
 
 // Creates workflow conformance guard for commit operations on protected branches.
@@ -58,18 +66,30 @@ export function createWorkflowConformanceGuardHook(options: {
       if (tool !== "bash") {
         return
       }
-      const command = String(eventPayload.output?.args?.command ?? "").trim().toLowerCase()
-      if (!/\bgit\s+(commit|merge|rebase|cherry-pick)\b/.test(command)) {
+      const command = String(eventPayload.output?.args?.command ?? "").trim()
+      if (isProtectedGitMutationCommand(command)) {
+        const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
+        writeGatewayEventAudit(directory, {
+          hook: "workflow-conformance-guard",
+          stage: "skip",
+          reason_code: "commit_on_protected_branch_blocked",
+          session_id: sessionId,
+        })
+        throw new Error(`Git commits are blocked on protected branch '${branch}'. Use a worktree feature branch.`)
+      }
+      if (isAllowedProtectedShellCommand(command)) {
         return
       }
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
       writeGatewayEventAudit(directory, {
         hook: "workflow-conformance-guard",
         stage: "skip",
-        reason_code: "commit_on_protected_branch_blocked",
+        reason_code: "bash_on_protected_branch_blocked",
         session_id: sessionId,
       })
-      throw new Error(`Git commits are blocked on protected branch '${branch}'. Use a worktree feature branch.`)
+      throw new Error(
+        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and sync. Use a worktree feature branch for task mutations.`
+      )
     },
   }
 }

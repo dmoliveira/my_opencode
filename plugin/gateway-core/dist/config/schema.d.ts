@@ -264,6 +264,12 @@ export interface WorkflowConformanceGuardConfig {
     protectedBranches: string[];
     blockEditsOnProtectedBranches: boolean;
 }
+export interface PrimaryWorktreeGuardConfig {
+    enabled: boolean;
+    allowedBranches: string[];
+    blockEdits: boolean;
+    blockBranchSwitches: boolean;
+}
 export interface ScopeDriftGuardConfig {
     enabled: boolean;
     allowedPaths: string[];
@@ -453,6 +459,7 @@ export interface GatewayConfig {
     semanticOutputSummarizer: SemanticOutputSummarizerConfig;
     dangerousCommandGuard: DangerousCommandGuardConfig;
     secretLeakGuard: SecretLeakGuardConfig;
+    primaryWorktreeGuard: PrimaryWorktreeGuardConfig;
     workflowConformanceGuard: WorkflowConformanceGuardConfig;
     scopeDriftGuard: ScopeDriftGuardConfig;
     doneProofEnforcer: DoneProofEnforcerConfig;
