@@ -35,7 +35,6 @@ test("agent-model-resolver infers explore delegation and category", async () => 
   assert.match(output.args.prompt, /\[DELEGATION ROUTER\]/)
   assert.match(output.args.prompt, /\[MODEL ROUTING\]/)
   assert.match(output.args.prompt, /\[TOOL SURFACE\]/)
-  assert.match(output.args.prompt, /\/agent-catalog explain explore/)
 })
 
 test("agent-model-resolver sets default category for explicit subagent", async () => {

@@ -4,6 +4,7 @@ import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
 import { createAdaptiveDelegationPolicyHook } from "./hooks/adaptive-delegation-policy/index.js";
 import { createAgentContextShaperHook } from "./hooks/agent-context-shaper/index.js";
+import { createAgentDiscoverabilityInjectorHook } from "./hooks/agent-discoverability-injector/index.js";
 import { createAgentDeniedToolEnforcerHook } from "./hooks/agent-denied-tool-enforcer/index.js";
 import { createAgentModelResolverHook } from "./hooks/agent-model-resolver/index.js";
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
@@ -16,6 +17,7 @@ import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.j
 import { createDelegationConcurrencyGuardHook } from "./hooks/delegation-concurrency-guard/index.js";
 import { createDelegationDecisionAuditHook } from "./hooks/delegation-decision-audit/index.js";
 import { createDelegationFallbackOrchestratorHook } from "./hooks/delegation-fallback-orchestrator/index.js";
+import { createDelegationOutcomeLearnerHook } from "./hooks/delegation-outcome-learner/index.js";
 import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
 import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
@@ -39,6 +41,7 @@ import { createLongTurnWatchdogHook } from "./hooks/long-turn-watchdog/index.js"
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
 import { createProviderModelBudgetEnforcerHook } from "./hooks/provider-model-budget-enforcer/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
+import { createHookSemanticBridgeHook } from "./hooks/hook-semantic-bridge/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
@@ -341,13 +344,28 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: true,
     }),
+    createHookSemanticBridgeHook({
+      directory,
+      enabled: true,
+    }),
     createAgentModelResolverHook({
       directory,
       enabled: true,
     }),
+    createDelegationOutcomeLearnerHook({
+      directory,
+      enabled: true,
+      windowMs: cfg.adaptiveDelegationPolicy.windowMs,
+      minSamples: cfg.adaptiveDelegationPolicy.minSamples,
+      highFailureRate: cfg.adaptiveDelegationPolicy.highFailureRate,
+    }),
     createDelegationFallbackOrchestratorHook({
       directory,
       enabled: cfg.delegationFallbackOrchestrator.enabled,
+    }),
+    createAgentDiscoverabilityInjectorHook({
+      directory,
+      enabled: true,
     }),
     createDelegationDecisionAuditHook({
       directory,

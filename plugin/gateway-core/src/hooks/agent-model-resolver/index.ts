@@ -102,7 +102,7 @@ function prependHint(original: string, hint: string): string {
   return `${hint}\n\n${original}`
 }
 
-function inferSubagentType(text: string, available: Set<string>): string | null {
+function inferSubagentType(text: string, available: Set<string>): { name: string; score: number } | null {
   const source = text.trim()
   if (!source) {
     return null
@@ -110,7 +110,7 @@ function inferSubagentType(text: string, available: Set<string>): string | null 
   const lower = source.toLowerCase()
   for (const candidate of available) {
     if (lower.includes(candidate)) {
-      return candidate
+      return { name: candidate, score: 3 }
     }
   }
   let best: { name: string; score: number } | null = null
@@ -126,7 +126,22 @@ function inferSubagentType(text: string, available: Set<string>): string | null 
       best = { name: rule.subagentType, score }
     }
   }
-  return best && best.score >= 1 ? best.name : null
+  return best && best.score >= 1 ? best : null
+}
+
+function scoreSubagentIntent(text: string, subagentType: string): number {
+  const source = text.trim()
+  if (!source) {
+    return 0
+  }
+  const lower = source.toLowerCase()
+  let score = lower.includes(subagentType) ? 2 : 0
+  const rule = ROUTING_PATTERNS.find((candidate) => candidate.subagentType === subagentType)
+  if (!rule) {
+    return score
+  }
+  score += rule.patterns.reduce((count, pattern) => (pattern.test(source) ? count + 1 : count), 0)
+  return score
 }
 
 function normalizeToolList(value: unknown): string[] {
@@ -169,11 +184,32 @@ export function createAgentModelResolverHook(options: {
 
       let subagentType = String(args.subagent_type ?? "").toLowerCase().trim()
       const originalSubagentType = subagentType
+      let routeSource = "explicit_subagent_type"
       if (!subagentType) {
         const inferred = inferSubagentType(combinedText, knownAgents)
         if (inferred) {
-          subagentType = inferred
-          args.subagent_type = inferred
+          subagentType = inferred.name
+          args.subagent_type = inferred.name
+          routeSource = "inferred_subagent_type"
+        }
+      } else if (knownAgents.has(subagentType)) {
+        const inferred = inferSubagentType(combinedText, knownAgents)
+        const explicitScore = scoreSubagentIntent(combinedText, subagentType)
+        if (inferred && inferred.name !== subagentType && inferred.score > explicitScore) {
+          const previous = subagentType
+          subagentType = inferred.name
+          args.subagent_type = inferred.name
+          routeSource = "overridden_low_confidence"
+          writeGatewayEventAudit(directory, {
+            hook: "agent-model-resolver",
+            stage: "guard",
+            reason_code: "delegation_route_overridden_low_confidence",
+            session_id: sessionId(eventPayload),
+            original_subagent_type: previous,
+            inferred_subagent_type: inferred.name,
+            original_score: String(explicitScore),
+            inferred_score: String(inferred.score),
+          })
         }
       }
       if (!subagentType || !knownAgents.has(subagentType)) {
@@ -196,12 +232,11 @@ export function createAgentModelResolverHook(options: {
       const allowedTools = normalizeToolList(metadata?.allowed_tools)
       const deniedTools = normalizeToolList(metadata?.denied_tools)
       const toolSurface = `[TOOL SURFACE] subagent=${subagentType}; allowed=${allowedTools.join(",") || "none"}; denied=${deniedTools.join(",") || "none"}.`
-      const discoverability = `[AGENT CATALOG] Inspect details with: /agent-catalog explain ${subagentType}`
       const routeHint =
-        !originalSubagentType && subagentType
+        routeSource !== "explicit_subagent_type"
           ? `[DELEGATION ROUTER] inferred subagent_type=${subagentType} from delegation intent.`
           : ""
-      const composedHint = [routeHint, hint, toolSurface, discoverability]
+      const composedHint = [routeHint, hint, toolSurface]
         .filter((part) => part.length > 0)
         .join("\n")
 
@@ -217,7 +252,7 @@ export function createAgentModelResolverHook(options: {
         recommended_category: category,
         model: model.model,
         reasoning: model.reasoning,
-        route_source: originalSubagentType ? "explicit_subagent_type" : "inferred_subagent_type",
+        route_source: routeSource,
         tool_surface_injected: "true",
       })
     },

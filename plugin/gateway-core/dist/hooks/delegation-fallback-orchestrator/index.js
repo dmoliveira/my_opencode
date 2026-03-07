@@ -67,11 +67,10 @@ export function createDelegationFallbackOrchestratorHook(options) {
                     ? eventPayload.directory
                     : options.directory;
                 const fallbackHint = "[delegation-fallback-orchestrator] previous delegation failed; applying fallback route category=general and removing explicit subagent_type.";
-                const discoverabilityHint = "[agent-catalog] Inspect agent guidance with /agent-catalog list or /agent-catalog explain <agent>.";
                 delete args.subagent_type;
                 args.category = "general";
-                args.prompt = prependHint(String(args.prompt ?? ""), `${fallbackHint}\n${discoverabilityHint}`);
-                args.description = prependHint(String(args.description ?? ""), `${fallbackHint}\n${discoverabilityHint}`);
+                args.prompt = prependHint(String(args.prompt ?? ""), fallbackHint);
+                args.description = prependHint(String(args.description ?? ""), fallbackHint);
                 lastFailureBySession.delete(sid);
                 writeGatewayEventAudit(directory, {
                     hook: "delegation-fallback-orchestrator",
