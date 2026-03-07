@@ -5,5 +5,6 @@ export interface AgentRoutingMetadata {
     triggers?: string[];
     avoid_when?: string[];
     denied_tools?: string[];
+    allowed_tools?: string[];
 }
 export declare function loadAgentMetadata(directory: string): Map<string, AgentRoutingMetadata>;
