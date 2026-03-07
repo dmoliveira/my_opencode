@@ -8,6 +8,18 @@ const MODEL_BY_CATEGORY = {
     visual: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
     writing: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
 };
+const SUBAGENT_ICON_BY_TYPE = {
+    explore: { nerd: "󰍉", fallback: "[scan]" },
+    librarian: { nerd: "󰂺", fallback: "[docs]" },
+    verifier: { nerd: "󰄬", fallback: "[check]" },
+    reviewer: { nerd: "󰦨", fallback: "[review]" },
+    "release-scribe": { nerd: "󰜘", fallback: "[notes]" },
+    oracle: { nerd: "󱠓", fallback: "[advisor]" },
+    "strategic-planner": { nerd: "󱎸", fallback: "[plan]" },
+    "ambiguity-analyst": { nerd: "󰋗", fallback: "[clarify]" },
+    "plan-critic": { nerd: "󰒠", fallback: "[critic]" },
+    orchestrator: { nerd: "󰯲", fallback: "[lead]" },
+};
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -23,6 +35,13 @@ function prependHint(original, hint) {
 function withThinkingEffortLabel(original, reasoning) {
     const label = `[THINKING EFFORT] ${reasoning}`;
     return prependHint(original, label);
+}
+function formatSubagentLabel(subagentType, reasoning) {
+    const icon = SUBAGENT_ICON_BY_TYPE[subagentType] ?? {
+        nerd: "󰚩",
+        fallback: "[agent]",
+    };
+    return `[SUBAGENT] ${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`;
 }
 export function createAgentModelResolverHook(options) {
     return {
@@ -59,8 +78,9 @@ export function createAgentModelResolverHook(options) {
             const model = MODEL_BY_CATEGORY[category];
             args.category = category;
             const hint = `[MODEL ROUTING] Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`;
+            const subagentLabel = formatSubagentLabel(subagentType, model.reasoning);
             args.prompt = prependHint(String(args.prompt ?? ""), hint);
-            args.description = withThinkingEffortLabel(prependHint(String(args.description ?? ""), hint), model.reasoning);
+            args.description = prependHint(withThinkingEffortLabel(prependHint(String(args.description ?? ""), hint), model.reasoning), subagentLabel);
             writeGatewayEventAudit(directory, {
                 hook: "agent-model-resolver",
                 stage: "state",

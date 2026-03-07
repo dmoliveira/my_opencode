@@ -38,6 +38,10 @@ test("agent-model-resolver prepends thinking effort label for task descriptions"
     await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-effort" }, output)
 
     assert.equal(String(output.args.category ?? ""), "quick")
+    assert.match(
+      String(output.args.description ?? ""),
+      /^\[SUBAGENT\].*explore.*\[scan\].*effort=low/m,
+    )
     assert.match(String(output.args.description ?? ""), /^\[THINKING EFFORT\] low/m)
     assert.match(String(output.args.description ?? ""), /\[MODEL ROUTING\].*reasoning=low/i)
   } finally {
