@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
 
 interface ToolPayload {
   input?: {
@@ -103,6 +104,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
         if (!args || typeof args !== "object") {
           return
         }
+        const traceId = resolveDelegationTraceId(args)
         const failure = lastFailureBySession.get(sid)
         if (!failure) {
           return
@@ -123,6 +125,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
           stage: "state",
           reason_code: "delegation_fallback_applied",
           session_id: sid,
+          trace_id: traceId,
           previous_subagent_type: failure.subagentType || undefined,
           previous_category: failure.category || undefined,
           previous_reason_code: failure.reasonCode,
@@ -147,6 +150,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
         return
       }
       const args = eventPayload.output?.args
+      const traceId = resolveDelegationTraceId(args ?? {})
       const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
       const category = String(args?.category ?? "").toLowerCase().trim()
       lastFailureBySession.set(sid, {
@@ -163,6 +167,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
         stage: "state",
         reason_code: "delegation_failure_recorded",
         session_id: sid,
+        trace_id: traceId,
         subagent_type: subagentType || undefined,
         category: category || undefined,
         failure_reason_code: reason,

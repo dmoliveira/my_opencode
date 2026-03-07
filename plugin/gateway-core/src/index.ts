@@ -351,6 +351,9 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAgentModelResolverHook({
       directory,
       enabled: true,
+      defaultOverrideDelta: cfg.adaptiveDelegationPolicy.defaultOverrideDelta,
+      defaultIntentThreshold: cfg.adaptiveDelegationPolicy.defaultIntentThreshold,
+      agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
     }),
     createDelegationOutcomeLearnerHook({
       directory,
@@ -358,6 +361,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       windowMs: cfg.adaptiveDelegationPolicy.windowMs,
       minSamples: cfg.adaptiveDelegationPolicy.minSamples,
       highFailureRate: cfg.adaptiveDelegationPolicy.highFailureRate,
+      agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
     }),
     createDelegationFallbackOrchestratorHook({
       directory,
@@ -366,6 +370,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAgentDiscoverabilityInjectorHook({
       directory,
       enabled: true,
+      cooldownMs: cfg.adaptiveDelegationPolicy.discoverabilityCooldownMs,
     }),
     createDelegationDecisionAuditHook({
       directory,
@@ -382,6 +387,9 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       directory,
       enabled: cfg.subagentTelemetryTimeline.enabled,
       maxTimelineEntries: cfg.subagentTelemetryTimeline.maxTimelineEntries,
+      persistState: cfg.adaptiveDelegationPolicy.persistState,
+      stateFile: cfg.adaptiveDelegationPolicy.stateFile,
+      stateMaxEntries: cfg.adaptiveDelegationPolicy.stateMaxEntries,
     }),
     createAdaptiveDelegationPolicyHook({
       directory,

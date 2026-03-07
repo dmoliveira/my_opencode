@@ -13,7 +13,13 @@ import { createSubagentTelemetryTimelineHook } from "../dist/hooks/subagent-tele
 const REPO_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 
 test("delegation confidence gate overrides low-confidence explicit subagent", async () => {
-  const hook = createAgentModelResolverHook({ directory: REPO_DIRECTORY, enabled: true })
+  const hook = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 1,
+    defaultIntentThreshold: 1,
+    agentPolicyOverrides: {},
+  })
   const output = {
     args: {
       subagent_type: "explore",
@@ -26,14 +32,21 @@ test("delegation confidence gate overrides low-confidence explicit subagent", as
     output,
   })
   assert.equal(output.args.subagent_type, "librarian")
-  assert.match(output.args.prompt, /\[DELEGATION ROUTER\]/)
+  assert.match(output.args.prompt, /\[DELEGATION ROUTER(?:\s+[^\]]+)?\]/)
 })
 
 test("agent discoverability injector appends catalog hint only after routing rewrite", async () => {
-  const resolver = createAgentModelResolverHook({ directory: REPO_DIRECTORY, enabled: true })
+  const resolver = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 1,
+    defaultIntentThreshold: 1,
+    agentPolicyOverrides: {},
+  })
   const discoverability = createAgentDiscoverabilityInjectorHook({
     directory: REPO_DIRECTORY,
     enabled: true,
+    cooldownMs: 60000,
   })
   const output = {
     args: {
@@ -47,7 +60,7 @@ test("agent discoverability injector appends catalog hint only after routing rew
   }
   await resolver.event("tool.execute.before", payload)
   await discoverability.event("tool.execute.before", payload)
-  assert.match(output.args.prompt, /\[DELEGATION ROUTER\]/)
+  assert.match(output.args.prompt, /\[DELEGATION ROUTER(?:\s+[^\]]+)?\]/)
   assert.match(output.args.prompt, /\/agent-catalog explain explore/)
 })
 
@@ -56,6 +69,9 @@ test("delegation outcome learner adapts risky category after repeated failures",
     directory: REPO_DIRECTORY,
     enabled: true,
     maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
   })
   const learnerHook = createDelegationOutcomeLearnerHook({
     directory: REPO_DIRECTORY,
@@ -63,6 +79,7 @@ test("delegation outcome learner adapts risky category after repeated failures",
     windowMs: 120000,
     minSamples: 2,
     highFailureRate: 0.5,
+    agentPolicyOverrides: {},
   })
 
   await timelineHook.event("tool.execute.before", {
@@ -131,4 +148,28 @@ test("hook semantic bridge maps upstream semantics to local runtime", async () =
   })
   assert.match(output.args.prompt, /\[HOOK SEMANTIC BRIDGE\]/)
   assert.match(output.args.prompt, /sisyphus->orchestrator/)
+})
+
+test("discoverability injector respects cooldown window", async () => {
+  const discoverability = createAgentDiscoverabilityInjectorHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    cooldownMs: 3600000,
+  })
+  const payload = {
+    input: { tool: "task", sessionID: "session-discoverability-cooldown" },
+    output: {
+      args: {
+        subagent_type: "explore",
+        prompt: "[DELEGATION ROUTER] inferred route",
+        description: "first",
+      },
+    },
+  }
+  await discoverability.event("tool.execute.before", payload)
+  const first = String(payload.output.args.prompt)
+  await discoverability.event("tool.execute.before", payload)
+  const second = String(payload.output.args.prompt)
+  assert.equal((first.match(/\/agent-catalog/g) ?? []).length, 1)
+  assert.equal((second.match(/\/agent-catalog/g) ?? []).length, 1)
 })

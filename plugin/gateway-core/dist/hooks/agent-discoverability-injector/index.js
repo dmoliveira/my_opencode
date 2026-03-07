@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -15,12 +16,13 @@ function detectRewriteSource(text) {
     if (text.includes("[delegation-fallback-orchestrator]")) {
         return "fallback";
     }
-    if (text.includes("[DELEGATION ROUTER]")) {
+    if (/\[DELEGATION ROUTER(?:\s+[^\]]+)?\]/i.test(text)) {
         return "route";
     }
     return null;
 }
 export function createAgentDiscoverabilityInjectorHook(options) {
+    const lastInjectedAtBySession = new Map();
     return {
         id: "agent-discoverability-injector",
         priority: 294,
@@ -36,6 +38,13 @@ export function createAgentDiscoverabilityInjectorHook(options) {
             if (!args || typeof args !== "object") {
                 return;
             }
+            const sid = sessionId(eventPayload);
+            const now = Date.now();
+            const last = sid ? lastInjectedAtBySession.get(sid) ?? 0 : 0;
+            if (sid && options.cooldownMs > 0 && now - last < options.cooldownMs) {
+                return;
+            }
+            const traceId = resolveDelegationTraceId(args);
             const combined = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
             if (combined.includes("/agent-catalog")) {
                 return;
@@ -50,6 +59,9 @@ export function createAgentDiscoverabilityInjectorHook(options) {
                 : "[AGENT CATALOG] Inspect details with: /agent-catalog list";
             args.prompt = prependHint(String(args.prompt ?? ""), hint);
             args.description = prependHint(String(args.description ?? ""), hint);
+            if (sid) {
+                lastInjectedAtBySession.set(sid, now);
+            }
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
@@ -57,9 +69,11 @@ export function createAgentDiscoverabilityInjectorHook(options) {
                 hook: "agent-discoverability-injector",
                 stage: "state",
                 reason_code: "agent_discoverability_hint_injected",
-                session_id: sessionId(eventPayload),
+                session_id: sid,
+                trace_id: traceId,
                 subagent_type: subagentType || undefined,
                 trigger_source: source,
+                cooldown_ms: String(options.cooldownMs),
             });
         },
     };

@@ -3,4 +3,7 @@ export declare function createSubagentTelemetryTimelineHook(options: {
     directory: string;
     enabled: boolean;
     maxTimelineEntries: number;
+    persistState: boolean;
+    stateFile: string;
+    stateMaxEntries: number;
 }): GatewayHook;

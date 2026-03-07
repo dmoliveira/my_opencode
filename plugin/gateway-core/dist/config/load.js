@@ -9,6 +9,40 @@ function stringList(value) {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
 }
+function recordValue(value) {
+    return value && typeof value === "object" ? value : {};
+}
+function parseAgentPolicyOverrides(value, fallback) {
+    if (!value || typeof value !== "object") {
+        return fallback;
+    }
+    const source = value;
+    const output = {};
+    for (const [agent, rawPolicy] of Object.entries(source)) {
+        if (typeof agent !== "string" || !agent.trim()) {
+            continue;
+        }
+        const policy = recordValue(rawPolicy);
+        const parsed = {};
+        if ("overrideDelta" in policy) {
+            parsed.overrideDelta = nonNegativeInt(policy.overrideDelta, 0);
+        }
+        if ("intentThreshold" in policy) {
+            parsed.intentThreshold = nonNegativeInt(policy.intentThreshold, 0);
+        }
+        if ("minSamples" in policy) {
+            parsed.minSamples = positiveInt(policy.minSamples, 1);
+        }
+        if ("highFailureRate" in policy) {
+            parsed.highFailureRate = boundedFloat(policy.highFailureRate, 0, 1, 0.5);
+        }
+        if ("protectCategories" in policy) {
+            parsed.protectCategories = stringList(policy.protectCategories);
+        }
+        output[agent.trim().toLowerCase()] = parsed;
+    }
+    return Object.keys(output).length > 0 ? output : fallback;
+}
 // Coerces unknown value into a safe non-negative integer fallback.
 function nonNegativeInt(value, fallback) {
     const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -550,6 +584,18 @@ export function loadGatewayConfig(raw) {
                 ? adaptiveDelegationPolicySource.blockExpensiveDuringCooldown
                 : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
                     .blockExpensiveDuringCooldown,
+            persistState: typeof adaptiveDelegationPolicySource.persistState === "boolean"
+                ? adaptiveDelegationPolicySource.persistState
+                : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.persistState,
+            stateFile: typeof adaptiveDelegationPolicySource.stateFile === "string" &&
+                adaptiveDelegationPolicySource.stateFile.trim().length > 0
+                ? adaptiveDelegationPolicySource.stateFile.trim()
+                : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.stateFile,
+            stateMaxEntries: positiveInt(adaptiveDelegationPolicySource.stateMaxEntries, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.stateMaxEntries),
+            defaultOverrideDelta: nonNegativeInt(adaptiveDelegationPolicySource.defaultOverrideDelta, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultOverrideDelta),
+            defaultIntentThreshold: nonNegativeInt(adaptiveDelegationPolicySource.defaultIntentThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultIntentThreshold),
+            discoverabilityCooldownMs: positiveInt(adaptiveDelegationPolicySource.discoverabilityCooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.discoverabilityCooldownMs),
+            agentPolicyOverrides: parseAgentPolicyOverrides(adaptiveDelegationPolicySource.agentPolicyOverrides, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.agentPolicyOverrides),
         },
         validationEvidenceLedger: {
             enabled: typeof validationEvidenceLedgerSource.enabled === "boolean"

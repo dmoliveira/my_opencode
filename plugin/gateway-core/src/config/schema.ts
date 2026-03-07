@@ -172,6 +172,21 @@ export interface AdaptiveDelegationPolicyConfig {
   highFailureRate: number;
   cooldownMs: number;
   blockExpensiveDuringCooldown: boolean;
+  persistState: boolean;
+  stateFile: string;
+  stateMaxEntries: number;
+  defaultOverrideDelta: number;
+  defaultIntentThreshold: number;
+  discoverabilityCooldownMs: number;
+  agentPolicyOverrides: Record<string, AgentRuntimePolicyOverride>;
+}
+
+export interface AgentRuntimePolicyOverride {
+  overrideDelta?: number;
+  intentThreshold?: number;
+  minSamples?: number;
+  highFailureRate?: number;
+  protectCategories?: string[];
 }
 
 // Declares continuation stop guard settings for loop stop persistence.
@@ -835,6 +850,33 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     highFailureRate: 0.5,
     cooldownMs: 180000,
     blockExpensiveDuringCooldown: true,
+    persistState: true,
+    stateFile: ".opencode/delegation-runtime-state.json",
+    stateMaxEntries: 300,
+    defaultOverrideDelta: 1,
+    defaultIntentThreshold: 1,
+    discoverabilityCooldownMs: 180000,
+    agentPolicyOverrides: {
+      verifier: {
+        overrideDelta: 2,
+        intentThreshold: 2,
+      },
+      reviewer: {
+        overrideDelta: 2,
+        intentThreshold: 2,
+      },
+      oracle: {
+        overrideDelta: 2,
+        intentThreshold: 2,
+        minSamples: 3,
+        highFailureRate: 0.6,
+        protectCategories: ["critical"],
+      },
+      "release-scribe": {
+        overrideDelta: 2,
+        intentThreshold: 2,
+      },
+    },
   },
   validationEvidenceLedger: {
     enabled: true,

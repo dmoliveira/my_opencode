@@ -5,4 +5,9 @@ export declare function createDelegationOutcomeLearnerHook(options: {
     windowMs: number;
     minSamples: number;
     highFailureRate: number;
+    agentPolicyOverrides: Record<string, {
+        minSamples?: number;
+        highFailureRate?: number;
+        protectCategories?: string[];
+    }>;
 }): GatewayHook;

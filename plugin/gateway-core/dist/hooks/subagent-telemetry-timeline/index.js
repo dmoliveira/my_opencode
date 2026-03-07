@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { clearDelegationSession, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
+import { clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
@@ -7,6 +8,12 @@ function isFailureOutput(output) {
     return /(\[error\]|invalid arguments|failed|exception|traceback|unknown\s+agent|unknown\s+category|blocked delegation)/i.test(output);
 }
 export function createSubagentTelemetryTimelineHook(options) {
+    configureDelegationRuntimeState({
+        directory: options.directory,
+        persistState: options.persistState,
+        stateFile: options.stateFile,
+        stateMaxEntries: options.stateMaxEntries,
+    });
     return {
         id: "subagent-telemetry-timeline",
         priority: 296,
@@ -31,6 +38,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                     return;
                 }
                 const args = eventPayload.output?.args;
+                const traceId = resolveDelegationTraceId(args ?? {});
                 const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
                 const category = String(args?.category ?? "balanced").toLowerCase().trim() || "balanced";
                 if (!subagentType && !category) {
@@ -41,6 +49,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                     subagentType,
                     category,
                     startedAt: Date.now(),
+                    traceId,
                 });
                 return;
             }
@@ -80,6 +89,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                 category: record.category,
                 duration_ms: String(record.durationMs),
                 status: record.status,
+                trace_id: record.traceId,
             });
         },
     };

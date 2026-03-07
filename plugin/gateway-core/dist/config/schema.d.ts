@@ -133,6 +133,20 @@ export interface AdaptiveDelegationPolicyConfig {
     highFailureRate: number;
     cooldownMs: number;
     blockExpensiveDuringCooldown: boolean;
+    persistState: boolean;
+    stateFile: string;
+    stateMaxEntries: number;
+    defaultOverrideDelta: number;
+    defaultIntentThreshold: number;
+    discoverabilityCooldownMs: number;
+    agentPolicyOverrides: Record<string, AgentRuntimePolicyOverride>;
+}
+export interface AgentRuntimePolicyOverride {
+    overrideDelta?: number;
+    intentThreshold?: number;
+    minSamples?: number;
+    highFailureRate?: number;
+    protectCategories?: string[];
 }
 export interface StopContinuationGuardConfig {
     enabled: boolean;

@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -45,6 +46,7 @@ export function createHookSemanticBridgeHook(options) {
             if (!args || typeof args !== "object") {
                 return;
             }
+            const traceId = resolveDelegationTraceId(args);
             const combined = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
             const matches = SEMANTIC_MAP.filter((entry) => entry.upstream.test(combined));
             if (matches.length === 0) {
@@ -62,6 +64,7 @@ export function createHookSemanticBridgeHook(options) {
                 stage: "state",
                 reason_code: "hook_semantic_bridge_applied",
                 session_id: sessionId(eventPayload),
+                trace_id: traceId,
                 mapping_count: String(matches.length),
                 mappings: mapping,
             });
