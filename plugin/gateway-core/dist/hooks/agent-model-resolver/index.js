@@ -49,11 +49,15 @@ export function createAgentModelResolverHook(options) {
                 return;
             }
             const metadata = loadAgentMetadata(directory).get(subagentType);
-            const category = metadata?.default_category;
+            const requestedCategory = String(args.category ?? "").toLowerCase().trim();
+            const category = requestedCategory && MODEL_BY_CATEGORY[requestedCategory]
+                ? requestedCategory
+                : metadata?.default_category;
             if (!category || !MODEL_BY_CATEGORY[category]) {
                 return;
             }
             const model = MODEL_BY_CATEGORY[category];
+            args.category = category;
             const hint = `[MODEL ROUTING] Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`;
             args.prompt = prependHint(String(args.prompt ?? ""), hint);
             args.description = withThinkingEffortLabel(prependHint(String(args.description ?? ""), hint), model.reasoning);
