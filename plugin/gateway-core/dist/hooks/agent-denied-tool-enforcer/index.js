@@ -4,22 +4,18 @@ import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function referencesDeniedTool(text, tool) {
-    const lower = text.toLowerCase();
-    const checks = [
-        `use ${tool}`,
-        `run ${tool}`,
-        `execute ${tool}`,
-        `call ${tool}`,
-        `\`${tool}\``,
-        `functions.${tool}`,
-        `"${tool}"`,
-        `'${tool}'`,
+    const escaped = escapeRegex(tool);
+    const patterns = [
+        new RegExp(`\\b(use|run|execute|call|invoke)\\s+(?:the\\s+)?(?:tool\\s+)?${escaped}\\b`, "i"),
+        new RegExp(`\\b${escaped}\\s+tool\\b`, "i"),
+        new RegExp(`\\bfunctions\\.${escaped}\\b`, "i"),
+        new RegExp(`(?:^|\\s)["'\`]${escaped}["'\`](?:$|\\s)`, "i"),
     ];
-    if (checks.some((pattern) => lower.includes(pattern))) {
-        return true;
-    }
-    return new RegExp(`\\b${tool}\\b`, "i").test(text);
+    return patterns.some((pattern) => pattern.test(text));
 }
 const MUTATING_INTENT_RULES = [
     { label: "git_commit", pattern: /\bgit\s+commit\b|\bcommit\s+(changes?|code|files?)\b/i },
@@ -52,7 +48,7 @@ function collectStrings(value, depth = 0) {
         return value.flatMap((item) => collectStrings(item, depth + 1));
     }
     if (value && typeof value === "object") {
-        return Object.entries(value).flatMap(([key, nested]) => [key, ...collectStrings(nested, depth + 1)]);
+        return Object.values(value).flatMap((nested) => collectStrings(nested, depth + 1));
     }
     return [];
 }

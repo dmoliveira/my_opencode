@@ -15,7 +15,6 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from model_routing_schema import (  # type: ignore
     default_schema,
@@ -25,6 +24,12 @@ from model_routing_schema import (  # type: ignore
 
 
 SECTION = "model_routing"
+CONFIG_PATH = Path(
+    os.environ.get(
+        "OPENCODE_MODEL_ROUTING_PATH", "~/.config/opencode/opencode-model-routing.json"
+    )
+).expanduser()
+LEGACY_ENV_SET = "OPENCODE_MODEL_ROUTING_PATH" in os.environ
 SPEC_DIR = Path(__file__).resolve().parent.parent / "agent" / "specs"
 DEFAULT_STATE = {
     "active_category": "balanced",
@@ -48,6 +53,24 @@ def usage() -> int:
 def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
     config, _ = load_layered_config()
     write_path = resolve_write_path()
+    if LEGACY_ENV_SET and CONFIG_PATH.exists():
+        loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        state = loaded if isinstance(loaded, dict) else {}
+        merged = dict(DEFAULT_STATE)
+        merged.update(state)
+        if not isinstance(merged.get("system_defaults"), dict):
+            merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
+        return config, merged, CONFIG_PATH
+
+    if CONFIG_PATH.exists():
+        loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        state = loaded if isinstance(loaded, dict) else {}
+        merged = dict(DEFAULT_STATE)
+        merged.update(state)
+        if not isinstance(merged.get("system_defaults"), dict):
+            merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
+        return config, merged, CONFIG_PATH
+
     state = config.get(SECTION)
     if not isinstance(state, dict):
         state = dict(DEFAULT_STATE)
@@ -55,16 +78,32 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
     merged.update(state)
     if not isinstance(merged.get("system_defaults"), dict):
         merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
-    return config, merged, write_path
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    return config, merged, CONFIG_PATH
 
 
 def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
-    config[SECTION] = {
+    payload = {
         "active_category": state.get("active_category", "balanced"),
         "system_defaults": state.get("system_defaults", {}),
         "latest_trace": state.get("latest_trace", {}),
     }
-    save_config_file(config, write_path)
+    if LEGACY_ENV_SET:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return
+
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def active_config_path(write_path: Path) -> Path:
+    if LEGACY_ENV_SET:
+        return CONFIG_PATH
+    if CONFIG_PATH.exists():
+        return CONFIG_PATH
+    return write_path
 
 
 def parse_value(argv: list[str], flag: str) -> str | None:
@@ -188,7 +227,7 @@ def command_status(argv: list[str]) -> int:
         "active_category": state.get("active_category"),
         "system_defaults": state.get("system_defaults"),
         "has_latest_trace": bool(state.get("latest_trace")),
-        "config": str(write_path),
+        "config": str(active_config_path(write_path)),
     }
     if json_output:
         print(json.dumps(payload, indent=2))
@@ -212,7 +251,7 @@ def command_set_category(argv: list[str]) -> int:
     state["active_category"] = category
     save_state(config, state, write_path)
     print(f"active_category: {category}")
-    print(f"config: {write_path}")
+    print(f"config: {active_config_path(write_path)}")
     return 0
 
 
@@ -282,11 +321,11 @@ def command_recommend(argv: list[str]) -> int:
             save_state(config, state, write_path)
             report["applied"] = True
             report["active_category"] = state.get("active_category")
-            report["config"] = str(write_path)
+            report["config"] = str(active_config_path(write_path))
         else:
             report["applied"] = False
             report["active_category"] = state.get("active_category")
-            report["config"] = str(write_path)
+            report["config"] = str(active_config_path(write_path))
 
         if json_output:
             print(json.dumps(report, indent=2))

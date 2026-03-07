@@ -6,6 +6,7 @@ This document defines explicit deny-list expectations for agent safety boundarie
 
 - Subagents are read-only by default.
 - Any tool listed in an agent's `metadata.denied_tools` must be disabled (`false`) in `tools`.
+- Runtime enforcement targets explicit invocation intent (for example `use bash`, `functions.bash`, `"bash"`), not passive mentions like "avoid bash" or generic words such as "task".
 - Primary agents may write/edit when required by execution scope.
 
 ## Deny Lists (Current)
