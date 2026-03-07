@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function fallbackDelegationKey(sid, args) {
     const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
     const category = String(args?.category ?? "").toLowerCase().trim();
@@ -28,6 +28,15 @@ function sessionLifecycleKeys(byDelegation, sid) {
     const matches = [];
     for (const key of byDelegation.keys()) {
         if (key === sid || key.startsWith(`${sid}:`)) {
+            matches.push(key);
+        }
+    }
+    return matches;
+}
+function matchingSessionLifecycleKeys(byDelegation, sid, subagentType) {
+    const matches = [];
+    for (const [key, value] of byDelegation.entries()) {
+        if ((key === sid || key.startsWith(`${sid}:`)) && value.subagentType === subagentType) {
             matches.push(key);
         }
     }
@@ -74,6 +83,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
                     return;
                 }
                 const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {});
+                annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args);
                 const key = lifecycleKey(sid, traceId, eventPayload.output?.args);
                 const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                     ? eventPayload.directory
@@ -137,13 +147,18 @@ export function createSubagentLifecycleSupervisorHook(options) {
             if (!sid) {
                 return;
             }
-            const traceId = extractDelegationTraceId(eventPayload.output?.args);
+            const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
             const key = lifecycleKey(sid, traceId, eventPayload.output?.args);
             let activeKey = key;
             let state = byDelegation.get(activeKey);
             if (!state) {
                 if (!traceId) {
-                    const matches = sessionLifecycleKeys(byDelegation, sid);
+                    const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
+                    const outputSubagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+                        extractDelegationSubagentTypeFromOutput(outputText);
+                    const matches = outputSubagentType
+                        ? matchingSessionLifecycleKeys(byDelegation, sid, outputSubagentType)
+                        : sessionLifecycleKeys(byDelegation, sid);
                     if (matches.length === 1) {
                         activeKey = matches[0];
                         state = byDelegation.get(activeKey);

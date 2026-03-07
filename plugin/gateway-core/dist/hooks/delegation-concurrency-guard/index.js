@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
-import { extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+function matchingSessionDelegationKeys(activeByDelegation, sid, subagentType) {
+    const matches = [];
+    for (const [key, value] of activeByDelegation.entries()) {
+        if ((key === sid || key.startsWith(`${sid}:`)) && value.subagentType === subagentType) {
+            matches.push(key);
+        }
+    }
+    return matches;
+}
 function nowMs() {
     return Date.now();
 }
@@ -80,13 +89,18 @@ export function createDelegationConcurrencyGuardHook(options) {
                 }
                 const sid = sessionId(eventPayload);
                 if (sid) {
-                    const traceId = extractDelegationTraceId(eventPayload.output?.args);
+                    const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
                     if (traceId) {
                         const key = delegationKey(sid, traceId);
                         activeByDelegation.delete(key);
                     }
                     else {
-                        const fallbackKeys = sessionDelegationKeys(activeByDelegation, sid);
+                        const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
+                        const outputSubagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+                            extractDelegationSubagentTypeFromOutput(outputText);
+                        const fallbackKeys = outputSubagentType
+                            ? matchingSessionDelegationKeys(activeByDelegation, sid, outputSubagentType)
+                            : sessionDelegationKeys(activeByDelegation, sid);
                         if (fallbackKeys.length === 1) {
                             activeByDelegation.delete(fallbackKeys[0]);
                         }
@@ -122,6 +136,7 @@ export function createDelegationConcurrencyGuardHook(options) {
             const subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
             const category = String(args.category ?? "").toLowerCase().trim();
             const traceId = resolveDelegationTraceId(args ?? {});
+            annotateDelegationMetadata(eventPayload.output ?? {}, args);
             const key = delegationKey(sid, traceId, args);
             if (!subagentType && !category) {
                 return;

@@ -148,3 +148,54 @@ test("delegation-concurrency-guard prunes stale ambiguous reservations before ne
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("delegation-concurrency-guard releases matching reservation from output subagent hint", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegation-concurrency-guard"],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 2,
+          maxExpensiveConcurrent: 2,
+          maxDeepConcurrent: 2,
+          maxCriticalConcurrent: 1,
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-4" },
+      { args: { subagent_type: "explore" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-4" },
+      { args: { subagent_type: "strategic-planner" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-concurrency-4" },
+      {
+        output: "done\n\n[agent-context-shaper] delegation context\n- subagent: strategic-planner\n- recommended_category: deep",
+      },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-4" },
+      { args: { subagent_type: "reviewer" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

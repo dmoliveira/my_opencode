@@ -1,6 +1,10 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
+import {
+  annotateDelegationMetadata,
+  extractDelegationTraceId,
+  resolveDelegationTraceId,
+} from "../shared/delegation-trace.js"
 
 interface ToolPayload {
   input?: {
@@ -15,6 +19,7 @@ interface ToolPayload {
       prompt?: string
       description?: string
     }
+    metadata?: unknown
     output?: unknown
   }
   directory?: string
@@ -29,9 +34,24 @@ interface SessionDeletedPayload {
 }
 
 interface FailedDelegation {
+  traceId: string
   subagentType: string
   category: string
   reasonCode: string
+}
+
+function delegationKey(sessionId: string, traceId: string): string {
+  return traceId ? `${sessionId}:${traceId}` : sessionId
+}
+
+function sessionFailureKeys(lastFailureByDelegation: Map<string, FailedDelegation>, sid: string): string[] {
+  const matches: string[] = []
+  for (const key of lastFailureByDelegation.keys()) {
+    if (key === sid || key.startsWith(`${sid}:`)) {
+      matches.push(key)
+    }
+  }
+  return matches
 }
 
 function sessionId(payload: {
@@ -75,7 +95,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
   directory: string
   enabled: boolean
 }): GatewayHook {
-  const lastFailureBySession = new Map<string, FailedDelegation>()
+  const lastFailureByDelegation = new Map<string, FailedDelegation>()
 
   return {
     id: "delegation-fallback-orchestrator",
@@ -87,7 +107,9 @@ export function createDelegationFallbackOrchestratorHook(options: {
       if (type === "session.deleted") {
         const sid = sessionId((payload ?? {}) as SessionDeletedPayload)
         if (sid) {
-          lastFailureBySession.delete(sid)
+          for (const key of sessionFailureKeys(lastFailureByDelegation, sid)) {
+            lastFailureByDelegation.delete(key)
+          }
         }
         return
       }
@@ -105,7 +127,8 @@ export function createDelegationFallbackOrchestratorHook(options: {
           return
         }
         const traceId = resolveDelegationTraceId(args)
-        const failure = lastFailureBySession.get(sid)
+        annotateDelegationMetadata(eventPayload.output ?? {}, args)
+        const failure = lastFailureByDelegation.get(delegationKey(sid, traceId))
         if (!failure) {
           return
         }
@@ -119,7 +142,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
         args.category = "general"
         args.prompt = prependHint(String(args.prompt ?? ""), fallbackHint)
         args.description = prependHint(String(args.description ?? ""), fallbackHint)
-        lastFailureBySession.delete(sid)
+        lastFailureByDelegation.delete(delegationKey(sid, failure.traceId))
         writeGatewayEventAudit(directory, {
           hook: "delegation-fallback-orchestrator",
           stage: "state",
@@ -144,19 +167,23 @@ export function createDelegationFallbackOrchestratorHook(options: {
       if (!sid || typeof eventPayload.output?.output !== "string") {
         return
       }
-      const reason = detectFailureReason(eventPayload.output.output)
-      if (!reason) {
-        lastFailureBySession.delete(sid)
-        return
-      }
-      const args = eventPayload.output?.args
-      const traceId = resolveDelegationTraceId(args ?? {})
-      const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
-      const category = String(args?.category ?? "").toLowerCase().trim()
-      lastFailureBySession.set(sid, {
-        subagentType,
-        category,
-        reasonCode: reason,
+        const reason = detectFailureReason(eventPayload.output.output)
+        if (!reason) {
+          for (const key of sessionFailureKeys(lastFailureByDelegation, sid)) {
+            lastFailureByDelegation.delete(key)
+          }
+          return
+        }
+        const args = eventPayload.output?.args
+        const traceId = extractDelegationTraceId(args, eventPayload.output?.metadata)
+        const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
+        const category = String(args?.category ?? "").toLowerCase().trim()
+        const key = delegationKey(sid, traceId)
+        lastFailureByDelegation.set(key, {
+          traceId,
+          subagentType,
+          category,
+          reasonCode: reason,
       })
       const directory =
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()

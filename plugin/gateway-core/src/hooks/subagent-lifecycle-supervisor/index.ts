@@ -3,6 +3,9 @@ import { createHash } from "node:crypto"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  annotateDelegationMetadata,
+  extractDelegationSubagentType,
+  extractDelegationSubagentTypeFromOutput,
   extractDelegationTraceId,
   resolveDelegationTraceId,
 } from "../shared/delegation-trace.js"
@@ -19,6 +22,7 @@ interface ToolPayload {
       prompt?: string
       description?: string
     }
+    metadata?: unknown
     output?: unknown
   }
   directory?: string
@@ -91,6 +95,20 @@ function sessionLifecycleKeys(
   return matches
 }
 
+function matchingSessionLifecycleKeys(
+  byDelegation: Map<string, LifecycleState>,
+  sid: string,
+  subagentType: string,
+): string[] {
+  const matches: string[] = []
+  for (const [key, value] of byDelegation.entries()) {
+    if ((key === sid || key.startsWith(`${sid}:`)) && value.subagentType === subagentType) {
+      matches.push(key)
+    }
+  }
+  return matches
+}
+
 function isFailureOutput(output: string): boolean {
   const trimmed = output.trim()
   if (!trimmed) {
@@ -142,6 +160,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           return
         }
         const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {})
+        annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args)
         const key = lifecycleKey(sid, traceId, eventPayload.output?.args)
         const directory =
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
@@ -212,13 +231,19 @@ export function createSubagentLifecycleSupervisorHook(options: {
       if (!sid) {
         return
       }
-      const traceId = extractDelegationTraceId(eventPayload.output?.args)
+      const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
       const key = lifecycleKey(sid, traceId, eventPayload.output?.args)
       let activeKey = key
       let state = byDelegation.get(activeKey)
       if (!state) {
         if (!traceId) {
-          const matches = sessionLifecycleKeys(byDelegation, sid)
+          const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
+          const outputSubagentType =
+            extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+            extractDelegationSubagentTypeFromOutput(outputText)
+          const matches = outputSubagentType
+            ? matchingSessionLifecycleKeys(byDelegation, sid, outputSubagentType)
+            : sessionLifecycleKeys(byDelegation, sid)
           if (matches.length === 1) {
             activeKey = matches[0]
             state = byDelegation.get(activeKey)
