@@ -1205,6 +1205,49 @@ exit 0
             "gh_grep should be enabled in research profile",
         )
 
+        # MCP all should enable every managed server and pass.
+        result = run_script(MCP_SCRIPT, cfg, home, "profile", "all")
+        expect(result.returncode == 0, f"mcp profile all failed: {result.stderr}")
+
+        result = run_script(MCP_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 0,
+            f"mcp doctor --json (all) failed: {result.stderr}",
+        )
+        report = parse_json_output(result.stdout)
+        expect(
+            report.get("result") == "PASS",
+            "mcp doctor should pass for all profile",
+        )
+        for server_name in (
+            "context7",
+            "gh_grep",
+            "playwright",
+            "exa_search",
+            "firecrawl",
+            "github",
+        ):
+            expect(
+                report.get("servers", {}).get(server_name, {}).get("status")
+                == "enabled",
+                f"{server_name} should be enabled in all profile",
+            )
+
+        # MCP alias should resolve to canonical target names.
+        result = run_script(MCP_SCRIPT, cfg, home, "disable", "exa")
+        expect(result.returncode == 0, f"mcp disable exa failed: {result.stderr}")
+
+        result = run_script(MCP_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 0,
+            f"mcp doctor --json (alias) failed: {result.stderr}",
+        )
+        report = parse_json_output(result.stdout)
+        expect(
+            report.get("servers", {}).get("exa_search", {}).get("status") == "disabled",
+            "exa alias should disable exa_search",
+        )
+
         # Layered config precedence: project override should beat user override.
         project_dir = tmp / "project"
         (project_dir / ".opencode").mkdir(parents=True, exist_ok=True)

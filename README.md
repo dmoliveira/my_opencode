@@ -33,7 +33,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 
 ## Features and benefits 🌟
 
-- 🧠 Built-in `/mcp` command for `status`, `enable`, and `disable`.
+- 🧠 Built-in `/mcp` command for `status`, `help`, `doctor`, `profile`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
 - 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
@@ -57,7 +57,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
 - 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
 - 🛑 Built-in `/continuation-stop` for one-shot continuation shutdown (autopilot stop + resume disable).
-- 💸 Better token control by enabling `context7` / `gh_grep` only on demand.
+- 💸 Better token control with MCP profiles (`minimal`, `research`, `web`, `all`) and on-demand toggling.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
 - 🧩 Clear, versioned config for experiments and rollbacks.
@@ -111,6 +111,7 @@ Quickstart commands:
 /doctor run
 /plugin status
 /mcp status
+/mcp profile research
 /notify status
 /autoflow status --json
 /session handoff --json
@@ -119,6 +120,16 @@ Quickstart commands:
 ```
 
 Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, and `docs/operator-playbook.md` for canonical operator flows.
+
+Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
+
+Aliases: `ghgrep` -> `gh_grep`, `exa` -> `exa_search`.
+
+Profiles:
+- `minimal` -> disable all managed MCPs
+- `research` -> `context7`, `gh_grep`
+- `web` -> `playwright`, `exa_search`, `firecrawl`
+- `all` -> enable all managed MCPs
 
 ## Repo layout 📦
 
