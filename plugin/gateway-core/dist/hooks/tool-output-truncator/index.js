@@ -46,12 +46,6 @@ export function createToolOutputTruncatorHook(options) {
                 : options.directory;
             const tool = resolveTool(eventPayload);
             if (!tool || !configuredTools.has(tool)) {
-                writeGatewayEventAudit(directory, {
-                    hook: "tool-output-truncator",
-                    stage: "skip",
-                    reason_code: "tool_not_supported",
-                    tool,
-                });
                 return;
             }
             if (typeof eventPayload.output?.output !== "string") {

@@ -32,7 +32,8 @@ const MUTATING_INTENT_RULES = [
 ];
 const MUTATION_TOOL_MARKERS = new Set(["bash", "write", "edit", "task"]);
 const NEGATED_MUTATION_PATTERNS = [
-    /\b(without|do\s+not|don't|avoid)\s+(editing|modifying|rewriting|refactoring|implementing|writing)\s+(the\s+)?(code|file|files|docs?|documentation)\b/gi,
+    /\b(without|do\s+not|don't|avoid|no)\s+(editing|edits?|modifying|changes?|rewriting|refactoring|implementing|writing)\s+(the\s+)?(code|file|files|docs?|documentation)\b/gi,
+    /\b(no\s+file\s+edits?|without\s+file\s+edits?|no\s+code\s+changes?|without\s+code\s+changes?)\b/gi,
     /\b(read-?only|non-?mutating)\b/gi,
 ];
 function detectMutatingIntent(text) {
