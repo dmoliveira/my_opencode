@@ -14,8 +14,8 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | --- | --- | --- | --- | --- |
 | fast | `quick` | `openai/gpt-5.1-codex-mini` | `low` | high-frequency discovery/verification loops |
 | standard | `balanced` | `openai/gpt-5.3-codex` | `medium` | normal implementation and planning |
-| complex | `deep` | `openai/gpt-5.3-codex` | `high` | multi-module architecture/debug work |
-| critical | `critical` | `openai/gpt-5.3-codex` | `xhigh` | final risk review, release/security sign-off |
+| complex | `deep` | `openai/gpt-5.4-codex` | `high` | multi-module architecture/debug work |
+| critical | `critical` | `openai/gpt-5.4-codex` | `xhigh` | final risk review, release/security sign-off |
 
 ## Default Agent Routing
 
@@ -26,8 +26,8 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | `verifier` | fast | `quick` |
 | `release-scribe` | fast | `quick` |
 | `librarian` | standard | `balanced` |
-| `strategic-planner` | standard | `balanced` |
-| `ambiguity-analyst` | standard | `balanced` |
+| `strategic-planner` | complex | `deep` |
+| `ambiguity-analyst` | complex | `deep` |
 | `reviewer` | critical | `critical` |
 | `oracle` | critical | `critical` |
 | `plan-critic` | critical | `critical` |
@@ -45,8 +45,8 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | --- | --- | --- | --- |
 | `quick` | `openai/gpt-5.1-codex-mini` | Copilot low-latency coding model | Copilot balanced coding model |
 | `balanced` | `openai/gpt-5.3-codex` (`medium`) | Copilot balanced reasoning model | Copilot high-reasoning model |
-| `deep` | `openai/gpt-5.3-codex` (`high`) | Copilot high-reasoning model | Copilot balanced reasoning model |
-| `critical` | `openai/gpt-5.3-codex` (`xhigh`) | Copilot highest-reasoning available model | Copilot high-reasoning model |
+| `deep` | `openai/gpt-5.4-codex` (`high`) | Copilot high-reasoning model | Copilot balanced reasoning model |
+| `critical` | `openai/gpt-5.4-codex` (`xhigh`) | Copilot highest-reasoning available model | Copilot high-reasoning model |
 | `visual` | `openai/gpt-5.3-codex` (`medium`) | Copilot visual-capable reasoning model | Copilot balanced model |
 | `writing` | `openai/gpt-5.3-codex` (`medium`) | Copilot strong writing/reasoning model | Copilot balanced model |
 

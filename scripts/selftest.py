@@ -356,8 +356,8 @@ exit 0
 
         base_config_payload = load_json_file(cfg)
         expect(
-            str(base_config_payload.get("default_agent") or "") == "build",
-            "default_agent should remain build",
+            str(base_config_payload.get("default_agent") or "") == "orchestrator",
+            "default_agent should remain orchestrator",
         )
         plugin_entries_any = base_config_payload.get("plugin", [])
         plugin_entries = (
@@ -6834,12 +6834,23 @@ index 3333333..4444444 100644
             == "openai/gpt-5.1-codex-mini",
             "model routing schema should define balanced/critical categories and quick mini profile",
         )
+        expect(
+            routing_categories.get("deep", {}).get("model") == "openai/gpt-5.4-codex"
+            and routing_categories.get("critical", {}).get("model")
+            == "openai/gpt-5.4-codex",
+            "model routing schema should route deep/critical categories to GPT-5.4",
+        )
 
         resolved_requested = resolve_category(routing_schema, "deep")
         expect(
             resolved_requested.get("category") == "deep"
             and resolved_requested.get("reason") == "requested_category",
             "model routing should resolve explicit known category",
+        )
+        expect(
+            resolved_requested.get("settings", {}).get("model")
+            == "openai/gpt-5.4-codex",
+            "deep category should resolve to GPT-5.4 by default",
         )
 
         resolved_missing = resolve_category(routing_schema, "unknown")

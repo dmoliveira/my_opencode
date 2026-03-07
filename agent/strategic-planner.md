@@ -16,7 +16,7 @@ tools:
   todoread: false
 routing:
   cost_tier: cheap
-  default_category: balanced
+  default_category: deep
   fallback_policy: openai-default-with-alt-fallback
   triggers:
     - sequence milestones

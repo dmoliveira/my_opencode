@@ -23,8 +23,8 @@ interface ToolBeforePayload {
 const MODEL_BY_CATEGORY: Record<string, { model: string; reasoning: string }> = {
   quick: { model: "openai/gpt-5.1-codex-mini", reasoning: "low" },
   balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-  deep: { model: "openai/gpt-5.3-codex", reasoning: "high" },
-  critical: { model: "openai/gpt-5.3-codex", reasoning: "xhigh" },
+  deep: { model: "openai/gpt-5.4-codex", reasoning: "high" },
+  critical: { model: "openai/gpt-5.4-codex", reasoning: "xhigh" },
   visual: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
   writing: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
 }
