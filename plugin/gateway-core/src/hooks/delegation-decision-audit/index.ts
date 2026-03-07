@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -49,12 +50,14 @@ export function createDelegationDecisionAuditHook(options: {
       if (!subagentType && !category) {
         return
       }
+      const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {})
       const metadata = loadAgentMetadata(directory).get(subagentType)
       writeGatewayEventAudit(directory, {
         hook: "delegation-decision-audit",
         stage: "state",
         reason_code: "delegation_decision_recorded",
         session_id: sessionId(eventPayload),
+        trace_id: traceId,
         subagent_type: subagentType || undefined,
         category: category || undefined,
         decision_source: subagentType ? "explicit_subagent_type" : "explicit_category",

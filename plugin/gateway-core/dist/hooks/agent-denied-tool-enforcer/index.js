@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -15,7 +16,25 @@ function referencesDeniedTool(text, tool) {
         `"${tool}"`,
         `'${tool}'`,
     ];
-    return checks.some((pattern) => lower.includes(pattern));
+    if (checks.some((pattern) => lower.includes(pattern))) {
+        return true;
+    }
+    return new RegExp(`\\b${tool}\\b`, "i").test(text);
+}
+function collectStrings(value, depth = 0) {
+    if (depth > 4) {
+        return [];
+    }
+    if (typeof value === "string") {
+        return [value];
+    }
+    if (Array.isArray(value)) {
+        return value.flatMap((item) => collectStrings(item, depth + 1));
+    }
+    if (value && typeof value === "object") {
+        return Object.entries(value).flatMap(([key, nested]) => [key, ...collectStrings(nested, depth + 1)]);
+    }
+    return [];
 }
 function suggestAllowedTool(deniedTool, allowedTools) {
     if (!allowedTools.length) {
@@ -57,6 +76,7 @@ export function createAgentDeniedToolEnforcerHook(options) {
             if (!args || typeof args !== "object") {
                 return;
             }
+            const traceId = resolveDelegationTraceId(args);
             const subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
             if (!subagentType) {
                 return;
@@ -67,7 +87,10 @@ export function createAgentDeniedToolEnforcerHook(options) {
             if (!denied || denied.length === 0) {
                 return;
             }
-            const combinedText = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
+            const combinedText = collectStrings({
+                prompt: args.prompt,
+                description: args.description,
+            }).join("\n");
             const violating = denied.filter((deniedTool) => referencesDeniedTool(combinedText, String(deniedTool).toLowerCase().trim()));
             if (violating.length === 0) {
                 return;
@@ -78,6 +101,7 @@ export function createAgentDeniedToolEnforcerHook(options) {
                 stage: "guard",
                 reason_code: "tool_surface_enforced_runtime",
                 session_id: sessionId(eventPayload),
+                trace_id: traceId,
                 subagent_type: subagentType,
                 denied_tools: violating.join(","),
                 suggested_tool: suggestion ?? undefined,

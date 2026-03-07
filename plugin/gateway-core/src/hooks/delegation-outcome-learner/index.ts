@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { getRecentDelegationOutcomes } from "../shared/delegation-runtime-state.js"
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
 
 interface ToolPayload {
   input?: {
@@ -39,6 +40,11 @@ export function createDelegationOutcomeLearnerHook(options: {
   windowMs: number
   minSamples: number
   highFailureRate: number
+  agentPolicyOverrides: Record<string, {
+    minSamples?: number
+    highFailureRate?: number
+    protectCategories?: string[]
+  }>
 }): GatewayHook {
   return {
     id: "delegation-outcome-learner",
@@ -55,24 +61,36 @@ export function createDelegationOutcomeLearnerHook(options: {
       if (!args || typeof args !== "object") {
         return
       }
+      const traceId = resolveDelegationTraceId(args)
       const subagentType = String(args.subagent_type ?? "").toLowerCase().trim()
       if (!subagentType) {
         return
       }
+      const policy = options.agentPolicyOverrides[subagentType] ?? {}
+      const minSamples = Math.max(1, Number(policy.minSamples ?? options.minSamples))
+      const highFailureRate = Number(policy.highFailureRate ?? options.highFailureRate)
       const outcomes = getRecentDelegationOutcomes(options.windowMs).filter(
         (record) => record.subagentType === subagentType,
       )
-      if (outcomes.length < options.minSamples) {
+      if (outcomes.length < minSamples) {
         return
       }
       const failed = outcomes.filter((record) => record.status === "failed").length
       const failureRate = failed / outcomes.length
-      if (failureRate < options.highFailureRate) {
+      if (failureRate < highFailureRate) {
         return
       }
       const currentCategory =
         String(args.category ?? "balanced").toLowerCase().trim() || "balanced"
+      const protectedCategories = new Set(
+        Array.isArray(policy.protectCategories)
+          ? policy.protectCategories.map((item) => String(item).toLowerCase().trim()).filter(Boolean)
+          : [],
+      )
       const adaptedCategory =
+        protectedCategories.has(currentCategory)
+          ? currentCategory
+          :
         currentCategory === "critical" || currentCategory === "deep"
           ? "balanced"
           : currentCategory
@@ -92,10 +110,13 @@ export function createDelegationOutcomeLearnerHook(options: {
         stage: "state",
         reason_code: "delegation_policy_adapted_from_outcomes",
         session_id: sessionId(eventPayload),
+        trace_id: traceId,
         subagent_type: subagentType,
         failures: String(failed),
         samples: String(outcomes.length),
         failure_rate: String(failureRate),
+        min_samples: String(minSamples),
+        high_failure_rate: String(highFailureRate),
         original_category: currentCategory,
         adapted_category: adaptedCategory,
       })

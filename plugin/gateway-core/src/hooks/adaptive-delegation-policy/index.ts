@@ -4,6 +4,7 @@ import {
   getDelegationFailureStats,
   getRecentDelegationOutcomes,
 } from "../shared/delegation-runtime-state.js"
+import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
 
 interface ToolPayload {
   input?: {
@@ -66,6 +67,7 @@ export function createAdaptiveDelegationPolicyHook(options: {
       if (!args || typeof args !== "object") {
         return
       }
+      const traceId = resolveDelegationTraceId(args)
       const category = String(args.category ?? "balanced").toLowerCase().trim() || "balanced"
       const sid = sessionId(eventPayload)
       const directory =
@@ -84,6 +86,7 @@ export function createAdaptiveDelegationPolicyHook(options: {
           stage: "state",
           reason_code: "adaptive_policy_cooldown_started",
           session_id: sid,
+          trace_id: traceId,
           sample_total: String(stats.total),
           sample_failed: String(stats.failed),
           failure_rate: String(stats.failureRate),
@@ -102,6 +105,7 @@ export function createAdaptiveDelegationPolicyHook(options: {
           stage: "guard",
           reason_code: "adaptive_policy_expensive_delegation_blocked",
           session_id: sid,
+          trace_id: traceId,
           category,
           cooldown_until: String(cooldownUntil),
         })
@@ -119,6 +123,7 @@ export function createAdaptiveDelegationPolicyHook(options: {
         stage: "state",
         reason_code: "adaptive_policy_hint_injected",
         session_id: sid,
+        trace_id: traceId,
         category,
         recent_outcomes: String(recent.length),
         cooldown_until: String(cooldownUntil),

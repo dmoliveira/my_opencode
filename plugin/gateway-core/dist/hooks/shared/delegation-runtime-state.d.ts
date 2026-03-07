@@ -3,6 +3,7 @@ export interface DelegationStartInput {
     subagentType: string;
     category: string;
     startedAt: number;
+    traceId?: string;
 }
 export interface DelegationOutcomeInput {
     sessionId: string;
@@ -19,7 +20,14 @@ export interface DelegationOutcomeRecord {
     startedAt: number;
     endedAt: number;
     durationMs: number;
+    traceId?: string;
 }
+export declare function configureDelegationRuntimeState(options: {
+    directory: string;
+    persistState: boolean;
+    stateFile: string;
+    stateMaxEntries: number;
+}): void;
 export declare function registerDelegationStart(input: DelegationStartInput): void;
 export declare function registerDelegationOutcome(input: DelegationOutcomeInput, maxEntries: number): DelegationOutcomeRecord | null;
 export declare function clearDelegationSession(sessionId: string): void;
