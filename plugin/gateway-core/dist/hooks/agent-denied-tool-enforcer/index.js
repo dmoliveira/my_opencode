@@ -21,6 +21,26 @@ function referencesDeniedTool(text, tool) {
     }
     return new RegExp(`\\b${tool}\\b`, "i").test(text);
 }
+const MUTATING_INTENT_RULES = [
+    { label: "git_commit", pattern: /\bgit\s+commit\b|\bcommit\s+(changes?|code|files?)\b/i },
+    {
+        label: "pull_request",
+        pattern: /\b(create|open|file|submit|merge|close|update)\s+(a\s+)?(pr|pull\s*request)\b|\bgh\s+pr\s+(create|merge)\b/i,
+    },
+    { label: "git_push", pattern: /\bgit\s+push\b|\bpush\s+(to\s+)?(origin|remote)\b/i },
+    { label: "git_rewrite", pattern: /\bgit\s+(rebase|cherry-pick|reset|amend)\b/i },
+    {
+        label: "code_edit",
+        pattern: /\b(edit|modify|rewrite|refactor|implement|apply\s+patch|write)\s+(the\s+)?(code|file|files|docs?|documentation)\b/i,
+    },
+];
+const MUTATION_TOOL_MARKERS = new Set(["bash", "write", "edit", "task"]);
+function detectMutatingIntent(text) {
+    return MUTATING_INTENT_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.label);
+}
+function enforcesReadOnlySurface(deniedTools) {
+    return deniedTools.some((tool) => MUTATION_TOOL_MARKERS.has(String(tool).toLowerCase().trim()));
+}
 function collectStrings(value, depth = 0) {
     if (depth > 4) {
         return [];
@@ -91,6 +111,19 @@ export function createAgentDeniedToolEnforcerHook(options) {
                 prompt: args.prompt,
                 description: args.description,
             }).join("\n");
+            const mutatingSignals = detectMutatingIntent(combinedText);
+            if (mutatingSignals.length > 0 && enforcesReadOnlySurface(denied)) {
+                writeGatewayEventAudit(directory, {
+                    hook: "agent-denied-tool-enforcer",
+                    stage: "guard",
+                    reason_code: "delegation_mutation_intent_blocked",
+                    session_id: sessionId(eventPayload),
+                    trace_id: traceId,
+                    subagent_type: subagentType,
+                    mutating_signals: mutatingSignals.join(","),
+                });
+                throw new Error(`Blocked task delegation for ${subagentType}: prompt requests mutating work (${mutatingSignals.join(", ")}) but this subagent is read-only. Run commit/PR/edit actions directly with the primary agent.`);
+            }
             const violating = denied.filter((deniedTool) => referencesDeniedTool(combinedText, String(deniedTool).toLowerCase().trim()));
             if (violating.length === 0) {
                 return;

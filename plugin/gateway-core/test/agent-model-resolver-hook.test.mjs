@@ -113,3 +113,18 @@ test("agent-model-resolver preserves explicit category and injects tool surface"
   assert.match(output.args.prompt, /allowed=/)
   assert.match(output.args.prompt, /denied=/)
 })
+
+test("agent-model-resolver blocks mutating delegation intents for read-only subagents", async () => {
+  const plugin = createPlugin(REPO_DIRECTORY)
+  const output = {
+    args: {
+      prompt: "Create a repository commit and open a pull request with these edits.",
+      description: "Update docs file content and push changes.",
+    },
+  }
+
+  await assert.rejects(
+    plugin["tool.execute.before"]({ tool: "task", sessionID: "session-mutation-block" }, output),
+    /mutating work.*read-only/i,
+  )
+})
