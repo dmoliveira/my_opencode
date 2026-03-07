@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 
@@ -21,12 +24,28 @@ function hasReservation(envKeys: string[]): boolean {
   return false
 }
 
+interface ReservationState {
+  reservationActive?: boolean
+  active?: boolean
+}
+
+function readReservationState(directory: string, stateFile: string): ReservationState {
+  try {
+    const content = readFileSync(resolve(directory, stateFile), "utf-8")
+    const parsed = JSON.parse(content)
+    return parsed && typeof parsed === "object" ? (parsed as ReservationState) : {}
+  } catch {
+    return {}
+  }
+}
+
 // Creates reservation guard for multi-agent file edit coordination.
 export function createAgentReservationGuardHook(options: {
   directory: string
   enabled: boolean
   enforce: boolean
   reservationEnvKeys: string[]
+  stateFile: string
 }): GatewayHook {
   return {
     id: "agent-reservation-guard",
@@ -40,13 +59,17 @@ export function createAgentReservationGuardHook(options: {
       if (tool !== "write" && tool !== "edit" && tool !== "apply_patch") {
         return
       }
-      if (hasReservation(options.reservationEnvKeys)) {
-        return
-      }
       const directory =
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
+      const state = readReservationState(directory, options.stateFile)
+      const activeFromState =
+        state.reservationActive === true ||
+        state.active === true
+      if (hasReservation(options.reservationEnvKeys) || activeFromState) {
+        return
+      }
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
       writeGatewayEventAudit(directory, {
         hook: "agent-reservation-guard",

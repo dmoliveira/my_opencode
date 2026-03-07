@@ -704,6 +704,10 @@ export function loadGatewayConfig(raw) {
             reservationEnvKeys: agentReservationSource.reservationEnvKeys === undefined
                 ? DEFAULT_GATEWAY_CONFIG.agentReservationGuard.reservationEnvKeys
                 : stringList(agentReservationSource.reservationEnvKeys),
+            stateFile: typeof agentReservationSource.stateFile === "string" &&
+                agentReservationSource.stateFile.trim()
+                ? agentReservationSource.stateFile.trim()
+                : DEFAULT_GATEWAY_CONFIG.agentReservationGuard.stateFile,
         },
         subagentQuestionBlocker: {
             enabled: typeof subagentQuestionSource.enabled === "boolean"
@@ -1056,6 +1060,10 @@ export function loadGatewayConfig(raw) {
                 ? parallelWriterConflictSource.enforceReservationCoverage
                 : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard
                     .enforceReservationCoverage,
+            stateFile: typeof parallelWriterConflictSource.stateFile === "string" &&
+                parallelWriterConflictSource.stateFile.trim()
+                ? parallelWriterConflictSource.stateFile.trim()
+                : DEFAULT_GATEWAY_CONFIG.parallelWriterConflictGuard.stateFile,
         },
         secretCommitGuard: {
             enabled: typeof secretCommitSource.enabled === "boolean"

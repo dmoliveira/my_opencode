@@ -36,12 +36,22 @@ const NEGATED_MUTATION_PATTERNS = [
     /\b(no\s+file\s+edits?|without\s+file\s+edits?|no\s+code\s+changes?|without\s+code\s+changes?)\b/gi,
     /\b(read-?only|non-?mutating)\b/gi,
 ];
+const EPHEMERAL_ARTIFACT_HINT_PATTERN = /\b(--output\b|runtime\/|\/tmp\b|temp\b|sqlite\b|\.db\b|\.log\b|artifact\b|cache\b|generated\b)\b/i;
 function detectMutatingIntent(text) {
     const normalized = NEGATED_MUTATION_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, " "), text);
     return MUTATING_INTENT_RULES.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.label);
 }
 function enforcesReadOnlySurface(deniedTools) {
     return deniedTools.some((tool) => MUTATION_TOOL_MARKERS.has(String(tool).toLowerCase().trim()));
+}
+function allowsEphemeralVerifierIntent(subagentType, text, signals) {
+    if (subagentType !== "verifier") {
+        return false;
+    }
+    if (signals.some((label) => label !== "code_edit")) {
+        return false;
+    }
+    return EPHEMERAL_ARTIFACT_HINT_PATTERN.test(text);
 }
 function collectStrings(value, depth = 0) {
     if (depth > 4) {
@@ -114,7 +124,9 @@ export function createAgentDeniedToolEnforcerHook(options) {
                 description: args.description,
             }).join("\n");
             const mutatingSignals = detectMutatingIntent(combinedText);
-            if (mutatingSignals.length > 0 && enforcesReadOnlySurface(denied)) {
+            if (mutatingSignals.length > 0 &&
+                enforcesReadOnlySurface(denied) &&
+                !allowsEphemeralVerifierIntent(subagentType, combinedText, mutatingSignals)) {
                 writeGatewayEventAudit(directory, {
                     hook: "agent-denied-tool-enforcer",
                     stage: "guard",

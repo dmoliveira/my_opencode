@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process"
+
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 
@@ -31,6 +33,60 @@ function isPrMerge(command: string): boolean {
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command: string): boolean {
   return /\bgit\s+pull\s+--rebase\b/i.test(command)
+}
+
+function currentBranch(directory: string): string {
+  try {
+    return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: directory,
+      encoding: "utf-8",
+    }).trim()
+  } catch {
+    return ""
+  }
+}
+
+function mainWorktreePath(directory: string): string {
+  try {
+    const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      cwd: directory,
+      encoding: "utf-8",
+    })
+    const blocks = output
+      .split(/\n\n+/)
+      .map((block) => block.trim())
+      .filter(Boolean)
+    for (const block of blocks) {
+      const lines = block.split(/\r?\n/)
+      const worktreeLine = lines.find((line) => line.startsWith("worktree "))
+      const branchLine = lines.find((line) => line.startsWith("branch "))
+      if (!worktreeLine || !branchLine) {
+        continue
+      }
+      const branchRef = branchLine.replace(/^branch\s+/, "").trim()
+      if (branchRef === "refs/heads/main") {
+        return worktreeLine.replace(/^worktree\s+/, "").trim()
+      }
+    }
+  } catch {
+    return ""
+  }
+  return ""
+}
+
+function resolveReminderCommands(directory: string, defaults: string[]): string[] {
+  const branch = currentBranch(directory)
+  const mainPath = mainWorktreePath(directory)
+  if (!mainPath) {
+    return defaults
+  }
+  if (branch === "main") {
+    return ["git pull --rebase"]
+  }
+  if (mainPath !== directory) {
+    return [`git -C "${mainPath}" pull --rebase`]
+  }
+  return defaults
 }
 
 // Creates post-merge sync guard with cleanup enforcement and reminder injection.
@@ -107,7 +163,8 @@ export function createPostMergeSyncGuardHook(options: {
       if (reminderCommands.length === 0) {
         return
       }
-      const reminder = `\n\n[post-merge-sync-guard] Merge complete. Run cleanup sync:\n${reminderCommands.map((cmd) => `- ${cmd}`).join("\n")}`
+      const recommendedCommands = resolveReminderCommands(directory, reminderCommands)
+      const reminder = `\n\n[post-merge-sync-guard] Merge complete. Run cleanup sync:\n${recommendedCommands.map((cmd) => `- ${cmd}`).join("\n")}`
       toolOutput.output = `${toolOutput.output}${reminder}`
       writeGatewayEventAudit(directory, {
         hook: "post-merge-sync-guard",

@@ -210,8 +210,48 @@ function normalizeToolList(value: unknown): string[] {
 
 const MUTATION_TOOL_MARKERS = new Set(["bash", "write", "edit", "task"])
 
-const MUTATING_DELEGATION_INTENT_PATTERN =
-  /\bgit\s+commit\b|\bcommit\s+(changes?|code|files?)\b|\b(create|open|file|submit|merge|close|update)\s+(a\s+)?(pr|pull\s*request)\b|\bgh\s+pr\s+(create|merge)\b|\bgit\s+push\b|\bpush\s+(to\s+)?(origin|remote)\b|\bgit\s+(rebase|cherry-pick|reset|amend)\b|\b(edit|modify|rewrite|refactor|implement|apply\s+patch|write)\s+(the\s+)?(code|file|files|docs?|documentation)\b/i
+const MUTATING_INTENT_RULES: Array<{ label: string; pattern: RegExp }> = [
+  { label: "git_commit", pattern: /\bgit\s+commit\b|\bcommit\s+(changes?|code|files?)\b/i },
+  {
+    label: "pull_request",
+    pattern:
+      /\b(create|open|file|submit|merge|close|update)\s+(a\s+)?(pr|pull\s*request)\b|\bgh\s+pr\s+(create|merge)\b/i,
+  },
+  { label: "git_push", pattern: /\bgit\s+push\b|\bpush\s+(to\s+)?(origin|remote)\b/i },
+  { label: "git_rewrite", pattern: /\bgit\s+(rebase|cherry-pick|reset|amend)\b/i },
+  {
+    label: "code_edit",
+    pattern:
+      /\b(edit|modify|rewrite|refactor|implement|apply\s+patch|write)\s+(the\s+)?(code|file|files|docs?|documentation)\b/i,
+  },
+]
+
+const NEGATED_MUTATION_PATTERNS: RegExp[] = [
+  /\b(without|do\s+not|don't|avoid|no)\s+(editing|edits?|modifying|changes?|rewriting|refactoring|implementing|writing)\s+(the\s+)?(code|file|files|docs?|documentation)\b/gi,
+  /\b(no\s+file\s+edits?|without\s+file\s+edits?|no\s+code\s+changes?|without\s+code\s+changes?)\b/gi,
+  /\b(read-?only|non-?mutating)\b/gi,
+]
+
+const EPHEMERAL_ARTIFACT_HINT_PATTERN =
+  /\b(--output\b|runtime\/|\/tmp\b|temp\b|sqlite\b|\.db\b|\.log\b|artifact\b|cache\b|generated\b)\b/i
+
+function detectMutatingIntent(text: string): string[] {
+  const normalized = NEGATED_MUTATION_PATTERNS.reduce(
+    (acc, pattern) => acc.replace(pattern, " "),
+    text,
+  )
+  return MUTATING_INTENT_RULES.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.label)
+}
+
+function allowsEphemeralVerifierIntent(subagentType: string, text: string, signals: string[]): boolean {
+  if (subagentType !== "verifier") {
+    return false
+  }
+  if (signals.some((label) => label !== "code_edit")) {
+    return false
+  }
+  return EPHEMERAL_ARTIFACT_HINT_PATTERN.test(text)
+}
 
 function enforcesReadOnlySurface(deniedTools: string[]): boolean {
   return deniedTools.some((tool) => MUTATION_TOOL_MARKERS.has(String(tool).toLowerCase().trim()))
@@ -327,7 +367,12 @@ export function createAgentModelResolverHook(options: {
 
       const metadata = metadataByAgent.get(subagentType)
       const deniedTools = normalizeToolList(metadata?.denied_tools)
-      if (MUTATING_DELEGATION_INTENT_PATTERN.test(combinedText) && enforcesReadOnlySurface(deniedTools)) {
+      const mutatingSignals = detectMutatingIntent(combinedText)
+      if (
+        mutatingSignals.length > 0 &&
+        enforcesReadOnlySurface(deniedTools) &&
+        !allowsEphemeralVerifierIntent(subagentType, combinedText, mutatingSignals)
+      ) {
         writeGatewayEventAudit(directory, {
           hook: "agent-model-resolver",
           stage: "guard",
@@ -335,6 +380,7 @@ export function createAgentModelResolverHook(options: {
           session_id: sid,
           trace_id: traceId,
           subagent_type: subagentType,
+          mutating_signals: mutatingSignals.join(","),
           route_source: routeSource,
         })
         throw new Error(
@@ -378,13 +424,17 @@ export function createAgentModelResolverHook(options: {
         .filter((part) => part.length > 0)
         .join("\n")
       const flowHint = formatHeader("SESSION FLOW", `parent_session_id=${sid || "unknown"}; trace_id=${traceId}`)
+      const worktreeHint = formatHeader(
+        "WORKTREE CONTEXT",
+        `cwd=${directory}; execute file discovery and validation relative to this path unless prompt explicitly overrides.`,
+      )
       const subagentLabel = formatSubagentLabel(subagentType, model.reasoning, stamp.full)
 
       const cleanPrompt = stripInjectedHeaders(String(args.prompt ?? ""))
       const cleanDescription = stripInjectedHeaders(String(args.description ?? ""))
-      args.prompt = prependHint(prependHint(cleanPrompt, flowHint), composedPromptHint)
+      args.prompt = prependHint(prependHint(prependHint(cleanPrompt, worktreeHint), flowHint), composedPromptHint)
       args.description = prependHint(
-        prependHint(prependHint(cleanDescription, composedDescriptionHint), flowHint),
+        prependHint(prependHint(prependHint(cleanDescription, composedDescriptionHint), worktreeHint), flowHint),
         subagentLabel,
       )
 

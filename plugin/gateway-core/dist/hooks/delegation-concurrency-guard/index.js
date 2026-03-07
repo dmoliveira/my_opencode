@@ -1,10 +1,22 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
+import { extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+function delegationKey(sid, traceId) {
+    return traceId ? `${sid}:${traceId}` : sid;
+}
+function firstSessionDelegationKey(activeByDelegation, sid) {
+    for (const key of activeByDelegation.keys()) {
+        if (key === sid || key.startsWith(`${sid}:`)) {
+            return key;
+        }
+    }
+    return "";
+}
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
 export function createDelegationConcurrencyGuardHook(options) {
-    const activeBySession = new Map();
+    const activeByDelegation = new Map();
     return {
         id: "delegation-concurrency-guard",
         priority: 319,
@@ -15,7 +27,11 @@ export function createDelegationConcurrencyGuardHook(options) {
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
-                    activeBySession.delete(sid);
+                    for (const key of activeByDelegation.keys()) {
+                        if (key === sid || key.startsWith(`${sid}:`)) {
+                            activeByDelegation.delete(key);
+                        }
+                    }
                 }
                 return;
             }
@@ -26,7 +42,17 @@ export function createDelegationConcurrencyGuardHook(options) {
                 }
                 const sid = sessionId(eventPayload);
                 if (sid) {
-                    activeBySession.delete(sid);
+                    const traceId = extractDelegationTraceId(eventPayload.output?.args);
+                    if (traceId) {
+                        const key = delegationKey(sid, traceId);
+                        activeByDelegation.delete(key);
+                    }
+                    else {
+                        const fallbackKey = firstSessionDelegationKey(activeByDelegation, sid);
+                        if (fallbackKey) {
+                            activeByDelegation.delete(fallbackKey);
+                        }
+                    }
                 }
                 return;
             }
@@ -48,6 +74,8 @@ export function createDelegationConcurrencyGuardHook(options) {
             }
             const subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
             const category = String(args.category ?? "").toLowerCase().trim();
+            const traceId = resolveDelegationTraceId(args ?? {});
+            const key = delegationKey(sid, traceId);
             if (!subagentType && !category) {
                 return;
             }
@@ -58,7 +86,7 @@ export function createDelegationConcurrencyGuardHook(options) {
             const costTier = String(metadata?.cost_tier ?? "cheap").toLowerCase();
             const fallbackCategory = category.length > 0 ? category : "balanced";
             const recommendedCategory = String(metadata?.default_category ?? fallbackCategory).toLowerCase();
-            const values = [...activeBySession.values()];
+            const values = [...activeByDelegation.values()];
             const total = values.length;
             const expensive = values.filter((item) => item.costTier === "expensive").length;
             const deep = values.filter((item) => item.category === "deep").length;
@@ -103,16 +131,18 @@ export function createDelegationConcurrencyGuardHook(options) {
                 });
                 throw new Error(`Blocked delegation: critical concurrent delegations ${critical} reached maxCriticalConcurrent=${options.maxCriticalConcurrent}.`);
             }
-            activeBySession.set(sid, {
+            activeByDelegation.set(key, {
                 subagentType,
                 category: recommendedCategory,
                 costTier,
+                traceId,
             });
             writeGatewayEventAudit(directory, {
                 hook: "delegation-concurrency-guard",
                 stage: "state",
                 reason_code: "delegation_concurrency_reserved",
                 session_id: sid,
+                trace_id: traceId || undefined,
                 subagent_type: subagentType || undefined,
                 category: recommendedCategory,
                 cost_tier: costTier,

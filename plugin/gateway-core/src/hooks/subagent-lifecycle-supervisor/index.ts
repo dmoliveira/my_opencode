@@ -1,5 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import {
+  extractDelegationTraceId,
+  resolveDelegationTraceId,
+} from "../shared/delegation-trace.js"
 
 interface ToolPayload {
   input?: {
@@ -35,6 +39,10 @@ interface LifecycleState {
   lastReasonCode?: string
 }
 
+function lifecycleKey(sid: string, traceId: string): string {
+  return traceId ? `${sid}:${traceId}` : sid
+}
+
 function sessionId(payload: {
   input?: { sessionID?: string; sessionId?: string }
   properties?: { info?: { id?: string } }
@@ -59,7 +67,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
   staleRunningMs: number
   blockOnExhausted: boolean
 }): GatewayHook {
-  const bySession = new Map<string, LifecycleState>()
+  const byDelegation = new Map<string, LifecycleState>()
 
   return {
     id: "subagent-lifecycle-supervisor",
@@ -71,7 +79,11 @@ export function createSubagentLifecycleSupervisorHook(options: {
       if (type === "session.deleted") {
         const sid = sessionId((payload ?? {}) as SessionDeletedPayload)
         if (sid) {
-          bySession.delete(sid)
+          for (const key of byDelegation.keys()) {
+            if (key === sid || key.startsWith(`${sid}:`)) {
+              byDelegation.delete(key)
+            }
+          }
         }
         return
       }
@@ -88,11 +100,13 @@ export function createSubagentLifecycleSupervisorHook(options: {
         if (!subagentType) {
           return
         }
+        const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {})
+        const key = lifecycleKey(sid, traceId)
         const directory =
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
             : options.directory
-        const existing = bySession.get(sid)
+        const existing = byDelegation.get(key)
         const now = nowMs()
         if (existing && existing.status === "running" && now - existing.lastStartedAt < options.staleRunningMs) {
           writeGatewayEventAudit(directory, {
@@ -100,6 +114,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
             stage: "guard",
             reason_code: "subagent_lifecycle_duplicate_running_blocked",
             session_id: sid,
+            trace_id: traceId || undefined,
             subagent_type: subagentType,
           })
           throw new Error(
@@ -117,6 +132,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
             stage: "guard",
             reason_code: "subagent_lifecycle_retry_exhausted_blocked",
             session_id: sid,
+            trace_id: traceId || undefined,
             subagent_type: subagentType,
             failure_count: String(existing.failureCount),
           })
@@ -125,7 +141,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           )
         }
         const nextFailureCount = existing?.status === "failed" ? existing.failureCount : 0
-        bySession.set(sid, {
+        byDelegation.set(key, {
           subagentType,
           status: "running",
           failureCount: nextFailureCount,
@@ -138,6 +154,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           stage: "state",
           reason_code: "subagent_lifecycle_started",
           session_id: sid,
+          trace_id: traceId || undefined,
           subagent_type: subagentType,
           failure_count: String(nextFailureCount),
         })
@@ -154,7 +171,21 @@ export function createSubagentLifecycleSupervisorHook(options: {
       if (!sid) {
         return
       }
-      const state = bySession.get(sid)
+      const traceId = extractDelegationTraceId(eventPayload.output?.args)
+      const key = lifecycleKey(sid, traceId)
+      let activeKey = key
+      let state = byDelegation.get(activeKey)
+      if (!state) {
+        if (!traceId) {
+          for (const candidate of byDelegation.keys()) {
+            if (candidate === sid || candidate.startsWith(`${sid}:`)) {
+              activeKey = candidate
+              state = byDelegation.get(candidate)
+              break
+            }
+          }
+        }
+      }
       if (!state) {
         return
       }
@@ -165,7 +196,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
       const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
       if (isFailureOutput(outputText)) {
         const failedCount = state.failureCount + 1
-        bySession.set(sid, {
+        byDelegation.set(activeKey, {
           ...state,
           status: "failed",
           failureCount: failedCount,
@@ -177,6 +208,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           stage: "state",
           reason_code: "subagent_lifecycle_failed",
           session_id: sid,
+          trace_id: traceId || undefined,
           subagent_type: state.subagentType,
           failure_count: String(failedCount),
         })
@@ -185,7 +217,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
         }
         return
       }
-      bySession.set(sid, {
+      byDelegation.set(activeKey, {
         ...state,
         status: "completed",
         lastUpdatedAt: nowMs(),
@@ -196,10 +228,11 @@ export function createSubagentLifecycleSupervisorHook(options: {
         stage: "state",
         reason_code: "subagent_lifecycle_completed",
         session_id: sid,
+        trace_id: traceId || undefined,
         subagent_type: state.subagentType,
         failure_count: String(state.failureCount),
       })
-      bySession.delete(sid)
+      byDelegation.delete(activeKey)
     },
   }
 }

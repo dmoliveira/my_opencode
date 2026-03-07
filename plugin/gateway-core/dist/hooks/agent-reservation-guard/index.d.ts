@@ -4,4 +4,5 @@ export declare function createAgentReservationGuardHook(options: {
     enabled: boolean;
     enforce: boolean;
     reservationEnvKeys: string[];
+    stateFile: string;
 }): GatewayHook;

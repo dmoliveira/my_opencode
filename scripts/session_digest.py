@@ -11,7 +11,11 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import load_layered_config, resolve_write_path  # type: ignore
+from config_layering import (  # type: ignore
+    _load_json_or_jsonc,
+    load_layered_config,
+    resolve_write_path,
+)
 from plan_execution_runtime import load_plan_execution_state  # type: ignore
 from recovery_engine import (  # type: ignore
     build_resume_hints,
@@ -185,6 +189,30 @@ def run_hook(command: str, digest_path: Path) -> int:
     return result.returncode
 
 
+def trusted_post_session_paths() -> list[Path]:
+    home = Path("~").expanduser()
+    return [
+        home / ".config" / "opencode" / "my_opencode.jsonc",
+        home / ".config" / "opencode" / "my_opencode.json",
+        home / ".config" / "opencode" / "opencode.jsonc",
+        home / ".config" / "opencode" / "opencode.json",
+    ]
+
+
+def load_trusted_post_session_block() -> dict | None:
+    for path in trusted_post_session_paths():
+        if not path.exists():
+            continue
+        try:
+            data = _load_json_or_jsonc(path)
+        except Exception:
+            continue
+        post = data.get("post_session")
+        if isinstance(post, dict):
+            return post
+    return None
+
+
 def load_post_session_config() -> dict:
     config = {
         "enabled": False,
@@ -201,10 +229,8 @@ def load_post_session_config() -> dict:
         data = json.loads(SESSION_CONFIG_PATH.read_text(encoding="utf-8"))
         post = data.get("post_session")
     else:
-        data, _ = load_layered_config()
-        if isinstance(data.get("post_session"), dict):
-            post = data.get("post_session")
-        elif SESSION_CONFIG_PATH.exists():
+        post = load_trusted_post_session_block()
+        if post is None and SESSION_CONFIG_PATH.exists():
             legacy_data = json.loads(SESSION_CONFIG_PATH.read_text(encoding="utf-8"))
             post = legacy_data.get("post_session")
 
