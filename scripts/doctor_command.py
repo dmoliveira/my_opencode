@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CHECK_TIMEOUT_SECONDS = 30
 
 
 def script_path(name: str) -> Path:
@@ -627,13 +628,29 @@ def run_check(entry: dict) -> dict:
                 "skip_reason": f"optional check unavailable: {required}",
             }
 
-    result = subprocess.run(
-        entry["command"],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=os.environ.copy(),
-    )
+    timeout_seconds = int(entry.get("timeout_seconds") or DEFAULT_CHECK_TIMEOUT_SECONDS)
+    try:
+        result = subprocess.run(
+            entry["command"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=os.environ.copy(),
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = str(exc.stdout or "").strip()
+        stderr = str(exc.stderr or "").strip()
+        return {
+            "name": entry["name"],
+            "kind": entry["kind"],
+            "exit_code": -1,
+            "ok": False,
+            "stdout": stdout,
+            "stderr": stderr,
+            "timeout_seconds": timeout_seconds,
+            "timeout": True,
+        }
 
     stdout = result.stdout.strip()
     stderr = result.stderr.strip()
@@ -652,6 +669,8 @@ def run_check(entry: dict) -> dict:
             parsed = json.loads(stdout)
             item["report"] = parsed
             item["report_result"] = parsed.get("result")
+            if str(item.get("report_result") or "").upper() != "PASS":
+                item["ok"] = False
         except Exception as exc:
             item["ok"] = False
             item["parse_error"] = str(exc)

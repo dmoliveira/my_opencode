@@ -151,6 +151,18 @@ interface CommandBeforeOutput {
   parts?: Array<{ type: string; text?: string }>;
 }
 
+// Declares minimal command execute after input shape.
+interface CommandAfterInput {
+  command: string;
+  arguments?: string;
+  sessionID?: string;
+}
+
+// Declares minimal command execute after mutable output shape.
+interface CommandAfterOutput {
+  output?: unknown;
+}
+
 const DISPATCH_NOISY_EVENTS = new Set([
   "message.part.delta",
   "message.part.updated",
@@ -742,6 +754,10 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     input: CommandBeforeInput,
     output: CommandBeforeOutput,
   ): Promise<void>;
+  "command.execute.after"(
+    input: CommandAfterInput,
+    output: CommandAfterOutput,
+  ): Promise<void>;
   "tool.execute.after"(
     input: ToolAfterInput,
     output: ToolAfterOutput,
@@ -834,6 +850,25 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     }
   }
 
+  // Dispatches command post-execution event to ordered hooks.
+  async function commandExecuteAfter(
+    input: CommandAfterInput,
+    output: CommandAfterOutput,
+  ): Promise<void> {
+    writeGatewayEventAudit(directory, {
+      hook: "gateway-core",
+      stage: "dispatch",
+      reason_code: "command_execute_after_dispatch",
+      event_type: "command.execute.after",
+      command: input.command,
+      hook_count: hooks.length,
+      has_output: output.output !== undefined,
+    });
+    for (const hook of hooks) {
+      await hook.event("command.execute.after", { input, output, directory });
+    }
+  }
+
   // Dispatches slash command post-execution event to ordered hooks.
   async function toolExecuteAfter(
     input: ToolAfterInput,
@@ -915,6 +950,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     event,
     "tool.execute.before": toolExecuteBefore,
     "command.execute.before": commandExecuteBefore,
+    "command.execute.after": commandExecuteAfter,
     "tool.execute.after": toolExecuteAfter,
     "chat.message": chatMessage,
     "experimental.chat.messages.transform": chatMessagesTransform,

@@ -175,11 +175,23 @@ def summarize(events: list[dict[str, Any]], minutes: int) -> dict[str, Any]:
 
 def command_status(args: Args) -> int:
     events = load_events(args.path)
+    summary = summarize(events, args.minutes)
+    warnings: list[str] = []
+    if not args.path.exists():
+        warnings.append("delegation audit path does not exist")
+    if summary["events_in_window"] == 0:
+        warnings.append("no delegation events found in selected window")
+    result = "WARN" if warnings else "PASS"
     payload = {
-        "result": "PASS",
+        "result": result,
         "path": str(args.path),
         "exists": args.path.exists(),
-        "summary": summarize(events, args.minutes),
+        "warnings": warnings,
+        "summary": summary,
+        "quick_fixes": [
+            "set MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 and rerun your workflow",
+            "rerun /delegation-health status --minutes 120 --json after delegated runs",
+        ],
     }
     if args.json_output:
         print(json.dumps(payload, indent=2))
@@ -192,6 +204,10 @@ def command_status(args: Args) -> int:
     print(f"events_total: {summary['events_total']}")
     print(f"events_in_window: {summary['events_in_window']}")
     print(f"window_minutes: {summary['window_minutes']}")
+    if warnings:
+        print("warnings:")
+        for item in warnings:
+            print(f"- {item}")
     print("top_reasons:")
     for item in summary["top_reasons"][:8]:
         print(f"- {item['reason_code']}: {item['count']}")
@@ -229,7 +245,7 @@ def command_doctor(args: Args) -> int:
     if risk_counts.get("delegation_fallback_applied", 0) > 3:
         problems.append("high fallback frequency suggests unstable delegation routing")
 
-    result = "FAIL" if problems else "PASS"
+    result = "FAIL" if problems else ("WARN" if warnings else "PASS")
     payload = {
         "result": result,
         "path": str(args.path),
@@ -237,6 +253,11 @@ def command_doctor(args: Args) -> int:
         "problems": problems,
         "warnings": warnings,
         "summary": summary,
+        "quick_fixes": [
+            "set MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 and rerun delegated tasks",
+            "check /gateway doctor --json for process-pressure or guard anomalies",
+            "rerun /delegation-health doctor --minutes 120 --json",
+        ],
     }
     if args.json_output:
         print(json.dumps(payload, indent=2))
@@ -250,7 +271,7 @@ def command_doctor(args: Args) -> int:
             print(f"- problem: {item}")
         for item in warnings:
             print(f"- warning: {item}")
-    return 0 if result == "PASS" else 1
+    return 0 if result != "FAIL" else 1
 
 
 def main(argv: list[str]) -> int:

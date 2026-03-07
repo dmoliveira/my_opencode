@@ -34,6 +34,8 @@ Phase A recovery command (dry-run first):
 /gateway recover memory --apply --force-kill
 ```
 
+Dry-run output now includes a compact threshold summary (`candidate_mode`, `candidate_count`, and `policy_thresholds`) so operators can quickly see why recovery did or did not select targets.
+
 `recover memory` targets top `high_footprint` entries first on macOS (falls back to `high_rss`) and sends graceful `SIGTERM` before recommending escalation.
 When tmux pane mapping is available, recovery now sends `Ctrl+C` first, then falls back to `SIGTERM`, and only uses `SIGKILL` when pressure exceeds `memoryRecovery.forceKillMinPressureMb`.
 

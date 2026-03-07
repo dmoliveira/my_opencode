@@ -32,6 +32,37 @@ test("gateway event audit writes dispatch entries when enabled", async () => {
   }
 })
 
+test("gateway event audit writes command.execute.after dispatch entries", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({ directory, config: {} })
+    await plugin["command.execute.after"](
+      { command: "gateway", arguments: "doctor", sessionID: "session-1" },
+      { output: "ok" },
+    )
+
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const lines = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    const dispatch = lines.find(
+      (item) => item.reason_code === "command_execute_after_dispatch",
+    )
+    assert.equal(dispatch?.event_type, "command.execute.after")
+    assert.equal(dispatch?.command, "gateway")
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("gateway event audit samples noisy dispatch events", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
   const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

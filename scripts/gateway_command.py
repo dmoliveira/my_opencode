@@ -58,6 +58,97 @@ def emit(payload: dict[str, Any], *, as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
+def print_gateway_doctor_human(report: dict[str, Any]) -> None:
+    status_any = report.get("status")
+    status = status_any if isinstance(status_any, dict) else {}
+    process_any = status.get("process_pressure")
+    process = process_any if isinstance(process_any, dict) else {}
+    print(f"result: {report.get('result')}")
+    print(f"runtime_mode: {status.get('runtime_mode')}")
+    print(f"runtime_reason_code: {status.get('runtime_reason_code')}")
+    print(f"plugin_enabled: {'yes' if status.get('enabled') else 'no'}")
+    print(
+        "process_pressure: "
+        + f"opencode={int(process.get('opencode_process_count') or 0)} "
+        + f"continue={int(process.get('continue_process_count') or 0)} "
+        + f"max_pressure_mb={float(process.get('max_pressure_mb') or process.get('max_rss_mb') or 0):.1f}"
+    )
+
+    warnings_any = report.get("warnings")
+    warnings = warnings_any if isinstance(warnings_any, list) else []
+    problems_any = report.get("problems")
+    problems = problems_any if isinstance(problems_any, list) else []
+    fixes_any = report.get("quick_fixes")
+    fixes = fixes_any if isinstance(fixes_any, list) else []
+    remediations_any = report.get("remediation_commands")
+    remediations = remediations_any if isinstance(remediations_any, list) else []
+
+    print(f"problems: {len(problems)}")
+    for item in problems:
+        print(f"- problem: {item}")
+    print(f"warnings: {len(warnings)}")
+    for item in warnings:
+        print(f"- warning: {item}")
+    if remediations:
+        print("remediation_commands:")
+        for command in remediations:
+            print(f"- {command}")
+    if fixes:
+        print("quick_fixes:")
+        for item in fixes[:6]:
+            print(f"- {item}")
+
+
+def print_gateway_recover_human(payload: dict[str, Any]) -> None:
+    policy_any = payload.get("policy")
+    policy = policy_any if isinstance(policy_any, dict) else {}
+    print(f"result: {payload.get('result')}")
+    print(f"mode: {payload.get('mode')}")
+    print(f"candidate_mode: {payload.get('candidate_mode')}")
+    print(f"candidate_count: {int(payload.get('candidate_count') or 0)}")
+    print(
+        "policy_thresholds: "
+        + f"footprint>={float(policy.get('candidate_min_footprint_mb') or 0):.0f}MB "
+        + f"rss>={float(policy.get('candidate_min_rss_mb') or 0):.0f}MB "
+        + f"force_kill>={float(policy.get('force_kill_min_pressure_mb') or 0):.0f}MB"
+    )
+
+    aggregate_reason = str(payload.get("aggregate_reason") or "").strip()
+    emergency_reason = str(payload.get("emergency_reason") or "").strip()
+    if aggregate_reason:
+        print(f"aggregate_reason: {aggregate_reason}")
+    if emergency_reason:
+        print(f"emergency_reason: {emergency_reason}")
+
+    actions_any = payload.get("actions")
+    actions = actions_any if isinstance(actions_any, list) else []
+    if not actions:
+        print("actions: none")
+        print(
+            "hint: no candidates matched current thresholds; use /gateway recover memory --apply --force-kill only when pressure is critical"
+        )
+    else:
+        print(f"actions: {len(actions)}")
+        for item in actions[:8]:
+            if not isinstance(item, dict):
+                continue
+            pid = item.get("pid")
+            action = item.get("action")
+            result = item.get("result")
+            signal_name = item.get("signal")
+            print(
+                f"- pid={pid} action={action} result={result}"
+                + (f" signal={signal_name}" if signal_name else "")
+            )
+
+    next_steps_any = payload.get("next_steps")
+    next_steps = next_steps_any if isinstance(next_steps_any, list) else []
+    if next_steps:
+        print("next_steps:")
+        for step in next_steps:
+            print(f"- {step}")
+
+
 # Loads writable layered config data and path.
 def load_config() -> tuple[dict[str, Any], Path]:
     config, _ = load_layered_config()
@@ -794,6 +885,7 @@ def hook_diagnostics(pdir: Path) -> dict[str, Any]:
         "dist_hooks_exist": all(path.exists() for path in dist_hook_files),
         "dist_exposes_tool_execute_before": '"tool.execute.before"' in content,
         "dist_exposes_command_execute_before": '"command.execute.before"' in content,
+        "dist_exposes_command_execute_after": '"command.execute.after"' in content,
         "dist_exposes_chat_message": '"chat.message"' in content,
         "dist_exposes_messages_transform": '"experimental.chat.messages.transform"'
         in content,
@@ -826,6 +918,7 @@ def gateway_runtime_mode(
     required_dist_flags = [
         "dist_exposes_tool_execute_before",
         "dist_exposes_command_execute_before",
+        "dist_exposes_command_execute_after",
         "dist_exposes_chat_message",
         "dist_exposes_messages_transform",
         "dist_autopilot_handles_slashcommand",
@@ -979,6 +1072,7 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
     required_dist_flags = [
         "dist_exposes_tool_execute_before",
         "dist_exposes_command_execute_before",
+        "dist_exposes_command_execute_after",
         "dist_exposes_chat_message",
         "dist_exposes_messages_transform",
         "dist_autopilot_handles_slashcommand",
@@ -1132,6 +1226,10 @@ def command_doctor(as_json: bool) -> int:
 
     counters_any = status.get("guard_event_counters")
     counters = counters_any if isinstance(counters_any, dict) else {}
+    if status.get("event_audit_enabled") is not True:
+        warnings.append(
+            "gateway event audit is disabled; enable MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 for richer delegation and pressure diagnostics"
+        )
     critical_events_recent = int(
         counters.get("recent_global_process_pressure_critical_events") or 0
     )
@@ -1193,7 +1291,10 @@ def command_doctor(as_json: bool) -> int:
         "remediation_commands": remediation_commands,
         "manual_emergency_steps": manual_emergency_steps,
     }
-    emit(report, as_json=as_json)
+    if as_json:
+        emit(report, as_json=True)
+    else:
+        print_gateway_doctor_human(report)
     return 0 if not problems else 1
 
 
@@ -1706,7 +1807,7 @@ def command_recover_memory(
         return default
 
     candidate_min_footprint_mb = parse_float(
-        recovery.get("candidateMinFootprintMb"), 4000.0
+        recovery.get("candidateMinFootprintMb"), 6000.0
     )
     candidate_min_rss_mb = parse_float(recovery.get("candidateMinRssMb"), 1400.0)
     force_kill_min_pressure_mb = parse_float(
@@ -2290,7 +2391,10 @@ def command_recover_memory(
             "process_pressure": after_status.get("process_pressure"),
             "guard_event_counters": after_status.get("guard_event_counters"),
         }
-    emit(payload, as_json=as_json)
+    if as_json:
+        emit(payload, as_json=True)
+    else:
+        print_gateway_recover_human(payload)
     return 0
 
 

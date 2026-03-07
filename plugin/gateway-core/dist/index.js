@@ -668,6 +668,21 @@ export default function GatewayCorePlugin(ctx) {
             await hook.event("command.execute.before", { input, output, directory });
         }
     }
+    // Dispatches command post-execution event to ordered hooks.
+    async function commandExecuteAfter(input, output) {
+        writeGatewayEventAudit(directory, {
+            hook: "gateway-core",
+            stage: "dispatch",
+            reason_code: "command_execute_after_dispatch",
+            event_type: "command.execute.after",
+            command: input.command,
+            hook_count: hooks.length,
+            has_output: output.output !== undefined,
+        });
+        for (const hook of hooks) {
+            await hook.event("command.execute.after", { input, output, directory });
+        }
+    }
     // Dispatches slash command post-execution event to ordered hooks.
     async function toolExecuteAfter(input, output) {
         writeGatewayEventAudit(directory, {
@@ -729,6 +744,7 @@ export default function GatewayCorePlugin(ctx) {
         event,
         "tool.execute.before": toolExecuteBefore,
         "command.execute.before": commandExecuteBefore,
+        "command.execute.after": commandExecuteAfter,
         "tool.execute.after": toolExecuteAfter,
         "chat.message": chatMessage,
         "experimental.chat.messages.transform": chatMessagesTransform,
