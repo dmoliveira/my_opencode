@@ -87,7 +87,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/changes_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "workflow": {
-      "description": "Run reusable workflow templates (run|validate|list|status|resume|stop|template|doctor)",
+      "description": "Run the low-level reusable workflow engine (run|validate|list|status|resume|stop|template|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "daemon": {
@@ -95,11 +95,11 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/daemon_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "delivery": {
-      "description": "Run unified delivery transactions (start|status|handoff|close|doctor)",
+      "description": "Run the recommended day-to-day delivery flow (start|status|handoff|close|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delivery_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "do": {
-      "description": "Route high-level execution intent to autopilot go",
+      "description": "Shorthand alias for /autopilot go with a high-level goal",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/do_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "agent-pool": {
@@ -159,11 +159,11 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "autopilot": {
-      "description": "Continue current task autonomously with autopilot guardrails",
+      "description": "Run open-ended autonomous execution with autopilot guardrails",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
     "autoflow": {
-      "description": "Run deterministic plan execution flow (start|status|report|resume|doctor)",
+      "description": "Run the public deterministic plan-file execution flow (start|status|report|resume|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "continuation-stop": {
@@ -215,7 +215,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "plan": {
-      "description": "Run contract-enforced plan execution flows (run|status|doctor)",
+      "description": "Run the legacy/internal contract-checking plan wrapper (run|status|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "nvim": {
@@ -231,7 +231,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "notify": {
-      "description": "Manage notification controls (status|profile|enable|disable|channel)",
+      "description": "Manage notification controls and inbox feed (status|doctor|inbox|profile|enable|disable|channel|policy)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "session": {
@@ -239,7 +239,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "digest": {
-      "description": "Generate or show session digests (run|show)",
+      "description": "Generate or inspect session digests (run|show|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" $ARGUMENTS`\nShow only the command output."
     },
     "post-session": {

@@ -494,6 +494,24 @@ function contextParts(payload) {
     }
     return parts;
 }
+function notificationAuditFields(payload, content) {
+    const properties = payload.properties && typeof payload.properties === "object"
+        ? payload.properties
+        : {};
+    const input = payload.input && typeof payload.input === "object"
+        ? payload.input
+        : {};
+    const sessionId = firstPropertyText(properties, ["session_id", "sessionID", "sessionId"]) ||
+        firstPropertyText(input, ["sessionID", "sessionId"]);
+    const windowId = firstPropertyText(properties, ["window_id", "windowID", "windowId", "window"]) ||
+        firstPropertyText(input, ["windowID", "windowId"]);
+    return {
+        title: cleanText(content.title),
+        message: cleanText(content.message),
+        session_id: sessionId,
+        window_id: windowId,
+    };
+}
 function headlineFromPayload(payload) {
     const properties = payload.properties && typeof payload.properties === "object"
         ? payload.properties
@@ -609,6 +627,8 @@ export function createNotifyEventsHook(options) {
             if (!visual && !sound) {
                 return;
             }
+            const content = messageForEvent(eventName, eventPayload, options.style);
+            const auditFields = notificationAuditFields(eventPayload, content);
             const ts = now();
             const previous = lastSent.get(eventName) ?? 0;
             if (options.cooldownMs > 0 &&
@@ -621,10 +641,10 @@ export function createNotifyEventsHook(options) {
                     event_type: type,
                     notify_event: eventName,
                     cooldown_ms: options.cooldownMs,
+                    ...auditFields,
                 });
                 return;
             }
-            const content = messageForEvent(eventName, eventPayload, options.style);
             const resolvedImagePath = iconImagePath(eventName, state, directory);
             const result = notifyFn(eventName, visual, sound, content, state, directory);
             lastSent.set(eventName, ts);
@@ -645,6 +665,7 @@ export function createNotifyEventsHook(options) {
                 icon_image_path: resolvedImagePath,
                 icon_image_present: Boolean(resolvedImagePath),
                 sound_theme: state.sound.theme,
+                ...auditFields,
             });
         },
     };

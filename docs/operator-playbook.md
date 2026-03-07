@@ -2,10 +2,18 @@
 
 Canonical operational flows for day-to-day delivery with the current command surface.
 
+## Choose the right surface
+
+- Use `/delivery` as the default day-to-day command for issue ownership, workflow execution, and closeout.
+- Use `/workflow` only when you need direct engine validation, resume, or template control beneath `/delivery`.
+- Use `/autopilot` for open-ended autonomous execution that is not centered on a workflow file; `/do` is the shorthand alias.
+- Use `/autoflow` for deterministic execution of a plan artifact; treat legacy `/start-work` references as backend history, not the recommended surface.
+
 ## Flow 1: Claim -> Deliver -> Close
 
 ```text
-/delivery start --issue issue-900 --role coder --workflow workflows/ship.json --execute --json
+/workflow template init ship --json
+/delivery start --issue issue-900 --role coder --workflow <workflow.json> --execute --json
 /delivery status --json
 /delivery close --issue issue-900 --json
 ```
@@ -25,14 +33,33 @@ Use this when ownership transfers between humans/agents.
 ## Flow 3: Workflow Reliability Loop
 
 ```text
-/workflow validate --file workflows/ship.json --json
-/workflow run --file workflows/ship.json --execute --json
+/workflow validate --file <workflow.json> --json
+/workflow run --file <workflow.json> --execute --json
 /workflow resume --run-id wf-YYYYmmddHHMMSS --execute --json
 ```
 
 Use this when a workflow fails and you need deterministic resume from the last failed step.
 
-## Flow 4: Reconciliation and Hygiene
+## Flow 4: Open-ended autonomous execution
+
+```text
+/autopilot go --goal "finish current objective" --json
+/continuation-stop --reason "manual checkpoint" --json
+```
+
+Use this when the task is not driven by a workflow file and you want one autonomous loop with guardrails.
+
+## Flow 5: Plan artifact execution
+
+```text
+/autoflow start <plan.md> --json
+/autoflow status --json
+/autoflow report --json
+```
+
+Use this when work is already captured as a plan file and you want deterministic execution and resume behavior.
+
+## Flow 6: Reconciliation and Hygiene
 
 ```text
 /daemon tick --claims-hours 24 --json

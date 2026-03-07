@@ -86,7 +86,7 @@ Supported plugin names: `notifier`, `morph`, `worktree`.
 `/plugin setup-keys` prints exact environment/file snippets for missing API keys.
 
 Profiles:
-- `lean` -> no managed plugins (gateway-only baseline)
+- `lean` -> `notifier`
 - `stable` -> `notifier`
 - `experimental` -> `stable` + `morph`, `worktree`
 
@@ -102,6 +102,8 @@ Use these directly in OpenCode:
 /notify help
 /notify doctor
 /notify doctor --json
+/notify inbox
+/notify inbox --limit 10 --json
 /notify profile all
 /notify profile quiet
 /notify profile focus
@@ -123,6 +125,8 @@ Use these directly in OpenCode:
 - channel: `sound.enabled`, `visual.enabled`
 - event: `events.<type>`
 - per-event channel: `channels.<type>.sound|visual`
+
+`/notify inbox` reads the repo-local gateway event audit feed from `.opencode/gateway-events.jsonl` (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` when set). Enable gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to populate inbox entries.
 
 ## Session digest inside OpenCode 🧾
 
@@ -179,16 +183,17 @@ Use these directly in OpenCode:
 /claims reject-handoff issue-101 --reason "needs context" --json
 /claims expire-stale --hours 48 --apply --json
 
-/workflow validate --file workflows/ship.json --json
-/workflow run --file workflows/ship.json --json
-/workflow run --file workflows/ship.json --execute --json
+/workflow template init ship --json
+/workflow validate --file <workflow.json> --json
+/workflow run --file <workflow.json> --json
+/workflow run --file <workflow.json> --execute --json
 /workflow status --json
 /workflow resume --run-id wf-20260224091500 --execute --json
 /workflow stop --reason "manual intervention" --json
 
 /daemon tick --claims-hours 24 --json
 
-/delivery start --issue issue-900 --role coder --workflow workflows/ship.json --execute --json
+/delivery start --issue issue-900 --role coder --workflow <workflow.json> --execute --json
 /delivery status --json
 /delivery handoff --issue issue-900 --to human:alex --json
 /delivery close --issue issue-900 --json
@@ -339,6 +344,16 @@ Use these directly in OpenCode:
 - per-event toggles (`events.complete|error|permission|question`)
 
 For your LangGraph setup, default endpoint target is `http://localhost:3000/opencode/events`.
+
+## Recommended flow map
+
+- `/delivery` -> recommended day-to-day issue delivery surface
+- `/workflow` -> lower-level engine behind reusable workflow runs
+- `/autopilot` -> open-ended autonomous execution surface
+- `/do` -> shorthand alias for `/autopilot`
+- `/autoflow` -> public deterministic plan-file execution surface
+- `/plan` -> legacy/internal contract-checking wrapper; prefer `/autoflow` for new usage
+- legacy note -> `/start-work` redirects to `/autoflow`; use `/autoflow` in new guidance
 
 ## Complete slash-command index
 

@@ -35,7 +35,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 
 - 🧠 Built-in `/mcp` command for `status`, `help`, `doctor`, `profile`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
-- 🔔 Built-in `/notify` command to tune notification behavior by level (all, channel, event, per-channel event).
+- 🔔 Built-in `/notify` command to tune notification behavior and inspect a repo-local notification inbox feed.
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
@@ -113,13 +113,19 @@ Quickstart commands:
 /plugin status
 /mcp status
 /notify status
-/autoflow status --json
-/session handoff --json
+/delivery status --json
 /autopilot go --goal "finish current objective" --json
+/autoflow status --json
 /gateway status
 ```
 
 Enable MCPs only when the task benefits from extra context, for example with `/mcp profile research`.
+
+Recommended command split:
+- `/delivery` for day-to-day issue delivery and closeout
+- `/workflow` for lower-level workflow validation and resume control
+- `/autopilot` for open-ended autonomous execution; use `/do` as shorthand
+- `/autoflow` for explicit plan-file execution
 
 Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, and `docs/operator-playbook.md` for canonical operator flows.
 

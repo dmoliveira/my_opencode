@@ -32,6 +32,7 @@ CHANNELS = ("sound", "visual")
 SOUND_THEMES = ("classic", "minimal", "retro", "urgent", "chime")
 ICON_MODES = ("nerd+emoji", "emoji")
 REPO_ROOT = SCRIPT_DIR.parent
+DEFAULT_GATEWAY_AUDIT_ENV = "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH"
 
 PROFILE_MAP = {
     "all": {
@@ -281,7 +282,7 @@ def save_state(state: dict) -> None:
 
 def usage() -> int:
     print(
-        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify policy <status|help|profile <strict|balanced|fast>> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
+        "usage: /notify status | /notify help | /notify doctor [--json] [--verbose] | /notify inbox [--limit <n>] [--path <jsonl>] [--json] | /notify profile <all|quiet|focus|sound-only|visual-only> | /notify policy <status|help|profile <strict|balanced|fast>> | /notify enable <all|sound|visual|icons|complete|error|permission|question> | /notify disable <all|sound|visual|icons|complete|error|permission|question> | /notify channel <complete|error|permission|question> <sound|visual> <on|off> | /notify sound-theme <classic|minimal|retro|urgent|chime> | /notify event-sound <complete|error|permission|question> <default|classic|minimal|retro|urgent|chime> | /notify icon-version <version>"
     )
     return 2
 
@@ -479,6 +480,141 @@ def print_status(config_path: Path, state: dict) -> int:
     return 0
 
 
+def default_gateway_audit_path(cwd: Path) -> Path:
+    override = normalize_label(os.environ.get(DEFAULT_GATEWAY_AUDIT_ENV, ""))
+    if override:
+        return Path(os.path.expanduser(override))
+    return cwd / ".opencode" / "gateway-events.jsonl"
+
+
+def load_jsonl(path: Path) -> list[dict]:
+    if not path.exists() or not path.is_file():
+        return []
+    rows: list[dict] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    return rows
+
+
+def _notification_row(event: dict) -> dict | None:
+    reason_code = normalize_label(event.get("reason_code"))
+    hook = normalize_label(event.get("hook"))
+    if hook != "notify-events" and "notification" not in reason_code:
+        return None
+    timestamp = normalize_label(
+        event.get("ts") or event.get("timestamp") or event.get("at")
+    )
+    notify_event = normalize_label(event.get("notify_event")) or "unknown"
+    title = normalize_label(event.get("title"))
+    message = normalize_label(event.get("message"))
+    session_id = normalize_label(event.get("session_id") or event.get("sessionId"))
+    window_id = normalize_label(event.get("window_id") or event.get("windowId"))
+    stage = normalize_label(event.get("stage")) or "state"
+    sent = bool(event.get("visual_sent") or event.get("sound_sent"))
+    status = "sent" if sent else ("skipped" if stage == "skip" else "not_sent")
+    return {
+        "timestamp": timestamp,
+        "event": notify_event,
+        "status": status,
+        "reason_code": reason_code,
+        "stage": stage,
+        "title": title,
+        "message": message,
+        "session_id": session_id,
+        "window_id": window_id,
+        "visual_enabled": bool(event.get("visual_enabled")),
+        "sound_enabled": bool(event.get("sound_enabled")),
+        "visual_sent": bool(event.get("visual_sent")),
+        "sound_sent": bool(event.get("sound_sent")),
+    }
+
+
+def print_inbox(argv: list[str]) -> int:
+    json_output = False
+    limit = 20
+    path = default_gateway_audit_path(Path.cwd())
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--json":
+            json_output = True
+            idx += 1
+            continue
+        if token == "--limit":
+            if idx + 1 >= len(argv):
+                return usage()
+            try:
+                limit = max(1, int(argv[idx + 1]))
+            except ValueError:
+                return usage()
+            idx += 2
+            continue
+        if token == "--path":
+            if idx + 1 >= len(argv):
+                return usage()
+            path = Path(os.path.expanduser(argv[idx + 1]))
+            idx += 2
+            continue
+        return usage()
+
+    rows = load_jsonl(path)
+    entries = []
+    for row in rows:
+        entry = _notification_row(row)
+        if entry is not None:
+            entries.append(entry)
+    entries = entries[-limit:]
+    entries.reverse()
+    payload = {
+        "result": "PASS",
+        "path": str(path),
+        "exists": path.exists(),
+        "count": len(entries),
+        "entries": entries,
+        "warnings": []
+        if path.exists()
+        else ["notification feed file does not exist yet"],
+        "quick_fixes": []
+        if path.exists()
+        else [
+            "set MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 before running OpenCode to capture notification feed events",
+            "rerun /notify inbox after a completion, error, permission, or question event",
+        ],
+    }
+    if json_output:
+        print(json.dumps(payload, indent=2))
+        return 0
+    print("notify inbox")
+    print("------------")
+    print(f"path: {payload['path']}")
+    print(f"exists: {'yes' if payload['exists'] else 'no'}")
+    print(f"count: {payload['count']}")
+    if payload["warnings"]:
+        print("warnings:")
+        for item in payload["warnings"]:
+            print(f"- {item}")
+    if entries:
+        print("entries:")
+        for entry in entries:
+            label = entry["title"] or f"OpenCode {entry['event']}"
+            detail = entry["message"]
+            suffix = f" [s:{entry['session_id']}]" if entry["session_id"] else ""
+            print(
+                f"- {entry['timestamp']} {entry['event']} {entry['status']}: {label}{suffix}"
+            )
+            if detail:
+                print(f"  {detail}")
+    return 0
+
+
 def apply_profile(state: dict, profile: str) -> int:
     if profile not in PROFILE_MAP:
         return usage()
@@ -587,6 +723,9 @@ def main(argv: list[str]) -> int:
             json_output="--json" in flags,
             verbose="--verbose" in flags,
         )
+
+    if argv[0] == "inbox":
+        return print_inbox(argv[1:])
 
     if argv[0] == "profile":
         if len(argv) < 2:
