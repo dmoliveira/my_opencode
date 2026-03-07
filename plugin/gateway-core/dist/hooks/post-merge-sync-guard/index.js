@@ -47,19 +47,38 @@ function mainWorktreePath(directory) {
     }
     return "";
 }
-function resolveReminderCommands(directory, defaults) {
+function resolveReminder(directory, defaults) {
     const branch = currentBranch(directory);
     const mainPath = mainWorktreePath(directory);
     if (!mainPath) {
-        return defaults;
+        if (branch !== "main") {
+            return {
+                intro: "Merge complete. No checked-out main worktree was found; inspect worktrees before syncing:",
+                commands: ["git worktree list", "git status --short --branch"],
+            };
+        }
+        return {
+            intro: "Merge complete. Run cleanup sync:",
+            commands: defaults,
+        };
     }
-    if (branch === "main") {
-        return ["git pull --rebase"];
+    const mainBranch = currentBranch(mainPath);
+    if (branch === "main" && mainPath === directory) {
+        return {
+            intro: "Merge complete. Run cleanup sync:",
+            commands: ["git pull --rebase"],
+        };
     }
-    if (mainPath !== directory) {
-        return [`git -C "${mainPath}" pull --rebase`];
+    if (mainBranch === "main") {
+        return {
+            intro: "Merge complete. Run cleanup sync:",
+            commands: [`git -C "${mainPath}" pull --rebase`],
+        };
     }
-    return defaults;
+    return {
+        intro: "Merge complete. Main worktree is not on 'main'; inspect it before syncing:",
+        commands: ["git worktree list", `git -C "${mainPath}" status --short --branch`],
+    };
 }
 // Creates post-merge sync guard with cleanup enforcement and reminder injection.
 export function createPostMergeSyncGuardHook(options) {
@@ -126,8 +145,8 @@ export function createPostMergeSyncGuardHook(options) {
             if (reminderCommands.length === 0) {
                 return;
             }
-            const recommendedCommands = resolveReminderCommands(directory, reminderCommands);
-            const reminder = `\n\n[post-merge-sync-guard] Merge complete. Run cleanup sync:\n${recommendedCommands.map((cmd) => `- ${cmd}`).join("\n")}`;
+            const reminderState = resolveReminder(directory, reminderCommands);
+            const reminder = `\n\n[post-merge-sync-guard] ${reminderState.intro}\n${reminderState.commands.map((cmd) => `- ${cmd}`).join("\n")}`;
             toolOutput.output = `${toolOutput.output}${reminder}`;
             writeGatewayEventAudit(directory, {
                 hook: "post-merge-sync-guard",

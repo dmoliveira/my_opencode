@@ -70,6 +70,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "question-label-truncator",
             "dangerous-command-guard",
             "secret-leak-guard",
+            "primary-worktree-guard",
             "secret-commit-guard",
             "workflow-conformance-guard",
             "scope-drift-guard",
@@ -444,8 +445,14 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
         ],
     },
+    primaryWorktreeGuard: {
+        enabled: true,
+        allowedBranches: ["main", "master"],
+        blockEdits: true,
+        blockBranchSwitches: true,
+    },
     workflowConformanceGuard: {
-        enabled: false,
+        enabled: true,
         protectedBranches: ["main", "master"],
         blockEditsOnProtectedBranches: true,
     },
@@ -539,7 +546,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         requireDeleteBranch: true,
         enforceMainSyncInline: false,
-        reminderCommands: ["git checkout main", "git pull --rebase"],
+        reminderCommands: ["git pull --rebase"],
     },
     parallelWriterConflictGuard: {
         enabled: true,

@@ -435,6 +435,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.secretLeakGuard && typeof source.secretLeakGuard === "object"
       ? (source.secretLeakGuard as Record<string, unknown>)
       : {};
+  const primaryWorktreeSource =
+    source.primaryWorktreeGuard && typeof source.primaryWorktreeGuard === "object"
+      ? (source.primaryWorktreeGuard as Record<string, unknown>)
+      : {};
   const workflowConformanceSource =
     source.workflowConformanceGuard &&
     typeof source.workflowConformanceGuard === "object"
@@ -1321,6 +1325,24 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         secretLeakSource.patterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
           : stringList(secretLeakSource.patterns),
+    },
+    primaryWorktreeGuard: {
+      enabled:
+        typeof primaryWorktreeSource.enabled === "boolean"
+          ? primaryWorktreeSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.primaryWorktreeGuard.enabled,
+      allowedBranches:
+        primaryWorktreeSource.allowedBranches === undefined
+          ? DEFAULT_GATEWAY_CONFIG.primaryWorktreeGuard.allowedBranches
+          : stringList(primaryWorktreeSource.allowedBranches),
+      blockEdits:
+        typeof primaryWorktreeSource.blockEdits === "boolean"
+          ? primaryWorktreeSource.blockEdits
+          : DEFAULT_GATEWAY_CONFIG.primaryWorktreeGuard.blockEdits,
+      blockBranchSwitches:
+        typeof primaryWorktreeSource.blockBranchSwitches === "boolean"
+          ? primaryWorktreeSource.blockBranchSwitches
+          : DEFAULT_GATEWAY_CONFIG.primaryWorktreeGuard.blockBranchSwitches,
     },
     workflowConformanceGuard: {
       enabled:

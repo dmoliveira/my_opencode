@@ -29,7 +29,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - **Token-aware workflow** by keeping managed MCPs disabled by default.
 - **Instant MCP toggling** with `/mcp` commands in the OpenCode prompt.
 - **Portable install** with a one-liner script and symlinked default config path.
-- **Worktree-friendly repo** so you can iterate on config safely in feature branches.
+- **Worktree-first repo**: start each task in a dedicated git worktree branch and keep the main project folder off task branches.
 
 ## Features and benefits 🌟
 
@@ -127,7 +127,11 @@ Recommended command split:
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for explicit plan-file execution
 
-Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, `docs/operator-playbook.md` for canonical operator flows, and `docs/parallel-wt-playbook.md` for reservation-first parallel worktree execution.
+Before implementation work, create a dedicated git worktree branch for the task. Do not edit task files from the main project folder, and do not `git checkout` or `git switch` that folder onto a task branch.
+
+Protected branches (`main`, `master`) are also edit-blocked by default even in linked worktrees, and bash usage there is limited to inspection, validation, and sync flows.
+
+Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, `docs/operator-playbook.md` for canonical operator flows, and `docs/parallel-wt-playbook.md` for the worktree-first execution checklist.
 
 Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
 

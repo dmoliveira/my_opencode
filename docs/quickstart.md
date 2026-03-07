@@ -30,6 +30,8 @@ Run `/session handoff --json` after you have at least one indexed digest.
 
 ## Common productivity flows
 
+Before you start a task, create a dedicated git worktree branch from the current root branch. Keep the main project folder on `main`, never `git checkout` or `git switch` that folder onto a task branch, and treat protected branches (`main`, `master`) as edit-blocked everywhere by default. Bash usage on those protected surfaces is limited to inspection, validation, and main-branch sync.
+
 ```text
 /workflow template init ship --json
 /delivery start --issue issue-900 --role coder --workflow <workflow.json> --execute --json
@@ -44,11 +46,12 @@ Use this split to stay consistent:
 
 - `/delivery` for normal issue-to-close work
 - `/workflow` when you need direct workflow validation or resume controls
-- `/autopilot` for open-ended autonomous execution; `/do` is the shorthand alias
+- `/autopilot` for open-ended autonomous execution
 - `/autoflow` for plan markdown execution
 
 ## References
 
 - Full command catalog: `docs/command-handbook.md`
 - Operator runbook: `docs/operator-playbook.md`
+- Worktree-first execution: `docs/parallel-wt-playbook.md`
 - Deeper architecture notes: `docs/readme-deep-notes.md`

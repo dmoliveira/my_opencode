@@ -2,16 +2,25 @@
 
 Canonical operational flows for day-to-day delivery with the current command surface.
 
+## Worktree-first rule
+
+- Start every implementation task in a dedicated git worktree branch created from the current root branch.
+- Keep the main project folder on `main`; use it for sync/inspection, not for task edits.
+- Never `git checkout` or `git switch` the main project folder onto a task branch.
+- Protected branches (`main`, `master`) are edit-blocked by default even in linked worktrees, and bash there is limited to inspection, validation, and sync flows.
+- Use `docs/parallel-wt-playbook.md` as the checklist before delegating or editing.
+
 ## Choose the right surface
 
 - Use `/delivery` as the default day-to-day command for issue ownership, workflow execution, and closeout.
 - Use `/workflow` only when you need direct engine validation, resume, or template control beneath `/delivery`.
-- Use `/autopilot` for open-ended autonomous execution that is not centered on a workflow file; `/do` is the shorthand alias.
+- Use `/autopilot` for open-ended autonomous execution that is not centered on a workflow file.
 - Use `/autoflow` for deterministic execution of a plan artifact; treat legacy `/start-work` references as backend history, not the recommended surface.
 
 ## Flow 1: Claim -> Deliver -> Close
 
 ```text
+git worktree add ../my_opencode-wt-<task> -b feat/<task> HEAD
 /workflow template init ship --json
 /delivery start --issue issue-900 --role coder --workflow <workflow.json> --execute --json
 /delivery status --json
