@@ -82,6 +82,10 @@
       "description": "Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
     },
+    "reservation": {
+      "description": "Manage file reservation state for parallel writer guardrails (status|set|clear|export)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/reservation_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "changes": {
       "description": "Explain local change narrative for handoff/release notes (explain|--since)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/changes_command.py\" $ARGUMENTS`\nShow only the command output."
@@ -97,10 +101,6 @@
     "delivery": {
       "description": "Run the recommended day-to-day delivery flow (start|status|handoff|close|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delivery_command.py\" $ARGUMENTS`\nShow only the command output."
-    },
-    "do": {
-      "description": "Shorthand alias for /autopilot go with a high-level goal",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/do_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "agent-pool": {
       "description": "Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)",

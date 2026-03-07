@@ -69,3 +69,60 @@ test("validation-evidence-ledger allows DONE when required checks were executed"
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("validation-evidence-ledger tracks queued bash commands in order", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint", "test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-queue" },
+      { args: { command: "npm run lint" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-queue" },
+      { args: { command: "npm test" } },
+    )
+
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-queue" },
+      { output: "lint passed" },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-queue" },
+      { output: "tests passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-queue" },
+      { args: { command: "git status" } },
+    )
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-queue" },
+      done,
+    )
+
+    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

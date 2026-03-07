@@ -183,10 +183,19 @@ Use these directly in OpenCode:
 /claims reject-handoff issue-101 --reason "needs context" --json
 /claims expire-stale --hours 48 --apply --json
 
+/reservation status --json
+/reservation set --own-paths "plugin/gateway-core/src/**" --active-paths "plugin/gateway-core/src/**,docs/**" --writer-count 2
+/reservation export
+/reservation clear
+
 /workflow template init ship --json
 /workflow validate --file <workflow.json> --json
 /workflow run --file <workflow.json> --json
 /workflow run --file <workflow.json> --execute --json
+
+/workflow validate --file workflows/ship.json --json
+/workflow run --file workflows/ship.json --json
+/workflow run --file workflows/ship.json --execute --json
 /workflow status --json
 /workflow resume --run-id wf-20260224091500 --execute --json
 /workflow stop --reason "manual intervention" --json
@@ -378,7 +387,6 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
 /delivery - Run unified delivery transactions (start|status|handoff|close|doctor)
 /delegation-health - Summarize delegation health and detect routing drift (status|doctor)
-/do - Route high-level execution intent to autopilot go
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run diagnostics and reason-code registry export
@@ -399,6 +407,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output
+/reservation - Manage file reservation state for parallel writer guardrails (status|set|clear|export)
 /review - Run local review pass with diagnostics and checklist artifacts/findings (local|apply-checklist|doctor)
 /refactor-lite - Run safe refactor workflow backend
 /release-train - Run release-train workflow controls (status|prepare|draft|rollup|publish with optional --profile docs-only|runtime)

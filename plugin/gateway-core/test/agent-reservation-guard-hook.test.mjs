@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -46,6 +46,43 @@ test("agent-reservation-guard enforces reservation marker when configured", asyn
     } else {
       process.env.MY_TEST_RES = previous
     }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("agent-reservation-guard accepts reservation state file marker", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-reservation-"))
+  const statePath = join(directory, ".opencode", "reservation-state.json")
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(
+      statePath,
+      JSON.stringify({ reservationActive: true, writerCount: 2, ownPaths: ["src/**"] }),
+      "utf-8",
+    )
+
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["agent-reservation-guard"],
+          disabled: [],
+        },
+        agentReservationGuard: {
+          enabled: true,
+          enforce: true,
+          reservationEnvKeys: ["MY_TEST_RES"],
+          stateFile: ".opencode/reservation-state.json",
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "write", sessionID: "session-reservation-state" },
+      { args: { filePath: "src/a.ts" } },
+    )
+  } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
