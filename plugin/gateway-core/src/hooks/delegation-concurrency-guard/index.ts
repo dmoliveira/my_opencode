@@ -4,6 +4,9 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import {
+  annotateDelegationMetadata,
+  extractDelegationSubagentType,
+  extractDelegationSubagentTypeFromOutput,
   extractDelegationTraceId,
   resolveDelegationTraceId,
 } from "../shared/delegation-trace.js"
@@ -19,6 +22,8 @@ interface ToolPayload {
       subagent_type?: string
       category?: string
     }
+    metadata?: unknown
+    output?: unknown
   }
   directory?: string
 }
@@ -44,6 +49,20 @@ interface ActiveDelegation {
   costTier: string
   traceId: string
   startedAt: number
+}
+
+function matchingSessionDelegationKeys(
+  activeByDelegation: Map<string, ActiveDelegation>,
+  sid: string,
+  subagentType: string,
+): string[] {
+  const matches: string[] = []
+  for (const [key, value] of activeByDelegation.entries()) {
+    if ((key === sid || key.startsWith(`${sid}:`)) && value.subagentType === subagentType) {
+      matches.push(key)
+    }
+  }
+  return matches
 }
 
 function nowMs(): number {
@@ -145,12 +164,18 @@ export function createDelegationConcurrencyGuardHook(options: {
         }
         const sid = sessionId(eventPayload)
         if (sid) {
-          const traceId = extractDelegationTraceId(eventPayload.output?.args)
+          const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
           if (traceId) {
             const key = delegationKey(sid, traceId)
             activeByDelegation.delete(key)
           } else {
-            const fallbackKeys = sessionDelegationKeys(activeByDelegation, sid)
+            const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
+            const outputSubagentType =
+              extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+              extractDelegationSubagentTypeFromOutput(outputText)
+            const fallbackKeys = outputSubagentType
+              ? matchingSessionDelegationKeys(activeByDelegation, sid, outputSubagentType)
+              : sessionDelegationKeys(activeByDelegation, sid)
             if (fallbackKeys.length === 1) {
               activeByDelegation.delete(fallbackKeys[0])
             } else if (fallbackKeys.length > 1) {
@@ -185,6 +210,7 @@ export function createDelegationConcurrencyGuardHook(options: {
       const subagentType = String(args.subagent_type ?? "").toLowerCase().trim()
       const category = String(args.category ?? "").toLowerCase().trim()
       const traceId = resolveDelegationTraceId(args ?? {})
+      annotateDelegationMetadata(eventPayload.output ?? {}, args)
       const key = delegationKey(sid, traceId, args)
       if (!subagentType && !category) {
         return

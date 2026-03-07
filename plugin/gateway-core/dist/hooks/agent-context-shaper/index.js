@@ -1,5 +1,12 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
+import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+function delegationKey(sessionId, traceId, subagentType) {
+    if (traceId) {
+        return `${sessionId}:${traceId}`;
+    }
+    return `${sessionId}:agent:${subagentType || "unknown"}`;
+}
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
@@ -23,7 +30,7 @@ function buildHint(context) {
     ].join("\n");
 }
 export function createAgentContextShaperHook(options) {
-    const contextBySession = new Map();
+    const contextByDelegation = new Map();
     return {
         id: "agent-context-shaper",
         priority: 294,
@@ -34,7 +41,11 @@ export function createAgentContextShaperHook(options) {
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
-                    contextBySession.delete(sid);
+                    for (const key of contextByDelegation.keys()) {
+                        if (key === sid || key.startsWith(`${sid}:`)) {
+                            contextByDelegation.delete(key);
+                        }
+                    }
                 }
                 return;
             }
@@ -50,12 +61,15 @@ export function createAgentContextShaperHook(options) {
                 }
                 const subagentType = String(eventPayload.output?.args?.subagent_type ?? "").toLowerCase().trim();
                 if (!subagentType) {
-                    contextBySession.delete(sid);
                     return;
                 }
+                const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {});
+                annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args);
                 const metadata = loadAgentMetadata(options.directory).get(subagentType) ?? {};
                 const category = String(eventPayload.output?.args?.category ?? metadata.default_category ?? "balanced");
-                contextBySession.set(sid, {
+                contextByDelegation.set(delegationKey(sid, traceId, subagentType), {
+                    sessionId: sid,
+                    traceId,
                     subagentType,
                     category,
                     metadata,
@@ -74,12 +88,31 @@ export function createAgentContextShaperHook(options) {
             if (!sid) {
                 return;
             }
-            const context = contextBySession.get(sid);
+            const outputText = eventPayload.output.output;
+            const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
+            const subagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+                extractDelegationSubagentTypeFromOutput(outputText);
+            const directKey = delegationKey(sid, traceId, subagentType);
+            let matchedKey = directKey;
+            let context = contextByDelegation.get(directKey);
+            if (!context) {
+                const matches = [...contextByDelegation.entries()].filter(([, candidate]) => candidate.sessionId === sid && candidate.subagentType === subagentType);
+                if (matches.length === 1) {
+                    ;
+                    [[matchedKey, context]] = matches;
+                }
+            }
             if (!context) {
                 return;
             }
-            const output = eventPayload.output.output;
+            annotateDelegationMetadata(eventPayload.output ?? {}, {
+                subagent_type: context.subagentType,
+                category: context.category,
+                prompt: `[DELEGATION TRACE ${context.traceId}]`,
+            });
+            const output = outputText;
             if (!looksLikeFailure(output) && output.length < 1200) {
+                contextByDelegation.delete(matchedKey);
                 return;
             }
             const hint = buildHint(context);
@@ -97,6 +130,7 @@ export function createAgentContextShaperHook(options) {
                 subagent_type: context.subagentType,
                 recommended_category: context.category,
             });
+            contextByDelegation.delete(matchedKey);
         },
     };
 }
