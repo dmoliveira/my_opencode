@@ -17,12 +17,40 @@
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": false
+      "enabled": true
     },
     "gh_grep": {
       "type": "remote",
       "url": "https://mcp.grep.app",
-      "enabled": false
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "enabled": true
+    },
+    "exa_search": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp",
+      "enabled": true
+    },
+    "firecrawl": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "firecrawl-mcp"
+      ],
+      "enabled": true
+    },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "enabled": true
     }
   },
   "command": {
@@ -219,8 +247,12 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "gateway": {
-      "description": "Manage plugin gateway mode (status|enable|disable|doctor)",
+      "description": "Manage gateway runtime controls (status|enable|disable|doctor|tune memory|recover memory|protection)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "delegation-health": {
+      "description": "Summarize delegation health and detect routing drift (status|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delegation_health_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",

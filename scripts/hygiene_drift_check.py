@@ -26,7 +26,7 @@ ALLOWED_DUPLICATE_CLUSTERS = {
 # Transitional allowlist for hook IDs present in config order but not yet
 # guaranteed in every branch snapshot. Keep this list short and temporary.
 ALLOWED_MISSING_HOOK_IDS = {"mistake-ledger"}
-MAX_COMMAND_SURFACE = 50
+MAX_COMMAND_SURFACE = 51
 MAX_COMMANDS_PER_SCRIPT = 3
 
 
