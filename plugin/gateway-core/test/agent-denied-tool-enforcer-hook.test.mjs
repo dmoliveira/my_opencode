@@ -118,6 +118,26 @@ test("agent-denied-tool-enforcer allows negated mutating instructions", async ()
   }
 })
 
+test("agent-denied-tool-enforcer allows no-file-edits phrasing", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
+  try {
+    seedExploreSpec(directory)
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "No file edits. Find routing and diagnostics locations.",
+        prompt: "Read-only run. No code changes.",
+      },
+    }
+
+    await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-no-file-edits" }, output)
+    assert.equal(output.args.subagent_type, "explore")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("agent-denied-tool-enforcer blocks explicit denied tool invocation patterns", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
   try {
