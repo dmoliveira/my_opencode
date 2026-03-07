@@ -27,7 +27,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 - `orchestrator` is the execution lead for bigger flows.
 - Specialist subagents are intentionally read-only to reduce accidental drift.
 - Completion should only happen after implementation + validation + review gates pass.
-- Model allocation defaults and fallbacks are documented in `agent/model-allocation-policy.md`.
+- Model allocation defaults and fallbacks are documented in `docs/model-allocation-policy.md`.
 
 Architecture and safety contracts:
 

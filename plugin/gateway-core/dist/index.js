@@ -2,6 +2,10 @@ import { loadGatewayConfig } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
+import { createAdaptiveDelegationPolicyHook } from "./hooks/adaptive-delegation-policy/index.js";
+import { createAgentContextShaperHook } from "./hooks/agent-context-shaper/index.js";
+import { createAgentDeniedToolEnforcerHook } from "./hooks/agent-denied-tool-enforcer/index.js";
+import { createAgentModelResolverHook } from "./hooks/agent-model-resolver/index.js";
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
 import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js";
 import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
@@ -9,6 +13,9 @@ import { createCompactionContextInjectorHook } from "./hooks/compaction-context-
 import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
+import { createDelegationConcurrencyGuardHook } from "./hooks/delegation-concurrency-guard/index.js";
+import { createDelegationDecisionAuditHook } from "./hooks/delegation-decision-audit/index.js";
+import { createDelegationFallbackOrchestratorHook } from "./hooks/delegation-fallback-orchestrator/index.js";
 import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
 import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
@@ -30,6 +37,7 @@ import { createGhChecksMergeGuardHook } from "./hooks/gh-checks-merge-guard/inde
 import { createGlobalProcessPressureHook } from "./hooks/global-process-pressure/index.js";
 import { createLongTurnWatchdogHook } from "./hooks/long-turn-watchdog/index.js";
 import { createPressureEscalationGuardHook } from "./hooks/pressure-escalation-guard/index.js";
+import { createProviderModelBudgetEnforcerHook } from "./hooks/provider-model-budget-enforcer/index.js";
 import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
@@ -54,10 +62,12 @@ import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
+import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-timeline/index.js";
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
 import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js";
+import { createSubagentLifecycleSupervisorHook } from "./hooks/subagent-lifecycle-supervisor/index.js";
 import { createThinkModeHook } from "./hooks/think-mode/index.js";
 import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validator/index.js";
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
@@ -198,6 +208,59 @@ function configuredHooks(ctx) {
             blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
             allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
         }),
+        createProviderModelBudgetEnforcerHook({
+            directory,
+            enabled: cfg.providerModelBudgetEnforcer.enabled,
+            windowMs: cfg.providerModelBudgetEnforcer.windowMs,
+            maxDelegationsPerWindow: cfg.providerModelBudgetEnforcer.maxDelegationsPerWindow,
+            maxEstimatedTokensPerWindow: cfg.providerModelBudgetEnforcer.maxEstimatedTokensPerWindow,
+            maxPerModelDelegationsPerWindow: cfg.providerModelBudgetEnforcer.maxPerModelDelegationsPerWindow,
+        }),
+        createDelegationConcurrencyGuardHook({
+            directory,
+            enabled: cfg.delegationConcurrencyGuard.enabled,
+            maxTotalConcurrent: cfg.delegationConcurrencyGuard.maxTotalConcurrent,
+            maxExpensiveConcurrent: cfg.delegationConcurrencyGuard.maxExpensiveConcurrent,
+            maxDeepConcurrent: cfg.delegationConcurrencyGuard.maxDeepConcurrent,
+            maxCriticalConcurrent: cfg.delegationConcurrencyGuard.maxCriticalConcurrent,
+        }),
+        createAgentDeniedToolEnforcerHook({
+            directory,
+            enabled: true,
+        }),
+        createAgentModelResolverHook({
+            directory,
+            enabled: true,
+        }),
+        createDelegationFallbackOrchestratorHook({
+            directory,
+            enabled: cfg.delegationFallbackOrchestrator.enabled,
+        }),
+        createDelegationDecisionAuditHook({
+            directory,
+            enabled: true,
+        }),
+        createSubagentLifecycleSupervisorHook({
+            directory,
+            enabled: cfg.subagentLifecycleSupervisor.enabled,
+            maxRetriesPerSession: cfg.subagentLifecycleSupervisor.maxRetriesPerSession,
+            staleRunningMs: cfg.subagentLifecycleSupervisor.staleRunningMs,
+            blockOnExhausted: cfg.subagentLifecycleSupervisor.blockOnExhausted,
+        }),
+        createSubagentTelemetryTimelineHook({
+            directory,
+            enabled: cfg.subagentTelemetryTimeline.enabled,
+            maxTimelineEntries: cfg.subagentTelemetryTimeline.maxTimelineEntries,
+        }),
+        createAdaptiveDelegationPolicyHook({
+            directory,
+            enabled: cfg.adaptiveDelegationPolicy.enabled,
+            windowMs: cfg.adaptiveDelegationPolicy.windowMs,
+            minSamples: cfg.adaptiveDelegationPolicy.minSamples,
+            highFailureRate: cfg.adaptiveDelegationPolicy.highFailureRate,
+            cooldownMs: cfg.adaptiveDelegationPolicy.cooldownMs,
+            blockExpensiveDuringCooldown: cfg.adaptiveDelegationPolicy.blockExpensiveDuringCooldown,
+        }),
         createSessionRecoveryHook({
             directory,
             client: ctx.client,
@@ -206,6 +269,10 @@ function configuredHooks(ctx) {
         }),
         createDelegateTaskRetryHook({
             enabled: cfg.delegateTaskRetry.enabled,
+        }),
+        createAgentContextShaperHook({
+            directory,
+            enabled: true,
         }),
         createValidationEvidenceLedgerHook({
             directory,

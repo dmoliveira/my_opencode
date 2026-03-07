@@ -917,7 +917,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     sessionPatterns: ["task-", "subagent"],
   },
   tasksTodowriteDisabler: {
-    enabled: true,
+    enabled: false,
   },
   taskResumeInfo: {
     enabled: true,

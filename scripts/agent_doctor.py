@@ -19,7 +19,7 @@ SPEC_DIR = SOURCE_AGENT_DIR / "specs"
 INSTALLED_AGENT_DIR = Path.home() / ".config" / "opencode" / "agent"
 
 REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
-    "agent/model-allocation-policy.md": [
+    "docs/model-allocation-policy.md": [
         "## Effort-Band Fallback Chains",
         "## Provider Outage Behavior",
     ],

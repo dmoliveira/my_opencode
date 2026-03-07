@@ -133,6 +133,8 @@ Note: MCP OAuth parity was intentionally out-of-scope for cycle 1 and remains de
 
 ## Remaining gap backlog (post-parity)
 
+Intentional divergence registry: `docs/upstream-divergence-registry.md`.
+
 Status: `deferred` (no active post-parity backlog by owner decision)
 
 Gaps:

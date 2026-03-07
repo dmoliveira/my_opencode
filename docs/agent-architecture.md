@@ -52,4 +52,4 @@ Canonical contract and per-agent deny lists: `docs/agent-tool-restrictions.md`.
 
 ## Model Routing Contract
 
-Model allocation and fallback policy is documented in `agent/model-allocation-policy.md`.
+Model allocation and fallback policy is documented in `docs/model-allocation-policy.md`.

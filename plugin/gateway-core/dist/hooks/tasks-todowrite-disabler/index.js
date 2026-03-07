@@ -25,7 +25,7 @@ export function createTasksTodowriteDisablerHook(options) {
                 session_id: String(sessionId),
                 tool,
             });
-            throw new Error("Task/TodoWrite tools are disabled in this workflow. Use br issue tracking and Agent Mail coordination instead.");
+            throw new Error("Task/TodoWrite tools are disabled in this workflow by gateway configuration.");
         },
     };
 }

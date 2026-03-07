@@ -98,6 +98,7 @@ Use these references for deeper context:
 
 - `docs/readme-deep-notes.md`
 - `docs/plan/oh-my-opencode-parity-high-value-plan.md`
+- `docs/upstream-divergence-registry.md`
 - `instructions/agent_operating_contract.md`
 
 ## Command Handbook 📚

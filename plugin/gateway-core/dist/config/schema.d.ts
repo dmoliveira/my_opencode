@@ -99,6 +99,41 @@ export interface SessionRecoveryConfig {
 export interface DelegateTaskRetryConfig {
     enabled: boolean;
 }
+export interface ProviderModelBudgetEnforcerConfig {
+    enabled: boolean;
+    windowMs: number;
+    maxDelegationsPerWindow: number;
+    maxEstimatedTokensPerWindow: number;
+    maxPerModelDelegationsPerWindow: number;
+}
+export interface SubagentLifecycleSupervisorConfig {
+    enabled: boolean;
+    maxRetriesPerSession: number;
+    staleRunningMs: number;
+    blockOnExhausted: boolean;
+}
+export interface DelegationConcurrencyGuardConfig {
+    enabled: boolean;
+    maxTotalConcurrent: number;
+    maxExpensiveConcurrent: number;
+    maxDeepConcurrent: number;
+    maxCriticalConcurrent: number;
+}
+export interface DelegationFallbackOrchestratorConfig {
+    enabled: boolean;
+}
+export interface SubagentTelemetryTimelineConfig {
+    enabled: boolean;
+    maxTimelineEntries: number;
+}
+export interface AdaptiveDelegationPolicyConfig {
+    enabled: boolean;
+    windowMs: number;
+    minSamples: number;
+    highFailureRate: number;
+    cooldownMs: number;
+    blockExpensiveDuringCooldown: boolean;
+}
 export interface StopContinuationGuardConfig {
     enabled: boolean;
 }
@@ -356,6 +391,12 @@ export interface GatewayConfig {
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
+    providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
+    delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
+    delegationFallbackOrchestrator: DelegationFallbackOrchestratorConfig;
+    subagentLifecycleSupervisor: SubagentLifecycleSupervisorConfig;
+    subagentTelemetryTimeline: SubagentTelemetryTimelineConfig;
+    adaptiveDelegationPolicy: AdaptiveDelegationPolicyConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;
     mistakeLedger: MistakeLedgerConfig;
     parallelOpportunityDetector: ParallelOpportunityDetectorConfig;

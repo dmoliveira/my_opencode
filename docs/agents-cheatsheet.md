@@ -47,7 +47,7 @@ For medium/large tasks:
 
 Escalate to `oracle` after repeated failures or hard tradeoffs.
 
-Model allocation reference: `agent/model-allocation-policy.md`.
+Model allocation reference: `docs/model-allocation-policy.md`.
 Architecture reference: `docs/agent-architecture.md`.
 Tool restrictions reference: `docs/agent-tool-restrictions.md`.
 

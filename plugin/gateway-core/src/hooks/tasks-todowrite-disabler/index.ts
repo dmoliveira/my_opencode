@@ -42,7 +42,7 @@ export function createTasksTodowriteDisablerHook(options: {
         tool,
       })
       throw new Error(
-        "Task/TodoWrite tools are disabled in this workflow. Use br issue tracking and Agent Mail coordination instead.",
+        "Task/TodoWrite tools are disabled in this workflow by gateway configuration.",
       )
     },
   }

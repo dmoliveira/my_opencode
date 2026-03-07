@@ -117,6 +117,30 @@ export function loadGatewayConfig(raw) {
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
         : {};
+    const providerModelBudgetEnforcerSource = source.providerModelBudgetEnforcer &&
+        typeof source.providerModelBudgetEnforcer === "object"
+        ? source.providerModelBudgetEnforcer
+        : {};
+    const delegationConcurrencyGuardSource = source.delegationConcurrencyGuard &&
+        typeof source.delegationConcurrencyGuard === "object"
+        ? source.delegationConcurrencyGuard
+        : {};
+    const delegationFallbackOrchestratorSource = source.delegationFallbackOrchestrator &&
+        typeof source.delegationFallbackOrchestrator === "object"
+        ? source.delegationFallbackOrchestrator
+        : {};
+    const subagentLifecycleSupervisorSource = source.subagentLifecycleSupervisor &&
+        typeof source.subagentLifecycleSupervisor === "object"
+        ? source.subagentLifecycleSupervisor
+        : {};
+    const subagentTelemetryTimelineSource = source.subagentTelemetryTimeline &&
+        typeof source.subagentTelemetryTimeline === "object"
+        ? source.subagentTelemetryTimeline
+        : {};
+    const adaptiveDelegationPolicySource = source.adaptiveDelegationPolicy &&
+        typeof source.adaptiveDelegationPolicy === "object"
+        ? source.adaptiveDelegationPolicy
+        : {};
     const validationEvidenceLedgerSource = source.validationEvidenceLedger &&
         typeof source.validationEvidenceLedger === "object"
         ? source.validationEvidenceLedger
@@ -470,6 +494,62 @@ export function loadGatewayConfig(raw) {
             enabled: typeof delegateTaskRetrySource.enabled === "boolean"
                 ? delegateTaskRetrySource.enabled
                 : DEFAULT_GATEWAY_CONFIG.delegateTaskRetry.enabled,
+        },
+        providerModelBudgetEnforcer: {
+            enabled: typeof providerModelBudgetEnforcerSource.enabled === "boolean"
+                ? providerModelBudgetEnforcerSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer.enabled,
+            windowMs: positiveInt(providerModelBudgetEnforcerSource.windowMs, DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer.windowMs),
+            maxDelegationsPerWindow: positiveInt(providerModelBudgetEnforcerSource.maxDelegationsPerWindow, DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer
+                .maxDelegationsPerWindow),
+            maxEstimatedTokensPerWindow: positiveInt(providerModelBudgetEnforcerSource.maxEstimatedTokensPerWindow, DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer
+                .maxEstimatedTokensPerWindow),
+            maxPerModelDelegationsPerWindow: positiveInt(providerModelBudgetEnforcerSource.maxPerModelDelegationsPerWindow, DEFAULT_GATEWAY_CONFIG.providerModelBudgetEnforcer
+                .maxPerModelDelegationsPerWindow),
+        },
+        delegationConcurrencyGuard: {
+            enabled: typeof delegationConcurrencyGuardSource.enabled === "boolean"
+                ? delegationConcurrencyGuardSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.enabled,
+            maxTotalConcurrent: positiveInt(delegationConcurrencyGuardSource.maxTotalConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxTotalConcurrent),
+            maxExpensiveConcurrent: positiveInt(delegationConcurrencyGuardSource.maxExpensiveConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxExpensiveConcurrent),
+            maxDeepConcurrent: positiveInt(delegationConcurrencyGuardSource.maxDeepConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxDeepConcurrent),
+            maxCriticalConcurrent: positiveInt(delegationConcurrencyGuardSource.maxCriticalConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxCriticalConcurrent),
+        },
+        delegationFallbackOrchestrator: {
+            enabled: typeof delegationFallbackOrchestratorSource.enabled === "boolean"
+                ? delegationFallbackOrchestratorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.delegationFallbackOrchestrator.enabled,
+        },
+        subagentLifecycleSupervisor: {
+            enabled: typeof subagentLifecycleSupervisorSource.enabled === "boolean"
+                ? subagentLifecycleSupervisorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.enabled,
+            maxRetriesPerSession: positiveInt(subagentLifecycleSupervisorSource.maxRetriesPerSession, DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.maxRetriesPerSession),
+            staleRunningMs: positiveInt(subagentLifecycleSupervisorSource.staleRunningMs, DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.staleRunningMs),
+            blockOnExhausted: typeof subagentLifecycleSupervisorSource.blockOnExhausted === "boolean"
+                ? subagentLifecycleSupervisorSource.blockOnExhausted
+                : DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.blockOnExhausted,
+        },
+        subagentTelemetryTimeline: {
+            enabled: typeof subagentTelemetryTimelineSource.enabled === "boolean"
+                ? subagentTelemetryTimelineSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.subagentTelemetryTimeline.enabled,
+            maxTimelineEntries: positiveInt(subagentTelemetryTimelineSource.maxTimelineEntries, DEFAULT_GATEWAY_CONFIG.subagentTelemetryTimeline.maxTimelineEntries),
+        },
+        adaptiveDelegationPolicy: {
+            enabled: typeof adaptiveDelegationPolicySource.enabled === "boolean"
+                ? adaptiveDelegationPolicySource.enabled
+                : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.enabled,
+            windowMs: positiveInt(adaptiveDelegationPolicySource.windowMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.windowMs),
+            minSamples: positiveInt(adaptiveDelegationPolicySource.minSamples, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.minSamples),
+            highFailureRate: boundedFloat(adaptiveDelegationPolicySource.highFailureRate, 0, 1, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.highFailureRate),
+            cooldownMs: positiveInt(adaptiveDelegationPolicySource.cooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.cooldownMs),
+            blockExpensiveDuringCooldown: typeof adaptiveDelegationPolicySource.blockExpensiveDuringCooldown ===
+                "boolean"
+                ? adaptiveDelegationPolicySource.blockExpensiveDuringCooldown
+                : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
+                    .blockExpensiveDuringCooldown,
         },
         validationEvidenceLedger: {
             enabled: typeof validationEvidenceLedgerSource.enabled === "boolean"
