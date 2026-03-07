@@ -228,6 +228,7 @@ Escalate to `oracle` when:
 ## Guardrails and expectations 🛡️
 
 - Read-only subagents must not edit files.
+- Runtime hook guard blocks delegated commit/PR/edit intents for read-only subagents; keep mutating operations on the primary agent.
 - Do not declare done without validation evidence.
 - If blocked, return exact blocker + evidence + next best action.
 - Prefer practical outcomes over over-engineering.

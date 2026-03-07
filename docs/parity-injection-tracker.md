@@ -130,3 +130,37 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 28. [x] Retry delay clamp parity (headerless backoff cap)
     - Pre-check completed: upstream `SessionRetry.delay` caps headerless retry delay (`RETRY_MAX_DELAY_NO_HEADERS = 30000`) and handles retry headers; local retry-backoff guidance parses headers but does not enforce a canonical headerless delay clamp policy. Confirmed on latest main with no explicit no-header retry-delay cap in gateway retry guidance.
     - Delivered: added headerless retry-delay clamp behavior (30s max) with exponential backoff progression, per-session attempt tracking, and explicit capped delay messaging in provider retry guidance, with dedicated regression tests.
+
+## Runtime Hook Hardening Wave (Post-28 Refresh)
+
+29. [x] Delegation confidence-gate hardening parity
+    - Pre-check completed: delegation routing inferred subagents but used simple confidence comparisons with no per-agent thresholds.
+    - Delivered: added per-agent runtime override policy (`overrideDelta`, `intentThreshold`) and default knobs in `adaptiveDelegationPolicy`, with low-confidence override audit evidence.
+
+30. [x] Delegation outcome learner policy controls parity
+    - Pre-check completed: learner adapted category from recent failures but lacked per-agent policy controls and protected-category support.
+    - Delivered: added per-agent learner policy overrides (`minSamples`, `highFailureRate`, `protectCategories`) and emitted adaptation evidence with effective thresholds.
+
+31. [x] Delegation runtime-state persistence parity
+    - Pre-check completed: subagent outcome timeline lived in-memory only, resetting across process restarts.
+    - Delivered: added persisted runtime-state support (`persistState`, `stateFile`, `stateMaxEntries`) for delegation outcomes with safe load/trim behavior.
+
+32. [x] Cross-hook delegation trace correlation parity
+    - Pre-check completed: audits were hook-local and session-bound without stable cross-hook correlation id.
+    - Delivered: added shared delegation trace utility and propagated `trace_id` across resolver, learner, fallback, telemetry, semantic bridge, and decision-audit hooks.
+
+33. [x] Structured denied-tool enforcement parity
+    - Pre-check completed: denied-tool checks were largely prompt-string based and missed nested/structured payload text.
+    - Delivered: expanded enforcement to recursively inspect structured payload strings and improved replacement guidance toward allowed tools.
+
+34. [x] Discoverability noise-control parity
+    - Pre-check completed: discoverability hints could be repeatedly injected within the same session.
+    - Delivered: added session-scoped discoverability cooldown control (`discoverabilityCooldownMs`) and cooldown-aware audit fields.
+
+35. [x] Parent session-flow hint propagation parity
+    - Pre-check completed: delegated task hints lacked explicit parent-flow metadata for downstream tracking.
+    - Delivered: resolver now injects stable session-flow metadata (`parent_session_id`, `trace_id`) and keeps header normalization idempotent across repeated hook passes.
+
+## Remaining Deferred Gap (Intentional)
+
+- [x] MCP OAuth/websearch provider parity remains deferred by owner decision (tracked in `docs/plan/oh-my-opencode-parity-high-value-plan.md` and `docs/upstream-divergence-registry.md`).
