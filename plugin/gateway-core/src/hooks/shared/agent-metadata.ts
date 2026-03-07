@@ -8,10 +8,10 @@ export interface AgentRoutingMetadata {
   triggers?: string[]
   avoid_when?: string[]
   denied_tools?: string[]
+  allowed_tools?: string[]
 }
 
-let cacheKey = ""
-let cacheValue = new Map<string, AgentRoutingMetadata>()
+const cacheByDirectory = new Map<string, Map<string, AgentRoutingMetadata>>()
 
 function cleanStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -47,6 +47,17 @@ function normalizeMetadata(value: unknown): AgentRoutingMetadata {
   }
 }
 
+function collectAllowedTools(value: unknown): string[] {
+  if (!value || typeof value !== "object") {
+    return []
+  }
+  const source = value as Record<string, unknown>
+  return Object.entries(source)
+    .filter(([tool, enabled]) => typeof tool === "string" && enabled === true)
+    .map(([tool]) => tool.trim())
+    .filter((tool) => tool.length > 0)
+}
+
 function buildMap(directory: string): Map<string, AgentRoutingMetadata> {
   const map = new Map<string, AgentRoutingMetadata>()
   const names = [
@@ -65,7 +76,10 @@ function buildMap(directory: string): Map<string, AgentRoutingMetadata> {
     const path = join(directory, "agent", "specs", `${name}.json`)
     try {
       const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>
-      map.set(name, normalizeMetadata(raw.metadata))
+      map.set(name, {
+        ...normalizeMetadata(raw.metadata),
+        allowed_tools: collectAllowedTools(raw.tools),
+      })
     } catch {
       map.set(name, {})
     }
@@ -74,10 +88,11 @@ function buildMap(directory: string): Map<string, AgentRoutingMetadata> {
 }
 
 export function loadAgentMetadata(directory: string): Map<string, AgentRoutingMetadata> {
-  if (cacheKey === directory && cacheValue.size > 0) {
-    return cacheValue
+  const cached = cacheByDirectory.get(directory)
+  if (cached && cached.size > 0) {
+    return cached
   }
-  cacheKey = directory
-  cacheValue = buildMap(directory)
-  return cacheValue
+  const built = buildMap(directory)
+  cacheByDirectory.set(directory, built)
+  return built
 }

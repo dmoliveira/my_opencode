@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-let cacheKey = "";
-let cacheValue = new Map();
+const cacheByDirectory = new Map();
 function cleanStringArray(value) {
     if (!Array.isArray(value)) {
         return [];
@@ -31,6 +30,16 @@ function normalizeMetadata(value) {
         denied_tools: cleanStringArray(source.denied_tools),
     };
 }
+function collectAllowedTools(value) {
+    if (!value || typeof value !== "object") {
+        return [];
+    }
+    const source = value;
+    return Object.entries(source)
+        .filter(([tool, enabled]) => typeof tool === "string" && enabled === true)
+        .map(([tool]) => tool.trim())
+        .filter((tool) => tool.length > 0);
+}
 function buildMap(directory) {
     const map = new Map();
     const names = [
@@ -49,7 +58,10 @@ function buildMap(directory) {
         const path = join(directory, "agent", "specs", `${name}.json`);
         try {
             const raw = JSON.parse(readFileSync(path, "utf-8"));
-            map.set(name, normalizeMetadata(raw.metadata));
+            map.set(name, {
+                ...normalizeMetadata(raw.metadata),
+                allowed_tools: collectAllowedTools(raw.tools),
+            });
         }
         catch {
             map.set(name, {});
@@ -58,10 +70,11 @@ function buildMap(directory) {
     return map;
 }
 export function loadAgentMetadata(directory) {
-    if (cacheKey === directory && cacheValue.size > 0) {
-        return cacheValue;
+    const cached = cacheByDirectory.get(directory);
+    if (cached && cached.size > 0) {
+        return cached;
     }
-    cacheKey = directory;
-    cacheValue = buildMap(directory);
-    return cacheValue;
+    const built = buildMap(directory);
+    cacheByDirectory.set(directory, built);
+    return built;
 }

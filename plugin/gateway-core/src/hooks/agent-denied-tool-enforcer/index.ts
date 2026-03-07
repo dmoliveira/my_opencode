@@ -30,8 +30,32 @@ function referencesDeniedTool(text: string, tool: string): boolean {
     `execute ${tool}`,
     `call ${tool}`,
     `\`${tool}\``,
+    `functions.${tool}`,
+    `"${tool}"`,
+    `'${tool}'`,
   ]
   return checks.some((pattern) => lower.includes(pattern))
+}
+
+function suggestAllowedTool(deniedTool: string, allowedTools: string[]): string | null {
+  if (!allowedTools.length) {
+    return null
+  }
+  const replacementMatrix: Record<string, string[]> = {
+    bash: ["read", "glob", "grep"],
+    write: ["edit", "read"],
+    edit: ["read", "write"],
+    task: ["read", "glob", "grep"],
+    webfetch: ["read", "grep"],
+    todowrite: ["todoread", "read"],
+  }
+  const preferred = replacementMatrix[deniedTool] ?? []
+  for (const candidate of preferred) {
+    if (allowedTools.includes(candidate)) {
+      return candidate
+    }
+  }
+  return allowedTools[0] ?? null
 }
 
 export function createAgentDeniedToolEnforcerHook(options: {
@@ -63,6 +87,7 @@ export function createAgentDeniedToolEnforcerHook(options: {
         return
       }
       const metadata = loadAgentMetadata(directory).get(subagentType)
+      const allowed = Array.isArray(metadata?.allowed_tools) ? metadata?.allowed_tools : []
       const denied = Array.isArray(metadata?.denied_tools) ? metadata?.denied_tools : []
       if (!denied || denied.length === 0) {
         return
@@ -74,16 +99,20 @@ export function createAgentDeniedToolEnforcerHook(options: {
       if (violating.length === 0) {
         return
       }
+      const suggestion = suggestAllowedTool(String(violating[0]), allowed)
       writeGatewayEventAudit(directory, {
         hook: "agent-denied-tool-enforcer",
         stage: "guard",
-        reason_code: "delegation_forbidden_tool_request",
+        reason_code: "tool_surface_enforced_runtime",
         session_id: sessionId(eventPayload),
         subagent_type: subagentType,
         denied_tools: violating.join(","),
+        suggested_tool: suggestion ?? undefined,
       })
       throw new Error(
-        `Blocked task delegation for ${subagentType}: prompt requests denied tools (${violating.join(", ")}). Remove forbidden tool instructions and retry.`,
+        `Blocked task delegation for ${subagentType}: prompt requests denied tools (${violating.join(", ")}).${
+          suggestion ? ` Use allowed tool '${suggestion}' instead.` : ""
+        } Remove forbidden tool instructions and retry.`,
       )
     },
   }

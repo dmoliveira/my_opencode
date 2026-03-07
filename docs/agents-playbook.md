@@ -63,6 +63,18 @@ This now also verifies orchestration policy markers in the nearest `AGENTS.md` (
 /agent-doctor --json
 ```
 
+Runtime discoverability commands:
+
+```text
+/agent-catalog list
+/agent-catalog explain orchestrator
+/agent-catalog doctor --json
+```
+
+When these hints appear automatically in execution flow:
+- delegation router injects `/agent-catalog explain <subagent>` when it infers or applies routing metadata
+- fallback orchestrator injects `/agent-catalog list` + explain hint when it rewrites a failed delegation path
+
 ---
 
 ## Real usage examples 🛠️
