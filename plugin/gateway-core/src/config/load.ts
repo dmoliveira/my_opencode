@@ -177,6 +177,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     typeof source.subagentLifecycleSupervisor === "object"
       ? (source.subagentLifecycleSupervisor as Record<string, unknown>)
       : {};
+  const subagentTelemetryTimelineSource =
+    source.subagentTelemetryTimeline &&
+    typeof source.subagentTelemetryTimeline === "object"
+      ? (source.subagentTelemetryTimeline as Record<string, unknown>)
+      : {};
+  const adaptiveDelegationPolicySource =
+    source.adaptiveDelegationPolicy &&
+    typeof source.adaptiveDelegationPolicy === "object"
+      ? (source.adaptiveDelegationPolicy as Record<string, unknown>)
+      : {};
   const validationEvidenceLedgerSource =
     source.validationEvidenceLedger &&
     typeof source.validationEvidenceLedger === "object"
@@ -819,6 +829,46 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof subagentLifecycleSupervisorSource.blockOnExhausted === "boolean"
           ? subagentLifecycleSupervisorSource.blockOnExhausted
           : DEFAULT_GATEWAY_CONFIG.subagentLifecycleSupervisor.blockOnExhausted,
+    },
+    subagentTelemetryTimeline: {
+      enabled:
+        typeof subagentTelemetryTimelineSource.enabled === "boolean"
+          ? subagentTelemetryTimelineSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.subagentTelemetryTimeline.enabled,
+      maxTimelineEntries: positiveInt(
+        subagentTelemetryTimelineSource.maxTimelineEntries,
+        DEFAULT_GATEWAY_CONFIG.subagentTelemetryTimeline.maxTimelineEntries,
+      ),
+    },
+    adaptiveDelegationPolicy: {
+      enabled:
+        typeof adaptiveDelegationPolicySource.enabled === "boolean"
+          ? adaptiveDelegationPolicySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.enabled,
+      windowMs: positiveInt(
+        adaptiveDelegationPolicySource.windowMs,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.windowMs,
+      ),
+      minSamples: positiveInt(
+        adaptiveDelegationPolicySource.minSamples,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.minSamples,
+      ),
+      highFailureRate: boundedFloat(
+        adaptiveDelegationPolicySource.highFailureRate,
+        0,
+        1,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.highFailureRate,
+      ),
+      cooldownMs: positiveInt(
+        adaptiveDelegationPolicySource.cooldownMs,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.cooldownMs,
+      ),
+      blockExpensiveDuringCooldown:
+        typeof adaptiveDelegationPolicySource.blockExpensiveDuringCooldown ===
+        "boolean"
+          ? adaptiveDelegationPolicySource.blockExpensiveDuringCooldown
+          : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
+              .blockExpensiveDuringCooldown,
     },
     validationEvidenceLedger: {
       enabled:

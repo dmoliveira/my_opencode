@@ -158,6 +158,22 @@ export interface DelegationFallbackOrchestratorConfig {
   enabled: boolean;
 }
 
+// Declares telemetry timeline settings for delegated subagent outcomes.
+export interface SubagentTelemetryTimelineConfig {
+  enabled: boolean;
+  maxTimelineEntries: number;
+}
+
+// Declares adaptive delegation policy settings for dynamic failure-response behavior.
+export interface AdaptiveDelegationPolicyConfig {
+  enabled: boolean;
+  windowMs: number;
+  minSamples: number;
+  highFailureRate: number;
+  cooldownMs: number;
+  blockExpensiveDuringCooldown: boolean;
+}
+
 // Declares continuation stop guard settings for loop stop persistence.
 export interface StopContinuationGuardConfig {
   enabled: boolean;
@@ -521,6 +537,8 @@ export interface GatewayConfig {
   delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
   delegationFallbackOrchestrator: DelegationFallbackOrchestratorConfig;
   subagentLifecycleSupervisor: SubagentLifecycleSupervisorConfig;
+  subagentTelemetryTimeline: SubagentTelemetryTimelineConfig;
+  adaptiveDelegationPolicy: AdaptiveDelegationPolicyConfig;
   validationEvidenceLedger: ValidationEvidenceLedgerConfig;
   mistakeLedger: MistakeLedgerConfig;
   parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
@@ -603,6 +621,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "delegation-fallback-orchestrator",
       "delegation-decision-audit",
       "subagent-lifecycle-supervisor",
+      "subagent-telemetry-timeline",
+      "adaptive-delegation-policy",
       "session-recovery",
       "delegate-task-retry",
       "agent-context-shaper",
@@ -800,6 +820,18 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     maxRetriesPerSession: 3,
     staleRunningMs: 300000,
     blockOnExhausted: true,
+  },
+  subagentTelemetryTimeline: {
+    enabled: true,
+    maxTimelineEntries: 1000,
+  },
+  adaptiveDelegationPolicy: {
+    enabled: true,
+    windowMs: 300000,
+    minSamples: 4,
+    highFailureRate: 0.5,
+    cooldownMs: 180000,
+    blockExpensiveDuringCooldown: true,
   },
   validationEvidenceLedger: {
     enabled: true,

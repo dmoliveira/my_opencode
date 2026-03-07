@@ -2,6 +2,7 @@ import { loadGatewayConfig } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
+import { createAdaptiveDelegationPolicyHook } from "./hooks/adaptive-delegation-policy/index.js";
 import { createAgentContextShaperHook } from "./hooks/agent-context-shaper/index.js";
 import { createAgentDeniedToolEnforcerHook } from "./hooks/agent-denied-tool-enforcer/index.js";
 import { createAgentModelResolverHook } from "./hooks/agent-model-resolver/index.js";
@@ -61,6 +62,7 @@ import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
+import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-timeline/index.js";
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
@@ -357,6 +359,21 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       maxRetriesPerSession: cfg.subagentLifecycleSupervisor.maxRetriesPerSession,
       staleRunningMs: cfg.subagentLifecycleSupervisor.staleRunningMs,
       blockOnExhausted: cfg.subagentLifecycleSupervisor.blockOnExhausted,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory,
+      enabled: cfg.subagentTelemetryTimeline.enabled,
+      maxTimelineEntries: cfg.subagentTelemetryTimeline.maxTimelineEntries,
+    }),
+    createAdaptiveDelegationPolicyHook({
+      directory,
+      enabled: cfg.adaptiveDelegationPolicy.enabled,
+      windowMs: cfg.adaptiveDelegationPolicy.windowMs,
+      minSamples: cfg.adaptiveDelegationPolicy.minSamples,
+      highFailureRate: cfg.adaptiveDelegationPolicy.highFailureRate,
+      cooldownMs: cfg.adaptiveDelegationPolicy.cooldownMs,
+      blockExpensiveDuringCooldown:
+        cfg.adaptiveDelegationPolicy.blockExpensiveDuringCooldown,
     }),
     createSessionRecoveryHook({
       directory,
