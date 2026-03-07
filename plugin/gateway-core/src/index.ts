@@ -151,6 +151,32 @@ interface CommandBeforeOutput {
   parts?: Array<{ type: string; text?: string }>;
 }
 
+const DISPATCH_NOISY_EVENTS = new Set([
+  "message.part.delta",
+  "message.part.updated",
+  "message.updated",
+  "session.updated",
+  "session.status",
+  "session.diff",
+  "experimental.chat.messages.transform",
+]);
+
+const DISPATCH_NOISY_REASON_CODES = new Set([
+  "event_dispatch",
+  "chat_messages_transform_dispatch",
+]);
+
+function dispatchSampleRate(): number {
+  const parsed = Number.parseInt(
+    String(process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE ?? ""),
+    10,
+  );
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 20;
+  }
+  return parsed;
+}
+
 // Declares minimal slash command post-execution mutable output shape.
 interface ToolAfterOutput {
   output?: unknown;
@@ -730,20 +756,37 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
   ): Promise<void>;
 } {
   const hooks = configuredHooks(ctx);
+  const noisyDispatchSampleCounters = new Map<string, number>();
+  const noisyDispatchSampleRate = dispatchSampleRate();
   const directory =
     typeof ctx.directory === "string" && ctx.directory.trim()
       ? ctx.directory
       : process.cwd();
 
+  function shouldWriteDispatchAudit(reasonCode: string, eventType: string): boolean {
+    if (!DISPATCH_NOISY_REASON_CODES.has(reasonCode)) {
+      return true;
+    }
+    if (!DISPATCH_NOISY_EVENTS.has(eventType)) {
+      return true;
+    }
+    const key = `${reasonCode}:${eventType}`;
+    const next = (noisyDispatchSampleCounters.get(key) ?? 0) + 1;
+    noisyDispatchSampleCounters.set(key, next);
+    return next === 1 || next % noisyDispatchSampleRate === 0;
+  }
+
   // Dispatches plugin lifecycle event to all enabled hooks in order.
   async function event(input: GatewayEventPayload): Promise<void> {
-    writeGatewayEventAudit(directory, {
-      hook: "gateway-core",
-      stage: "dispatch",
-      reason_code: "event_dispatch",
-      event_type: input.event.type,
-      hook_count: hooks.length,
-    });
+    if (shouldWriteDispatchAudit("event_dispatch", input.event.type)) {
+      writeGatewayEventAudit(directory, {
+        hook: "gateway-core",
+        stage: "dispatch",
+        reason_code: "event_dispatch",
+        event_type: input.event.type,
+        hook_count: hooks.length,
+      });
+    }
     for (const hook of hooks) {
       await hook.event(input.event.type, {
         properties: input.event.properties,
@@ -842,16 +885,23 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     input: { sessionID?: string },
     output: ChatMessagesTransformOutput,
   ): Promise<void> {
-    writeGatewayEventAudit(directory, {
-      hook: "gateway-core",
-      stage: "dispatch",
-      reason_code: "chat_messages_transform_dispatch",
-      event_type: "experimental.chat.messages.transform",
-      has_session_id:
-        typeof input.sessionID === "string" &&
-        input.sessionID.trim().length > 0,
-      hook_count: hooks.length,
-    });
+    if (
+      shouldWriteDispatchAudit(
+        "chat_messages_transform_dispatch",
+        "experimental.chat.messages.transform",
+      )
+    ) {
+      writeGatewayEventAudit(directory, {
+        hook: "gateway-core",
+        stage: "dispatch",
+        reason_code: "chat_messages_transform_dispatch",
+        event_type: "experimental.chat.messages.transform",
+        has_session_id:
+          typeof input.sessionID === "string" &&
+          input.sessionID.trim().length > 0,
+        hook_count: hooks.length,
+      });
+    }
     for (const hook of hooks) {
       await hook.event("experimental.chat.messages.transform", {
         input,

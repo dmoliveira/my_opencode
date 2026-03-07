@@ -225,6 +225,9 @@ Use these directly in OpenCode:
 /gateway enable
 /gateway disable
 /gateway doctor
+/gateway tune memory --json
+/gateway recover memory --apply --resume --compress --force-kill
+/gateway protection report --limit 20 --json
 ```
 
 Notes:
@@ -236,6 +239,23 @@ Notes:
 - `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
 - parity and naming differences vs upstream are tracked in `docs/upstream-divergence-registry.md`.
 - set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
+- set `MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE=<n>` to reduce noisy dispatch audit events (`message.*`, `session.*`, transform dispatch); `1` logs every event, default is `20`.
+
+## Delegation health summary 🧪
+
+Use these directly in OpenCode:
+
+```text
+/delegation-health status
+/delegation-health status --minutes 120 --json
+/delegation-health doctor
+/delegation-health doctor --json
+```
+
+Notes:
+- reads gateway audit events from `.opencode/gateway-events.jsonl` by default (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
+- `status` summarizes recent delegation reason codes and per-subagent signal ratios.
+- `doctor` warns on mutation-intent blocks / denied-tool enforcement and fails on excessive fallback routing.
 
 Gateway orphan cleanup report fields (`--json`):
 
@@ -305,11 +325,12 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /config - Backup/restore and sanitize OpenCode config files (status|layers|backup|list|restore|sanitize|safe-start)
 /daemon - Manage observability daemon controls (start|stop|status|tick|summary|doctor)
 /delivery - Run unified delivery transactions (start|status|handoff|close|doctor)
+/delegation-health - Summarize delegation health and detect routing drift (status|doctor)
 /do - Route high-level execution intent to autopilot go
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run diagnostics and reason-code registry export
-/gateway - Manage plugin gateway mode (status|enable|disable|doctor)
+/gateway - Manage gateway runtime controls (status|enable|disable|doctor|tune memory|recover memory|protection)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
 /health - Show repo health score and drift insights
 /hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)

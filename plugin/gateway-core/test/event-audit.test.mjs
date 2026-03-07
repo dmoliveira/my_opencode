@@ -32,6 +32,43 @@ test("gateway event audit writes dispatch entries when enabled", async () => {
   }
 })
 
+test("gateway event audit samples noisy dispatch events", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousRate = process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE = "5"
+  try {
+    const plugin = GatewayCorePlugin({ directory, config: {} })
+    for (let i = 0; i < 6; i += 1) {
+      await plugin.event({ event: { type: "session.updated", properties: { i } } })
+    }
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const events = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter(
+        (event) =>
+          event.reason_code === "event_dispatch" &&
+          event.event_type === "session.updated",
+      )
+    assert.equal(events.length, 2)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousRate === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE = previousRate
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 
 test("gateway event audit rotates file when max bytes threshold is exceeded", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))

@@ -84,6 +84,26 @@ import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/
 import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
+const DISPATCH_NOISY_EVENTS = new Set([
+    "message.part.delta",
+    "message.part.updated",
+    "message.updated",
+    "session.updated",
+    "session.status",
+    "session.diff",
+    "experimental.chat.messages.transform",
+]);
+const DISPATCH_NOISY_REASON_CODES = new Set([
+    "event_dispatch",
+    "chat_messages_transform_dispatch",
+]);
+function dispatchSampleRate() {
+    const parsed = Number.parseInt(String(process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE ?? ""), 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return 20;
+    }
+    return parsed;
+}
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx) {
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
@@ -583,18 +603,34 @@ function configuredHooks(ctx) {
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx) {
     const hooks = configuredHooks(ctx);
+    const noisyDispatchSampleCounters = new Map();
+    const noisyDispatchSampleRate = dispatchSampleRate();
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
         ? ctx.directory
         : process.cwd();
+    function shouldWriteDispatchAudit(reasonCode, eventType) {
+        if (!DISPATCH_NOISY_REASON_CODES.has(reasonCode)) {
+            return true;
+        }
+        if (!DISPATCH_NOISY_EVENTS.has(eventType)) {
+            return true;
+        }
+        const key = `${reasonCode}:${eventType}`;
+        const next = (noisyDispatchSampleCounters.get(key) ?? 0) + 1;
+        noisyDispatchSampleCounters.set(key, next);
+        return next === 1 || next % noisyDispatchSampleRate === 0;
+    }
     // Dispatches plugin lifecycle event to all enabled hooks in order.
     async function event(input) {
-        writeGatewayEventAudit(directory, {
-            hook: "gateway-core",
-            stage: "dispatch",
-            reason_code: "event_dispatch",
-            event_type: input.event.type,
-            hook_count: hooks.length,
-        });
+        if (shouldWriteDispatchAudit("event_dispatch", input.event.type)) {
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "dispatch",
+                reason_code: "event_dispatch",
+                event_type: input.event.type,
+                hook_count: hooks.length,
+            });
+        }
         for (const hook of hooks) {
             await hook.event(input.event.type, {
                 properties: input.event.properties,
@@ -670,15 +706,17 @@ export default function GatewayCorePlugin(ctx) {
     }
     // Dispatches experimental chat transform lifecycle signal to ordered hooks.
     async function chatMessagesTransform(input, output) {
-        writeGatewayEventAudit(directory, {
-            hook: "gateway-core",
-            stage: "dispatch",
-            reason_code: "chat_messages_transform_dispatch",
-            event_type: "experimental.chat.messages.transform",
-            has_session_id: typeof input.sessionID === "string" &&
-                input.sessionID.trim().length > 0,
-            hook_count: hooks.length,
-        });
+        if (shouldWriteDispatchAudit("chat_messages_transform_dispatch", "experimental.chat.messages.transform")) {
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "dispatch",
+                reason_code: "chat_messages_transform_dispatch",
+                event_type: "experimental.chat.messages.transform",
+                has_session_id: typeof input.sessionID === "string" &&
+                    input.sessionID.trim().length > 0,
+                hook_count: hooks.length,
+            });
+        }
         for (const hook of hooks) {
             await hook.event("experimental.chat.messages.transform", {
                 input,

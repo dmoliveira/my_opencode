@@ -1293,13 +1293,13 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
         "memoryRecovery": {
             "candidateMinFootprintMb": 6000,
             "candidateMinRssMb": 1400,
-            "forceKillMinPressureMb": 12000,
+            "forceKillMinPressureMb": 10240,
             "aggregateEnabled": True,
             "aggregateMaxPressureMb": 40960,
             "aggregateCandidateMinFootprintMb": 5000,
             "aggregateCandidateMinRssMb": 1800,
             "aggregateRequireSwapUsedMb": 12000,
-            "aggregateRequireContinueSessions": 6,
+            "aggregateRequireContinueSessions": 4,
             "aggregateBatchSize": 1,
             "emergencySwapEnabled": True,
             "emergencySwapUsedMb": 28000,
@@ -1710,7 +1710,7 @@ def command_recover_memory(
     )
     candidate_min_rss_mb = parse_float(recovery.get("candidateMinRssMb"), 1400.0)
     force_kill_min_pressure_mb = parse_float(
-        recovery.get("forceKillMinPressureMb"), 12000.0
+        recovery.get("forceKillMinPressureMb"), 10240.0
     )
     auto_continue_prompt = recovery.get("autoContinuePromptOnResume") is True
     continue_prompt_enabled = continue_prompt or auto_continue_prompt
@@ -1731,7 +1731,7 @@ def command_recover_memory(
         recovery.get("aggregateRequireSwapUsedMb"), 12_000.0
     )
     aggregate_require_continue_sessions = parse_int(
-        recovery.get("aggregateRequireContinueSessions"), 6
+        recovery.get("aggregateRequireContinueSessions"), 4
     )
     aggregate_batch_size = max(1, parse_int(recovery.get("aggregateBatchSize"), 1))
     emergency_swap_enabled = recovery.get("emergencySwapEnabled") is not False
@@ -2785,8 +2785,11 @@ def main(argv: list[str]) -> int:
     force_kill = False
     watch = False
     interval_seconds = 20
+    interval_seconds_set = False
     max_cycles = 0
+    max_cycles_set = False
     limit = 20
+    limit_set = False
     clear_cache = False
     if "--json" in args:
         args.remove("--json")
@@ -2823,6 +2826,7 @@ def main(argv: list[str]) -> int:
         del args[idx : idx + 2]
         try:
             interval_seconds = max(1, int(value))
+            interval_seconds_set = True
         except ValueError:
             return usage()
     if "--max-cycles" in args:
@@ -2833,6 +2837,7 @@ def main(argv: list[str]) -> int:
         del args[idx : idx + 2]
         try:
             max_cycles = max(0, int(value))
+            max_cycles_set = True
         except ValueError:
             return usage()
     if "--limit" in args:
@@ -2843,19 +2848,67 @@ def main(argv: list[str]) -> int:
         del args[idx : idx + 2]
         try:
             limit = max(1, int(value))
+            limit_set = True
         except ValueError:
             return usage()
+
+    used_flags: set[str] = set()
+    if as_json:
+        used_flags.add("--json")
+    if force:
+        used_flags.add("--force")
+    if apply:
+        used_flags.add("--apply")
+    if resume:
+        used_flags.add("--resume")
+    if compress:
+        used_flags.add("--compress")
+    if continue_prompt:
+        used_flags.add("--continue-prompt")
+    if force_kill:
+        used_flags.add("--force-kill")
+    if watch:
+        used_flags.add("--watch")
+    if clear_cache:
+        used_flags.add("--clear")
+    if interval_seconds_set:
+        used_flags.add("--interval-seconds")
+    if max_cycles_set:
+        used_flags.add("--max-cycles")
+    if limit_set:
+        used_flags.add("--limit")
+
+    def flags_allowed(*allowed: str) -> bool:
+        allowed_set = set(allowed)
+        return all(flag in allowed_set for flag in used_flags)
+
     if not args:
+        if not flags_allowed("--json"):
+            return usage()
         return command_status(as_json)
     cmd = args.pop(0)
     if cmd in {"help", "--help", "-h"}:
         return usage()
     if cmd == "tune":
         if len(args) == 1 and args[0] == "memory":
+            if not flags_allowed("--json", "--apply"):
+                return usage()
             return command_tune_memory(as_json, apply=apply)
         return usage()
     if cmd == "recover":
         if len(args) == 1 and args[0] == "memory":
+            if not flags_allowed(
+                "--json",
+                "--apply",
+                "--resume",
+                "--compress",
+                "--continue-prompt",
+                "--force-kill",
+                "--watch",
+                "--interval-seconds",
+                "--max-cycles",
+            ):
+                return usage()
             if watch:
                 return command_recover_memory_watch(
                     as_json,
@@ -2882,6 +2935,17 @@ def main(argv: list[str]) -> int:
         action = args[0]
         if action not in {"status", "enable", "disable", "report", "cache"}:
             return usage()
+        if action == "enable":
+            if not flags_allowed("--json", "--interval-seconds", "--max-cycles"):
+                return usage()
+        elif action == "report":
+            if not flags_allowed("--json", "--limit"):
+                return usage()
+        elif action == "cache":
+            if not flags_allowed("--json", "--clear"):
+                return usage()
+        elif not flags_allowed("--json"):
+            return usage()
         return command_protection(
             as_json,
             action,
@@ -2893,12 +2957,20 @@ def main(argv: list[str]) -> int:
     if args:
         return usage()
     if cmd == "status":
+        if not flags_allowed("--json"):
+            return usage()
         return command_status(as_json)
     if cmd == "enable":
+        if not flags_allowed("--json", "--force"):
+            return usage()
         return command_enable(as_json, force=force)
     if cmd == "disable":
+        if not flags_allowed("--json"):
+            return usage()
         return command_disable(as_json)
     if cmd == "doctor":
+        if not flags_allowed("--json"):
+            return usage()
         return command_doctor(as_json)
     return usage()
 
