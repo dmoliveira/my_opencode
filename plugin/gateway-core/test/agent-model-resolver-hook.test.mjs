@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
@@ -19,6 +21,35 @@ function createPlugin(directory) {
     },
   })
 }
+
+test("agent-model-resolver prepends thinking effort label for task descriptions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-agent-model-resolver-"))
+  try {
+    const specsDir = join(directory, "agent", "specs")
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(
+      join(specsDir, "explore.json"),
+      JSON.stringify({ name: "explore", metadata: { default_category: "quick" } }),
+      "utf-8",
+    )
+
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "Scout repository patterns",
+        prompt: "Inspect code paths",
+      },
+    }
+    await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-effort" }, output)
+
+    assert.equal(String(output.args.category ?? ""), "quick")
+    assert.match(String(output.args.description ?? ""), /^\[SUBAGENT\].*explore.*\[scan\].*effort=low/m)
+    assert.match(String(output.args.description ?? ""), /\[MODEL ROUTING\].*reasoning=low/i)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 test("agent-model-resolver infers explore delegation and category", async () => {
   const plugin = createPlugin(REPO_DIRECTORY)

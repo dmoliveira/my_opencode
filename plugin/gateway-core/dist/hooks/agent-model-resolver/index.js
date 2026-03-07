@@ -67,6 +67,18 @@ const ROUTING_PATTERNS = [
         patterns: [/\bcritique|feasibility|coverage|testability|plan review\b/i],
     },
 ];
+const SUBAGENT_ICON_BY_TYPE = {
+    explore: { nerd: "󰍉", fallback: "[scan]" },
+    librarian: { nerd: "󰂺", fallback: "[docs]" },
+    verifier: { nerd: "󰄬", fallback: "[check]" },
+    reviewer: { nerd: "󰦨", fallback: "[review]" },
+    "release-scribe": { nerd: "󰜘", fallback: "[notes]" },
+    oracle: { nerd: "󱠓", fallback: "[advisor]" },
+    "strategic-planner": { nerd: "󱎸", fallback: "[plan]" },
+    "ambiguity-analyst": { nerd: "󰋗", fallback: "[clarify]" },
+    "plan-critic": { nerd: "󰒠", fallback: "[critic]" },
+    orchestrator: { nerd: "󰯲", fallback: "[lead]" },
+};
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -128,6 +140,13 @@ function normalizeToolList(value) {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
 }
+function formatSubagentLabel(subagentType, reasoning) {
+    const icon = SUBAGENT_ICON_BY_TYPE[subagentType] ?? {
+        nerd: "󰚩",
+        fallback: "[agent]",
+    };
+    return `[SUBAGENT] ${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`;
+}
 export function createAgentModelResolverHook(options) {
     return {
         id: "agent-model-resolver",
@@ -152,7 +171,6 @@ export function createAgentModelResolverHook(options) {
             const knownAgents = new Set(metadataByAgent.keys());
             const combinedText = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
             let subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
-            const originalSubagentType = subagentType;
             let routeSource = "explicit_subagent_type";
             if (!subagentType) {
                 const inferred = inferSubagentType(combinedText, knownAgents);
@@ -187,13 +205,12 @@ export function createAgentModelResolverHook(options) {
             }
             const metadata = metadataByAgent.get(subagentType);
             const explicitCategory = String(args.category ?? "").toLowerCase().trim();
-            const category = explicitCategory || String(metadata?.default_category ?? "").toLowerCase().trim();
+            const requestedCategory = explicitCategory && MODEL_BY_CATEGORY[explicitCategory] ? explicitCategory : "";
+            const category = requestedCategory || String(metadata?.default_category ?? "").toLowerCase().trim();
             if (!category || !MODEL_BY_CATEGORY[category]) {
                 return;
             }
-            if (!explicitCategory) {
-                args.category = category;
-            }
+            args.category = category;
             const model = MODEL_BY_CATEGORY[category];
             const hint = `[MODEL ROUTING] Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`;
             const allowedTools = normalizeToolList(metadata?.allowed_tools);
@@ -205,8 +222,9 @@ export function createAgentModelResolverHook(options) {
             const composedHint = [routeHint, hint, toolSurface]
                 .filter((part) => part.length > 0)
                 .join("\n");
+            const subagentLabel = formatSubagentLabel(subagentType, model.reasoning);
             args.prompt = prependHint(String(args.prompt ?? ""), composedHint);
-            args.description = prependHint(String(args.description ?? ""), composedHint);
+            args.description = prependHint(prependHint(String(args.description ?? ""), composedHint), subagentLabel);
             writeGatewayEventAudit(directory, {
                 hook: "agent-model-resolver",
                 stage: "state",
