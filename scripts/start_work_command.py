@@ -18,6 +18,7 @@ from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
 )
+from model_routing_command import resolve_for_entrypoint  # type: ignore
 from plan_execution_runtime import (  # type: ignore
     load_plan_execution_state,
     save_plan_execution_state,
@@ -59,6 +60,19 @@ ALLOWED_STATUSES = {
     "resume_escalated",
     "budget_stopped",
 }
+
+
+def entrypoint_model_routing() -> dict[str, Any]:
+    return resolve_for_entrypoint("start-work")
+
+
+def attach_model_routing(target: dict[str, Any], routing: dict[str, Any]) -> None:
+    target["model_routing"] = routing
+
+
+def decorate_report(report: dict[str, Any]) -> dict[str, Any]:
+    attach_model_routing(report, entrypoint_model_routing())
+    return report
 
 
 def usage() -> int:
@@ -361,6 +375,7 @@ def command_start(args: list[str]) -> int:
             "plan": str(plan_path),
             "hint": "pass a readable markdown plan path",
         }
+        decorate_report(report)
         print(json.dumps(report, indent=2) if json_output else report["hint"])
         return 1
 
@@ -373,6 +388,7 @@ def command_start(args: list[str]) -> int:
             "plan": str(plan_path),
             "detail": str(exc),
         }
+        decorate_report(report)
         print(json.dumps(report, indent=2) if json_output else str(exc))
         return 1
 
@@ -383,10 +399,12 @@ def command_start(args: list[str]) -> int:
             "plan": str(plan_path),
             "violations": violations,
         }
+        decorate_report(report)
         print(json.dumps(report, indent=2) if json_output else "validation failed")
         return 1
 
     assert parsed is not None
+    routing = entrypoint_model_routing()
     steps = parsed["steps"]
     transitions: list[dict[str, Any]] = []
     compliance_violations: list[dict[str, Any]] = []
@@ -551,6 +569,7 @@ def command_start(args: list[str]) -> int:
                 "code": "background_manager_unavailable",
                 "hint": "install scripts/background_task_manager.py before using --background",
             }
+            decorate_report(report)
             print(json.dumps(report, indent=2) if json_output else report["hint"])
             return 1
 
@@ -587,6 +606,7 @@ def command_start(args: list[str]) -> int:
                 "stderr": enqueue_result.stderr.strip(),
                 "stdout": enqueue_result.stdout.strip(),
             }
+            decorate_report(report)
             print(json.dumps(report, indent=2) if json_output else "failed to enqueue")
             return 1
 
@@ -601,6 +621,7 @@ def command_start(args: list[str]) -> int:
                 "code": "background_enqueue_parse_failed",
                 "stdout": enqueue_result.stdout.strip(),
             }
+            decorate_report(report)
             print(
                 json.dumps(report, indent=2)
                 if json_output
@@ -616,6 +637,7 @@ def command_start(args: list[str]) -> int:
             "plan": {"path": str(plan_path), "metadata": parsed["metadata"]},
             "hint": "run /bg run --id <job-id> to execute queued plan",
         }
+        attach_model_routing(report, routing)
         if json_output:
             print(json.dumps(report, indent=2))
         else:
@@ -659,6 +681,7 @@ def command_start(args: list[str]) -> int:
         "checkpoint": persistence,
         "config": str(write_path),
     }
+    attach_model_routing(report, routing)
 
     if json_output:
         print(json.dumps(report, indent=2))
@@ -727,6 +750,7 @@ def command_status(args: list[str]) -> int:
         "budget": runtime.get("budget", {}),
         "config": str(write_path),
     }
+    decorate_report(report)
     if json_output:
         print(json.dumps(report, indent=2))
     else:
@@ -753,6 +777,7 @@ def command_deviations(args: list[str]) -> int:
         "count": len(deviations),
         "config": str(write_path),
     }
+    decorate_report(report)
     if json_output:
         print(json.dumps(report, indent=2))
     else:
@@ -863,6 +888,7 @@ def command_doctor(args: list[str]) -> int:
         ],
         "config": str(write_path),
     }
+    decorate_report(report)
 
     if json_output:
         print(json.dumps(report, indent=2))
@@ -922,6 +948,7 @@ def command_recover(args: list[str]) -> int:
             "hint": "run /start-work <plan.md> before attempting recovery",
             "config": str(write_path),
         }
+        decorate_report(report)
         print(json.dumps(report, indent=2) if json_output else report["hint"])
         return 1
 
@@ -1039,6 +1066,7 @@ def command_recover(args: list[str]) -> int:
         "snapshot": persistence,
         "config": str(write_path),
     }
+    decorate_report(report)
     if json_output:
         print(json.dumps(report, indent=2))
     else:

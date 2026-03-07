@@ -42,6 +42,13 @@ DEFAULT_STATE = {
     "latest_trace": {},
 }
 
+ENTRYPOINT_CATEGORY_DEFAULTS = {
+    "autopilot": "balanced",
+    "delivery": "balanced",
+    "start-work": "deep",
+    "workflow": "balanced",
+}
+
 
 def usage() -> int:
     print(
@@ -50,37 +57,45 @@ def usage() -> int:
     return 2
 
 
-def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
+def _merged_state(raw_state: Any) -> dict[str, Any]:
+    state = raw_state if isinstance(raw_state, dict) else {}
+    merged = dict(DEFAULT_STATE)
+    merged.update(state)
+    system_defaults = merged.get("system_defaults")
+    if not isinstance(system_defaults, dict):
+        merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
+    else:
+        merged["system_defaults"] = {
+            **DEFAULT_STATE["system_defaults"],
+            **system_defaults,
+        }
+    if not isinstance(merged.get("latest_trace"), dict):
+        merged["latest_trace"] = {}
+    return merged
+
+
+def load_state_snapshot(
+    *, persist_missing: bool = False
+) -> tuple[dict[str, Any], dict[str, Any], Path]:
     config, _ = load_layered_config()
     write_path = resolve_write_path()
     if LEGACY_ENV_SET and CONFIG_PATH.exists():
         loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        state = loaded if isinstance(loaded, dict) else {}
-        merged = dict(DEFAULT_STATE)
-        merged.update(state)
-        if not isinstance(merged.get("system_defaults"), dict):
-            merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
-        return config, merged, CONFIG_PATH
+        return config, _merged_state(loaded), CONFIG_PATH
 
     if CONFIG_PATH.exists():
         loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        state = loaded if isinstance(loaded, dict) else {}
-        merged = dict(DEFAULT_STATE)
-        merged.update(state)
-        if not isinstance(merged.get("system_defaults"), dict):
-            merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
-        return config, merged, CONFIG_PATH
+        return config, _merged_state(loaded), CONFIG_PATH
 
-    state = config.get(SECTION)
-    if not isinstance(state, dict):
-        state = dict(DEFAULT_STATE)
-    merged = dict(DEFAULT_STATE)
-    merged.update(state)
-    if not isinstance(merged.get("system_defaults"), dict):
-        merged["system_defaults"] = dict(DEFAULT_STATE["system_defaults"])
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    merged = _merged_state(config.get(SECTION))
+    if persist_missing:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     return config, merged, CONFIG_PATH
+
+
+def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
+    return load_state_snapshot(persist_missing=True)
 
 
 def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
@@ -214,6 +229,56 @@ def run_resolve(state: dict[str, Any], argv: list[str]) -> dict[str, Any]:
         "active_category": state.get("active_category"),
         "requested_category": category,
         "available_models": sorted(available_models) if available_models else None,
+        **resolved,
+    }
+
+
+def resolve_for_entrypoint(
+    entrypoint: str,
+    *,
+    requested_category: str | None = None,
+    available_models: set[str] | None = None,
+    user_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    _, state, _ = load_state_snapshot(persist_missing=False)
+    schema = default_schema()
+    problems = validate_schema(schema)
+    if problems:
+        return {
+            "result": "FAIL",
+            "entrypoint": entrypoint,
+            "problems": problems,
+        }
+
+    effective_requested_category = requested_category
+    requested_category_source = "requested_category"
+    if not effective_requested_category:
+        entrypoint_default = ENTRYPOINT_CATEGORY_DEFAULTS.get(entrypoint)
+        if isinstance(entrypoint_default, str) and entrypoint_default:
+            effective_requested_category = entrypoint_default
+            requested_category_source = "entrypoint_default"
+        else:
+            active_category = state.get("active_category")
+            effective_requested_category = (
+                str(active_category).strip()
+                if isinstance(active_category, str)
+                else None
+            )
+            requested_category_source = "active_category"
+
+    resolved = resolve_model_settings(
+        schema=schema,
+        requested_category=effective_requested_category,
+        user_overrides=user_overrides,
+        system_defaults=state.get("system_defaults"),
+        available_models=available_models,
+    )
+    return {
+        "result": "PASS",
+        "entrypoint": entrypoint,
+        "active_category": state.get("active_category"),
+        "requested_category": effective_requested_category,
+        "requested_category_source": requested_category_source,
         **resolved,
     }
 

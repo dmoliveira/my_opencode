@@ -12,6 +12,7 @@ from typing import Any
 
 from runtime_audit import append_event  # type: ignore
 from governance_policy import check_operation  # type: ignore
+from model_routing_command import resolve_for_entrypoint  # type: ignore
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -24,6 +25,29 @@ DEFAULT_STATE_PATH = Path(
         "~/.config/opencode/my_opencode/runtime/delivery_runs.json",
     )
 ).expanduser()
+
+
+def entrypoint_model_routing() -> dict[str, Any]:
+    return resolve_for_entrypoint("delivery")
+
+
+def attach_model_routing(
+    target: dict[str, Any], routing: dict[str, Any]
+) -> dict[str, Any]:
+    target["model_routing"] = routing
+    return target
+
+
+def strip_model_routing(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: strip_model_routing(item)
+            for key, item in value.items()
+            if key != "model_routing"
+        }
+    if isinstance(value, list):
+        return [strip_model_routing(item) for item in value]
+    return value
 
 
 def now_iso() -> str:
@@ -83,6 +107,7 @@ def run_json(command: list[str]) -> tuple[int, dict[str, Any]]:
 
 
 def emit(payload: dict[str, Any], as_json: bool) -> int:
+    attach_model_routing(payload, entrypoint_model_routing())
     if as_json:
         print(json.dumps(payload, indent=2))
     else:
@@ -98,6 +123,7 @@ def emit(payload: dict[str, Any], as_json: bool) -> int:
 
 
 def cmd_start(argv: list[str]) -> int:
+    routing = entrypoint_model_routing()
     as_json = "--json" in argv
     execute = "--execute" in argv
     override_flag = "--override" in argv
@@ -215,10 +241,10 @@ def cmd_start(argv: list[str]) -> int:
         "workflow_file": workflow_file,
         "execute": execute,
         "status": status,
-        "claim": claim_payload,
-        "workflow": workflow_payload,
+        "claim": strip_model_routing(claim_payload),
+        "workflow": strip_model_routing(workflow_payload),
         "final_step": final_step,
-        "final": final_payload,
+        "final": strip_model_routing(final_payload),
         "created_at": now_iso(),
     }
 
@@ -243,10 +269,16 @@ def cmd_start(argv: list[str]) -> int:
         {"run_id": run_id, "issue_id": issue_id, "status": status},
     )
 
-    return emit({"result": result_value, "command": "start", **run_record}, as_json)
+    return emit(
+        attach_model_routing(
+            {"result": result_value, "command": "start", **run_record}, routing
+        ),
+        as_json,
+    )
 
 
 def cmd_status(argv: list[str]) -> int:
+    routing = entrypoint_model_routing()
     as_json = "--json" in argv
     argv = [a for a in argv if a != "--json"]
     run_id = None
@@ -263,12 +295,15 @@ def cmd_status(argv: list[str]) -> int:
     )
     if not runs:
         return emit(
-            {
-                "result": "PASS",
-                "command": "status",
-                "status": "idle",
-                "warnings": ["no delivery runs recorded"],
-            },
+            attach_model_routing(
+                {
+                    "result": "PASS",
+                    "command": "status",
+                    "status": "idle",
+                    "warnings": ["no delivery runs recorded"],
+                },
+                routing,
+            ),
             as_json,
         )
     if run_id:
@@ -289,9 +324,19 @@ def cmd_status(argv: list[str]) -> int:
                 },
                 as_json,
             )
-        return emit({"result": "PASS", "command": "status", **match}, as_json)
+        return emit(
+            attach_model_routing(
+                {"result": "PASS", "command": "status", **match}, routing
+            ),
+            as_json,
+        )
     latest = runs[0] if isinstance(runs[0], dict) else {}
-    return emit({"result": "PASS", "command": "status", **latest}, as_json)
+    return emit(
+        attach_model_routing(
+            {"result": "PASS", "command": "status", **latest}, routing
+        ),
+        as_json,
+    )
 
 
 def cmd_handoff(argv: list[str]) -> int:

@@ -1164,7 +1164,7 @@ exit 0
         result = run_script(PLUGIN_SCRIPT, cfg, home, "setup-keys")
         expect(result.returncode == 0, f"plugin setup-keys failed: {result.stderr}")
 
-        # MCP minimal should pass with disabled warning.
+        # MCP minimal should pass cleanly with all servers disabled.
         result = run_script(MCP_SCRIPT, cfg, home, "profile", "minimal")
         expect(result.returncode == 0, f"mcp profile minimal failed: {result.stderr}")
 
@@ -1177,9 +1177,9 @@ exit 0
         expect(
             report.get("result") == "PASS", "mcp doctor should pass for minimal profile"
         )
-        warnings = "\n".join(report.get("warnings", []))
         expect(
-            "all MCP servers are disabled" in warnings, "expected disabled MCP warning"
+            not report.get("warnings"),
+            "mcp doctor should stay quiet for the minimal disabled profile",
         )
 
         # MCP research should enable both servers and pass.
@@ -1806,6 +1806,10 @@ exit 0
             wf_payload.get("execution_mode") == "dry-run",
             "workflow run should default to dry-run execution mode",
         )
+        expect(
+            wf_payload.get("model_routing", {}).get("entrypoint") == "workflow",
+            "workflow run should expose entrypoint model routing metadata",
+        )
 
         wf_exec_path = tmp / "wf-selftest-exec.json"
         wf_exec_path.write_text(
@@ -2262,6 +2266,10 @@ exit 0
             delivery_payload.get("status") == "completed"
             and delivery_payload.get("final_step") == "release",
             "delivery start should complete workflow and release claim",
+        )
+        expect(
+            delivery_payload.get("model_routing", {}).get("entrypoint") == "delivery",
+            "delivery start should expose entrypoint model routing metadata",
         )
 
         result = subprocess.run(
@@ -7314,6 +7322,11 @@ version: 1
             "start-work should report PASS todo compliance for valid plan execution",
         )
         expect(
+            start_work_report.get("model_routing", {}).get("entrypoint") == "start-work"
+            and start_work_report.get("model_routing", {}).get("category") == "deep",
+            "start-work should expose entrypoint model routing metadata",
+        )
+        expect(
             start_work_report.get("deviation_count", 0) >= 2,
             "start-work should capture precompleted and manual deviations",
         )
@@ -7615,6 +7628,15 @@ version: 1
             and autopilot_command_start_report.get("run", {}).get("status") == "draft",
             "autopilot start should persist dry-run-required draft state",
         )
+        expect(
+            autopilot_command_start_report.get("model_routing", {}).get("entrypoint")
+            == "autopilot"
+            and autopilot_command_start_report.get("run", {})
+            .get("model_routing", {})
+            .get("category")
+            == "balanced",
+            "autopilot start should expose entrypoint model routing metadata",
+        )
 
         autopilot_command_status = subprocess.run(
             [
@@ -7644,6 +7666,11 @@ version: 1
                 autopilot_command_status_report.get("control_integrations", {}), dict
             ),
             "autopilot status should include control integration diagnostics",
+        )
+        expect(
+            autopilot_command_status_report.get("model_routing", {}).get("entrypoint")
+            == "autopilot",
+            "autopilot status should expose entrypoint model routing metadata",
         )
         expect(
             autopilot_command_status_report.get("gateway_runtime_mode")
@@ -8167,6 +8194,11 @@ version: 1
         expect(
             start_work_status_report.get("status") == "completed",
             "start-work status should persist latest run status",
+        )
+        expect(
+            start_work_status_report.get("model_routing", {}).get("entrypoint")
+            == "start-work",
+            "start-work status should expose entrypoint model routing metadata",
         )
 
         budget_status = subprocess.run(
