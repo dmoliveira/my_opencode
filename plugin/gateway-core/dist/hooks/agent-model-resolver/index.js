@@ -123,8 +123,9 @@ function stripInjectedHeaders(original) {
         .reduce((text, header) => stripHeaderLine(text, header), original)
         .trimStart();
 }
-function stampHeader(header, timestamp, body) {
-    return `[${header} ${timestamp}] ${body}`;
+function formatHeader(header, body, timestamp) {
+    const marker = timestamp ? `${header} ${timestamp}` : header;
+    return `[${marker}] ${body}`;
 }
 function inferSubagentType(text, available) {
     const source = text.trim();
@@ -187,7 +188,7 @@ function formatSubagentLabel(subagentType, reasoning, timestamp) {
         nerd: "󰚩",
         fallback: "[agent]",
     };
-    return stampHeader("SUBAGENT", timestamp, `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`);
+    return formatHeader("SUBAGENT", `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`, timestamp);
 }
 export function createAgentModelResolverHook(options) {
     return {
@@ -267,13 +268,13 @@ export function createAgentModelResolverHook(options) {
             args.category = category;
             const model = MODEL_BY_CATEGORY[category];
             const stamp = formatTimestamp(new Date());
-            const modelHintPrompt = stampHeader("MODEL ROUTING", stamp.full, `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`);
-            const modelHintDescription = stampHeader("MODEL ROUTING", stamp.time, `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`);
+            const modelHintPrompt = formatHeader("MODEL ROUTING", `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`, stamp.full);
+            const modelHintDescription = formatHeader("MODEL ROUTING", `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`);
             const allowedTools = normalizeToolList(metadata?.allowed_tools);
             const deniedTools = normalizeToolList(metadata?.denied_tools);
-            const toolSurface = stampHeader("TOOL SURFACE", stamp.time, `subagent=${subagentType}; allowed=${allowedTools.join(",") || "none"}; denied=${deniedTools.join(",") || "none"}.`);
+            const toolSurface = formatHeader("TOOL SURFACE", `subagent=${subagentType}; allowed=${allowedTools.join(",") || "none"}; denied=${deniedTools.join(",") || "none"}.`);
             const routeHint = routeSource !== "explicit_subagent_type"
-                ? stampHeader("DELEGATION ROUTER", stamp.time, `inferred subagent_type=${subagentType} from delegation intent.`)
+                ? formatHeader("DELEGATION ROUTER", `inferred subagent_type=${subagentType} from delegation intent.`)
                 : "";
             const composedPromptHint = [modelHintPrompt, routeHint, toolSurface]
                 .filter((part) => part.length > 0)
@@ -281,11 +282,11 @@ export function createAgentModelResolverHook(options) {
             const composedDescriptionHint = [modelHintDescription, routeHint, toolSurface]
                 .filter((part) => part.length > 0)
                 .join("\n");
-            const flowHint = stampHeader("SESSION FLOW", stamp.time, `parent_session_id=${sid || "unknown"}; trace_id=${traceId}`);
+            const flowHint = formatHeader("SESSION FLOW", `parent_session_id=${sid || "unknown"}; trace_id=${traceId}`);
             const subagentLabel = formatSubagentLabel(subagentType, model.reasoning, stamp.full);
             const cleanPrompt = stripInjectedHeaders(String(args.prompt ?? ""));
             const cleanDescription = stripInjectedHeaders(String(args.description ?? ""));
-            args.prompt = prependHint(prependHint(cleanPrompt, composedPromptHint), flowHint);
+            args.prompt = prependHint(prependHint(cleanPrompt, flowHint), composedPromptHint);
             args.description = prependHint(prependHint(prependHint(cleanDescription, composedDescriptionHint), flowHint), subagentLabel);
             writeGatewayEventAudit(directory, {
                 hook: "agent-model-resolver",
