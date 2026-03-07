@@ -110,7 +110,7 @@ test("primary-worktree-guard blocks switching the primary worktree onto task bra
         { tool: "bash", sessionID: "session-primary-checkout-path" },
         { args: { command: "git checkout main -- file.txt" } }
       ),
-      /limited to inspection, validation, and main-branch sync/
+      /limited to inspection, validation, and exact default-branch sync commands/
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -175,7 +175,7 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
         { tool: "bash", sessionID: "session-primary-bash-mutate" },
         { args: { command: "echo hi > file.txt" } }
       ),
-      /limited to inspection, validation, and main-branch sync/
+      /limited to inspection, validation, and exact default-branch sync commands/
     )
 
     await assert.rejects(
@@ -183,7 +183,7 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
         { tool: "bash", sessionID: "session-primary-gh-api" },
         { args: { command: "gh api -X POST repos/foo/bar/issues" } }
       ),
-      /limited to inspection, validation, and main-branch sync/
+      /limited to inspection, validation, and exact default-branch sync commands/
     )
 
     await assert.rejects(
@@ -191,7 +191,7 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
         { tool: "bash", sessionID: "session-primary-chain" },
         { args: { command: "git status --short --branch && echo hi > file.txt" } }
       ),
-      /limited to inspection, validation, and main-branch sync/
+      /limited to inspection, validation, and exact default-branch sync commands/
     )
 
     await assert.rejects(
@@ -199,7 +199,7 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
         { tool: "bash", sessionID: "session-primary-chain-switch" },
         { args: { command: "git switch main && git switch feature/foo" } }
       ),
-      /limited to inspection, validation, and main-branch sync/
+      /limited to inspection, validation, and exact default-branch sync commands/
     )
 
     await assert.rejects(
@@ -207,12 +207,22 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
         { tool: "bash", sessionID: "session-primary-redirection" },
         { args: { command: "git status --short --branch > file.txt" } }
       ),
-      /limited to inspection, validation, and main-branch sync/
+      /limited to inspection, validation, and exact default-branch sync commands/
     )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-bash-safe" },
       { args: { command: "git status --short --branch" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-fetch-plain-safe" },
+      { args: { command: "git fetch" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-fetch-safe" },
+      { args: { command: "git fetch --prune" } }
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

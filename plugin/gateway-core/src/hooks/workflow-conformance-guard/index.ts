@@ -88,7 +88,7 @@ export function createWorkflowConformanceGuardHook(options: {
         session_id: sessionId,
       })
       throw new Error(
-        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and sync. Use a worktree feature branch for task mutations.`
+        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations.`
       )
     },
   }

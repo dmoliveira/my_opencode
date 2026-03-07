@@ -102,7 +102,7 @@ export function createPrimaryWorktreeGuardHook(options) {
                 reason_code: "bash_in_primary_worktree_blocked",
                 session_id: sessionId,
             });
-            throw new Error("Bash commands in the primary project folder are limited to inspection, validation, and main-branch sync. Create or use a dedicated git worktree branch for task mutations.");
+            throw new Error("Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (`git fetch`, `git fetch --prune`, and `git pull --rebase`). Create or use a dedicated git worktree branch for task mutations.");
         },
     };
 }
