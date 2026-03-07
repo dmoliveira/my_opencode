@@ -191,12 +191,23 @@ def run_hook(command: str, digest_path: Path) -> int:
 
 def trusted_post_session_paths() -> list[Path]:
     home = Path("~").expanduser()
-    return [
+    layered_path = resolve_write_path()
+    candidates = [
+        layered_path,
         home / ".config" / "opencode" / "my_opencode.jsonc",
         home / ".config" / "opencode" / "my_opencode.json",
         home / ".config" / "opencode" / "opencode.jsonc",
         home / ".config" / "opencode" / "opencode.json",
     ]
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.expanduser())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path.expanduser())
+    return unique
 
 
 def load_trusted_post_session_block() -> dict | None:
