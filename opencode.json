@@ -227,6 +227,17 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
     }
   },
+  "observability": {
+    "enabled": true,
+    "provider": "langfuse",
+    "otlp_endpoint": "http://dmm:3005/api/public/otel",
+    "otlp_traces_endpoint": "http://dmm:3005/api/public/otel/v1/traces",
+    "otlp_protocol": "http/protobuf",
+    "otlp_headers_env": "OTEL_EXPORTER_OTLP_HEADERS",
+    "langfuse_public_key_env": "LANGFUSE_PUBLIC_KEY",
+    "langfuse_secret_key_env": "LANGFUSE_SECRET_KEY",
+    "service_name": "my_opencode"
+  },
   "plugin": [
     "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
   ],
