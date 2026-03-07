@@ -77,3 +77,45 @@ test("agent-denied-tool-enforcer allows read-only discovery prompts", async () =
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("agent-denied-tool-enforcer does not block generic word mentions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
+  try {
+    seedExploreSpec(directory)
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "This task maps architecture and references previous task outcomes.",
+        prompt: "Avoid bash usage and stick to read-only discovery.",
+      },
+    }
+
+    await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-generic-mentions" }, output)
+    assert.equal(output.args.subagent_type, "explore")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("agent-denied-tool-enforcer blocks explicit denied tool invocation patterns", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
+  try {
+    seedExploreSpec(directory)
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "Run the bash tool to inspect repository state.",
+        prompt: "Use functions.bash for command execution.",
+      },
+    }
+
+    await assert.rejects(
+      plugin["tool.execute.before"]({ tool: "task", sessionID: "session-explicit-denied" }, output),
+      /denied tools/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
