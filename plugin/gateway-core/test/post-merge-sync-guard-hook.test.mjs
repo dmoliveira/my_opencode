@@ -62,8 +62,10 @@ test("post-merge-sync-guard appends sync reminder after merge without inline pul
       directory,
     }
     await hook.event("tool.execute.after", afterPayload)
-    assert.match(String(afterPayload.output.output), /Merge complete\. Run cleanup sync/)
-    assert.match(String(afterPayload.output.output), /git pull --rebase/)
+    assert.match(String(afterPayload.output.output), /Merge complete\./)
+    assert.match(String(afterPayload.output.output), /inspect worktrees before syncing/)
+    assert.match(String(afterPayload.output.output), /git worktree list/)
+    assert.match(String(afterPayload.output.output), /git status --short --branch/)
     assert.doesNotMatch(String(afterPayload.output.output), /git checkout main/)
   } finally {
     rmSync(directory, { recursive: true, force: true })

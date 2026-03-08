@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js";
 const MODEL_BY_CATEGORY = {
     quick: { model: "openai/gpt-5.1-codex-mini", reasoning: "low" },
     balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
@@ -247,6 +247,7 @@ export function createAgentModelResolverHook(options) {
                 return;
             }
             const traceId = resolveDelegationTraceId(args);
+            annotateDelegationMetadata(eventPayload.output ?? {}, args);
             const sid = sessionId(eventPayload);
             const metadataByAgent = loadAgentMetadata(directory);
             const knownAgents = new Set(metadataByAgent.keys());
@@ -341,6 +342,7 @@ export function createAgentModelResolverHook(options) {
             const cleanDescription = stripInjectedHeaders(String(args.description ?? ""));
             args.prompt = prependHint(prependHint(prependHint(cleanPrompt, worktreeHint), flowHint), composedPromptHint);
             args.description = prependHint(prependHint(prependHint(prependHint(cleanDescription, composedDescriptionHint), worktreeHint), flowHint), subagentLabel);
+            annotateDelegationMetadata(eventPayload.output ?? {}, args);
             writeGatewayEventAudit(directory, {
                 hook: "agent-model-resolver",
                 stage: "state",

@@ -1,6 +1,13 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata, type AgentRoutingMetadata } from "../shared/agent-metadata.js"
+import {
+  annotateDelegationMetadata,
+  extractDelegationSubagentType,
+  extractDelegationSubagentTypeFromOutput,
+  extractDelegationTraceId,
+  resolveDelegationTraceId,
+} from "../shared/delegation-trace.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -13,6 +20,7 @@ interface ToolBeforePayload {
       subagent_type?: string
       category?: string
     }
+    metadata?: unknown
   }
 }
 
@@ -23,6 +31,10 @@ interface ToolAfterPayload {
     sessionId?: string
   }
   output?: {
+    args?: {
+      subagent_type?: string
+    }
+    metadata?: unknown
     output?: unknown
   }
   directory?: string
@@ -37,9 +49,18 @@ interface SessionDeletedPayload {
 }
 
 interface StoredContext {
+  sessionId: string
+  traceId: string
   subagentType: string
   category: string
   metadata: AgentRoutingMetadata
+}
+
+function delegationKey(sessionId: string, traceId: string, subagentType: string): string {
+  if (traceId) {
+    return `${sessionId}:${traceId}`
+  }
+  return `${sessionId}:agent:${subagentType || "unknown"}`
 }
 
 function sessionId(payload: {
@@ -76,7 +97,7 @@ export function createAgentContextShaperHook(options: {
   directory: string
   enabled: boolean
 }): GatewayHook {
-  const contextBySession = new Map<string, StoredContext>()
+  const contextByDelegation = new Map<string, StoredContext>()
   return {
     id: "agent-context-shaper",
     priority: 294,
@@ -87,7 +108,11 @@ export function createAgentContextShaperHook(options: {
       if (type === "session.deleted") {
         const sid = sessionId((payload ?? {}) as SessionDeletedPayload)
         if (sid) {
-          contextBySession.delete(sid)
+          for (const key of contextByDelegation.keys()) {
+            if (key === sid || key.startsWith(`${sid}:`)) {
+              contextByDelegation.delete(key)
+            }
+          }
         }
         return
       }
@@ -103,12 +128,15 @@ export function createAgentContextShaperHook(options: {
         }
         const subagentType = String(eventPayload.output?.args?.subagent_type ?? "").toLowerCase().trim()
         if (!subagentType) {
-          contextBySession.delete(sid)
           return
         }
+        const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {})
+        annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args)
         const metadata = loadAgentMetadata(options.directory).get(subagentType) ?? {}
         const category = String(eventPayload.output?.args?.category ?? metadata.default_category ?? "balanced")
-        contextBySession.set(sid, {
+        contextByDelegation.set(delegationKey(sid, traceId, subagentType), {
+          sessionId: sid,
+          traceId,
           subagentType,
           category,
           metadata,
@@ -127,12 +155,33 @@ export function createAgentContextShaperHook(options: {
       if (!sid) {
         return
       }
-      const context = contextBySession.get(sid)
+      const outputText = eventPayload.output.output
+      const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
+      const subagentType =
+        extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+        extractDelegationSubagentTypeFromOutput(outputText)
+      const directKey = delegationKey(sid, traceId, subagentType)
+      let matchedKey = directKey
+      let context = contextByDelegation.get(directKey)
+      if (!context) {
+        const matches = [...contextByDelegation.entries()].filter(
+          ([, candidate]) => candidate.sessionId === sid && candidate.subagentType === subagentType,
+        )
+        if (matches.length === 1) {
+          ;[[matchedKey, context]] = matches
+        }
+      }
       if (!context) {
         return
       }
-      const output = eventPayload.output.output
+      annotateDelegationMetadata(eventPayload.output ?? {}, {
+        subagent_type: context.subagentType,
+        category: context.category,
+        prompt: `[DELEGATION TRACE ${context.traceId}]`,
+      })
+      const output = outputText
       if (!looksLikeFailure(output) && output.length < 1200) {
+        contextByDelegation.delete(matchedKey)
         return
       }
       const hint = buildHint(context)
@@ -151,6 +200,7 @@ export function createAgentContextShaperHook(options: {
         subagent_type: context.subagentType,
         recommended_category: context.category,
       })
+      contextByDelegation.delete(matchedKey)
     },
   }
 }

@@ -14,6 +14,8 @@ export interface DelegationOutcomeInput {
   status: "completed" | "failed"
   reasonCode?: string
   endedAt: number
+  traceId?: string
+  subagentType?: string
 }
 
 export interface DelegationOutcomeRecord {
@@ -39,7 +41,7 @@ interface PersistedState {
   timeline: DelegationOutcomeRecord[]
 }
 
-const activeBySession = new Map<string, ActiveDelegation>()
+const activeByDelegation = new Map<string, ActiveDelegation>()
 const timeline: DelegationOutcomeRecord[] = []
 
 let statePath = ""
@@ -138,12 +140,21 @@ export function configureDelegationRuntimeState(options: {
   load()
 }
 
+function delegationKey(sessionId: string, traceId?: string, subagentType?: string): string {
+  const normalizedTrace = String(traceId ?? "").trim()
+  if (normalizedTrace) {
+    return `${sessionId}:${normalizedTrace}`
+  }
+  const normalizedSubagent = String(subagentType ?? "").trim().toLowerCase() || "unknown"
+  return `${sessionId}:agent:${normalizedSubagent}`
+}
+
 export function registerDelegationStart(input: DelegationStartInput): void {
   if (!input.sessionId.trim()) {
     return
   }
   load()
-  activeBySession.set(input.sessionId, {
+  activeByDelegation.set(delegationKey(input.sessionId, input.traceId, input.subagentType), {
     subagentType: input.subagentType,
     category: input.category,
     startedAt: input.startedAt,
@@ -156,11 +167,31 @@ export function registerDelegationOutcome(
   maxEntries: number,
 ): DelegationOutcomeRecord | null {
   load()
-  const active = activeBySession.get(input.sessionId)
+  const directKey = delegationKey(input.sessionId, input.traceId, input.subagentType)
+  let active = activeByDelegation.get(directKey)
+  let activeKey = directKey
+  if (!active && !input.traceId && input.subagentType) {
+    const matches = [...activeByDelegation.entries()].filter(
+      ([candidateKey, candidate]) =>
+        (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
+        candidate.subagentType === input.subagentType,
+    )
+    if (matches.length === 1) {
+      ;[[activeKey, active]] = matches
+    }
+  }
+  if (!active && !input.traceId && !input.subagentType) {
+    const matches = [...activeByDelegation.entries()].filter(
+      ([candidateKey]) => candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`),
+    )
+    if (matches.length === 1) {
+      ;[[activeKey, active]] = matches
+    }
+  }
   if (!active) {
     return null
   }
-  activeBySession.delete(input.sessionId)
+  activeByDelegation.delete(activeKey)
   const durationMs = Math.max(0, input.endedAt - active.startedAt)
   const record: DelegationOutcomeRecord = {
     sessionId: input.sessionId,
@@ -184,7 +215,11 @@ export function registerDelegationOutcome(
 }
 
 export function clearDelegationSession(sessionId: string): void {
-  activeBySession.delete(sessionId)
+  for (const key of activeByDelegation.keys()) {
+    if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+      activeByDelegation.delete(key)
+    }
+  }
 }
 
 export function getRecentDelegationOutcomes(windowMs: number): DelegationOutcomeRecord[] {
