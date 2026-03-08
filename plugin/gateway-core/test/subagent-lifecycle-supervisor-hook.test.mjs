@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createSubagentLifecycleSupervisorHook } from "../dist/hooks/subagent-lifecycle-supervisor/index.js"
 
 test("subagent-lifecycle-supervisor blocks duplicate running delegations", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
@@ -430,5 +431,131 @@ test("subagent-lifecycle-supervisor uses child run id metadata before fallback c
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+
+test("subagent-lifecycle-supervisor records fallback and ambiguous cleanup audit reasons", async () => {
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-audit" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE life-audit-explore] first" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-audit" },
+      { args: { subagent_type: "strategic-planner", prompt: "[DELEGATION TRACE life-audit-plan] second" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-audit" },
+      {
+        output: `done
+
+[agent-context-shaper] delegation context
+- subagent: strategic-planner
+- recommended_category: deep`,
+      },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-audit" },
+      { output: "done" },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-audit-ambiguous" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE life-audit-ambiguous-explore] first" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-audit-ambiguous" },
+      { args: { subagent_type: "strategic-planner", prompt: "[DELEGATION TRACE life-audit-ambiguous-plan] second" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-audit-ambiguous" },
+      { output: "done" },
+    )
+
+    const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\n+/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(events.some((entry) => entry.reason_code === "subagent_lifecycle_subagent_fallback_matched"))
+    assert.ok(events.some((entry) => entry.reason_code === "subagent_lifecycle_after_ambiguous_skip"))
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+  }
+})
+
+test("subagent-lifecycle-supervisor writes after-event fallback audit to the payload directory", async () => {
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  const rootDirectory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-root-"))
+  const eventDirectory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-events-"))
+  try {
+    const hook = createSubagentLifecycleSupervisorHook({
+      directory: rootDirectory,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    })
+
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-event-dir" },
+      output: { args: { subagent_type: "explore", prompt: "first" } },
+      directory: eventDirectory,
+    })
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-event-dir" },
+      output: { args: { subagent_type: "strategic-planner", prompt: "second" } },
+      directory: eventDirectory,
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "task", sessionID: "session-life-event-dir" },
+      output: {
+        output: `done
+
+[agent-context-shaper] delegation context
+- subagent: strategic-planner
+- recommended_category: deep`,
+      },
+      directory: eventDirectory,
+    })
+
+    const events = readFileSync(join(eventDirectory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\n+/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(events.some((entry) => entry.reason_code === "subagent_lifecycle_subagent_fallback_matched"))
+  } finally {
+    rmSync(rootDirectory, { recursive: true, force: true })
+    rmSync(eventDirectory, { recursive: true, force: true })
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
   }
 })

@@ -177,16 +177,33 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
     if not path.exists():
         return {
             "audit_path": str(path),
+            "counter_semantics": "hook_audit_events",
             "total_events": 0,
             "context_warnings_triggered": 0,
             "compactions_triggered": 0,
             "global_process_pressure_warnings": 0,
             "global_process_pressure_critical_events": 0,
+            "delegation_fallback_matches": 0,
+            "ambiguous_cleanup_skips": 0,
+            "stale_prunes": 0,
+            "stale_loop_expirations": 0,
+            "delegation_fallback_match_events": 0,
+            "ambiguous_cleanup_skip_events": 0,
+            "stale_prune_events": 0,
+            "stale_loop_expiration_events": 0,
             "recent_window_minutes": 30,
             "recent_context_warnings": 0,
             "recent_compactions": 0,
             "recent_global_process_pressure_warnings": 0,
             "recent_global_process_pressure_critical_events": 0,
+            "recent_delegation_fallback_matches": 0,
+            "recent_ambiguous_cleanup_skips": 0,
+            "recent_stale_prunes": 0,
+            "recent_stale_loop_expirations": 0,
+            "recent_delegation_fallback_match_events": 0,
+            "recent_ambiguous_cleanup_skip_events": 0,
+            "recent_stale_prune_events": 0,
+            "recent_stale_loop_expiration_events": 0,
             "session_pressure_attribution": [],
             "last_critical_triggered_at": None,
             "last_triggered_at": None,
@@ -197,10 +214,18 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
     compactions = 0
     global_pressure_warnings = 0
     global_pressure_critical_events = 0
+    delegation_fallback_matches = 0
+    ambiguous_cleanup_skips = 0
+    stale_prunes = 0
+    stale_loop_expirations = 0
     recent_context_warnings = 0
     recent_compactions = 0
     recent_global_pressure_warnings = 0
     recent_global_pressure_critical_events = 0
+    recent_delegation_fallback_matches = 0
+    recent_ambiguous_cleanup_skips = 0
+    recent_stale_prunes = 0
+    recent_stale_loop_expirations = 0
     attribution: dict[str, dict[str, Any]] = {}
     recent_window_minutes = 30
     now_utc = datetime.now(UTC)
@@ -278,6 +303,30 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
                             },
                         )
                         row["critical_events"] = int(row["critical_events"]) + 1
+                elif reason_code in {
+                    "delegation_concurrency_trace_fallback_matched",
+                    "delegation_concurrency_subagent_fallback_matched",
+                    "subagent_lifecycle_trace_fallback_matched",
+                    "subagent_lifecycle_subagent_fallback_matched",
+                }:
+                    delegation_fallback_matches += 1
+                    if in_recent_window:
+                        recent_delegation_fallback_matches += 1
+                elif reason_code in {
+                    "delegation_concurrency_after_ambiguous_skip",
+                    "subagent_lifecycle_after_ambiguous_skip",
+                }:
+                    ambiguous_cleanup_skips += 1
+                    if in_recent_window:
+                        recent_ambiguous_cleanup_skips += 1
+                elif reason_code == "delegation_concurrency_stale_pruned":
+                    stale_prunes += 1
+                    if in_recent_window:
+                        recent_stale_prunes += 1
+                elif reason_code == "stale_loop_expired":
+                    stale_loop_expirations += 1
+                    if in_recent_window:
+                        recent_stale_loop_expirations += 1
                 rss_value = payload.get("max_rss_mb")
                 if (
                     session_id
@@ -336,6 +385,7 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
     except (OSError, UnicodeDecodeError):
         return {
             "audit_path": str(path),
+            "counter_semantics": "hook_audit_events",
             "total_events": 0,
             "context_warnings_triggered": 0,
             "compactions_triggered": 0,
@@ -346,6 +396,22 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
             "recent_global_process_pressure_warnings": 0,
             "global_process_pressure_critical_events": 0,
             "recent_global_process_pressure_critical_events": 0,
+            "delegation_fallback_matches": 0,
+            "ambiguous_cleanup_skips": 0,
+            "stale_prunes": 0,
+            "stale_loop_expirations": 0,
+            "delegation_fallback_match_events": 0,
+            "ambiguous_cleanup_skip_events": 0,
+            "stale_prune_events": 0,
+            "stale_loop_expiration_events": 0,
+            "recent_delegation_fallback_matches": 0,
+            "recent_ambiguous_cleanup_skips": 0,
+            "recent_stale_prunes": 0,
+            "recent_stale_loop_expirations": 0,
+            "recent_delegation_fallback_match_events": 0,
+            "recent_ambiguous_cleanup_skip_events": 0,
+            "recent_stale_prune_events": 0,
+            "recent_stale_loop_expiration_events": 0,
             "session_pressure_attribution": [],
             "last_critical_triggered_at": None,
             "last_triggered_at": None,
@@ -380,6 +446,7 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
 
     return {
         "audit_path": str(path),
+        "counter_semantics": "hook_audit_events",
         "total_events": total_events,
         "context_warnings_triggered": context_warnings,
         "compactions_triggered": compactions,
@@ -390,6 +457,22 @@ def gateway_event_counters(cwd: Path) -> dict[str, Any]:
         "recent_global_process_pressure_warnings": recent_global_pressure_warnings,
         "global_process_pressure_critical_events": global_pressure_critical_events,
         "recent_global_process_pressure_critical_events": recent_global_pressure_critical_events,
+        "delegation_fallback_matches": delegation_fallback_matches,
+        "ambiguous_cleanup_skips": ambiguous_cleanup_skips,
+        "stale_prunes": stale_prunes,
+        "stale_loop_expirations": stale_loop_expirations,
+        "delegation_fallback_match_events": delegation_fallback_matches,
+        "ambiguous_cleanup_skip_events": ambiguous_cleanup_skips,
+        "stale_prune_events": stale_prunes,
+        "stale_loop_expiration_events": stale_loop_expirations,
+        "recent_delegation_fallback_matches": recent_delegation_fallback_matches,
+        "recent_ambiguous_cleanup_skips": recent_ambiguous_cleanup_skips,
+        "recent_stale_prunes": recent_stale_prunes,
+        "recent_stale_loop_expirations": recent_stale_loop_expirations,
+        "recent_delegation_fallback_match_events": recent_delegation_fallback_matches,
+        "recent_ambiguous_cleanup_skip_events": recent_ambiguous_cleanup_skips,
+        "recent_stale_prune_events": recent_stale_prunes,
+        "recent_stale_loop_expiration_events": recent_stale_loop_expirations,
         "session_pressure_attribution": attribution_rows,
         "last_critical_triggered_at": last_critical_triggered_at,
         "last_triggered_at": last_triggered_at,

@@ -55,25 +55,35 @@ function sessionDelegationKeys(activeByDelegation, sid) {
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
+function effectiveDirectory(payload, fallbackDirectory) {
+    return typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : fallbackDirectory;
+}
 export function createDelegationConcurrencyGuardHook(options) {
     const activeByDelegation = new Map();
     function releaseDelegationReservation(eventPayload, directory) {
         const sid = sessionId(eventPayload);
         if (!sid) {
-            return false;
+            return "none";
         }
         const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
         const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
         if (childRunId || traceId) {
             const key = delegationKey(sid, childRunId, traceId);
             if (activeByDelegation.delete(key)) {
-                return true;
+                return "direct";
             }
             if (traceId) {
                 const traceMatches = matchingSessionTraceDelegationKeys(activeByDelegation, sid, traceId);
                 if (traceMatches.length === 1) {
                     activeByDelegation.delete(traceMatches[0]);
-                    return true;
+                    writeGatewayEventAudit(directory, {
+                        hook: "delegation-concurrency-guard",
+                        stage: "state",
+                        reason_code: "delegation_concurrency_trace_fallback_matched",
+                        session_id: sid,
+                        trace_id: traceId || undefined,
+                    });
+                    return "trace_fallback";
                 }
             }
         }
@@ -85,7 +95,14 @@ export function createDelegationConcurrencyGuardHook(options) {
             : sessionDelegationKeys(activeByDelegation, sid);
         if (fallbackKeys.length === 1) {
             activeByDelegation.delete(fallbackKeys[0]);
-            return true;
+            writeGatewayEventAudit(directory, {
+                hook: "delegation-concurrency-guard",
+                stage: "state",
+                reason_code: "delegation_concurrency_subagent_fallback_matched",
+                session_id: sid,
+                subagent_type: outputSubagentType || undefined,
+            });
+            return "subagent_fallback";
         }
         if (fallbackKeys.length > 1) {
             writeGatewayEventAudit(directory, {
@@ -96,7 +113,7 @@ export function createDelegationConcurrencyGuardHook(options) {
                 concurrent_total: String(fallbackKeys.length),
             });
         }
-        return false;
+        return fallbackKeys.length > 1 ? "ambiguous_skip" : "none";
     }
     function pruneStaleDelegations(directory, referenceTime) {
         for (const [key, active] of activeByDelegation.entries()) {
@@ -140,7 +157,7 @@ export function createDelegationConcurrencyGuardHook(options) {
                 if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
                     return;
                 }
-                releaseDelegationReservation(eventPayload, options.directory);
+                releaseDelegationReservation(eventPayload, effectiveDirectory(eventPayload, options.directory));
                 return;
             }
             if (type === "tool.execute.before.error") {
@@ -152,8 +169,10 @@ export function createDelegationConcurrencyGuardHook(options) {
                 if (!sid) {
                     return;
                 }
-                if (releaseDelegationReservation(eventPayload, options.directory)) {
-                    writeGatewayEventAudit(options.directory, {
+                const directory = effectiveDirectory(eventPayload, options.directory);
+                const releaseMode = releaseDelegationReservation(eventPayload, directory);
+                if (releaseMode !== "none" && releaseMode !== "ambiguous_skip") {
+                    writeGatewayEventAudit(directory, {
                         hook: "delegation-concurrency-guard",
                         stage: "state",
                         reason_code: "delegation_concurrency_before_error_released",
@@ -187,9 +206,7 @@ export function createDelegationConcurrencyGuardHook(options) {
             if (!subagentType && !category) {
                 return;
             }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
+            const directory = effectiveDirectory(eventPayload, options.directory);
             const now = nowMs();
             pruneStaleDelegations(directory, now);
             const metadata = subagentType ? loadAgentMetadata(directory).get(subagentType) : undefined;

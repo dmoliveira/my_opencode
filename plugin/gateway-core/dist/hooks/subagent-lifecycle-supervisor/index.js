@@ -24,6 +24,9 @@ function lifecycleKey(sid, childRunId, traceId, args) {
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
+function effectiveDirectory(payload, fallbackDirectory) {
+    return typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : fallbackDirectory;
+}
 function nowMs() {
     return Date.now();
 }
@@ -79,6 +82,9 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 activeKey = traceMatches[0];
                 state = byDelegation.get(activeKey);
             }
+            if (state) {
+                return { sid, activeKey, state, resolution: "trace_fallback" };
+            }
         }
         if (!state && !childRunId && !traceId) {
             const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
@@ -91,8 +97,11 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 activeKey = matches[0];
                 state = byDelegation.get(activeKey);
             }
+            if (state) {
+                return { sid, activeKey, state, resolution: "subagent_fallback" };
+            }
         }
-        return { sid, activeKey, state };
+        return { sid, activeKey, state, resolution: state ? "direct" : "none" };
     }
     return {
         id: "subagent-lifecycle-supervisor",
@@ -129,9 +138,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args);
                 const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
                 const key = lifecycleKey(sid, childRunId, traceId, eventPayload.output?.args);
-                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                    ? eventPayload.directory
-                    : options.directory;
+                const directory = effectiveDirectory(eventPayload, options.directory);
                 const existing = byDelegation.get(key);
                 const now = nowMs();
                 if (existing && existing.status === "running" && now - existing.lastStartedAt < options.staleRunningMs) {
@@ -190,12 +197,26 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
                     return;
                 }
+                const directory = effectiveDirectory(eventPayload, options.directory);
                 const resolved = resolveLifecycleState(eventPayload);
                 if (!resolved?.state) {
                     return;
                 }
+                if (resolved.resolution === "trace_fallback" || resolved.resolution === "subagent_fallback") {
+                    writeGatewayEventAudit(directory, {
+                        hook: "subagent-lifecycle-supervisor",
+                        stage: "state",
+                        reason_code: resolved.resolution === "trace_fallback"
+                            ? "subagent_lifecycle_trace_fallback_matched"
+                            : "subagent_lifecycle_subagent_fallback_matched",
+                        session_id: resolved.sid,
+                        subagent_type: resolved.state.subagentType,
+                        trace_id: resolved.state.traceId,
+                        child_run_id: resolved.state.childRunId,
+                    });
+                }
                 byDelegation.delete(resolved.activeKey);
-                writeGatewayEventAudit(options.directory, {
+                writeGatewayEventAudit(directory, {
                     hook: "subagent-lifecycle-supervisor",
                     stage: "state",
                     reason_code: "subagent_lifecycle_before_error_released",
@@ -213,6 +234,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
             if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
                 return;
             }
+            const directory = effectiveDirectory(eventPayload, options.directory);
             const resolved = resolveLifecycleState(eventPayload);
             if (!resolved) {
                 return;
@@ -222,6 +244,19 @@ export function createSubagentLifecycleSupervisorHook(options) {
             const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
             let activeKey = resolved.activeKey;
             let state = resolved.state;
+            if (state && (resolved.resolution === "trace_fallback" || resolved.resolution === "subagent_fallback")) {
+                writeGatewayEventAudit(directory, {
+                    hook: "subagent-lifecycle-supervisor",
+                    stage: "state",
+                    reason_code: resolved.resolution === "trace_fallback"
+                        ? "subagent_lifecycle_trace_fallback_matched"
+                        : "subagent_lifecycle_subagent_fallback_matched",
+                    session_id: sid,
+                    subagent_type: state.subagentType,
+                    trace_id: state.traceId,
+                    child_run_id: state.childRunId,
+                });
+            }
             if (!state && !childRunId && !traceId) {
                 const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
                 const outputSubagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
@@ -230,7 +265,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
                     ? matchingSessionLifecycleKeys(byDelegation, sid, outputSubagentType)
                     : sessionLifecycleKeys(byDelegation, sid);
                 if (matches.length > 1) {
-                    writeGatewayEventAudit(options.directory, {
+                    writeGatewayEventAudit(directory, {
                         hook: "subagent-lifecycle-supervisor",
                         stage: "skip",
                         reason_code: "subagent_lifecycle_after_ambiguous_skip",
@@ -243,9 +278,6 @@ export function createSubagentLifecycleSupervisorHook(options) {
             if (!state) {
                 return;
             }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
             const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
             if (isFailureOutput(outputText)) {
                 const failedCount = state.failureCount + 1;
