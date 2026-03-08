@@ -4527,6 +4527,11 @@ index 3333333..4444444 100644
             and "publication_target_coverage:" in docs_automation_summary_text,
             "docs automation summary should include generation timestamp and publication coverage fields",
         )
+        expect(
+            "## Remediation Summary" in docs_automation_summary_text
+            and "summary_status: ok" in docs_automation_summary_text,
+            "docs automation summary should include top-level remediation summary status",
+        )
 
         docs_automation_sync_check = subprocess.run(
             [sys.executable, str(DOCS_AUTOMATION_SYNC_CHECK_SCRIPT)],
@@ -4546,6 +4551,150 @@ index 3333333..4444444 100644
         expect(
             isinstance(docs_automation_sync_payload.get("reason_code_map"), dict),
             "docs automation sync check should emit reason-code map metadata",
+        )
+        expect(
+            docs_automation_sync_payload.get("summary_status") == "ok"
+            and isinstance(docs_automation_sync_payload.get("reason_groups"), dict),
+            "docs automation sync check should emit grouped fail-fast status metadata",
+        )
+
+        docs_automation_fixture = tmp / "docs_automation_fixture"
+        (docs_automation_fixture / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (docs_automation_fixture / "docs" / "pages").mkdir(parents=True, exist_ok=True)
+        (docs_automation_fixture / "docs" / "plan").mkdir(parents=True, exist_ok=True)
+        (docs_automation_fixture / ".github" / "workflows" / "docs-automation.yml").write_text(
+            """name: Docs Automation
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+""",
+            encoding="utf-8",
+        )
+        (docs_automation_fixture / "docs" / "pages" / "index.html").write_text(
+            '<html><body><a href="https://example.com">Placeholder</a></body></html>' + "\n",
+            encoding="utf-8",
+        )
+        (docs_automation_fixture / "docs" / "plan" / "v0.4-release-index.md").write_text(
+            "| Release | Notes |" + "\n" + "|---|---|" + "\n" + "| v0.4.19 | fixture |" + "\n",
+            encoding="utf-8",
+        )
+        (docs_automation_fixture / "docs" / "plan" / "docs-automation-summary.md").write_text(
+            "# Docs Automation Summary" + "\n\n" + "- latest_indexed_release: v0.4.18" + "\n",
+            encoding="utf-8",
+        )
+
+        docs_automation_fixture_check = subprocess.run(
+            [
+                sys.executable,
+                str(DOCS_AUTOMATION_SYNC_CHECK_SCRIPT),
+                "--repo-root",
+                str(docs_automation_fixture),
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            docs_automation_fixture_check.returncode == 1,
+            "docs automation sync check should fail for intentionally broken fixture inputs",
+        )
+        docs_automation_fixture_payload = parse_json_output(
+            docs_automation_fixture_check.stdout
+        )
+        expect(
+            docs_automation_fixture_payload.get("summary_status") == "action_required"
+            and docs_automation_fixture_payload.get("highest_severity") == "high",
+            "docs automation sync check should escalate fail-fast status for broken fixture inputs",
+        )
+        expect(
+            isinstance(docs_automation_fixture_payload.get("reason_groups"), dict)
+            and {"workflow", "pages", "summary"}.issubset(
+                set(docs_automation_fixture_payload.get("reason_groups", {}).keys())
+            ),
+            "docs automation sync check should group reason codes by workflow, pages, and summary areas",
+        )
+        expect(
+            docs_automation_fixture_payload.get("recommended_next_step") == "run: make docs-automation-check",
+            "docs automation sync check should recommend the full check command when multiple failures exist",
+        )
+
+        docs_automation_fixture_update = subprocess.run(
+            [
+                sys.executable,
+                str(DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT),
+                "--repo-root",
+                str(docs_automation_fixture),
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            docs_automation_fixture_update.returncode == 0,
+            "docs automation summary updater should render remediation summary for broken fixture inputs",
+        )
+        docs_automation_fixture_summary = (
+            docs_automation_fixture / "docs" / "plan" / "docs-automation-summary.md"
+        ).read_text(encoding="utf-8")
+        expect(
+            "## Remediation Summary" in docs_automation_fixture_summary
+            and "summary_status: action_required" in docs_automation_fixture_summary,
+            "docs automation summary should render fail-fast remediation summary for broken fixture inputs",
+        )
+        expect(
+            "## Suggested Fixes" in docs_automation_fixture_summary
+            and "recommended_next_step: run: make docs-automation-check" in docs_automation_fixture_summary,
+            "docs automation summary should surface suggested fixes and next-step guidance for broken fixture inputs",
+        )
+
+        docs_automation_summary_only_fixture = tmp / "docs_automation_summary_only_fixture"
+        (docs_automation_summary_only_fixture / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (docs_automation_summary_only_fixture / "docs" / "pages").mkdir(parents=True, exist_ok=True)
+        (docs_automation_summary_only_fixture / "docs" / "plan").mkdir(parents=True, exist_ok=True)
+        (docs_automation_summary_only_fixture / ".github" / "workflows" / "docs-automation.yml").write_text(
+            (REPO_ROOT / ".github" / "workflows" / "docs-automation.yml").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (docs_automation_summary_only_fixture / "docs" / "pages" / "index.html").write_text(
+            (REPO_ROOT / "docs" / "pages" / "index.html").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (docs_automation_summary_only_fixture / "docs" / "plan" / "v0.4-release-index.md").write_text(
+            (REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (docs_automation_summary_only_fixture / "docs" / "plan" / "docs-automation-summary.md").write_text(
+            "# Docs Automation Summary" + "\n\n" + "- latest_indexed_release: v0.4.18" + "\n",
+            encoding="utf-8",
+        )
+        docs_automation_summary_only_update = subprocess.run(
+            [
+                sys.executable,
+                str(DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT),
+                "--repo-root",
+                str(docs_automation_summary_only_fixture),
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            docs_automation_summary_only_update.returncode == 0,
+            "docs automation summary updater should repair a summary-only drift fixture in one run",
+        )
+        docs_automation_summary_only_text = (
+            docs_automation_summary_only_fixture / "docs" / "plan" / "docs-automation-summary.md"
+        ).read_text(encoding="utf-8")
+        expect(
+            "summary_status: ok" in docs_automation_summary_only_text
+            and "recommended_next_step: none" in docs_automation_summary_only_text,
+            "docs automation summary updater should converge summary-only drift to ok status in one run",
         )
 
         release_note_validation_check = subprocess.run(
