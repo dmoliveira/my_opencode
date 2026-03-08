@@ -122,8 +122,8 @@ Remaining:
 
 | Item | Status | Notes |
 |---|---|---|
-| E2/E3 guard hardening implementation | doing | Allow safe chained protected commands and improve branch-freshness fallback guidance. |
-| Guard hardening PR prep | doing | Run targeted guard tests + validate, then open focused PR from this worktree. |
+| Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
+| Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
 
 ## Done Recently
 
@@ -135,13 +135,15 @@ Remaining:
 | Merged roadmap tracker PR | done | `#414` merged after branch freshness refresh and CI pass. |
 | Merged canonical docs guidance PR | done | `#419` merged after CI pass and branch refresh. |
 | Merged workflow resume/runtime guard PR | done | `#420` merged after CI success. |
+| Merged E2/E3 guard hardening slice | done | `#423` merged with chained protected-command parsing and branch-freshness fallback guidance updates. |
+| Final canonical active-doc sweep complete | done | Active operator docs now keep compatibility aliases explicitly secondary. |
 | Synced local `main` while preserving local docs edit | done | Used targeted stash + `git pull --rebase` + stash pop for `docs/plan/docs-automation-summary.md`. |
 
 ## Next Tasks
 
-1. Land the current E2/E3 guard hardening slice (safe chained protected commands + freshness fallback guidance).
-2. Run post-merge verification for protected-main guard behavior in real operator flows.
-3. Continue scanning active docs for canonical-first guidance drift as new commands evolve.
+1. Continue post-merge verification for protected-main guard behavior in real operator flows.
+2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
+3. Keep active docs canonical-first as new command/runtime slices land.
 4. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
