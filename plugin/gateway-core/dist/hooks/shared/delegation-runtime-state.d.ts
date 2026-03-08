@@ -1,5 +1,6 @@
 export interface DelegationStartInput {
     sessionId: string;
+    childRunId?: string;
     subagentType: string;
     category: string;
     startedAt: number;
@@ -10,11 +11,13 @@ export interface DelegationOutcomeInput {
     status: "completed" | "failed";
     reasonCode?: string;
     endedAt: number;
+    childRunId?: string;
     traceId?: string;
     subagentType?: string;
 }
 export interface DelegationOutcomeRecord {
     sessionId: string;
+    childRunId?: string;
     subagentType: string;
     category: string;
     status: "completed" | "failed";

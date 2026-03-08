@@ -199,3 +199,99 @@ test("delegation-concurrency-guard releases matching reservation from output sub
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("delegation-concurrency-guard releases reservation from child-run-only after metadata", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegation-concurrency-guard"],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 1,
+          maxExpensiveConcurrent: 1,
+          maxDeepConcurrent: 1,
+          maxCriticalConcurrent: 1,
+        },
+      },
+    })
+
+    const beforeOutput = { args: { subagent_type: "explore", prompt: "first" } }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-child-run-after" },
+      beforeOutput,
+    )
+
+    const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-concurrency-child-run-after" },
+      {
+        metadata: {
+          gateway: {
+            delegation: {
+              childRunId,
+            },
+          },
+        },
+        output: "done",
+      },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-child-run-after" },
+      { args: { subagent_type: "reviewer", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("delegation-concurrency-guard releases reservation from child run id metadata", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegation-concurrency-guard"],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 1,
+          maxExpensiveConcurrent: 1,
+          maxDeepConcurrent: 1,
+          maxCriticalConcurrent: 1,
+        },
+      },
+    })
+
+    const beforeOutput = { args: { subagent_type: "explore", prompt: "first" } }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-child-run" },
+      beforeOutput,
+    )
+
+    const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+    assert.match(String(childRunId), /^subagent-run\//)
+
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-concurrency-child-run" },
+      { metadata: beforeOutput.metadata, output: "done" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-child-run" },
+      { args: { subagent_type: "reviewer", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

@@ -4,6 +4,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
   annotateDelegationMetadata,
+  extractDelegationChildRunId,
   extractDelegationSubagentType,
   extractDelegationSubagentTypeFromOutput,
   extractDelegationTraceId,
@@ -44,6 +45,8 @@ interface SessionDeletedPayload {
 }
 
 interface LifecycleState {
+  childRunId?: string
+  traceId?: string
   subagentType: string
   status: "running" | "failed" | "completed"
   failureCount: number
@@ -67,7 +70,10 @@ function fallbackDelegationKey(sid: string, args: DelegationArgs | undefined): s
   return `${sid}:agent:${subagentType || "unknown"}`
 }
 
-function lifecycleKey(sid: string, traceId: string, args?: DelegationArgs): string {
+function lifecycleKey(sid: string, childRunId: string, traceId: string, args?: DelegationArgs): string {
+  if (childRunId) {
+    return `${sid}:${childRunId}`
+  }
   return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args)
 }
 
@@ -103,6 +109,20 @@ function matchingSessionLifecycleKeys(
   const matches: string[] = []
   for (const [key, value] of byDelegation.entries()) {
     if ((key === sid || key.startsWith(`${sid}:`)) && value.subagentType === subagentType) {
+      matches.push(key)
+    }
+  }
+  return matches
+}
+
+function matchingSessionTraceLifecycleKeys(
+  byDelegation: Map<string, LifecycleState>,
+  sid: string,
+  traceId: string,
+): string[] {
+  const matches: string[] = []
+  for (const [key, value] of byDelegation.entries()) {
+    if ((key === sid || key.startsWith(`${sid}:`)) && value.traceId === traceId) {
       matches.push(key)
     }
   }
@@ -161,7 +181,8 @@ export function createSubagentLifecycleSupervisorHook(options: {
         }
         const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {})
         annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args)
-        const key = lifecycleKey(sid, traceId, eventPayload.output?.args)
+        const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata)
+        const key = lifecycleKey(sid, childRunId, traceId, eventPayload.output?.args)
         const directory =
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
@@ -174,6 +195,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
             stage: "guard",
             reason_code: "subagent_lifecycle_duplicate_running_blocked",
             session_id: sid,
+            child_run_id: childRunId || undefined,
             trace_id: traceId || undefined,
             subagent_type: subagentType,
           })
@@ -192,6 +214,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
             stage: "guard",
             reason_code: "subagent_lifecycle_retry_exhausted_blocked",
             session_id: sid,
+            child_run_id: childRunId || undefined,
             trace_id: traceId || undefined,
             subagent_type: subagentType,
             failure_count: String(existing.failureCount),
@@ -202,6 +225,8 @@ export function createSubagentLifecycleSupervisorHook(options: {
         }
         const nextFailureCount = existing?.status === "failed" ? existing.failureCount : 0
         byDelegation.set(key, {
+          childRunId: childRunId || undefined,
+          traceId: traceId || undefined,
           subagentType,
           status: "running",
           failureCount: nextFailureCount,
@@ -214,6 +239,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           stage: "state",
           reason_code: "subagent_lifecycle_started",
           session_id: sid,
+          child_run_id: childRunId || undefined,
           trace_id: traceId || undefined,
           subagent_type: subagentType,
           failure_count: String(nextFailureCount),
@@ -232,11 +258,19 @@ export function createSubagentLifecycleSupervisorHook(options: {
         return
       }
       const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
-      const key = lifecycleKey(sid, traceId, eventPayload.output?.args)
+      const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata)
+      const key = lifecycleKey(sid, childRunId, traceId, eventPayload.output?.args)
       let activeKey = key
       let state = byDelegation.get(activeKey)
+      if (!state && traceId) {
+        const traceMatches = matchingSessionTraceLifecycleKeys(byDelegation, sid, traceId)
+        if (traceMatches.length === 1) {
+          activeKey = traceMatches[0]
+          state = byDelegation.get(activeKey)
+        }
+      }
       if (!state) {
-        if (!traceId) {
+        if (!childRunId && !traceId) {
           const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
           const outputSubagentType =
             extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
@@ -281,6 +315,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
           stage: "state",
           reason_code: "subagent_lifecycle_failed",
           session_id: sid,
+          child_run_id: childRunId || undefined,
           trace_id: traceId || undefined,
           subagent_type: state.subagentType,
           failure_count: String(failedCount),
@@ -301,6 +336,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
         stage: "state",
         reason_code: "subagent_lifecycle_completed",
         session_id: sid,
+        child_run_id: childRunId || undefined,
         trace_id: traceId || undefined,
         subagent_type: state.subagentType,
         failure_count: String(state.failureCount),

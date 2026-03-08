@@ -9,6 +9,10 @@ import { createAgentModelResolverHook } from "../dist/hooks/agent-model-resolver
 import { createDelegationOutcomeLearnerHook } from "../dist/hooks/delegation-outcome-learner/index.js"
 import { createHookSemanticBridgeHook } from "../dist/hooks/hook-semantic-bridge/index.js"
 import { createSubagentTelemetryTimelineHook } from "../dist/hooks/subagent-telemetry-timeline/index.js"
+import { createSubagentLifecycleSupervisorHook } from "../dist/hooks/subagent-lifecycle-supervisor/index.js"
+import { createDelegationConcurrencyGuardHook } from "../dist/hooks/delegation-concurrency-guard/index.js"
+import { resolveHookOrder } from "../dist/hooks/registry.js"
+import { getRecentDelegationOutcomes } from "../dist/hooks/shared/delegation-runtime-state.js"
 
 const REPO_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 
@@ -172,4 +176,199 @@ test("discoverability injector respects cooldown window", async () => {
   const second = String(payload.output.args.prompt)
   assert.equal((first.match(/\/agent-catalog/g) ?? []).length, 1)
   assert.equal((second.match(/\/agent-catalog/g) ?? []).length, 1)
+})
+
+
+test("subagent telemetry timeline records child run id metadata on normal path", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  const beforeOutput = {
+    args: { subagent_type: "explore", category: "balanced", prompt: "telemetry child run" },
+  }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-child-run" },
+    output: beforeOutput,
+  })
+
+  const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+  assert.match(String(childRunId), /^subagent-run\//)
+
+  await timelineHook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-telemetry-child-run" },
+    output: { metadata: beforeOutput.metadata, output: "done" },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === "session-telemetry-child-run")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.childRunId, childRunId)
+})
+
+
+test("subagent telemetry timeline refreshes stale child run id metadata when trace changes", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  const beforeOutput = {
+    args: {
+      subagent_type: "explore",
+      category: "balanced",
+      prompt: "[DELEGATION TRACE trace-fresh] telemetry stale metadata",
+    },
+    metadata: {
+      gateway: {
+        delegation: {
+          childRunId: "subagent-run/trace-stale",
+          traceId: "trace-stale",
+        },
+      },
+    },
+  }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-stale-child-run" },
+    output: beforeOutput,
+  })
+
+  const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+  assert.equal(childRunId, "subagent-run/trace-fresh")
+
+  await timelineHook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-telemetry-stale-child-run" },
+    output: { metadata: beforeOutput.metadata, output: "done" },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === "session-telemetry-stale-child-run")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.childRunId, childRunId)
+  assert.equal(record.traceId, "trace-fresh")
+})
+
+test("subagent telemetry timeline refreshes child run id when legacy metadata omits trace id", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  const beforeOutput = {
+    args: {
+      subagent_type: "explore",
+      category: "balanced",
+      prompt: "[DELEGATION TRACE trace-legacy-refresh] telemetry legacy metadata",
+    },
+    metadata: {
+      gateway: {
+        delegation: {
+          childRunId: "subagent-run/trace-legacy-stale",
+        },
+      },
+    },
+  }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-legacy-child-run" },
+    output: beforeOutput,
+  })
+
+  const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+  assert.equal(childRunId, "subagent-run/trace-legacy-refresh")
+  assert.equal(beforeOutput.metadata?.gateway?.delegation?.traceId, "trace-legacy-refresh")
+})
+
+test("subagent telemetry timeline records outcome from child-run-only after metadata", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  const beforeOutput = {
+    args: { subagent_type: "explore", category: "balanced", prompt: "telemetry child-run-only after" },
+  }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-child-run-after" },
+    output: beforeOutput,
+  })
+
+  const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+  await timelineHook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-telemetry-child-run-after" },
+    output: {
+      metadata: {
+        gateway: {
+          delegation: {
+            childRunId,
+          },
+        },
+      },
+      output: "done",
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === "session-telemetry-child-run-after")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.childRunId, childRunId)
+  assert.equal(record.traceId, String(childRunId).replace(/^subagent-run\//, ""))
+})
+
+test("default hook ordering runs concurrency guard before lifecycle and telemetry state hooks", async () => {
+  const hooks = resolveHookOrder(
+    [
+      createSubagentLifecycleSupervisorHook({
+        directory: REPO_DIRECTORY,
+        enabled: true,
+        maxRetriesPerSession: 3,
+        staleRunningMs: 60000,
+        blockOnExhausted: true,
+      }),
+      createSubagentTelemetryTimelineHook({
+        directory: REPO_DIRECTORY,
+        enabled: true,
+        maxTimelineEntries: 10,
+        persistState: false,
+        stateFile: ".opencode/test-runtime-state.json",
+        stateMaxEntries: 10,
+      }),
+      createDelegationConcurrencyGuardHook({
+        directory: REPO_DIRECTORY,
+        enabled: true,
+        maxTotalConcurrent: 1,
+        maxExpensiveConcurrent: 1,
+        maxDeepConcurrent: 1,
+        maxCriticalConcurrent: 1,
+        staleReservationMs: 60000,
+      }),
+    ],
+    [],
+    [],
+  )
+  const ids = hooks.map((hook) => hook.id)
+  assert.deepEqual(ids, [
+    "delegation-concurrency-guard",
+    "subagent-lifecycle-supervisor",
+    "subagent-telemetry-timeline",
+  ])
 })

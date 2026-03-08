@@ -68,7 +68,7 @@ Use these scenarios before marking related items `done`.
 | E3 Warning Noise Reduction | done | Remove confusing user-facing ambiguity text while keeping audits | S3, S7 |
 | E4 Protected Main Inspection + Setup Policy | done | Allow safe inspection/sync/setup commands on protected `main` | S4 |
 | E5 Effective Target Guarding | done | Enforce restrictions on the real target worktree/path, not session root fallback | S5, S6 |
-| E6 Parallel Efficiency Follow-Ups | todo | Reduce residual fallback logic and improve throughput/observability | future S1-S7 reruns |
+| E6 Parallel Efficiency Follow-Ups | doing | Reduce residual fallback logic and improve throughput/observability | future S1-S7 reruns |
 
 ## Epics And Tasks
 
@@ -147,7 +147,7 @@ Notes:
 
 ### E6 Parallel Efficiency Follow-Ups
 
-Status: `todo`
+Status: `doing`
 
 - [ ] Replace remaining prompt/output parsing fallbacks with mandatory structured delegation ids
 - [ ] Add a distinct child run id separate from parent session id for every subagent run
@@ -159,8 +159,8 @@ Status: `todo`
 
 ## Doing Now
 
-- No active implementation item in this file right now.
-- Next recommended starting point: `E6 Parallel Efficiency Follow-Ups`.
+- Active slice: structured child delegation run id via task metadata, with trace/output parsing fallbacks still kept as backup until scenario reruns pass.
+- Current focus: wire the child run id into normal lifecycle/concurrency/telemetry paths before legacy fallbacks.
 
 ## Watch List
 

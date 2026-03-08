@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path"
 
 export interface DelegationStartInput {
   sessionId: string
+  childRunId?: string
   subagentType: string
   category: string
   startedAt: number
@@ -14,12 +15,14 @@ export interface DelegationOutcomeInput {
   status: "completed" | "failed"
   reasonCode?: string
   endedAt: number
+  childRunId?: string
   traceId?: string
   subagentType?: string
 }
 
 export interface DelegationOutcomeRecord {
   sessionId: string
+  childRunId?: string
   subagentType: string
   category: string
   status: "completed" | "failed"
@@ -31,6 +34,7 @@ export interface DelegationOutcomeRecord {
 }
 
 interface ActiveDelegation {
+  childRunId?: string
   subagentType: string
   category: string
   startedAt: number
@@ -74,9 +78,11 @@ function normalizeRecord(value: unknown): DelegationOutcomeRecord | null {
   ) {
     return null
   }
+  const childRunId = String(source.childRunId ?? "").trim() || undefined
   const traceId = String(source.traceId ?? "").trim() || undefined
   return {
     sessionId,
+    childRunId,
     subagentType,
     category,
     status,
@@ -140,7 +146,11 @@ export function configureDelegationRuntimeState(options: {
   load()
 }
 
-function delegationKey(sessionId: string, traceId?: string, subagentType?: string): string {
+function delegationKey(sessionId: string, childRunId?: string, traceId?: string, subagentType?: string): string {
+  const normalizedChildRunId = String(childRunId ?? "").trim()
+  if (normalizedChildRunId) {
+    return `${sessionId}:${normalizedChildRunId}`
+  }
   const normalizedTrace = String(traceId ?? "").trim()
   if (normalizedTrace) {
     return `${sessionId}:${normalizedTrace}`
@@ -154,7 +164,8 @@ export function registerDelegationStart(input: DelegationStartInput): void {
     return
   }
   load()
-  activeByDelegation.set(delegationKey(input.sessionId, input.traceId, input.subagentType), {
+  activeByDelegation.set(delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType), {
+    childRunId: input.childRunId,
     subagentType: input.subagentType,
     category: input.category,
     startedAt: input.startedAt,
@@ -167,10 +178,20 @@ export function registerDelegationOutcome(
   maxEntries: number,
 ): DelegationOutcomeRecord | null {
   load()
-  const directKey = delegationKey(input.sessionId, input.traceId, input.subagentType)
+  const directKey = delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType)
   let active = activeByDelegation.get(directKey)
   let activeKey = directKey
-  if (!active && !input.traceId && input.subagentType) {
+  if (!active && input.traceId) {
+    const matches = [...activeByDelegation.entries()].filter(
+      ([candidateKey, candidate]) =>
+        (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
+        candidate.traceId === input.traceId,
+    )
+    if (matches.length === 1) {
+      ;[[activeKey, active]] = matches
+    }
+  }
+  if (!active && !input.childRunId && !input.traceId && input.subagentType) {
     const matches = [...activeByDelegation.entries()].filter(
       ([candidateKey, candidate]) =>
         (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
@@ -180,7 +201,7 @@ export function registerDelegationOutcome(
       ;[[activeKey, active]] = matches
     }
   }
-  if (!active && !input.traceId && !input.subagentType) {
+  if (!active && !input.childRunId && !input.traceId && !input.subagentType) {
     const matches = [...activeByDelegation.entries()].filter(
       ([candidateKey]) => candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`),
     )
@@ -195,6 +216,7 @@ export function registerDelegationOutcome(
   const durationMs = Math.max(0, input.endedAt - active.startedAt)
   const record: DelegationOutcomeRecord = {
     sessionId: input.sessionId,
+    childRunId: active.childRunId,
     subagentType: active.subagentType,
     category: active.category,
     status: input.status,

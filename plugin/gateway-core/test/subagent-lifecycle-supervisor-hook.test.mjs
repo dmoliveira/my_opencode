@@ -338,3 +338,97 @@ test("agent-context-shaper stamps metadata before lifecycle handles trace-less c
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("subagent-lifecycle-supervisor completes from child-run-only metadata on after events", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    const beforeOutput = { args: { subagent_type: "explore", prompt: "first" } }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-child-run-after" },
+      beforeOutput,
+    )
+
+    const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-child-run-after" },
+      {
+        metadata: {
+          gateway: {
+            delegation: {
+              childRunId,
+            },
+          },
+        },
+        output: "done",
+      },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-child-run-after" },
+      { args: { subagent_type: "explore", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("subagent-lifecycle-supervisor uses child run id metadata before fallback cleanup", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    const beforeOutput = { args: { subagent_type: "explore", prompt: "first" } }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-child-run" },
+      beforeOutput,
+    )
+
+    const childRunId = beforeOutput.metadata?.gateway?.delegation?.childRunId
+    assert.match(String(childRunId), /^subagent-run\//)
+
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-child-run" },
+      { metadata: beforeOutput.metadata, output: "done" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-child-run" },
+      { args: { subagent_type: "explore", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
