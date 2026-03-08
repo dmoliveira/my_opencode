@@ -283,11 +283,12 @@ def cmd_handoff(argv: list[str], path: Path) -> int:
         return usage()
     issue_id = argv.pop(0)
     try:
-        to_owner = normalize_claimant(parse_flag_value(argv, "--to") or "")
+        to_raw = parse_flag_value(argv, "--to")
     except ValueError:
         return usage()
-    if not to_owner:
+    if not to_raw or not to_raw.strip():
         return usage()
+    to_owner = normalize_claimant(to_raw)
     state = load_state(path)
     claims = claims_map(state)
     item = claims.get(issue_id)
@@ -297,6 +298,17 @@ def cmd_handoff(argv: list[str], path: Path) -> int:
                 "result": "FAIL",
                 "command": "handoff",
                 "error": f"issue not claimed: {issue_id}",
+            },
+            as_json,
+        )
+    if str(item.get("status") or "") != "active":
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "handoff",
+                "error": "only active claims can be handed off",
+                "issue_id": issue_id,
+                "status": item.get("status"),
             },
             as_json,
         )
@@ -469,13 +481,17 @@ def cmd_expire_stale(argv: list[str], path: Path) -> int:
     updated: list[str] = []
     if apply_mode and stale:
         claims = claims_map(state)
+        pool_state = load_agent_pool(DEFAULT_AGENT_POOL_PATH)
         for issue_id in stale:
             item = claims.get(issue_id)
             if not isinstance(item, dict):
                 continue
+            adjust_pool_load(pool_state, str(item.get("owner") or ""), -1)
             item["status"] = "expired"
+            item["handoff_to"] = None
             item["updated_at"] = now_iso()
             updated.append(issue_id)
+        save_agent_pool(DEFAULT_AGENT_POOL_PATH, pool_state)
         save_state(path, state)
         append_event(
             "claims", "expire-stale", "PASS", {"updated": updated, "hours": stale_hours}
