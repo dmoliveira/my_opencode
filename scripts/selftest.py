@@ -2288,6 +2288,109 @@ exit 0
             "delivery flow should leave claimed issue in completed status",
         )
 
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "start",
+                "--issue",
+                "issue-304",
+                "--role",
+                "coder",
+                "--workflow",
+                str(wf_delivery_path),
+                "--execute",
+                "--handoff-to",
+                "human:alex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery handoff start failed: {result.stderr}")
+        delivery_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_handoff_payload.get("status") == "handoff-pending"
+            and delivery_handoff_payload.get("final_step") == "handoff",
+            "delivery start with handoff should leave the run awaiting handoff",
+        )
+        delivery_handoff_run_id = str(delivery_handoff_payload.get("run_id") or "")
+        expect(
+            bool(delivery_handoff_run_id),
+            "delivery handoff flow should persist a run id for follow-up status checks",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "status",
+                "--id",
+                delivery_handoff_run_id,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"delivery status by run id failed: {result.stderr}",
+        )
+        delivery_status_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_status_payload.get("run_id") == delivery_handoff_run_id
+            and delivery_status_payload.get("status") == "handoff-pending",
+            "delivery status should return the persisted handoff run by id",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(DELIVERY_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery latest status failed: {result.stderr}")
+        delivery_latest_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_latest_payload.get("run_id") == delivery_handoff_run_id
+            and delivery_latest_payload.get("final_step") == "handoff",
+            "delivery status without id should return the latest persisted run",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "status",
+                "--id",
+                "issue-304",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims status issue-304 failed: {result.stderr}",
+        )
+        issue_304 = parse_json_output(result.stdout)
+        expect(
+            issue_304.get("status") == "handoff-pending"
+            and issue_304.get("handoff_to") == "human:alex",
+            "delivery handoff flow should leave the issue in handoff-pending state",
+        )
+
         audit_export = tmp / "audit-export.json"
         result = subprocess.run(
             [sys.executable, str(AUDIT_SCRIPT), "status", "--json"],
