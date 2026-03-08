@@ -13,6 +13,7 @@ from typing import Any
 
 from runtime_audit import append_event  # type: ignore
 from governance_policy import check_operation  # type: ignore
+from model_routing_command import resolve_for_entrypoint  # type: ignore
 
 
 DEFAULT_STATE_PATH = Path(
@@ -28,6 +29,17 @@ DEFAULT_TEMPLATE_DIR = Path(
         "~/.config/opencode/my_opencode/workflows",
     )
 ).expanduser()
+
+
+def entrypoint_model_routing() -> dict[str, Any]:
+    return resolve_for_entrypoint("workflow")
+
+
+def attach_model_routing(
+    target: dict[str, Any], routing: dict[str, Any]
+) -> dict[str, Any]:
+    target["model_routing"] = routing
+    return target
 
 
 def now_iso() -> str:
@@ -83,6 +95,7 @@ def parse_flag_value(argv: list[str], flag: str) -> str | None:
 
 
 def emit(payload: dict[str, Any], as_json: bool) -> int:
+    attach_model_routing(payload, entrypoint_model_routing())
     if as_json:
         print(json.dumps(payload, indent=2))
     else:
@@ -423,6 +436,7 @@ def cmd_validate(argv: list[str]) -> int:
 
 
 def cmd_run(argv: list[str]) -> int:
+    routing = entrypoint_model_routing()
     as_json = "--json" in argv
     execute_commands = "--execute" in argv
     override_flag = "--override" in argv
@@ -517,10 +531,16 @@ def cmd_run(argv: list[str]) -> int:
     state["active"] = {}
     save_json_file(DEFAULT_STATE_PATH, state)
     append_event("workflow", "run", "PASS", {"run_id": run_id, "status": status})
-    return emit({"result": "PASS", "command": "run", **run_record}, as_json)
+    return emit(
+        attach_model_routing(
+            {"result": "PASS", "command": "run", **run_record}, routing
+        ),
+        as_json,
+    )
 
 
 def cmd_resume(argv: list[str]) -> int:
+    routing = entrypoint_model_routing()
     as_json = "--json" in argv
     execute_commands = "--execute" in argv
     override_flag = "--override" in argv
@@ -639,10 +659,16 @@ def cmd_resume(argv: list[str]) -> int:
         "PASS",
         {"run_id": new_run_id, "resumed_from": run_id, "status": status},
     )
-    return emit({"result": "PASS", "command": "resume", **run_record}, as_json)
+    return emit(
+        attach_model_routing(
+            {"result": "PASS", "command": "resume", **run_record}, routing
+        ),
+        as_json,
+    )
 
 
 def cmd_status(argv: list[str]) -> int:
+    routing = entrypoint_model_routing()
     as_json = "--json" in argv
     state = load_json_file(DEFAULT_STATE_PATH)
     active = active_record(state)
@@ -650,16 +676,24 @@ def cmd_status(argv: list[str]) -> int:
         history = history_list(state)
         latest = history[0] if history and isinstance(history[0], dict) else {}
         return emit(
-            {
-                "result": "PASS",
-                "command": "status",
-                "status": "idle",
-                "warnings": ["no active workflow run"],
-                "latest": latest,
-            },
+            attach_model_routing(
+                {
+                    "result": "PASS",
+                    "command": "status",
+                    "status": "idle",
+                    "warnings": ["no active workflow run"],
+                    "latest": latest,
+                },
+                routing,
+            ),
             as_json,
         )
-    return emit({"result": "PASS", "command": "status", **active}, as_json)
+    return emit(
+        attach_model_routing(
+            {"result": "PASS", "command": "status", **active}, routing
+        ),
+        as_json,
+    )
 
 
 def cmd_stop(argv: list[str]) -> int:

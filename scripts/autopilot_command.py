@@ -19,6 +19,7 @@ from autopilot_integration import integrate_controls  # type: ignore
 from autopilot_runtime import execute_cycle, initialize_run, load_runtime, save_runtime  # type: ignore
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
 from gateway_command import hook_diagnostics, plugin_dir, status_payload  # type: ignore
+from model_routing_command import resolve_for_entrypoint  # type: ignore
 from gateway_plugin_bridge import (  # type: ignore
     bridge_start_loop,
     bridge_stop_loop,
@@ -74,6 +75,7 @@ def pop_optional_value(
 
 
 def emit(payload: dict[str, Any], *, as_json: bool) -> None:
+    attach_model_routing(payload, entrypoint_model_routing())
     if as_json:
         print(json.dumps(payload, indent=2))
         return
@@ -175,6 +177,14 @@ def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
             "state_path": str(cleanup_path) if cleanup_path else None,
         },
     }
+
+
+def entrypoint_model_routing() -> dict[str, Any]:
+    return resolve_for_entrypoint("autopilot")
+
+
+def attach_model_routing(target: dict[str, Any], routing: dict[str, Any]) -> None:
+    target["model_routing"] = routing
 
 
 def infer_touched_paths(cwd: Path) -> list[str]:
@@ -298,6 +308,7 @@ def command_start(args: list[str]) -> int:
 
     config, _ = load_layered_config()
     write_path = resolve_write_path()
+    routing = entrypoint_model_routing()
     objective = {
         "goal": goal or "",
         "scope": scope or "",
@@ -313,6 +324,7 @@ def command_start(args: list[str]) -> int:
         objective=objective,
         actor="autopilot",
     )
+    attach_model_routing(initialized, routing)
     if inferred_defaults:
         initialized["inferred_defaults"] = inferred_defaults
         initialized["warnings"] = initialized.get("warnings", [])
@@ -322,6 +334,7 @@ def command_start(args: list[str]) -> int:
             )
     run_any = initialized.get("run")
     if isinstance(run_any, dict):
+        attach_model_routing(run_any, routing)
         runtime_status = gateway_runtime_status(Path.cwd(), config)
         runtime_mode = str(
             runtime_status.get("runtime_mode") or "python_command_bridge"
@@ -402,6 +415,7 @@ def command_go(args: list[str]) -> int:
     config, _ = load_layered_config()
     write_path = resolve_write_path()
     goal = normalize_goal(goal)
+    routing = entrypoint_model_routing()
 
     runtime = load_runtime(write_path)
     started_new_run = False
@@ -498,6 +512,7 @@ def command_go(args: list[str]) -> int:
             actor="autopilot",
         )
         if initialized.get("result") != "PASS":
+            attach_model_routing(initialized, routing)
             emit(initialized, as_json=as_json)
             return 1
         run_any = initialized.get("run")
@@ -585,10 +600,14 @@ def command_go(args: list[str]) -> int:
         "iterations": len(history),
         "final_status": status,
         "reason_code": reason_code,
-        "run": current,
+        "run": dict(current),
         "history": history,
         "next_actions": current.get("next_actions", []),
     }
+    run_payload = payload.get("run")
+    if isinstance(run_payload, dict):
+        attach_model_routing(run_payload, routing)
+    attach_model_routing(payload, routing)
     payload.update(gateway_state_snapshot(Path.cwd(), config))
     if inferred_defaults:
         payload["inferred_defaults"] = inferred_defaults
