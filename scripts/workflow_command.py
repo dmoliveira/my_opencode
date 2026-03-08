@@ -82,6 +82,24 @@ def active_record(state: dict[str, Any]) -> dict[str, Any]:
     state["active"] = {}
     return state["active"]
 
+def next_run_id(state: dict[str, Any]) -> str:
+    max_seq = 0
+    candidates: list[dict[str, Any]] = []
+    active = active_record(state)
+    if active:
+        candidates.append(active)
+    candidates.extend(history_list(state))
+    prefix = "wf-run-"
+    for item in candidates:
+        raw = str(item.get("run_id") or "")
+        if not raw.startswith(prefix):
+            continue
+        suffix = raw[len(prefix) :]
+        if suffix.isdigit():
+            max_seq = max(max_seq, int(suffix))
+    return f"{prefix}{max_seq + 1:06d}"
+
+
 
 def parse_flag_value(argv: list[str], flag: str) -> str | None:
     if flag not in argv:
@@ -508,7 +526,7 @@ def cmd_run(argv: list[str]) -> int:
     status, step_results, failed_step_id = execute_steps(
         ordered_steps, execute_commands
     )
-    run_id = f"wf-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    run_id = next_run_id(state)
     run_record = {
         "run_id": run_id,
         "name": workflow.get("name"),
@@ -567,6 +585,18 @@ def cmd_resume(argv: list[str]) -> int:
             )
 
     state = load_json_file(DEFAULT_STATE_PATH)
+    active = active_record(state)
+    if active and str(active.get("status") or "") == "running":
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "resume",
+                "error": "workflow run already active",
+                "reason_code": "workflow_already_running",
+                "active_run_id": active.get("run_id"),
+            },
+            as_json,
+        )
     history = history_list(state)
     source_run = next(
         (row for row in history if str(row.get("run_id") or "") == run_id), None
@@ -623,15 +653,28 @@ def cmd_resume(argv: list[str]) -> int:
 
     failed_step_id = str(source_run.get("failed_step_id") or "")
     start_index = 0
+    found_failed_step = False
     if failed_step_id:
         for idx, step in enumerate(ordered_steps):
             if str(step.get("id") or "") == failed_step_id:
                 start_index = idx
+                found_failed_step = True
                 break
+        if not found_failed_step:
+            return emit(
+                {
+                    "result": "FAIL",
+                    "command": "resume",
+                    "error": f"failed step no longer exists in workflow: {failed_step_id}",
+                    "reason_code": "workflow_resume_failed_step_missing",
+                    "failed_step_id": failed_step_id,
+                },
+                as_json,
+            )
     resumed_steps = ordered_steps[start_index:]
 
     status, step_results, new_failed = execute_steps(resumed_steps, execute_commands)
-    new_run_id = f"wf-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    new_run_id = next_run_id(state)
     run_record = {
         "run_id": new_run_id,
         "name": workflow.get("name"),
