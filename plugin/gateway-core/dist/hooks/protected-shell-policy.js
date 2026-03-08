@@ -49,10 +49,23 @@ export function normalizeShellCommand(command) {
 export function hasDisallowedShellSyntax(command) {
     return /&&|\|\||;|\n|\||[<>`]|\$\(|\(|\)/.test(command);
 }
+function hasHardDisallowedShellSyntax(command) {
+    return /\|\||\||\n|[<>`]|\$\(|\(|\)/.test(command);
+}
+function splitChainedCommands(command) {
+    return command
+        .split(/&&|;/)
+        .map((segment) => normalizeShellCommand(segment))
+        .filter((segment) => segment.length > 0);
+}
 export function isAllowedProtectedShellCommand(command) {
-    if (hasDisallowedShellSyntax(command)) {
+    if (hasHardDisallowedShellSyntax(command)) {
         return false;
     }
     const normalized = normalizeShellCommand(command);
-    return ALLOWED_PROTECTED_SHELL_PATTERNS.some((pattern) => pattern.test(normalized));
+    const commands = splitChainedCommands(normalized);
+    if (commands.length === 0) {
+        return false;
+    }
+    return commands.every((candidate) => ALLOWED_PROTECTED_SHELL_PATTERNS.some((pattern) => pattern.test(candidate)));
 }
