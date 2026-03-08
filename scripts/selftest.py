@@ -9807,7 +9807,7 @@ version: 1
                 str(AUTO_SLASH_SCRIPT),
                 "execute",
                 "--prompt",
-                "run doctor diagnostics",
+                "switch to focus mode",
                 "--json",
             ],
             capture_output=True,
@@ -9827,6 +9827,16 @@ version: 1
             auto_slash_execute_preview_report.get("result") == "PREVIEW_ONLY",
             "auto-slash execute should require force in preview-first mode",
         )
+        expect(
+            (auto_slash_execute_preview_report.get("selected") or {}).get("command")
+            == "stack",
+            "auto-slash execute preview should choose stack for focus prompt",
+        )
+        expect(
+            (auto_slash_execute_preview_report.get("selected") or {}).get("args")
+            == ["apply", "focus"],
+            "auto-slash execute preview should preserve stack focus action",
+        )
 
         auto_slash_execute_forced = subprocess.run(
             [
@@ -9834,7 +9844,7 @@ version: 1
                 str(AUTO_SLASH_SCRIPT),
                 "execute",
                 "--prompt",
-                "run doctor diagnostics",
+                "switch to focus mode",
                 "--force",
                 "--json",
             ],
@@ -9858,6 +9868,16 @@ version: 1
                 auto_slash_execute_forced_report.get("command_returncode"), int
             ),
             "auto-slash forced execution should dispatch and report a command exit code",
+        )
+        expect(
+            (auto_slash_execute_forced_report.get("selected") or {}).get("command")
+            == "stack",
+            "auto-slash forced execution should target stack for focus prompt",
+        )
+        expect(
+            (auto_slash_execute_forced_report.get("selected") or {}).get("args")
+            == ["apply", "focus"],
+            "auto-slash forced execution should preserve stack focus action",
         )
 
         auto_slash_audit = subprocess.run(

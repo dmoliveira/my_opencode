@@ -304,7 +304,11 @@ def evaluate_precision(
         predicted_command = selected.get("command")
         if predicted_command:
             predicted += 1
-        if predicted_command is not None and predicted_command == expected:
+        if (
+            predicted_command is not None
+            and expected is not None
+            and predicted_command == expected
+        ):
             correct += 1
         if expected is None and predicted_command is not None:
             unsafe += 1
@@ -318,7 +322,7 @@ def evaluate_precision(
             }
         )
 
-    precision = 1.0 if predicted == 0 else (correct / predicted)
+    precision = 0.0 if predicted == 0 else (correct / predicted)
     return {
         "samples": len(dataset),
         "predicted": predicted,
