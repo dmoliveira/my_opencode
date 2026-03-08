@@ -34,6 +34,12 @@ export declare function configureDelegationRuntimeState(options: {
     stateMaxEntries: number;
 }): void;
 export declare function registerDelegationStart(input: DelegationStartInput): void;
+export declare function clearActiveDelegation(input: {
+    sessionId: string;
+    childRunId?: string;
+    traceId?: string;
+    subagentType?: string;
+}): boolean;
 export declare function registerDelegationOutcome(input: DelegationOutcomeInput, maxEntries: number): DelegationOutcomeRecord | null;
 export declare function clearDelegationSession(sessionId: string): void;
 export declare function getRecentDelegationOutcomes(windowMs: number): DelegationOutcomeRecord[];

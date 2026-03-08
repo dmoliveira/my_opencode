@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
@@ -290,6 +290,92 @@ test("delegation-concurrency-guard releases reservation from child run id metada
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-concurrency-child-run" },
       { args: { subagent_type: "reviewer", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+
+test("default before-hook failure rolls back reviewer reservation state", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  try {
+    const specsDir = join(directory, "agent", "specs")
+    mkdirSync(specsDir, { recursive: true })
+    writeFileSync(
+      join(specsDir, "reviewer.json"),
+      JSON.stringify({
+        name: "reviewer",
+        metadata: {
+          default_category: "critical",
+          cost_tier: "expensive",
+          allowed_tools: ["read", "glob", "grep", "list"],
+          denied_tools: ["bash", "write", "edit", "task", "webfetch", "todowrite", "todoread"],
+        },
+      }),
+      "utf-8",
+    )
+
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: [
+            "delegation-concurrency-guard",
+            "subagent-lifecycle-supervisor",
+            "subagent-telemetry-timeline",
+            "agent-denied-tool-enforcer",
+          ],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 4,
+          maxExpensiveConcurrent: 1,
+          maxDeepConcurrent: 2,
+          maxCriticalConcurrent: 1,
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+        subagentTelemetryTimeline: {
+          enabled: true,
+          maxTimelineEntries: 20,
+          persistState: false,
+          stateFile: ".opencode/test-runtime-state.json",
+          stateMaxEntries: 20,
+        },
+      },
+    })
+
+    await assert.rejects(
+      () =>
+        plugin["tool.execute.before"](
+          { tool: "task", sessionID: "session-concurrency-before-error" },
+          {
+            args: {
+              subagent_type: "reviewer",
+              prompt: "Use functions.bash to run git status.",
+              description: "Trigger read-only subagent denial.",
+            },
+          },
+        ),
+      /denied tools/i,
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-before-error" },
+      {
+        args: {
+          subagent_type: "reviewer",
+          prompt: "Review the touched diff for correctness.",
+          description: "Safe follow-up reviewer run.",
+        },
+      },
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

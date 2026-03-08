@@ -27,6 +27,7 @@ interface ToolPayload {
     output?: unknown
   }
   directory?: string
+  error?: unknown
 }
 
 interface DelegationArgs {
@@ -138,6 +139,49 @@ export function createDelegationConcurrencyGuardHook(options: {
 }): GatewayHook {
   const activeByDelegation = new Map<string, ActiveDelegation>()
 
+  function releaseDelegationReservation(eventPayload: ToolPayload, directory: string): boolean {
+    const sid = sessionId(eventPayload)
+    if (!sid) {
+      return false
+    }
+    const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata)
+    const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
+    if (childRunId || traceId) {
+      const key = delegationKey(sid, childRunId, traceId)
+      if (activeByDelegation.delete(key)) {
+        return true
+      }
+      if (traceId) {
+        const traceMatches = matchingSessionTraceDelegationKeys(activeByDelegation, sid, traceId)
+        if (traceMatches.length === 1) {
+          activeByDelegation.delete(traceMatches[0])
+          return true
+        }
+      }
+    }
+    const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
+    const outputSubagentType =
+      extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+      extractDelegationSubagentTypeFromOutput(outputText)
+    const fallbackKeys = outputSubagentType
+      ? matchingSessionDelegationKeys(activeByDelegation, sid, outputSubagentType)
+      : sessionDelegationKeys(activeByDelegation, sid)
+    if (fallbackKeys.length === 1) {
+      activeByDelegation.delete(fallbackKeys[0])
+      return true
+    }
+    if (fallbackKeys.length > 1) {
+      writeGatewayEventAudit(directory, {
+        hook: "delegation-concurrency-guard",
+        stage: "skip",
+        reason_code: "delegation_concurrency_after_ambiguous_skip",
+        session_id: sid,
+        concurrent_total: String(fallbackKeys.length),
+      })
+    }
+    return false
+  }
+
   function pruneStaleDelegations(directory: string, referenceTime: number): void {
     for (const [key, active] of activeByDelegation.entries()) {
       if (referenceTime - active.startedAt < options.staleReservationMs) {
@@ -181,42 +225,25 @@ export function createDelegationConcurrencyGuardHook(options: {
         if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
           return
         }
+        releaseDelegationReservation(eventPayload, options.directory)
+        return
+      }
+      if (type === "tool.execute.before.error") {
+        const eventPayload = (payload ?? {}) as ToolPayload
+        if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
+          return
+        }
         const sid = sessionId(eventPayload)
-        if (sid) {
-          const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata)
-          const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
-          if (childRunId || traceId) {
-            const key = delegationKey(sid, childRunId, traceId)
-            if (activeByDelegation.delete(key)) {
-              return
-            }
-            if (traceId) {
-              const traceMatches = matchingSessionTraceDelegationKeys(activeByDelegation, sid, traceId)
-              if (traceMatches.length === 1) {
-                activeByDelegation.delete(traceMatches[0])
-                return
-              }
-            }
-          } else {
-            const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
-            const outputSubagentType =
-              extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
-              extractDelegationSubagentTypeFromOutput(outputText)
-            const fallbackKeys = outputSubagentType
-              ? matchingSessionDelegationKeys(activeByDelegation, sid, outputSubagentType)
-              : sessionDelegationKeys(activeByDelegation, sid)
-            if (fallbackKeys.length === 1) {
-              activeByDelegation.delete(fallbackKeys[0])
-            } else if (fallbackKeys.length > 1) {
-              writeGatewayEventAudit(options.directory, {
-                hook: "delegation-concurrency-guard",
-                stage: "skip",
-                reason_code: "delegation_concurrency_after_ambiguous_skip",
-                session_id: sid,
-                concurrent_total: String(fallbackKeys.length),
-              })
-            }
-          }
+        if (!sid) {
+          return
+        }
+        if (releaseDelegationReservation(eventPayload, options.directory)) {
+          writeGatewayEventAudit(options.directory, {
+            hook: "delegation-concurrency-guard",
+            stage: "state",
+            reason_code: "delegation_concurrency_before_error_released",
+            session_id: sid,
+          })
         }
         return
       }

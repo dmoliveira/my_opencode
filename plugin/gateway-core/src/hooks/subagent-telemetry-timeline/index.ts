@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  clearActiveDelegation,
   clearDelegationSession,
   configureDelegationRuntimeState,
   registerDelegationOutcome,
@@ -30,6 +31,7 @@ interface ToolPayload {
     output?: unknown
   }
   directory?: string
+  error?: unknown
 }
 
 interface SessionDeletedPayload {
@@ -106,6 +108,24 @@ export function createSubagentTelemetryTimelineHook(options: {
           category,
           startedAt: Date.now(),
           traceId,
+        })
+        return
+      }
+      if (type === "tool.execute.before.error") {
+        const eventPayload = (payload ?? {}) as ToolPayload
+        if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
+          return
+        }
+        const sid = sessionId(eventPayload)
+        if (!sid) {
+          return
+        }
+        clearActiveDelegation({
+          sessionId: sid,
+          childRunId: extractDelegationChildRunId(eventPayload.output?.metadata) || undefined,
+          traceId: extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
+          subagentType:
+            extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
         })
         return
       }

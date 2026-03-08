@@ -838,8 +838,29 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         typeof output.args?.command === "string" &&
         output.args.command.trim().length > 0,
     });
-    for (const hook of hooks) {
-      await hook.event("tool.execute.before", { input, output, directory });
+    const executedHooks: GatewayHook[] = [];
+    try {
+      for (const hook of hooks) {
+        await hook.event("tool.execute.before", { input, output, directory });
+        executedHooks.push(hook);
+      }
+    } catch (error) {
+      writeGatewayEventAudit(directory, {
+        hook: "gateway-core",
+        stage: "dispatch",
+        reason_code: "tool_execute_before_failed",
+        event_type: "tool.execute.before",
+        tool: input.tool,
+        hook_count: executedHooks.length,
+      });
+      for (const hook of executedHooks.reverse()) {
+        try {
+          await hook.event("tool.execute.before.error", { input, output, directory, error });
+        } catch {
+          // Keep the original before-hook failure as the surfaced error.
+        }
+      }
+      throw error;
     }
   }
 

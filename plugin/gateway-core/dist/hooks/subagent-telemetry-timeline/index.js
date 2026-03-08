@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
+import { clearActiveDelegation, clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
@@ -53,6 +53,23 @@ export function createSubagentTelemetryTimelineHook(options) {
                     category,
                     startedAt: Date.now(),
                     traceId,
+                });
+                return;
+            }
+            if (type === "tool.execute.before.error") {
+                const eventPayload = (payload ?? {});
+                if (String(eventPayload.input?.tool ?? "").toLowerCase().trim() !== "task") {
+                    return;
+                }
+                const sid = sessionId(eventPayload);
+                if (!sid) {
+                    return;
+                }
+                clearActiveDelegation({
+                    sessionId: sid,
+                    childRunId: extractDelegationChildRunId(eventPayload.output?.metadata) || undefined,
+                    traceId: extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
+                    subagentType: extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
                 });
                 return;
             }
