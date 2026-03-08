@@ -2207,6 +2207,10 @@ exit 0
             wf_fail_payload.get("status") == "failed",
             "workflow resume setup run should fail first",
         )
+        expect(
+            str(wf_fail_payload.get("run_id") or "").startswith("wf-run-"),
+            "workflow runs should use deterministic state-derived run ids",
+        )
         wf_resume_path.write_text(
             json.dumps(
                 {
@@ -2242,6 +2246,285 @@ exit 0
             wf_resume_payload.get("status") == "completed"
             and wf_resume_payload.get("resumed_from") == wf_fail_payload.get("run_id"),
             "workflow resume should continue from failed run context",
+        )
+        expect(
+            str(wf_resume_payload.get("run_id") or "").startswith("wf-run-")
+            and wf_resume_payload.get("run_id") != wf_fail_payload.get("run_id"),
+            "workflow resume should allocate a new deterministic run id",
+        )
+
+        workflow_state_path = (
+            home / ".config" / "opencode" / "my_opencode" / "runtime" / "workflow_state.json"
+        )
+        workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
+        workflow_state_path.write_text(
+            json.dumps(
+                {
+                    "active": {"run_id": "wf-run-000007", "status": "idle"},
+                    "history": [
+                        {"run_id": "wf-run-000006", "status": "completed"},
+                        {"run_id": "wf-run-000005", "status": "failed"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wf_seq_path = tmp / "wf-selftest-seq.json"
+        wf_seq_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-seq",
+                    "steps": [{"id": "only", "action": "run-fixed"}],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_seq_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow deterministic id run failed: {result.stderr}",
+        )
+        wf_seq_payload = parse_json_output(result.stdout)
+        expect(
+            wf_seq_payload.get("run_id") == "wf-run-000008",
+            "workflow run ids should advance from persisted active/history state",
+        )
+
+        wf_resume_missing_path = tmp / "wf-selftest-resume-missing-step.json"
+        wf_resume_missing_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-resume-missing",
+                    "steps": [
+                        {"id": "blocking", "action": "fail"},
+                        {"id": "after", "action": "run-after", "when": "on_success"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_resume_missing_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow missing-step setup run failed: {result.stderr}",
+        )
+        wf_resume_missing_payload = parse_json_output(result.stdout)
+        expect(
+            wf_resume_missing_payload.get("status") == "failed",
+            "workflow missing-step resume setup should fail first",
+        )
+        wf_resume_missing_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-resume-missing",
+                    "steps": [
+                        {"id": "replacement", "action": "run-fixed"},
+                        {"id": "after", "action": "run-after", "when": "on_success"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "resume",
+                "--run-id",
+                str(wf_resume_missing_payload.get("run_id") or ""),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow resume should reject runs whose failed step no longer exists",
+        )
+        wf_resume_missing_error = parse_json_output(result.stdout)
+        expect(
+            wf_resume_missing_error.get("reason_code")
+            == "workflow_resume_failed_step_missing",
+            "workflow resume should report a deterministic missing-step reason code",
+        )
+
+        workflow_state_path = (
+            home / ".config" / "opencode" / "my_opencode" / "runtime" / "workflow_state.json"
+        )
+        workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
+        workflow_state_path.write_text(
+            json.dumps(
+                {
+                    "active": {
+                        "run_id": "wf-active-selftest",
+                        "name": "selftest-active-workflow",
+                        "status": "running",
+                        "path": str(wf_resume_path),
+                        "started_at": "2026-03-08T09:00:00Z",
+                        "step_count": 2,
+                        "completed_steps": 1,
+                    },
+                    "history": [
+                        {
+                            "run_id": "wf-active-selftest",
+                            "name": "selftest-active-workflow",
+                            "status": "running",
+                            "path": str(wf_resume_path),
+                            "started_at": "2026-03-08T09:00:00Z",
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow status failed: {result.stderr}")
+        workflow_status_payload = parse_json_output(result.stdout)
+        expect(
+            workflow_status_payload.get("status") == "running"
+            and workflow_status_payload.get("run_id") == "wf-active-selftest",
+            "workflow status should surface persisted active runs",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "stop",
+                "--reason",
+                "selftest stop",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow stop failed: {result.stderr}")
+        workflow_stop_payload = parse_json_output(result.stdout)
+        expect(
+            workflow_stop_payload.get("status") == "stopped"
+            and workflow_stop_payload.get("stop_reason") == "selftest stop",
+            "workflow stop should finalize persisted active runs with a stop reason",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow idle status failed: {result.stderr}")
+        workflow_idle_payload = parse_json_output(result.stdout)
+        expect(
+            workflow_idle_payload.get("status") == "idle"
+            and isinstance(workflow_idle_payload.get("latest"), dict)
+            and workflow_idle_payload.get("latest", {}).get("status") == "stopped",
+            "workflow status should return idle with the stopped run as latest history",
+        )
+
+        workflow_state_path.write_text(
+            json.dumps(
+                {
+                    "active": {
+                        "run_id": "wf-active-conflict",
+                        "name": "selftest-active-conflict",
+                        "status": "running",
+                        "path": str(wf_resume_path),
+                        "started_at": "2026-03-08T09:05:00Z",
+                    },
+                    "history": [
+                        {
+                            "run_id": str(wf_fail_payload.get("run_id") or ""),
+                            "name": "selftest-workflow-resume",
+                            "path": str(wf_resume_path),
+                            "status": "failed",
+                            "failed_step_id": "blocking",
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "resume",
+                "--run-id",
+                str(wf_fail_payload.get("run_id") or ""),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow resume should reject while another active run is marked running",
+        )
+        workflow_resume_conflict = parse_json_output(result.stdout)
+        expect(
+            workflow_resume_conflict.get("reason_code") == "workflow_already_running"
+            and workflow_resume_conflict.get("active_run_id") == "wf-active-conflict",
+            "workflow resume should preserve the active run and report the conflicting run id",
+        )
+        workflow_state_path.write_text(
+            json.dumps({"active": {}, "history": []}, indent=2) + "\n",
+            encoding="utf-8",
         )
 
         result = subprocess.run(
