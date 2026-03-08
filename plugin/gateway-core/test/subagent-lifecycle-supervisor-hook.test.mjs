@@ -157,7 +157,7 @@ test("subagent-lifecycle-supervisor allows mixed subagents in one session withou
   }
 })
 
-test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace-less after events", async () => {
+test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace-less after events without user-visible warning noise", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -192,7 +192,7 @@ test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace
       afterOutput,
     )
 
-    assert.match(afterOutput.output, /ambiguous trace-less completion observed/i)
+    assert.doesNotMatch(afterOutput.output, /ambiguous trace-less completion observed/i)
     await assert.rejects(
       () =>
         plugin["tool.execute.before"](

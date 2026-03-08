@@ -255,10 +255,6 @@ export function createSubagentLifecycleSupervisorHook(options: {
               session_id: sid,
               concurrent_total: String(matches.length),
             })
-            if (typeof eventPayload.output?.output === "string") {
-              eventPayload.output.output +=
-                "\n[subagent-lifecycle-supervisor] ambiguous trace-less completion observed; running state preserved until an exact delegation match arrives or stale timeout expires."
-            }
             return
           }
         }
