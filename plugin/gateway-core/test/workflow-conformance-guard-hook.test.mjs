@@ -91,6 +91,16 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { tool: "bash", sessionID: "session-workflow-safe" },
       { args: { command: "git status --short --branch" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-fetch-safe" },
+      { args: { command: "git fetch" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-fetch-prune-safe" },
+      { args: { command: "git fetch --prune" } }
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -145,7 +155,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-bash-mutate" },
         { args: { command: "echo hi > file.txt" } }
       ),
-      /limited to inspection, validation, and sync/
+      /limited to inspection, validation, and exact sync commands/
     )
 
     await assert.rejects(
@@ -153,7 +163,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-gh-api" },
         { args: { command: "gh api -X POST repos/foo/bar/issues" } }
       ),
-      /limited to inspection, validation, and sync/
+      /limited to inspection, validation, and exact sync commands/
     )
 
     await assert.rejects(
@@ -161,7 +171,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-chain" },
         { args: { command: "git status --short --branch && echo hi > file.txt" } }
       ),
-      /limited to inspection, validation, and sync/
+      /limited to inspection, validation, and exact sync commands/
     )
 
     await assert.rejects(
@@ -169,7 +179,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-refspec-pull" },
         { args: { command: "git pull --rebase origin feature/x" } }
       ),
-      /limited to inspection, validation, and sync/
+      /limited to inspection, validation, and exact sync commands/
     )
 
     await assert.rejects(
@@ -177,7 +187,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-fetch-refspec" },
         { args: { command: "git fetch origin +feature/x:main" } }
       ),
-      /limited to inspection, validation, and sync/
+      /limited to inspection, validation, and exact sync commands/
     )
 
     await assert.rejects(
@@ -185,7 +195,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-redirection" },
         { args: { command: "git status --short --branch > file.txt" } }
       ),
-      /limited to inspection, validation, and sync/
+      /limited to inspection, validation, and exact sync commands/
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -235,6 +245,11 @@ test("workflow-conformance-guard blocks edits in linked worktrees on protected b
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-linked-protected-sync" },
       { args: { command: "git pull --rebase" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-linked-protected-fetch" },
+      { args: { command: "git fetch --prune" } }
     )
   } finally {
     rmSync(linked, { recursive: true, force: true })

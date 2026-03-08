@@ -68,7 +68,10 @@ test("subagent-lifecycle-supervisor blocks exhausted retry sessions", async () =
       { tool: "task", sessionID: "session-life-2" },
       { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE retry-trace] first" } },
     )
-    const failedOutput = { output: "[ERROR] Invalid arguments" }
+    const failedOutput = {
+      args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE retry-trace] first" },
+      output: "[ERROR] Invalid arguments",
+    }
     await plugin["tool.execute.after"](
       { tool: "task", sessionID: "session-life-2" },
       failedOutput,

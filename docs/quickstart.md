@@ -30,7 +30,7 @@ Run `/session handoff --json` after you have at least one indexed digest.
 
 ## Common productivity flows
 
-Before you start a task, create a dedicated git worktree branch from the current root branch. Keep the main project folder on `main`, never `git checkout` or `git switch` that folder onto a task branch, and treat protected branches (`main`, `master`) as edit-blocked everywhere by default. Bash usage on those protected surfaces is limited to inspection, validation, and main-branch sync.
+Before you start a task, create a dedicated git worktree branch from the current root branch. Keep the main project folder on `main`, never `git checkout` or `git switch` that folder onto a task branch, and treat protected branches (`main`, `master`) as edit-blocked everywhere by default. Bash usage on those protected surfaces is limited to inspection, validation, and exact sync commands: `git fetch`, `git fetch --prune`, and `git pull --rebase`.
 
 ```text
 /workflow template init ship --json
