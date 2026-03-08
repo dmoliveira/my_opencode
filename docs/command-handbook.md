@@ -359,10 +359,15 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `/delivery` -> recommended day-to-day issue delivery surface
 - `/workflow` -> lower-level engine behind reusable workflow runs
 - `/autopilot` -> open-ended autonomous execution surface
-- `/do` -> shorthand alias for `/autopilot`
 - `/autoflow` -> public deterministic plan-file execution surface
-- `/plan` -> legacy/internal contract-checking wrapper; prefer `/autoflow` for new usage
-- legacy note -> `/start-work` redirects to `/autoflow`; use `/autoflow` in new guidance
+
+- compatibility aliases are listed below; keep operator guidance canonical-first
+
+### Compatibility aliases (secondary)
+
+- `/do` -> shorthand alias for `/autopilot`
+- `/plan` -> compatibility/internal contract-checking wrapper; prefer `/autoflow` for new usage
+- `/start-work` -> legacy alias path that redirects to `/autoflow`; keep `/autoflow` in new guidance
 
 ## Complete slash-command index
 
@@ -403,7 +408,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
-/plan - Run contract-enforced plan execution flows (run|status|doctor)
+/plan - Compatibility/internal wrapper for plan execution flows (run|status|doctor); prefer /autoflow
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /post-session - Manage post-session hook config (status|enable|disable|set)
 /pr-review - Run PR review copilot analysis with checklist output

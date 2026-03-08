@@ -18,10 +18,7 @@ Tracks the active `my_opencode` improvement wave so any AI can recover context q
 
 ## Active PRs
 
-| PR | Title | Status | Notes |
-|---|---|---|---|
-| `#406` | `auto-wire model routing into entrypoints` | doing | Entry-point routing work is implemented and under review. |
-| `#409` | `fix selftest command dispatch coverage` | doing | Follow-up validation fix separated from `#406`. |
+None for this wave right now. Most recent merges are `#406`, `#409`, and `#414`.
 
 ## Current Epics
 
@@ -76,7 +73,7 @@ Remaining:
 
 ### E4 Model Routing Integration
 
-Status: doing
+Status: done
 
 Goal:
 - auto-wire model-routing resolution into normal execution entrypoints without leaking transient routing metadata into persisted state
@@ -86,15 +83,14 @@ Delivered:
 - response-level routing metadata added to relevant outputs
 - persistence leakage prevented
 - routing selftests expanded
-- PR `#406` opened
+- PR `#406` merged
 
 Remaining:
-- finish PR review/fix cycle for `#406`
-- verify any merge follow-ups after review comments
+- monitor for regressions as new command/runtime slices land
 
 ### E5 Selftest and Doctor Stabilization
 
-Status: doing
+Status: done
 
 Goal:
 - keep validation green as canonical-command and routing changes land
@@ -103,34 +99,48 @@ Delivered:
 - fixed layered config discovery for post-session digest execution
 - switched forced auto-slash execute coverage to a stable dispatch path
 - corrected auto-slash precision accounting
-- full `python3 scripts/selftest.py` passed
-- PR `#409` opened
+- PR `#409` merged
 
 Remaining:
-- monitor for any additional unrelated regressions uncovered by branch review/merge
+- watch for unrelated selftest drift after future main-branch guard updates
+
+### E6 Roadmap Memory and Handoff Tracking
+
+Status: done
+
+Goal:
+- keep a durable roadmap note with epics, active work, and handoff-ready next tasks
+
+Delivered:
+- added tracker at `docs/plan/current-roadmap-tracker.md`
+- PR `#414` merged
+
+Remaining:
+- keep this tracker updated at each milestone boundary
 
 ## Doing Now
 
 | Item | Status | Notes |
 |---|---|---|
-| Review and merge `#406` | doing | Main routing work is implemented; next step is review/fix/merge cycle. |
-| Review and merge `#409` | doing | Small follow-up PR to keep selftest fixes isolated. |
-| Preserve project memory in tracker docs | doing | This file is the live handoff anchor for the current wave. |
+| Canonical guidance sweep (active docs) | doing | Validate that active docs prefer canonical commands and mark compatibility wrappers as secondary. |
+| Plan next hardening slice | doing | Choose next orchestration/runtime hardening task after docs sweep. |
 
 ## Done Recently
 
 | Item | Status | Notes |
 |---|---|---|
 | Reconstructed current initiative from git/OpenCode history | done | Reviewed reflog, prompt history, logs, and checkpoints. |
-| Opened routing PR | done | `#406` covers entrypoint routing integration. |
-| Opened selftest follow-up PR | done | `#409` covers post-session + auto-slash validation fixes. |
+| Merged model routing entrypoint PR | done | `#406` merged after refresh-from-main and CI pass. |
+| Merged selftest follow-up PR | done | `#409` merged after refresh-from-main and CI pass. |
+| Merged roadmap tracker PR | done | `#414` merged after branch freshness refresh and CI pass. |
+| Synced local `main` while preserving local docs edit | done | Used targeted stash + `git pull --rebase` + stash pop for `docs/plan/docs-automation-summary.md`. |
 
 ## Next Tasks
 
-1. Review PR `#406` comments/checks, fix anything needed in a fresh worktree from latest `main`, and merge when green.
-2. Review PR `#409`, merge when green, then sync local `main` again.
-3. Re-scan docs and command handbook references for any non-canonical command guidance that still remains.
-4. Continue the next orchestration/runtime hardening slice only after both current PRs are settled.
+1. Clean up active docs that still present compatibility wrappers as primary workflows (starting with `docs/command-handbook.md`).
+2. Re-run docs guidance checks and quick smoke validation after the docs cleanup patch.
+3. Start the next orchestration/runtime hardening slice in a fresh worktree from latest `main`.
+4. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 
