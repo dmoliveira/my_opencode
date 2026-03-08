@@ -8,6 +8,25 @@ function targetFileArg(args) {
     }
     return rawPath;
 }
+function patchTargetPaths(args) {
+    const patchText = String(args?.patchText ?? args?.patch_text ?? "");
+    if (!patchText.trim()) {
+        return [];
+    }
+    const paths = [];
+    for (const line of patchText.split(/\r?\n/)) {
+        const match = line.match(/^\*\*\*\s+(?:Add|Update|Delete)\s+File:\s+(.+)\s*$/);
+        if (match?.[1]) {
+            paths.push(match[1].trim());
+            continue;
+        }
+        const moveMatch = line.match(/^\*\*\*\s+Move to:\s+(.+)\s*$/);
+        if (moveMatch?.[1]) {
+            paths.push(moveMatch[1].trim());
+        }
+    }
+    return paths;
+}
 function nearestExistingParent(path) {
     let current = path;
     while (current && !existsSync(current)) {
@@ -31,6 +50,11 @@ function gitTopLevel(directory) {
         return "";
     }
 }
+function resolveTargetDirectory(baseDirectory, targetPath) {
+    const absoluteTarget = isAbsolute(targetPath) ? targetPath : resolve(baseDirectory, targetPath);
+    const existingParent = nearestExistingParent(dirname(absoluteTarget));
+    return gitTopLevel(existingParent) || existingParent || baseDirectory;
+}
 export function effectiveToolDirectory(payload, fallbackDirectory) {
     const payloadDirectory = typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : "";
     const baseDirectory = payloadDirectory || fallbackDirectory;
@@ -41,9 +65,14 @@ export function effectiveToolDirectory(payload, fallbackDirectory) {
     }
     const targetFile = targetFileArg(args);
     if (targetFile) {
-        const absoluteTarget = isAbsolute(targetFile) ? targetFile : resolve(baseDirectory, targetFile);
-        const existingParent = nearestExistingParent(dirname(absoluteTarget));
-        return gitTopLevel(existingParent) || existingParent || baseDirectory;
+        return resolveTargetDirectory(baseDirectory, targetFile);
+    }
+    const patchTargets = patchTargetPaths(args);
+    if (patchTargets.length > 0) {
+        const directories = [...new Set(patchTargets.map((target) => resolveTargetDirectory(baseDirectory, target)))];
+        if (directories.length === 1) {
+            return directories[0];
+        }
     }
     return baseDirectory;
 }

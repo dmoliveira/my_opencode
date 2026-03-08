@@ -4,6 +4,8 @@ interface ToolArgs {
     filePath?: string;
     path?: string;
     file_path?: string;
+    patchText?: string;
+    patch_text?: string;
 }
 interface ToolPayload {
     output?: {
