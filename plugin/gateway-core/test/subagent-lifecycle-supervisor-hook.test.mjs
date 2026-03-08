@@ -28,14 +28,14 @@ test("subagent-lifecycle-supervisor blocks duplicate running delegations", async
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-1" },
-      { args: { subagent_type: "explore" } },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-life-1] first" } },
     )
 
     await assert.rejects(
       () =>
         plugin["tool.execute.before"](
           { tool: "task", sessionID: "session-life-1" },
-          { args: { subagent_type: "explore" } },
+          { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-life-1] retry" } },
         ),
       /already running/i,
     )
@@ -66,9 +66,12 @@ test("subagent-lifecycle-supervisor blocks exhausted retry sessions", async () =
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-2" },
-      { args: { subagent_type: "reviewer" } },
+      { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE trace-life-2] first" } },
     )
-    const failedOutput = { output: "[ERROR] Invalid arguments" }
+    const failedOutput = {
+      args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE trace-life-2] first" },
+      output: "[ERROR] Invalid arguments",
+    }
     await plugin["tool.execute.after"](
       { tool: "task", sessionID: "session-life-2" },
       failedOutput,
@@ -78,7 +81,7 @@ test("subagent-lifecycle-supervisor blocks exhausted retry sessions", async () =
       () =>
         plugin["tool.execute.before"](
           { tool: "task", sessionID: "session-life-2" },
-          { args: { subagent_type: "reviewer" } },
+          { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE trace-life-2] retry" } },
         ),
       /retry budget exhausted/i,
     )
@@ -176,11 +179,11 @@ test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-5" },
-      { args: { subagent_type: "explore" } },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-life-5a] first" } },
     )
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-5" },
-      { args: { subagent_type: "strategic-planner" } },
+      { args: { subagent_type: "strategic-planner", prompt: "[DELEGATION TRACE trace-life-5b] second" } },
     )
 
     const afterOutput = { output: "done" }
@@ -194,7 +197,7 @@ test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace
       () =>
         plugin["tool.execute.before"](
           { tool: "task", sessionID: "session-life-5" },
-          { args: { subagent_type: "explore" } },
+          { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-life-5a] retry" } },
         ),
       /already running/i,
     )

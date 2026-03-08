@@ -199,7 +199,7 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
         { tool: "bash", sessionID: "session-primary-chain-switch" },
         { args: { command: "git switch main && git switch feature/foo" } }
       ),
-      /limited to inspection, validation, and exact default-branch sync commands/
+      /Branch switching to 'main' is blocked/
     )
 
     await assert.rejects(
