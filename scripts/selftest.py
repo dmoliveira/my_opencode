@@ -1658,6 +1658,27 @@ exit 0
             [
                 sys.executable,
                 str(CLAIMS_SCRIPT),
+                "handoff",
+                "issue-101",
+                "--to",
+                "",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "claims handoff should reject blank handoff owners",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
                 "accept-handoff",
                 "issue-101",
                 "--json",
@@ -1724,14 +1745,98 @@ exit 0
             "claims reject-handoff should keep current owner active",
         )
 
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "handoff",
+                "issue-101",
+                "--to",
+                "human:zoe",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims active handoff after reject failed: {result.stderr}",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "release",
+                "issue-101",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"claims release issue-101 failed: {result.stderr}")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "handoff",
+                "issue-101",
+                "--to",
+                "human:pat",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "claims handoff should reject non-active claims",
+        )
+
         claims_state_path = (
             home / ".config" / "opencode" / "my_opencode" / "runtime" / "claims.json"
         )
         claims_state = load_json_file(claims_state_path)
         claims_state_claims = claims_state.get("claims")
+        agent_pool_path = (
+            home / ".config" / "opencode" / "my_opencode" / "runtime" / "agent_pool.json"
+        )
+        previous_agent_pool_text = None
+        if agent_pool_path.exists():
+            previous_agent_pool_text = agent_pool_path.read_text(encoding="utf-8")
+        agent_pool_path.parent.mkdir(parents=True, exist_ok=True)
+        agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "agents": [
+                        {
+                            "agent_id": "alex",
+                            "status": "active",
+                            "role": "coder",
+                            "load": 1,
+                        }
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         if isinstance(claims_state_claims, dict):
             claims_state_claims["issue-101"]["updated_at"] = "2000-01-01T00:00:00Z"
             claims_state_claims["issue-101"]["status"] = "active"
+            claims_state_claims["issue-101"]["owner"] = "agent:alex"
+            claims_state_claims["issue-101"]["handoff_to"] = None
             claims_state_path.parent.mkdir(parents=True, exist_ok=True)
             claims_state_path.write_text(
                 json.dumps(claims_state, indent=2) + "\n", encoding="utf-8"
@@ -1759,6 +1864,22 @@ exit 0
             "issue-101" in claims_expire_payload.get("updated", []),
             "claims expire-stale should expire stale claims in apply mode",
         )
+        agent_pool_state = load_json_file(agent_pool_path)
+        agent_entries = agent_pool_state.get("agents") if isinstance(agent_pool_state, dict) else []
+        agent_alex = {}
+        if isinstance(agent_entries, list):
+            for entry in agent_entries:
+                if isinstance(entry, dict) and str(entry.get("agent_id") or "") == "alex":
+                    agent_alex = entry
+                    break
+        expect(
+            int(agent_alex.get("load") or 0) == 0,
+            "claims expire-stale should decrement agent pool load for expired owners",
+        )
+        if previous_agent_pool_text is None:
+            agent_pool_path.unlink(missing_ok=True)
+        else:
+            agent_pool_path.write_text(previous_agent_pool_text, encoding="utf-8")
 
         wf_path = tmp / "wf-selftest.json"
         wf_path.write_text(
@@ -2294,6 +2415,158 @@ exit 0
         expect(
             issue_303.get("status") == "completed",
             "delivery flow should leave claimed issue in completed status",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "start",
+                "--issue",
+                "issue-304",
+                "--role",
+                "coder",
+                "--workflow",
+                str(wf_delivery_path),
+                "--execute",
+                "--handoff-to",
+                "human:alex",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery handoff start failed: {result.stderr}")
+        delivery_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_handoff_payload.get("status") == "handoff-pending"
+            and delivery_handoff_payload.get("final_step") == "handoff",
+            "delivery start with handoff should leave the run awaiting handoff",
+        )
+        delivery_handoff_run_id = str(delivery_handoff_payload.get("run_id") or "")
+        expect(
+            bool(delivery_handoff_run_id),
+            "delivery handoff flow should persist a run id for follow-up status checks",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "status",
+                "--id",
+                delivery_handoff_run_id,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"delivery status by run id failed: {result.stderr}",
+        )
+        delivery_status_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_status_payload.get("run_id") == delivery_handoff_run_id
+            and delivery_status_payload.get("status") == "handoff-pending",
+            "delivery status should return the persisted handoff run by id",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(DELIVERY_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery latest status failed: {result.stderr}")
+        delivery_latest_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_latest_payload.get("run_id") == delivery_handoff_run_id
+            and delivery_latest_payload.get("final_step") == "handoff",
+            "delivery status without id should return the latest persisted run",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "status",
+                "--id",
+                "issue-304",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims status issue-304 failed: {result.stderr}",
+        )
+        issue_304 = parse_json_output(result.stdout)
+        expect(
+            issue_304.get("status") == "handoff-pending"
+            and issue_304.get("handoff_to") == "human:alex",
+            "delivery handoff flow should leave the issue in handoff-pending state",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "close",
+                "--issue",
+                "issue-304",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery close failed: {result.stderr}")
+        delivery_close_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_close_payload.get("status") == "completed"
+            and delivery_close_payload.get("handoff_to") is None,
+            "delivery close should release a handoff-pending issue and clear handoff metadata",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "status",
+                "--id",
+                "issue-304",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims status issue-304 after close failed: {result.stderr}",
+        )
+        issue_304_closed = parse_json_output(result.stdout)
+        expect(
+            issue_304_closed.get("status") == "completed"
+            and issue_304_closed.get("handoff_to") is None,
+            "delivery close should leave the issue completed without stale handoff metadata",
         )
 
         audit_export = tmp / "audit-export.json"
