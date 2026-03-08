@@ -152,7 +152,7 @@ Status: `doing`
 - [ ] Replace remaining prompt/output parsing fallbacks with mandatory structured delegation ids
 - [ ] Add a distinct child run id separate from parent session id for every subagent run
 - [ ] Require structured completion payloads for `task` `after` events (`traceId`, `subagentType`, result status)
-- [ ] Add runtime stress/e2e coverage for 3-5 concurrent subagents with varied completion order
+- [x] Add runtime stress/e2e coverage for 3-5 concurrent subagents with varied completion order
 - [ ] Add observability counters for fallback matches, ambiguous cleanup skips, and stale prunes
 - [ ] Re-check whether any other guard still uses session-root fallback instead of effective target resolution
 - [ ] Only mark this epic `done` after future reruns of S1-S7 pass under stress conditions
@@ -160,7 +160,7 @@ Status: `doing`
 ## Doing Now
 
 - Active slice: structured child delegation run id via task metadata, with trace/output parsing fallbacks still kept as backup until scenario reruns pass.
-- Current focus: wire the child run id into normal lifecycle/concurrency/telemetry paths before legacy fallbacks.
+- Current focus: expand runtime stress coverage for 3-5 same-session subagents and use the results to expose any remaining false-blocking edges.
 
 ## Watch List
 
