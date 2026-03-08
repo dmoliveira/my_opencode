@@ -334,6 +334,81 @@ test("subagent telemetry timeline records outcome from child-run-only after meta
   assert.equal(record.traceId, String(childRunId).replace(/^subagent-run\//, ""))
 })
 
+test("runtime delegation hooks sustain five same-session subagents with varied completion order", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 5,
+      maxExpensiveConcurrent: 2,
+      maxDeepConcurrent: 5,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-stress-five-subagents"
+  const delegations = [
+    { subagent_type: "explore", category: "quick", prompt: "stress alpha" },
+    { subagent_type: "strategic-planner", category: "deep", prompt: "stress beta" },
+    { subagent_type: "librarian", category: "balanced", prompt: "stress gamma" },
+    { subagent_type: "verifier", category: "quick", prompt: "stress delta" },
+    { subagent_type: "reviewer", category: "critical", prompt: "stress epsilon" },
+  ].map((args) => ({ args }))
+
+  for (const output of delegations) {
+    await dispatch("tool.execute.before", {
+      input: { tool: "task", sessionID },
+      output,
+    })
+  }
+
+  for (const index of [2, 4, 1, 3, 0]) {
+    await dispatch("tool.execute.after", {
+      input: { tool: "task", sessionID },
+      output: {
+        metadata: delegations[index].metadata,
+        output: "done",
+      },
+    })
+  }
+
+  const records = getRecentDelegationOutcomes(60000).filter((item) => item.sessionId === sessionID)
+  assert.equal(records.length, 5)
+  assert.deepEqual(
+    records.map((item) => item.subagentType).sort(),
+    ["explore", "librarian", "reviewer", "strategic-planner", "verifier"],
+  )
+  assert.equal(new Set(records.map((item) => item.childRunId)).size, 5)
+  assert.ok(records.every((item) => item.status === "completed"))
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "stress follow-up" } },
+  })
+})
+
 test("default hook ordering runs concurrency guard before lifecycle and telemetry state hooks", async () => {
   const hooks = resolveHookOrder(
     [
