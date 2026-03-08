@@ -2,7 +2,15 @@
 
 Generated artifact that tracks docs-automation publication coverage.
 
-- generated_at_utc: 2026-03-02T09:34:46Z
+## Remediation Summary
+- result: PASS
+- summary_status: ok
+- highest_severity: none
+- issue_count: 0
+- reason_groups: none
+- recommended_next_step: none
+
+- generated_at_utc: 2026-03-08T22:40:42Z
 - indexed_release_count: 20
 - latest_indexed_release: v0.4.19
 - publication_target_coverage: 3/3
