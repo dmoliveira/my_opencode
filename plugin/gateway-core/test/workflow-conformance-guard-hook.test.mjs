@@ -146,6 +146,14 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { tool: "bash", sessionID: "session-workflow-stash-list-safe" },
       { args: { command: "git stash list" } }
     )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-restore-safe" },
+      { args: { command: "git restore --source main -- docs/plan/docs-automation-summary.md" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-checkout-restore-safe" },
+      { args: { command: "git checkout main -- docs/plan/docs-automation-summary.md" } }
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

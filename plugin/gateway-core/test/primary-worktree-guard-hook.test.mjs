@@ -105,12 +105,9 @@ test("primary-worktree-guard blocks switching the primary worktree onto task bra
       /Branch switching to 'main' is blocked/
     )
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-primary-checkout-path" },
-        { args: { command: "git checkout main -- file.txt" } }
-      ),
-      /limited to inspection, validation, and exact default-branch sync commands/
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-checkout-path" },
+      { args: { command: "git checkout main -- file.txt" } }
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -313,6 +310,14 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-stash-list-safe" },
       { args: { command: "git stash list" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-restore-safe" },
+      { args: { command: "git restore --source main -- docs/plan/docs-automation-summary.md" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-checkout-restore-safe" },
+      { args: { command: "git checkout main -- docs/plan/docs-automation-summary.md" } }
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
