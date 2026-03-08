@@ -173,6 +173,42 @@ export function registerDelegationStart(input: DelegationStartInput): void {
   })
 }
 
+export function clearActiveDelegation(input: {
+  sessionId: string
+  childRunId?: string
+  traceId?: string
+  subagentType?: string
+}): boolean {
+  load()
+  const directKey = delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType)
+  if (activeByDelegation.delete(directKey)) {
+    return true
+  }
+  if (input.traceId) {
+    const matches = [...activeByDelegation.entries()].filter(
+      ([candidateKey, candidate]) =>
+        (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
+        candidate.traceId === input.traceId,
+    )
+    if (matches.length === 1) {
+      activeByDelegation.delete(matches[0][0])
+      return true
+    }
+  }
+  if (!input.childRunId && !input.traceId && input.subagentType) {
+    const matches = [...activeByDelegation.entries()].filter(
+      ([candidateKey, candidate]) =>
+        (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
+        candidate.subagentType === input.subagentType,
+    )
+    if (matches.length === 1) {
+      activeByDelegation.delete(matches[0][0])
+      return true
+    }
+  }
+  return false
+}
+
 export function registerDelegationOutcome(
   input: DelegationOutcomeInput,
   maxEntries: number,
