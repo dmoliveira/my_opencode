@@ -216,6 +216,16 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-no-pager-log-safe" },
+      { args: { command: "git --no-pager log --oneline --decorate --graph -20" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-no-pager-status-safe" },
+      { args: { command: "git --no-pager status --short --branch" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-fetch-plain-safe" },
       { args: { command: "git fetch" } }
     )

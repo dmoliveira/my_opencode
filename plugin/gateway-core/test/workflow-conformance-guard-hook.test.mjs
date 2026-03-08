@@ -93,6 +93,16 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-no-pager-log-safe" },
+      { args: { command: "git --no-pager log --oneline --decorate --graph -20" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-no-pager-status-safe" },
+      { args: { command: "git --no-pager status --short --branch" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-safe" },
       { args: { command: "git fetch" } }
     )

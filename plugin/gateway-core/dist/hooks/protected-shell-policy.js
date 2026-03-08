@@ -1,15 +1,21 @@
+const GIT_SAFE_GLOBAL_FLAGS = String.raw `(?:\s+--no-pager)?`;
+const GIT_SAFE_ARGS = String.raw `(?:\s+[^;&|]+)*`;
+const GIT_REQUIRED_ARGS = String.raw `(?:\s+[^;&|]+)+`;
+function gitProtectedPattern(subcommandPattern, argsPattern = GIT_SAFE_ARGS) {
+    return new RegExp(String.raw `^git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}$`, "i");
+}
 const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     /^pwd$/i,
     /^ls(?:\s+[^;&|]+)*$/i,
-    /^git\s+status(?:\s+[^;&|]+)*$/i,
-    /^git\s+diff(?:\s+[^;&|]+)*$/i,
-    /^git\s+log(?:\s+[^;&|]+)*$/i,
-    /^git\s+branch\s+--show-current$/i,
-    /^git\s+rev-parse(?:\s+[^;&|]+)+$/i,
-    /^git\s+worktree\s+list(?:\s+[^;&|]+)*$/i,
-    /^git\s+fetch$/i,
-    /^git\s+fetch\s+--prune$/i,
-    /^git\s+pull\s+--rebase$/i,
+    gitProtectedPattern("status"),
+    gitProtectedPattern("diff"),
+    gitProtectedPattern("log"),
+    gitProtectedPattern(String.raw `branch\s+--show-current`, ""),
+    gitProtectedPattern("rev-parse", GIT_REQUIRED_ARGS),
+    gitProtectedPattern(String.raw `worktree\s+list`),
+    gitProtectedPattern("fetch", ""),
+    gitProtectedPattern(String.raw `fetch\s+--prune`, ""),
+    gitProtectedPattern(String.raw `pull\s+--rebase`, ""),
     /^gh\s+pr\s+view(?:\s+[^;&|]+)*$/i,
     /^gh\s+pr\s+checks(?:\s+[^;&|]+)*$/i,
     /^make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)$/i,
