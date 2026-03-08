@@ -1,11 +1,12 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createDelegationConcurrencyGuardHook } from "../dist/hooks/delegation-concurrency-guard/index.js"
 
 test("delegation-concurrency-guard counts mixed subagents separately without explicit traces", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
@@ -379,5 +380,170 @@ test("default before-hook failure rolls back reviewer reservation state", async 
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+
+test("delegation-concurrency-guard records fallback-match and stale-prune audit reasons", async () => {
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  const fallbackDirectory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  const staleDirectory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  try {
+    const fallbackPlugin = GatewayCorePlugin({
+      directory: fallbackDirectory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegation-concurrency-guard"],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 2,
+          maxExpensiveConcurrent: 2,
+          maxDeepConcurrent: 2,
+          maxCriticalConcurrent: 1,
+          staleReservationMs: 1,
+        },
+      },
+    })
+
+    await fallbackPlugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-fallback-audit" },
+      { args: { subagent_type: "explore", prompt: "first" } },
+    )
+    await fallbackPlugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-fallback-audit" },
+      { args: { subagent_type: "strategic-planner", prompt: "second" } },
+    )
+    await fallbackPlugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-concurrency-fallback-audit" },
+      {
+        output: `done
+
+[agent-context-shaper] delegation context
+- subagent: strategic-planner
+- recommended_category: deep`,
+      },
+    )
+
+    const stalePlugin = GatewayCorePlugin({
+      directory: staleDirectory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegation-concurrency-guard"],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 2,
+          maxExpensiveConcurrent: 2,
+          maxDeepConcurrent: 2,
+          maxCriticalConcurrent: 1,
+          staleReservationMs: 0,
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 1,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    await stalePlugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-stale-audit" },
+      { args: { subagent_type: "explore", prompt: "third" } },
+    )
+    await stalePlugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-stale-audit" },
+      { args: { subagent_type: "strategic-planner", prompt: "fourth" } },
+    )
+    await stalePlugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-concurrency-stale-audit" },
+      { output: "done" },
+    )
+    await delay(5)
+    await stalePlugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-stale-audit" },
+      { args: { subagent_type: "reviewer", prompt: "fifth" } },
+    )
+
+    const fallbackEvents = readFileSync(join(fallbackDirectory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\n+/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    const staleEvents = readFileSync(join(staleDirectory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\n+/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(
+      fallbackEvents.some((entry) => entry.reason_code === "delegation_concurrency_subagent_fallback_matched"),
+    )
+    assert.ok(staleEvents.some((entry) => entry.reason_code === "delegation_concurrency_stale_pruned"))
+  } finally {
+    rmSync(fallbackDirectory, { recursive: true, force: true })
+    rmSync(staleDirectory, { recursive: true, force: true })
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+  }
+})
+
+test("delegation-concurrency-guard writes after-event fallback audit to the payload directory", async () => {
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  const rootDirectory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-root-"))
+  const eventDirectory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-events-"))
+  try {
+    const hook = createDelegationConcurrencyGuardHook({
+      directory: rootDirectory,
+      enabled: true,
+      maxTotalConcurrent: 2,
+      maxExpensiveConcurrent: 2,
+      maxDeepConcurrent: 2,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    })
+
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-concurrency-event-dir" },
+      output: { args: { subagent_type: "explore", prompt: "first" } },
+      directory: eventDirectory,
+    })
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-concurrency-event-dir" },
+      output: { args: { subagent_type: "strategic-planner", prompt: "second" } },
+      directory: eventDirectory,
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "task", sessionID: "session-concurrency-event-dir" },
+      output: {
+        output: `done
+
+[agent-context-shaper] delegation context
+- subagent: strategic-planner
+- recommended_category: deep`,
+      },
+      directory: eventDirectory,
+    })
+
+    const events = readFileSync(join(eventDirectory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\n+/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.ok(events.some((entry) => entry.reason_code === "delegation_concurrency_subagent_fallback_matched"))
+  } finally {
+    rmSync(rootDirectory, { recursive: true, force: true })
+    rmSync(eventDirectory, { recursive: true, force: true })
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
   }
 })
