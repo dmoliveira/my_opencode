@@ -6,7 +6,13 @@ import {
   registerDelegationOutcome,
   registerDelegationStart,
 } from "../shared/delegation-runtime-state.js"
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
+import {
+  annotateDelegationMetadata,
+  extractDelegationSubagentType,
+  extractDelegationSubagentTypeFromOutput,
+  extractDelegationTraceId,
+  resolveDelegationTraceId,
+} from "../shared/delegation-trace.js"
 
 interface ToolPayload {
   input?: {
@@ -19,6 +25,7 @@ interface ToolPayload {
       subagent_type?: string
       category?: string
     }
+    metadata?: unknown
     output?: unknown
   }
   directory?: string
@@ -84,6 +91,7 @@ export function createSubagentTelemetryTimelineHook(options: {
         }
         const args = eventPayload.output?.args
         const traceId = resolveDelegationTraceId(args ?? {})
+        annotateDelegationMetadata(eventPayload.output ?? {}, args)
         const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
         const category = String(args?.category ?? "balanced").toLowerCase().trim() || "balanced"
         if (!subagentType && !category) {
@@ -111,6 +119,10 @@ export function createSubagentTelemetryTimelineHook(options: {
       }
       const output = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
       const failed = isFailureOutput(output)
+      const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
+      const subagentType =
+        extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
+        extractDelegationSubagentTypeFromOutput(output)
       const record = registerDelegationOutcome(
         {
           sessionId: sid,
@@ -119,6 +131,8 @@ export function createSubagentTelemetryTimelineHook(options: {
             ? "subagent_telemetry_failed"
             : "subagent_telemetry_completed",
           endedAt: Date.now(),
+          traceId: traceId || undefined,
+          subagentType: subagentType || undefined,
         },
         options.maxTimelineEntries,
       )

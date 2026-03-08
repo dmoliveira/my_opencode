@@ -1,5 +1,17 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+function delegationKey(sessionId, traceId) {
+    return traceId ? `${sessionId}:${traceId}` : sessionId;
+}
+function sessionFailureKeys(lastFailureByDelegation, sid) {
+    const matches = [];
+    for (const key of lastFailureByDelegation.keys()) {
+        if (key === sid || key.startsWith(`${sid}:`)) {
+            matches.push(key);
+        }
+    }
+    return matches;
+}
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
@@ -32,7 +44,7 @@ function prependHint(original, hint) {
     return `${hint}\n\n${original}`;
 }
 export function createDelegationFallbackOrchestratorHook(options) {
-    const lastFailureBySession = new Map();
+    const lastFailureByDelegation = new Map();
     return {
         id: "delegation-fallback-orchestrator",
         priority: 293,
@@ -43,7 +55,9 @@ export function createDelegationFallbackOrchestratorHook(options) {
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
-                    lastFailureBySession.delete(sid);
+                    for (const key of sessionFailureKeys(lastFailureByDelegation, sid)) {
+                        lastFailureByDelegation.delete(key);
+                    }
                 }
                 return;
             }
@@ -61,7 +75,8 @@ export function createDelegationFallbackOrchestratorHook(options) {
                     return;
                 }
                 const traceId = resolveDelegationTraceId(args);
-                const failure = lastFailureBySession.get(sid);
+                annotateDelegationMetadata(eventPayload.output ?? {}, args);
+                const failure = lastFailureByDelegation.get(delegationKey(sid, traceId));
                 if (!failure) {
                     return;
                 }
@@ -73,7 +88,7 @@ export function createDelegationFallbackOrchestratorHook(options) {
                 args.category = "general";
                 args.prompt = prependHint(String(args.prompt ?? ""), fallbackHint);
                 args.description = prependHint(String(args.description ?? ""), fallbackHint);
-                lastFailureBySession.delete(sid);
+                lastFailureByDelegation.delete(delegationKey(sid, failure.traceId));
                 writeGatewayEventAudit(directory, {
                     hook: "delegation-fallback-orchestrator",
                     stage: "state",
@@ -100,14 +115,18 @@ export function createDelegationFallbackOrchestratorHook(options) {
             }
             const reason = detectFailureReason(eventPayload.output.output);
             if (!reason) {
-                lastFailureBySession.delete(sid);
+                for (const key of sessionFailureKeys(lastFailureByDelegation, sid)) {
+                    lastFailureByDelegation.delete(key);
+                }
                 return;
             }
             const args = eventPayload.output?.args;
-            const traceId = resolveDelegationTraceId(args ?? {});
+            const traceId = extractDelegationTraceId(args, eventPayload.output?.metadata);
             const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
             const category = String(args?.category ?? "").toLowerCase().trim();
-            lastFailureBySession.set(sid, {
+            const key = delegationKey(sid, traceId);
+            lastFailureByDelegation.set(key, {
+                traceId,
                 subagentType,
                 category,
                 reasonCode: reason,

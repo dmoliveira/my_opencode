@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { hasDisallowedShellSyntax, isAllowedProtectedShellCommand } from "../protected-shell-policy.js";
+import { effectiveToolDirectory } from "../shared/effective-tool-directory.js";
 function gitPath(directory, flag) {
     const output = execFileSync("git", ["rev-parse", flag], {
         cwd: directory,
@@ -58,9 +59,7 @@ export function createPrimaryWorktreeGuardHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
+            const directory = effectiveToolDirectory(eventPayload, options.directory);
             if (!isPrimaryWorktree(directory)) {
                 return;
             }
@@ -102,7 +101,7 @@ export function createPrimaryWorktreeGuardHook(options) {
                 reason_code: "bash_in_primary_worktree_blocked",
                 session_id: sessionId,
             });
-            throw new Error("Bash commands in the primary project folder are limited to inspection, validation, and main-branch sync. Create or use a dedicated git worktree branch for task mutations.");
+            throw new Error("Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (`git fetch`, `git fetch --prune`, and `git pull --rebase`). Create or use a dedicated git worktree branch for task mutations.");
         },
     };
 }

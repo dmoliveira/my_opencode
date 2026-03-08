@@ -1,7 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
+import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -16,6 +16,7 @@ interface ToolBeforePayload {
       prompt?: string
       description?: string
     }
+    metadata?: unknown
   }
   directory?: string
 }
@@ -310,6 +311,7 @@ export function createAgentModelResolverHook(options: {
         return
       }
       const traceId = resolveDelegationTraceId(args)
+      annotateDelegationMetadata(eventPayload.output ?? {}, args)
       const sid = sessionId(eventPayload)
 
       const metadataByAgent = loadAgentMetadata(directory)
@@ -437,6 +439,7 @@ export function createAgentModelResolverHook(options: {
         prependHint(prependHint(prependHint(cleanDescription, composedDescriptionHint), worktreeHint), flowHint),
         subagentLabel,
       )
+      annotateDelegationMetadata(eventPayload.output ?? {}, args)
 
       writeGatewayEventAudit(directory, {
         hook: "agent-model-resolver",

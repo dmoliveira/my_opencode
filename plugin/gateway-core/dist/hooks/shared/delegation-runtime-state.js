@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-const activeBySession = new Map();
+const activeByDelegation = new Map();
 const timeline = [];
 let statePath = "";
 let stateMaxEntries = 300;
@@ -86,12 +86,20 @@ export function configureDelegationRuntimeState(options) {
     loaded = false;
     load();
 }
+function delegationKey(sessionId, traceId, subagentType) {
+    const normalizedTrace = String(traceId ?? "").trim();
+    if (normalizedTrace) {
+        return `${sessionId}:${normalizedTrace}`;
+    }
+    const normalizedSubagent = String(subagentType ?? "").trim().toLowerCase() || "unknown";
+    return `${sessionId}:agent:${normalizedSubagent}`;
+}
 export function registerDelegationStart(input) {
     if (!input.sessionId.trim()) {
         return;
     }
     load();
-    activeBySession.set(input.sessionId, {
+    activeByDelegation.set(delegationKey(input.sessionId, input.traceId, input.subagentType), {
         subagentType: input.subagentType,
         category: input.category,
         startedAt: input.startedAt,
@@ -100,11 +108,28 @@ export function registerDelegationStart(input) {
 }
 export function registerDelegationOutcome(input, maxEntries) {
     load();
-    const active = activeBySession.get(input.sessionId);
+    const directKey = delegationKey(input.sessionId, input.traceId, input.subagentType);
+    let active = activeByDelegation.get(directKey);
+    let activeKey = directKey;
+    if (!active && !input.traceId && input.subagentType) {
+        const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
+            candidate.subagentType === input.subagentType);
+        if (matches.length === 1) {
+            ;
+            [[activeKey, active]] = matches;
+        }
+    }
+    if (!active && !input.traceId && !input.subagentType) {
+        const matches = [...activeByDelegation.entries()].filter(([candidateKey]) => candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`));
+        if (matches.length === 1) {
+            ;
+            [[activeKey, active]] = matches;
+        }
+    }
     if (!active) {
         return null;
     }
-    activeBySession.delete(input.sessionId);
+    activeByDelegation.delete(activeKey);
     const durationMs = Math.max(0, input.endedAt - active.startedAt);
     const record = {
         sessionId: input.sessionId,
@@ -126,7 +151,11 @@ export function registerDelegationOutcome(input, maxEntries) {
     return record;
 }
 export function clearDelegationSession(sessionId) {
-    activeBySession.delete(sessionId);
+    for (const key of activeByDelegation.keys()) {
+        if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+            activeByDelegation.delete(key);
+        }
+    }
 }
 export function getRecentDelegationOutcomes(windowMs) {
     load();

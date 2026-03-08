@@ -4,10 +4,20 @@ import { resolve } from "node:path"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { hasDisallowedShellSyntax, isAllowedProtectedShellCommand } from "../protected-shell-policy.js"
 import type { GatewayHook } from "../registry.js"
+import { effectiveToolDirectory } from "../shared/effective-tool-directory.js"
 
 interface ToolBeforePayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
-  output?: { args?: { command?: string } }
+  output?: {
+    args?: {
+      command?: string
+      workdir?: string
+      cwd?: string
+      filePath?: string
+      path?: string
+      file_path?: string
+    }
+  }
   directory?: string
 }
 
@@ -92,10 +102,7 @@ export function createPrimaryWorktreeGuardHook(options: {
         return
       }
       const eventPayload = (payload ?? {}) as ToolBeforePayload
-      const directory =
-        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-          ? eventPayload.directory
-          : options.directory
+      const directory = effectiveToolDirectory(eventPayload, options.directory)
       if (!isPrimaryWorktree(directory)) {
         return
       }
@@ -142,7 +149,7 @@ export function createPrimaryWorktreeGuardHook(options: {
         session_id: sessionId,
       })
       throw new Error(
-        "Bash commands in the primary project folder are limited to inspection, validation, and main-branch sync. Create or use a dedicated git worktree branch for task mutations."
+        "Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (`git fetch`, `git fetch --prune`, and `git pull --rebase`). Create or use a dedicated git worktree branch for task mutations."
       )
     },
   }

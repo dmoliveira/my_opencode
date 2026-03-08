@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
+import { resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isAllowedProtectedShellCommand } from "../protected-shell-policy.js";
+import { effectiveToolDirectory } from "../shared/effective-tool-directory.js";
 // Resolves current git branch for workflow branch protection.
 function currentBranch(directory) {
     try {
@@ -10,6 +12,19 @@ function currentBranch(directory) {
     }
     catch {
         return "";
+    }
+}
+function gitPath(directory, flag) {
+    return resolve(directory, execSync(`git rev-parse ${flag}`, { cwd: directory, stdio: ["ignore", "pipe", "ignore"] })
+        .toString("utf-8")
+        .trim());
+}
+function isPrimaryWorktree(directory) {
+    try {
+        return gitPath(directory, "--git-dir") === gitPath(directory, "--git-common-dir");
+    }
+    catch {
+        return false;
     }
 }
 const PROTECTED_GIT_MUTATION_PATTERN = /(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:[^\s;&|]*\/)?git\s+(commit|merge|rebase|cherry-pick)\b/i;
@@ -28,9 +43,10 @@ export function createWorkflowConformanceGuardHook(options) {
             }
             const eventPayload = (payload ?? {});
             const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
+            const directory = effectiveToolDirectory(eventPayload, options.directory);
+            if (!isPrimaryWorktree(directory)) {
+                return;
+            }
             const branch = currentBranch(directory);
             if (!branch || !protectedSet.has(branch)) {
                 return;
@@ -69,7 +85,7 @@ export function createWorkflowConformanceGuardHook(options) {
                 reason_code: "bash_on_protected_branch_blocked",
                 session_id: sessionId,
             });
-            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and sync. Use a worktree feature branch for task mutations.`);
+            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations.`);
         },
     };
 }

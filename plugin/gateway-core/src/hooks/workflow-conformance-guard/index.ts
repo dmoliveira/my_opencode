@@ -1,12 +1,23 @@
 import { execSync } from "node:child_process"
+import { resolve } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { isAllowedProtectedShellCommand } from "../protected-shell-policy.js"
 import type { GatewayHook } from "../registry.js"
+import { effectiveToolDirectory } from "../shared/effective-tool-directory.js"
 
 interface ToolBeforePayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
-  output?: { args?: { command?: string } }
+  output?: {
+    args?: {
+      command?: string
+      workdir?: string
+      cwd?: string
+      filePath?: string
+      path?: string
+      file_path?: string
+    }
+  }
   directory?: string
 }
 
@@ -18,6 +29,23 @@ function currentBranch(directory: string): string {
       .trim()
   } catch {
     return ""
+  }
+}
+
+function gitPath(directory: string, flag: "--git-dir" | "--git-common-dir"): string {
+  return resolve(
+    directory,
+    execSync(`git rev-parse ${flag}`, { cwd: directory, stdio: ["ignore", "pipe", "ignore"] })
+      .toString("utf-8")
+      .trim(),
+  )
+}
+
+function isPrimaryWorktree(directory: string): boolean {
+  try {
+    return gitPath(directory, "--git-dir") === gitPath(directory, "--git-common-dir")
+  } catch {
+    return false
   }
 }
 
@@ -45,10 +73,10 @@ export function createWorkflowConformanceGuardHook(options: {
       }
       const eventPayload = (payload ?? {}) as ToolBeforePayload
       const tool = String(eventPayload.input?.tool ?? "").toLowerCase()
-      const directory =
-        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-          ? eventPayload.directory
-          : options.directory
+      const directory = effectiveToolDirectory(eventPayload, options.directory)
+      if (!isPrimaryWorktree(directory)) {
+        return
+      }
       const branch = currentBranch(directory)
       if (!branch || !protectedSet.has(branch)) {
         return
@@ -88,7 +116,7 @@ export function createWorkflowConformanceGuardHook(options: {
         session_id: sessionId,
       })
       throw new Error(
-        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and sync. Use a worktree feature branch for task mutations.`
+        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations.`
       )
     },
   }

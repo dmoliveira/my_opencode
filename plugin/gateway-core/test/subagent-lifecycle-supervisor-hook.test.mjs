@@ -28,14 +28,14 @@ test("subagent-lifecycle-supervisor blocks duplicate running delegations", async
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-1" },
-      { args: { subagent_type: "explore" } },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE same-trace] first" } },
     )
 
     await assert.rejects(
       () =>
         plugin["tool.execute.before"](
           { tool: "task", sessionID: "session-life-1" },
-          { args: { subagent_type: "explore" } },
+          { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE same-trace] second" } },
         ),
       /already running/i,
     )
@@ -66,9 +66,12 @@ test("subagent-lifecycle-supervisor blocks exhausted retry sessions", async () =
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-2" },
-      { args: { subagent_type: "reviewer" } },
+      { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE retry-trace] first" } },
     )
-    const failedOutput = { output: "[ERROR] Invalid arguments" }
+    const failedOutput = {
+      args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE retry-trace] first" },
+      output: "[ERROR] Invalid arguments",
+    }
     await plugin["tool.execute.after"](
       { tool: "task", sessionID: "session-life-2" },
       failedOutput,
@@ -78,7 +81,7 @@ test("subagent-lifecycle-supervisor blocks exhausted retry sessions", async () =
       () =>
         plugin["tool.execute.before"](
           { tool: "task", sessionID: "session-life-2" },
-          { args: { subagent_type: "reviewer" } },
+          { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE retry-trace] second" } },
         ),
       /retry budget exhausted/i,
     )
@@ -154,7 +157,7 @@ test("subagent-lifecycle-supervisor allows mixed subagents in one session withou
   }
 })
 
-test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace-less after events", async () => {
+test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace-less after events without user-visible warning noise", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -176,11 +179,11 @@ test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-5" },
-      { args: { subagent_type: "explore" } },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE explore-trace] first" } },
     )
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-5" },
-      { args: { subagent_type: "strategic-planner" } },
+      { args: { subagent_type: "strategic-planner", prompt: "[DELEGATION TRACE planner-trace] second" } },
     )
 
     const afterOutput = { output: "done" }
@@ -189,12 +192,12 @@ test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace
       afterOutput,
     )
 
-    assert.match(afterOutput.output, /ambiguous trace-less completion observed/i)
+    assert.doesNotMatch(afterOutput.output, /ambiguous trace-less completion observed/i)
     await assert.rejects(
       () =>
         plugin["tool.execute.before"](
           { tool: "task", sessionID: "session-life-5" },
-          { args: { subagent_type: "explore" } },
+          { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE explore-trace] retry" } },
         ),
       /already running/i,
     )
@@ -238,6 +241,98 @@ test("subagent-lifecycle-supervisor does not mark plain analytical output as fai
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-life-6" },
       { args: { subagent_type: "reviewer" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("subagent-lifecycle-supervisor resolves trace-less completion from output subagent hint", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-7" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE explore-trace-7] first" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-7" },
+      { args: { subagent_type: "strategic-planner", prompt: "[DELEGATION TRACE planner-trace-7] second" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-7" },
+      {
+        output: "done\n\n[agent-context-shaper] delegation context\n- subagent: strategic-planner\n- recommended_category: deep",
+      },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-7" },
+      { args: { subagent_type: "strategic-planner" } },
+    )
+    await assert.rejects(
+      () =>
+        plugin["tool.execute.before"](
+          { tool: "task", sessionID: "session-life-7" },
+          { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE explore-trace-7] retry" } },
+        ),
+      /already running/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("agent-context-shaper stamps metadata before lifecycle handles trace-less completion", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["agent-context-shaper", "subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-8" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-8] first" } },
+    )
+    const afterOutput = { output: "done" }
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-life-8" },
+      afterOutput,
+    )
+
+    assert.doesNotMatch(String(afterOutput.output), /ambiguous trace-less completion observed/i)
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-8" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE trace-8b] second" } },
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

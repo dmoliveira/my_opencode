@@ -10,6 +10,8 @@ export interface DelegationOutcomeInput {
     status: "completed" | "failed";
     reasonCode?: string;
     endedAt: number;
+    traceId?: string;
+    subagentType?: string;
 }
 export interface DelegationOutcomeRecord {
     sessionId: string;
