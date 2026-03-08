@@ -268,6 +268,14 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-worktree-list-safe" },
+      { args: { command: `git -C "${directory}" worktree list` } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-worktree-list-abs-safe" },
+      { args: { command: `/usr/bin/git -C "${directory}" worktree list` } }
+    )
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-env-no-pager-log-safe" },
       {
         args: {

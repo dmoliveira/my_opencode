@@ -1,13 +1,14 @@
-const GIT_SAFE_GLOBAL_FLAGS = String.raw `(?:\s+--no-pager)?`;
+const SHELL_TOKEN = String.raw `(?:"[^"]*"|'[^']*'|[^\s;&|]+)`;
+const GIT_SAFE_GLOBAL_FLAGS = String.raw `(?:\s+(?:--no-pager|-C\s+${SHELL_TOKEN}|--git-dir\s+${SHELL_TOKEN}|--work-tree\s+${SHELL_TOKEN}))*`;
 const GIT_SAFE_ARGS = String.raw `(?:\s+[^;&|]+)*`;
 const GIT_REQUIRED_ARGS = String.raw `(?:\s+[^;&|]+)+`;
-const SAFE_ENV_PREFIX = String.raw `(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s+)*)`;
+const SAFE_ENV_PREFIX = String.raw `(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=${SHELL_TOKEN}\s+)*)`;
 const PROTECTED_BRANCH_REF = String.raw `(?:main|master)`;
 function protectedPattern(commandPattern) {
     return new RegExp(String.raw `^${SAFE_ENV_PREFIX}${commandPattern}$`, "i");
 }
 function gitProtectedPattern(subcommandPattern, argsPattern = GIT_SAFE_ARGS) {
-    return protectedPattern(String.raw `git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}`);
+    return protectedPattern(String.raw `(?:[^\s;&|]*/)?git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}`);
 }
 const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     protectedPattern("pwd"),
