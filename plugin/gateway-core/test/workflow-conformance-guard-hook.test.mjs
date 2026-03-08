@@ -103,6 +103,14 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-worktree-list-safe" },
+      { args: { command: `git -C "${directory}" worktree list` } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-worktree-list-abs-safe" },
+      { args: { command: `/usr/bin/git -C "${directory}" worktree list` } }
+    )
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-env-no-pager-log-safe" },
       {
         args: {
