@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { hasDisallowedShellSyntax, isAllowedProtectedShellCommand } from "../protected-shell-policy.js";
+import { effectiveToolDirectory } from "../shared/effective-tool-directory.js";
 function gitPath(directory, flag) {
     const output = execFileSync("git", ["rev-parse", flag], {
         cwd: directory,
@@ -58,9 +59,7 @@ export function createPrimaryWorktreeGuardHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
+            const directory = effectiveToolDirectory(eventPayload, options.directory);
             if (!isPrimaryWorktree(directory)) {
                 return;
             }

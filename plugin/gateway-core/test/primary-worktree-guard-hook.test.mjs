@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { execSync } from "node:child_process"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { join, relative } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
@@ -143,6 +143,51 @@ test("primary-worktree-guard allows edits in linked worktrees", async () => {
     await plugin["tool.execute.before"](
       { tool: "write", sessionID: "session-linked-edit" },
       { args: { filePath: "src/new.ts" } }
+    )
+  } finally {
+    rmSync(linked, { recursive: true, force: true })
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("primary-worktree-guard allows linked worktree targets even when session directory is the primary worktree", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-primary-worktree-"))
+  const linked = `${directory}-linked`
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    writeFileSync(join(directory, "file.txt"), "v1\n", "utf-8")
+    commitAll(directory, "init")
+    execSync("git checkout -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    execSync(`git worktree add "${linked}" main`, { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["primary-worktree-guard"], disabled: [] },
+        primaryWorktreeGuard: {
+          enabled: true,
+          allowedBranches: ["main", "master"],
+          blockEdits: true,
+          blockBranchSwitches: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "write", sessionID: "session-primary-dir-linked-write", directory },
+      { args: { filePath: join(linked, "src/new.ts") } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "write", sessionID: "session-primary-dir-linked-write-relative", directory },
+      { args: { filePath: relative(directory, join(linked, "src/new.ts")) } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-dir-linked-bash", directory },
+      { args: { command: "git status --short --branch", workdir: linked } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-dir-linked-bash-relative", directory },
+      { args: { command: "git status --short --branch", workdir: relative(directory, linked) } }
     )
   } finally {
     rmSync(linked, { recursive: true, force: true })
