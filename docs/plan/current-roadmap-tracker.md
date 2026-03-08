@@ -122,8 +122,8 @@ Remaining:
 
 | Item | Status | Notes |
 |---|---|---|
-| Canonical guidance sweep (active docs) | doing | Validate that active docs prefer canonical commands and mark compatibility wrappers as secondary. |
-| Plan next hardening slice | doing | Choose next orchestration/runtime hardening task after docs sweep. |
+| E2/E3 guard hardening implementation | doing | Allow safe chained protected commands and improve branch-freshness fallback guidance. |
+| Guard hardening PR prep | doing | Run targeted guard tests + validate, then open focused PR from this worktree. |
 
 ## Done Recently
 
@@ -133,13 +133,15 @@ Remaining:
 | Merged model routing entrypoint PR | done | `#406` merged after refresh-from-main and CI pass. |
 | Merged selftest follow-up PR | done | `#409` merged after refresh-from-main and CI pass. |
 | Merged roadmap tracker PR | done | `#414` merged after branch freshness refresh and CI pass. |
+| Merged canonical docs guidance PR | done | `#419` merged after CI pass and branch refresh. |
+| Merged workflow resume/runtime guard PR | done | `#420` merged after CI success. |
 | Synced local `main` while preserving local docs edit | done | Used targeted stash + `git pull --rebase` + stash pop for `docs/plan/docs-automation-summary.md`. |
 
 ## Next Tasks
 
-1. Clean up active docs that still present compatibility wrappers as primary workflows (starting with `docs/command-handbook.md`).
-2. Re-run docs guidance checks and quick smoke validation after the docs cleanup patch.
-3. Start the next orchestration/runtime hardening slice in a fresh worktree from latest `main`.
+1. Land the current E2/E3 guard hardening slice (safe chained protected commands + freshness fallback guidance).
+2. Run post-merge verification for protected-main guard behavior in real operator flows.
+3. Continue scanning active docs for canonical-first guidance drift as new commands evolve.
 4. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes

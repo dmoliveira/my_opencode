@@ -110,7 +110,7 @@ export function createBranchFreshnessGuardHook(options: {
         max_behind: maxBehind,
       })
       throw new Error(
-        `[branch-freshness-guard] Current branch is behind '${baseRef}' by ${behind} commit(s). Rebase or merge latest base before PR create/merge.`,
+        `[branch-freshness-guard] Current branch is behind '${baseRef}' by ${behind} commit(s). Rebase or merge latest base before PR create/merge. If auto-update fails, run a deterministic refresh (e.g. git fetch --prune && git merge --no-edit ${baseRef} on the PR branch, then push) and retry.`,
       )
     },
   }

@@ -311,6 +311,11 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
       { tool: "bash", sessionID: "session-primary-stash-list-safe" },
       { args: { command: "git stash list" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-safe-chain" },
+      { args: { command: "git stash pop && git status --short --branch" } }
+    )
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-restore-safe" },
       { args: { command: "git restore --source main -- docs/plan/docs-automation-summary.md" } }
