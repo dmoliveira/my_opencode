@@ -2391,6 +2391,55 @@ exit 0
             "delivery handoff flow should leave the issue in handoff-pending state",
         )
 
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(DELIVERY_SCRIPT),
+                "close",
+                "--issue",
+                "issue-304",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"delivery close failed: {result.stderr}")
+        delivery_close_payload = parse_json_output(result.stdout)
+        expect(
+            delivery_close_payload.get("status") == "completed"
+            and delivery_close_payload.get("handoff_to") is None,
+            "delivery close should release a handoff-pending issue and clear handoff metadata",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(CLAIMS_SCRIPT),
+                "status",
+                "--id",
+                "issue-304",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"claims status issue-304 after close failed: {result.stderr}",
+        )
+        issue_304_closed = parse_json_output(result.stdout)
+        expect(
+            issue_304_closed.get("status") == "completed"
+            and issue_304_closed.get("handoff_to") is None,
+            "delivery close should leave the issue completed without stale handoff metadata",
+        )
+
         audit_export = tmp / "audit-export.json"
         result = subprocess.run(
             [sys.executable, str(AUDIT_SCRIPT), "status", "--json"],

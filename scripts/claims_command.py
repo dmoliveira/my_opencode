@@ -327,6 +327,7 @@ def cmd_release(argv: list[str], path: Path) -> int:
             as_json,
         )
     item["status"] = "completed"
+    item["handoff_to"] = None
     item["updated_at"] = now_iso()
     pool_state = load_agent_pool(DEFAULT_AGENT_POOL_PATH)
     adjust_pool_load(pool_state, str(item.get("owner") or ""), -1)
