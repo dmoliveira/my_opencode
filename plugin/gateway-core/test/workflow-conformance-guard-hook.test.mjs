@@ -121,6 +121,31 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { tool: "bash", sessionID: "session-workflow-fetch-prune-safe" },
       { args: { command: "git fetch --prune" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-worktree-add-safe" },
+      {
+        args: {
+          command:
+            'git worktree add -b feature/test "/tmp/gateway-linked" origin/main',
+        },
+      }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-stash-push-safe" },
+      { args: { command: 'git stash push -m "temp" -- docs/plan/docs-automation-summary.md' } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-stash-pop-safe" },
+      { args: { command: "git stash pop" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-stash-list-safe" },
+      { args: { command: "git stash list" } }
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -244,6 +244,31 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
       { tool: "bash", sessionID: "session-primary-fetch-safe" },
       { args: { command: "git fetch --prune" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-worktree-add-safe" },
+      {
+        args: {
+          command:
+            'git worktree add -b feature/test "/tmp/gateway-linked" origin/main',
+        },
+      }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-stash-push-safe" },
+      { args: { command: 'git stash push -m "temp" -- docs/plan/docs-automation-summary.md' } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-stash-pop-safe" },
+      { args: { command: "git stash pop" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-stash-list-safe" },
+      { args: { command: "git stash list" } }
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
