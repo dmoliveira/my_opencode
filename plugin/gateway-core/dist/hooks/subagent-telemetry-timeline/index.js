@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
-import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
@@ -40,6 +40,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                 const args = eventPayload.output?.args;
                 const traceId = resolveDelegationTraceId(args ?? {});
                 annotateDelegationMetadata(eventPayload.output ?? {}, args);
+                const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
                 const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
                 const category = String(args?.category ?? "balanced").toLowerCase().trim() || "balanced";
                 if (!subagentType && !category) {
@@ -47,6 +48,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                 }
                 registerDelegationStart({
                     sessionId: sid,
+                    childRunId: childRunId || undefined,
                     subagentType,
                     category,
                     startedAt: Date.now(),
@@ -67,6 +69,7 @@ export function createSubagentTelemetryTimelineHook(options) {
             }
             const output = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
             const failed = isFailureOutput(output);
+            const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
             const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
             const subagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
                 extractDelegationSubagentTypeFromOutput(output);
@@ -77,6 +80,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                     ? "subagent_telemetry_failed"
                     : "subagent_telemetry_completed",
                 endedAt: Date.now(),
+                childRunId: childRunId || undefined,
                 traceId: traceId || undefined,
                 subagentType: subagentType || undefined,
             }, options.maxTimelineEntries);
@@ -91,6 +95,7 @@ export function createSubagentTelemetryTimelineHook(options) {
                 stage: "state",
                 reason_code: record.reasonCode,
                 session_id: record.sessionId,
+                child_run_id: record.childRunId,
                 subagent_type: record.subagentType || undefined,
                 category: record.category,
                 duration_ms: String(record.durationMs),

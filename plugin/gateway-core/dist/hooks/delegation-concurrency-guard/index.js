@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
-import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function matchingSessionDelegationKeys(activeByDelegation, sid, subagentType) {
     const matches = [];
     for (const [key, value] of activeByDelegation.entries()) {
@@ -28,8 +28,20 @@ function fallbackDelegationKey(sid, args) {
     }
     return `${sid}:agent:${subagentType || "unknown"}`;
 }
-function delegationKey(sid, traceId, args) {
+function delegationKey(sid, childRunId, traceId, args) {
+    if (childRunId) {
+        return `${sid}:${childRunId}`;
+    }
     return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args);
+}
+function matchingSessionTraceDelegationKeys(activeByDelegation, sid, traceId) {
+    const matches = [];
+    for (const [key, value] of activeByDelegation.entries()) {
+        if ((key === sid || key.startsWith(`${sid}:`)) && value.traceId === traceId) {
+            matches.push(key);
+        }
+    }
+    return matches;
 }
 function sessionDelegationKeys(activeByDelegation, sid) {
     const matches = [];
@@ -66,7 +78,7 @@ export function createDelegationConcurrencyGuardHook(options) {
     }
     return {
         id: "delegation-concurrency-guard",
-        priority: 319,
+        priority: 294,
         async event(type, payload) {
             if (!options.enabled) {
                 return;
@@ -89,10 +101,20 @@ export function createDelegationConcurrencyGuardHook(options) {
                 }
                 const sid = sessionId(eventPayload);
                 if (sid) {
+                    const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
                     const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
-                    if (traceId) {
-                        const key = delegationKey(sid, traceId);
-                        activeByDelegation.delete(key);
+                    if (childRunId || traceId) {
+                        const key = delegationKey(sid, childRunId, traceId);
+                        if (activeByDelegation.delete(key)) {
+                            return;
+                        }
+                        if (traceId) {
+                            const traceMatches = matchingSessionTraceDelegationKeys(activeByDelegation, sid, traceId);
+                            if (traceMatches.length === 1) {
+                                activeByDelegation.delete(traceMatches[0]);
+                                return;
+                            }
+                        }
                     }
                     else {
                         const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
@@ -137,7 +159,8 @@ export function createDelegationConcurrencyGuardHook(options) {
             const category = String(args.category ?? "").toLowerCase().trim();
             const traceId = resolveDelegationTraceId(args ?? {});
             annotateDelegationMetadata(eventPayload.output ?? {}, args);
-            const key = delegationKey(sid, traceId, args);
+            const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
+            const key = delegationKey(sid, childRunId, traceId, args);
             if (!subagentType && !category) {
                 return;
             }
@@ -196,6 +219,7 @@ export function createDelegationConcurrencyGuardHook(options) {
                 throw new Error(`Blocked delegation: critical concurrent delegations ${critical} reached maxCriticalConcurrent=${options.maxCriticalConcurrent}.`);
             }
             activeByDelegation.set(key, {
+                childRunId: childRunId || undefined,
                 subagentType,
                 category: recommendedCategory,
                 costTier,
@@ -207,6 +231,7 @@ export function createDelegationConcurrencyGuardHook(options) {
                 stage: "state",
                 reason_code: "delegation_concurrency_reserved",
                 session_id: sid,
+                child_run_id: childRunId || undefined,
                 trace_id: traceId || undefined,
                 subagent_type: subagentType || undefined,
                 category: recommendedCategory,

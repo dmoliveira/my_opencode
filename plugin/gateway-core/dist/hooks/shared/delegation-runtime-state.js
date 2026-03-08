@@ -29,9 +29,11 @@ function normalizeRecord(value) {
         !Number.isFinite(durationMs)) {
         return null;
     }
+    const childRunId = String(source.childRunId ?? "").trim() || undefined;
     const traceId = String(source.traceId ?? "").trim() || undefined;
     return {
         sessionId,
+        childRunId,
         subagentType,
         category,
         status,
@@ -86,7 +88,11 @@ export function configureDelegationRuntimeState(options) {
     loaded = false;
     load();
 }
-function delegationKey(sessionId, traceId, subagentType) {
+function delegationKey(sessionId, childRunId, traceId, subagentType) {
+    const normalizedChildRunId = String(childRunId ?? "").trim();
+    if (normalizedChildRunId) {
+        return `${sessionId}:${normalizedChildRunId}`;
+    }
     const normalizedTrace = String(traceId ?? "").trim();
     if (normalizedTrace) {
         return `${sessionId}:${normalizedTrace}`;
@@ -99,7 +105,8 @@ export function registerDelegationStart(input) {
         return;
     }
     load();
-    activeByDelegation.set(delegationKey(input.sessionId, input.traceId, input.subagentType), {
+    activeByDelegation.set(delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType), {
+        childRunId: input.childRunId,
         subagentType: input.subagentType,
         category: input.category,
         startedAt: input.startedAt,
@@ -108,10 +115,18 @@ export function registerDelegationStart(input) {
 }
 export function registerDelegationOutcome(input, maxEntries) {
     load();
-    const directKey = delegationKey(input.sessionId, input.traceId, input.subagentType);
+    const directKey = delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType);
     let active = activeByDelegation.get(directKey);
     let activeKey = directKey;
-    if (!active && !input.traceId && input.subagentType) {
+    if (!active && input.traceId) {
+        const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
+            candidate.traceId === input.traceId);
+        if (matches.length === 1) {
+            ;
+            [[activeKey, active]] = matches;
+        }
+    }
+    if (!active && !input.childRunId && !input.traceId && input.subagentType) {
         const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
             candidate.subagentType === input.subagentType);
         if (matches.length === 1) {
@@ -119,7 +134,7 @@ export function registerDelegationOutcome(input, maxEntries) {
             [[activeKey, active]] = matches;
         }
     }
-    if (!active && !input.traceId && !input.subagentType) {
+    if (!active && !input.childRunId && !input.traceId && !input.subagentType) {
         const matches = [...activeByDelegation.entries()].filter(([candidateKey]) => candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`));
         if (matches.length === 1) {
             ;
@@ -133,6 +148,7 @@ export function registerDelegationOutcome(input, maxEntries) {
     const durationMs = Math.max(0, input.endedAt - active.startedAt);
     const record = {
         sessionId: input.sessionId,
+        childRunId: active.childRunId,
         subagentType: active.subagentType,
         category: active.category,
         status: input.status,

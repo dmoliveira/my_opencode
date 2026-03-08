@@ -13,12 +13,14 @@ interface DelegationMetadataCarrier {
 }
 
 interface GatewayDelegationMetadata {
+  childRunId?: string
   traceId?: string
   subagentType?: string
   category?: string
 }
 
 const TRACE_PATTERN = /\[DELEGATION TRACE ([A-Za-z0-9_-]+)\]/
+const CHILD_RUN_PREFIX = "subagent-run/"
 
 function prependHint(original: string, hint: string): string {
   if (!original.trim()) {
@@ -54,13 +56,27 @@ function readGatewayDelegationMetadata(metadata: unknown): GatewayDelegationMeta
   if (!nested || typeof nested !== "object") {
     return null
   }
+  const childRunId = String(nested.childRunId ?? "").trim() || undefined
   const traceId = String(nested.traceId ?? "").trim() || undefined
   const subagentType = String(nested.subagentType ?? "").trim() || undefined
   const category = String(nested.category ?? "").trim() || undefined
-  if (!traceId && !subagentType && !category) {
+  if (!childRunId && !traceId && !subagentType && !category) {
     return null
   }
-  return { traceId, subagentType, category }
+  return { childRunId, traceId, subagentType, category }
+}
+
+function buildDelegationChildRunId(traceId: string): string {
+  const normalizedTraceId = String(traceId).trim()
+  return normalizedTraceId ? `${CHILD_RUN_PREFIX}${normalizedTraceId}` : ""
+}
+
+function parseTraceIdFromChildRunId(childRunId: string): string {
+  const normalizedChildRunId = String(childRunId).trim()
+  if (!normalizedChildRunId.startsWith(CHILD_RUN_PREFIX)) {
+    return ""
+  }
+  return normalizedChildRunId.slice(CHILD_RUN_PREFIX.length).trim()
 }
 
 function writeGatewayDelegationMetadata(
@@ -77,6 +93,9 @@ function writeGatewayDelegationMetadata(
     gateway.delegation && typeof gateway.delegation === "object"
       ? { ...(gateway.delegation as Record<string, unknown>) }
       : {}
+  if (metadata.childRunId) {
+    delegation.childRunId = metadata.childRunId
+  }
   if (metadata.traceId) {
     delegation.traceId = metadata.traceId
   }
@@ -113,13 +132,28 @@ export function resolveDelegationTraceId(args: TraceArgs): string {
 }
 
 export function annotateDelegationMetadata(carrier: DelegationMetadataCarrier, args: TraceArgs | undefined): void {
+  const existing = readGatewayDelegationMetadata(carrier.metadata)
   const traceId = extractDelegationTraceId(args, carrier.metadata)
+  const expectedChildRunId = buildDelegationChildRunId(traceId)
+  const childRunId =
+    existing?.childRunId && expectedChildRunId && existing.childRunId !== expectedChildRunId
+      ? expectedChildRunId
+      : existing?.childRunId || expectedChildRunId
   const subagentType = String(args?.subagent_type ?? "").trim() || undefined
   const category = String(args?.category ?? "").trim() || undefined
-  if (!traceId && !subagentType && !category) {
+  if (!childRunId && !traceId && !subagentType && !category) {
     return
   }
-  writeGatewayDelegationMetadata(carrier, { traceId: traceId || undefined, subagentType, category })
+  writeGatewayDelegationMetadata(carrier, {
+    childRunId: childRunId || undefined,
+    traceId: traceId || undefined,
+    subagentType,
+    category,
+  })
+}
+
+export function extractDelegationChildRunId(metadata?: unknown): string {
+  return String(readGatewayDelegationMetadata(metadata)?.childRunId ?? "").trim()
 }
 
 export function extractDelegationTraceId(args: TraceArgs | undefined, metadata?: unknown): string {
@@ -128,7 +162,8 @@ export function extractDelegationTraceId(args: TraceArgs | undefined, metadata?:
   if (parsed) {
     return parsed
   }
-  return readGatewayDelegationMetadata(metadata)?.traceId ?? ""
+  const delegation = readGatewayDelegationMetadata(metadata)
+  return delegation?.traceId ?? parseTraceIdFromChildRunId(delegation?.childRunId ?? "")
 }
 
 export function extractDelegationSubagentType(args: TraceArgs | undefined, metadata?: unknown): string {
