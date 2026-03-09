@@ -8,6 +8,7 @@ test("validation-command-matcher classifies repo-native and wrapped test command
   assert.deepEqual(classifyValidationCommand("make install-test"), ["test"])
   assert.deepEqual(classifyValidationCommand("uv run pytest tests/test_api.py"), ["test"])
   assert.deepEqual(classifyValidationCommand("npm exec vitest run"), ["test"])
+  assert.deepEqual(classifyValidationCommand("./scripts/ci-check tests/api smoke"), ["test"])
 })
 
 test("validation-command-matcher covers run and prefix package-manager forms", () => {

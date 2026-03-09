@@ -480,7 +480,7 @@ test("validation-evidence-ledger shadow mode does not record ambiguous validatio
   })
   await ledger.event("tool.execute.before", {
     input: { tool: "bash", sessionID: "session-ledger-shadow-1" },
-    output: { args: { command: "./scripts/ci-check tests/api smoke" } },
+    output: { args: { command: "./scripts/custom-check api smoke" } },
   })
   await ledger.event("tool.execute.after", {
     input: { tool: "bash", sessionID: "session-ledger-shadow-1" },
