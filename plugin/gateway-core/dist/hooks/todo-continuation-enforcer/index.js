@@ -68,9 +68,12 @@ function hasHardContinuationCue(text) {
     }
     return (normalized.includes("still left to do") ||
         normalized.includes("remaining actionable") ||
+        normalized.includes("remaining epic") ||
+        normalized.includes("next remaining epic") ||
         normalized.includes("remaining tasks") ||
         normalized.includes("remaining items") ||
         normalized.includes("next items") ||
+        normalized.includes("continue loop") ||
         normalized.includes("in progress") ||
         normalized.includes("in-progress right now") ||
         normalized.includes("still left to do (next") ||
@@ -79,6 +82,7 @@ function hasHardContinuationCue(text) {
 function hasSoftContinuationCue(text) {
     const normalized = text.toLowerCase();
     const hasNextSteps = normalized.includes("next steps") ||
+        normalized.includes("next safe steps") ||
         normalized.includes("natural next") ||
         normalized.includes("if you want");
     const hasOfferToExecute = normalized.includes("i can") &&

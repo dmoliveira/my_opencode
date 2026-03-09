@@ -58,6 +58,56 @@ const results = []
       maxConsecutiveFailures: 5,
       client: {
         session: {
+          async messages() {
+            return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Next remaining epic - E6 parity scoreboard and drift checks. Continue Loop." }] }] }
+          },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-10" } })
+    results.push({ id: "todo-remaining-epic-continue-loop", workflow: "todo-continuation-enforcer", requestType: "progress_summary", description: "remaining epic plus continue loop phrasing", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() { throw new Error("messages should not be called") },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-11", prompt: "continue" } })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-11" }, output: { output: "Task complete for now. Next safe steps: rerun lint and validate drift. If you want, I can continue." } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-11" } })
+    results.push({ id: "todo-next-safe-steps-armed", workflow: "todo-continuation-enforcer", requestType: "soft_cue", description: "next safe steps soft cue with continue intent", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
           async messages() { throw new Error("messages should not be called") },
           async promptAsync() { promptCalls += 1 },
         },
