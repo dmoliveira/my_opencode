@@ -7,14 +7,15 @@ Use this as the default task-start checklist. Parallel delegation adds reservati
 1. Create a dedicated worktree branch for the task from the current root branch.
 2. Leave the main project folder on `main`; do not edit task files there.
 3. Never `git checkout` or `git switch` the main project folder onto a task branch.
-4. For parallel work, split planned edits into disjoint path reservations.
-5. Set reservation state:
+4. Treat linked worktrees as the normal editing surface; only block them when that linked worktree itself is on a protected branch.
+5. For parallel work, split planned edits into disjoint path reservations.
+6. Set reservation state:
 
 ```text
 /reservation set --own-paths "plugin/gateway-core/src/**" --active-paths "plugin/gateway-core/src/**,docs/**" --writer-count 2
 ```
 
-6. Confirm:
+7. Confirm:
 
 ```text
 /reservation status --json

@@ -2,12 +2,12 @@ const TODOREAD_MARKER = "[todoread CADENCE REMINDER]";
 const START_HINT = [
     TODOREAD_MARKER,
     "Session start checkpoint detected.",
-    "- Run TodoRead now to align pending priorities before new work",
+    "- Review the todo list now to align pending priorities before new work",
 ].join("\n");
 const CHECKPOINT_HINT = [
     TODOREAD_MARKER,
     "Progress checkpoint detected.",
-    "- Run TodoRead before starting the next task block",
+    "- Review or refresh the todo list before starting the next task block",
     "- Re-sync pending/in-progress/completed statuses first",
 ].join("\n");
 const START_PATTERNS = [/session start/i, /starting new session/i, /beginning of conversations/i];
