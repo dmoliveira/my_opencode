@@ -192,3 +192,51 @@ test("pr-body-evidence-guard applies the same body checks to gh api PR creation"
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("pr-body-evidence-guard accepts validation evidence from another session in the same worktree", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "pr-body-evidence-guard"],
+          disabled: ["pr-readiness-guard"],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prBodyEvidenceGuard: {
+          enabled: true,
+          requireSummarySection: true,
+          requireValidationSection: true,
+          requireValidationEvidence: true,
+          allowUninspectableBody: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-a" },
+      { args: { command: "node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-body-a" },
+      { output: "tests passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-b" },
+      { args: { command: 'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs"' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

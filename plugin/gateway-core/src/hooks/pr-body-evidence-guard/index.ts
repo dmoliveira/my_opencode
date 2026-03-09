@@ -1,7 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js"
-import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js"
+import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -48,8 +48,8 @@ export function createPrBodyEvidenceGuardHook(options: {
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim()
 
       if (options.requireValidationEvidence && sessionId && requiredMarkers.length > 0) {
-        const missing = missingValidationMarkers(sessionId, requiredMarkers)
-        if (missing.length > 0) {
+        const status = validationEvidenceStatus(sessionId, requiredMarkers, directory)
+        if (status.missing.length > 0) {
           writeGatewayEventAudit(directory, {
             hook: "pr-body-evidence-guard",
             stage: "skip",
@@ -57,7 +57,9 @@ export function createPrBodyEvidenceGuardHook(options: {
             session_id: sessionId,
           })
           throw new Error(
-            `[pr-body-evidence-guard] Missing validation evidence before PR create: ${missing.join(", ")}.`,
+            `[pr-body-evidence-guard] Missing validation evidence before PR create: ${status.missing.join(
+              ", ",
+            )}. Evidence must be recorded in this session or the current worktree before PR creation.`,
           )
         }
       }

@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
-import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js";
+import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 // Creates PR body evidence guard for structured PR metadata quality.
 export function createPrBodyEvidenceGuardHook(options) {
     const requiredMarkers = options.requiredMarkers.map((item) => item.trim().toLowerCase()).filter(Boolean);
@@ -24,15 +24,15 @@ export function createPrBodyEvidenceGuardHook(options) {
                 : options.directory;
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim();
             if (options.requireValidationEvidence && sessionId && requiredMarkers.length > 0) {
-                const missing = missingValidationMarkers(sessionId, requiredMarkers);
-                if (missing.length > 0) {
+                const status = validationEvidenceStatus(sessionId, requiredMarkers, directory);
+                if (status.missing.length > 0) {
                     writeGatewayEventAudit(directory, {
                         hook: "pr-body-evidence-guard",
                         stage: "skip",
                         reason_code: "pr_body_missing_validation_evidence",
                         session_id: sessionId,
                     });
-                    throw new Error(`[pr-body-evidence-guard] Missing validation evidence before PR create: ${missing.join(", ")}.`);
+                    throw new Error(`[pr-body-evidence-guard] Missing validation evidence before PR create: ${status.missing.join(", ")}. Evidence must be recorded in this session or the current worktree before PR creation.`);
                 }
             }
             const inspection = inspectGitHubPrCreateBody(command, directory);
