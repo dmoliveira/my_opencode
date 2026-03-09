@@ -12,6 +12,18 @@
     "expectedMeaning": "route_doctor"
   },
   {
+    "id": "auto-slash-noop",
+    "hookId": "auto-slash-command",
+    "requestType": "no_op",
+    "description": "non-diagnostic request should not map to doctor",
+    "instruction": "Classify only the sanitized user request text for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics.",
+    "context": "request=write a changelog summary for this refactor",
+    "allowedChars": ["D", "N"],
+    "decisionMeaning": { "D": "route_doctor", "N": "no_slash" },
+    "expectedChar": "N",
+    "expectedMeaning": "no_slash"
+  },
+  {
     "id": "provider-overload-contamination",
     "hookId": "provider-error-classifier",
     "requestType": "provider_error",
@@ -22,6 +34,30 @@
     "decisionMeaning": { "F": "free_usage_exhausted", "R": "rate_limited", "O": "provider_overloaded", "N": "not_classified" },
     "expectedChar": "O",
     "expectedMeaning": "provider_overloaded"
+  },
+  {
+    "id": "provider-rate-limit",
+    "hookId": "provider-error-classifier",
+    "requestType": "provider_error",
+    "description": "rate-limit wording should map to rate limited",
+    "instruction": "Classify this provider error. F=free_usage_or_credit_exhausted, R=rate_limited, O=provider_overloaded_or_unavailable, N=not_classified.",
+    "context": "error=Rate limit exceeded, please slow down and retry later",
+    "allowedChars": ["F", "R", "O", "N"],
+    "decisionMeaning": { "F": "free_usage_exhausted", "R": "rate_limited", "O": "provider_overloaded", "N": "not_classified" },
+    "expectedChar": "R",
+    "expectedMeaning": "rate_limited"
+  },
+  {
+    "id": "provider-free-usage",
+    "hookId": "provider-error-classifier",
+    "requestType": "provider_error",
+    "description": "free tier exhaustion should map to quota exhaustion",
+    "instruction": "Classify this provider error. F=free_usage_or_credit_exhausted, R=rate_limited, O=provider_overloaded_or_unavailable, N=not_classified.",
+    "context": "error=Free usage exceeded, add credits before retrying",
+    "allowedChars": ["F", "R", "O", "N"],
+    "decisionMeaning": { "F": "free_usage_exhausted", "R": "rate_limited", "O": "provider_overloaded", "N": "not_classified" },
+    "expectedChar": "F",
+    "expectedMeaning": "free_usage_exhausted"
   },
   {
     "id": "done-proof-smoke-checks",
@@ -36,6 +72,18 @@
     "expectedMeaning": "test_present"
   },
   {
+    "id": "done-proof-missing-evidence",
+    "hookId": "done-proof-enforcer",
+    "requestType": "completion_evidence",
+    "description": "completion text without validation evidence should fail semantic test marker",
+    "instruction": "Does this completion text include evidence-equivalent wording for test? Y=yes, N=no.",
+    "context": "completion=Implemented the refactor and updated the docs. <promise>DONE</promise>",
+    "allowedChars": ["Y", "N"],
+    "decisionMeaning": { "Y": "test_present", "N": "test_missing" },
+    "expectedChar": "N",
+    "expectedMeaning": "test_missing"
+  },
+  {
     "id": "validation-wrapper-test",
     "hookId": "validation-evidence-ledger",
     "requestType": "validation_wrapper",
@@ -48,6 +96,18 @@
     "expectedMeaning": "test"
   },
   {
+    "id": "validation-non-validation",
+    "hookId": "validation-evidence-ledger",
+    "requestType": "no_op",
+    "description": "non-validation shell command should remain not_validation",
+    "instruction": "Classify only the sanitized shell command for validation evidence. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation.",
+    "context": "command=git status",
+    "allowedChars": ["L", "T", "C", "B", "S", "N"],
+    "decisionMeaning": { "L": "lint", "T": "test", "C": "typecheck", "B": "build", "S": "security", "N": "not_validation" },
+    "expectedChar": "N",
+    "expectedMeaning": "not_validation"
+  },
+  {
     "id": "fallback-invalid-arguments",
     "hookId": "delegation-fallback-orchestrator",
     "requestType": "delegation_failure",
@@ -58,5 +118,17 @@
     "decisionMeaning": { "U": "delegation_unknown_agent", "C": "delegation_unknown_category", "I": "delegation_invalid_arguments", "B": "delegation_blocked_forbidden_tool", "R": "delegation_runtime_error", "N": "no_match" },
     "expectedChar": "I",
     "expectedMeaning": "delegation_invalid_arguments"
+  },
+  {
+    "id": "fallback-runtime-error",
+    "hookId": "delegation-fallback-orchestrator",
+    "requestType": "delegation_failure",
+    "description": "runtime shell failure should map to runtime_error",
+    "instruction": "Classify only the sanitized delegation failure evidence. U=unknown_agent, C=unknown_category, I=invalid_arguments, B=blocked_forbidden_tool, R=runtime_error, N=no_match.",
+    "context": "output=[ERROR] command failed with exit code 1 while running delegated task prompt=[DELEGATION TRACE y] retry delegation description=(empty)",
+    "allowedChars": ["U", "C", "I", "B", "R", "N"],
+    "decisionMeaning": { "U": "delegation_unknown_agent", "C": "delegation_unknown_category", "I": "delegation_invalid_arguments", "B": "delegation_blocked_forbidden_tool", "R": "delegation_runtime_error", "N": "no_match" },
+    "expectedChar": "R",
+    "expectedMeaning": "delegation_runtime_error"
   }
 ]
