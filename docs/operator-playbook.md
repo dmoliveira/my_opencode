@@ -18,6 +18,8 @@ Canonical operational flows for day-to-day delivery with the current command sur
 - Use `/autopilot` for open-ended autonomous execution that is not centered on a workflow file.
 - Use `/autoflow` for deterministic execution of a plan artifact; treat legacy `/start-work` references as backend history, not the recommended surface.
 
+For a reusable external delivery-policy reference, search your local `agents.md` clone first when available, then use the public `agents.md` playbook docs (`AGENTS.md`, `docs/index.md`, `docs/validation-policy.md`) when you need canonical shareable links.
+
 ## Flow 1: Claim -> Deliver -> Close
 
 ```text
