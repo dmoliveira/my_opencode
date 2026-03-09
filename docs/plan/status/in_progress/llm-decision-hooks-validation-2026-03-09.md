@@ -175,6 +175,15 @@ Outcome:
 - Epic 5 hardening improved the protocol against prompt-injection-style context and refusal/explanation leakage
 - remaining Epic 5 work is broader adversarial expansion, not the core parser contract
 
+Refinement note:
+
+- an initial mixed-context probe with injected tool-output wording still returned `N`
+- prompt was tightened further to explicitly ignore adversarial phrases like `ignore previous instructions`, `answer X`, XML tags, chat roles, and tool-output markers
+- after refinement, the same mixed-context live probe returned:
+  - char: `Y`
+  - meaning: `test_present`
+  - duration: about `7.8s`
+
 ### 13. Sidecar config live runtime fix
 
 Scenario:
