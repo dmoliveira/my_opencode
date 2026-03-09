@@ -56,6 +56,61 @@ const results = []
       maxConsecutiveFailures: 5,
       client: {
         session: {
+          async messages() { throw new Error("messages should not be called") },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-6", prompt: "yes, let's do it" } })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-6" }, output: { output: "Task 3/7 complete. Remaining tasks exist.\n<CONTINUE-LOOP>" } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-6" } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-6" } })
+    results.push({ id: "todo-multi-idle-cooldown", workflow: "todo-continuation-enforcer", requestType: "cooldown", description: "multiple idle cycles after a single pending run", expectedAction: "inject_once", actualAction: promptCalls === 1 ? "inject_once" : `inject_${promptCalls}_times`, correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() { throw new Error("messages should not be called") },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-7", prompt: "yes, let's do it" } })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-7" }, output: { output: "Task 3/7 complete. Remaining tasks exist.\n<CONTINUE-LOOP>" } })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-7", prompt: "stop for now" } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-7" } })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-7", prompt: "continue" } })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-7" }, output: { output: "Task 4/7 complete. Remaining tasks exist.\n<CONTINUE-LOOP>" } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-7" } })
+    results.push({ id: "todo-stop-resume-cycle", workflow: "todo-continuation-enforcer", requestType: "stop_resume", description: "stop clears continuation and later continue re-arms it", expectedAction: "inject_once_after_resume", actualAction: promptCalls === 1 ? "inject_once_after_resume" : `inject_${promptCalls}_times`, correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
           async messages() {
             return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Epic 4 in progress. Completed 3/7 tasks. Next items: 4. add tests 5. rerun build. Remaining tasks exist." }] }] }
           },
