@@ -44,6 +44,7 @@ Do not use LLM decisions for:
 - Live runtime config path: `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`) now carries gateway plugin settings without violating OpenCode root schema
 - Scenario reliability fixtures live in `docs/plan/status/in_progress/llm-scenario-fixtures.json`
 - Workflow scenario artifact lives in `docs/plan/status/in_progress/workflow-scenario-report.md`
+- Combined rollout signal snapshot lives in `docs/plan/status/in_progress/llm-rollout-signal-summary.md`
 
 ### Epic status
 
