@@ -329,6 +329,16 @@ Outcome:
 - workflow/enforcer scenario reporting is now in place alongside the semantic hook reliability report
 - we now track expected trigger/action vs actual trigger/action for unfinished-work and completion-gating flows
 
+Expanded workflow coverage:
+
+- added realistic progress-summary scenarios for `todo-continuation-enforcer`
+  - epic in progress with remaining items -> inject
+  - epic complete with no pending items -> do not inject
+- updated workflow report result:
+  - total scenarios: `7`
+  - correct actions: `7`
+  - accuracy: `100%`
+
 ### 13. Sidecar config live runtime fix
 
 Scenario:

@@ -68,6 +68,10 @@ function hasHardContinuationCue(text) {
     }
     return (normalized.includes("still left to do") ||
         normalized.includes("remaining actionable") ||
+        normalized.includes("remaining tasks") ||
+        normalized.includes("remaining items") ||
+        normalized.includes("next items") ||
+        normalized.includes("in progress") ||
         normalized.includes("in-progress right now") ||
         normalized.includes("still left to do (next") ||
         normalized.includes("need finish"));

@@ -54,6 +54,56 @@ const results = []
       enabled: true,
       cooldownMs: 30000,
       maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Epic 4 in progress. Completed 3/7 tasks. Next items: 4. add tests 5. rerun build. Remaining tasks exist." }] }] }
+          },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-4" } })
+    results.push({ id: "todo-epic-progress-pending", workflow: "todo-continuation-enforcer", requestType: "progress_summary", description: "epic progress with remaining items", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Epic 4 complete. All 7 tasks are done. Summary: tests passed and build succeeded." }] }] }
+          },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-5" } })
+    results.push({ id: "todo-epic-progress-complete", workflow: "todo-continuation-enforcer", requestType: "progress_summary", description: "epic progress summary without pending items", expectedAction: "no_inject", actualAction: promptCalls === 0 ? "no_inject" : "inject_prompt", correct: promptCalls === 0 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
       client: { session: { async messages() { throw new Error("messages should not be called") }, async promptAsync() { promptCalls += 1 } } },
     })
     await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-2", prompt: "yes, let's do it" } })
