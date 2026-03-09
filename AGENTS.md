@@ -6,6 +6,7 @@
 - Keep the primary project folder on `main`; use it for sync and inspection only.
 - Never `git checkout` or `git switch` the primary project folder onto a task branch.
 - If you need parallel work, create additional linked worktrees instead of branching in place.
+- For related policy/playbook docs from `agents.md`, prefer a local clone first and use public links only when you need canonical shareable references.
 
 ### wt flow
 
