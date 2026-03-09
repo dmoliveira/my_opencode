@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage } from "../hook-message-injector/index.js";
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const CLASSIFICATION_BY_CHAR = {
     F: "free_usage_exhausted",
     R: "rate_limited",
@@ -115,6 +116,16 @@ export function createProviderErrorClassifierHook(options) {
                 if (decision.accepted) {
                     const classification = CLASSIFICATION_BY_CHAR[decision.char];
                     if (classification) {
+                        writeDecisionComparisonAudit({
+                            directory: resolveDirectory(eventPayload, options.directory),
+                            hookId: "provider-error-classifier",
+                            sessionId,
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "not_classified",
+                            aiMeaning: decision.meaning || classification,
+                            deterministicValue: "none",
+                            aiValue: classification,
+                        });
                         writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
                             hook: "provider-error-classifier",
                             stage: "state",

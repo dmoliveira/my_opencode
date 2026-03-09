@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { annotateDelegationMetadata, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 const FAILURE_REASON_BY_CHAR = {
     U: "delegation_unknown_agent",
@@ -158,6 +159,18 @@ export function createDelegationFallbackOrchestratorHook(options) {
                     cacheKey: `delegation-failure:${subagentType}:${category}:${String(eventPayload.output.output ?? "").trim().toLowerCase()}`,
                 });
                 if (decision.accepted) {
+                    const aiReason = FAILURE_REASON_BY_CHAR[decision.char] ?? null;
+                    writeDecisionComparisonAudit({
+                        directory,
+                        hookId: "delegation-fallback-orchestrator",
+                        sessionId: sid,
+                        traceId,
+                        mode: options.decisionRuntime.config.mode,
+                        deterministicMeaning: "no_match",
+                        aiMeaning: decision.meaning || aiReason || "no_match",
+                        deterministicValue: "none",
+                        aiValue: aiReason ?? "none",
+                    });
                     writeGatewayEventAudit(directory, {
                         hook: "delegation-fallback-orchestrator",
                         stage: "state",
@@ -168,7 +181,6 @@ export function createDelegationFallbackOrchestratorHook(options) {
                         llm_decision_meaning: decision.meaning,
                         llm_decision_mode: options.decisionRuntime.config.mode,
                     });
-                    const aiReason = FAILURE_REASON_BY_CHAR[decision.char] ?? null;
                     if (options.decisionRuntime.config.mode === "shadow" && aiReason) {
                         writeGatewayEventAudit(directory, {
                             hook: "delegation-fallback-orchestrator",

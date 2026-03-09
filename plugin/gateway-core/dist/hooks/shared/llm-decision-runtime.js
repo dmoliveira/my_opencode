@@ -44,6 +44,28 @@ function resolveDecisionMeaning(char, decisionMeaning) {
     const value = decisionMeaning[key];
     return typeof value === "string" ? value.trim() : "";
 }
+export function shouldAuditDecisionDisagreement(deterministicMeaning, aiMeaning) {
+    const deterministic = deterministicMeaning.trim().toLowerCase();
+    const ai = aiMeaning.trim().toLowerCase();
+    return Boolean(deterministic && ai && deterministic !== ai);
+}
+export function writeDecisionComparisonAudit(input) {
+    if (!shouldAuditDecisionDisagreement(input.deterministicMeaning, input.aiMeaning)) {
+        return;
+    }
+    writeGatewayEventAudit(input.directory, {
+        hook: input.hookId,
+        stage: "state",
+        reason_code: "llm_decision_disagreement",
+        session_id: input.sessionId,
+        trace_id: input.traceId,
+        llm_decision_mode: input.mode,
+        deterministic_decision_meaning: input.deterministicMeaning,
+        deterministic_decision_value: input.deterministicValue,
+        llm_decision_meaning: input.aiMeaning,
+        llm_decision_value: input.aiValue,
+    });
+}
 function pruneDecisionCache(cache, now, maxEntries) {
     for (const [key, value] of cache.entries()) {
         if (value.expiresAt <= now) {

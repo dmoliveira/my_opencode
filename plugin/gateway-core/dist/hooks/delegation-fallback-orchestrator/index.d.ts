@@ -1,5 +1,5 @@
 import type { GatewayHook } from "../registry.js";
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
+import { type LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
 export declare function createDelegationFallbackOrchestratorHook(options: {
     directory: string;
     enabled: boolean;

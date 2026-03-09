@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
 // Resolves stable session id across gateway payload variants.
@@ -122,6 +123,16 @@ export function createValidationEvidenceLedgerHook(options) {
                 if (decision.accepted) {
                     const category = VALIDATION_CATEGORY_BY_CHAR[decision.char];
                     if (category) {
+                        writeDecisionComparisonAudit({
+                            directory: options.directory,
+                            hookId: "validation-evidence-ledger",
+                            sessionId: sid,
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "not_validation",
+                            aiMeaning: decision.meaning || category,
+                            deterministicValue: "none",
+                            aiValue: category,
+                        });
                         writeGatewayEventAudit(options.directory, {
                             hook: "validation-evidence-ledger",
                             stage: "state",

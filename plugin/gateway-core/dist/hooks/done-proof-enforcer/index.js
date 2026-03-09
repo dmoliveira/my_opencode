@@ -1,5 +1,6 @@
 import { markerCategory, missingValidationMarkers } from "../validation-evidence-ledger/evidence.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
 function buildMarkerInstruction(marker) {
     return `Does this completion text include evidence-equivalent wording for '${marker}'? Y=yes, N=no.`;
 }
@@ -47,6 +48,16 @@ export function createDoneProofEnforcerHook(options) {
                                 cacheKey: `done-proof:${marker}:${text.trim().toLowerCase()}`,
                             });
                             if (decision.accepted) {
+                                writeDecisionComparisonAudit({
+                                    directory: options.directory ?? process.cwd(),
+                                    hookId: "done-proof-enforcer",
+                                    sessionId,
+                                    mode: options.decisionRuntime.config.mode,
+                                    deterministicMeaning: `${marker}_missing`,
+                                    aiMeaning: decision.meaning || `${marker}_missing`,
+                                    deterministicValue: "missing",
+                                    aiValue: decision.char === "Y" ? "present" : "missing",
+                                });
                                 writeGatewayEventAudit(options.directory ?? process.cwd(), {
                                     hook: "done-proof-enforcer",
                                     stage: "state",

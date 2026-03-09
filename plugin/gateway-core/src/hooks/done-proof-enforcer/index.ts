@@ -2,6 +2,7 @@ import { markerCategory, missingValidationMarkers } from "../validation-evidence
 import type { GatewayHook } from "../registry.js"
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
 
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
@@ -65,6 +66,16 @@ export function createDoneProofEnforcerHook(options: {
                 cacheKey: `done-proof:${marker}:${text.trim().toLowerCase()}`,
               })
               if (decision.accepted) {
+                writeDecisionComparisonAudit({
+                  directory: options.directory ?? process.cwd(),
+                  hookId: "done-proof-enforcer",
+                  sessionId,
+                  mode: options.decisionRuntime.config.mode,
+                  deterministicMeaning: `${marker}_missing`,
+                  aiMeaning: decision.meaning || `${marker}_missing`,
+                  deterministicValue: "missing",
+                  aiValue: decision.char === "Y" ? "present" : "missing",
+                })
                 writeGatewayEventAudit(options.directory ?? process.cwd(), {
                   hook: "done-proof-enforcer",
                   stage: "state",

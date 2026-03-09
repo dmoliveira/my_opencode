@@ -35,6 +35,17 @@ export interface SingleCharDecisionResult {
     skippedReason?: string;
     error?: string;
 }
+export interface DecisionComparisonAudit {
+    directory: string;
+    hookId: string;
+    sessionId: string;
+    traceId?: string;
+    mode: LlmDecisionMode;
+    deterministicMeaning: string;
+    aiMeaning: string;
+    deterministicValue?: string;
+    aiValue?: string;
+}
 export interface LlmDecisionRuntime {
     config: LlmDecisionRuntimeConfig;
     decide(request: SingleCharDecisionRequest): Promise<SingleCharDecisionResult>;
@@ -55,5 +66,7 @@ export declare function buildSingleCharDecisionPrompt(request: {
     allowedChars: string[];
 }): string;
 export declare function parseSingleCharDecision(raw: string, allowedChars: string[]): string;
+export declare function shouldAuditDecisionDisagreement(deterministicMeaning: string, aiMeaning: string): boolean;
+export declare function writeDecisionComparisonAudit(input: DecisionComparisonAudit): void;
 export declare function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRuntime;
 export {};

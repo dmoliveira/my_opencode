@@ -2,7 +2,10 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
+import {
+  type LlmDecisionRuntime,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
 
 interface GatewayClient {
   session?: {
@@ -156,6 +159,16 @@ export function createProviderErrorClassifierHook(options: {
         if (decision.accepted) {
           const classification = CLASSIFICATION_BY_CHAR[decision.char]
           if (classification) {
+            writeDecisionComparisonAudit({
+              directory: resolveDirectory(eventPayload, options.directory),
+              hookId: "provider-error-classifier",
+              sessionId,
+              mode: options.decisionRuntime.config.mode,
+              deterministicMeaning: "not_classified",
+              aiMeaning: decision.meaning || classification,
+              deterministicValue: "none",
+              aiValue: classification,
+            })
             writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
               hook: "provider-error-classifier",
               stage: "state",

@@ -43,6 +43,18 @@ export interface SingleCharDecisionResult {
   error?: string
 }
 
+export interface DecisionComparisonAudit {
+  directory: string
+  hookId: string
+  sessionId: string
+  traceId?: string
+  mode: LlmDecisionMode
+  deterministicMeaning: string
+  aiMeaning: string
+  deterministicValue?: string
+  aiValue?: string
+}
+
 export interface LlmDecisionRuntime {
   config: LlmDecisionRuntimeConfig
   decide(request: SingleCharDecisionRequest): Promise<SingleCharDecisionResult>
@@ -115,6 +127,30 @@ function resolveDecisionMeaning(char: string, decisionMeaning?: Record<string, s
   }
   const value = decisionMeaning[key]
   return typeof value === "string" ? value.trim() : ""
+}
+
+export function shouldAuditDecisionDisagreement(deterministicMeaning: string, aiMeaning: string): boolean {
+  const deterministic = deterministicMeaning.trim().toLowerCase()
+  const ai = aiMeaning.trim().toLowerCase()
+  return Boolean(deterministic && ai && deterministic !== ai)
+}
+
+export function writeDecisionComparisonAudit(input: DecisionComparisonAudit): void {
+  if (!shouldAuditDecisionDisagreement(input.deterministicMeaning, input.aiMeaning)) {
+    return
+  }
+  writeGatewayEventAudit(input.directory, {
+    hook: input.hookId,
+    stage: "state",
+    reason_code: "llm_decision_disagreement",
+    session_id: input.sessionId,
+    trace_id: input.traceId,
+    llm_decision_mode: input.mode,
+    deterministic_decision_meaning: input.deterministicMeaning,
+    deterministic_decision_value: input.deterministicValue,
+    llm_decision_meaning: input.aiMeaning,
+    llm_decision_value: input.aiValue,
+  })
 }
 
 function pruneDecisionCache(cache: Map<string, CachedDecision>, now: number, maxEntries: number): void {

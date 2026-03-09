@@ -1,6 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
+import {
+  type LlmDecisionRuntime,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
 import {
   clearValidationEvidence,
   markValidationEvidence,
@@ -173,6 +176,16 @@ export function createValidationEvidenceLedgerHook(options: {
         if (decision.accepted) {
           const category = VALIDATION_CATEGORY_BY_CHAR[decision.char]
           if (category) {
+            writeDecisionComparisonAudit({
+              directory: options.directory,
+              hookId: "validation-evidence-ledger",
+              sessionId: sid,
+              mode: options.decisionRuntime.config.mode,
+              deterministicMeaning: "not_validation",
+              aiMeaning: decision.meaning || category,
+              deterministicValue: "none",
+              aiValue: category,
+            })
             writeGatewayEventAudit(options.directory, {
               hook: "validation-evidence-ledger",
               stage: "state",

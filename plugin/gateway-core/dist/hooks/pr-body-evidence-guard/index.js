@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
 import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 function buildSectionInstruction(section) {
@@ -72,6 +73,16 @@ export function createPrBodyEvidenceGuardHook(options) {
                         cacheKey: `pr-body-summary:${body.trim().toLowerCase()}`,
                     });
                     if (decision.accepted) {
+                        writeDecisionComparisonAudit({
+                            directory,
+                            hookId: "pr-body-evidence-guard",
+                            sessionId,
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "summary_missing",
+                            aiMeaning: decision.meaning || "summary_missing",
+                            deterministicValue: "missing",
+                            aiValue: decision.char === "Y" ? "present" : "missing",
+                        });
                         writeGatewayEventAudit(directory, {
                             hook: "pr-body-evidence-guard",
                             stage: "state",
@@ -109,6 +120,16 @@ export function createPrBodyEvidenceGuardHook(options) {
                         cacheKey: `pr-body-validation:${body.trim().toLowerCase()}`,
                     });
                     if (decision.accepted) {
+                        writeDecisionComparisonAudit({
+                            directory,
+                            hookId: "pr-body-evidence-guard",
+                            sessionId,
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "validation_missing",
+                            aiMeaning: decision.meaning || "validation_missing",
+                            deterministicValue: "missing",
+                            aiValue: decision.char === "Y" ? "present" : "missing",
+                        });
                         writeGatewayEventAudit(directory, {
                             hook: "pr-body-evidence-guard",
                             stage: "state",

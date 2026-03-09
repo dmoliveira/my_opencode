@@ -5,6 +5,7 @@ import {
   buildSingleCharDecisionPrompt,
   createLlmDecisionRuntime,
   parseSingleCharDecision,
+  shouldAuditDecisionDisagreement,
   truncateDecisionText,
 } from "../dist/hooks/shared/llm-decision-runtime.js"
 
@@ -27,6 +28,12 @@ test("buildSingleCharDecisionPrompt encodes answer-only contract", () => {
 test("truncateDecisionText marks oversized content", () => {
   const value = truncateDecisionText("abcdefghij", 8)
   assert.match(value, /\[truncated\]$/)
+})
+
+test("shouldAuditDecisionDisagreement only reports real semantic differences", () => {
+  assert.equal(shouldAuditDecisionDisagreement("no_slash", "route_doctor"), true)
+  assert.equal(shouldAuditDecisionDisagreement("test_present", "test_present"), false)
+  assert.equal(shouldAuditDecisionDisagreement("", "test_present"), false)
 })
 
 test("llm decision runtime accepts valid JSON text output", async () => {

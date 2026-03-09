@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const AUTO_SLASH_COMMAND_TAG_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_TAG_CLOSE = "</auto-slash-command>";
 const SLASH_COMMAND_PATTERN = /^\/([a-zA-Z][\w-]*)\s*(.*)/;
@@ -171,6 +172,16 @@ export function createAutoSlashCommandHook(options) {
                     });
                     if (decision.accepted) {
                         const aiSlash = AI_AUTO_SLASH_CHAR_TO_COMMAND[decision.char] ?? null;
+                        writeDecisionComparisonAudit({
+                            directory,
+                            hookId: "auto-slash-command",
+                            sessionId: typeof sessionId === "string" ? sessionId : "",
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "no_slash",
+                            aiMeaning: decision.meaning || (aiSlash ? "route_doctor" : "no_slash"),
+                            deterministicValue: "none",
+                            aiValue: aiSlash ?? "none",
+                        });
                         writeGatewayEventAudit(directory, {
                             hook: "auto-slash-command",
                             stage: "state",
