@@ -246,6 +246,7 @@ export function createAutoSlashCommandHook(options: {
             templateId: "auto-slash-v1",
             instruction: buildAiSlashInstruction(),
             context: buildAiSlashContext(prompt),
+            userContext: prompt,
             allowedChars: ["D", "N"],
             decisionMeaning: {
               D: "route_doctor",
