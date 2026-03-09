@@ -514,7 +514,6 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createSessionRuntimeContextHook({
       directory,
       enabled: cfg.sessionRuntimeContextInjector.enabled,
-      client: ctx.client,
     }),
     createContextInjectorHook({
       directory,

@@ -7,37 +7,6 @@ import test from "node:test"
 import GatewayCorePlugin from "../dist/index.js"
 import { createSessionRuntimeContextHook } from "../dist/hooks/session-runtime-context/index.js"
 
-test("session-runtime-context injects authoritative session id into first chat message", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-context-"))
-  try {
-    const hook = createSessionRuntimeContextHook({
-      directory,
-      enabled: true,
-    })
-    const output = {
-      parts: [{ type: "text", text: "Original prompt" }],
-    }
-    await hook.event("chat.message", {
-      properties: { sessionID: "session-runtime-1" },
-      output,
-      directory,
-    })
-
-    assert.match(String(output.parts[0]?.text), /\[SESSION CONTEXT\]/)
-    assert.match(String(output.parts[0]?.text), /authoritative_runtime_session_id=session-runtime-1/)
-    assert.match(String(output.parts[0]?.text), /Original prompt/)
-
-    await hook.event("chat.message", {
-      properties: { sessionID: "session-runtime-1" },
-      output,
-      directory,
-    })
-    assert.equal(String(output.parts[0]?.text).match(/\[SESSION CONTEXT\]/g)?.length ?? 0, 1)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
-})
-
 test("session-runtime-context injects authoritative session id into transform payloads", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-context-"))
   try {
@@ -66,41 +35,49 @@ test("session-runtime-context injects authoritative session id into transform pa
   }
 })
 
-test("session-runtime-context restores authoritative session id after compaction", async () => {
+test("session-runtime-context resets injection state after compaction", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-context-"))
   try {
-    let promptCalls = 0
     const hook = createSessionRuntimeContextHook({
       directory,
       enabled: true,
-      client: {
-        session: {
-          async promptAsync() {
-            promptCalls += 1
-          },
-          async messages() {
-            return { data: [] }
-          },
-        },
-      },
     })
-
-    await hook.event("chat.message", {
-      properties: { sessionID: "session-runtime-3" },
-      output: { parts: [{ type: "text", text: "hello" }] },
+    const output = {
+      messages: [
+        {
+          info: { role: "user", sessionId: "session-runtime-3" },
+          parts: [{ type: "text", text: "hello" }],
+        },
+      ],
+    }
+    await hook.event("experimental.chat.messages.transform", {
+      input: {},
+      output,
       directory,
     })
     await hook.event("session.compacted", {
       properties: { info: { id: "session-runtime-3" } },
       directory,
     })
+    const resumed = {
+      messages: [
+        {
+          info: { role: "user", sessionId: "session-runtime-3" },
+          parts: [{ type: "text", text: "hello again" }],
+        },
+      ],
+    }
+    await hook.event("experimental.chat.messages.transform", {
+      input: {},
+      output: resumed,
+      directory,
+    })
 
-    assert.equal(promptCalls, 1)
+    assert.match(String(resumed.messages[0]?.parts?.[0]?.text), /authoritative_runtime_session_id=session-runtime-3/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
-
 
 test("session-runtime-context reinjects on resumed session with fresh hook instance", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-context-"))
@@ -110,10 +87,15 @@ test("session-runtime-context reinjects on resumed session with fresh hook insta
       enabled: true,
     })
     const firstOutput = {
-      parts: [{ type: "text", text: "First prompt" }],
+      messages: [
+        {
+          info: { role: "user", sessionId: "session-runtime-resume" },
+          parts: [{ type: "text", text: "First prompt" }],
+        },
+      ],
     }
-    await firstHook.event("chat.message", {
-      properties: { sessionID: "session-runtime-resume" },
+    await firstHook.event("experimental.chat.messages.transform", {
+      input: {},
       output: firstOutput,
       directory,
     })
@@ -123,43 +105,63 @@ test("session-runtime-context reinjects on resumed session with fresh hook insta
       enabled: true,
     })
     const resumedOutput = {
-      parts: [{ type: "text", text: "Resumed prompt" }],
+      messages: [
+        {
+          info: { role: "user", sessionId: "session-runtime-resume" },
+          parts: [{ type: "text", text: "Resumed prompt" }],
+        },
+      ],
     }
-    await resumedHook.event("chat.message", {
-      properties: { sessionID: "session-runtime-resume" },
+    await resumedHook.event("experimental.chat.messages.transform", {
+      input: {},
       output: resumedOutput,
       directory,
     })
 
-    assert.match(String(resumedOutput.parts[0]?.text), /authoritative_runtime_session_id=session-runtime-resume/)
-    assert.match(String(resumedOutput.parts[0]?.text), /Resumed prompt/)
+    assert.match(String(resumedOutput.messages[0]?.parts?.[0]?.text), /authoritative_runtime_session_id=session-runtime-resume/)
+    assert.match(String(resumedOutput.messages[0]?.parts?.[0]?.text), /Resumed prompt/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-
-test("session-runtime-context integrates through default plugin hook order", async () => {
+test("session-runtime-context integrates through default plugin transform hook order", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-context-"))
   try {
     const plugin = GatewayCorePlugin({ directory })
     const output = {
-      parts: [{ type: "text", text: "Plugin prompt" }],
+      messages: [
+        {
+          info: { role: "user", sessionId: "session-runtime-plugin-default" },
+          parts: [{ type: "text", text: "Plugin prompt" }],
+        },
+      ],
     }
 
-    await plugin["chat.message"](
-      {
-        sessionID: "session-runtime-plugin-default",
-      },
-      output,
-    )
+    await plugin["experimental.chat.messages.transform"]({ input: {} }, output)
 
-    assert.match(String(output.parts[0]?.text), /\[SESSION CONTEXT\]/)
+    assert.match(String(output.messages[0]?.parts?.[0]?.text), /\[SESSION CONTEXT\]/)
     assert.match(
-      String(output.parts[0]?.text),
+      String(output.messages[0]?.parts?.[0]?.text),
       /authoritative_runtime_session_id=session-runtime-plugin-default/,
     )
-    assert.match(String(output.parts[0]?.text), /Plugin prompt/)
+    assert.match(String(output.messages[0]?.parts?.[0]?.text), /Plugin prompt/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-runtime-context does not mutate visible chat.message output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-context-"))
+  try {
+    const plugin = GatewayCorePlugin({ directory })
+    const output = {
+      parts: [{ type: "text", text: "Visible prompt" }],
+    }
+
+    await plugin["chat.message"]({ sessionID: "session-visible-chat" }, output)
+
+    assert.equal(output.parts[0]?.text, "Visible prompt")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -177,17 +179,17 @@ test("session-runtime-context can be disabled through plugin config", async () =
       },
     })
     const output = {
-      parts: [{ type: "text", text: "No runtime context expected" }],
+      messages: [
+        {
+          info: { role: "user", sessionId: "session-runtime-plugin-disabled" },
+          parts: [{ type: "text", text: "No runtime context expected" }],
+        },
+      ],
     }
 
-    await plugin["chat.message"](
-      {
-        sessionID: "session-runtime-plugin-disabled",
-      },
-      output,
-    )
+    await plugin["experimental.chat.messages.transform"]({ input: {} }, output)
 
-    assert.equal(output.parts[0]?.text, "No runtime context expected")
+    assert.equal(output.messages[0]?.parts?.[0]?.text, "No runtime context expected")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

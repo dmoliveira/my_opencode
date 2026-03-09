@@ -1,5 +1,4 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { injectHookMessage } from "../hook-message-injector/index.js";
 const SESSION_CONTEXT_MARKER = "[SESSION CONTEXT]";
 function resolveSessionId(payload) {
     const typed = payload;
@@ -66,63 +65,10 @@ export function createSessionRuntimeContextHook(options) {
                 return;
             }
             if (type === "session.compacted") {
-                const eventPayload = (payload ?? {});
-                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                    ? eventPayload.directory
-                    : options.directory;
-                const sessionId = resolveSessionId(eventPayload);
-                if (!sessionId) {
-                    return;
+                const sessionId = resolveSessionId((payload ?? {}));
+                if (sessionId) {
+                    injectedSessions.delete(sessionId);
                 }
-                injectedSessions.delete(sessionId);
-                const client = options.client?.session;
-                if (!client) {
-                    return;
-                }
-                const injected = await injectHookMessage({
-                    session: client,
-                    sessionId,
-                    content: buildSessionContext(sessionId),
-                    directory,
-                });
-                if (!injected) {
-                    writeGatewayEventAudit(directory, {
-                        hook: "session-runtime-context",
-                        stage: "inject",
-                        reason_code: "session_runtime_context_compaction_restore_failed",
-                        session_id: sessionId,
-                    });
-                    return;
-                }
-                injectedSessions.add(sessionId);
-                writeGatewayEventAudit(directory, {
-                    hook: "session-runtime-context",
-                    stage: "inject",
-                    reason_code: "session_runtime_context_compaction_restored",
-                    session_id: sessionId,
-                });
-                return;
-            }
-            if (type === "chat.message") {
-                const eventPayload = (payload ?? {});
-                const sessionId = resolveSessionId(eventPayload);
-                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                    ? eventPayload.directory
-                    : options.directory;
-                const parts = eventPayload.output?.parts;
-                if (!sessionId || injectedSessions.has(sessionId) || !Array.isArray(parts)) {
-                    return;
-                }
-                if (!injectIntoParts(parts, buildSessionContext(sessionId))) {
-                    return;
-                }
-                injectedSessions.add(sessionId);
-                writeGatewayEventAudit(directory, {
-                    hook: "session-runtime-context",
-                    stage: "inject",
-                    reason_code: "session_runtime_context_injected_chat",
-                    session_id: sessionId,
-                });
                 return;
             }
             if (type !== "experimental.chat.messages.transform") {

@@ -370,7 +370,6 @@ function configuredHooks(ctx) {
         createSessionRuntimeContextHook({
             directory,
             enabled: cfg.sessionRuntimeContextInjector.enabled,
-            client: ctx.client,
         }),
         createContextInjectorHook({
             directory,

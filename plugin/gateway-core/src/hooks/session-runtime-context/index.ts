@@ -1,38 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
-import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 
 interface TextPart {
   type?: string
   text?: string
-}
-
-interface SessionClient {
-  promptAsync(args: {
-    path: { id: string }
-    body: {
-      parts: Array<{ type: string; text: string }>
-      agent?: string
-      model?: { providerID: string; modelID: string; variant?: string }
-    }
-    query?: { directory?: string }
-  }): Promise<void>
-  messages?(args: {
-    path: { id: string }
-    query?: { directory?: string }
-  }): Promise<{ data?: Array<{ info?: { role?: string } }> }>
-}
-
-interface ChatPayload {
-  properties?: {
-    sessionID?: string
-    sessionId?: string
-    info?: { id?: string }
-  }
-  output?: {
-    parts?: TextPart[]
-  }
-  directory?: string
 }
 
 interface TransformPayload {
@@ -64,7 +35,7 @@ interface SessionEventPayload {
 
 const SESSION_CONTEXT_MARKER = "[SESSION CONTEXT]"
 
-function resolveSessionId(payload: ChatPayload | TransformPayload | SessionEventPayload): string {
+function resolveSessionId(payload: TransformPayload | SessionEventPayload): string {
   const typed = payload as {
     input?: { sessionID?: string; sessionId?: string }
     properties?: { sessionID?: string; sessionId?: string; info?: { id?: string } }
@@ -121,7 +92,6 @@ function injectIntoParts(parts: TextPart[], content: string): boolean {
 export function createSessionRuntimeContextHook(options: {
   directory: string
   enabled: boolean
-  client?: { session?: SessionClient }
 }): GatewayHook {
   const injectedSessions = new Set<string>()
 
@@ -142,66 +112,10 @@ export function createSessionRuntimeContextHook(options: {
       }
 
       if (type === "session.compacted") {
-        const eventPayload = (payload ?? {}) as SessionEventPayload
-        const directory =
-          typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-            ? eventPayload.directory
-            : options.directory
-        const sessionId = resolveSessionId(eventPayload)
-        if (!sessionId) {
-          return
+        const sessionId = resolveSessionId((payload ?? {}) as SessionEventPayload)
+        if (sessionId) {
+          injectedSessions.delete(sessionId)
         }
-        injectedSessions.delete(sessionId)
-        const client = options.client?.session
-        if (!client) {
-          return
-        }
-        const injected = await injectHookMessage({
-          session: client,
-          sessionId,
-          content: buildSessionContext(sessionId),
-          directory,
-        })
-        if (!injected) {
-          writeGatewayEventAudit(directory, {
-            hook: "session-runtime-context",
-            stage: "inject",
-            reason_code: "session_runtime_context_compaction_restore_failed",
-            session_id: sessionId,
-          })
-          return
-        }
-        injectedSessions.add(sessionId)
-        writeGatewayEventAudit(directory, {
-          hook: "session-runtime-context",
-          stage: "inject",
-          reason_code: "session_runtime_context_compaction_restored",
-          session_id: sessionId,
-        })
-        return
-      }
-
-      if (type === "chat.message") {
-        const eventPayload = (payload ?? {}) as ChatPayload
-        const sessionId = resolveSessionId(eventPayload)
-        const directory =
-          typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-            ? eventPayload.directory
-            : options.directory
-        const parts = eventPayload.output?.parts
-        if (!sessionId || injectedSessions.has(sessionId) || !Array.isArray(parts)) {
-          return
-        }
-        if (!injectIntoParts(parts, buildSessionContext(sessionId))) {
-          return
-        }
-        injectedSessions.add(sessionId)
-        writeGatewayEventAudit(directory, {
-          hook: "session-runtime-context",
-          stage: "inject",
-          reason_code: "session_runtime_context_injected_chat",
-          session_id: sessionId,
-        })
         return
       }
 
