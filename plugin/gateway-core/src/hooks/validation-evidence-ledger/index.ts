@@ -1,10 +1,12 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
 import {
   clearValidationEvidence,
   markValidationEvidence,
 } from "./evidence.js"
 import { classifyValidationCommand } from "../shared/validation-command-matcher.js"
+import type { ValidationEvidenceCategory } from "./evidence.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -65,10 +67,27 @@ function commandFailed(output: string): boolean {
   return false
 }
 
+const VALIDATION_CATEGORY_BY_CHAR: Record<string, ValidationEvidenceCategory> = {
+  L: "lint",
+  T: "test",
+  C: "typecheck",
+  B: "build",
+  S: "security",
+}
+
+function buildValidationInstruction(): string {
+  return "Classify this shell command for validation evidence. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation."
+}
+
+function buildValidationContext(command: string): string {
+  return `command=${command.trim() || "(empty)"}`
+}
+
 // Creates validation evidence ledger hook to track successful validation commands.
 export function createValidationEvidenceLedgerHook(options: {
   directory: string
   enabled: boolean
+  decisionRuntime?: LlmDecisionRuntime
 }): GatewayHook {
   const pendingCommandsBySession = new Map<string, string[]>()
   return {
@@ -132,7 +151,42 @@ export function createValidationEvidenceLedgerHook(options: {
       if (typeof eventPayload.output?.output !== "string") {
         return
       }
-      const categories = classifyValidationCommand(command)
+      let categories = classifyValidationCommand(command)
+      if (categories.length === 0 && options.decisionRuntime) {
+        const decision = await options.decisionRuntime.decide({
+          hookId: "validation-evidence-ledger",
+          sessionId: sid,
+          templateId: "validation-command-classifier-v1",
+          instruction: buildValidationInstruction(),
+          context: buildValidationContext(command),
+          allowedChars: ["L", "T", "C", "B", "S", "N"],
+          decisionMeaning: {
+            L: "lint",
+            T: "test",
+            C: "typecheck",
+            B: "build",
+            S: "security",
+            N: "not_validation",
+          },
+          cacheKey: `validation-command:${command.trim().toLowerCase()}`,
+        })
+        if (decision.accepted) {
+          const category = VALIDATION_CATEGORY_BY_CHAR[decision.char]
+          if (category) {
+            categories = [category]
+            writeGatewayEventAudit(options.directory, {
+              hook: "validation-evidence-ledger",
+              stage: "state",
+              reason_code: "llm_validation_command_decision_recorded",
+              session_id: sid,
+              llm_decision_char: decision.char,
+              llm_decision_meaning: decision.meaning,
+              llm_decision_mode: options.decisionRuntime.config.mode,
+              evidence: category,
+            })
+          }
+        }
+      }
       if (categories.length === 0) {
         return
       }

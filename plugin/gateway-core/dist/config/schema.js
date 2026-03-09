@@ -268,6 +268,18 @@ export const DEFAULT_GATEWAY_CONFIG = {
             },
         },
     },
+    llmDecisionRuntime: {
+        enabled: false,
+        mode: "disabled",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 30000,
+        maxPromptChars: 1200,
+        maxContextChars: 2400,
+        enableCache: true,
+        cacheTtlMs: 300000,
+        maxCacheEntries: 256,
+    },
     validationEvidenceLedger: {
         enabled: true,
     },

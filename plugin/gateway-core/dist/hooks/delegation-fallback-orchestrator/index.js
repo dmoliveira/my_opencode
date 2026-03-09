@@ -1,5 +1,12 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { annotateDelegationMetadata, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+const FAILURE_REASON_BY_CHAR = {
+    U: "delegation_unknown_agent",
+    C: "delegation_unknown_category",
+    I: "delegation_invalid_arguments",
+    B: "delegation_blocked_forbidden_tool",
+    R: "delegation_runtime_error",
+};
 function delegationKey(sessionId, traceId) {
     return traceId ? `${sessionId}:${traceId}` : sessionId;
 }
@@ -33,6 +40,16 @@ function detectFailureReason(output) {
         return "delegation_runtime_error";
     }
     return null;
+}
+function buildFailureInstruction() {
+    return "Classify this failed delegation output. U=unknown_agent, C=unknown_category, I=invalid_arguments, B=blocked_forbidden_tool, R=runtime_error, N=no_match.";
+}
+function buildFailureContext(output, prompt, description) {
+    return [
+        `output=${output.trim() || "(empty)"}`,
+        `prompt=${prompt.trim() || "(empty)"}`,
+        `description=${description.trim() || "(empty)"}`,
+    ].join(" ");
 }
 function prependHint(original, hint) {
     if (!original.trim()) {
@@ -113,17 +130,53 @@ export function createDelegationFallbackOrchestratorHook(options) {
             if (!sid || typeof eventPayload.output?.output !== "string") {
                 return;
             }
-            const reason = detectFailureReason(eventPayload.output.output);
+            let reason = detectFailureReason(eventPayload.output.output);
+            const args = eventPayload.output?.args;
+            const traceId = extractDelegationTraceId(args, eventPayload.output?.metadata);
+            const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
+            const category = String(args?.category ?? "").toLowerCase().trim();
+            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                ? eventPayload.directory
+                : options.directory;
+            if (!reason && options.decisionRuntime) {
+                const decision = await options.decisionRuntime.decide({
+                    hookId: "delegation-fallback-orchestrator",
+                    sessionId: sid,
+                    traceId,
+                    templateId: "delegation-failure-classifier-v1",
+                    instruction: buildFailureInstruction(),
+                    context: buildFailureContext(String(eventPayload.output.output ?? ""), String(args?.prompt ?? ""), String(args?.description ?? "")),
+                    allowedChars: ["U", "C", "I", "B", "R", "N"],
+                    decisionMeaning: {
+                        U: "delegation_unknown_agent",
+                        C: "delegation_unknown_category",
+                        I: "delegation_invalid_arguments",
+                        B: "delegation_blocked_forbidden_tool",
+                        R: "delegation_runtime_error",
+                        N: "no_match",
+                    },
+                    cacheKey: `delegation-failure:${subagentType}:${category}:${String(eventPayload.output.output ?? "").trim().toLowerCase()}`,
+                });
+                if (decision.accepted) {
+                    reason = FAILURE_REASON_BY_CHAR[decision.char] ?? null;
+                    writeGatewayEventAudit(directory, {
+                        hook: "delegation-fallback-orchestrator",
+                        stage: "state",
+                        reason_code: "llm_delegation_failure_decision_recorded",
+                        session_id: sid,
+                        trace_id: traceId,
+                        llm_decision_char: decision.char,
+                        llm_decision_meaning: decision.meaning,
+                        llm_decision_mode: options.decisionRuntime.config.mode,
+                    });
+                }
+            }
             if (!reason) {
                 for (const key of sessionFailureKeys(lastFailureByDelegation, sid)) {
                     lastFailureByDelegation.delete(key);
                 }
                 return;
             }
-            const args = eventPayload.output?.args;
-            const traceId = extractDelegationTraceId(args, eventPayload.output?.metadata);
-            const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
-            const category = String(args?.category ?? "").toLowerCase().trim();
             const key = delegationKey(sid, traceId);
             lastFailureByDelegation.set(key, {
                 traceId,
@@ -131,9 +184,6 @@ export function createDelegationFallbackOrchestratorHook(options) {
                 category,
                 reasonCode: reason,
             });
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
             writeGatewayEventAudit(directory, {
                 hook: "delegation-fallback-orchestrator",
                 stage: "state",

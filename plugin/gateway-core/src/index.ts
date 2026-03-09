@@ -80,6 +80,7 @@ import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysi
 import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
 import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
+import { createLlmDecisionRuntime } from "./hooks/shared/llm-decision-runtime.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
@@ -240,6 +241,10 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       ? ctx.directory
       : process.cwd();
   const cfg = loadGatewayConfig(ctx.config);
+  const llmDecisionRuntime = createLlmDecisionRuntime({
+    directory,
+    config: cfg.llmDecisionRuntime,
+  });
   const stopGuard = createStopContinuationGuardHook({
     directory,
     enabled: cfg.stopContinuationGuard.enabled,
@@ -398,6 +403,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAgentDeniedToolEnforcerHook({
       directory,
       enabled: true,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createHookSemanticBridgeHook({
       directory,
@@ -409,6 +415,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       defaultOverrideDelta: cfg.adaptiveDelegationPolicy.defaultOverrideDelta,
       defaultIntentThreshold: cfg.adaptiveDelegationPolicy.defaultIntentThreshold,
       agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createDelegationOutcomeLearnerHook({
       directory,
@@ -421,6 +428,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createDelegationFallbackOrchestratorHook({
       directory,
       enabled: cfg.delegationFallbackOrchestrator.enabled,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createAgentDiscoverabilityInjectorHook({
       directory,
@@ -476,6 +484,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createValidationEvidenceLedgerHook({
       directory,
       enabled: cfg.validationEvidenceLedger.enabled,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createParallelOpportunityDetectorHook({
       directory,
@@ -505,6 +514,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAutoSlashCommandHook({
       directory,
       enabled: cfg.autoSlashCommand.enabled,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createContextInjectorHook({
       directory,
@@ -610,6 +620,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       enabled: cfg.providerErrorClassifier.enabled,
       client: ctx.client,
       cooldownMs: cfg.providerErrorClassifier.cooldownMs,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createCodexHeaderInjectorHook({
       directory,
@@ -669,10 +680,12 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       blockOnDrift: cfg.scopeDriftGuard.blockOnDrift,
     }),
     createDoneProofEnforcerHook({
+      directory,
       enabled: cfg.doneProofEnforcer.enabled,
       requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
       requireLedgerEvidence: cfg.doneProofEnforcer.requireLedgerEvidence,
       allowTextFallback: cfg.doneProofEnforcer.allowTextFallback,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createDependencyRiskGuardHook({
       directory,
@@ -742,6 +755,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         cfg.prBodyEvidenceGuard.requireValidationEvidence,
       allowUninspectableBody: cfg.prBodyEvidenceGuard.allowUninspectableBody,
       requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+      decisionRuntime: llmDecisionRuntime,
     }),
     createMergeReadinessGuardHook({
       directory,

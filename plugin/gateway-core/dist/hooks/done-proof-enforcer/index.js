@@ -1,4 +1,11 @@
 import { markerCategory, missingValidationMarkers } from "../validation-evidence-ledger/evidence.js";
+import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+function buildMarkerInstruction(marker) {
+    return `Does this completion text include evidence-equivalent wording for '${marker}'? Y=yes, N=no.`;
+}
+function buildMarkerContext(text) {
+    return `completion=${text.trim() || "(empty)"}`;
+}
 // Creates done proof enforcer that requires evidence markers near completion token.
 export function createDoneProofEnforcerHook(options) {
     const markers = options.requiredMarkers.map((item) => item.trim().toLowerCase()).filter(Boolean);
@@ -27,7 +34,33 @@ export function createDoneProofEnforcerHook(options) {
                 const category = markerCategory(marker);
                 if (category) {
                     if (options.requireLedgerEvidence && sessionId && missingFromLedger.includes(marker)) {
-                        if (!(options.allowTextFallback && lower.includes(marker))) {
+                        let fallbackSatisfied = options.allowTextFallback && lower.includes(marker);
+                        if (!fallbackSatisfied && options.allowTextFallback && options.decisionRuntime) {
+                            const decision = await options.decisionRuntime.decide({
+                                hookId: "done-proof-enforcer",
+                                sessionId,
+                                templateId: `done-proof-marker-${marker}-v1`,
+                                instruction: buildMarkerInstruction(marker),
+                                context: buildMarkerContext(text),
+                                allowedChars: ["Y", "N"],
+                                decisionMeaning: { Y: `${marker}_present`, N: `${marker}_missing` },
+                                cacheKey: `done-proof:${marker}:${text.trim().toLowerCase()}`,
+                            });
+                            if (decision.accepted) {
+                                fallbackSatisfied = decision.char === "Y";
+                                writeGatewayEventAudit(options.directory ?? process.cwd(), {
+                                    hook: "done-proof-enforcer",
+                                    stage: "state",
+                                    reason_code: "llm_done_proof_marker_decision_recorded",
+                                    session_id: sessionId,
+                                    llm_decision_char: decision.char,
+                                    llm_decision_meaning: decision.meaning,
+                                    llm_decision_mode: options.decisionRuntime.config.mode,
+                                    evidence: marker,
+                                });
+                            }
+                        }
+                        if (!fallbackSatisfied) {
                             missingMarkers.push(marker);
                         }
                         continue;

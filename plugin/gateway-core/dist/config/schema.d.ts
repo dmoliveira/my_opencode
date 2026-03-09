@@ -144,6 +144,18 @@ export interface AdaptiveDelegationPolicyConfig {
     discoverabilityCooldownMs: number;
     agentPolicyOverrides: Record<string, AgentRuntimePolicyOverride>;
 }
+export interface LlmDecisionRuntimeConfig {
+    enabled: boolean;
+    mode: "disabled" | "shadow" | "assist" | "enforce";
+    command: string;
+    model: string;
+    timeoutMs: number;
+    maxPromptChars: number;
+    maxContextChars: number;
+    enableCache: boolean;
+    cacheTtlMs: number;
+    maxCacheEntries: number;
+}
 export interface AgentRuntimePolicyOverride {
     overrideDelta?: number;
     intentThreshold?: number;
@@ -423,6 +435,7 @@ export interface GatewayConfig {
     subagentLifecycleSupervisor: SubagentLifecycleSupervisorConfig;
     subagentTelemetryTimeline: SubagentTelemetryTimelineConfig;
     adaptiveDelegationPolicy: AdaptiveDelegationPolicyConfig;
+    llmDecisionRuntime: LlmDecisionRuntimeConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;
     mistakeLedger: MistakeLedgerConfig;
     parallelOpportunityDetector: ParallelOpportunityDetectorConfig;

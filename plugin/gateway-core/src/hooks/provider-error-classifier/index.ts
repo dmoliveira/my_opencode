@@ -2,6 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
+import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
 
 interface GatewayClient {
   session?: {
@@ -26,6 +27,12 @@ interface EventPayload {
 }
 
 type Classification = "free_usage_exhausted" | "rate_limited" | "provider_overloaded"
+
+const CLASSIFICATION_BY_CHAR: Record<string, Classification> = {
+  F: "free_usage_exhausted",
+  R: "rate_limited",
+  O: "provider_overloaded",
+}
 
 function resolveSessionId(payload: EventPayload): string {
   const candidates = [payload.properties?.sessionID, payload.properties?.sessionId, payload.properties?.info?.id]
@@ -61,6 +68,14 @@ function classify(text: string): { classification: Classification; reason: strin
   return { classification: "rate_limited", reason: reason.message }
 }
 
+function buildAiInstruction(): string {
+  return "Classify this provider error. F=free_usage_or_credit_exhausted, R=rate_limited, O=provider_overloaded_or_unavailable, N=not_classified."
+}
+
+function buildAiContext(text: string): string {
+  return `error=${text.trim() || "(empty)"}`
+}
+
 function buildHint(classification: Classification, reason: string): string {
   if (classification === "free_usage_exhausted") {
     return [
@@ -94,6 +109,7 @@ export function createProviderErrorClassifierHook(options: {
   enabled: boolean
   client?: GatewayClient
   cooldownMs: number
+  decisionRuntime?: LlmDecisionRuntime
 }): GatewayHook {
   const lastClassificationBySession = new Map<string, { classification: Classification; at: number }>()
   return {
@@ -118,9 +134,44 @@ export function createProviderErrorClassifierHook(options: {
       if (isContextOverflowNonRetryable(text)) {
         return
       }
-      const outcome = classify(text)
+      let outcome = classify(text)
       const sessionId = resolveSessionId(eventPayload)
       const session = options.client?.session
+      if (!outcome && options.decisionRuntime && sessionId) {
+        const decision = await options.decisionRuntime.decide({
+          hookId: "provider-error-classifier",
+          sessionId,
+          templateId: "provider-error-classifier-v1",
+          instruction: buildAiInstruction(),
+          context: buildAiContext(text),
+          allowedChars: ["F", "R", "O", "N"],
+          decisionMeaning: {
+            F: "free_usage_exhausted",
+            R: "rate_limited",
+            O: "provider_overloaded",
+            N: "not_classified",
+          },
+          cacheKey: `provider-error:${text.trim().toLowerCase()}`,
+        })
+        if (decision.accepted) {
+          const classification = CLASSIFICATION_BY_CHAR[decision.char]
+          if (classification) {
+            outcome = {
+              classification,
+              reason: `llm:${decision.meaning || decision.char}`,
+            }
+            writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+              hook: "provider-error-classifier",
+              stage: "state",
+              reason_code: "llm_provider_error_decision_recorded",
+              session_id: sessionId,
+              llm_decision_char: decision.char,
+              llm_decision_meaning: decision.meaning,
+              llm_decision_mode: options.decisionRuntime.config.mode,
+            })
+          }
+        }
+      }
       if (!outcome || !sessionId || !session) {
         return
       }

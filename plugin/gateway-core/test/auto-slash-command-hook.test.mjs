@@ -5,6 +5,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createAutoSlashCommandHook } from "../dist/hooks/auto-slash-command/index.js"
 
 const TAG_OPEN = "<auto-slash-command>"
 const TAG_CLOSE = "</auto-slash-command>"
@@ -254,4 +255,87 @@ test("auto-slash-command ignores embedded excluded explicit slash token", async 
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("auto-slash-command uses assist-mode LLM for ambiguous doctor intent", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "D",
+        raw: "D",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "auto-slash-v1",
+        meaning: "route_doctor",
+      }),
+    },
+  })
+
+  const output = {
+    parts: [{ type: "text", text: "can you inspect the environment health and tell me what's wrong" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-7",
+      prompt: "can you inspect the environment health and tell me what's wrong",
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(String(output.parts[0].text).includes("/doctor"), true)
+})
+
+test("auto-slash-command skips LLM rewrite for high-risk install prompt", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => {
+        throw new Error("should not be called")
+      },
+    },
+  })
+
+  const output = {
+    parts: [{ type: "text", text: "please install and configure devtools for me" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-8",
+      prompt: "please install and configure devtools for me",
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(output.parts[0].text, "please install and configure devtools for me")
 })

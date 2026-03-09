@@ -124,6 +124,7 @@ Remaining:
 |---|---|---|
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
+| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes delegation, validation, and PR-body slices with `done-proof-enforcer` as the active next slice. |
 
 ## Done Recently
 

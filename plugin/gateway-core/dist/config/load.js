@@ -104,6 +104,12 @@ function durationThreshold(value, fallback) {
         ? trimmed
         : fallback;
 }
+function llmDecisionMode(value, fallback) {
+    if (value === "disabled" || value === "shadow" || value === "assist" || value === "enforce") {
+        return value;
+    }
+    return fallback;
+}
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
@@ -177,6 +183,9 @@ export function loadGatewayConfig(raw) {
     const adaptiveDelegationPolicySource = source.adaptiveDelegationPolicy &&
         typeof source.adaptiveDelegationPolicy === "object"
         ? source.adaptiveDelegationPolicy
+        : {};
+    const llmDecisionRuntimeSource = source.llmDecisionRuntime && typeof source.llmDecisionRuntime === "object"
+        ? source.llmDecisionRuntime
         : {};
     const validationEvidenceLedgerSource = source.validationEvidenceLedger &&
         typeof source.validationEvidenceLedger === "object"
@@ -607,6 +616,28 @@ export function loadGatewayConfig(raw) {
             defaultIntentThreshold: nonNegativeInt(adaptiveDelegationPolicySource.defaultIntentThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultIntentThreshold),
             discoverabilityCooldownMs: positiveInt(adaptiveDelegationPolicySource.discoverabilityCooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.discoverabilityCooldownMs),
             agentPolicyOverrides: parseAgentPolicyOverrides(adaptiveDelegationPolicySource.agentPolicyOverrides, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.agentPolicyOverrides),
+        },
+        llmDecisionRuntime: {
+            enabled: typeof llmDecisionRuntimeSource.enabled === "boolean"
+                ? llmDecisionRuntimeSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enabled,
+            mode: llmDecisionMode(llmDecisionRuntimeSource.mode, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.mode),
+            command: typeof llmDecisionRuntimeSource.command === "string" &&
+                llmDecisionRuntimeSource.command.trim().length > 0
+                ? llmDecisionRuntimeSource.command.trim()
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.command,
+            model: typeof llmDecisionRuntimeSource.model === "string" &&
+                llmDecisionRuntimeSource.model.trim().length > 0
+                ? llmDecisionRuntimeSource.model.trim()
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
+            timeoutMs: positiveInt(llmDecisionRuntimeSource.timeoutMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs),
+            maxPromptChars: positiveInt(llmDecisionRuntimeSource.maxPromptChars, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars),
+            maxContextChars: positiveInt(llmDecisionRuntimeSource.maxContextChars, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxContextChars),
+            enableCache: typeof llmDecisionRuntimeSource.enableCache === "boolean"
+                ? llmDecisionRuntimeSource.enableCache
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enableCache,
+            cacheTtlMs: positiveInt(llmDecisionRuntimeSource.cacheTtlMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.cacheTtlMs),
+            maxCacheEntries: positiveInt(llmDecisionRuntimeSource.maxCacheEntries, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxCacheEntries),
         },
         validationEvidenceLedger: {
             enabled: typeof validationEvidenceLedgerSource.enabled === "boolean"

@@ -5,6 +5,8 @@ import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createDoneProofEnforcerHook } from "../dist/hooks/done-proof-enforcer/index.js"
+import { createValidationEvidenceLedgerHook } from "../dist/hooks/validation-evidence-ledger/index.js"
 
 test("validation-evidence-ledger allows DONE when required checks were executed", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
@@ -326,4 +328,117 @@ test("validation-evidence-ledger clears queued commands when bash output is miss
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("validation-evidence-ledger uses LLM fallback for ambiguous validation wrapper command", async () => {
+  const hook = createValidationEvidenceLedgerHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "T",
+        raw: "T",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "validation-command-classifier-v1",
+        meaning: "test",
+      }),
+    },
+  })
+
+  await hook.event("tool.execute.before", {
+    input: { tool: "bash", sessionID: "session-ledger-llm-1" },
+    output: { args: { command: "./scripts/ci-check tests/api smoke" } },
+  })
+  await hook.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-llm-1" },
+    output: { output: "smoke suite passed" },
+    directory: process.cwd(),
+  })
+
+  const done = { output: "done\n<promise>DONE</promise>" }
+  const plugin = GatewayCorePlugin({
+    directory: process.cwd(),
+    config: {
+      hooks: {
+        enabled: true,
+        order: ["done-proof-enforcer"],
+        disabled: [],
+      },
+      doneProofEnforcer: {
+        enabled: true,
+        requiredMarkers: ["test"],
+        requireLedgerEvidence: true,
+        allowTextFallback: false,
+      },
+    },
+  })
+  await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-ledger-llm-1" }, done)
+  assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+})
+
+test("validation-evidence-ledger LLM test evidence does not satisfy broader repo-style done markers", async () => {
+  const ledger = createValidationEvidenceLedgerHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "T",
+        raw: "T",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "validation-command-classifier-v1",
+        meaning: "test",
+      }),
+    },
+  })
+  const doneProof = createDoneProofEnforcerHook({
+    enabled: true,
+    requiredMarkers: ["validation", "lint"],
+    requireLedgerEvidence: true,
+    allowTextFallback: false,
+  })
+
+  await ledger.event(
+    "tool.execute.before",
+    { input: { tool: "bash", sessionID: "session-ledger-llm-2" }, output: { args: { command: "./scripts/ci-check tests/api smoke" } } },
+  )
+  await ledger.event(
+    "tool.execute.after",
+    { input: { tool: "bash", sessionID: "session-ledger-llm-2" }, output: { output: "smoke suite passed" }, directory: process.cwd() },
+  )
+
+  const done = { output: "done\n<promise>DONE</promise>" }
+  await doneProof.event("tool.execute.after", { tool: "bash", sessionID: "session-ledger-llm-2", output: done })
+
+  assert.equal(done.output.includes("PENDING_VALIDATION"), true)
+  assert.match(done.output, /validation, lint/i)
 })
