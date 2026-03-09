@@ -86,22 +86,24 @@ test("delegation outcome learner adapts risky category after repeated failures",
     agentPolicyOverrides: {},
   })
 
+  const firstOutput = { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } }
   await timelineHook.event("tool.execute.before", {
     input: { tool: "task", sessionID: "session-learn-1" },
-    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } },
+    output: firstOutput,
   })
   await timelineHook.event("tool.execute.after", {
     input: { tool: "task", sessionID: "session-learn-1" },
-    output: { output: "[ERROR] Failed delegation" },
+    output: { metadata: firstOutput.metadata, output: "[ERROR] Failed delegation" },
   })
 
+  const secondOutput = { args: { subagent_type: "reviewer", category: "critical", prompt: "second" } }
   await timelineHook.event("tool.execute.before", {
     input: { tool: "task", sessionID: "session-learn-2" },
-    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "second" } },
+    output: secondOutput,
   })
   await timelineHook.event("tool.execute.after", {
     input: { tool: "task", sessionID: "session-learn-2" },
-    output: { output: "[ERROR] Failed delegation" },
+    output: { metadata: secondOutput.metadata, output: "[ERROR] Failed delegation" },
   })
 
   const output = {
@@ -293,6 +295,43 @@ test("subagent telemetry timeline refreshes child run id when legacy metadata om
   assert.equal(beforeOutput.metadata?.gateway?.delegation?.traceId, "trace-legacy-refresh")
 })
 
+test("subagent telemetry timeline normalizes malformed child run id to canonical trace-based identity", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  const beforeOutput = {
+    args: {
+      subagent_type: "explore",
+      category: "balanced",
+      prompt: "[DELEGATION TRACE trace-normalize-child-run] telemetry malformed child run",
+    },
+    metadata: {
+      gateway: {
+        delegation: {
+          childRunId: "legacy-run-id",
+          traceId: "trace-normalize-child-run",
+        },
+      },
+    },
+  }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-normalize-child-run" },
+    output: beforeOutput,
+  })
+
+  assert.equal(
+    beforeOutput.metadata?.gateway?.delegation?.childRunId,
+    "subagent-run/trace-normalize-child-run",
+  )
+  assert.equal(beforeOutput.metadata?.gateway?.delegation?.traceId, "trace-normalize-child-run")
+})
+
 test("subagent telemetry timeline records outcome from child-run-only after metadata", async () => {
   const timelineHook = createSubagentTelemetryTimelineHook({
     directory: REPO_DIRECTORY,
@@ -332,6 +371,34 @@ test("subagent telemetry timeline records outcome from child-run-only after meta
   assert.ok(record)
   assert.equal(record.childRunId, childRunId)
   assert.equal(record.traceId, String(childRunId).replace(/^subagent-run\//, ""))
+})
+
+test("subagent telemetry timeline skips outcome when after-event identity is missing", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-missing-identity" },
+    output: { args: { subagent_type: "explore", category: "balanced", prompt: "telemetry missing identity" } },
+  })
+
+  await timelineHook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-telemetry-missing-identity" },
+    output: {
+      output: "done\n\n[agent-context-shaper] delegation context\n- subagent: explore\n- recommended_category: balanced",
+    },
+  })
+
+  const records = getRecentDelegationOutcomes(60000).filter(
+    (item) => item.sessionId === "session-telemetry-missing-identity",
+  )
+  assert.equal(records.length, 0)
 })
 
 test("runtime delegation hooks sustain five same-session subagents with varied completion order", async () => {

@@ -1,25 +1,7 @@
-import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
-function fallbackDelegationKey(sid, args) {
-    const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
-    const category = String(args?.category ?? "").toLowerCase().trim();
-    const prompt = String(args?.prompt ?? "").trim();
-    const description = String(args?.description ?? "").trim();
-    const fingerprintSource = [subagentType, category, prompt, description]
-        .filter(Boolean)
-        .join("\n");
-    if (fingerprintSource) {
-        const fingerprint = createHash("sha1").update(fingerprintSource).digest("hex").slice(0, 12);
-        return `${sid}:fp:${fingerprint}`;
-    }
-    return `${sid}:agent:${subagentType || "unknown"}`;
-}
-function lifecycleKey(sid, childRunId, traceId, args) {
-    if (childRunId) {
-        return `${sid}:${childRunId}`;
-    }
-    return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args);
+import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+function lifecycleKey(sid, childRunId) {
+    return `${sid}:${childRunId}`;
 }
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
@@ -29,33 +11,6 @@ function effectiveDirectory(payload, fallbackDirectory) {
 }
 function nowMs() {
     return Date.now();
-}
-function sessionLifecycleKeys(byDelegation, sid) {
-    const matches = [];
-    for (const key of byDelegation.keys()) {
-        if (key === sid || key.startsWith(`${sid}:`)) {
-            matches.push(key);
-        }
-    }
-    return matches;
-}
-function matchingSessionLifecycleKeys(byDelegation, sid, subagentType) {
-    const matches = [];
-    for (const [key, value] of byDelegation.entries()) {
-        if ((key === sid || key.startsWith(`${sid}:`)) && value.subagentType === subagentType) {
-            matches.push(key);
-        }
-    }
-    return matches;
-}
-function matchingSessionTraceLifecycleKeys(byDelegation, sid, traceId) {
-    const matches = [];
-    for (const [key, value] of byDelegation.entries()) {
-        if ((key === sid || key.startsWith(`${sid}:`)) && value.traceId === traceId) {
-            matches.push(key);
-        }
-    }
-    return matches;
 }
 function isFailureOutput(output) {
     const trimmed = output.trim();
@@ -71,36 +26,17 @@ export function createSubagentLifecycleSupervisorHook(options) {
         if (!sid) {
             return null;
         }
-        const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
         const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
-        const key = lifecycleKey(sid, childRunId, traceId, eventPayload.output?.args);
-        let activeKey = key;
-        let state = byDelegation.get(activeKey);
-        if (!state && traceId) {
-            const traceMatches = matchingSessionTraceLifecycleKeys(byDelegation, sid, traceId);
-            if (traceMatches.length === 1) {
-                activeKey = traceMatches[0];
-                state = byDelegation.get(activeKey);
-            }
-            if (state) {
-                return { sid, activeKey, state, resolution: "trace_fallback" };
-            }
+        if (!childRunId) {
+            return {
+                sid,
+                activeKey: "",
+                state: undefined,
+                resolution: eventPayload.output ? "missing_identity" : "none",
+            };
         }
-        if (!state && !childRunId && !traceId) {
-            const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
-            const outputSubagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
-                extractDelegationSubagentTypeFromOutput(outputText);
-            const matches = outputSubagentType
-                ? matchingSessionLifecycleKeys(byDelegation, sid, outputSubagentType)
-                : sessionLifecycleKeys(byDelegation, sid);
-            if (matches.length === 1) {
-                activeKey = matches[0];
-                state = byDelegation.get(activeKey);
-            }
-            if (state) {
-                return { sid, activeKey, state, resolution: "subagent_fallback" };
-            }
-        }
+        const activeKey = lifecycleKey(sid, childRunId);
+        const state = byDelegation.get(activeKey);
         return { sid, activeKey, state, resolution: state ? "direct" : "none" };
     }
     return {
@@ -137,7 +73,10 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {});
                 annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args);
                 const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
-                const key = lifecycleKey(sid, childRunId, traceId, eventPayload.output?.args);
+                if (!childRunId) {
+                    return;
+                }
+                const key = lifecycleKey(sid, childRunId);
                 const directory = effectiveDirectory(eventPayload, options.directory);
                 const existing = byDelegation.get(key);
                 const now = nowMs();
@@ -171,7 +110,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 }
                 const nextFailureCount = existing?.status === "failed" ? existing.failureCount : 0;
                 byDelegation.set(key, {
-                    childRunId: childRunId || undefined,
+                    childRunId,
                     traceId: traceId || undefined,
                     subagentType,
                     status: "running",
@@ -199,21 +138,16 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 }
                 const directory = effectiveDirectory(eventPayload, options.directory);
                 const resolved = resolveLifecycleState(eventPayload);
-                if (!resolved?.state) {
-                    return;
-                }
-                if (resolved.resolution === "trace_fallback" || resolved.resolution === "subagent_fallback") {
+                if (resolved?.resolution === "missing_identity") {
                     writeGatewayEventAudit(directory, {
                         hook: "subagent-lifecycle-supervisor",
-                        stage: "state",
-                        reason_code: resolved.resolution === "trace_fallback"
-                            ? "subagent_lifecycle_trace_fallback_matched"
-                            : "subagent_lifecycle_subagent_fallback_matched",
+                        stage: "skip",
+                        reason_code: "subagent_lifecycle_before_error_missing_identity",
                         session_id: resolved.sid,
-                        subagent_type: resolved.state.subagentType,
-                        trace_id: resolved.state.traceId,
-                        child_run_id: resolved.state.childRunId,
                     });
+                }
+                if (!resolved?.state) {
+                    return;
                 }
                 byDelegation.delete(resolved.activeKey);
                 writeGatewayEventAudit(directory, {
@@ -236,6 +170,14 @@ export function createSubagentLifecycleSupervisorHook(options) {
             }
             const directory = effectiveDirectory(eventPayload, options.directory);
             const resolved = resolveLifecycleState(eventPayload);
+            if (resolved?.resolution === "missing_identity") {
+                writeGatewayEventAudit(directory, {
+                    hook: "subagent-lifecycle-supervisor",
+                    stage: "skip",
+                    reason_code: "subagent_lifecycle_after_missing_identity",
+                    session_id: resolved.sid,
+                });
+            }
             if (!resolved) {
                 return;
             }
@@ -244,37 +186,6 @@ export function createSubagentLifecycleSupervisorHook(options) {
             const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
             let activeKey = resolved.activeKey;
             let state = resolved.state;
-            if (state && (resolved.resolution === "trace_fallback" || resolved.resolution === "subagent_fallback")) {
-                writeGatewayEventAudit(directory, {
-                    hook: "subagent-lifecycle-supervisor",
-                    stage: "state",
-                    reason_code: resolved.resolution === "trace_fallback"
-                        ? "subagent_lifecycle_trace_fallback_matched"
-                        : "subagent_lifecycle_subagent_fallback_matched",
-                    session_id: sid,
-                    subagent_type: state.subagentType,
-                    trace_id: state.traceId,
-                    child_run_id: state.childRunId,
-                });
-            }
-            if (!state && !childRunId && !traceId) {
-                const outputText = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
-                const outputSubagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
-                    extractDelegationSubagentTypeFromOutput(outputText);
-                const matches = outputSubagentType
-                    ? matchingSessionLifecycleKeys(byDelegation, sid, outputSubagentType)
-                    : sessionLifecycleKeys(byDelegation, sid);
-                if (matches.length > 1) {
-                    writeGatewayEventAudit(directory, {
-                        hook: "subagent-lifecycle-supervisor",
-                        stage: "skip",
-                        reason_code: "subagent_lifecycle_after_ambiguous_skip",
-                        session_id: sid,
-                        concurrent_total: String(matches.length),
-                    });
-                    return;
-                }
-            }
             if (!state) {
                 return;
             }

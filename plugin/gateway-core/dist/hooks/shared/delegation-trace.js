@@ -29,8 +29,10 @@ function readGatewayDelegationMetadata(metadata) {
     if (!nested || typeof nested !== "object") {
         return null;
     }
-    const childRunId = String(nested.childRunId ?? "").trim() || undefined;
-    const traceId = String(nested.traceId ?? "").trim() || undefined;
+    const rawChildRunId = String(nested.childRunId ?? "").trim();
+    const rawTraceId = String(nested.traceId ?? "").trim();
+    const traceId = rawTraceId || parseTraceIdFromChildRunId(rawChildRunId) || undefined;
+    const childRunId = traceId ? buildDelegationChildRunId(traceId) || undefined : undefined;
     const subagentType = String(nested.subagentType ?? "").trim() || undefined;
     const category = String(nested.category ?? "").trim() || undefined;
     if (!childRunId && !traceId && !subagentType && !category) {
@@ -97,9 +99,7 @@ export function annotateDelegationMetadata(carrier, args) {
     const existing = readGatewayDelegationMetadata(carrier.metadata);
     const traceId = extractDelegationTraceId(args, carrier.metadata);
     const expectedChildRunId = buildDelegationChildRunId(traceId);
-    const childRunId = existing?.childRunId && expectedChildRunId && existing.childRunId !== expectedChildRunId
-        ? expectedChildRunId
-        : existing?.childRunId || expectedChildRunId;
+    const childRunId = expectedChildRunId || existing?.childRunId;
     const subagentType = String(args?.subagent_type ?? "").trim() || undefined;
     const category = String(args?.category ?? "").trim() || undefined;
     if (!childRunId && !traceId && !subagentType && !category) {
