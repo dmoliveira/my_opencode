@@ -1477,6 +1477,23 @@ exit 0
         )
 
         result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "current", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"session current --json failed: {result.stderr}")
+        session_current_payload = parse_json_output(result.stdout)
+        expect(
+            session_current_payload.get("result") == "PASS"
+            and session_current_payload.get("session", {}).get("session_id")
+            == "selftest-session",
+            "session current should resolve the active session id",
+        )
+
+        result = subprocess.run(
             [sys.executable, str(SESSION_SCRIPT), "search", "selftest", "--json"],
             capture_output=True,
             text=True,

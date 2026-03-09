@@ -148,6 +148,15 @@ export function loadGatewayConfig(raw) {
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
+    const sessionRuntimeContextInjectorSource = source.sessionRuntimeContextInjector && typeof source.sessionRuntimeContextInjector === "object"
+        ? source.sessionRuntimeContextInjector
+        : {};
+    const sessionRuntimeNotifierSource = source.sessionRuntimeNotifier && typeof source.sessionRuntimeNotifier === "object"
+        ? source.sessionRuntimeNotifier
+        : {};
+    const sessionRuntimeVisibleNoteSource = source.sessionRuntimeVisibleNote && typeof source.sessionRuntimeVisibleNote === "object"
+        ? source.sessionRuntimeVisibleNote
+        : {};
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
         : {};
@@ -526,6 +535,24 @@ export function loadGatewayConfig(raw) {
             autoResume: typeof sessionRecoverySource.autoResume === "boolean"
                 ? sessionRecoverySource.autoResume
                 : DEFAULT_GATEWAY_CONFIG.sessionRecovery.autoResume,
+        },
+        sessionRuntimeContextInjector: {
+            enabled: typeof sessionRuntimeContextInjectorSource.enabled === "boolean"
+                ? sessionRuntimeContextInjectorSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeContextInjector.enabled,
+        },
+        sessionRuntimeNotifier: {
+            enabled: typeof sessionRuntimeNotifierSource.enabled === "boolean"
+                ? sessionRuntimeNotifierSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeNotifier.enabled,
+            durationMs: typeof sessionRuntimeNotifierSource.durationMs === "number" && Number.isFinite(sessionRuntimeNotifierSource.durationMs)
+                ? Math.max(1000, Math.trunc(sessionRuntimeNotifierSource.durationMs))
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeNotifier.durationMs,
+        },
+        sessionRuntimeVisibleNote: {
+            enabled: typeof sessionRuntimeVisibleNoteSource.enabled === "boolean"
+                ? sessionRuntimeVisibleNoteSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeVisibleNote.enabled,
         },
         delegateTaskRetry: {
             enabled: typeof delegateTaskRetrySource.enabled === "boolean"

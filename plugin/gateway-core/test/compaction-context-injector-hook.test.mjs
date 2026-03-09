@@ -37,6 +37,7 @@ test("compaction-context-injector prepends context for summarize command", async
 
     assert.equal(output.parts.length > 1, true)
     assert.match(String(output.parts[0]?.text), /\[COMPACTION CONTEXT\]/)
+    assert.match(String(output.parts[0]?.text), /Authoritative runtime session id: session-compaction-context-1/)
     const lines = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
       .split(/\r?\n/)
       .filter(Boolean)
@@ -192,6 +193,40 @@ test("compaction context survives custom order before auto-slash", async () => {
     const combined = output.parts.map((part) => String(part.text ?? "")).join("\n\n")
     assert.match(combined, /\[COMPACTION CONTEXT\]/)
     assert.match(combined, /<auto-slash-command>[\s\S]*\/summarize[\s\S]*<\/auto-slash-command>/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+
+test("compaction-context-injector resolves session id from sessionId input", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-compaction-context-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["compaction-context-injector"],
+          disabled: ["auto-slash-command"],
+        },
+        compactionContextInjector: {
+          enabled: true,
+        },
+      },
+    })
+
+    const output = { parts: [{ type: "text", text: "summarize current session" }] }
+    await plugin["command.execute.before"](
+      {
+        command: "summarize",
+        arguments: "",
+        sessionId: "session-compaction-context-sessionId",
+      },
+      output,
+    )
+
+    assert.match(String(output.parts[0]?.text), /Authoritative runtime session id: session-compaction-context-sessionId/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

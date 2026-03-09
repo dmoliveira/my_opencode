@@ -43,9 +43,24 @@ function commandBinary(command: string): string {
 function allowedEnvKeys(command: string): Set<string> {
   const binary = commandBinary(command)
   if (binary === "git" || binary === "gh") {
-    return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE"])
+    return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE", "OPENCODE_SESSION_ID", "MY_OPENCODE_SESSION_ID"])
   }
   return new Set()
+}
+
+function shellQuoteEnvValue(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
+
+function sessionEnvPrefixes(sessionId: string): string[] {
+  const normalized = sessionId.trim()
+  if (!normalized) {
+    return []
+  }
+  return [
+    `OPENCODE_SESSION_ID=${shellQuoteEnvValue(normalized)}`,
+    `MY_OPENCODE_SESSION_ID=${shellQuoteEnvValue(normalized)}`,
+  ]
 }
 
 function prefixCommand(command: string, envPrefixes: string[]): string {
@@ -146,12 +161,24 @@ export function createNoninteractiveShellGuardHook(options: {
           ? eventPayload.directory
           : options.directory
 
+      const sessionPrefixed = prefixCommand(command, sessionEnvPrefixes(sessionId))
+      if (sessionPrefixed !== command && eventPayload.output?.args) {
+        eventPayload.output.args.command = sessionPrefixed
+        writeGatewayEventAudit(directory, {
+          hook: "noninteractive-shell-guard",
+          stage: "state",
+          reason_code: "runtime_session_env_prefixed",
+          session_id: sessionId,
+        })
+      }
+
+      const commandWithSessionEnv = String(eventPayload.output?.args?.command ?? command).trim()
       if (
         options.injectEnvPrefix &&
         shouldPrefixCommand(command, options.prefixCommands)
       ) {
-        const prefixed = prefixCommand(command, options.envPrefixes)
-        if (prefixed !== command && eventPayload.output?.args) {
+        const prefixed = prefixCommand(commandWithSessionEnv, options.envPrefixes)
+        if (prefixed !== commandWithSessionEnv && eventPayload.output?.args) {
           eventPayload.output.args.command = prefixed
           writeGatewayEventAudit(directory, {
             hook: "noninteractive-shell-guard",
@@ -162,7 +189,7 @@ export function createNoninteractiveShellGuardHook(options: {
         }
       }
 
-      const updatedCommand = String(eventPayload.output?.args?.command ?? command).trim()
+      const updatedCommand = String(eventPayload.output?.args?.command ?? commandWithSessionEnv).trim()
       const message = violation(updatedCommand, blockedPatterns)
       if (!message) {
         return
