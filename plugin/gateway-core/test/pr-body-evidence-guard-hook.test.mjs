@@ -240,3 +240,68 @@ test("pr-body-evidence-guard accepts validation evidence from another session in
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("pr-body-evidence-guard still accepts validation evidence after a blocked PR attempt in the same session", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "pr-body-evidence-guard"],
+          disabled: ["pr-readiness-guard"],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint", "test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prBodyEvidenceGuard: {
+          enabled: true,
+          requireSummarySection: true,
+          requireValidationSection: true,
+          requireValidationEvidence: true,
+          allowUninspectableBody: false,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-pr-body-blocked-then-valid" },
+        { args: { command: 'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- npm test"' } },
+      ),
+      /Missing validation evidence/,
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-blocked-then-valid" },
+      { args: { command: "npm run lint" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-body-blocked-then-valid" },
+      { output: "lint passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-blocked-then-valid" },
+      { args: { command: "npm test" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-body-blocked-then-valid" },
+      { output: "tests passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-blocked-then-valid" },
+      { args: { command: 'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- npm run lint\n- npm test"' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
