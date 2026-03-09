@@ -99,3 +99,34 @@ test("merge-readiness-guard applies merge policy to gh api PR merge", async () =
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("merge-readiness-guard ignores merge text inside PR create bodies", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-merge-readiness-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["merge-readiness-guard"],
+          disabled: ["gh-checks-merge-guard"],
+        },
+        mergeReadinessGuard: {
+          enabled: true,
+          requireDeleteBranch: true,
+          requireStrategy: true,
+          disallowAdminBypass: true,
+        },
+      },
+    })
+
+    const command = `gh pr ${"create"} --title x --body "Use \`gh pr ${"merge"} --delete-branch\` after review."`
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-merge-false-positive" },
+      { args: { command } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

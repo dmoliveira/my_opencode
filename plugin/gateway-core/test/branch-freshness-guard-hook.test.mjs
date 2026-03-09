@@ -212,3 +212,36 @@ test("branch-freshness-guard applies gh api PR merge to freshness checks", async
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("branch-freshness-guard ignores merge text inside PR create bodies", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-branch-freshness-"))
+  try {
+    execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["branch-freshness-guard"],
+          disabled: ["pr-readiness-guard", "pr-body-evidence-guard", "primary-worktree-guard"],
+        },
+        branchFreshnessGuard: {
+          enabled: true,
+          baseRef: "main",
+          maxBehind: 0,
+          enforceOnPrCreate: false,
+          enforceOnPrMerge: true,
+        },
+      },
+    })
+
+    const command = `gh pr ${"create"} --title test --body "Run \`gh pr ${"merge"} --delete-branch\` after checks pass."`
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-branch-freshness-false-positive" },
+      { args: { command } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
