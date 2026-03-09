@@ -61,3 +61,59 @@ test("adaptive-validation-scheduler reminds after edit bursts and clears on vali
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("adaptive-validation-scheduler clears reminders after repo selftest commands", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-scheduler-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["adaptive-validation-scheduler"],
+          disabled: [],
+        },
+        adaptiveValidationScheduler: {
+          enabled: true,
+          reminderEditThreshold: 2,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "write", sessionID: "session-scheduler-selftest" },
+      { args: { filePath: "src/a.ts" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "edit", sessionID: "session-scheduler-selftest" },
+      { args: { filePath: "src/b.ts" } },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-scheduler-selftest" },
+      { args: { command: "git status" } },
+    )
+    const output1 = { output: "status" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-scheduler-selftest" }, output1)
+    assert.ok(output1.output.includes("adaptive-validation-scheduler"))
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-scheduler-selftest" },
+      { args: { command: "python3 scripts/selftest.py" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-scheduler-selftest" },
+      { output: "selftest passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-scheduler-selftest" },
+      { args: { command: "git status" } },
+    )
+    const output2 = { output: "status" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-scheduler-selftest" }, output2)
+    assert.equal(output2.output.includes("adaptive-validation-scheduler"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

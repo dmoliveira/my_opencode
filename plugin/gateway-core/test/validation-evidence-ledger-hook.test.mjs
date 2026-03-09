@@ -183,3 +183,99 @@ test("validation-evidence-ledger treats node --test as test evidence", async () 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("validation-evidence-ledger treats repo selftest commands as test evidence", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-selftest" },
+      { args: { command: "python3 scripts/selftest.py" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-selftest" },
+      { output: "selftest passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-selftest" },
+      { args: { command: "git status" } },
+    )
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-selftest" },
+      done,
+    )
+
+    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("validation-evidence-ledger treats make install-test as test evidence", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-install-test" },
+      { args: { command: "make install-test" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-install-test" },
+      { output: "install test passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-install-test" },
+      { args: { command: "git status" } },
+    )
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-install-test" },
+      done,
+    )
+
+    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

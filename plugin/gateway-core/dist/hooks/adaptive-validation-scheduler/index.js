@@ -12,7 +12,7 @@ function resolveSessionId(payload) {
 // Returns true when command appears to run validation checks.
 function isValidationCommand(command) {
     const value = command.trim().toLowerCase();
-    return /\b(npm\s+(run\s+)?(test|lint|build|typecheck)|pnpm\s+(test|lint|build|typecheck)|yarn\s+(test|lint|build|typecheck)|pytest|vitest|jest|ruff\s+check|tsc\b|cargo\s+(test|clippy|check))\b/.test(value);
+    return /\b(npm\s+(run\s+)?(test|lint|build|typecheck)|pnpm\s+(test|lint|build|typecheck)|yarn\s+(test|lint|build|typecheck)|node\s+--test\b|(?:npm|pnpm)\s+exec\s+vitest|npx\s+vitest|python\d?\s+-m\s+pytest|uv\s+run\s+pytest|pytest|vitest|jest|ruff\s+check|tsc\b|cargo\s+(test|clippy|check)|make\s+(validate|selftest|install-test)|python\d?\s+scripts\/selftest\.py)\b/.test(value);
 }
 // Returns true when command output looks like failure output.
 function commandFailed(output) {
