@@ -291,3 +291,53 @@ test("pr-body-evidence-guard uses LLM fallback for semantic summary and validati
     },
   )
 })
+
+test("pr-body-evidence-guard shadow mode does not accept semantic sections", async () => {
+  const hook = createPrBodyEvidenceGuardHook({
+    directory: process.cwd(),
+    enabled: true,
+    requireSummarySection: true,
+    requireValidationSection: true,
+    requireValidationEvidence: false,
+    allowUninspectableBody: false,
+    requiredMarkers: [],
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "shadow",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async (request) => ({
+        mode: "shadow",
+        accepted: true,
+        char: "Y",
+        raw: "Y",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: request.templateId,
+        meaning: request.templateId === "pr-body-summary-v1" ? "summary_present" : "validation_present",
+      }),
+    },
+  })
+
+  await assert.rejects(
+    hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-pr-body-shadow-1" },
+      output: {
+        args: {
+          command:
+            'gh pr create --title "x" --body "## Why this change matters\n- improves routing\n## Checks performed\n- smoke tests passed"',
+        },
+      },
+      directory: process.cwd(),
+    }),
+    /## Summary/,
+  )
+})

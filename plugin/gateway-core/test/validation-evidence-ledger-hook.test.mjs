@@ -442,3 +442,52 @@ test("validation-evidence-ledger LLM test evidence does not satisfy broader repo
   assert.equal(done.output.includes("PENDING_VALIDATION"), true)
   assert.match(done.output, /validation, lint/i)
 })
+
+test("validation-evidence-ledger shadow mode does not record ambiguous validation wrapper evidence", async () => {
+  const ledger = createValidationEvidenceLedgerHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "shadow",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "shadow",
+        accepted: true,
+        char: "T",
+        raw: "T",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "validation-command-classifier-v1",
+        meaning: "test",
+      }),
+    },
+  })
+  const doneProof = createDoneProofEnforcerHook({
+    enabled: true,
+    requiredMarkers: ["test"],
+    requireLedgerEvidence: true,
+    allowTextFallback: false,
+  })
+  await ledger.event("tool.execute.before", {
+    input: { tool: "bash", sessionID: "session-ledger-shadow-1" },
+    output: { args: { command: "./scripts/ci-check tests/api smoke" } },
+  })
+  await ledger.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-shadow-1" },
+    output: { output: "smoke suite passed" },
+    directory: process.cwd(),
+  })
+  const done = { output: "done\n<promise>DONE</promise>" }
+  await doneProof.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-ledger-shadow-1" }, output: done })
+  assert.equal(done.output.includes("PENDING_VALIDATION"), true)
+})

@@ -72,7 +72,6 @@ export function createPrBodyEvidenceGuardHook(options) {
                         cacheKey: `pr-body-summary:${body.trim().toLowerCase()}`,
                     });
                     if (decision.accepted) {
-                        hasSummary = decision.char === "Y";
                         writeGatewayEventAudit(directory, {
                             hook: "pr-body-evidence-guard",
                             stage: "state",
@@ -82,6 +81,20 @@ export function createPrBodyEvidenceGuardHook(options) {
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
                         });
+                        if (options.decisionRuntime.config.mode === "shadow" && decision.char === "Y") {
+                            writeGatewayEventAudit(directory, {
+                                hook: "pr-body-evidence-guard",
+                                stage: "state",
+                                reason_code: "llm_pr_body_summary_shadow_deferred",
+                                session_id: sessionId,
+                                llm_decision_char: decision.char,
+                                llm_decision_meaning: decision.meaning,
+                                llm_decision_mode: options.decisionRuntime.config.mode,
+                            });
+                        }
+                        else {
+                            hasSummary = decision.char === "Y";
+                        }
                     }
                 }
                 if (!hasValidation) {
@@ -96,7 +109,6 @@ export function createPrBodyEvidenceGuardHook(options) {
                         cacheKey: `pr-body-validation:${body.trim().toLowerCase()}`,
                     });
                     if (decision.accepted) {
-                        hasValidation = decision.char === "Y";
                         writeGatewayEventAudit(directory, {
                             hook: "pr-body-evidence-guard",
                             stage: "state",
@@ -106,6 +118,20 @@ export function createPrBodyEvidenceGuardHook(options) {
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
                         });
+                        if (options.decisionRuntime.config.mode === "shadow" && decision.char === "Y") {
+                            writeGatewayEventAudit(directory, {
+                                hook: "pr-body-evidence-guard",
+                                stage: "state",
+                                reason_code: "llm_pr_body_validation_shadow_deferred",
+                                session_id: sessionId,
+                                llm_decision_char: decision.char,
+                                llm_decision_meaning: decision.meaning,
+                                llm_decision_mode: options.decisionRuntime.config.mode,
+                            });
+                        }
+                        else {
+                            hasValidation = decision.char === "Y";
+                        }
                     }
                 }
             }

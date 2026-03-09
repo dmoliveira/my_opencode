@@ -339,3 +339,46 @@ test("auto-slash-command skips LLM rewrite for high-risk install prompt", async 
 
   assert.equal(output.parts[0].text, "please install and configure devtools for me")
 })
+
+test("auto-slash-command shadow mode records but does not rewrite ambiguous prompt", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "shadow",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "shadow",
+        accepted: true,
+        char: "D",
+        raw: "D",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "auto-slash-v1",
+        meaning: "route_doctor",
+      }),
+    },
+  })
+  const output = {
+    parts: [{ type: "text", text: "can you inspect the environment health and tell me what's wrong" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-shadow-1",
+      prompt: "can you inspect the environment health and tell me what's wrong",
+    },
+    output,
+    directory: process.cwd(),
+  })
+  assert.equal(output.parts[0].text, "can you inspect the environment health and tell me what's wrong")
+})

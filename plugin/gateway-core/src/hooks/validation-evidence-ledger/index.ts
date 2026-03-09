@@ -173,7 +173,6 @@ export function createValidationEvidenceLedgerHook(options: {
         if (decision.accepted) {
           const category = VALIDATION_CATEGORY_BY_CHAR[decision.char]
           if (category) {
-            categories = [category]
             writeGatewayEventAudit(options.directory, {
               hook: "validation-evidence-ledger",
               stage: "state",
@@ -184,6 +183,20 @@ export function createValidationEvidenceLedgerHook(options: {
               llm_decision_mode: options.decisionRuntime.config.mode,
               evidence: category,
             })
+            if (options.decisionRuntime.config.mode === "shadow") {
+              writeGatewayEventAudit(options.directory, {
+                hook: "validation-evidence-ledger",
+                stage: "state",
+                reason_code: "llm_validation_command_shadow_deferred",
+                session_id: sid,
+                llm_decision_char: decision.char,
+                llm_decision_meaning: decision.meaning,
+                llm_decision_mode: options.decisionRuntime.config.mode,
+                evidence: category,
+              })
+            } else {
+              categories = [category]
+            }
           }
         }
       }

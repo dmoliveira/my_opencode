@@ -222,7 +222,6 @@ export function createDelegationFallbackOrchestratorHook(options: {
             cacheKey: `delegation-failure:${subagentType}:${category}:${String(eventPayload.output.output ?? "").trim().toLowerCase()}`,
           })
           if (decision.accepted) {
-            reason = FAILURE_REASON_BY_CHAR[decision.char] ?? null
             writeGatewayEventAudit(directory, {
               hook: "delegation-fallback-orchestrator",
               stage: "state",
@@ -233,6 +232,21 @@ export function createDelegationFallbackOrchestratorHook(options: {
               llm_decision_meaning: decision.meaning,
               llm_decision_mode: options.decisionRuntime.config.mode,
             })
+            const aiReason = FAILURE_REASON_BY_CHAR[decision.char] ?? null
+            if (options.decisionRuntime.config.mode === "shadow" && aiReason) {
+              writeGatewayEventAudit(directory, {
+                hook: "delegation-fallback-orchestrator",
+                stage: "state",
+                reason_code: "llm_delegation_failure_shadow_deferred",
+                session_id: sid,
+                trace_id: traceId,
+                llm_decision_char: decision.char,
+                llm_decision_meaning: decision.meaning,
+                llm_decision_mode: options.decisionRuntime.config.mode,
+              })
+            } else {
+              reason = aiReason
+            }
           }
         }
         if (!reason) {

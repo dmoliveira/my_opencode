@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, and done-proof semantic slices are implemented in this worktree and validated with real-session probes
-- Current active slice: checkpoint complete; next recommended work is rollout/shadow instrumentation or commit-ready consolidation
+- Current active slice: rollout/shadow instrumentation follow-up after milestone checkpoint commit
 
 ### Epic status
 
@@ -45,7 +45,7 @@ Do not use LLM decisions for:
 | Epic 1 - Build the decision runtime | done | Shared runtime, parser, prompt builder, caching, audit metadata, and central config are implemented. |
 | Epic 2 - Hybrid delegation decisions | done | `agent-model-resolver` and `agent-denied-tool-enforcer` use the centralized runtime with real simulation evidence. |
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
-| Epic 4 - Safety, cost, and performance controls | in_progress | Modes, timeouts, cache TTL, cache size, compact prompts, and audit meanings are implemented; disagreement/shadow reporting remains open. |
+| Epic 4 - Safety, cost, and performance controls | in_progress | Modes, timeouts, cache TTL, cache size, compact prompts, audit meanings, and representative shadow-deferred behavior are implemented; broader disagreement reporting remains open. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, and prompt refinements are in place; adversarial expansion remains open. |
 | Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs. |
 | Epic 7 - Rollout and cleanup | pending | No rollout promotion or heuristic removal yet. |

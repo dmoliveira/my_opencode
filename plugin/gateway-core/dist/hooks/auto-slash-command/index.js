@@ -170,7 +170,7 @@ export function createAutoSlashCommandHook(options) {
                         cacheKey: `auto-slash:${prompt.trim().toLowerCase()}`,
                     });
                     if (decision.accepted) {
-                        slash = AI_AUTO_SLASH_CHAR_TO_COMMAND[decision.char] ?? null;
+                        const aiSlash = AI_AUTO_SLASH_CHAR_TO_COMMAND[decision.char] ?? null;
                         writeGatewayEventAudit(directory, {
                             hook: "auto-slash-command",
                             stage: "state",
@@ -179,8 +179,23 @@ export function createAutoSlashCommandHook(options) {
                             llm_decision_char: decision.char,
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
-                            slash_command: slash ?? undefined,
+                            slash_command: aiSlash ?? undefined,
                         });
+                        if (options.decisionRuntime.config.mode === "shadow" && aiSlash) {
+                            writeGatewayEventAudit(directory, {
+                                hook: "auto-slash-command",
+                                stage: "state",
+                                reason_code: "llm_auto_slash_shadow_deferred",
+                                session_id: typeof sessionId === "string" ? sessionId : "",
+                                llm_decision_char: decision.char,
+                                llm_decision_meaning: decision.meaning,
+                                llm_decision_mode: options.decisionRuntime.config.mode,
+                                slash_command: aiSlash,
+                            });
+                        }
+                        else {
+                            slash = aiSlash;
+                        }
                     }
                 }
                 if (detection.excludedExplicit || !slash) {

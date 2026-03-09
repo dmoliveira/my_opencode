@@ -65,7 +65,6 @@ export function createDoneProofEnforcerHook(options: {
                 cacheKey: `done-proof:${marker}:${text.trim().toLowerCase()}`,
               })
               if (decision.accepted) {
-                fallbackSatisfied = decision.char === "Y"
                 writeGatewayEventAudit(options.directory ?? process.cwd(), {
                   hook: "done-proof-enforcer",
                   stage: "state",
@@ -76,6 +75,20 @@ export function createDoneProofEnforcerHook(options: {
                   llm_decision_mode: options.decisionRuntime.config.mode,
                   evidence: marker,
                 })
+                if (options.decisionRuntime.config.mode === "shadow" && decision.char === "Y") {
+                  writeGatewayEventAudit(options.directory ?? process.cwd(), {
+                    hook: "done-proof-enforcer",
+                    stage: "state",
+                    reason_code: "llm_done_proof_shadow_deferred",
+                    session_id: sessionId,
+                    llm_decision_char: decision.char,
+                    llm_decision_meaning: decision.meaning,
+                    llm_decision_mode: options.decisionRuntime.config.mode,
+                    evidence: marker,
+                  })
+                } else {
+                  fallbackSatisfied = decision.char === "Y"
+                }
               }
             }
             if (!fallbackSatisfied) {
