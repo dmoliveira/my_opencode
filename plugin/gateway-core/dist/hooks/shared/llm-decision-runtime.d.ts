@@ -19,6 +19,7 @@ export interface SingleCharDecisionRequest {
     templateId: string;
     instruction: string;
     context: string;
+    userContext?: string;
     allowedChars: string[];
     decisionMeaning?: Record<string, string>;
     cacheKey?: string;
@@ -65,6 +66,7 @@ export declare function truncateDecisionText(text: string, maxChars: number): st
 export declare function buildSingleCharDecisionPrompt(request: {
     instruction: string;
     context: string;
+    userContext?: string;
     allowedChars: string[];
 }): string;
 export declare function parseSingleCharDecision(raw: string, allowedChars: string[]): string;

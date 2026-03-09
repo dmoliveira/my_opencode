@@ -342,9 +342,10 @@ Expanded workflow coverage:
 - added chained multi-task progress sequence coverage for `todo-continuation-enforcer`
   - 3-step unfinished sequence -> inject on each cycle when cooldown permits
 - added stop/resume cycle coverage to confirm continuation re-arms only after explicit resume
+- added alternating-task coverage to confirm pending state clears when a later task reports completion
 - updated workflow report result:
-  - total scenarios: `10`
-  - correct actions: `10`
+  - total scenarios: `11`
+  - correct actions: `11`
   - accuracy: `100%`
 
 ### 13. Sidecar config live runtime fix

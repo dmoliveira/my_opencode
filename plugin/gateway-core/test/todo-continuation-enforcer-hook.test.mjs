@@ -506,3 +506,45 @@ test("todo-continuation-enforcer does not inject on progress summary without pen
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("todo-continuation-enforcer clears pending state when a later task output reports completion", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when marker is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-12" },
+      output: { output: "Task 3/7 complete. Remaining tasks exist.\n<CONTINUE-LOOP>" },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-12" },
+      output: { output: "Task 7/7 complete. All tasks are done." },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-12" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

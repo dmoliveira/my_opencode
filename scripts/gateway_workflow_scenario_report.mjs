@@ -54,6 +54,31 @@ const results = []
     const hook = createTodoContinuationEnforcerHook({
       directory,
       enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() { throw new Error("messages should not be called") },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-9" }, output: { output: "Task 3/7 complete. Remaining tasks exist.\n<CONTINUE-LOOP>" } })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-9" }, output: { output: "Task 7/7 complete. All tasks are done." } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-9" } })
+    results.push({ id: "todo-pending-then-complete", workflow: "todo-continuation-enforcer", requestType: "alternating_tasks", description: "pending state clears when later task reports completion", expectedAction: "no_inject", actualAction: promptCalls === 0 ? "no_inject" : `inject_${promptCalls}_times`, correct: promptCalls === 0 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
       cooldownMs: 1,
       maxConsecutiveFailures: 5,
       client: {
