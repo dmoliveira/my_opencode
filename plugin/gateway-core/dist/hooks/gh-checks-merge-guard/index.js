@@ -10,7 +10,6 @@ function normalize(value) {
         .trim()
         .toUpperCase();
 }
-
 // Loads PR metadata from gh cli for merge checks.
 function loadPrView(input) {
     const args = ["pr", "view"];

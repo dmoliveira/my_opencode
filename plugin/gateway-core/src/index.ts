@@ -64,9 +64,6 @@ import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
 import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
-import { createSessionRuntimeContextHook } from "./hooks/session-runtime-context/index.js";
-import { createSessionRuntimeNotifierHook } from "./hooks/session-runtime-notifier/index.js";
-import { createSessionRuntimeVisibleNoteHook } from "./hooks/session-runtime-visible-note/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
 import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-timeline/index.js";
@@ -499,21 +496,6 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAutoSlashCommandHook({
       directory,
       enabled: cfg.autoSlashCommand.enabled,
-    }),
-    createSessionRuntimeVisibleNoteHook({
-      directory,
-      enabled: cfg.sessionRuntimeVisibleNote.enabled,
-      client: ctx.client,
-    }),
-    createSessionRuntimeNotifierHook({
-      directory,
-      enabled: cfg.sessionRuntimeNotifier.enabled,
-      durationMs: cfg.sessionRuntimeNotifier.durationMs,
-      client: ctx.client,
-    }),
-    createSessionRuntimeContextHook({
-      directory,
-      enabled: cfg.sessionRuntimeContextInjector.enabled,
     }),
     createContextInjectorHook({
       directory,

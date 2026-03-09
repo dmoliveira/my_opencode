@@ -28,9 +28,6 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "subagent-telemetry-timeline",
             "adaptive-delegation-policy",
             "session-recovery",
-            "session-runtime-visible-note",
-            "session-runtime-notifier",
-            "session-runtime-context",
             "delegate-task-retry",
             "validation-evidence-ledger",
             "mistake-ledger",
@@ -201,16 +198,6 @@ export const DEFAULT_GATEWAY_CONFIG = {
     sessionRecovery: {
         enabled: true,
         autoResume: true,
-    },
-    sessionRuntimeContextInjector: {
-        enabled: true,
-    },
-    sessionRuntimeNotifier: {
-        enabled: true,
-        durationMs: 6000,
-    },
-    sessionRuntimeVisibleNote: {
-        enabled: true,
     },
     delegateTaskRetry: {
         enabled: true,

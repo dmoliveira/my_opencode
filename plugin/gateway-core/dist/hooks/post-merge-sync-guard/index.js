@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
+const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command) {
     return /\bgit\s+pull\s+--rebase\b/i.test(command);
@@ -44,7 +45,6 @@ function mainWorktreePath(directory) {
     }
     return "";
 }
-const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 function resolveReminder(directory, defaults) {
     const branch = currentBranch(directory);
     const mainPath = mainWorktreePath(directory);
@@ -90,7 +90,6 @@ function normalizeMergeOutput(output) {
     }
     return `${cleaned}\n\n${note}`;
 }
-
 // Creates post-merge sync guard with cleanup enforcement and reminder injection.
 export function createPostMergeSyncGuardHook(options) {
     const pendingReminderSessions = new Set();

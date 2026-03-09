@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 const evidenceBySession = new Map();
 const evidenceByWorktree = new Map();
+// Returns blank evidence snapshot.
 function emptyEvidence() {
     return {
         lint: false,
@@ -62,6 +63,7 @@ function computeMissing(snapshot, markers) {
     }
     return missing;
 }
+// Resolves evidence category for marker token when supported.
 export function markerCategory(marker) {
     const value = marker.trim().toLowerCase();
     if (!value) {
@@ -87,6 +89,7 @@ export function markerCategory(marker) {
     }
     return null;
 }
+// Returns immutable snapshot for session evidence.
 export function validationEvidence(sessionId) {
     if (!sessionId.trim()) {
         return emptyEvidence();
@@ -97,6 +100,7 @@ export function validationEvidence(sessionId) {
     }
     return { ...current };
 }
+// Returns immutable snapshot for worktree/branch-scoped evidence.
 export function worktreeValidationEvidence(directory) {
     const key = evidenceScopeKey(directory);
     if (!key) {
@@ -108,6 +112,7 @@ export function worktreeValidationEvidence(directory) {
     }
     return { ...current };
 }
+// Marks one or more evidence categories as validated.
 export function markValidationEvidence(sessionId, categories, directory = "") {
     const key = sessionId.trim();
     if (!key) {
@@ -134,6 +139,7 @@ export function markValidationEvidence(sessionId, categories, directory = "") {
     }
     return { ...next };
 }
+// Clears evidence state for one session.
 export function clearValidationEvidence(sessionId) {
     const key = sessionId.trim();
     if (!key) {
@@ -141,9 +147,11 @@ export function clearValidationEvidence(sessionId) {
     }
     evidenceBySession.delete(key);
 }
+// Returns missing marker list based on current ledger evidence.
 export function missingValidationMarkers(sessionId, markers) {
     return computeMissing(validationEvidence(sessionId), markers);
 }
+// Returns validation status across session and optional worktree fallback.
 export function validationEvidenceStatus(sessionId, markers, directory = "") {
     const sessionSnapshot = validationEvidence(sessionId);
     const sessionMissing = computeMissing(sessionSnapshot, markers);
