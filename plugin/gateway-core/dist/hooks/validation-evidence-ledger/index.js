@@ -31,7 +31,7 @@ function classifyValidationCommand(command) {
     if (/\b(eslint|ruff\s+check|ruff\s+format\s+--check|npm(?:\s+--prefix\s+\S+)?\s+run\s+lint|pnpm(?:\s+--filter\s+\S+)?\s+lint|yarn\s+lint|biome\s+check|golangci-lint|cargo\s+clippy|make\s+validate)\b/i.test(value)) {
         categories.add("lint");
     }
-    if (/\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|python\d?\s+-m\s+unittest)\b/i.test(value)) {
+    if (/\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|node\s+--test\b|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|python\d?\s+-m\s+unittest)\b/i.test(value)) {
         categories.add("test");
     }
     if (/\b(tsc\b|npm\s+run\s+typecheck|pnpm\s+typecheck|yarn\s+typecheck|pyright|mypy|cargo\s+check|go\s+vet)\b/i.test(value)) {
