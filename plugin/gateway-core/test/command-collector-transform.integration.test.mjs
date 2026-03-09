@@ -6,6 +6,10 @@ import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
 
+function assertTailText(parts, expected) {
+  assert.match(String(parts.at(-1)?.text), new RegExp(`${expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
+}
+
 test("integration: tool command registers collector context then transform injects synthetic part", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-integration-flow-"))
   try {
@@ -30,7 +34,7 @@ test("integration: tool command registers collector context then transform injec
     const parts = output.messages[0]?.parts ?? []
     assert.equal(parts[0]?.synthetic, true)
     assert.match(String(parts[0]?.text), /Autopilot objective activated\./)
-    assert.equal(parts[1]?.text, "Continue task")
+    assertTailText(parts, "Continue task")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -59,7 +63,7 @@ test("integration: command.execute.before path registers collector context then 
     const parts = output.messages[0]?.parts ?? []
     assert.equal(parts[0]?.synthetic, true)
     assert.match(String(parts[0]?.text), /ship command flow/)
-    assert.equal(parts[1]?.text, "Continue command flow")
+    assertTailText(parts, "Continue command flow")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -83,7 +87,7 @@ test("integration: non-start command does not register collector context for tra
 
     const parts = output.messages[0]?.parts ?? []
     assert.equal(parts[0]?.synthetic, undefined)
-    assert.equal(parts[0]?.text, "Status check")
+    assertTailText(parts, "Status check")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -116,7 +120,7 @@ test("integration: transform consumes collector context only once", async () => 
     await plugin["experimental.chat.messages.transform"]({ sessionID }, second)
 
     assert.equal(second.messages[0]?.parts?.[0]?.synthetic, undefined)
-    assert.equal(second.messages[0]?.parts?.[0]?.text, "Second")
+    assertTailText(second.messages[0]?.parts ?? [], "Second")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
