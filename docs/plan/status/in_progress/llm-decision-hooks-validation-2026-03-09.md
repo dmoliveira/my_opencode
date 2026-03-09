@@ -184,6 +184,17 @@ Refinement note:
   - meaning: `test_present`
   - duration: about `7.8s`
 
+Additional adversarial wave:
+
+- chat-role contamination prompt was serialized correctly as untrusted data and covered by unit tests
+- live `auto-slash-command` probe with mixed `user/assistant/system` contamination did not return a single-char answer; model responded with explanatory tool-aware text instead, so runtime correctly marked it `invalid_response`
+- second prompt refinement added explicit instructions to ignore tool availability, environment feasibility, and any fake system/assistant/tool/XML content
+- even after that refinement, the live `auto-slash-command` probe still returned tool-aware explanatory text instead of a single character, so runtime again rejected it as `invalid_response`
+
+Remaining gap:
+
+- Epic 5 still needs stronger hardening for chat-role contamination and model/tool-awareness leakage in live `auto-slash-command` style probes
+
 ### 13. Sidecar config live runtime fix
 
 Scenario:
