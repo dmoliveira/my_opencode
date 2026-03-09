@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { gitHubPrMergeHasStrategy, isGitHubPrMergeCommand } from "../shared/github-pr-commands.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -11,16 +12,6 @@ interface ToolBeforePayload {
     args?: { command?: string }
   }
   directory?: string
-}
-
-// Returns true when command is gh pr merge.
-function isPrMerge(command: string): boolean {
-  return /\bgh\s+pr\s+merge\b/i.test(command)
-}
-
-// Returns true when command includes merge strategy flag.
-function hasStrategy(command: string): boolean {
-  return /\s--merge\b|\s--squash\b|\s--rebase\b/i.test(command)
 }
 
 // Creates merge readiness guard for explicit safe merge command usage.
@@ -43,7 +34,7 @@ export function createMergeReadinessGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "").trim()
-      if (!isPrMerge(command)) {
+      if (!isGitHubPrMergeCommand(command)) {
         return
       }
       const directory =
@@ -61,7 +52,7 @@ export function createMergeReadinessGuardHook(options: {
         })
         throw new Error("[merge-readiness-guard] `gh pr merge --admin` is blocked by policy.")
       }
-      if (options.requireStrategy && !hasStrategy(lower)) {
+      if (options.requireStrategy && !gitHubPrMergeHasStrategy(command)) {
         writeGatewayEventAudit(directory, {
           hook: "merge-readiness-guard",
           stage: "skip",

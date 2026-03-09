@@ -1,10 +1,7 @@
 import { execSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
 import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js";
-// Returns true when command triggers PR creation.
-function isPrCreate(command) {
-    return /\bgh\s+pr\s+create\b/i.test(command);
-}
 // Returns true when git worktree has no pending tracked or untracked changes.
 function isWorktreeClean(directory) {
     try {
@@ -35,7 +32,7 @@ export function createPrReadinessGuardHook(options) {
                 return;
             }
             const command = String(eventPayload.output?.args?.command ?? "");
-            if (!isPrCreate(command)) {
+            if (!isGitHubPrCreateCommand(command)) {
                 return;
             }
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()

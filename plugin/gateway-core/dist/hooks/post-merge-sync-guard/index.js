@@ -1,9 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-// Returns true when command is gh pr merge.
-function isPrMerge(command) {
-    return /\bgh\s+pr\s+merge\b/i.test(command);
-}
+import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command) {
     return /\bgit\s+pull\s+--rebase\b/i.test(command);
@@ -101,7 +98,7 @@ export function createPostMergeSyncGuardHook(options) {
                     return;
                 }
                 const command = String(eventPayload.output?.args?.command ?? "").trim();
-                if (!isPrMerge(command)) {
+                if (!isGitHubPrMergeCommand(command)) {
                     return;
                 }
                 const lower = command.toLowerCase();

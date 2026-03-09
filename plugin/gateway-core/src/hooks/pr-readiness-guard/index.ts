@@ -2,6 +2,7 @@ import { execSync } from "node:child_process"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { isGitHubPrCreateCommand } from "../shared/github-pr-commands.js"
 import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js"
 
 interface ToolBeforePayload {
@@ -14,11 +15,6 @@ interface ToolBeforePayload {
     args?: { command?: string }
   }
   directory?: string
-}
-
-// Returns true when command triggers PR creation.
-function isPrCreate(command: string): boolean {
-  return /\bgh\s+pr\s+create\b/i.test(command)
 }
 
 // Returns true when git worktree has no pending tracked or untracked changes.
@@ -57,7 +53,7 @@ export function createPrReadinessGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "")
-      if (!isPrCreate(command)) {
+      if (!isGitHubPrCreateCommand(command)) {
         return
       }
       const directory =

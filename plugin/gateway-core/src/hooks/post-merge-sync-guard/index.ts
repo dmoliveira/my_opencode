@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js"
 
 interface ToolBeforeInput {
   tool?: string
@@ -23,11 +24,6 @@ interface HookPayload {
   input?: ToolBeforeInput
   output?: ToolBeforeOutput | ToolAfterOutput
   directory?: string
-}
-
-// Returns true when command is gh pr merge.
-function isPrMerge(command: string): boolean {
-  return /\bgh\s+pr\s+merge\b/i.test(command)
 }
 
 // Returns true when command includes inline main sync action.
@@ -136,7 +132,7 @@ export function createPostMergeSyncGuardHook(options: {
           return
         }
         const command = String((eventPayload.output as ToolBeforeOutput | undefined)?.args?.command ?? "").trim()
-        if (!isPrMerge(command)) {
+        if (!isGitHubPrMergeCommand(command)) {
           return
         }
         const lower = command.toLowerCase()

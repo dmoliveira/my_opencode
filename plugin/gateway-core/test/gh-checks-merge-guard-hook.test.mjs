@@ -132,3 +132,30 @@ test("gh-checks-merge-guard can fail open when lookup errors", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("gh-checks-merge-guard applies checks policy to gh api PR merge", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-gh-checks-"))
+  try {
+    let seenSelector = ""
+    const hook = createGhChecksMergeGuardHook(
+      baseOptions(directory, (input) => {
+        seenSelector = input.selector
+        return {
+          isDraft: false,
+          reviewDecision: "REVIEW_REQUIRED",
+          mergeStateStatus: "CLEAN",
+          statusCheckRollup: [],
+        }
+      }),
+    )
+
+    await assert.rejects(
+      hook.event("tool.execute.before", payload(directory, "gh api repos/foo/bar/pulls/10/merge -X PUT -f merge_method=merge")),
+      /Approval is required/,
+    )
+    assert.equal(seenSelector, "10")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
