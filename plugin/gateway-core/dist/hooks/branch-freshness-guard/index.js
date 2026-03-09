@@ -1,9 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-// Returns true when command triggers PR creation.
-function isPrCreate(command) {
-    return /\bgh\s+pr\s+create\b/i.test(command);
-}
+import { isGitHubPrCreateCommand, isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
 // Returns true when command triggers PR merge.
 function isPrMerge(command) {
     return /\bgh\s+pr\s+merge\b/i.test(command);
@@ -43,8 +40,8 @@ export function createBranchFreshnessGuardHook(options) {
                 return;
             }
             const command = String(eventPayload.output?.args?.command ?? "");
-            const checkCreate = options.enforceOnPrCreate && isPrCreate(command);
-            const checkMerge = options.enforceOnPrMerge && isPrMerge(command);
+            const checkCreate = options.enforceOnPrCreate && isGitHubPrCreateCommand(command);
+            const checkMerge = options.enforceOnPrMerge && (isPrMerge(command) || isGitHubPrMergeCommand(command));
             if (!checkCreate && !checkMerge) {
                 return;
             }

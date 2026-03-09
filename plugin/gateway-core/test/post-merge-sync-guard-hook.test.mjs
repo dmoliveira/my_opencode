@@ -132,3 +132,33 @@ test("post-merge-sync-guard avoids checkout guidance when no main worktree is ch
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("post-merge-sync-guard applies merge reminders to gh api PR merge", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-post-merge-"))
+  try {
+    const hook = createPostMergeSyncGuardHook({
+      directory,
+      enabled: true,
+      requireDeleteBranch: false,
+      enforceMainSyncInline: false,
+      reminderCommands: ["git pull --rebase"],
+    })
+
+    await hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-post-merge-api" },
+      output: { args: { command: "gh api repos/foo/bar/pulls/10/merge -X PUT -f merge_method=merge" } },
+      directory,
+    })
+
+    const afterPayload = {
+      input: { tool: "bash", sessionID: "session-post-merge-api" },
+      output: { output: "merged" },
+      directory,
+    }
+    await hook.event("tool.execute.after", afterPayload)
+    assert.match(String(afterPayload.output.output), /Merge complete\./)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

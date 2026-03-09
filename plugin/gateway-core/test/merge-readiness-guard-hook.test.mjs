@@ -58,3 +58,44 @@ test("merge-readiness-guard enforces merge flags", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("merge-readiness-guard applies merge policy to gh api PR merge", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-merge-readiness-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["merge-readiness-guard"],
+          disabled: ["gh-checks-merge-guard"],
+        },
+        mergeReadinessGuard: {
+          enabled: true,
+          requireDeleteBranch: true,
+          requireStrategy: true,
+          disallowAdminBypass: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-merge-api" },
+        { args: { command: "gh api repos/foo/bar/pulls/10/merge -X PUT" } },
+      ),
+      /Merge strategy flag is required/,
+    )
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-merge-api" },
+        { args: { command: "gh api repos/foo/bar/pulls/10/merge -X PUT -f merge_method=squash" } },
+      ),
+      /--delete-branch/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

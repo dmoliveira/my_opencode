@@ -1,8 +1,6 @@
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
-
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js"
 import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js"
 
 interface ToolBeforePayload {
@@ -15,82 +13,6 @@ interface ToolBeforePayload {
     args?: { command?: string }
   }
   directory?: string
-}
-
-interface BodyInspection {
-  body: string
-  inspectable: boolean
-}
-
-// Returns true when command triggers PR creation.
-function isPrCreate(command: string): boolean {
-  return /\bgh\s+pr\s+create\b/i.test(command)
-}
-
-// Tokenizes command string with basic quote support.
-function tokenize(command: string): string[] {
-  const matches = command.match(/"[^"]*"|'[^']*'|\S+/g)
-  if (!matches) {
-    return []
-  }
-  return matches.map((token) => {
-    if (token.length >= 2 && ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'")))) {
-      return token.slice(1, -1)
-    }
-    return token
-  })
-}
-
-// Resolves PR body text from command flags when available.
-function inspectBody(command: string, directory: string): BodyInspection {
-  const tokens = tokenize(command)
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index]
-    if (token === "--body" && index + 1 < tokens.length) {
-      return {
-        body: tokens[index + 1],
-        inspectable: true,
-      }
-    }
-    if (token.startsWith("--body=")) {
-      return {
-        body: token.slice("--body=".length),
-        inspectable: true,
-      }
-    }
-    if (token === "--body-file" && index + 1 < tokens.length) {
-      try {
-        const content = readFileSync(resolve(directory, tokens[index + 1]), "utf-8")
-        return {
-          body: content,
-          inspectable: true,
-        }
-      } catch {
-        return {
-          body: "",
-          inspectable: false,
-        }
-      }
-    }
-    if (token.startsWith("--body-file=")) {
-      try {
-        const content = readFileSync(resolve(directory, token.slice("--body-file=".length)), "utf-8")
-        return {
-          body: content,
-          inspectable: true,
-        }
-      } catch {
-        return {
-          body: "",
-          inspectable: false,
-        }
-      }
-    }
-  }
-  return {
-    body: "",
-    inspectable: false,
-  }
 }
 
 // Creates PR body evidence guard for structured PR metadata quality.
@@ -116,7 +38,7 @@ export function createPrBodyEvidenceGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "")
-      if (!isPrCreate(command)) {
+      if (!isGitHubPrCreateCommand(command)) {
         return
       }
       const directory =
@@ -140,7 +62,7 @@ export function createPrBodyEvidenceGuardHook(options: {
         }
       }
 
-      const inspection = inspectBody(command, directory)
+      const inspection = inspectGitHubPrCreateBody(command, directory)
       if (!inspection.inspectable) {
         if (options.allowUninspectableBody) {
           return

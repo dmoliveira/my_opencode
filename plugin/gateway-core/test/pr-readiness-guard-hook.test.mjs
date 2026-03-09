@@ -78,3 +78,38 @@ test("pr-readiness-guard blocks PR creation when validation evidence is missing"
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("pr-readiness-guard applies gh api PR creation to the same readiness checks", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
+  try {
+    execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    writeFileSync(join(directory, "scratch.txt"), "dirty\n", "utf-8")
+
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["pr-readiness-guard"],
+          disabled: [],
+        },
+        prReadinessGuard: {
+          enabled: true,
+          requireCleanWorktree: true,
+          requireValidationEvidence: false,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-pr-api-dirty" },
+        { args: { command: "gh api repos/foo/bar/pulls -X POST -f title=x -f head=feature -f base=main" } },
+      ),
+      /Worktree is dirty/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
