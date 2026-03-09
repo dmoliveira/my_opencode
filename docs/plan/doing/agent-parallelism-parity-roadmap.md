@@ -268,3 +268,35 @@ Immediate next slice:
 
 - broaden from targeted gateway-core coverage to one higher-level runtime flow if we want end-to-end CLI confidence
 - decide whether any telemetry consumers need explicit missing-identity diagnostics surfaced beyond current audit events
+
+### 2026-03-09 - Live same-session relaunch smoke and legacy cleanup
+
+Current status: `doing`
+
+Findings:
+
+- A live CLI smoke using the current gateway-core runtime completed the old failure pattern successfully: two same-session `explore` subagents ran in parallel, then a third same-session `explore` subagent launched after the parallel wave without hitting an `already running` or duplicate-running blocker.
+- The smoke used a temporary sync of the worktree `gateway-core/dist` files into the configured live plugin path, with hash evidence captured before and during execution.
+- The live smoke returned `PASS`, with two parallel `task` completions followed by a third same-session `task` completion.
+- Legacy compatibility was reduced where the structured identity path is now clearly authoritative: shared runtime-state no longer exposes unused fallback-match inputs, telemetry no longer passes those stale fields, and delegation metadata reading no longer accepts top-level `metadata.delegation`.
+- Canonical trace-to-child-run normalization remains in place and is still intentional.
+
+Primary evidence references:
+
+- CLI smoke output: `/tmp/gwcfglive/parallel-relaunch.stdout`
+- CLI smoke logs: `/tmp/gwcfglive/parallel-relaunch.stderr`
+- CLI smoke hash manifest: `/tmp/gwcfglive/parallel-relaunch-hashes.json`
+- `plugin/gateway-core/src/hooks/shared/delegation-runtime-state.ts`
+- `plugin/gateway-core/src/hooks/shared/delegation-trace.ts`
+- `plugin/gateway-core/src/hooks/subagent-telemetry-timeline/index.ts`
+
+Validation:
+
+- `npm run build && node --test test/runtime-delegation-hooks.test.mjs test/delegation-concurrency-guard-hook.test.mjs test/subagent-lifecycle-supervisor-hook.test.mjs`
+- Result: pass (`37` tests, `0` failures)
+- Live smoke result: pass (`PASS` from fresh session flow)
+
+Immediate next slice:
+
+- decide whether to formalize the live relaunch smoke into selftest/install-smoke coverage
+- if so, add a non-interactive harness that can safely swap or inject the local gateway plugin path without touching user config

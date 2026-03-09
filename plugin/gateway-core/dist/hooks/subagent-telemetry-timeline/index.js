@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { clearActiveDelegation, clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
-import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
+import { annotateDelegationMetadata, extractDelegationChildRunId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
@@ -68,8 +68,6 @@ export function createSubagentTelemetryTimelineHook(options) {
                 clearActiveDelegation({
                     sessionId: sid,
                     childRunId: extractDelegationChildRunId(eventPayload.output?.metadata) || undefined,
-                    traceId: extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
-                    subagentType: extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
                 });
                 return;
             }
@@ -87,9 +85,6 @@ export function createSubagentTelemetryTimelineHook(options) {
             const output = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
             const failed = isFailureOutput(output);
             const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
-            const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
-            const subagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
-                extractDelegationSubagentTypeFromOutput(output);
             const record = registerDelegationOutcome({
                 sessionId: sid,
                 status: failed ? "failed" : "completed",
@@ -98,8 +93,6 @@ export function createSubagentTelemetryTimelineHook(options) {
                     : "subagent_telemetry_completed",
                 endedAt: Date.now(),
                 childRunId: childRunId || undefined,
-                traceId: traceId || undefined,
-                subagentType: subagentType || undefined,
             }, options.maxTimelineEntries);
             if (!record) {
                 return;

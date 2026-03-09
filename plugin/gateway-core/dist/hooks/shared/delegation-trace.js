@@ -23,9 +23,7 @@ function readGatewayDelegationMetadata(metadata) {
         return null;
     }
     const source = metadata;
-    const nested = source.gateway && typeof source.gateway === "object" && source.gateway.delegation
-        ? source.gateway.delegation
-        : source.delegation;
+    const nested = source.gateway && typeof source.gateway === "object" ? source.gateway.delegation : undefined;
     if (!nested || typeof nested !== "object") {
         return null;
     }

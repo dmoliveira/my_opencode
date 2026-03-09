@@ -16,8 +16,6 @@ export interface DelegationOutcomeInput {
   reasonCode?: string
   endedAt: number
   childRunId?: string
-  traceId?: string
-  subagentType?: string
 }
 
 export interface DelegationOutcomeRecord {
@@ -172,8 +170,6 @@ export function registerDelegationStart(input: DelegationStartInput): void {
 export function clearActiveDelegation(input: {
   sessionId: string
   childRunId?: string
-  traceId?: string
-  subagentType?: string
 }): boolean {
   load()
   const directKey = delegationKey(input.sessionId, input.childRunId)
@@ -195,12 +191,11 @@ export function registerDelegationOutcome(
   if (!directKey) {
     return null
   }
-  let active = activeByDelegation.get(directKey)
-  let activeKey = directKey
+  const active = activeByDelegation.get(directKey)
   if (!active) {
     return null
   }
-  activeByDelegation.delete(activeKey)
+  activeByDelegation.delete(directKey)
   const durationMs = Math.max(0, input.endedAt - active.startedAt)
   const record: DelegationOutcomeRecord = {
     sessionId: input.sessionId,

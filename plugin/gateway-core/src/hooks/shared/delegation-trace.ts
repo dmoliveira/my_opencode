@@ -47,12 +47,8 @@ function readGatewayDelegationMetadata(metadata: unknown): GatewayDelegationMeta
   }
   const source = metadata as {
     gateway?: { delegation?: GatewayDelegationMetadata }
-    delegation?: GatewayDelegationMetadata
   }
-  const nested =
-    source.gateway && typeof source.gateway === "object" && source.gateway.delegation
-      ? source.gateway.delegation
-      : source.delegation
+  const nested = source.gateway && typeof source.gateway === "object" ? source.gateway.delegation : undefined
   if (!nested || typeof nested !== "object") {
     return null
   }

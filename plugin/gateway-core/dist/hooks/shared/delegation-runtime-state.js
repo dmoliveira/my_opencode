@@ -126,12 +126,11 @@ export function registerDelegationOutcome(input, maxEntries) {
     if (!directKey) {
         return null;
     }
-    let active = activeByDelegation.get(directKey);
-    let activeKey = directKey;
+    const active = activeByDelegation.get(directKey);
     if (!active) {
         return null;
     }
-    activeByDelegation.delete(activeKey);
+    activeByDelegation.delete(directKey);
     const durationMs = Math.max(0, input.endedAt - active.startedAt);
     const record = {
         sessionId: input.sessionId,

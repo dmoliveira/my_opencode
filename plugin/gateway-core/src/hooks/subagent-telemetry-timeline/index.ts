@@ -10,9 +10,6 @@ import {
 import {
   annotateDelegationMetadata,
   extractDelegationChildRunId,
-  extractDelegationSubagentType,
-  extractDelegationSubagentTypeFromOutput,
-  extractDelegationTraceId,
   resolveDelegationTraceId,
 } from "../shared/delegation-trace.js"
 
@@ -123,9 +120,6 @@ export function createSubagentTelemetryTimelineHook(options: {
         clearActiveDelegation({
           sessionId: sid,
           childRunId: extractDelegationChildRunId(eventPayload.output?.metadata) || undefined,
-          traceId: extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
-          subagentType:
-            extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) || undefined,
         })
         return
       }
@@ -143,10 +137,6 @@ export function createSubagentTelemetryTimelineHook(options: {
       const output = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
       const failed = isFailureOutput(output)
       const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata)
-      const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)
-      const subagentType =
-        extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
-        extractDelegationSubagentTypeFromOutput(output)
       const record = registerDelegationOutcome(
         {
           sessionId: sid,
@@ -156,8 +146,6 @@ export function createSubagentTelemetryTimelineHook(options: {
             : "subagent_telemetry_completed",
           endedAt: Date.now(),
           childRunId: childRunId || undefined,
-          traceId: traceId || undefined,
-          subagentType: subagentType || undefined,
         },
         options.maxTimelineEntries,
       )
