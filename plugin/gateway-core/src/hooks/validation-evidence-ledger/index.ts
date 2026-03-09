@@ -80,7 +80,7 @@ function classifyValidationCommand(command: string): ValidationEvidenceCategory[
     categories.add("lint")
   }
   if (
-    /\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|node\s+--test\b|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|python\d?\s+-m\s+unittest)\b/i.test(
+    /\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|node\s+--test\b|(?:npm|pnpm)\s+exec\s+vitest|npx\s+vitest|python\d?\s+-m\s+pytest|python\d?\s+-m\s+unittest|uv\s+run\s+pytest|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|make\s+selftest|make\s+install-test|python\d?\s+scripts\/selftest\.py)\b/i.test(
       value,
     )
   ) {
