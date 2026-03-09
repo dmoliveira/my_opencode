@@ -112,6 +112,7 @@ Observed:
 - `npm --prefix plugin/gateway-core run lint`
 - `node --test plugin/gateway-core/test/auto-slash-command-hook.test.mjs plugin/gateway-core/test/llm-decision-runtime.test.mjs plugin/gateway-core/test/runtime-delegation-hooks.test.mjs plugin/gateway-core/test/config-load.test.mjs`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl`
+- `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --markdown-out docs/plan/status/in_progress/llm-disagreement-rollout-report.md`
 
 ## Key takeaways
 
@@ -121,6 +122,7 @@ Observed:
 - high-risk prompts should stay on deterministic skip paths
 - provider-style vendor wording benefits from AI fallback when canonical regexes miss the phrasing
 - disagreement audits can now be aggregated into rollout recommendations with `scripts/gateway_llm_disagreement_report.mjs`
+- the same report can now emit a markdown artifact for daily human review with `--markdown-out`
 
 ### 7. Delegation fallback ambiguous failure output
 

@@ -5,6 +5,7 @@ import {
   buildLlmRolloutReport,
   parseGatewayAuditJsonl,
   recommendLlmRolloutActions,
+  renderLlmRolloutMarkdown,
   summarizeLlmDecisionDisagreements,
 } from "../dist/audit/llm-disagreement-report.js"
 
@@ -78,4 +79,32 @@ test("llm disagreement report builds rollout report from events", () => {
   assert.equal(report.summary.total, 1)
   assert.equal(report.recommendations[0]?.hook, "auto-slash-command")
   assert.equal(report.recommendations[0]?.action, "observe")
+})
+
+test("llm disagreement report renders markdown artifact", () => {
+  const markdown = renderLlmRolloutMarkdown({
+    summary: {
+      total: 3,
+      byHook: [{ hook: "agent-model-resolver", count: 3 }],
+      pairs: [
+        {
+          hook: "agent-model-resolver",
+          deterministicMeaning: "route_explore",
+          aiMeaning: "route_librarian",
+          count: 3,
+        },
+      ],
+    },
+    recommendations: [
+      {
+        hook: "agent-model-resolver",
+        action: "observe",
+        reason: "low disagreement volume; continue shadow sampling before promotion",
+        disagreementCount: 3,
+      },
+    ],
+  })
+  assert.match(markdown, /# LLM Disagreement Rollout Report/)
+  assert.match(markdown, /agent-model-resolver: observe \(3\)/)
+  assert.match(markdown, /route_explore -> route_librarian \(3\)/)
 })

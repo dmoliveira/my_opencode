@@ -128,3 +128,40 @@ export function buildLlmRolloutReport(events: GatewayAuditEvent[]): LlmRolloutRe
     recommendations: recommendLlmRolloutActions(summary),
   }
 }
+
+export function renderLlmRolloutMarkdown(report: LlmRolloutReport): string {
+  const lines: string[] = [
+    "# LLM Disagreement Rollout Report",
+    "",
+    `- Total disagreements: ${report.summary.total}`,
+    `- Hooks with disagreements: ${report.summary.byHook.length}`,
+    "",
+    "## Recommendations",
+  ]
+
+  if (report.recommendations.length === 0) {
+    lines.push("", "- No disagreement data found.")
+  } else {
+    for (const item of report.recommendations) {
+      lines.push(
+        "",
+        `- ${item.hook}: ${item.action} (${item.disagreementCount})`,
+        `  - ${item.reason}`,
+      )
+    }
+  }
+
+  lines.push("", "## Top disagreement pairs")
+  if (report.summary.pairs.length === 0) {
+    lines.push("", "- No disagreement pairs found.")
+  } else {
+    for (const pair of report.summary.pairs.slice(0, 10)) {
+      lines.push(
+        "",
+        `- ${pair.hook}: ${pair.deterministicMeaning} -> ${pair.aiMeaning} (${pair.count})`,
+      )
+    }
+  }
+
+  return `${lines.join("\n")}\n`
+}

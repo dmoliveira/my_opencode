@@ -34,3 +34,4 @@ export declare function parseGatewayAuditJsonl(text: string): GatewayAuditEvent[
 export declare function summarizeLlmDecisionDisagreements(events: GatewayAuditEvent[]): LlmDisagreementSummary;
 export declare function recommendLlmRolloutActions(summary: LlmDisagreementSummary): LlmRolloutRecommendation[];
 export declare function buildLlmRolloutReport(events: GatewayAuditEvent[]): LlmRolloutReport;
+export declare function renderLlmRolloutMarkdown(report: LlmRolloutReport): string;
