@@ -130,6 +130,7 @@ Observed:
 - initial shadow-to-assist hook candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
 - a checked-in rollout config example now exists at `docs/plan/status/in_progress/llm-rollout-config.example.json`
+- the active repo config in `opencode.json` now enables `auto-slash-command` and `provider-error-classifier` in `assist`
 
 ### 7. Delegation fallback ambiguous failure output
 

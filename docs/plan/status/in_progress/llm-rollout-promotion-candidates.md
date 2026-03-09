@@ -53,3 +53,7 @@ Branch: `plan/llm-decision-hooks`
 Canonical example file:
 
 - `docs/plan/status/in_progress/llm-rollout-config.example.json`
+
+Current repo runtime state:
+
+- `opencode.json` now enables `llmDecisionRuntime.mode = shadow` with `auto-slash-command` and `provider-error-classifier` promoted to `assist` via `hookModes`.

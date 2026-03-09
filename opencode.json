@@ -262,6 +262,22 @@
   "plugin": [
     "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
   ],
+  "llmDecisionRuntime": {
+    "enabled": true,
+    "mode": "shadow",
+    "hookModes": {
+      "auto-slash-command": "assist",
+      "provider-error-classifier": "assist"
+    },
+    "command": "opencode",
+    "model": "openai/gpt-5.1-codex-mini",
+    "timeoutMs": 30000,
+    "maxPromptChars": 1200,
+    "maxContextChars": 2400,
+    "enableCache": true,
+    "cacheTtlMs": 300000,
+    "maxCacheEntries": 256
+  },
   "instructions": [
     "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
   ]

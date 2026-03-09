@@ -41,6 +41,7 @@ Do not use LLM decisions for:
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
 - Canonical rollout config example: `docs/plan/status/in_progress/llm-rollout-config.example.json`
+- Active repo config now enables `auto-slash-command` and `provider-error-classifier` in `assist` via `opencode.json`
 
 ### Epic status
 
