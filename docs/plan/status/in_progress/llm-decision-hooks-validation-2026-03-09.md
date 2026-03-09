@@ -226,6 +226,26 @@ Outcome:
 - broader mixed-context adversarial probes are now behaving correctly for `provider-error-classifier` and `done-proof-enforcer`
 - remaining Epic 5 focus should shift to any other semantic hooks that still show live contamination issues under assist/shadow traffic
 
+### 15. Delegation fallback and validation ledger mixed-context probes
+
+Scenario:
+
+- delegation fallback classifier received adversarial contamination trying to force `R`, while actual failure text matched invalid-arguments semantics
+- validation ledger classifier received adversarial contamination trying to force `N`, while actual command was a test wrapper command
+
+Observed:
+
+- delegation fallback probe returned:
+  - char: `R`
+  - meaning: `delegation_runtime_error`
+  - duration: about `6.0s`
+- validation ledger probe returned explanatory text (`**Response** - T`) instead of a single character and was rejected as `invalid_response`
+
+Outcome:
+
+- `delegation-fallback-orchestrator` still needs more semantic hardening because this contaminated case should have resolved to invalid-arguments semantics, not runtime-error semantics
+- `validation-evidence-ledger` remains a live Epic 5 gap because contaminated wrapper-command prompts can still trigger non-compliant explanatory output
+
 ### 13. Sidecar config live runtime fix
 
 Scenario:
