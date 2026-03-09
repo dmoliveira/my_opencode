@@ -162,3 +162,39 @@ test("post-merge-sync-guard applies merge reminders to gh api PR merge", async (
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("post-merge-sync-guard downgrades benign gh merge worktree warnings", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-post-merge-"))
+  try {
+    const hook = createPostMergeSyncGuardHook({
+      directory,
+      enabled: true,
+      requireDeleteBranch: false,
+      enforceMainSyncInline: false,
+      reminderCommands: ["git pull --rebase"],
+    })
+
+    await hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-post-merge-benign-warning" },
+      output: { args: { command: "gh pr merge 10 --merge --delete-branch" } },
+      directory,
+    })
+
+    const afterPayload = {
+      input: { tool: "bash", sessionID: "session-post-merge-benign-warning" },
+      output: {
+        output:
+          "failed to run git: fatal: 'main' is already used by worktree at '/tmp/primary'\n\n[post-merge-sync-guard] Merge complete. Run cleanup sync:\n- git pull --rebase",
+      },
+      directory,
+    }
+    await hook.event("tool.execute.after", afterPayload)
+    assert.doesNotMatch(String(afterPayload.output.output), /failed to run git/)
+    assert.doesNotMatch(String(afterPayload.output.output), /already used by worktree/)
+    assert.match(String(afterPayload.output.output), /PR merged on GitHub/)
+    assert.match(String(afterPayload.output.output), /git pull --rebase/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
