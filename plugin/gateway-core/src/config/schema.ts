@@ -122,6 +122,11 @@ export interface SessionRecoveryConfig {
   autoResume: boolean;
 }
 
+// Declares hidden runtime session system context settings.
+export interface SessionRuntimeSystemContextConfig {
+  enabled: boolean;
+}
+
 // Declares retry guidance settings for failed delegated task calls.
 export interface DelegateTaskRetryConfig {
   enabled: boolean;
@@ -557,6 +562,7 @@ export interface GatewayConfig {
   notifyEvents: NotifyEventsConfig;
   pressureEscalationGuard: PressureEscalationGuardConfig;
   sessionRecovery: SessionRecoveryConfig;
+  sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
   providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
   delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
@@ -654,6 +660,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "subagent-telemetry-timeline",
       "adaptive-delegation-policy",
       "session-recovery",
+      "session-runtime-system-context",
       "delegate-task-retry",
       "validation-evidence-ledger",
       "mistake-ledger",
@@ -824,6 +831,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   sessionRecovery: {
     enabled: true,
     autoResume: true,
+  },
+  sessionRuntimeSystemContext: {
+    enabled: true,
   },
   delegateTaskRetry: {
     enabled: true,

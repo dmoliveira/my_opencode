@@ -148,6 +148,9 @@ export function loadGatewayConfig(raw) {
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
+    const sessionRuntimeSystemContextSource = source.sessionRuntimeSystemContext && typeof source.sessionRuntimeSystemContext === "object"
+        ? source.sessionRuntimeSystemContext
+        : {};
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
         : {};
@@ -526,6 +529,11 @@ export function loadGatewayConfig(raw) {
             autoResume: typeof sessionRecoverySource.autoResume === "boolean"
                 ? sessionRecoverySource.autoResume
                 : DEFAULT_GATEWAY_CONFIG.sessionRecovery.autoResume,
+        },
+        sessionRuntimeSystemContext: {
+            enabled: typeof sessionRuntimeSystemContextSource.enabled === "boolean"
+                ? sessionRuntimeSystemContextSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
         },
         delegateTaskRetry: {
             enabled: typeof delegateTaskRetrySource.enabled === "boolean"

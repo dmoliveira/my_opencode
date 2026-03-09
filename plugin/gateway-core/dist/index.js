@@ -64,6 +64,7 @@ import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
 import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
+import { createSessionRuntimeSystemContextHook } from "./hooks/session-runtime-system-context/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
 import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-timeline/index.js";
@@ -314,6 +315,10 @@ function configuredHooks(ctx) {
             client: ctx.client,
             enabled: cfg.sessionRecovery.enabled,
             autoResume: cfg.sessionRecovery.autoResume,
+        }),
+        createSessionRuntimeSystemContextHook({
+            directory,
+            enabled: cfg.sessionRuntimeSystemContext.enabled,
         }),
         createDelegateTaskRetryHook({
             enabled: cfg.delegateTaskRetry.enabled,
@@ -774,6 +779,25 @@ export default function GatewayCorePlugin(ctx) {
             });
         }
     }
+    async function chatSystemTransform(input, output) {
+        if (shouldWriteDispatchAudit("chat_system_transform_dispatch", "experimental.chat.system.transform")) {
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "dispatch",
+                reason_code: "chat_system_transform_dispatch",
+                event_type: "experimental.chat.system.transform",
+                has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+                hook_count: hooks.length,
+            });
+        }
+        for (const hook of hooks) {
+            await hook.event("experimental.chat.system.transform", {
+                input,
+                output,
+                directory,
+            });
+        }
+    }
     return {
         event,
         "tool.execute.before": toolExecuteBefore,
@@ -782,5 +806,6 @@ export default function GatewayCorePlugin(ctx) {
         "tool.execute.after": toolExecuteAfter,
         "chat.message": chatMessage,
         "experimental.chat.messages.transform": chatMessagesTransform,
+        "experimental.chat.system.transform": chatSystemTransform,
     };
 }

@@ -96,6 +96,9 @@ export interface SessionRecoveryConfig {
     enabled: boolean;
     autoResume: boolean;
 }
+export interface SessionRuntimeSystemContextConfig {
+    enabled: boolean;
+}
 export interface DelegateTaskRetryConfig {
     enabled: boolean;
 }
@@ -412,6 +415,7 @@ export interface GatewayConfig {
     notifyEvents: NotifyEventsConfig;
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
+    sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
     delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;

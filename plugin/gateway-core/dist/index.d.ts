@@ -132,6 +132,9 @@ interface ChatMessagesTransformOutput {
         }>;
     }>;
 }
+interface ChatSystemTransformOutput {
+    system: string[];
+}
 export default function GatewayCorePlugin(ctx: GatewayContext): {
     event(input: GatewayEventPayload): Promise<void>;
     "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>;
@@ -142,5 +145,12 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     "experimental.chat.messages.transform"(input: {
         sessionID?: string;
     }, output: ChatMessagesTransformOutput): Promise<void>;
+    "experimental.chat.system.transform"(input: {
+        sessionID?: string;
+        model?: {
+            providerID?: string;
+            modelID?: string;
+        };
+    }, output: ChatSystemTransformOutput): Promise<void>;
 };
 export {};

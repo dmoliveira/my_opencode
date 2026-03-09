@@ -28,6 +28,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "subagent-telemetry-timeline",
             "adaptive-delegation-policy",
             "session-recovery",
+            "session-runtime-system-context",
             "delegate-task-retry",
             "validation-evidence-ledger",
             "mistake-ledger",
@@ -198,6 +199,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
     sessionRecovery: {
         enabled: true,
         autoResume: true,
+    },
+    sessionRuntimeSystemContext: {
+        enabled: true,
     },
     delegateTaskRetry: {
         enabled: true,
