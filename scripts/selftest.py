@@ -171,6 +171,9 @@ RELEASE_NOTE_QUALITY_CHECK_SCRIPT = (
 )
 WAVE_LINKAGE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "wave_linkage_check.py"
 WAVE_HANDOFF_SUMMARY_SCRIPT = REPO_ROOT / "scripts" / "wave_handoff_summary.py"
+GATEWAY_LIVE_RELAUNCH_SMOKE_SCRIPT = (
+    REPO_ROOT / "scripts" / "gateway_live_relaunch_smoke.py"
+)
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
 HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
@@ -1484,7 +1487,9 @@ exit 0
             check=False,
             cwd=REPO_ROOT,
         )
-        expect(result.returncode == 0, f"session current --json failed: {result.stderr}")
+        expect(
+            result.returncode == 0, f"session current --json failed: {result.stderr}"
+        )
         session_current_payload = parse_json_output(result.stdout)
         expect(
             session_current_payload.get("result") == "PASS"
@@ -3450,6 +3455,225 @@ exit 0
         expect(
             isinstance(gateway_doctor.get("status", {}).get("hook_diagnostics"), dict),
             "gateway doctor should include hook diagnostics in status",
+        )
+
+        smoke_home = tmp / "gateway-smoke-home"
+        smoke_repo = tmp / "gateway-smoke-repo"
+        smoke_output_dir = tmp / "gateway-smoke-output"
+        smoke_plugin_dist = (
+            smoke_home
+            / ".config"
+            / "opencode"
+            / "my_opencode"
+            / "plugin"
+            / "gateway-core"
+            / "dist"
+        )
+        smoke_source_dist = smoke_repo / "plugin" / "gateway-core" / "dist"
+        smoke_plugin_dist.mkdir(parents=True, exist_ok=True)
+        smoke_source_dist.mkdir(parents=True, exist_ok=True)
+        (smoke_repo / "docs").mkdir(parents=True, exist_ok=True)
+        (smoke_repo / "README.md").write_text("# smoke\n", encoding="utf-8")
+        (smoke_repo / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+        (smoke_repo / "docs" / "quickstart.md").write_text(
+            "# quickstart\n", encoding="utf-8"
+        )
+        for rel in [
+            "hooks/delegation-concurrency-guard/index.js",
+            "hooks/shared/delegation-runtime-state.js",
+            "hooks/shared/delegation-trace.js",
+            "hooks/subagent-lifecycle-supervisor/index.js",
+            "hooks/subagent-telemetry-timeline/index.js",
+        ]:
+            target_live = smoke_plugin_dist / rel
+            target_source = smoke_source_dist / rel
+            target_live.parent.mkdir(parents=True, exist_ok=True)
+            target_source.parent.mkdir(parents=True, exist_ok=True)
+            target_live.write_text(f"live-{rel}\n", encoding="utf-8")
+            target_source.write_text(f"source-{rel}\n", encoding="utf-8")
+
+        smoke_bin = tmp / "gateway-smoke-bin"
+        smoke_bin.mkdir(parents=True, exist_ok=True)
+        opencode_stub = smoke_bin / "opencode"
+        opencode_stub.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, sys\n"
+            "session = 'ses_selftest_smoke'\n"
+            "events = [\n"
+            "  {'type':'text','sessionID':'ses_child_noise','part':{'text':'PASS'}},\n"
+            "  {'type':'tool_use','sessionID':session,'part':{'state':{'status':'completed','input':{'description':'first'}}}},\n"
+            "  {'type':'tool_use','sessionID':session,'part':{'state':{'status':'completed','input':{'description':'second'}}}},\n"
+            "  {'type':'tool_use','sessionID':session,'part':{'state':{'status':'completed','input':{'description':'third'}}}},\n"
+            "  {'type':'text','sessionID':session,'part':{'text':'PA'}},\n"
+            "  {'type':'text','sessionID':session,'part':{'text':'SS'}}\n"
+            "]\n"
+            "for item in events:\n"
+            "    print(json.dumps(item))\n",
+            encoding="utf-8",
+        )
+        opencode_stub.chmod(0o755)
+        smoke_env = os.environ.copy()
+        smoke_env["HOME"] = str(smoke_home)
+        smoke_env["PATH"] = f"{smoke_bin}:{smoke_env.get('PATH', '')}"
+        smoke_env["XDG_CACHE_HOME"] = str(smoke_home / ".cache")
+        smoke_result = subprocess.run(
+            [
+                sys.executable,
+                str(GATEWAY_LIVE_RELAUNCH_SMOKE_SCRIPT),
+                "--home",
+                str(smoke_home),
+                "--repo-root",
+                str(smoke_repo),
+                "--sync-source-dist",
+                str(smoke_source_dist),
+                "--output-dir",
+                str(smoke_output_dir),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=smoke_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            smoke_result.returncode == 0,
+            f"gateway live relaunch smoke failed: {smoke_result.stderr}",
+        )
+        smoke_payload = parse_json_output(smoke_result.stdout)
+        expect(
+            smoke_payload.get("result") == "PASS",
+            "gateway live relaunch smoke should report PASS",
+        )
+        expect(
+            Path(str(smoke_payload.get("hash_manifest", ""))).exists(),
+            "gateway live relaunch smoke should emit hash manifest when syncing dist",
+        )
+        expect(
+            Path(str(smoke_payload.get("stdout_path", ""))).exists()
+            and Path(str(smoke_payload.get("stderr_path", ""))).exists(),
+            "gateway live relaunch smoke should emit stdout and stderr artifacts",
+        )
+        for rel in [
+            "hooks/delegation-concurrency-guard/index.js",
+            "hooks/shared/delegation-runtime-state.js",
+            "hooks/shared/delegation-trace.js",
+            "hooks/subagent-lifecycle-supervisor/index.js",
+            "hooks/subagent-telemetry-timeline/index.js",
+        ]:
+            restored = (smoke_plugin_dist / rel).read_text(encoding="utf-8")
+            expect(
+                restored == f"live-{rel}\n",
+                "gateway live relaunch smoke should restore live plugin dist",
+            )
+
+        timeout_bin = tmp / "gateway-timeout-bin"
+        timeout_bin.mkdir(parents=True, exist_ok=True)
+        timeout_stub = timeout_bin / "opencode"
+        timeout_stub.write_text(
+            "#!/usr/bin/env python3\nimport time\ntime.sleep(2)\n",
+            encoding="utf-8",
+        )
+        timeout_stub.chmod(0o755)
+        timeout_output_dir = tmp / "gateway-timeout-output"
+        timeout_env = os.environ.copy()
+        timeout_env["HOME"] = str(smoke_home)
+        timeout_env["PATH"] = f"{timeout_bin}:{timeout_env.get('PATH', '')}"
+        timeout_env["XDG_CACHE_HOME"] = str(smoke_home / ".cache")
+        timeout_result = subprocess.run(
+            [
+                sys.executable,
+                str(GATEWAY_LIVE_RELAUNCH_SMOKE_SCRIPT),
+                "--home",
+                str(smoke_home),
+                "--repo-root",
+                str(smoke_repo),
+                "--sync-source-dist",
+                str(smoke_source_dist),
+                "--output-dir",
+                str(timeout_output_dir),
+                "--timeout-seconds",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=timeout_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            timeout_result.returncode == 1,
+            "gateway live relaunch smoke should fail cleanly on timeout",
+        )
+        timeout_payload = parse_json_output(timeout_result.stdout)
+        expect(
+            timeout_payload.get("result") == "FAIL", "timeout smoke should report FAIL"
+        )
+        expect(
+            timeout_payload.get("reason") == "timeout",
+            "timeout smoke should report timeout reason",
+        )
+        expect(
+            Path(str(timeout_payload.get("stdout_path", ""))).parent
+            == timeout_output_dir,
+            "timeout smoke should still report artifact paths",
+        )
+        for rel in [
+            "hooks/delegation-concurrency-guard/index.js",
+            "hooks/shared/delegation-runtime-state.js",
+            "hooks/shared/delegation-trace.js",
+            "hooks/subagent-lifecycle-supervisor/index.js",
+            "hooks/subagent-telemetry-timeline/index.js",
+        ]:
+            restored = (smoke_plugin_dist / rel).read_text(encoding="utf-8")
+            expect(
+                restored == f"live-{rel}\n",
+                "gateway live relaunch smoke should restore live plugin dist after timeout",
+            )
+
+        blocker_bin = tmp / "gateway-blocker-bin"
+        blocker_bin.mkdir(parents=True, exist_ok=True)
+        blocker_stub = blocker_bin / "opencode"
+        blocker_stub.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, sys\n"
+            "print(json.dumps({'type':'text','sessionID':'ses_blocker','part':{'text':'PASS'}}))\n"
+            "print('duplicate running blocker', file=sys.stderr)\n",
+            encoding="utf-8",
+        )
+        blocker_stub.chmod(0o755)
+        blocker_output_dir = tmp / "gateway-blocker-output"
+        blocker_env = os.environ.copy()
+        blocker_env["HOME"] = str(smoke_home)
+        blocker_env["PATH"] = f"{blocker_bin}:{blocker_env.get('PATH', '')}"
+        blocker_env["XDG_CACHE_HOME"] = str(smoke_home / ".cache")
+        blocker_result = subprocess.run(
+            [
+                sys.executable,
+                str(GATEWAY_LIVE_RELAUNCH_SMOKE_SCRIPT),
+                "--home",
+                str(smoke_home),
+                "--repo-root",
+                str(smoke_repo),
+                "--output-dir",
+                str(blocker_output_dir),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=blocker_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            blocker_result.returncode == 1,
+            "gateway live relaunch smoke should fail when blocker text is present",
+        )
+        blocker_payload = parse_json_output(blocker_result.stdout)
+        expect(
+            blocker_payload.get("blocker_detected") is True,
+            "blocker smoke should set blocker_detected",
         )
 
         notify_policy_path = (

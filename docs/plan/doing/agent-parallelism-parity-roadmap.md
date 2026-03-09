@@ -300,3 +300,29 @@ Immediate next slice:
 
 - decide whether to formalize the live relaunch smoke into selftest/install-smoke coverage
 - if so, add a non-interactive harness that can safely swap or inject the local gateway plugin path without touching user config
+
+### 2026-03-09 - Automation harness for live relaunch smoke
+
+Current status: `doing`
+
+Findings:
+
+- Added a reusable non-interactive harness in `scripts/gateway_live_relaunch_smoke.py` that can temporarily sync selected `gateway-core/dist` files into the installed plugin path, run the same-session relaunch smoke, capture artifact paths and hash evidence, and restore the installed copy afterward.
+- Integrated that harness into `make install-test` so the installer smoke now covers the live parallel-wave-then-relaunch path under an isolated temp `HOME` and `XDG_CACHE_HOME`.
+- Added deterministic selftest coverage for the harness by stubbing `opencode`, asserting PASS output, emitted artifacts, and restoration of the installed plugin dist files.
+
+Primary evidence references:
+
+- `scripts/gateway_live_relaunch_smoke.py`
+- `Makefile:132`
+- `scripts/selftest.py:3460`
+
+Validation:
+
+- `python3 -m py_compile scripts/*.py && make install-test`
+- `npm run build && node --test test/runtime-delegation-hooks.test.mjs test/delegation-concurrency-guard-hook.test.mjs test/subagent-lifecycle-supervisor-hook.test.mjs`
+
+Immediate next slice:
+
+- consider whether this harness should also be callable from `scripts/selftest.py` against a real installed tree in CI
+- if install-smoke runtime is acceptable, keep selftest deterministic and let install-test remain the canonical live relaunch verification path

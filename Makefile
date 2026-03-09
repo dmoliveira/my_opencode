@@ -131,6 +131,7 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" doctor --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" status --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" doctor --json; \
+	HOME="$$TMP_HOME" XDG_CACHE_HOME="$$TMP_HOME/.cache" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_live_relaunch_smoke.py" --home "$$TMP_HOME" --repo-root "$$TMP_HOME/.config/opencode/my_opencode" --sync-source-dist "$(PWD)/plugin/gateway-core/dist" --output-dir "$$TMP_HOME/.config/opencode/my_opencode/runtime/live-relaunch-smoke" --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" backup --name install-test; \
