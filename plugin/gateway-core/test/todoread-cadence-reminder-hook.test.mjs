@@ -13,6 +13,7 @@ test("todoread-cadence-reminder appends start reminder on session-start checkpoi
   await hook.event("tool.execute.after", payload)
 
   assert.match(String(payload.output.output), /\[todoread CADENCE REMINDER\]/)
+  assert.match(String(payload.output.output), /Review the todo list now/)
 })
 
 test("todoread-cadence-reminder appends checkpoint reminder after cooldown", async () => {
@@ -24,6 +25,7 @@ test("todoread-cadence-reminder appends checkpoint reminder after cooldown", asy
   await hook.event("tool.execute.after", second)
 
   assert.match(String(second.output.output), /\[todoread CADENCE REMINDER\]/)
+  assert.match(String(second.output.output), /Review or refresh the todo list/)
 })
 
 test("todoread-cadence-reminder resets state after session deletion", async () => {

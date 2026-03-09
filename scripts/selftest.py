@@ -1529,6 +1529,44 @@ exit 0
             and len(session_handoff_payload.get("next_actions", [])) >= 2,
             "session handoff should include actionable next steps",
         )
+        expect(
+            isinstance(session_handoff_payload.get("launch_command"), str)
+            and session_handoff_payload.get("launch_command", "").startswith(
+                "opencode "
+            ),
+            "session handoff should include a launch command for reopening in the target cwd",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "handoff",
+                "--launch-cwd",
+                str(REPO_ROOT),
+                "--fork",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"session handoff --launch-cwd --fork --json failed: {result.stderr}",
+        )
+        session_handoff_launch_payload = parse_json_output(result.stdout)
+        expect(
+            session_handoff_launch_payload.get("launch_cwd") == str(REPO_ROOT),
+            "session handoff should honor explicit launch cwd overrides",
+        )
+        expect(
+            session_handoff_launch_payload.get("resume_command", "").endswith(
+                " --fork"
+            ),
+            "session handoff should expose fork resume command when requested",
+        )
 
         init_workspace = tmp / "init-deep-workspace"
         src_dir = init_workspace / "src"
@@ -1780,7 +1818,9 @@ exit 0
             check=False,
             cwd=REPO_ROOT,
         )
-        expect(result.returncode == 0, f"claims release issue-101 failed: {result.stderr}")
+        expect(
+            result.returncode == 0, f"claims release issue-101 failed: {result.stderr}"
+        )
 
         result = subprocess.run(
             [
@@ -1809,7 +1849,12 @@ exit 0
         claims_state = load_json_file(claims_state_path)
         claims_state_claims = claims_state.get("claims")
         agent_pool_path = (
-            home / ".config" / "opencode" / "my_opencode" / "runtime" / "agent_pool.json"
+            home
+            / ".config"
+            / "opencode"
+            / "my_opencode"
+            / "runtime"
+            / "agent_pool.json"
         )
         previous_agent_pool_text = None
         if agent_pool_path.exists():
@@ -1865,11 +1910,16 @@ exit 0
             "claims expire-stale should expire stale claims in apply mode",
         )
         agent_pool_state = load_json_file(agent_pool_path)
-        agent_entries = agent_pool_state.get("agents") if isinstance(agent_pool_state, dict) else []
+        agent_entries = (
+            agent_pool_state.get("agents") if isinstance(agent_pool_state, dict) else []
+        )
         agent_alex = {}
         if isinstance(agent_entries, list):
             for entry in agent_entries:
-                if isinstance(entry, dict) and str(entry.get("agent_id") or "") == "alex":
+                if (
+                    isinstance(entry, dict)
+                    and str(entry.get("agent_id") or "") == "alex"
+                ):
                     agent_alex = entry
                     break
         expect(
@@ -2254,7 +2304,12 @@ exit 0
         )
 
         workflow_state_path = (
-            home / ".config" / "opencode" / "my_opencode" / "runtime" / "workflow_state.json"
+            home
+            / ".config"
+            / "opencode"
+            / "my_opencode"
+            / "runtime"
+            / "workflow_state.json"
         )
         workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_state_path.write_text(
@@ -2388,7 +2443,12 @@ exit 0
         )
 
         workflow_state_path = (
-            home / ".config" / "opencode" / "my_opencode" / "runtime" / "workflow_state.json"
+            home
+            / ".config"
+            / "opencode"
+            / "my_opencode"
+            / "runtime"
+            / "workflow_state.json"
         )
         workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_state_path.write_text(
@@ -2722,7 +2782,9 @@ exit 0
             check=False,
             cwd=REPO_ROOT,
         )
-        expect(result.returncode == 0, f"delivery handoff start failed: {result.stderr}")
+        expect(
+            result.returncode == 0, f"delivery handoff start failed: {result.stderr}"
+        )
         delivery_handoff_payload = parse_json_output(result.stdout)
         expect(
             delivery_handoff_payload.get("status") == "handoff-pending"
@@ -2769,7 +2831,9 @@ exit 0
             check=False,
             cwd=REPO_ROOT,
         )
-        expect(result.returncode == 0, f"delivery latest status failed: {result.stderr}")
+        expect(
+            result.returncode == 0, f"delivery latest status failed: {result.stderr}"
+        )
         delivery_latest_payload = parse_json_output(result.stdout)
         expect(
             delivery_latest_payload.get("run_id") == delivery_handoff_run_id
@@ -4559,10 +4623,14 @@ index 3333333..4444444 100644
         )
 
         docs_automation_fixture = tmp / "docs_automation_fixture"
-        (docs_automation_fixture / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+        (docs_automation_fixture / ".github" / "workflows").mkdir(
+            parents=True, exist_ok=True
+        )
         (docs_automation_fixture / "docs" / "pages").mkdir(parents=True, exist_ok=True)
         (docs_automation_fixture / "docs" / "plan").mkdir(parents=True, exist_ok=True)
-        (docs_automation_fixture / ".github" / "workflows" / "docs-automation.yml").write_text(
+        (
+            docs_automation_fixture / ".github" / "workflows" / "docs-automation.yml"
+        ).write_text(
             """name: Docs Automation
 jobs:
   sync-wiki:
@@ -4571,15 +4639,28 @@ jobs:
             encoding="utf-8",
         )
         (docs_automation_fixture / "docs" / "pages" / "index.html").write_text(
-            '<html><body><a href="https://example.com">Placeholder</a></body></html>' + "\n",
+            '<html><body><a href="https://example.com">Placeholder</a></body></html>'
+            + "\n",
             encoding="utf-8",
         )
-        (docs_automation_fixture / "docs" / "plan" / "v0.4-release-index.md").write_text(
-            "| Release | Notes |" + "\n" + "|---|---|" + "\n" + "| v0.4.19 | fixture |" + "\n",
+        (
+            docs_automation_fixture / "docs" / "plan" / "v0.4-release-index.md"
+        ).write_text(
+            "| Release | Notes |"
+            + "\n"
+            + "|---|---|"
+            + "\n"
+            + "| v0.4.19 | fixture |"
+            + "\n",
             encoding="utf-8",
         )
-        (docs_automation_fixture / "docs" / "plan" / "docs-automation-summary.md").write_text(
-            "# Docs Automation Summary" + "\n\n" + "- latest_indexed_release: v0.4.18" + "\n",
+        (
+            docs_automation_fixture / "docs" / "plan" / "docs-automation-summary.md"
+        ).write_text(
+            "# Docs Automation Summary"
+            + "\n\n"
+            + "- latest_indexed_release: v0.4.18"
+            + "\n",
             encoding="utf-8",
         )
 
@@ -4616,7 +4697,8 @@ jobs:
             "docs automation sync check should group reason codes by workflow, pages, and summary areas",
         )
         expect(
-            docs_automation_fixture_payload.get("recommended_next_step") == "run: make docs-automation-check",
+            docs_automation_fixture_payload.get("recommended_next_step")
+            == "run: make docs-automation-check",
             "docs automation sync check should recommend the full check command when multiple failures exist",
         )
 
@@ -4647,28 +4729,61 @@ jobs:
         )
         expect(
             "## Suggested Fixes" in docs_automation_fixture_summary
-            and "recommended_next_step: run: make docs-automation-check" in docs_automation_fixture_summary,
+            and "recommended_next_step: run: make docs-automation-check"
+            in docs_automation_fixture_summary,
             "docs automation summary should surface suggested fixes and next-step guidance for broken fixture inputs",
         )
 
-        docs_automation_summary_only_fixture = tmp / "docs_automation_summary_only_fixture"
-        (docs_automation_summary_only_fixture / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
-        (docs_automation_summary_only_fixture / "docs" / "pages").mkdir(parents=True, exist_ok=True)
-        (docs_automation_summary_only_fixture / "docs" / "plan").mkdir(parents=True, exist_ok=True)
-        (docs_automation_summary_only_fixture / ".github" / "workflows" / "docs-automation.yml").write_text(
-            (REPO_ROOT / ".github" / "workflows" / "docs-automation.yml").read_text(encoding="utf-8"),
+        docs_automation_summary_only_fixture = (
+            tmp / "docs_automation_summary_only_fixture"
+        )
+        (docs_automation_summary_only_fixture / ".github" / "workflows").mkdir(
+            parents=True, exist_ok=True
+        )
+        (docs_automation_summary_only_fixture / "docs" / "pages").mkdir(
+            parents=True, exist_ok=True
+        )
+        (docs_automation_summary_only_fixture / "docs" / "plan").mkdir(
+            parents=True, exist_ok=True
+        )
+        (
+            docs_automation_summary_only_fixture
+            / ".github"
+            / "workflows"
+            / "docs-automation.yml"
+        ).write_text(
+            (REPO_ROOT / ".github" / "workflows" / "docs-automation.yml").read_text(
+                encoding="utf-8"
+            ),
             encoding="utf-8",
         )
-        (docs_automation_summary_only_fixture / "docs" / "pages" / "index.html").write_text(
+        (
+            docs_automation_summary_only_fixture / "docs" / "pages" / "index.html"
+        ).write_text(
             (REPO_ROOT / "docs" / "pages" / "index.html").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-        (docs_automation_summary_only_fixture / "docs" / "plan" / "v0.4-release-index.md").write_text(
-            (REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md").read_text(encoding="utf-8"),
+        (
+            docs_automation_summary_only_fixture
+            / "docs"
+            / "plan"
+            / "v0.4-release-index.md"
+        ).write_text(
+            (REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md").read_text(
+                encoding="utf-8"
+            ),
             encoding="utf-8",
         )
-        (docs_automation_summary_only_fixture / "docs" / "plan" / "docs-automation-summary.md").write_text(
-            "# Docs Automation Summary" + "\n\n" + "- latest_indexed_release: v0.4.18" + "\n",
+        (
+            docs_automation_summary_only_fixture
+            / "docs"
+            / "plan"
+            / "docs-automation-summary.md"
+        ).write_text(
+            "# Docs Automation Summary"
+            + "\n\n"
+            + "- latest_indexed_release: v0.4.18"
+            + "\n",
             encoding="utf-8",
         )
         docs_automation_summary_only_update = subprocess.run(
@@ -4689,7 +4804,10 @@ jobs:
             "docs automation summary updater should repair a summary-only drift fixture in one run",
         )
         docs_automation_summary_only_text = (
-            docs_automation_summary_only_fixture / "docs" / "plan" / "docs-automation-summary.md"
+            docs_automation_summary_only_fixture
+            / "docs"
+            / "plan"
+            / "docs-automation-summary.md"
         ).read_text(encoding="utf-8")
         expect(
             "summary_status: ok" in docs_automation_summary_only_text

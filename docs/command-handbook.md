@@ -165,11 +165,12 @@ Use these directly in OpenCode:
 /session show <session-id> --json
 /session search <query> --json
 /session handoff --json
+/session handoff --launch-cwd ../my_opencode-wt-task --fork --json
 /session doctor --json
 ```
 
 
-`/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions.
+`/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
 ## Claims and workflow coordination 🧩
 

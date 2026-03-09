@@ -26,11 +26,13 @@ Optional next step when you want lightweight repo or docs context:
 /mcp profile research
 ```
 
-Run `/session handoff --json` after you have at least one indexed digest.
+Run `/session handoff --json` after you have at least one indexed digest. If you need to reopen work in a different linked worktree, use `/session handoff --launch-cwd <worktree-path> --fork --json` to get a ready-to-run launch command.
+
+For automation-friendly help output, prefer command-specific help from this repo (for example `python3 scripts/session_command.py help`) because the upstream `opencode --help` banner formatting is not controlled here.
 
 ## Common productivity flows
 
-Before you start a task, create a dedicated git worktree branch from the current root branch. Keep the main project folder on `main`, never `git checkout` or `git switch` that folder onto a task branch, and treat the primary project folder on protected branches (`main`, `master`) as edit-blocked by default. Bash usage in that primary protected worktree is limited to inspection, validation, and sync/setup commands such as `git fetch`, `git fetch --prune`, `git pull --rebase`, `git worktree add ...`, and `git stash push|pop|list|show`. Linked worktrees are the place to do normal task mutations.
+Before you start a task, create a dedicated git worktree branch from the current root branch. Keep the main project folder on `main`, never `git checkout` or `git switch` that folder onto a task branch, and treat the primary project folder on protected branches (`main`, `master`) as edit-blocked by default. Bash usage in that primary protected worktree is limited to inspection, validation, and sync/setup commands such as `git fetch`, `git fetch --prune`, `git pull --rebase`, `git worktree add ...`, and `git stash push|pop|list|show`. Linked worktrees are the place to do normal task mutations, and they stay editable as long as the linked worktree itself is on a non-protected task branch.
 
 ```text
 /workflow template init ship --json

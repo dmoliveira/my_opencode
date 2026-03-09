@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -24,7 +25,7 @@ DEFAULT_DIGEST_PATH = Path(
 def _usage() -> int:
     print(
         "usage: /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--json] | /session doctor [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--json]"
     )
     return 2
 
@@ -116,11 +117,17 @@ def _emit(payload: dict, json_output: bool) -> int:
         print("---------------")
         print(f"session_id: {payload.get('session_id')}")
         print(f"cwd: {payload.get('cwd')}")
+        if payload.get("launch_cwd"):
+            print(f"launch_cwd: {payload.get('launch_cwd')}")
         print(f"last_event_at: {payload.get('last_event_at')}")
         print(f"event_count: {payload.get('event_count')}")
         print(f"last_reason: {payload.get('last_reason')}")
         if payload.get("git_branch"):
             print(f"git_branch: {payload.get('git_branch')}")
+        if payload.get("launch_command"):
+            print(f"launch_command: {payload.get('launch_command')}")
+        if payload.get("resume_command"):
+            print(f"resume_command: {payload.get('resume_command')}")
         if isinstance(payload.get("next_actions"), list) and payload.get(
             "next_actions"
         ):
@@ -294,11 +301,28 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
     args = [arg for arg in argv if arg != "--json"]
     target_id: str | None = None
-    if args:
-        if len(args) == 2 and args[0] == "--id":
-            target_id = args[1]
-        else:
-            return _usage()
+    launch_cwd: str | None = None
+    fork = False
+    cursor = 0
+    while cursor < len(args):
+        token = args[cursor]
+        if token == "--id":
+            if cursor + 1 >= len(args):
+                return _usage()
+            target_id = args[cursor + 1]
+            cursor += 2
+            continue
+        if token == "--launch-cwd":
+            if cursor + 1 >= len(args):
+                return _usage()
+            launch_cwd = args[cursor + 1]
+            cursor += 2
+            continue
+        if token == "--fork":
+            fork = True
+            cursor += 1
+            continue
+        return _usage()
 
     try:
         rows = _session_rows(_load_index(index_path))
@@ -356,11 +380,24 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
     if plan_status not in {"idle", "completed"}:
         next_actions.insert(0, "/autoflow status --json")
 
+    resolved_launch_cwd = launch_cwd or selected.get("cwd")
+    launch_command = ""
+    resume_command = ""
+    if isinstance(resolved_launch_cwd, str) and resolved_launch_cwd.strip():
+        quoted_cwd = shlex.quote(resolved_launch_cwd)
+        launch_command = f"opencode {quoted_cwd}"
+        resume_command = f"opencode {quoted_cwd} --session {shlex.quote(str(selected.get('session_id') or ''))}"
+        if fork:
+            resume_command = f"{resume_command} --fork"
+        next_actions.insert(0, launch_command)
+        next_actions.insert(1, resume_command)
+
     payload = {
         "result": "PASS",
         "command": "handoff",
         "session_id": selected.get("session_id"),
         "cwd": selected.get("cwd"),
+        "launch_cwd": resolved_launch_cwd,
         "started_at": selected.get("started_at"),
         "last_event_at": selected.get("last_event_at"),
         "event_count": selected.get("event_count"),
@@ -369,6 +406,9 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         "git_branch": git.get("branch"),
         "git_status_count": git.get("status_count"),
         "plan_status": plan_status,
+        "launch_command": launch_command,
+        "resume_command": resume_command,
+        "fork": fork,
         "next_actions": next_actions,
     }
     return _emit(payload, json_output)
