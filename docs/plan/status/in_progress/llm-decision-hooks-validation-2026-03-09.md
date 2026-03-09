@@ -300,6 +300,35 @@ Outcome:
 - there is now a repeatable scenario-based reliability harness for the upgraded semantic hooks
 - this complements live traffic disagreement reports with deterministic scenario accuracy tracking
 
+Next scenario targets:
+
+- expand from semantic hook decisions into progress/enforcer workflows such as `todo-continuation-enforcer` and completion gating loops
+- report should capture expected trigger/action vs actual trigger/action, not just decision char accuracy
+
+### 18. Workflow scenario reliability report
+
+Scenario set:
+
+- `todo-continuation-enforcer`
+  - pending marker on idle
+  - soft next steps with continue intent armed
+  - soft next steps without continue intent
+- `done-proof-enforcer`
+  - missing proof should rewrite to pending validation
+  - complete proof should keep done state
+
+Observed:
+
+- total scenarios: `5`
+- correct actions: `5`
+- accuracy: `100%`
+- markdown artifact written to `docs/plan/status/in_progress/workflow-scenario-report.md`
+
+Outcome:
+
+- workflow/enforcer scenario reporting is now in place alongside the semantic hook reliability report
+- we now track expected trigger/action vs actual trigger/action for unfinished-work and completion-gating flows
+
 ### 13. Sidecar config live runtime fix
 
 Scenario:

@@ -43,6 +43,7 @@ Do not use LLM decisions for:
 - Canonical rollout config example: `docs/plan/status/in_progress/llm-rollout-config.example.json`
 - Live runtime config path: `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`) now carries gateway plugin settings without violating OpenCode root schema
 - Scenario reliability fixtures live in `docs/plan/status/in_progress/llm-scenario-fixtures.json`
+- Workflow scenario artifact lives in `docs/plan/status/in_progress/workflow-scenario-report.md`
 
 ### Epic status
 
@@ -53,7 +54,7 @@ Do not use LLM decisions for:
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry collection is now waiting on real traffic volume. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, and sanitized fallback failure classification are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and a scenario-report harness now exists for accuracy/latency tracking across representative requests; current checked scenario set is passing at 100% across 5 representative cases. |
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; current checked semantic set passes 11/11 and workflow set passes 5/5. |
 | Epic 7 - Rollout and cleanup | pending | No rollout promotion or heuristic removal yet. |
 
 ### Task status by backlog item
@@ -68,6 +69,22 @@ Do not use LLM decisions for:
 | `delegation-fallback-orchestrator` | done | Ambiguous failure output now classifies into fallback reason codes. |
 | validation command and output semantic fallback | done | Wrapper command classification shipped in validation ledger. |
 | done-proof and PR-body semantic fallback | done | Both `pr-body-evidence-guard` and `done-proof-enforcer` semantic fallback paths are implemented and validated. |
+
+## Next scenario expansion
+
+- Extend the scenario harness beyond semantic LLM decisions into workflow enforcers and progress loops.
+- Priority workflow cases to model next:
+  - unfinished-work / pending-task continuation (`todo-continuation-enforcer`)
+  - completion gating with missing proof (`done-proof-enforcer` end-state flows)
+  - validation ledger plus completion interaction
+  - delegation retry/fallback after partial progress
+- For each scenario set, track:
+  - scenario id
+  - request type
+  - expected trigger/action
+  - actual trigger/action
+  - pass/fail
+  - duration or event count when relevant
 
 ### Epic 1 - Build the decision runtime
 
