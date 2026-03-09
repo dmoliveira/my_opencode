@@ -94,10 +94,10 @@ export function createValidationEvidenceLedgerHook(options) {
             if (commandFailed(eventPayload.output.output)) {
                 return;
             }
-            markValidationEvidence(sid, categories);
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
+            markValidationEvidence(sid, categories, directory);
             writeGatewayEventAudit(directory, {
                 hook: "validation-evidence-ledger",
                 stage: "state",

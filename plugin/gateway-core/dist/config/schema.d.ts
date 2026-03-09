@@ -96,6 +96,16 @@ export interface SessionRecoveryConfig {
     enabled: boolean;
     autoResume: boolean;
 }
+export interface SessionRuntimeContextInjectorConfig {
+    enabled: boolean;
+}
+export interface SessionRuntimeNotifierConfig {
+    enabled: boolean;
+    durationMs: number;
+}
+export interface SessionRuntimeVisibleNoteConfig {
+    enabled: boolean;
+}
 export interface DelegateTaskRetryConfig {
     enabled: boolean;
 }
@@ -412,6 +422,9 @@ export interface GatewayConfig {
     notifyEvents: NotifyEventsConfig;
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
+    sessionRuntimeContextInjector: SessionRuntimeContextInjectorConfig;
+    sessionRuntimeNotifier: SessionRuntimeNotifierConfig;
+    sessionRuntimeVisibleNote: SessionRuntimeVisibleNoteConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
     delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;

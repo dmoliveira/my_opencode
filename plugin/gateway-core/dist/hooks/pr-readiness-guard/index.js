@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
-import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js";
+import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 // Returns true when git worktree has no pending tracked or untracked changes.
 function isWorktreeClean(directory) {
     try {
@@ -51,8 +51,8 @@ export function createPrReadinessGuardHook(options) {
             if (!options.requireValidationEvidence || !sessionId || required.length === 0) {
                 return;
             }
-            const missing = missingValidationMarkers(sessionId, required);
-            if (missing.length === 0) {
+            const status = validationEvidenceStatus(sessionId, required, directory);
+            if (status.missing.length === 0) {
                 return;
             }
             writeGatewayEventAudit(directory, {
@@ -61,7 +61,7 @@ export function createPrReadinessGuardHook(options) {
                 reason_code: "pr_create_missing_validation",
                 session_id: sessionId,
             });
-            throw new Error(`[pr-readiness-guard] Missing validation evidence before PR create: ${missing.join(", ")}.`);
+            throw new Error(`[pr-readiness-guard] Missing validation evidence before PR create: ${status.missing.join(", ")}. Evidence must be recorded in this session or the current worktree before PR creation.`);
         },
     };
 }

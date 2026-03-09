@@ -1,5 +1,6 @@
+import { execFileSync } from "node:child_process";
 const evidenceBySession = new Map();
-// Returns blank evidence snapshot.
+const evidenceByWorktree = new Map();
 function emptyEvidence() {
     return {
         lint: false,
@@ -10,7 +11,57 @@ function emptyEvidence() {
         updatedAt: "",
     };
 }
-// Resolves evidence category for marker token when supported.
+function evidenceScopeKey(directory) {
+    const cwd = directory.trim();
+    if (!cwd) {
+        return "";
+    }
+    try {
+        const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+            cwd,
+            stdio: ["ignore", "pipe", "ignore"],
+        })
+            .toString("utf-8")
+            .trim();
+        const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+            cwd,
+            stdio: ["ignore", "pipe", "ignore"],
+        })
+            .toString("utf-8")
+            .trim();
+        return `${root}::${branch || cwd}`;
+    }
+    catch {
+        return cwd;
+    }
+}
+function mergeEvidence(sessionSnapshot, worktreeSnapshot) {
+    return {
+        lint: sessionSnapshot.lint || worktreeSnapshot.lint,
+        test: sessionSnapshot.test || worktreeSnapshot.test,
+        typecheck: sessionSnapshot.typecheck || worktreeSnapshot.typecheck,
+        build: sessionSnapshot.build || worktreeSnapshot.build,
+        security: sessionSnapshot.security || worktreeSnapshot.security,
+        updatedAt: sessionSnapshot.updatedAt || worktreeSnapshot.updatedAt,
+    };
+}
+function computeMissing(snapshot, markers) {
+    const missing = [];
+    for (const marker of markers) {
+        const normalized = marker.trim().toLowerCase();
+        if (!normalized) {
+            continue;
+        }
+        const category = markerCategory(normalized);
+        if (!category) {
+            continue;
+        }
+        if (!snapshot[category]) {
+            missing.push(normalized);
+        }
+    }
+    return missing;
+}
 export function markerCategory(marker) {
     const value = marker.trim().toLowerCase();
     if (!value) {
@@ -36,7 +87,6 @@ export function markerCategory(marker) {
     }
     return null;
 }
-// Returns immutable snapshot for session evidence.
 export function validationEvidence(sessionId) {
     if (!sessionId.trim()) {
         return emptyEvidence();
@@ -47,8 +97,18 @@ export function validationEvidence(sessionId) {
     }
     return { ...current };
 }
-// Marks one or more evidence categories as validated.
-export function markValidationEvidence(sessionId, categories) {
+export function worktreeValidationEvidence(directory) {
+    const key = evidenceScopeKey(directory);
+    if (!key) {
+        return emptyEvidence();
+    }
+    const current = evidenceByWorktree.get(key);
+    if (!current) {
+        return emptyEvidence();
+    }
+    return { ...current };
+}
+export function markValidationEvidence(sessionId, categories, directory = "") {
     const key = sessionId.trim();
     if (!key) {
         return emptyEvidence();
@@ -61,9 +121,19 @@ export function markValidationEvidence(sessionId, categories) {
     }
     next.updatedAt = new Date().toISOString();
     evidenceBySession.set(key, next);
+    const scopeKey = evidenceScopeKey(directory);
+    if (scopeKey) {
+        const scoped = {
+            ...worktreeValidationEvidence(directory),
+        };
+        for (const category of categories) {
+            scoped[category] = true;
+        }
+        scoped.updatedAt = next.updatedAt;
+        evidenceByWorktree.set(scopeKey, scoped);
+    }
     return { ...next };
 }
-// Clears evidence state for one session.
 export function clearValidationEvidence(sessionId) {
     const key = sessionId.trim();
     if (!key) {
@@ -71,22 +141,24 @@ export function clearValidationEvidence(sessionId) {
     }
     evidenceBySession.delete(key);
 }
-// Returns missing marker list based on current ledger evidence.
 export function missingValidationMarkers(sessionId, markers) {
-    const snapshot = validationEvidence(sessionId);
-    const missing = [];
-    for (const marker of markers) {
-        const normalized = marker.trim().toLowerCase();
-        if (!normalized) {
-            continue;
-        }
-        const category = markerCategory(normalized);
-        if (!category) {
-            continue;
-        }
-        if (!snapshot[category]) {
-            missing.push(normalized);
-        }
+    return computeMissing(validationEvidence(sessionId), markers);
+}
+export function validationEvidenceStatus(sessionId, markers, directory = "") {
+    const sessionSnapshot = validationEvidence(sessionId);
+    const sessionMissing = computeMissing(sessionSnapshot, markers);
+    if (sessionMissing.length === 0) {
+        return { missing: [], source: "session" };
     }
-    return missing;
+    const worktreeSnapshot = worktreeValidationEvidence(directory);
+    const worktreeMissing = computeMissing(worktreeSnapshot, markers);
+    if (worktreeMissing.length === 0 && directory.trim()) {
+        return { missing: [], source: "worktree" };
+    }
+    const merged = mergeEvidence(sessionSnapshot, worktreeSnapshot);
+    const mergedMissing = computeMissing(merged, markers);
+    if (mergedMissing.length === 0 && directory.trim()) {
+        return { missing: [], source: "session+worktree" };
+    }
+    return { missing: mergedMissing, source: "none" };
 }

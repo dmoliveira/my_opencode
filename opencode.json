@@ -235,7 +235,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "session": {
-      "description": "Inspect indexed sessions (list|show|search|handoff|doctor)",
+      "description": "Inspect current/indexed sessions (current|list|show|search|handoff|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "digest": {

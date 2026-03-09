@@ -24,7 +24,7 @@ DEFAULT_DIGEST_PATH = Path(
 
 def _usage() -> int:
     print(
-        "usage: /session list [--limit <n>] [--json] | /session show <id> [--json] "
+        "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
         "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--json]"
     )
     return 2
@@ -74,6 +74,15 @@ def _emit(payload: dict, json_output: bool) -> int:
     if payload.get("result") != "PASS":
         print(f"error: {payload.get('error', 'session command failed')}")
         return 1
+    if payload.get("command") == "current":
+        row = payload.get("session", {})
+        print(f"session_id: {row.get('session_id')}")
+        print(f"source: {payload.get('source')}")
+        if row.get("cwd"):
+            print(f"cwd: {row.get('cwd')}")
+        if row.get("last_event_at"):
+            print(f"last_event_at: {row.get('last_event_at')}")
+        return 0
     if payload.get("command") == "list":
         print(f"index: {payload.get('index_path')}")
         print(f"count: {payload.get('count')}")
@@ -143,6 +152,79 @@ def _load_digest(path: Path) -> dict:
         return {}
     loaded = json.loads(path.read_text(encoding="utf-8"))
     return loaded if isinstance(loaded, dict) else {}
+
+
+def _resolve_current_session(rows: list[dict]) -> tuple[dict | None, str]:
+    explicit = (
+        os.environ.get("OPENCODE_SESSION_ID", "").strip()
+        or os.environ.get("MY_OPENCODE_SESSION_ID", "").strip()
+    )
+    cwd = str(Path.cwd())
+    cwd_rows = [row for row in rows if str(row.get("cwd") or "") == cwd]
+
+    if explicit:
+        selected = next(
+            (row for row in cwd_rows if str(row.get("session_id") or "") == explicit),
+            None,
+        )
+        if selected is None:
+            selected = next(
+                (row for row in rows if str(row.get("session_id") or "") == explicit),
+                None,
+            )
+        if isinstance(selected, dict):
+            return selected, "env+index"
+        return {"session_id": explicit, "cwd": cwd}, "env_only"
+    if cwd_rows:
+        return cwd_rows[0], "cwd_latest"
+    if rows:
+        return rows[0], "index_latest"
+    return None, ""
+
+
+def _command_current(argv: list[str], index_path: Path) -> int:
+    json_output = "--json" in argv
+    args = [arg for arg in argv if arg != "--json"]
+    if args:
+        return _usage()
+
+    cwd = str(Path.cwd())
+    try:
+        rows = _session_rows(_load_index(index_path))
+    except Exception as exc:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "current",
+                "error": str(exc),
+                "index_path": str(index_path),
+            },
+            json_output,
+        )
+
+    selected, source = _resolve_current_session(rows)
+    if not isinstance(selected, dict):
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "current",
+                "error": "no indexed session found for current workspace",
+                "index_path": str(index_path),
+                "cwd": cwd,
+            },
+            json_output,
+        )
+
+    return _emit(
+        {
+            "result": "PASS",
+            "command": "current",
+            "index_path": str(index_path),
+            "source": source,
+            "session": selected,
+        },
+        json_output,
+    )
 
 
 def _command_list(argv: list[str], index_path: Path) -> int:
@@ -337,7 +419,7 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             json_output,
         )
 
-    if not rows:
+    if not rows and not target_id:
         return _emit(
             {
                 "result": "FAIL",
@@ -347,8 +429,7 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             },
             json_output,
         )
-
-    selected: dict = rows[0]
+    selected, source = _resolve_current_session(rows)
     if target_id:
         selected_match = next(
             (row for row in rows if str(row.get("session_id")) == target_id),
@@ -365,6 +446,19 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
                 json_output,
             )
         selected = selected_match
+    else:
+        if source == "env_only":
+            return _emit(
+                {
+                    "result": "FAIL",
+                    "command": "handoff",
+                    "error": "active runtime session is not indexed yet; run /digest run first",
+                    "index_path": str(index_path),
+                },
+                json_output,
+            )
+        if not isinstance(selected, dict):
+            selected = rows[0] if rows else {}
 
     digest = _load_digest(DEFAULT_DIGEST_PATH)
     raw_git = digest.get("git")
@@ -423,6 +517,8 @@ def main(argv: list[str]) -> int:
 
     if command == "help":
         return _usage()
+    if command == "current":
+        return _command_current(rest, index_path)
     if command == "list":
         return _command_list(rest, index_path)
     if command == "show":

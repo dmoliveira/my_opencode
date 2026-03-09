@@ -55,6 +55,16 @@ interface GatewayContext {
                 };
             }): Promise<void>;
         };
+        tui?: {
+            showToast(args?: {
+                directory?: string;
+                workspace?: string;
+                title?: string;
+                message?: string;
+                variant?: "info" | "success" | "warning" | "error";
+                duration?: number;
+            }): Promise<unknown>;
+        };
     };
 }
 interface ToolBeforeInput {

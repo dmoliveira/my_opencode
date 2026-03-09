@@ -1,16 +1,28 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
-const COMPACTION_CONTEXT_TEXT = [
-    "[COMPACTION CONTEXT]",
-    "When summarizing this session, include:",
-    "1) User requests as originally stated",
-    "2) Final goal",
-    "3) Work completed",
-    "4) Remaining tasks",
-    "5) Active working context (files, code in progress, external refs, state)",
-    "6) Explicit constraints (verbatim only)",
-    "7) Verification state (current agent, completed checks, pending checks, blockers)",
-].join("\n");
+function resolveSessionId(payload) {
+    const candidates = [payload.input?.sessionID, payload.input?.sessionId];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return "";
+}
+function buildCompactionContextText(sessionId) {
+    return [
+        "[COMPACTION CONTEXT]",
+        "When summarizing this session, include:",
+        "1) User requests as originally stated",
+        "2) Final goal",
+        "3) Work completed",
+        "4) Remaining tasks",
+        "5) Active working context (files, code in progress, external refs, state)",
+        "6) Explicit constraints (verbatim only)",
+        "7) Verification state (current agent, completed checks, pending checks, blockers)",
+        `8) Authoritative runtime session id: ${sessionId || "unknown"}`,
+    ].join("\n");
+}
 // Returns true when command should receive compaction context instruction.
 function isCompactionCommand(command) {
     const normalized = command.trim().toLowerCase().replace(/^\//, "");
@@ -44,22 +56,23 @@ export function createCompactionContextInjectorHook(options) {
             if (!Array.isArray(parts)) {
                 return;
             }
+            const sessionId = resolveSessionId(eventPayload);
             if (hasCompactionMarker(parts)) {
                 writeGatewayEventAudit(directory, {
                     hook: "compaction-context-injector",
                     stage: "inject",
                     reason_code: REASON_CODES.COMPACTION_CONTEXT_ALREADY_PRESENT,
-                    session_id: typeof eventPayload.input?.sessionID === "string" ? eventPayload.input.sessionID : "",
+                    session_id: sessionId,
                     command: command.trim(),
                 });
                 return;
             }
-            parts.unshift({ type: "text", text: COMPACTION_CONTEXT_TEXT });
+            parts.unshift({ type: "text", text: buildCompactionContextText(sessionId) });
             writeGatewayEventAudit(directory, {
                 hook: "compaction-context-injector",
                 stage: "inject",
                 reason_code: REASON_CODES.COMPACTION_CONTEXT_INJECTED,
-                session_id: typeof eventPayload.input?.sessionID === "string" ? eventPayload.input.sessionID : "",
+                session_id: sessionId,
                 command: command.trim(),
             });
         },

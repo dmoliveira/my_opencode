@@ -113,3 +113,50 @@ test("pr-readiness-guard applies gh api PR creation to the same readiness checks
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("pr-readiness-guard accepts validation evidence from another session in the same worktree", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
+  try {
+    execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "pr-readiness-guard"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prReadinessGuard: {
+          enabled: true,
+          requireCleanWorktree: false,
+          requireValidationEvidence: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-validation-a" },
+      { args: { command: "node --test plugin/gateway-core/test/pr-readiness-guard-hook.test.mjs" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-validation-a" },
+      { output: "tests passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-validation-b" },
+      { args: { command: "gh pr create --title x --body y" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
