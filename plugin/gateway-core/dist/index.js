@@ -1,4 +1,4 @@
-import { loadGatewayConfig } from "./config/load.js";
+import { loadGatewayConfig, loadGatewayConfigSource } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
@@ -112,7 +112,7 @@ function configuredHooks(ctx) {
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
         ? ctx.directory
         : process.cwd();
-    const cfg = loadGatewayConfig(ctx.config);
+    const cfg = loadGatewayConfig(loadGatewayConfigSource(directory, ctx.config));
     const llmDecisionRuntimeForHook = (hookId) => createLlmDecisionRuntime({
         directory,
         config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),

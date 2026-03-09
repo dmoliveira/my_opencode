@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
 import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js";
 
 // Coerces unknown value into a normalized string array.
@@ -13,6 +17,54 @@ function stringList(value: unknown): string[] {
 
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function deepMergeRecords(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(override)) {
+    const current = result[key]
+    if (isRecord(current) && isRecord(value)) {
+      result[key] = deepMergeRecords(current, value)
+    } else {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+function resolveGatewayConfigSidecarPath(directory: string): string {
+  const envPath = String(process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "").trim()
+  if (envPath) {
+    return resolve(envPath)
+  }
+  const localPath = join(directory, ".opencode", "gateway-core.config.json")
+  if (existsSync(localPath)) {
+    return localPath
+  }
+  return join(homedir(), ".config", "opencode", "my_opencode", "gateway-core.config.json")
+}
+
+export function loadGatewayConfigSource(directory: string, source: unknown): Record<string, unknown> {
+  const sidecarPath = resolveGatewayConfigSidecarPath(directory)
+  let sidecar: Record<string, unknown> = {}
+  try {
+    if (existsSync(sidecarPath)) {
+      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown
+      if (isRecord(parsed)) {
+        sidecar = parsed
+      }
+    }
+  } catch {
+    sidecar = {}
+  }
+  if (!isRecord(source)) {
+    return sidecar
+  }
+  return deepMergeRecords(sidecar, source)
 }
 
 function parseAgentPolicyOverrides(

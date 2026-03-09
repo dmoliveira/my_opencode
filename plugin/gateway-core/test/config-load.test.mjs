@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { loadGatewayConfig } from "../dist/config/load.js"
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+import { loadGatewayConfig, loadGatewayConfigSource } from "../dist/config/load.js"
 
 test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   const config = loadGatewayConfig({})
@@ -295,6 +299,38 @@ test("loadGatewayConfig normalizes llm hook mode overrides", () => {
     "auto-slash-command": "assist",
     "provider-error-classifier": "assist",
   })
+})
+
+test("loadGatewayConfigSource merges sidecar config with runtime source", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-source-"))
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(
+      join(directory, ".opencode", "gateway-core.config.json"),
+      JSON.stringify({
+        llmDecisionRuntime: {
+          enabled: true,
+          mode: "shadow",
+          hookModes: { "auto-slash-command": "assist" },
+        },
+      }),
+      "utf-8",
+    )
+    const merged = loadGatewayConfigSource(directory, {
+      llmDecisionRuntime: {
+        hookModes: { "provider-error-classifier": "assist" },
+      },
+    })
+    const config = loadGatewayConfig(merged)
+    assert.equal(config.llmDecisionRuntime.enabled, true)
+    assert.equal(config.llmDecisionRuntime.mode, "shadow")
+    assert.deepEqual(config.llmDecisionRuntime.hookModes, {
+      "auto-slash-command": "assist",
+      "provider-error-classifier": "assist",
+    })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test("loadGatewayConfig keeps default maxIgnoredCompletionCycles", () => {

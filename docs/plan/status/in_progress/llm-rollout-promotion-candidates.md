@@ -54,6 +54,6 @@ Canonical example file:
 
 - `docs/plan/status/in_progress/llm-rollout-config.example.json`
 
-Current repo runtime state:
+Current rollout path:
 
-- `opencode.json` now enables `llmDecisionRuntime.mode = shadow` with `auto-slash-command` and `provider-error-classifier` promoted to `assist` via `hookModes`.
+- live gateway settings now come from `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`), so these candidates are policy-ready and wired through a valid sidecar config surface.
