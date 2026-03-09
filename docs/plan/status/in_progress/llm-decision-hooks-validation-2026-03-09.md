@@ -334,9 +334,12 @@ Expanded workflow coverage:
 - added realistic progress-summary scenarios for `todo-continuation-enforcer`
   - epic in progress with remaining items -> inject
   - epic complete with no pending items -> do not inject
+- added chained multi-task progress sequence coverage for `todo-continuation-enforcer`
+  - 3-step unfinished sequence -> inject on each cycle when cooldown permits
+- added stop/resume cycle coverage to confirm continuation re-arms only after explicit resume
 - updated workflow report result:
-  - total scenarios: `7`
-  - correct actions: `7`
+  - total scenarios: `10`
+  - correct actions: `10`
   - accuracy: `100%`
 
 ### 13. Sidecar config live runtime fix

@@ -12,6 +12,8 @@ import {
   summarizeWorkflowScenarioResults,
 } from "../plugin/gateway-core/dist/audit/workflow-scenario-report.js"
 
+const sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
+
 const args = process.argv.slice(2)
 const markdownIndex = args.indexOf("--markdown-out")
 const markdownOut = markdownIndex >= 0 ? resolve(args[markdownIndex + 1] || "") : ""
@@ -40,6 +42,34 @@ const results = []
     })
     await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-1" } })
     results.push({ id: "todo-pending-marker", workflow: "todo-continuation-enforcer", requestType: "pending_marker", description: "idle with pending marker", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 1,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() { throw new Error("messages should not be called") },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-8", prompt: "continue" } })
+    for (let step = 1; step <= 3; step += 1) {
+      await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-8" }, output: { output: `Task ${step}/7 complete. Remaining tasks exist.\n<CONTINUE-LOOP>` } })
+      await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-8" } })
+      await sleep(5)
+    }
+    results.push({ id: "todo-chained-progress-sequence", workflow: "todo-continuation-enforcer", requestType: "progress_sequence", description: "three-step unfinished task sequence keeps prompting across cycles", expectedAction: "inject_3_times", actualAction: `inject_${promptCalls}_times`, correct: promptCalls === 3 })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
