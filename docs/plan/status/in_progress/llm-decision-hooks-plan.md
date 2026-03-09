@@ -40,6 +40,7 @@ Do not use LLM decisions for:
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
+- Canonical rollout config example: `docs/plan/status/in_progress/llm-rollout-config.example.json`
 
 ### Epic status
 

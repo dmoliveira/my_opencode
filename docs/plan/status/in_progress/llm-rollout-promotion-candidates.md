@@ -49,3 +49,7 @@ Branch: `plan/llm-decision-hooks`
   }
 }
 ```
+
+Canonical example file:
+
+- `docs/plan/status/in_progress/llm-rollout-config.example.json`
