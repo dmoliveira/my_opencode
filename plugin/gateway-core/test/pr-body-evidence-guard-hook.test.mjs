@@ -102,6 +102,53 @@ test("pr-body-evidence-guard inspects body file content", async () => {
   }
 })
 
+test("pr-body-evidence-guard accepts node --test evidence from the ledger", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "pr-body-evidence-guard"],
+          disabled: ["pr-readiness-guard"],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prBodyEvidenceGuard: {
+          enabled: true,
+          requireSummarySection: true,
+          requireValidationSection: true,
+          requireValidationEvidence: true,
+          allowUninspectableBody: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-node-test" },
+      { args: { command: "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-body-node-test" },
+      { output: "tests passed" },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-node-test" },
+      { args: { command: 'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs"' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 test("pr-body-evidence-guard applies the same body checks to gh api PR creation", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))

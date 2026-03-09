@@ -126,3 +126,60 @@ test("validation-evidence-ledger tracks queued bash commands in order", async ()
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("validation-evidence-ledger treats node --test as test evidence", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint", "test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-node-test" },
+      { args: { command: "npm run lint" } }
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-node-test" },
+      { output: "lint passed" }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-node-test" },
+      { args: { command: "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs" } }
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-node-test" },
+      { output: "tests passed" }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-node-test" },
+      { args: { command: "git status" } }
+    )
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-node-test" },
+      done,
+    )
+
+    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
