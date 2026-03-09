@@ -18,6 +18,9 @@ export function tokenizeShellCommand(command) {
 function isGhBinary(token) {
     return /(?:^|[\/])gh(?:\.exe)?$/i.test(token);
 }
+function isEnvAssignment(token) {
+    return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
+}
 function commandTokens(tokens, startIndex) {
     const command = [];
     for (let index = startIndex; index < tokens.length; index += 1) {
@@ -28,6 +31,33 @@ function commandTokens(tokens, startIndex) {
         command.push(token);
     }
     return command;
+}
+function ghCommandSlices(command) {
+    const tokens = tokenizeShellCommand(command);
+    const commands = [];
+    let index = 0;
+    while (index < tokens.length) {
+        while (index < tokens.length && COMMAND_SEPARATOR_TOKENS.has(tokens[index])) {
+            index += 1;
+        }
+        if (index >= tokens.length) {
+            break;
+        }
+        let commandStart = index;
+        while (commandStart < tokens.length && isEnvAssignment(tokens[commandStart])) {
+            commandStart += 1;
+        }
+        if (commandStart >= tokens.length || COMMAND_SEPARATOR_TOKENS.has(tokens[commandStart])) {
+            index = commandStart + 1;
+            continue;
+        }
+        const slice = commandTokens(tokens, commandStart);
+        if (slice.length > 0 && isGhBinary(slice[0])) {
+            commands.push(slice);
+        }
+        index = commandStart + slice.length + 1;
+    }
+    return commands;
 }
 function inlineOptionValue(token, name) {
     if (token.startsWith(`${name}=`)) {
@@ -211,12 +241,7 @@ function ghApiMergeHasStrategy(tokens) {
     return false;
 }
 export function isGitHubPrCreateCommand(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "create") {
             return true;
         }
@@ -231,12 +256,7 @@ export function isGitHubPrCreateCommand(command) {
     return false;
 }
 export function inspectGitHubPrCreateBody(command, directory) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "create") {
             return ghPrCreateInspection(commandSlice, directory);
         }
@@ -251,12 +271,7 @@ export function inspectGitHubPrCreateBody(command, directory) {
     return { body: "", inspectable: false };
 }
 export function isGitHubPrMergeCommand(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
             return true;
         }
@@ -271,12 +286,7 @@ export function isGitHubPrMergeCommand(command) {
     return false;
 }
 export function extractGitHubPrMergeSelector(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
             for (let argIndex = 3; argIndex < commandSlice.length; argIndex += 1) {
                 const token = commandSlice[argIndex];
@@ -305,12 +315,7 @@ export function extractGitHubPrMergeSelector(command) {
     return "";
 }
 export function gitHubPrMergeHasStrategy(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
             return ghPrMergeHasStrategy(commandSlice);
         }
