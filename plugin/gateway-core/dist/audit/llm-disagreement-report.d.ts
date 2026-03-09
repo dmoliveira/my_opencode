@@ -25,6 +25,16 @@ export interface LlmRolloutRecommendation {
     action: "investigate" | "tune" | "observe" | "promote_candidate";
     reason: string;
     disagreementCount: number;
+    thresholds: LlmRolloutThresholds;
+}
+export interface LlmRolloutThresholds {
+    investigateAt: number;
+    tuneAt: number;
+    observeAt: number;
+}
+export interface LlmRolloutThresholdMap {
+    default?: Partial<LlmRolloutThresholds>;
+    hooks?: Record<string, Partial<LlmRolloutThresholds>>;
 }
 export interface LlmRolloutReport {
     summary: LlmDisagreementSummary;
@@ -32,6 +42,6 @@ export interface LlmRolloutReport {
 }
 export declare function parseGatewayAuditJsonl(text: string): GatewayAuditEvent[];
 export declare function summarizeLlmDecisionDisagreements(events: GatewayAuditEvent[]): LlmDisagreementSummary;
-export declare function recommendLlmRolloutActions(summary: LlmDisagreementSummary): LlmRolloutRecommendation[];
-export declare function buildLlmRolloutReport(events: GatewayAuditEvent[]): LlmRolloutReport;
+export declare function recommendLlmRolloutActions(summary: LlmDisagreementSummary, overrides?: LlmRolloutThresholdMap): LlmRolloutRecommendation[];
+export declare function buildLlmRolloutReport(events: GatewayAuditEvent[], overrides?: LlmRolloutThresholdMap): LlmRolloutReport;
 export declare function renderLlmRolloutMarkdown(report: LlmRolloutReport): string;

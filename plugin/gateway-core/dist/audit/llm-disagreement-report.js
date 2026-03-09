@@ -1,3 +1,8 @@
+const DEFAULT_THRESHOLDS = {
+    investigateAt: 10,
+    tuneAt: 4,
+    observeAt: 1,
+};
 export function parseGatewayAuditJsonl(text) {
     return String(text ?? "")
         .split(/\r?\n/)
@@ -51,30 +56,45 @@ export function summarizeLlmDecisionDisagreements(events) {
         pairs,
     };
 }
-export function recommendLlmRolloutActions(summary) {
+function resolvedThresholds(hook, overrides) {
+    const normalizedHook = hook.trim().toLowerCase();
+    const defaultOverrides = overrides?.default ?? {};
+    const hookOverrides = overrides?.hooks?.[normalizedHook] ?? overrides?.hooks?.[hook] ?? {};
+    const merged = {
+        investigateAt: hookOverrides.investigateAt ?? defaultOverrides.investigateAt ?? DEFAULT_THRESHOLDS.investigateAt,
+        tuneAt: hookOverrides.tuneAt ?? defaultOverrides.tuneAt ?? DEFAULT_THRESHOLDS.tuneAt,
+        observeAt: hookOverrides.observeAt ?? defaultOverrides.observeAt ?? DEFAULT_THRESHOLDS.observeAt,
+    };
+    return merged;
+}
+export function recommendLlmRolloutActions(summary, overrides) {
     return summary.byHook.map(({ hook, count }) => {
-        if (count >= 10) {
+        const thresholds = resolvedThresholds(hook, overrides);
+        if (count >= thresholds.investigateAt) {
             return {
                 hook,
                 action: "investigate",
                 reason: "high disagreement volume; keep in shadow and inspect top disagreement pairs",
                 disagreementCount: count,
+                thresholds,
             };
         }
-        if (count >= 4) {
+        if (count >= thresholds.tuneAt) {
             return {
                 hook,
                 action: "tune",
                 reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
                 disagreementCount: count,
+                thresholds,
             };
         }
-        if (count >= 1) {
+        if (count >= thresholds.observeAt) {
             return {
                 hook,
                 action: "observe",
                 reason: "low disagreement volume; continue shadow sampling before promotion",
                 disagreementCount: count,
+                thresholds,
             };
         }
         return {
@@ -82,14 +102,15 @@ export function recommendLlmRolloutActions(summary) {
             action: "promote_candidate",
             reason: "no disagreements recorded in current sample; candidate for wider assist-mode evaluation",
             disagreementCount: count,
+            thresholds,
         };
     });
 }
-export function buildLlmRolloutReport(events) {
+export function buildLlmRolloutReport(events, overrides) {
     const summary = summarizeLlmDecisionDisagreements(events);
     return {
         summary,
-        recommendations: recommendLlmRolloutActions(summary),
+        recommendations: recommendLlmRolloutActions(summary, overrides),
     };
 }
 export function renderLlmRolloutMarkdown(report) {
@@ -106,7 +127,7 @@ export function renderLlmRolloutMarkdown(report) {
     }
     else {
         for (const item of report.recommendations) {
-            lines.push("", `- ${item.hook}: ${item.action} (${item.disagreementCount})`, `  - ${item.reason}`);
+            lines.push("", `- ${item.hook}: ${item.action} (${item.disagreementCount})`, `  - ${item.reason}`, `  - thresholds: investigate>=${item.thresholds.investigateAt}, tune>=${item.thresholds.tuneAt}, observe>=${item.thresholds.observeAt}`);
         }
     }
     lines.push("", "## Top disagreement pairs");

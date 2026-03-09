@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, and done-proof semantic slices are implemented in this worktree and validated with real-session probes
-- Current active slice: human-readable disagreement artifact generation on top of rollout recommendation reporting
+- Current active slice: per-hook rollout threshold tuning on top of disagreement and markdown reporting
 
 ### Epic status
 
@@ -45,7 +45,7 @@ Do not use LLM decisions for:
 | Epic 1 - Build the decision runtime | done | Shared runtime, parser, prompt builder, caching, audit metadata, and central config are implemented. |
 | Epic 2 - Hybrid delegation decisions | done | `agent-model-resolver` and `agent-denied-tool-enforcer` use the centralized runtime with real simulation evidence. |
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
-| Epic 4 - Safety, cost, and performance controls | in_progress | Modes, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, and markdown artifact generation are implemented; promotion heuristics still need broader production evidence. |
+| Epic 4 - Safety, cost, and performance controls | in_progress | Modes, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, and per-hook threshold tuning are implemented; promotion heuristics still need broader production evidence. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, and prompt refinements are in place; adversarial expansion remains open. |
 | Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs. |
 | Epic 7 - Rollout and cleanup | pending | No rollout promotion or heuristic removal yet. |

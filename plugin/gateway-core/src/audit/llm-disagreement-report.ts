@@ -25,11 +25,29 @@ export interface LlmRolloutRecommendation {
   action: "investigate" | "tune" | "observe" | "promote_candidate"
   reason: string
   disagreementCount: number
+  thresholds: LlmRolloutThresholds
+}
+
+export interface LlmRolloutThresholds {
+  investigateAt: number
+  tuneAt: number
+  observeAt: number
+}
+
+export interface LlmRolloutThresholdMap {
+  default?: Partial<LlmRolloutThresholds>
+  hooks?: Record<string, Partial<LlmRolloutThresholds>>
 }
 
 export interface LlmRolloutReport {
   summary: LlmDisagreementSummary
   recommendations: LlmRolloutRecommendation[]
+}
+
+const DEFAULT_THRESHOLDS: LlmRolloutThresholds = {
+  investigateAt: 10,
+  tuneAt: 4,
+  observeAt: 1,
 }
 
 export function parseGatewayAuditJsonl(text: string): GatewayAuditEvent[] {
@@ -86,30 +104,49 @@ export function summarizeLlmDecisionDisagreements(events: GatewayAuditEvent[]): 
   }
 }
 
-export function recommendLlmRolloutActions(summary: LlmDisagreementSummary): LlmRolloutRecommendation[] {
+function resolvedThresholds(hook: string, overrides?: LlmRolloutThresholdMap): LlmRolloutThresholds {
+  const normalizedHook = hook.trim().toLowerCase()
+  const defaultOverrides = overrides?.default ?? {}
+  const hookOverrides = overrides?.hooks?.[normalizedHook] ?? overrides?.hooks?.[hook] ?? {}
+  const merged: LlmRolloutThresholds = {
+    investigateAt: hookOverrides.investigateAt ?? defaultOverrides.investigateAt ?? DEFAULT_THRESHOLDS.investigateAt,
+    tuneAt: hookOverrides.tuneAt ?? defaultOverrides.tuneAt ?? DEFAULT_THRESHOLDS.tuneAt,
+    observeAt: hookOverrides.observeAt ?? defaultOverrides.observeAt ?? DEFAULT_THRESHOLDS.observeAt,
+  }
+  return merged
+}
+
+export function recommendLlmRolloutActions(
+  summary: LlmDisagreementSummary,
+  overrides?: LlmRolloutThresholdMap,
+): LlmRolloutRecommendation[] {
   return summary.byHook.map(({ hook, count }) => {
-    if (count >= 10) {
+    const thresholds = resolvedThresholds(hook, overrides)
+    if (count >= thresholds.investigateAt) {
       return {
         hook,
         action: "investigate",
         reason: "high disagreement volume; keep in shadow and inspect top disagreement pairs",
         disagreementCount: count,
+        thresholds,
       }
     }
-    if (count >= 4) {
+    if (count >= thresholds.tuneAt) {
       return {
         hook,
         action: "tune",
         reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
         disagreementCount: count,
+        thresholds,
       }
     }
-    if (count >= 1) {
+    if (count >= thresholds.observeAt) {
       return {
         hook,
         action: "observe",
         reason: "low disagreement volume; continue shadow sampling before promotion",
         disagreementCount: count,
+        thresholds,
       }
     }
     return {
@@ -117,15 +154,19 @@ export function recommendLlmRolloutActions(summary: LlmDisagreementSummary): Llm
       action: "promote_candidate",
       reason: "no disagreements recorded in current sample; candidate for wider assist-mode evaluation",
       disagreementCount: count,
+      thresholds,
     }
   })
 }
 
-export function buildLlmRolloutReport(events: GatewayAuditEvent[]): LlmRolloutReport {
+export function buildLlmRolloutReport(
+  events: GatewayAuditEvent[],
+  overrides?: LlmRolloutThresholdMap,
+): LlmRolloutReport {
   const summary = summarizeLlmDecisionDisagreements(events)
   return {
     summary,
-    recommendations: recommendLlmRolloutActions(summary),
+    recommendations: recommendLlmRolloutActions(summary, overrides),
   }
 }
 
@@ -147,6 +188,7 @@ export function renderLlmRolloutMarkdown(report: LlmRolloutReport): string {
         "",
         `- ${item.hook}: ${item.action} (${item.disagreementCount})`,
         `  - ${item.reason}`,
+        `  - thresholds: investigate>=${item.thresholds.investigateAt}, tune>=${item.thresholds.tuneAt}, observe>=${item.thresholds.observeAt}`,
       )
     }
   }

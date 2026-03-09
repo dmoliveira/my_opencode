@@ -54,18 +54,44 @@ test("llm disagreement report recommends rollout actions by disagreement volume"
       action: "investigate",
       reason: "high disagreement volume; keep in shadow and inspect top disagreement pairs",
       disagreementCount: 12,
+      thresholds: { investigateAt: 10, tuneAt: 4, observeAt: 1 },
     },
     {
       hook: "auto-slash-command",
       action: "tune",
       reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
       disagreementCount: 5,
+      thresholds: { investigateAt: 10, tuneAt: 4, observeAt: 1 },
     },
     {
       hook: "provider-error-classifier",
       action: "observe",
       reason: "low disagreement volume; continue shadow sampling before promotion",
       disagreementCount: 2,
+      thresholds: { investigateAt: 10, tuneAt: 4, observeAt: 1 },
+    },
+  ])
+})
+
+test("llm disagreement report supports per-hook thresholds", () => {
+  const summary = {
+    total: 3,
+    byHook: [{ hook: "agent-model-resolver", count: 3 }],
+    pairs: [],
+  }
+  assert.deepEqual(recommendLlmRolloutActions(summary, {
+    hooks: {
+      "agent-model-resolver": {
+        tuneAt: 3,
+      },
+    },
+  }), [
+    {
+      hook: "agent-model-resolver",
+      action: "tune",
+      reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
+      disagreementCount: 3,
+      thresholds: { investigateAt: 10, tuneAt: 3, observeAt: 1 },
     },
   ])
 })
@@ -79,6 +105,7 @@ test("llm disagreement report builds rollout report from events", () => {
   assert.equal(report.summary.total, 1)
   assert.equal(report.recommendations[0]?.hook, "auto-slash-command")
   assert.equal(report.recommendations[0]?.action, "observe")
+  assert.deepEqual(report.recommendations[0]?.thresholds, { investigateAt: 10, tuneAt: 4, observeAt: 1 })
 })
 
 test("llm disagreement report renders markdown artifact", () => {
@@ -101,10 +128,12 @@ test("llm disagreement report renders markdown artifact", () => {
         action: "observe",
         reason: "low disagreement volume; continue shadow sampling before promotion",
         disagreementCount: 3,
+        thresholds: { investigateAt: 10, tuneAt: 4, observeAt: 1 },
       },
     ],
   })
   assert.match(markdown, /# LLM Disagreement Rollout Report/)
   assert.match(markdown, /agent-model-resolver: observe \(3\)/)
+  assert.match(markdown, /thresholds: investigate>=10, tune>=4, observe>=1/)
   assert.match(markdown, /route_explore -> route_librarian \(3\)/)
 })

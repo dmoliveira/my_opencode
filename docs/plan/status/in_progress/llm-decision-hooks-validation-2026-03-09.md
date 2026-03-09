@@ -113,6 +113,7 @@ Observed:
 - `node --test plugin/gateway-core/test/auto-slash-command-hook.test.mjs plugin/gateway-core/test/llm-decision-runtime.test.mjs plugin/gateway-core/test/runtime-delegation-hooks.test.mjs plugin/gateway-core/test/config-load.test.mjs`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --markdown-out docs/plan/status/in_progress/llm-disagreement-rollout-report.md`
+- `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --thresholds path/to/llm-rollout-thresholds.json`
 
 ## Key takeaways
 
@@ -123,6 +124,7 @@ Observed:
 - provider-style vendor wording benefits from AI fallback when canonical regexes miss the phrasing
 - disagreement audits can now be aggregated into rollout recommendations with `scripts/gateway_llm_disagreement_report.mjs`
 - the same report can now emit a markdown artifact for daily human review with `--markdown-out`
+- rollout recommendations can now be tuned per hook with a thresholds JSON passed to `--thresholds`
 
 ### 7. Delegation fallback ambiguous failure output
 

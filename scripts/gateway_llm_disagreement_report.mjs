@@ -13,7 +13,17 @@ import {
 const args = process.argv.slice(2)
 const markdownIndex = args.indexOf("--markdown-out")
 const markdownOut = markdownIndex >= 0 ? resolve(args[markdownIndex + 1] || "") : ""
-const targetArg = args.find((arg, index) => arg && (index !== markdownIndex && index !== markdownIndex + 1) && !arg.startsWith("--"))
+const thresholdsIndex = args.indexOf("--thresholds")
+const thresholdsPath = thresholdsIndex >= 0 ? resolve(args[thresholdsIndex + 1] || "") : ""
+const targetArg = args.find(
+  (arg, index) =>
+    arg &&
+    index !== markdownIndex &&
+    index !== markdownIndex + 1 &&
+    index !== thresholdsIndex &&
+    index !== thresholdsIndex + 1 &&
+    !arg.startsWith("--"),
+)
 const target = targetArg ? resolve(targetArg) : join(process.cwd(), ".opencode", "gateway-events.jsonl")
 
 if (!existsSync(target)) {
@@ -23,7 +33,10 @@ if (!existsSync(target)) {
 
 const text = readFileSync(target, "utf-8")
 const events = parseGatewayAuditJsonl(text)
-const report = buildLlmRolloutReport(events)
+const thresholds = thresholdsPath && existsSync(thresholdsPath)
+  ? JSON.parse(readFileSync(thresholdsPath, "utf-8"))
+  : undefined
+const report = buildLlmRolloutReport(events, thresholds)
 const legacySummary = summarizeLlmDecisionDisagreements(events)
 console.log(
   JSON.stringify(
