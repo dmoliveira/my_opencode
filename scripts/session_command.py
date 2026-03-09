@@ -155,10 +155,7 @@ def _load_digest(path: Path) -> dict:
 
 
 def _resolve_current_session(rows: list[dict]) -> tuple[dict | None, str]:
-    explicit = (
-        os.environ.get("OPENCODE_SESSION_ID", "").strip()
-        or os.environ.get("MY_OPENCODE_SESSION_ID", "").strip()
-    )
+    explicit = os.environ.get("OPENCODE_SESSION_ID", "").strip()
     cwd = str(Path.cwd())
     cwd_rows = [row for row in rows if str(row.get("cwd") or "") == cwd]
 

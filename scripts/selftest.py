@@ -1392,7 +1392,7 @@ exit 0
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
-        digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
+        digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
 
         result = subprocess.run(
             [sys.executable, str(DIGEST_SCRIPT), "run", "--reason", "selftest"],
@@ -1484,7 +1484,9 @@ exit 0
             check=False,
             cwd=REPO_ROOT,
         )
-        expect(result.returncode == 0, f"session current --json failed: {result.stderr}")
+        expect(
+            result.returncode == 0, f"session current --json failed: {result.stderr}"
+        )
         session_current_payload = parse_json_output(result.stdout)
         expect(
             session_current_payload.get("result") == "PASS"

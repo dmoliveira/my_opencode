@@ -33,7 +33,7 @@ def _utc_now() -> datetime:
 
 
 def _session_id(timestamp: str, cwd: str) -> str:
-    explicit = os.environ.get("MY_OPENCODE_SESSION_ID", "").strip()
+    explicit = os.environ.get("OPENCODE_SESSION_ID", "").strip()
     if explicit:
         return explicit
     ts = _parse_iso(timestamp) or _utc_now()

@@ -35,7 +35,7 @@ function buildSessionContext(sessionId) {
         `authoritative_runtime_session_id=${sessionId}`,
         "Use this exact session id for commits, logs, telemetry, and external tooling created during this runtime session.",
         "If the user asks for the current runtime session id, return this exact session id directly.",
-        "Bash tool commands in this session expose OPENCODE_SESSION_ID and MY_OPENCODE_SESSION_ID when available.",
+        "Bash tool commands in this session expose OPENCODE_SESSION_ID when available.",
     ].join("\n");
 }
 function injectIntoParts(parts, content) {
