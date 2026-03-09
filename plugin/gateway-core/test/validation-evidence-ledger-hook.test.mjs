@@ -279,3 +279,51 @@ test("validation-evidence-ledger treats make install-test as test evidence", asy
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("validation-evidence-ledger clears queued commands when bash output is missing", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-missing-output" },
+      { args: { command: "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-missing-output" },
+      { output: {} },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-missing-output" },
+      { args: { command: "git status" } },
+    )
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-missing-output" },
+      done,
+    )
+
+    assert.equal(done.output.includes("PENDING_VALIDATION"), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

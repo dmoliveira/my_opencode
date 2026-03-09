@@ -117,3 +117,51 @@ test("adaptive-validation-scheduler clears reminders after repo selftest command
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("adaptive-validation-scheduler does not clear reminders when bash output is missing", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-scheduler-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["adaptive-validation-scheduler"],
+          disabled: [],
+        },
+        adaptiveValidationScheduler: {
+          enabled: true,
+          reminderEditThreshold: 2,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "write", sessionID: "session-scheduler-missing-output" },
+      { args: { filePath: "src/a.ts" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "edit", sessionID: "session-scheduler-missing-output" },
+      { args: { filePath: "src/b.ts" } },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-scheduler-missing-output" },
+      { args: { command: "python3 scripts/selftest.py" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-scheduler-missing-output" },
+      { output: {} },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-scheduler-missing-output" },
+      { args: { command: "git status" } },
+    )
+    const output = { output: "status" }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-scheduler-missing-output" }, output)
+    assert.ok(output.output.includes("adaptive-validation-scheduler"))
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { isValidationCommand } from "../shared/validation-command-matcher.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -48,14 +49,6 @@ function resolveSessionId(payload: {
     }
   }
   return ""
-}
-
-// Returns true when command appears to run validation checks.
-function isValidationCommand(command: string): boolean {
-  const value = command.trim().toLowerCase()
-  return /\b(npm\s+(run\s+)?(test|lint|build|typecheck)|pnpm\s+(test|lint|build|typecheck)|yarn\s+(test|lint|build|typecheck)|node\s+--test\b|(?:npm|pnpm)\s+exec\s+vitest|npx\s+vitest|python\d?\s+-m\s+pytest|uv\s+run\s+pytest|pytest|vitest|jest|ruff\s+check|tsc\b|cargo\s+(test|clippy|check)|make\s+(validate|selftest|install-test)|python\d?\s+scripts\/selftest\.py)\b/.test(
-    value,
-  )
 }
 
 // Returns true when command output looks like failure output.
@@ -121,9 +114,6 @@ export function createAdaptiveValidationSchedulerHook(options: {
       if (String(eventPayload.input?.tool ?? "").toLowerCase() !== "bash") {
         return
       }
-      if (typeof eventPayload.output?.output !== "string") {
-        return
-      }
       const sid = resolveSessionId(eventPayload)
       if (!sid) {
         return
@@ -132,7 +122,13 @@ export function createAdaptiveValidationSchedulerHook(options: {
       if (!current) {
         return
       }
-      if (isValidationCommand(current.lastCommand)) {
+      const command = current.lastCommand
+      current.lastCommand = ""
+      if (typeof eventPayload.output?.output !== "string") {
+        stateBySession.set(sid, current)
+        return
+      }
+      if (isValidationCommand(command)) {
         if (!commandFailed(eventPayload.output.output)) {
           current.editsSinceValidation = 0
           current.reminded = false

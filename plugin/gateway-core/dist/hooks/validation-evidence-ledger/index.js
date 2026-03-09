@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
+import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
 // Resolves stable session id across gateway payload variants.
 function sessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId, payload.properties?.info?.id];
@@ -20,30 +21,6 @@ function commandFailed(output) {
         return true;
     }
     return false;
-}
-// Classifies validation categories represented by shell command.
-function classifyValidationCommand(command) {
-    const value = command.trim().toLowerCase();
-    if (!value) {
-        return [];
-    }
-    const categories = new Set();
-    if (/\b(eslint|ruff\s+check|ruff\s+format\s+--check|npm(?:\s+--prefix\s+\S+)?\s+run\s+lint|pnpm(?:\s+--filter\s+\S+)?\s+lint|yarn\s+lint|biome\s+check|golangci-lint|cargo\s+clippy|make\s+validate)\b/i.test(value)) {
-        categories.add("lint");
-    }
-    if (/\b(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test|pnpm(?:\s+--filter\s+\S+)?\s+test|yarn\s+test|bun\s+test|node\s+--test\b|(?:npm|pnpm)\s+exec\s+vitest|npx\s+vitest|python\d?\s+-m\s+pytest|python\d?\s+-m\s+unittest|uv\s+run\s+pytest|pytest|vitest|jest|go\s+test|cargo\s+test|pre-commit\s+run|make\s+selftest|make\s+install-test|python\d?\s+scripts\/selftest\.py)\b/i.test(value)) {
-        categories.add("test");
-    }
-    if (/\b(tsc\b|npm\s+run\s+typecheck|pnpm\s+typecheck|yarn\s+typecheck|pyright|mypy|cargo\s+check|go\s+vet)\b/i.test(value)) {
-        categories.add("typecheck");
-    }
-    if (/\b(npm\s+run\s+build|pnpm\s+build|yarn\s+build|vite\s+build|next\s+build|cargo\s+build|go\s+build)\b/i.test(value)) {
-        categories.add("build");
-    }
-    if (/\b(npm\s+audit|pnpm\s+audit|yarn\s+audit|cargo\s+audit|semgrep|codeql|snyk)\b/i.test(value)) {
-        categories.add("security");
-    }
-    return [...categories];
 }
 // Creates validation evidence ledger hook to track successful validation commands.
 export function createValidationEvidenceLedgerHook(options) {
@@ -89,7 +66,7 @@ export function createValidationEvidenceLedgerHook(options) {
             }
             const eventPayload = (payload ?? {});
             const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-            if (tool !== "bash" || typeof eventPayload.output?.output !== "string") {
+            if (tool !== "bash") {
                 return;
             }
             const sid = sessionId(eventPayload);
@@ -105,6 +82,9 @@ export function createValidationEvidenceLedgerHook(options) {
                 pendingCommandsBySession.delete(sid);
             }
             if (!command) {
+                return;
+            }
+            if (typeof eventPayload.output?.output !== "string") {
                 return;
             }
             const categories = classifyValidationCommand(command);
