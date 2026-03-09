@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { extractGitHubPrMergeSelector, isGitHubPrMergeCommand } from "../shared/github-pr-commands.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -43,11 +44,6 @@ const SUCCESS_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"])
 const PENDING_CONCLUSIONS = new Set(["PENDING", "IN_PROGRESS", "QUEUED", "WAITING", "EXPECTED", "REQUESTED"])
 const PENDING_STATUSES = new Set(["PENDING", "IN_PROGRESS", "QUEUED", "WAITING", "EXPECTED", "REQUESTED"])
 
-// Returns true when command is gh pr merge.
-function isPrMerge(command: string): boolean {
-  return /\bgh\s+pr\s+merge\b/i.test(command)
-}
-
 // Normalizes token into uppercase trimmed string.
 function normalize(value: unknown): string {
   return String(value ?? "")
@@ -55,41 +51,6 @@ function normalize(value: unknown): string {
     .toUpperCase()
 }
 
-// Splits command into shell-like tokens with simple quote support.
-function tokenize(command: string): string[] {
-  const matches = command.match(/"[^"]*"|'[^']*'|\S+/g)
-  if (!matches) {
-    return []
-  }
-  return matches.map((token) => {
-    if (token.length >= 2 && ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'")))) {
-      return token.slice(1, -1)
-    }
-    return token
-  })
-}
-
-// Extracts PR selector argument from gh pr merge command.
-function mergeSelector(command: string): string {
-  const tokens = tokenize(command)
-  for (let idx = 0; idx < tokens.length - 2; idx += 1) {
-    if (tokens[idx] !== "gh" || tokens[idx + 1] !== "pr" || tokens[idx + 2] !== "merge") {
-      continue
-    }
-    for (let argIndex = idx + 3; argIndex < tokens.length; argIndex += 1) {
-      const token = tokens[argIndex]
-      if (!token || token === ";" || token === "&&" || token === "||" || token === "|") {
-        break
-      }
-      if (token.startsWith("-")) {
-        continue
-      }
-      return token
-    }
-    return ""
-  }
-  return ""
-}
 
 // Loads PR metadata from gh cli for merge checks.
 function loadPrView(input: InspectPrInput): PrViewPayload {
@@ -173,7 +134,7 @@ export function createGhChecksMergeGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "").trim()
-      if (!isPrMerge(command)) {
+      if (!isGitHubPrMergeCommand(command)) {
         return
       }
       const directory =
@@ -181,7 +142,7 @@ export function createGhChecksMergeGuardHook(options: {
           ? eventPayload.directory
           : options.directory
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
-      const selector = mergeSelector(command)
+      const selector = extractGitHubPrMergeSelector(command)
       let prView: PrViewPayload
       try {
         prView = inspectPr({

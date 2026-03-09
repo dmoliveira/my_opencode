@@ -149,3 +149,46 @@ test("pr-body-evidence-guard accepts node --test evidence from the ledger", asyn
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("pr-body-evidence-guard applies the same body checks to gh api PR creation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["pr-body-evidence-guard"],
+          disabled: ["pr-readiness-guard"],
+        },
+        prBodyEvidenceGuard: {
+          enabled: true,
+          requireSummarySection: true,
+          requireValidationSection: true,
+          requireValidationEvidence: false,
+          allowUninspectableBody: false,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-pr-body-api-missing" },
+        { args: { command: "gh api repos/foo/bar/pulls -X POST -f title=x -f head=feature -f base=main -f 'body=plain body'" } },
+      ),
+      /## Summary/,
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-api-ok" },
+      {
+        args: {
+          command:
+            "gh api repos/foo/bar/pulls -X POST -f title=x -f head=feature -f base=main -f 'body=## Summary\n- item\n## Validation\n- npm test'",
+        },
+      },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

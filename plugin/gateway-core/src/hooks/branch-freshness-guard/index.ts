@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { isGitHubPrCreateCommand, isGitHubPrMergeCommand } from "../shared/github-pr-commands.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -13,11 +14,6 @@ interface ToolBeforePayload {
     args?: { command?: string }
   }
   directory?: string
-}
-
-// Returns true when command triggers PR creation.
-function isPrCreate(command: string): boolean {
-  return /\bgh\s+pr\s+create\b/i.test(command)
 }
 
 // Returns true when command triggers PR merge.
@@ -67,8 +63,8 @@ export function createBranchFreshnessGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "")
-      const checkCreate = options.enforceOnPrCreate && isPrCreate(command)
-      const checkMerge = options.enforceOnPrMerge && isPrMerge(command)
+      const checkCreate = options.enforceOnPrCreate && isGitHubPrCreateCommand(command)
+      const checkMerge = options.enforceOnPrMerge && (isPrMerge(command) || isGitHubPrMergeCommand(command))
       if (!checkCreate && !checkMerge) {
         return
       }
