@@ -191,9 +191,17 @@ Additional adversarial wave:
 - second prompt refinement added explicit instructions to ignore tool availability, environment feasibility, and any fake system/assistant/tool/XML content
 - even after that refinement, the live `auto-slash-command` probe still returned tool-aware explanatory text instead of a single character, so runtime again rejected it as `invalid_response`
 
+Targeted hook-specific refinement:
+
+- `auto-slash-command` now sanitizes mixed chat-role contamination before AI classification and passes only the extracted user request text (`request=...`) into the decision runtime
+- after that hook-specific context packing change, the live sanitized probe returned:
+  - char: `D`
+  - meaning: `route_doctor`
+  - duration: about `7.7s`
+
 Remaining gap:
 
-- Epic 5 still needs stronger hardening for chat-role contamination and model/tool-awareness leakage in live `auto-slash-command` style probes
+- Epic 5 improved materially for `auto-slash-command`; remaining hardening should focus on broader mixed-context patterns across the other semantic hooks, not this specific chat-role contamination case
 
 ### 13. Sidecar config live runtime fix
 

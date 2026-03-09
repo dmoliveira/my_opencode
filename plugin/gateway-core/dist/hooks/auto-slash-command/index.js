@@ -110,6 +110,21 @@ function promptText(payload) {
     }
     return "";
 }
+function normalizePromptForAi(prompt) {
+    const trimmed = prompt.trim();
+    const actualRequestMatch = trimmed.match(/actual request\s*:\s*([\s\S]+)$/i);
+    const extracted = actualRequestMatch?.[1]?.trim() || trimmed;
+    return extracted
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
+        .replace(/ignore all previous instructions/gi, " ")
+        .replace(/ignore previous instructions/gi, " ")
+        .replace(/answer\s+[A-Z]/g, " ")
+        .replace(/force\s+no\s+slash/gi, " ")
+        .replace(/\[tool-output\]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
 // Maps natural language prompts to slash commands.
 function detectSlash(prompt) {
     const cleaned = removeCodeBlocks(prompt);
@@ -130,10 +145,10 @@ function shouldSkipAiAutoSlash(prompt) {
     return HIGH_RISK_SKIP_PATTERN.test(prompt);
 }
 function buildAiSlashInstruction() {
-    return "Classify this request for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics.";
+    return "Classify only the sanitized user request text for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics.";
 }
 function buildAiSlashContext(prompt) {
-    return `prompt=${prompt.trim() || "(empty)"}`;
+    return `request=${normalizePromptForAi(prompt) || "(empty)"}`;
 }
 // Creates auto slash command hook that rewrites prompt text when output parts are mutable.
 export function createAutoSlashCommandHook(options) {
