@@ -114,6 +114,7 @@ Observed:
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --markdown-out docs/plan/status/in_progress/llm-disagreement-rollout-report.md`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --thresholds path/to/llm-rollout-thresholds.json`
+- Baseline thresholds template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 
 ## Key takeaways
 
@@ -125,6 +126,7 @@ Observed:
 - disagreement audits can now be aggregated into rollout recommendations with `scripts/gateway_llm_disagreement_report.mjs`
 - the same report can now emit a markdown artifact for daily human review with `--markdown-out`
 - rollout recommendations can now be tuned per hook with a thresholds JSON passed to `--thresholds`
+- the repo now carries a checked-in starter policy at `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 
 ### 7. Delegation fallback ambiguous failure output
 

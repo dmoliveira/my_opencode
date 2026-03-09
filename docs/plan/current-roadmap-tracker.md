@@ -124,7 +124,7 @@ Remaining:
 |---|---|---|
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
-| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint now includes disagreement aggregation, rollout recommendation reporting, markdown artifact generation, and per-hook threshold tuning for AI-assisted hooks. |
+| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint now includes disagreement aggregation, rollout recommendation reporting, markdown artifact generation, per-hook threshold tuning, and a checked-in thresholds template for AI-assisted hooks. |
 
 ## Done Recently
 

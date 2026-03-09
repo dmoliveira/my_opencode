@@ -1,0 +1,20 @@
+{
+  "default": {
+    "investigateAt": 10,
+    "tuneAt": 4,
+    "observeAt": 1
+  },
+  "hooks": {
+    "agent-model-resolver": {
+      "tuneAt": 3
+    },
+    "auto-slash-command": {
+      "investigateAt": 8,
+      "tuneAt": 3
+    },
+    "provider-error-classifier": {
+      "investigateAt": 6,
+      "tuneAt": 2
+    }
+  }
+}
