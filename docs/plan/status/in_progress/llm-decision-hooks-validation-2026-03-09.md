@@ -127,6 +127,7 @@ Observed:
 - the same report can now emit a markdown artifact for daily human review with `--markdown-out`
 - rollout recommendations can now be tuned per hook with a thresholds JSON passed to `--thresholds`
 - the repo now carries a checked-in starter policy at `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
+- initial shadow-to-assist hook candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 
 ### 7. Delegation fallback ambiguous failure output
 

@@ -38,6 +38,7 @@ Do not use LLM decisions for:
 - Current checkpoint: runtime plus delegation, validation, PR-body, and done-proof semantic slices are implemented in this worktree and validated with real-session probes
 - Current active slice: per-hook rollout threshold tuning on top of disagreement and markdown reporting
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
+- Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 
 ### Epic status
 
