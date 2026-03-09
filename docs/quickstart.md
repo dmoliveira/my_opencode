@@ -57,3 +57,9 @@ Use this split to stay consistent:
 - Operator runbook: `docs/operator-playbook.md`
 - Worktree-first execution: `docs/parallel-wt-playbook.md`
 - Deeper architecture notes: `docs/readme-deep-notes.md`
+
+Optional external delivery-policy references: search your local clone first when available, then use these public links when you need a canonical shareable reference.
+
+- `https://github.com/dmoliveira/agents.md/blob/main/AGENTS.md`
+- `https://github.com/dmoliveira/agents.md/blob/main/docs/index.md`
+- `https://github.com/dmoliveira/agents.md/blob/main/docs/validation-policy.md`
