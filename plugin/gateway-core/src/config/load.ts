@@ -169,6 +169,20 @@ function llmDecisionMode(
   return fallback
 }
 
+function llmDecisionHookModes(value: unknown): Record<string, "disabled" | "shadow" | "assist" | "enforce"> {
+  if (!value || typeof value !== "object") {
+    return {}
+  }
+  const result: Record<string, "disabled" | "shadow" | "assist" | "enforce"> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const mode = llmDecisionMode(raw, "disabled")
+    if (key.trim() && mode !== "disabled") {
+      result[key.trim()] = mode
+    }
+  }
+  return result
+}
+
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source =
@@ -999,6 +1013,7 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         llmDecisionRuntimeSource.mode,
         DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.mode,
       ),
+      hookModes: llmDecisionHookModes(llmDecisionRuntimeSource.hookModes),
       command:
         typeof llmDecisionRuntimeSource.command === "string" &&
         llmDecisionRuntimeSource.command.trim().length > 0

@@ -1,5 +1,15 @@
 import { spawn } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+export function resolveLlmDecisionRuntimeConfigForHook(config, hookId) {
+    const override = config.hookModes[String(hookId ?? "").trim()] || config.hookModes[String(hookId ?? "").trim().toLowerCase()];
+    if (!override || override === config.mode) {
+        return config;
+    }
+    return {
+        ...config,
+        mode: override,
+    };
+}
 function safePositiveInt(value, fallback) {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
@@ -165,6 +175,7 @@ export function createLlmDecisionRuntime(options) {
     const config = {
         enabled: options.config.enabled,
         mode: options.config.mode,
+        hookModes: options.config.hookModes ?? {},
         command: String(options.config.command || "opencode").trim() || "opencode",
         model: String(options.config.model || "openai/gpt-5.1-codex-mini").trim() || "openai/gpt-5.1-codex-mini",
         timeoutMs: safePositiveInt(options.config.timeoutMs, 30000),

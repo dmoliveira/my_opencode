@@ -34,3 +34,18 @@ Branch: `plan/llm-decision-hooks`
 
 - Promote to `assist` only after disagreement reports stay low and stable for that hook.
 - Promote to `enforce` only after assist behavior is proven and deterministic fallback still exists.
+
+## Suggested runtime config snippet
+
+```json
+{
+  "llmDecisionRuntime": {
+    "enabled": true,
+    "mode": "shadow",
+    "hookModes": {
+      "auto-slash-command": "assist",
+      "provider-error-classifier": "assist"
+    }
+  }
+}
+```

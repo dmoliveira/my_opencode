@@ -189,6 +189,7 @@ export interface AdaptiveDelegationPolicyConfig {
 export interface LlmDecisionRuntimeConfig {
   enabled: boolean;
   mode: "disabled" | "shadow" | "assist" | "enforce";
+  hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
   command: string;
   model: string;
   timeoutMs: number;
@@ -917,6 +918,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   llmDecisionRuntime: {
     enabled: false,
     mode: "disabled",
+    hookModes: {},
     command: "opencode",
     model: "openai/gpt-5.1-codex-mini",
     timeoutMs: 30000,

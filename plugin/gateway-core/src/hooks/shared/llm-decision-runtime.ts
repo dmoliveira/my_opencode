@@ -7,6 +7,7 @@ export type LlmDecisionMode = "disabled" | "shadow" | "assist" | "enforce"
 export interface LlmDecisionRuntimeConfig {
   enabled: boolean
   mode: LlmDecisionMode
+  hookModes: Record<string, LlmDecisionMode>
   command: string
   model: string
   timeoutMs: number
@@ -58,6 +59,20 @@ export interface DecisionComparisonAudit {
 export interface LlmDecisionRuntime {
   config: LlmDecisionRuntimeConfig
   decide(request: SingleCharDecisionRequest): Promise<SingleCharDecisionResult>
+}
+
+export function resolveLlmDecisionRuntimeConfigForHook(
+  config: LlmDecisionRuntimeConfig,
+  hookId: string,
+): LlmDecisionRuntimeConfig {
+  const override = config.hookModes[String(hookId ?? "").trim()] || config.hookModes[String(hookId ?? "").trim().toLowerCase()]
+  if (!override || override === config.mode) {
+    return config
+  }
+  return {
+    ...config,
+    mode: override,
+  }
 }
 
 type RunnerResult = { stdout: string; stderr: string }
@@ -254,6 +269,7 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
   const config: LlmDecisionRuntimeConfig = {
     enabled: options.config.enabled,
     mode: options.config.mode,
+    hookModes: options.config.hookModes ?? {},
     command: String(options.config.command || "opencode").trim() || "opencode",
     model: String(options.config.model || "openai/gpt-5.1-codex-mini").trim() || "openai/gpt-5.1-codex-mini",
     timeoutMs: safePositiveInt(options.config.timeoutMs, 30000),

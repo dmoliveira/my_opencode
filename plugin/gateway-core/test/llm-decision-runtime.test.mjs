@@ -5,6 +5,7 @@ import {
   buildSingleCharDecisionPrompt,
   createLlmDecisionRuntime,
   parseSingleCharDecision,
+  resolveLlmDecisionRuntimeConfigForHook,
   shouldAuditDecisionDisagreement,
   truncateDecisionText,
 } from "../dist/hooks/shared/llm-decision-runtime.js"
@@ -34,6 +35,26 @@ test("shouldAuditDecisionDisagreement only reports real semantic differences", (
   assert.equal(shouldAuditDecisionDisagreement("no_slash", "route_doctor"), true)
   assert.equal(shouldAuditDecisionDisagreement("test_present", "test_present"), false)
   assert.equal(shouldAuditDecisionDisagreement("", "test_present"), false)
+})
+
+test("resolveLlmDecisionRuntimeConfigForHook applies per-hook mode overrides", () => {
+  const config = resolveLlmDecisionRuntimeConfigForHook(
+    {
+      enabled: true,
+      mode: "shadow",
+      hookModes: { "auto-slash-command": "assist" },
+      command: "opencode",
+      model: "openai/gpt-5.1-codex-mini",
+      timeoutMs: 1000,
+      maxPromptChars: 200,
+      maxContextChars: 200,
+      enableCache: true,
+      cacheTtlMs: 10000,
+      maxCacheEntries: 8,
+    },
+    "auto-slash-command",
+  )
+  assert.equal(config.mode, "assist")
 })
 
 test("llm decision runtime accepts valid JSON text output", async () => {

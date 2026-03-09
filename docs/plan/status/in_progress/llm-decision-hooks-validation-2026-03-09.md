@@ -128,6 +128,7 @@ Observed:
 - rollout recommendations can now be tuned per hook with a thresholds JSON passed to `--thresholds`
 - the repo now carries a checked-in starter policy at `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - initial shadow-to-assist hook candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
+- per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
 
 ### 7. Delegation fallback ambiguous failure output
 

@@ -110,6 +110,19 @@ function llmDecisionMode(value, fallback) {
     }
     return fallback;
 }
+function llmDecisionHookModes(value) {
+    if (!value || typeof value !== "object") {
+        return {};
+    }
+    const result = {};
+    for (const [key, raw] of Object.entries(value)) {
+        const mode = llmDecisionMode(raw, "disabled");
+        if (key.trim() && mode !== "disabled") {
+            result[key.trim()] = mode;
+        }
+    }
+    return result;
+}
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
@@ -622,6 +635,7 @@ export function loadGatewayConfig(raw) {
                 ? llmDecisionRuntimeSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enabled,
             mode: llmDecisionMode(llmDecisionRuntimeSource.mode, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.mode),
+            hookModes: llmDecisionHookModes(llmDecisionRuntimeSource.hookModes),
             command: typeof llmDecisionRuntimeSource.command === "string" &&
                 llmDecisionRuntimeSource.command.trim().length > 0
                 ? llmDecisionRuntimeSource.command.trim()

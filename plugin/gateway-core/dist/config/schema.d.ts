@@ -147,6 +147,7 @@ export interface AdaptiveDelegationPolicyConfig {
 export interface LlmDecisionRuntimeConfig {
     enabled: boolean;
     mode: "disabled" | "shadow" | "assist" | "enforce";
+    hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
     command: string;
     model: string;
     timeoutMs: number;

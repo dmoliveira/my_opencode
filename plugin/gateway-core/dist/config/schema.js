@@ -271,6 +271,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
     llmDecisionRuntime: {
         enabled: false,
         mode: "disabled",
+        hookModes: {},
         command: "opencode",
         model: "openai/gpt-5.1-codex-mini",
         timeoutMs: 30000,

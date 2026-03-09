@@ -80,7 +80,7 @@ import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysi
 import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
 import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
-import { createLlmDecisionRuntime } from "./hooks/shared/llm-decision-runtime.js";
+import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook, type LlmDecisionRuntime } from "./hooks/shared/llm-decision-runtime.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
@@ -241,10 +241,11 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       ? ctx.directory
       : process.cwd();
   const cfg = loadGatewayConfig(ctx.config);
-  const llmDecisionRuntime = createLlmDecisionRuntime({
-    directory,
-    config: cfg.llmDecisionRuntime,
-  });
+  const llmDecisionRuntimeForHook = (hookId: string): LlmDecisionRuntime =>
+    createLlmDecisionRuntime({
+      directory,
+      config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),
+    });
   const stopGuard = createStopContinuationGuardHook({
     directory,
     enabled: cfg.stopContinuationGuard.enabled,
@@ -403,7 +404,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAgentDeniedToolEnforcerHook({
       directory,
       enabled: true,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("agent-model-resolver"),
     }),
     createHookSemanticBridgeHook({
       directory,
@@ -415,7 +416,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       defaultOverrideDelta: cfg.adaptiveDelegationPolicy.defaultOverrideDelta,
       defaultIntentThreshold: cfg.adaptiveDelegationPolicy.defaultIntentThreshold,
       agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("agent-denied-tool-enforcer"),
     }),
     createDelegationOutcomeLearnerHook({
       directory,
@@ -428,7 +429,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createDelegationFallbackOrchestratorHook({
       directory,
       enabled: cfg.delegationFallbackOrchestrator.enabled,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("auto-slash-command"),
     }),
     createAgentDiscoverabilityInjectorHook({
       directory,
@@ -484,7 +485,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createValidationEvidenceLedgerHook({
       directory,
       enabled: cfg.validationEvidenceLedger.enabled,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("provider-error-classifier"),
     }),
     createParallelOpportunityDetectorHook({
       directory,
@@ -514,7 +515,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     createAutoSlashCommandHook({
       directory,
       enabled: cfg.autoSlashCommand.enabled,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("delegation-fallback-orchestrator"),
     }),
     createContextInjectorHook({
       directory,
@@ -620,7 +621,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       enabled: cfg.providerErrorClassifier.enabled,
       client: ctx.client,
       cooldownMs: cfg.providerErrorClassifier.cooldownMs,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("validation-evidence-ledger"),
     }),
     createCodexHeaderInjectorHook({
       directory,
@@ -685,7 +686,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
       requireLedgerEvidence: cfg.doneProofEnforcer.requireLedgerEvidence,
       allowTextFallback: cfg.doneProofEnforcer.allowTextFallback,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("done-proof-enforcer"),
     }),
     createDependencyRiskGuardHook({
       directory,
@@ -755,7 +756,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         cfg.prBodyEvidenceGuard.requireValidationEvidence,
       allowUninspectableBody: cfg.prBodyEvidenceGuard.allowUninspectableBody,
       requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
-      decisionRuntime: llmDecisionRuntime,
+      decisionRuntime: llmDecisionRuntimeForHook("pr-body-evidence-guard"),
     }),
     createMergeReadinessGuardHook({
       directory,

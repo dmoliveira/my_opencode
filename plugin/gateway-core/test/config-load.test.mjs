@@ -92,6 +92,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.adaptiveDelegationPolicy.blockExpensiveDuringCooldown, true)
   assert.equal(config.llmDecisionRuntime.enabled, false)
   assert.equal(config.llmDecisionRuntime.mode, "disabled")
+  assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
   assert.equal(config.llmDecisionRuntime.model, "openai/gpt-5.1-codex-mini")
   assert.equal(config.llmDecisionRuntime.enableCache, true)
   assert.equal(config.llmDecisionRuntime.cacheTtlMs, 300000)
@@ -223,6 +224,7 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.globalProcessPressure.selfSeverityOperator, "any")
   assert.equal(config.globalProcessPressure.selfHighCpuPct, 100)
   assert.equal(config.llmDecisionRuntime.mode, "disabled")
+  assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
   assert.equal(config.llmDecisionRuntime.timeoutMs, 30000)
   assert.equal(config.llmDecisionRuntime.maxPromptChars, 1200)
   assert.equal(config.llmDecisionRuntime.maxContextChars, 2400)
@@ -274,6 +276,25 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
   assert.equal(config.codexHeaderInjector.enabled, true)
   assert.equal(config.planHandoffReminder.enabled, true)
+})
+
+test("loadGatewayConfig normalizes llm hook mode overrides", () => {
+  const config = loadGatewayConfig({
+    llmDecisionRuntime: {
+      enabled: true,
+      mode: "shadow",
+      hookModes: {
+        "auto-slash-command": "assist",
+        "provider-error-classifier": "assist",
+        ignored: "invalid",
+      },
+    },
+  })
+  assert.equal(config.llmDecisionRuntime.mode, "shadow")
+  assert.deepEqual(config.llmDecisionRuntime.hookModes, {
+    "auto-slash-command": "assist",
+    "provider-error-classifier": "assist",
+  })
 })
 
 test("loadGatewayConfig keeps default maxIgnoredCompletionCycles", () => {

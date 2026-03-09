@@ -2,6 +2,7 @@ export type LlmDecisionMode = "disabled" | "shadow" | "assist" | "enforce";
 export interface LlmDecisionRuntimeConfig {
     enabled: boolean;
     mode: LlmDecisionMode;
+    hookModes: Record<string, LlmDecisionMode>;
     command: string;
     model: string;
     timeoutMs: number;
@@ -50,6 +51,7 @@ export interface LlmDecisionRuntime {
     config: LlmDecisionRuntimeConfig;
     decide(request: SingleCharDecisionRequest): Promise<SingleCharDecisionResult>;
 }
+export declare function resolveLlmDecisionRuntimeConfigForHook(config: LlmDecisionRuntimeConfig, hookId: string): LlmDecisionRuntimeConfig;
 type RunnerResult = {
     stdout: string;
     stderr: string;
