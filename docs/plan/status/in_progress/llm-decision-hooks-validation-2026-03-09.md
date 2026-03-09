@@ -114,6 +114,7 @@ Observed:
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --markdown-out docs/plan/status/in_progress/llm-disagreement-rollout-report.md`
 - `node scripts/gateway_llm_disagreement_report.mjs .opencode/gateway-events.jsonl --thresholds path/to/llm-rollout-thresholds.json`
+- `node scripts/gateway_llm_scenario_report.mjs docs/plan/status/in_progress/llm-scenario-fixtures.json --markdown-out docs/plan/status/in_progress/llm-scenario-report.md`
 - Baseline thresholds template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 
 ## Key takeaways
@@ -130,6 +131,7 @@ Observed:
 - initial shadow-to-assist hook candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
 - a checked-in rollout config example now exists at `docs/plan/status/in_progress/llm-rollout-config.example.json`
+- scenario-based reliability measurement now has a checked-in fixture set at `docs/plan/status/in_progress/llm-scenario-fixtures.json`
 - the active repo config in `opencode.json` now enables `auto-slash-command` and `provider-error-classifier` in `assist`
 
 ### 11. Initial assist rollout spot-check
@@ -275,6 +277,28 @@ Outcome:
 
 - the previously failing contaminated fallback case is now corrected
 - Epic 5 major live contamination hotspots are resolved for the currently upgraded semantic hooks
+
+### 17. Scenario reliability report
+
+Scenario set:
+
+- `auto-slash-command` contamination
+- `provider-error-classifier` provider overload contamination
+- `done-proof-enforcer` completion evidence contamination
+- `validation-evidence-ledger` wrapper-command contamination
+- `delegation-fallback-orchestrator` invalid-arguments contamination
+
+Observed:
+
+- total scenarios: `5`
+- correct decisions: `5`
+- accuracy: `100%`
+- markdown artifact written to `docs/plan/status/in_progress/llm-scenario-report.md`
+
+Outcome:
+
+- there is now a repeatable scenario-based reliability harness for the upgraded semantic hooks
+- this complements live traffic disagreement reports with deterministic scenario accuracy tracking
 
 ### 13. Sidecar config live runtime fix
 

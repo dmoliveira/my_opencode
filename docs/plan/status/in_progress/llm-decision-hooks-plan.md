@@ -42,6 +42,7 @@ Do not use LLM decisions for:
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
 - Canonical rollout config example: `docs/plan/status/in_progress/llm-rollout-config.example.json`
 - Live runtime config path: `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`) now carries gateway plugin settings without violating OpenCode root schema
+- Scenario reliability fixtures live in `docs/plan/status/in_progress/llm-scenario-fixtures.json`
 
 ### Epic status
 
@@ -52,7 +53,7 @@ Do not use LLM decisions for:
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry collection is now waiting on real traffic volume. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, and sanitized fallback failure classification are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs. |
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and a scenario-report harness now exists for accuracy/latency tracking across representative requests; current checked scenario set is passing at 100% across 5 representative cases. |
 | Epic 7 - Rollout and cleanup | pending | No rollout promotion or heuristic removal yet. |
 
 ### Task status by backlog item

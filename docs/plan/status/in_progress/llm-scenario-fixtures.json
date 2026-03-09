@@ -1,0 +1,62 @@
+[
+  {
+    "id": "auto-slash-chatrole",
+    "hookId": "auto-slash-command",
+    "requestType": "contamination",
+    "description": "chat-role contamination around diagnostics request",
+    "instruction": "Classify only the sanitized user request text for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics.",
+    "context": "request=inspect the environment and tell me what is wrong",
+    "allowedChars": ["D", "N"],
+    "decisionMeaning": { "D": "route_doctor", "N": "no_slash" },
+    "expectedChar": "D",
+    "expectedMeaning": "route_doctor"
+  },
+  {
+    "id": "provider-overload-contamination",
+    "hookId": "provider-error-classifier",
+    "requestType": "provider_error",
+    "description": "provider overload wording with contaminated context",
+    "instruction": "Classify this provider error. F=free_usage_or_credit_exhausted, R=rate_limited, O=provider_overloaded_or_unavailable, N=not_classified.",
+    "context": "error=Service temporarily saturated, please retry later",
+    "allowedChars": ["F", "R", "O", "N"],
+    "decisionMeaning": { "F": "free_usage_exhausted", "R": "rate_limited", "O": "provider_overloaded", "N": "not_classified" },
+    "expectedChar": "O",
+    "expectedMeaning": "provider_overloaded"
+  },
+  {
+    "id": "done-proof-smoke-checks",
+    "hookId": "done-proof-enforcer",
+    "requestType": "completion_evidence",
+    "description": "semantic completion evidence with contamination",
+    "instruction": "Does this completion text include evidence-equivalent wording for test? Y=yes, N=no.",
+    "context": "completion=Completed smoke verification and regression checks successfully. <promise>DONE</promise>",
+    "allowedChars": ["Y", "N"],
+    "decisionMeaning": { "Y": "test_present", "N": "test_missing" },
+    "expectedChar": "Y",
+    "expectedMeaning": "test_present"
+  },
+  {
+    "id": "validation-wrapper-test",
+    "hookId": "validation-evidence-ledger",
+    "requestType": "validation_wrapper",
+    "description": "wrapper command for test validation",
+    "instruction": "Classify only the sanitized shell command for validation evidence. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation.",
+    "context": "command=./scripts/ci-check tests/api smoke",
+    "allowedChars": ["L", "T", "C", "B", "S", "N"],
+    "decisionMeaning": { "L": "lint", "T": "test", "C": "typecheck", "B": "build", "S": "security", "N": "not_validation" },
+    "expectedChar": "T",
+    "expectedMeaning": "test"
+  },
+  {
+    "id": "fallback-invalid-arguments",
+    "hookId": "delegation-fallback-orchestrator",
+    "requestType": "delegation_failure",
+    "description": "sanitized delegation failure that should classify as invalid arguments",
+    "instruction": "Classify only the sanitized delegation failure evidence. U=unknown_agent, C=unknown_category, I=invalid_arguments, B=blocked_forbidden_tool, R=runtime_error, N=no_match.",
+    "context": "output=The task delegation could not proceed because the request shape was not accepted by the runtime. prompt=[DELEGATION TRACE x] retry delegation description=(empty)",
+    "allowedChars": ["U", "C", "I", "B", "R", "N"],
+    "decisionMeaning": { "U": "delegation_unknown_agent", "C": "delegation_unknown_category", "I": "delegation_invalid_arguments", "B": "delegation_blocked_forbidden_tool", "R": "delegation_runtime_error", "N": "no_match" },
+    "expectedChar": "I",
+    "expectedMeaning": "delegation_invalid_arguments"
+  }
+]
