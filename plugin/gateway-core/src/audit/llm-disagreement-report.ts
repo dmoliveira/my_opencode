@@ -20,6 +20,18 @@ export interface LlmDisagreementSummary {
   pairs: LlmDisagreementSummaryEntry[]
 }
 
+export interface LlmRolloutRecommendation {
+  hook: string
+  action: "investigate" | "tune" | "observe" | "promote_candidate"
+  reason: string
+  disagreementCount: number
+}
+
+export interface LlmRolloutReport {
+  summary: LlmDisagreementSummary
+  recommendations: LlmRolloutRecommendation[]
+}
+
 export function parseGatewayAuditJsonl(text: string): GatewayAuditEvent[] {
   return String(text ?? "")
     .split(/\r?\n/)
@@ -71,5 +83,48 @@ export function summarizeLlmDecisionDisagreements(events: GatewayAuditEvent[]): 
     total: pairs.reduce((sum, item) => sum + item.count, 0),
     byHook,
     pairs,
+  }
+}
+
+export function recommendLlmRolloutActions(summary: LlmDisagreementSummary): LlmRolloutRecommendation[] {
+  return summary.byHook.map(({ hook, count }) => {
+    if (count >= 10) {
+      return {
+        hook,
+        action: "investigate",
+        reason: "high disagreement volume; keep in shadow and inspect top disagreement pairs",
+        disagreementCount: count,
+      }
+    }
+    if (count >= 4) {
+      return {
+        hook,
+        action: "tune",
+        reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
+        disagreementCount: count,
+      }
+    }
+    if (count >= 1) {
+      return {
+        hook,
+        action: "observe",
+        reason: "low disagreement volume; continue shadow sampling before promotion",
+        disagreementCount: count,
+      }
+    }
+    return {
+      hook,
+      action: "promote_candidate",
+      reason: "no disagreements recorded in current sample; candidate for wider assist-mode evaluation",
+      disagreementCount: count,
+    }
+  })
+}
+
+export function buildLlmRolloutReport(events: GatewayAuditEvent[]): LlmRolloutReport {
+  const summary = summarizeLlmDecisionDisagreements(events)
+  return {
+    summary,
+    recommendations: recommendLlmRolloutActions(summary),
   }
 }

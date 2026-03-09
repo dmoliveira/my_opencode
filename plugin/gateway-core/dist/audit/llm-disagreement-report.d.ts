@@ -20,5 +20,17 @@ export interface LlmDisagreementSummary {
     }>;
     pairs: LlmDisagreementSummaryEntry[];
 }
+export interface LlmRolloutRecommendation {
+    hook: string;
+    action: "investigate" | "tune" | "observe" | "promote_candidate";
+    reason: string;
+    disagreementCount: number;
+}
+export interface LlmRolloutReport {
+    summary: LlmDisagreementSummary;
+    recommendations: LlmRolloutRecommendation[];
+}
 export declare function parseGatewayAuditJsonl(text: string): GatewayAuditEvent[];
 export declare function summarizeLlmDecisionDisagreements(events: GatewayAuditEvent[]): LlmDisagreementSummary;
+export declare function recommendLlmRolloutActions(summary: LlmDisagreementSummary): LlmRolloutRecommendation[];
+export declare function buildLlmRolloutReport(events: GatewayAuditEvent[]): LlmRolloutReport;

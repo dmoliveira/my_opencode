@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 import {
+  buildLlmRolloutReport,
   parseGatewayAuditJsonl,
   summarizeLlmDecisionDisagreements,
 } from "../plugin/gateway-core/dist/audit/llm-disagreement-report.js"
@@ -18,5 +19,16 @@ if (!existsSync(target)) {
 }
 
 const text = readFileSync(target, "utf-8")
-const summary = summarizeLlmDecisionDisagreements(parseGatewayAuditJsonl(text))
-console.log(JSON.stringify(summary, null, 2))
+const events = parseGatewayAuditJsonl(text)
+const report = buildLlmRolloutReport(events)
+const legacySummary = summarizeLlmDecisionDisagreements(events)
+console.log(
+  JSON.stringify(
+    {
+      ...report,
+      summary: legacySummary,
+    },
+    null,
+    2,
+  ),
+)
