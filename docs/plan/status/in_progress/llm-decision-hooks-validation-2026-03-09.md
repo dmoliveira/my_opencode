@@ -132,6 +132,28 @@ Observed:
 - a checked-in rollout config example now exists at `docs/plan/status/in_progress/llm-rollout-config.example.json`
 - the active repo config in `opencode.json` now enables `auto-slash-command` and `provider-error-classifier` in `assist`
 
+### 11. Initial assist rollout spot-check
+
+Scenario:
+
+- active repo config keeps global LLM mode at `shadow`
+- `auto-slash-command` and `provider-error-classifier` are promoted to `assist`
+
+Observed:
+
+- resolved runtime modes from real repo config:
+  - global: `shadow`
+  - `auto-slash-command`: `assist`
+  - `provider-error-classifier`: `assist`
+  - `agent-model-resolver`: `shadow`
+- fresh standalone assist probe produced no disagreement entries yet
+- one `auto-slash-command` AI call failed fast (`llm_decision_failed`, about `990ms`) during direct hook probing, so current disagreement report stayed empty in that spot-check
+
+Outcome:
+
+- rollout gating is wired correctly in the real repo config
+- next useful data collection should happen from normal interactive sessions so disagreement reporting reflects live traffic rather than sparse direct-hook probes
+
 ### 7. Delegation fallback ambiguous failure output
 
 Scenario:

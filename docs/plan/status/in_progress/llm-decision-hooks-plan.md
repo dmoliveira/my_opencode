@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, and done-proof semantic slices are implemented in this worktree and validated with real-session probes
-- Current active slice: per-hook rollout threshold tuning on top of disagreement and markdown reporting
+- Current active slice: collect live disagreement data from the first assist hooks and tune based on real traffic
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
