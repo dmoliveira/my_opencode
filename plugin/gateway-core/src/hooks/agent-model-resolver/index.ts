@@ -2,7 +2,10 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js"
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
+import {
+  type LlmDecisionRuntime,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -493,6 +496,23 @@ export function createAgentModelResolverHook(options: {
               : resolvedChar === "N"
                 ? ""
                 : (AGENT_BY_ROUTING_CHAR.get(resolvedChar) ?? "")
+          writeDecisionComparisonAudit({
+            directory,
+            hookId: "agent-model-resolver",
+            sessionId: sid,
+            traceId,
+            mode: options.decisionRuntime.config.mode,
+            deterministicMeaning: hadExplicitSubagent
+              ? `route_${originalExplicitSubagent}`
+              : aiInferred.name
+                ? `route_${aiInferred.name}`
+                : "no_opinion",
+            aiMeaning:
+              decision.meaning ||
+              (aiCandidate ? `route_${aiCandidate}` : resolvedChar === "N" ? "no_opinion" : "keep_explicit_choice"),
+            deterministicValue: hadExplicitSubagent ? originalExplicitSubagent : aiInferred.name,
+            aiValue: aiCandidate || resolvedChar,
+          })
           writeGatewayEventAudit(directory, {
             hook: "agent-model-resolver",
             stage: "state",

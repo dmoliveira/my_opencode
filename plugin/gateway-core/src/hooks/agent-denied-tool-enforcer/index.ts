@@ -2,7 +2,10 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
+import {
+  type LlmDecisionRuntime,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -228,6 +231,17 @@ export function createAgentDeniedToolEnforcerHook(options: {
           cacheKey: `mutation:${subagentType}:${combinedText}`,
         })
         if (mutationDecision.accepted && mutationDecision.char === "M") {
+          writeDecisionComparisonAudit({
+            directory,
+            hookId: "agent-denied-tool-enforcer",
+            sessionId: sessionId(eventPayload),
+            traceId,
+            mode: options.decisionRuntime.config.mode,
+            deterministicMeaning: "read_only_safe",
+            aiMeaning: mutationDecision.meaning || "mutating_requested",
+            deterministicValue: "R",
+            aiValue: mutationDecision.char,
+          })
           writeGatewayEventAudit(directory, {
             hook: "agent-denied-tool-enforcer",
             stage: "state",
@@ -272,6 +286,17 @@ export function createAgentDeniedToolEnforcerHook(options: {
           })
           if (toolDecision.accepted && toolDecision.char === "D") {
             const suggestion = suggestAllowedTool(String(denied[0]), allowed)
+            writeDecisionComparisonAudit({
+              directory,
+              hookId: "agent-denied-tool-enforcer",
+              sessionId: sessionId(eventPayload),
+              traceId,
+              mode: options.decisionRuntime.config.mode,
+              deterministicMeaning: "allowed_or_no_issue",
+              aiMeaning: toolDecision.meaning || "denied_tool_implied",
+              deterministicValue: "A",
+              aiValue: toolDecision.char,
+            })
             writeGatewayEventAudit(directory, {
               hook: "agent-denied-tool-enforcer",
               stage: "state",
