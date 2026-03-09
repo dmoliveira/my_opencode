@@ -300,6 +300,11 @@ Outcome:
 - there is now a repeatable scenario-based reliability harness for the upgraded semantic hooks
 - this complements live traffic disagreement reports with deterministic scenario accuracy tracking
 
+Live rollout note:
+
+- after tuning deterministic wrapped-test matching, the regenerated disagreement report did not change yet because the checked-in audit data still reflects earlier collected events
+- next rollout decision should use a fresh telemetry window rather than the current historical snapshot alone
+
 Next scenario targets:
 
 - expand from semantic hook decisions into progress/enforcer workflows such as `todo-continuation-enforcer` and completion gating loops

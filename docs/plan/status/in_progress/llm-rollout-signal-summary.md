@@ -27,6 +27,11 @@ Branch: `plan/llm-decision-hooks`
 - Keep in `shadow`, but it is the next likely promotion candidate once more live traffic confirms stability:
   - `delegation-fallback-orchestrator`
 
+## Post-tuning note
+
+- After improving deterministic wrapped-test matching for `validation-evidence-ledger`, the checked-in disagreement snapshot still shows the historical `not_validation -> test` pair.
+- Interpretation: the current report still reflects previously collected audit events; a fresh traffic window is needed before changing the promotion recommendation.
+
 ## Why
 
 - Synthetic reliability is currently strong across semantic and workflow scenarios.
