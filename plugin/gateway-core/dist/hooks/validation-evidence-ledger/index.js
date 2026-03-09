@@ -31,10 +31,25 @@ const VALIDATION_CATEGORY_BY_CHAR = {
     S: "security",
 };
 function buildValidationInstruction() {
-    return "Classify this shell command for validation evidence. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation.";
+    return "Classify only the sanitized shell command for validation evidence. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation.";
+}
+function normalizeValidationCommand(command) {
+    const trimmed = command.trim();
+    const actualCommandMatch = trimmed.match(/actual command\s*:\s*([\s\S]+)$/i);
+    const extracted = actualCommandMatch?.[1]?.trim() || trimmed;
+    return extracted
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
+        .replace(/ignore all previous instructions/gi, " ")
+        .replace(/ignore previous instructions/gi, " ")
+        .replace(/answer\s+[A-Z]/g, " ")
+        .replace(/classify as [a-z_-]+/gi, " ")
+        .replace(/\s*[;|]\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 function buildValidationContext(command) {
-    return `command=${command.trim() || "(empty)"}`;
+    return `command=${normalizeValidationCommand(command) || "(empty)"}`;
 }
 // Creates validation evidence ledger hook to track successful validation commands.
 export function createValidationEvidenceLedgerHook(options) {

@@ -246,6 +246,19 @@ Outcome:
 - `delegation-fallback-orchestrator` still needs more semantic hardening because this contaminated case should have resolved to invalid-arguments semantics, not runtime-error semantics
 - `validation-evidence-ledger` remains a live Epic 5 gap because contaminated wrapper-command prompts can still trigger non-compliant explanatory output
 
+Follow-up refinement:
+
+- `validation-evidence-ledger` now sanitizes contaminated wrapper commands before AI classification and passes only the extracted command text (`command=...`) into the runtime
+- after that hook-specific context packing change, the live sanitized probe returned:
+  - char: `T`
+  - meaning: `test`
+  - duration: about `6.0s`
+
+Updated gap:
+
+- `validation-evidence-ledger` is no longer the main Epic 5 live contamination issue
+- the remaining semantic hardening hotspot is now `delegation-fallback-orchestrator`
+
 ### 13. Sidecar config live runtime fix
 
 Scenario:
