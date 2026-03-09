@@ -243,8 +243,7 @@ Observed:
 
 Outcome:
 
-- `delegation-fallback-orchestrator` still needs more semantic hardening because this contaminated case should have resolved to invalid-arguments semantics, not runtime-error semantics
-- `validation-evidence-ledger` remains a live Epic 5 gap because contaminated wrapper-command prompts can still trigger non-compliant explanatory output
+- initial probe showed `delegation-fallback-orchestrator` and `validation-evidence-ledger` as the remaining Epic 5 hotspots
 
 Follow-up refinement:
 
@@ -258,6 +257,24 @@ Updated gap:
 
 - `validation-evidence-ledger` is no longer the main Epic 5 live contamination issue
 - the remaining semantic hardening hotspot is now `delegation-fallback-orchestrator`
+
+### 16. Delegation fallback sanitized live probe
+
+Scenario:
+
+- fallback classifier now sanitizes contaminated failure evidence and passes only the extracted failure/prompt text into the runtime
+
+Observed:
+
+- live sanitized fallback probe returned:
+  - char: `I`
+  - meaning: `delegation_invalid_arguments`
+  - duration: about `6.1s`
+
+Outcome:
+
+- the previously failing contaminated fallback case is now corrected
+- Epic 5 major live contamination hotspots are resolved for the currently upgraded semantic hooks
 
 ### 13. Sidecar config live runtime fix
 

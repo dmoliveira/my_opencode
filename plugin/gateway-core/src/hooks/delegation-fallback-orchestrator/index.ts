@@ -94,14 +94,30 @@ function detectFailureReason(output: string): string | null {
 }
 
 function buildFailureInstruction(): string {
-  return "Classify this failed delegation output. U=unknown_agent, C=unknown_category, I=invalid_arguments, B=blocked_forbidden_tool, R=runtime_error, N=no_match."
+  return "Classify only the sanitized delegation failure evidence. U=unknown_agent, C=unknown_category, I=invalid_arguments, B=blocked_forbidden_tool, R=runtime_error, N=no_match."
+}
+
+function sanitizeFailureText(text: string): string {
+  const trimmed = text.trim()
+  const actualMatch = trimmed.match(/actual (?:failure|output|prompt|description)\s*:\s*([\s\S]+)$/i)
+  const extracted = actualMatch?.[1]?.trim() || trimmed
+  return extracted
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
+    .replace(/ignore all previous instructions/gi, " ")
+    .replace(/ignore previous instructions/gi, " ")
+    .replace(/answer\s+[A-Z]/g, " ")
+    .replace(/classify as [a-z_-]+/gi, " ")
+    .replace(/\s*[;|]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function buildFailureContext(output: string, prompt: string, description: string): string {
   return [
-    `output=${output.trim() || "(empty)"}`,
-    `prompt=${prompt.trim() || "(empty)"}`,
-    `description=${description.trim() || "(empty)"}`,
+    `output=${sanitizeFailureText(output) || "(empty)"}`,
+    `prompt=${sanitizeFailureText(prompt) || "(empty)"}`,
+    `description=${sanitizeFailureText(description) || "(empty)"}`,
   ].join(" ")
 }
 
