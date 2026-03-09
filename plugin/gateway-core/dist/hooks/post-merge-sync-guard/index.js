@@ -44,6 +44,7 @@ function mainWorktreePath(directory) {
     }
     return "";
 }
+const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 function resolveReminder(directory, defaults) {
     const branch = currentBranch(directory);
     const mainPath = mainWorktreePath(directory);
@@ -77,6 +78,19 @@ function resolveReminder(directory, defaults) {
         commands: ["git worktree list", `git -C "${mainPath}" status --short --branch`],
     };
 }
+function normalizeMergeOutput(output) {
+    const match = output.match(BENIGN_GH_WORKTREE_MERGE_WARNING);
+    if (!match) {
+        return output;
+    }
+    const note = `[post-merge-sync-guard] PR merged on GitHub. Skipping redundant local branch checkout because 'main' is already active in the primary worktree (${match[1]}).`;
+    const cleaned = output.replace(BENIGN_GH_WORKTREE_MERGE_WARNING, "").trim();
+    if (!cleaned) {
+        return note;
+    }
+    return `${cleaned}\n\n${note}`;
+}
+
 // Creates post-merge sync guard with cleanup enforcement and reminder injection.
 export function createPostMergeSyncGuardHook(options) {
     const pendingReminderSessions = new Set();
@@ -139,6 +153,7 @@ export function createPostMergeSyncGuardHook(options) {
             if (typeof toolOutput?.output !== "string") {
                 return;
             }
+            toolOutput.output = normalizeMergeOutput(toolOutput.output);
             if (reminderCommands.length === 0) {
                 return;
             }
