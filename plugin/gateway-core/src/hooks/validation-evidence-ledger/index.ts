@@ -29,6 +29,11 @@ interface ToolAfterPayload {
   directory?: string
 }
 
+interface PendingValidationCommand {
+  command: string
+  categories: ReturnType<typeof classifyValidationCommand>
+}
+
 interface SessionDeletedPayload {
   properties?: {
     info?: { id?: string }
@@ -70,7 +75,7 @@ export function createValidationEvidenceLedgerHook(options: {
   directory: string
   enabled: boolean
 }): GatewayHook {
-  const pendingCommandsBySession = new Map<string, string[]>()
+  const pendingCommandsBySession = new Map<string, PendingValidationCommand[]>()
   return {
     id: "validation-evidence-ledger",
     priority: 330,
@@ -102,8 +107,12 @@ export function createValidationEvidenceLedgerHook(options: {
         if (!command) {
           return
         }
+        const categories = classifyValidationCommand(command)
+        if (categories.length === 0) {
+          return
+        }
         const queue = pendingCommandsBySession.get(sid) ?? []
-        queue.push(command)
+        queue.push({ command, categories })
         pendingCommandsBySession.set(sid, queue)
         return
       }
@@ -120,20 +129,16 @@ export function createValidationEvidenceLedgerHook(options: {
         return
       }
       const queue = pendingCommandsBySession.get(sid) ?? []
-      const command = queue.shift() ?? ""
+      const pending = queue.shift()
       if (queue.length > 0) {
         pendingCommandsBySession.set(sid, queue)
       } else {
         pendingCommandsBySession.delete(sid)
       }
-      if (!command) {
+      if (!pending) {
         return
       }
       if (typeof eventPayload.output?.output !== "string") {
-        return
-      }
-      const categories = classifyValidationCommand(command)
-      if (categories.length === 0) {
         return
       }
       if (commandFailed(eventPayload.output.output)) {
@@ -143,13 +148,13 @@ export function createValidationEvidenceLedgerHook(options: {
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
-      markValidationEvidence(sid, categories, directory)
+      markValidationEvidence(sid, pending.categories, directory)
       writeGatewayEventAudit(directory, {
         hook: "validation-evidence-ledger",
         stage: "state",
         reason_code: "validation_evidence_recorded",
         session_id: sid,
-        evidence: categories.join(","),
+        evidence: pending.categories.join(","),
       })
     },
   }
