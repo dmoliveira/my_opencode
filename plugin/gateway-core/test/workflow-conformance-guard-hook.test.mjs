@@ -200,6 +200,66 @@ test("workflow-conformance-guard still blocks env-prefixed git mutation commands
   }
 })
 
+test("workflow-conformance-guard allows apply_patch targeting a linked worktree from protected main", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  const linked = `${directory}-linked`
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    writeFileSync(join(directory, "file.txt"), "v1\n", "utf-8")
+    commitAll(directory, "init")
+    execSync("git checkout -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    execSync(`git worktree add "${linked}" main`, { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["primary-worktree-guard", "workflow-conformance-guard"],
+          disabled: [],
+        },
+        primaryWorktreeGuard: {
+          enabled: true,
+          allowedBranches: ["main", "master"],
+          blockEdits: true,
+          blockBranchSwitches: true,
+        },
+        workflowConformanceGuard: {
+          enabled: true,
+          protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "apply_patch", sessionID: "session-protected-dir-linked-patch", directory },
+      {
+        args: {
+          patchText: `*** Begin Patch
+*** Add File: ${join(linked, "src/new.ts")}
++export const value = 1
+*** End Patch`,
+        },
+      }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "apply_patch", sessionID: "session-protected-dir-linked-patch-relative", directory },
+      {
+        args: {
+          patchText: `*** Begin Patch
+*** Add File: ${relative(directory, join(linked, "src/relative.ts"))}
++export const relativeValue = 1
+*** End Patch`,
+        },
+      }
+    )
+  } finally {
+    rmSync(linked, { recursive: true, force: true })
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("workflow-conformance-guard blocks mutating bash commands on protected branches", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
