@@ -45,10 +45,10 @@ export function isIntentionalHookBlock(error: unknown): boolean {
   return (
     /^\[[^\]]+\]/.test(trimmed) ||
     /^blocked\b/i.test(trimmed) ||
-    /require(?:s|d)? explicit/i.test(trimmed) ||
-    /\bmust include\b/i.test(trimmed) ||
-    /\bmust use\b/i.test(trimmed) ||
-    /\bmissing active\b/i.test(trimmed)
+    /(question tool is disabled|task\/todowrite tools are disabled)/i.test(
+      trimmed,
+    ) ||
+    /require(?:s|d)? explicit/i.test(trimmed)
   );
 }
 
