@@ -1,7 +1,7 @@
 # LLM Rollout Promotion Candidates
 
 Date: 2026-03-10
-Branch: `feature/llm-todo-continuation`
+Branch: `fix/next-parity-item-2`
 
 ## Initial assist candidates
 
@@ -15,7 +15,8 @@ Branch: `feature/llm-todo-continuation`
 ## Observe longer before promotion
 
 - `delegation-fallback-orchestrator`
-  - Why: fallback mutation is helpful but can redirect delegation behavior.
+  - Why: fallback mutation is helpful, deterministic fallback already exists, and it still looks like the best next assist candidate once fresh disagreement data confirms stability.
+  - Suggested mode: keep in `shadow` until the refreshed disagreement report clears promotion.
 - `pr-body-evidence-guard`
   - Why: semantic section detection is useful but still affects release workflow gates.
 - `done-proof-enforcer`
