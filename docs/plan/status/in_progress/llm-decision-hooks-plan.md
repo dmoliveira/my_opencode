@@ -2,8 +2,8 @@
 
 Date: 2026-03-11
 Status: `in_progress`
-Branch: `docs/semantic-decision-migration`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-semantic-decision-migration`
+Branch: `fix/next-parity-item-3`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item-3`
 
 ## Goal
 
@@ -54,8 +54,13 @@ Do not use LLM decisions for:
 | Epic 2 - Hybrid delegation decisions | done | `agent-model-resolver` and `agent-denied-tool-enforcer` use the centralized runtime with real simulation evidence. |
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry remains active for `auto-slash-command` and `provider-error-classifier`, while `delegation-fallback-orchestrator` stays the next shadow-to-assist candidate pending a fresh disagreement window. |
+<<<<<<< HEAD
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, and sanitized fallback failure classification are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
 | Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 18/18, now including `task-resume-info` semantic continuation/shadow cases alongside the mixed-signal `todo-continuation-enforcer` LLM fallback, epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
+=======
+| Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, sanitized fallback failure classification, and hidden-unicode/code-fence neutralization are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 16/16, now including the mixed-signal `todo-continuation-enforcer` LLM fallback case alongside epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
+>>>>>>> 1797cc2 (harden shared llm decision runtime prompts)
 | Epic 7 - Rollout and cleanup | in_progress | `auto-slash-command` and `provider-error-classifier` remain the active assist cohort; `delegation-fallback-orchestrator` is the next promotion candidate once refreshed disagreement evidence clears it. |
 
 ### Task status by backlog item
