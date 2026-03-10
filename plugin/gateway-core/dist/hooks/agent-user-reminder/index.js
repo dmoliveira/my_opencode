@@ -1,4 +1,4 @@
-const COMPLEX_TASK_PATTERN = /(debug|architecture|refactor|research|investigate|root cause|postmortem|optimi[sz]e)/;
+const COMPLEX_TASK_PATTERN = /(debug|architecture|refactor|research|investigate|root cause|postmortem|optimi[sz]e|implement|migrat(?:e|ion)|ship|add feature|build feature)/;
 // Extracts prompt text from chat payload properties.
 function promptText(payload) {
     const props = payload.properties ?? {};

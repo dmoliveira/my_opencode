@@ -8,7 +8,7 @@ import {
   buildCompactDecisionCacheKey,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
-import { readToolAfterOutputText } from "../shared/tool-after-output.js"
+import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js"
 
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
@@ -47,7 +47,7 @@ export function createMistakeLedgerHook(options: {
         return
       }
       const eventPayload = (payload ?? {}) as ToolAfterPayload
-      const text = readToolAfterOutputText(eventPayload.output?.output)
+      const text = readCombinedToolAfterOutputText(eventPayload.output?.output)
       if (!text) {
         return
       }

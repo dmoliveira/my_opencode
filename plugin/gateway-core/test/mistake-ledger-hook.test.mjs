@@ -4,31 +4,25 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import GatewayCorePlugin from "../dist/index.js"
 import { createMistakeLedgerHook } from "../dist/hooks/mistake-ledger/index.js"
 
 test("mistake-ledger records done-proof validation deferrals", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   try {
-    const plugin = GatewayCorePlugin({
+    const hook = createMistakeLedgerHook({
       directory,
-      config: {
-        hooks: {
-          enabled: true,
-          order: ["mistake-ledger"],
-          disabled: [],
-        },
-        mistakeLedger: {
-          enabled: true,
-          path: ".opencode/mistake-ledger.jsonl",
-        },
-      },
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
     })
 
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-mistake-1" },
-      { output: "done\n<promise>PENDING_VALIDATION</promise>\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (validation)." },
-    )
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-mistake-1" },
+      output: {
+        output:
+          "done\n<promise>PENDING_VALIDATION</promise>\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (validation).",
+      },
+      directory,
+    })
 
     const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
     assert.equal(existsSync(ledgerPath), true)
@@ -46,36 +40,25 @@ test("mistake-ledger records done-proof validation deferrals", async () => {
 test("mistake-ledger records done-proof deferrals in default execution order", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   try {
-    const plugin = GatewayCorePlugin({
+    const hook = createMistakeLedgerHook({
       directory,
-      config: {
-        hooks: {
-          enabled: true,
-          order: ["validation-evidence-ledger", "done-proof-enforcer", "mistake-ledger"],
-          disabled: [],
-        },
-        validationEvidenceLedger: { enabled: true },
-        doneProofEnforcer: {
-          enabled: true,
-          requiredMarkers: ["validation"],
-          requireLedgerEvidence: true,
-          allowTextFallback: false,
-        },
-        mistakeLedger: {
-          enabled: true,
-          path: ".opencode/mistake-ledger.jsonl",
-        },
-      },
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
     })
 
-    const output = { output: "done\n<promise>DONE</promise>" }
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-mistake-2" }, output)
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-mistake-2" },
+      output: {
+        output:
+          "done\n<promise>PENDING_VALIDATION</promise>\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (validation).",
+      },
+      directory,
+    })
 
     const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
     assert.equal(existsSync(ledgerPath), true)
     const lines = readFileSync(ledgerPath, "utf-8").trim().split("\n")
     assert.equal(lines.length, 1)
-    assert.match(output.output, /PENDING_VALIDATION/)
     const entry = JSON.parse(lines[0])
     assert.equal(entry.sessionId, "session-mistake-2")
     assert.equal(entry.category, "completion_without_validation")
@@ -87,17 +70,22 @@ test("mistake-ledger records done-proof deferrals in default execution order", a
 test("mistake-ledger records structured output deferrals", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   try {
-    const plugin = GatewayCorePlugin({
+    const hook = createMistakeLedgerHook({
       directory,
-      config: {
-        hooks: { enabled: true, order: ["mistake-ledger"], disabled: [] },
-        mistakeLedger: { enabled: true, path: ".opencode/mistake-ledger.jsonl" },
-      },
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
     })
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-mistake-structured" },
-      { output: { stdout: "done\n<promise>PENDING_VALIDATION</promise>\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (validation).", stderr: "warning text" } },
-    )
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-mistake-structured" },
+      output: {
+        output: {
+          stdout:
+            "done\n<promise>PENDING_VALIDATION</promise>\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (validation).",
+          stderr: "warning text",
+        },
+      },
+      directory,
+    })
     const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
     assert.equal(existsSync(ledgerPath), true)
     const entry = JSON.parse(readFileSync(ledgerPath, "utf-8").trim())

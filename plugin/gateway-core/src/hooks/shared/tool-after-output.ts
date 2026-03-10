@@ -1,33 +1,72 @@
 export type ToolAfterOutputChannel = "string" | "stdout" | "output" | "message" | "stderr" | "unknown"
 
+export interface ToolAfterOutputEntry {
+  channel: ToolAfterOutputChannel
+  text: string
+}
+
+export function listToolAfterOutputTexts(output: unknown): ToolAfterOutputEntry[] {
+  if (typeof output === "string") {
+    return output.trim() ? [{ channel: "string", text: output }] : []
+  }
+  if (!output || typeof output !== "object") {
+    return []
+  }
+  const record = output as Record<string, unknown>
+  const entries: ToolAfterOutputEntry[] = []
+  for (const channel of ["stdout", "output", "message", "stderr"] as const) {
+    const value = record[channel]
+    if (typeof value === "string" && value.trim()) {
+      entries.push({ channel, text: value })
+    }
+  }
+  return entries
+}
+
 export function inspectToolAfterOutputText(output: unknown): {
   text: string
   channel: ToolAfterOutputChannel
 } {
-  if (typeof output === "string") {
-    return { text: output, channel: "string" }
-  }
-  if (!output || typeof output !== "object") {
-    return { text: "", channel: "unknown" }
-  }
-  const record = output as Record<string, unknown>
-  if (typeof record.stdout === "string" && record.stdout.trim()) {
-    return { text: record.stdout.trim(), channel: "stdout" }
-  }
-  if (typeof record.output === "string" && record.output.trim()) {
-    return { text: record.output.trim(), channel: "output" }
-  }
-  if (typeof record.message === "string" && record.message.trim()) {
-    return { text: record.message.trim(), channel: "message" }
-  }
-  if (typeof record.stderr === "string" && record.stderr.trim()) {
-    return { text: record.stderr.trim(), channel: "stderr" }
-  }
-  return { text: "", channel: "unknown" }
+  const first = listToolAfterOutputTexts(output)[0]
+  return first ?? { text: "", channel: "unknown" }
 }
 
 export function readToolAfterOutputText(output: unknown): string {
   return inspectToolAfterOutputText(output).text
+}
+
+export function readCombinedToolAfterOutputText(output: unknown): string {
+  return listToolAfterOutputTexts(output)
+    .map((entry) => entry.text)
+    .join("\n")
+}
+
+export function writeToolAfterOutputChannelText(
+  output: unknown,
+  channel: ToolAfterOutputChannel,
+  text: string,
+): boolean {
+  if (typeof output === "string" || !output || typeof output !== "object") {
+    return false
+  }
+  const record = output as Record<string, unknown>
+  if (channel === "stdout" && typeof record.stdout === "string") {
+    record.stdout = text
+    return true
+  }
+  if (channel === "output" && typeof record.output === "string") {
+    record.output = text
+    return true
+  }
+  if (channel === "message" && typeof record.message === "string") {
+    record.message = text
+    return true
+  }
+  if (channel === "stderr" && typeof record.stderr === "string") {
+    record.stderr = text
+    return true
+  }
+  return false
 }
 
 export function writeToolAfterOutputText(

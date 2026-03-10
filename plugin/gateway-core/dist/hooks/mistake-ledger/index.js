@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
-import { readToolAfterOutputText } from "../shared/tool-after-output.js";
+import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js";
 const DONE_PROOF_MARKER = "[done-proof-enforcer] Completion token deferred";
 const PENDING_VALIDATION_MARKER = "<promise>PENDING_VALIDATION</promise>";
 function resolveSessionId(payload) {
@@ -25,7 +25,7 @@ export function createMistakeLedgerHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const text = readToolAfterOutputText(eventPayload.output?.output);
+            const text = readCombinedToolAfterOutputText(eventPayload.output?.output);
             if (!text) {
                 return;
             }
