@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { basename, join, relative, sep } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
@@ -56,6 +56,11 @@ interface RuleMatch {
 
 interface SessionRuleState {
   hashes: Set<string>
+}
+
+interface RulesCacheEntry {
+  signature: string
+  rules: RuleCandidate[]
 }
 
 const TRACKED_TOOLS = new Set(["read", "write", "edit", "multiedit"])
@@ -264,15 +269,11 @@ function parseRuleFile(path: string): RuleCandidate | null {
   }
 }
 
-// Collects rule files from common project directories.
-function collectRuleFiles(directory: string): RuleCandidate[] {
-  const results: RuleCandidate[] = []
+function collectRuleFilePaths(directory: string): string[] {
+  const results: string[] = []
   const copilotPath = join(directory, ".github", "copilot-instructions.md")
   if (existsSync(copilotPath)) {
-    const parsed = parseRuleFile(copilotPath)
-    if (parsed) {
-      results.push(parsed)
-    }
+    results.push(copilotPath)
   }
   for (const segments of RULES_DIRS) {
     const root = join(directory, ...segments)
@@ -294,14 +295,42 @@ function collectRuleFiles(directory: string): RuleCandidate[] {
         if (!entry.isFile() || !entry.name.endsWith(".md")) {
           continue
         }
-        const parsed = parseRuleFile(child)
-        if (parsed) {
-          results.push(parsed)
-        }
+        results.push(child)
       }
     }
   }
-  return results
+  return results.sort()
+}
+
+function buildRuleCacheSignature(paths: string[]): string {
+  const hash = createHash("sha1")
+  for (const path of paths) {
+    hash.update(path)
+    try {
+      const stats = statSync(path)
+      hash.update(`:${stats.mtimeMs}:${stats.size}`)
+    } catch {
+      hash.update(":missing")
+    }
+    hash.update("\n")
+  }
+  return hash.digest("hex")
+}
+
+// Collects rule files from common project directories.
+function collectRuleFiles(directory: string): RulesCacheEntry {
+  const paths = collectRuleFilePaths(directory)
+  const rules: RuleCandidate[] = []
+  for (const path of paths) {
+    const parsed = parseRuleFile(path)
+    if (parsed) {
+      rules.push(parsed)
+    }
+  }
+  return {
+    signature: buildRuleCacheSignature(paths),
+    rules,
+  }
 }
 
 // Resolves target file path from tool output metadata/title.
@@ -342,11 +371,21 @@ function matchRules(rules: RuleCandidate[], targetPath: string): RuleMatch[] {
 export function createRulesInjectorHook(options: { directory: string; enabled: boolean }): GatewayHook {
   const pendingToolBySession = new Map<string, string>()
   const injectedStateBySession = new Map<string, SessionRuleState>()
-  const ruleCacheByDirectory = new Map<string, RuleCandidate[]>()
+  const ruleCacheByDirectory = new Map<string, RulesCacheEntry>()
 
   function clearSession(sessionId: string): void {
     pendingToolBySession.delete(sessionId)
     injectedStateBySession.delete(sessionId)
+  }
+
+  function loadRules(directory: string): RuleCandidate[] {
+    const next = collectRuleFiles(directory)
+    const cached = ruleCacheByDirectory.get(directory)
+    if (!cached || cached.signature !== next.signature) {
+      ruleCacheByDirectory.set(directory, next)
+      return next.rules
+    }
+    return cached.rules
   }
 
   return {
@@ -386,11 +425,7 @@ export function createRulesInjectorHook(options: { directory: string; enabled: b
           return
         }
 
-        let cachedRules = ruleCacheByDirectory.get(directory)
-        if (!cachedRules) {
-          cachedRules = collectRuleFiles(directory)
-          ruleCacheByDirectory.set(directory, cachedRules)
-        }
+        const cachedRules = loadRules(directory)
         const sessionId = resolveSessionId(eventPayload as ToolBeforePayload)
         const blocks: string[] = []
         for (const rule of cachedRules.filter((candidate) => candidate.alwaysApply)) {
@@ -429,11 +464,7 @@ export function createRulesInjectorHook(options: { directory: string; enabled: b
         return
       }
 
-      let cachedRules = ruleCacheByDirectory.get(directory)
-      if (!cachedRules) {
-        cachedRules = collectRuleFiles(directory)
-        ruleCacheByDirectory.set(directory, cachedRules)
-      }
+      const cachedRules = loadRules(directory)
       if (cachedRules.length === 0) {
         return
       }

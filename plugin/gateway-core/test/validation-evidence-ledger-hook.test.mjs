@@ -220,6 +220,63 @@ test("validation-evidence-ledger clears pending invocation on before error", asy
   assert.equal(done.output.includes("PENDING_VALIDATION"), true)
 })
 
+test("validation-evidence-ledger clears evidence on session.compacted", async () => {
+  const plugin = GatewayCorePlugin({
+    directory: process.cwd(),
+    config: {
+      hooks: {
+        enabled: true,
+        order: ["validation-evidence-ledger", "done-proof-enforcer"],
+        disabled: [],
+      },
+      validationEvidenceLedger: {
+        enabled: true,
+      },
+      doneProofEnforcer: {
+        enabled: true,
+        requiredMarkers: ["lint"],
+        requireLedgerEvidence: true,
+        allowTextFallback: false,
+      },
+    },
+  })
+
+  await plugin["tool.execute.before"](
+    { tool: "bash", sessionID: "session-ledger-compaction-1" },
+    { args: { command: "npm run lint" } },
+  )
+  await plugin["tool.execute.after"](
+    { tool: "bash", sessionID: "session-ledger-compaction-1" },
+    { args: { command: "npm run lint" }, output: "lint passed" },
+  )
+
+  assert.deepEqual(missingValidationMarkers("session-ledger-compaction-1", ["lint"]), [])
+  await plugin.event({ event: { type: "session.compacted", properties: { info: { id: "session-ledger-compaction-1" } } } })
+  assert.deepEqual(validationEvidence("session-ledger-compaction-1"), {
+    lint: false,
+    test: false,
+    typecheck: false,
+    build: false,
+    security: false,
+    updatedAt: "",
+  })
+
+  const doneHook = createDoneProofEnforcerHook({
+    directory: process.cwd(),
+    enabled: true,
+    requiredMarkers: ["lint"],
+    requireLedgerEvidence: true,
+    allowTextFallback: false,
+  })
+  const done = { output: "finalizing\n<promise>DONE</promise>" }
+  await doneHook.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-compaction-1" },
+    output: done,
+    directory: process.cwd(),
+  })
+  assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+})
+
 test("validation-evidence-ledger treats node --test as test evidence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
   try {
@@ -540,8 +597,10 @@ test("validation-evidence-ledger LLM test evidence does not satisfy broader repo
 })
 
 test("validation-evidence-ledger shadow mode does not record ambiguous validation wrapper evidence", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
   const ledger = createValidationEvidenceLedgerHook({
-    directory: process.cwd(),
+    directory,
     enabled: true,
     decisionRuntime: {
       config: {
@@ -569,6 +628,7 @@ test("validation-evidence-ledger shadow mode does not record ambiguous validatio
     },
   })
   const doneProof = createDoneProofEnforcerHook({
+    directory,
     enabled: true,
     requiredMarkers: ["test"],
     requireLedgerEvidence: true,
@@ -581,11 +641,18 @@ test("validation-evidence-ledger shadow mode does not record ambiguous validatio
   await ledger.event("tool.execute.after", {
     input: { tool: "bash", sessionID: "session-ledger-shadow-1" },
     output: { output: "smoke suite passed" },
-    directory: process.cwd(),
+    directory,
   })
   const done = { output: "done\n<promise>DONE</promise>" }
-  await doneProof.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-ledger-shadow-1" }, output: done })
+  await doneProof.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-shadow-1" },
+    output: done,
+    directory,
+  })
   assert.equal(done.output.includes("PENDING_VALIDATION"), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test("validation-evidence-ledger sanitizes contaminated wrapper command before AI classification", async () => {
