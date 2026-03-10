@@ -177,7 +177,7 @@ export function createValidationEvidenceLedgerHook(options: {
       if (!options.enabled) {
         return
       }
-      if (type === "session.deleted") {
+      if (type === "session.deleted" || type === "session.compacted") {
         const eventPayload = (payload ?? {}) as SessionDeletedPayload
         const sid = sessionId(eventPayload)
         if (!sid) {
