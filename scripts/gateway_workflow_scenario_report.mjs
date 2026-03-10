@@ -59,6 +59,57 @@ const results = []
       client: {
         session: {
           async messages() {
+            return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Epic 4 is in progress. Waiting on telemetry collection before any next action." }] }] }
+          },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-12" } })
+    results.push({ id: "todo-informational-in-progress", workflow: "todo-continuation-enforcer", requestType: "false_positive", description: "informational in-progress summary should not inject", expectedAction: "no_inject", actualAction: promptCalls === 0 ? "no_inject" : "inject_prompt", correct: promptCalls === 0 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Next remaining epic - E6 parity scoreboard and drift checks. Waiting for telemetry; do not continue yet." }] }] }
+          },
+          async promptAsync() { promptCalls += 1 },
+        },
+      },
+    })
+    await hook.event("chat.message", { directory, properties: { sessionID: "workflow-todo-13", prompt: "please do not continue yet" } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-13" } })
+    results.push({ id: "todo-remaining-epic-wait", workflow: "todo-continuation-enforcer", requestType: "false_positive", description: "remaining epic summary with explicit wait should not inject", expectedAction: "no_inject", actualAction: promptCalls === 0 ? "no_inject" : "inject_prompt", correct: promptCalls === 0 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
             return { data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "Next remaining epic - E6 parity scoreboard and drift checks. Continue Loop." }] }] }
           },
           async promptAsync() { promptCalls += 1 },

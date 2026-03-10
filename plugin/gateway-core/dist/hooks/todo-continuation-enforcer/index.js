@@ -74,7 +74,6 @@ function hasHardContinuationCue(text) {
         normalized.includes("remaining items") ||
         normalized.includes("next items") ||
         normalized.includes("continue loop") ||
-        normalized.includes("in progress") ||
         normalized.includes("in-progress right now") ||
         normalized.includes("still left to do (next") ||
         normalized.includes("need finish"));
@@ -91,6 +90,9 @@ function hasSoftContinuationCue(text) {
 }
 function hasPendingCueText(text, continueIntentArmed) {
     if (!text.trim()) {
+        return false;
+    }
+    if (NEGATED_CONTINUE_INTENT_PATTERN.test(text) || isStopIntent(text)) {
         return false;
     }
     if (hasHardContinuationCue(text)) {

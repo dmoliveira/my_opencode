@@ -628,3 +628,85 @@ test("todo-continuation-enforcer treats next safe steps as soft cue when continu
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("todo-continuation-enforcer does not inject on informational in-progress summary", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "Epic 4 is in progress. Waiting on telemetry collection before any next action." }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-15" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer does not inject on remaining epic when user asked to wait", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "Next remaining epic - E6 parity scoreboard and drift checks. Waiting for telemetry; do not continue yet." }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-16", prompt: "please do not continue yet" },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-16" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

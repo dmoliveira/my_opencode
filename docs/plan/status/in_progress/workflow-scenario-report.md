@@ -1,15 +1,17 @@
 # Workflow Scenario Reliability Report
 
-- Total scenarios: 13
-- Correct actions: 13
+- Total scenarios: 15
+- Correct actions: 15
 - Accuracy: 100%
 
 ## By Workflow
-- todo-continuation-enforcer: 11/11 (100%)
+- todo-continuation-enforcer: 13/13 (100%)
 - done-proof-enforcer: 2/2 (100%)
 
 ## Scenario Results
 - todo-pending-marker: PASS | todo-continuation-enforcer | pending_marker | expected=inject_prompt actual=inject_prompt
+- todo-informational-in-progress: PASS | todo-continuation-enforcer | false_positive | expected=no_inject actual=no_inject
+- todo-remaining-epic-wait: PASS | todo-continuation-enforcer | false_positive | expected=no_inject actual=no_inject
 - todo-remaining-epic-continue-loop: PASS | todo-continuation-enforcer | progress_summary | expected=inject_prompt actual=inject_prompt
 - todo-next-safe-steps-armed: PASS | todo-continuation-enforcer | soft_cue | expected=inject_prompt actual=inject_prompt
 - todo-pending-then-complete: PASS | todo-continuation-enforcer | alternating_tasks | expected=no_inject actual=no_inject
