@@ -4,6 +4,11 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import {
+  clearDelegationChildSessionLink,
+  getDelegationChildSessionLink,
+  registerDelegationChildSession,
+} from "../shared/delegation-child-session.js"
+import {
   annotateDelegationMetadata,
   extractDelegationChildRunId,
   extractDelegationSubagentType,
@@ -22,6 +27,8 @@ interface ToolPayload {
     args?: {
       subagent_type?: string
       category?: string
+      prompt?: string
+      description?: string
     }
     metadata?: unknown
     output?: unknown
@@ -41,6 +48,38 @@ interface SessionDeletedPayload {
   properties?: {
     info?: {
       id?: string
+    }
+  }
+}
+
+interface SessionInfoPayload {
+  properties?: {
+    info?: {
+      id?: string
+      parentID?: string
+      title?: string
+    }
+  }
+}
+
+interface SessionIdlePayload {
+  properties?: {
+    sessionID?: string
+    sessionId?: string
+    info?: { id?: string }
+  }
+}
+
+interface MessageUpdatedPayload {
+  directory?: string
+  properties?: {
+    info?: {
+      role?: string
+      sessionID?: string
+      error?: unknown
+      time?: {
+        completed?: number
+      }
     }
   }
 }
@@ -123,9 +162,16 @@ function sessionDelegationKeys(
 
 function sessionId(payload: {
   input?: { sessionID?: string; sessionId?: string }
-  properties?: { info?: { id?: string } }
+  properties?: { sessionID?: string; sessionId?: string; info?: { id?: string } }
 }): string {
-  return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim()
+  return String(
+    payload.input?.sessionID ??
+      payload.input?.sessionId ??
+      payload.properties?.sessionID ??
+      payload.properties?.sessionId ??
+      payload.properties?.info?.id ??
+      "",
+  ).trim()
 }
 
 function effectiveDirectory(payload: ToolPayload, fallbackDirectory: string): string {
@@ -142,6 +188,42 @@ export function createDelegationConcurrencyGuardHook(options: {
   staleReservationMs: number
 }): GatewayHook {
   const activeByDelegation = new Map<string, ActiveDelegation>()
+
+  function releaseLinkedDelegation(args: {
+    parentSessionId: string
+    traceId?: string
+    directory: string
+    reasonCode: string
+  }): boolean {
+    const fallbackEventPayload: ToolPayload = {
+      input: { tool: "task", sessionID: args.parentSessionId },
+      output: {
+        args: {
+          ...(args.traceId ? { prompt: `[DELEGATION TRACE ${args.traceId}]` } : {}),
+        },
+        metadata: {
+          gateway: {
+            delegation: {
+              ...(args.traceId ? { traceId: args.traceId } : {}),
+            },
+          },
+        },
+      },
+      directory: args.directory,
+    }
+    const releaseMode = releaseDelegationReservation(fallbackEventPayload, args.directory)
+    if (releaseMode === "none" || releaseMode === "ambiguous_skip") {
+      return false
+    }
+    writeGatewayEventAudit(args.directory, {
+      hook: "delegation-concurrency-guard",
+      stage: "state",
+      reason_code: args.reasonCode,
+      session_id: args.parentSessionId,
+      trace_id: args.traceId || undefined,
+    })
+    return true
+  }
 
   function releaseDelegationReservation(eventPayload: ToolPayload, directory: string): "none" | "direct" | "trace_fallback" | "subagent_fallback" | "ambiguous_skip" {
     const sid = sessionId(eventPayload)
@@ -227,9 +309,65 @@ export function createDelegationConcurrencyGuardHook(options: {
       if (!options.enabled) {
         return
       }
+      if (type === "session.created" || type === "session.updated") {
+        registerDelegationChildSession((payload ?? {}) as SessionInfoPayload)
+        return
+      }
+      if (type === "session.idle") {
+        const childSessionId = sessionId((payload ?? {}) as SessionIdlePayload)
+        const link = getDelegationChildSessionLink(childSessionId)
+        if (!link) {
+          return
+        }
+        releaseLinkedDelegation({
+          parentSessionId: link.parentSessionId,
+          traceId: link.traceId,
+          directory: options.directory,
+          reasonCode: "delegation_concurrency_child_idle_released",
+        })
+        return
+      }
+      if (type === "message.updated") {
+        const eventPayload = (payload ?? {}) as MessageUpdatedPayload
+        const info = eventPayload.properties?.info
+        if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+          return
+        }
+        const childSessionId = String(info?.sessionID ?? "").trim()
+        const link = getDelegationChildSessionLink(childSessionId)
+        if (!link) {
+          return
+        }
+        const completed = Number.isFinite(Number(info?.time?.completed ?? NaN))
+        const failed = info?.error !== undefined && info?.error !== null
+        if (!completed && !failed) {
+          return
+        }
+        releaseLinkedDelegation({
+          parentSessionId: link.parentSessionId,
+          traceId: link.traceId,
+          directory:
+            typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+              ? eventPayload.directory
+              : options.directory,
+          reasonCode: failed
+            ? "delegation_concurrency_child_message_failed_released"
+            : "delegation_concurrency_child_message_completed_released",
+        })
+        return
+      }
       if (type === "session.deleted") {
         const sid = sessionId((payload ?? {}) as SessionDeletedPayload)
         if (sid) {
+          const childLink = clearDelegationChildSessionLink(sid)
+          if (childLink) {
+            releaseLinkedDelegation({
+              parentSessionId: childLink.parentSessionId,
+              traceId: childLink.traceId,
+              directory: options.directory,
+              reasonCode: "delegation_concurrency_child_deleted_released",
+            })
+          }
           for (const key of activeByDelegation.keys()) {
             if (key === sid || key.startsWith(`${sid}:`)) {
               activeByDelegation.delete(key)
