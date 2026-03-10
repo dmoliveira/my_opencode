@@ -110,6 +110,7 @@ export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
     delegationFallbackOrchestrator: "delegation-fallback-orchestrator",
     validationEvidenceLedger: "validation-evidence-ledger",
     autoSlashCommand: "auto-slash-command",
+    taskResumeInfo: "task-resume-info",
     providerErrorClassifier: "provider-error-classifier",
     doneProofEnforcer: "done-proof-enforcer",
     prBodyEvidenceGuard: "pr-body-evidence-guard",
@@ -464,6 +465,7 @@ function configuredHooks(ctx) {
         })),
         safeHook("task-resume-info", () => createTaskResumeInfoHook({
             enabled: cfg.taskResumeInfo.enabled,
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.taskResumeInfo),
         })),
         safeHook("todo-continuation-enforcer", () => createTodoContinuationEnforcerHook({
             directory,
