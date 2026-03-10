@@ -681,6 +681,7 @@ def run_check(entry: dict) -> dict:
 def summarize(items: list[dict]) -> dict:
     failed = [item for item in items if not item.get("ok")]
     warnings = []
+    problems = []
     for item in items:
         if item.get("skipped"):
             warnings.append(f"{item['name']}: {item.get('skip_reason')}")
@@ -688,6 +689,8 @@ def summarize(items: list[dict]) -> dict:
         if isinstance(report, dict):
             for warning in report.get("warnings", []):
                 warnings.append(f"{item['name']}: {warning}")
+            for problem in report.get("problems", []):
+                problems.append(f"{item['name']}: {problem}")
 
     return {
         "result": "PASS" if not failed else "FAIL",
@@ -695,6 +698,8 @@ def summarize(items: list[dict]) -> dict:
         "failed_count": len(failed),
         "warning_count": len(warnings),
         "warnings": warnings,
+        "problem_count": len(problems),
+        "problems": problems,
     }
 
 
@@ -712,6 +717,11 @@ def print_human(summary: dict) -> int:
         print("\nwarnings:")
         for warning in summary["warnings"]:
             print(f"- {warning}")
+
+    if summary.get("problems"):
+        print("\nproblems:")
+        for problem in summary["problems"]:
+            print(f"- {problem}")
 
     print(f"\nresult: {summary['result']}")
     return 0 if summary["result"] == "PASS" else 1

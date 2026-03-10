@@ -45,6 +45,24 @@ test("session-runtime-system-context dedupes hidden system session id", async ()
   }
 })
 
+test("session-runtime-system-context replaces stale hidden system session id", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  try {
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true })
+    const output = { system: ["runtime_session_context: stale-session\nUse this exact runtime session id for commits, logs, telemetry, and external tooling created during this session."] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-3" },
+      output,
+      directory,
+    })
+    assert.equal(output.system.filter((line) => line.includes("runtime_session_context:")).length, 1)
+    assert.match(output.system[0], /runtime_session_context: session-hidden-3/)
+    assert.doesNotMatch(output.system[0], /stale-session/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("session-runtime-system-context integrates through plugin system transform", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {

@@ -78,6 +78,7 @@ import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validat
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
 import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
 import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
+import { createMistakeLedgerHook } from "./hooks/mistake-ledger/index.js";
 import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
 import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook } from "./hooks/shared/llm-decision-runtime.js";
@@ -352,6 +353,11 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.validationEvidenceLedger.enabled,
             decisionRuntime: llmDecisionRuntimeForHook("validation-evidence-ledger"),
+        }),
+        createMistakeLedgerHook({
+            directory,
+            enabled: cfg.mistakeLedger.enabled,
+            path: cfg.mistakeLedger.path,
         }),
         createParallelOpportunityDetectorHook({
             directory,
