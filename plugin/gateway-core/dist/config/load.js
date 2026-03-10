@@ -13,7 +13,9 @@ function stringList(value) {
         .filter((item) => item.length > 0);
 }
 function recordValue(value) {
-    return value && typeof value === "object" ? value : {};
+    return value && typeof value === "object"
+        ? value
+        : {};
 }
 function isRecord(value) {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -154,7 +156,10 @@ function durationThreshold(value, fallback) {
         : fallback;
 }
 function llmDecisionMode(value, fallback) {
-    if (value === "disabled" || value === "shadow" || value === "assist" || value === "enforce") {
+    if (value === "disabled" ||
+        value === "shadow" ||
+        value === "assist" ||
+        value === "enforce") {
         return value;
     }
     return fallback;
@@ -216,7 +221,8 @@ export function loadGatewayConfig(raw) {
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
-    const sessionRuntimeSystemContextSource = source.sessionRuntimeSystemContext && typeof source.sessionRuntimeSystemContext === "object"
+    const sessionRuntimeSystemContextSource = source.sessionRuntimeSystemContext &&
+        typeof source.sessionRuntimeSystemContext === "object"
         ? source.sessionRuntimeSystemContext
         : {};
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
@@ -375,6 +381,9 @@ export function loadGatewayConfig(raw) {
     const agentUserReminderSource = source.agentUserReminder && typeof source.agentUserReminder === "object"
         ? source.agentUserReminder
         : {};
+    const directWorkWarningSource = source.directWorkWarning && typeof source.directWorkWarning === "object"
+        ? source.directWorkWarning
+        : {};
     const unstableBabysitterSource = source.unstableAgentBabysitter &&
         typeof source.unstableAgentBabysitter === "object"
         ? source.unstableAgentBabysitter
@@ -394,7 +403,8 @@ export function loadGatewayConfig(raw) {
     const secretLeakSource = source.secretLeakGuard && typeof source.secretLeakGuard === "object"
         ? source.secretLeakGuard
         : {};
-    const primaryWorktreeSource = source.primaryWorktreeGuard && typeof source.primaryWorktreeGuard === "object"
+    const primaryWorktreeSource = source.primaryWorktreeGuard &&
+        typeof source.primaryWorktreeGuard === "object"
         ? source.primaryWorktreeGuard
         : {};
     const workflowConformanceSource = source.workflowConformanceGuard &&
@@ -628,7 +638,8 @@ export function loadGatewayConfig(raw) {
                 ? delegationConcurrencyGuardSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.enabled,
             maxTotalConcurrent: positiveInt(delegationConcurrencyGuardSource.maxTotalConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxTotalConcurrent),
-            maxExpensiveConcurrent: positiveInt(delegationConcurrencyGuardSource.maxExpensiveConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxExpensiveConcurrent),
+            maxExpensiveConcurrent: positiveInt(delegationConcurrencyGuardSource.maxExpensiveConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard
+                .maxExpensiveConcurrent),
             maxDeepConcurrent: positiveInt(delegationConcurrencyGuardSource.maxDeepConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxDeepConcurrent),
             maxCriticalConcurrent: positiveInt(delegationConcurrencyGuardSource.maxCriticalConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxCriticalConcurrent),
         },
@@ -676,7 +687,8 @@ export function loadGatewayConfig(raw) {
             stateMaxEntries: positiveInt(adaptiveDelegationPolicySource.stateMaxEntries, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.stateMaxEntries),
             defaultOverrideDelta: nonNegativeInt(adaptiveDelegationPolicySource.defaultOverrideDelta, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultOverrideDelta),
             defaultIntentThreshold: nonNegativeInt(adaptiveDelegationPolicySource.defaultIntentThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultIntentThreshold),
-            discoverabilityCooldownMs: positiveInt(adaptiveDelegationPolicySource.discoverabilityCooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.discoverabilityCooldownMs),
+            discoverabilityCooldownMs: positiveInt(adaptiveDelegationPolicySource.discoverabilityCooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
+                .discoverabilityCooldownMs),
             agentPolicyOverrides: parseAgentPolicyOverrides(adaptiveDelegationPolicySource.agentPolicyOverrides, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.agentPolicyOverrides),
         },
         llmDecisionRuntime: {
@@ -918,6 +930,14 @@ export function loadGatewayConfig(raw) {
             enabled: typeof agentUserReminderSource.enabled === "boolean"
                 ? agentUserReminderSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
+        },
+        directWorkWarning: {
+            enabled: typeof directWorkWarningSource.enabled === "boolean"
+                ? directWorkWarningSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.directWorkWarning.enabled,
+            blockRepeatedEdits: typeof directWorkWarningSource.blockRepeatedEdits === "boolean"
+                ? directWorkWarningSource.blockRepeatedEdits
+                : DEFAULT_GATEWAY_CONFIG.directWorkWarning.blockRepeatedEdits,
         },
         unstableAgentBabysitter: {
             enabled: typeof unstableBabysitterSource.enabled === "boolean"

@@ -258,6 +258,10 @@ export interface CommentCheckerConfig {
 export interface AgentUserReminderConfig {
     enabled: boolean;
 }
+export interface DirectWorkWarningConfig {
+    enabled: boolean;
+    blockRepeatedEdits: boolean;
+}
 export interface UnstableAgentBabysitterConfig {
     enabled: boolean;
     riskyPatterns: string[];
@@ -472,6 +476,7 @@ export interface GatewayConfig {
     planHandoffReminder: PlanHandoffReminderConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
+    directWorkWarning: DirectWorkWarningConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
     questionLabelTruncator: QuestionLabelTruncatorConfig;
     semanticOutputSummarizer: SemanticOutputSummarizerConfig;
