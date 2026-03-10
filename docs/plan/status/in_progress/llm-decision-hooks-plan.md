@@ -2,8 +2,8 @@
 
 Date: 2026-03-09
 Status: `in_progress`
-Branch: `feature/llm-todo-continuation`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-llm-todo-continuation`
+Branch: `fix/next-parity-item`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item`
 
 ## Goal
 
@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, and done-proof semantic slices are implemented in this worktree and validated with real-session probes
-- Current active slice: Epic 5 hardening is active; live rollout is unblocked through the gateway sidecar config path while assist telemetry accumulates, and a `todo-continuation-enforcer` mixed-signal continuation classifier slice is now being wired through the centralized runtime in shadow-first mode
+- Current active slice: Epic 5 hardening is active; live rollout is unblocked through the gateway sidecar config path while assist telemetry accumulates, and the `todo-continuation-enforcer` mixed-signal continuation classifier is now wired through the centralized runtime in shadow-first mode
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
@@ -70,7 +70,7 @@ Do not use LLM decisions for:
 | `delegation-fallback-orchestrator` | done | Ambiguous failure output now classifies into fallback reason codes. |
 | validation command and output semantic fallback | done | Wrapper command classification shipped in validation ledger. |
 | done-proof and PR-body semantic fallback | done | Both `pr-body-evidence-guard` and `done-proof-enforcer` semantic fallback paths are implemented and validated. |
-| `todo-continuation-enforcer` mixed-signal fallback | doing | Add centralized runtime fallback only for contradictory completion-plus-next-slice wording, keep deterministic hard cues primary, and validate with targeted workflow scenarios before rollout. |
+| `todo-continuation-enforcer` mixed-signal fallback | done | Centralized runtime fallback now only handles contradictory completion-plus-next-slice wording, deterministic hard cues remain primary, and targeted workflow scenarios cover the slice before broader rollout. |
 
 ## Next scenario expansion
 
