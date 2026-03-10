@@ -137,6 +137,7 @@ Remaining:
 | Reconstructed current initiative from git/OpenCode history | done | Reviewed reflog, prompt history, logs, and checkpoints. |
 | Merged model routing entrypoint PR | done | `#406` merged after refresh-from-main and CI pass. |
 | Merged selftest follow-up PR | done | `#409` merged after refresh-from-main and CI pass. |
+| Orchestration reliability hardening wave documented | done | Fresh-session continuation summary now lives in `docs/plan/status/in_progress/orchestration-reliability-continuation-2026-03-10.md`, covering merged PRs `#442`, `#446`, `#449`, `#451`, and `#454`. |
 | Merged roadmap tracker PR | done | `#414` merged after branch freshness refresh and CI pass. |
 | Merged canonical docs guidance PR | done | `#419` merged after CI pass and branch refresh. |
 | Merged workflow resume/runtime guard PR | done | `#420` merged after CI success. |
