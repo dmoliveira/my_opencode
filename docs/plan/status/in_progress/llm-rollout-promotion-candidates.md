@@ -1,7 +1,7 @@
 # LLM Rollout Promotion Candidates
 
-Date: 2026-03-09
-Branch: `plan/llm-decision-hooks`
+Date: 2026-03-10
+Branch: `feature/llm-todo-continuation`
 
 ## Initial assist candidates
 
@@ -29,6 +29,8 @@ Branch: `plan/llm-decision-hooks`
   - Why: semantic mutation/tool implication decisions can block execution paths and should remain conservative.
 - `validation-evidence-ledger`
   - Why: semantic validation classification can affect downstream done-proof outcomes and needs more longitudinal data.
+- `todo-continuation-enforcer`
+  - Why: mixed-signal continuation decisions can create autonomous follow-on execution, so shadow evidence should accumulate before any assist promotion.
 
 ## Promotion rule of thumb
 
@@ -44,7 +46,8 @@ Branch: `plan/llm-decision-hooks`
     "mode": "shadow",
     "hookModes": {
       "auto-slash-command": "assist",
-      "provider-error-classifier": "assist"
+      "provider-error-classifier": "assist",
+      "todo-continuation-enforcer": "shadow"
     }
   }
 }

@@ -56,6 +56,40 @@ const results = []
       enabled: true,
       cooldownMs: 30000,
       maxConsecutiveFailures: 5,
+      decisionRuntime: {
+        config: { mode: "assist" },
+        async decide(request) {
+          return {
+            mode: "assist",
+            accepted: true,
+            char: "C",
+            raw: "C",
+            durationMs: 1,
+            model: "test-model",
+            templateId: request.templateId,
+            meaning: "continue_now",
+          }
+        },
+      },
+      client: { session: { async messages() { throw new Error("messages should not be called") }, async promptAsync() { promptCalls += 1 } } },
+    })
+    await hook.event("tool.execute.after", { directory, input: { tool: "task", sessionID: "workflow-todo-llm-1" }, output: { output: "There is nothing additional to release right now. Best next safe slice: align README and spec. If you want, I'll continue directly with that docs alignment pass." } })
+    await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-llm-1" } })
+    results.push({ id: "todo-mixed-signal-llm", workflow: "todo-continuation-enforcer", requestType: "llm_soft_cue", description: "mixed completion plus next-slice wording uses LLM fallback", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
       client: {
         session: {
           async messages() {

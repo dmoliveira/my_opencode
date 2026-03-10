@@ -1,4 +1,4 @@
-import { markerCategory, missingValidationMarkers } from "../validation-evidence-ledger/evidence.js"
+import { markerCategory, validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js"
 import type { GatewayHook } from "../registry.js"
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
@@ -8,6 +8,7 @@ import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
   output?: { output?: unknown }
+  directory?: string
 }
 
 function buildMarkerInstruction(marker: string): string {
@@ -37,6 +38,10 @@ export function createDoneProofEnforcerHook(options: {
       }
       const eventPayload = (payload ?? {}) as ToolAfterPayload
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim()
+      const directory =
+        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+          ? eventPayload.directory
+          : options.directory ?? process.cwd()
       const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output)
       if (!text) {
         return
@@ -47,7 +52,7 @@ export function createDoneProofEnforcerHook(options: {
       const lower = text.toLowerCase()
       const missingFromLedger =
         options.requireLedgerEvidence && sessionId
-          ? missingValidationMarkers(sessionId, markers)
+          ? validationEvidenceStatus(sessionId, markers, directory).missing
           : []
       const missingMarkers: string[] = []
       for (const marker of markers) {
@@ -68,7 +73,7 @@ export function createDoneProofEnforcerHook(options: {
               })
               if (decision.accepted) {
                 writeDecisionComparisonAudit({
-                  directory: options.directory ?? process.cwd(),
+                  directory,
                   hookId: "done-proof-enforcer",
                   sessionId,
                   mode: options.decisionRuntime.config.mode,
@@ -77,7 +82,7 @@ export function createDoneProofEnforcerHook(options: {
                   deterministicValue: "missing",
                   aiValue: decision.char === "Y" ? "present" : "missing",
                 })
-                writeGatewayEventAudit(options.directory ?? process.cwd(), {
+                writeGatewayEventAudit(directory, {
                   hook: "done-proof-enforcer",
                   stage: "state",
                   reason_code: "llm_done_proof_marker_decision_recorded",
@@ -88,7 +93,7 @@ export function createDoneProofEnforcerHook(options: {
                   evidence: marker,
                 })
                 if (options.decisionRuntime.config.mode === "shadow" && decision.char === "Y") {
-                  writeGatewayEventAudit(options.directory ?? process.cwd(), {
+                  writeGatewayEventAudit(directory, {
                     hook: "done-proof-enforcer",
                     stage: "state",
                     reason_code: "llm_done_proof_shadow_deferred",

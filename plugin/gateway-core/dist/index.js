@@ -442,6 +442,7 @@ function configuredHooks(ctx) {
             enabled: cfg.todoContinuationEnforcer.enabled,
             client: ctx.client,
             stopGuard,
+            decisionRuntime: llmDecisionRuntimeForHook("todo-continuation-enforcer"),
             cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
             maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
         }),
