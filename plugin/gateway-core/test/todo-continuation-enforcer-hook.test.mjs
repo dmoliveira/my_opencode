@@ -7,6 +7,32 @@ import test from "node:test"
 import { createTodoContinuationEnforcerHook } from "../dist/hooks/todo-continuation-enforcer/index.js"
 import { saveGatewayState } from "../dist/state/storage.js"
 
+function mockDecisionRuntime(char, mode = "assist") {
+  const calls = []
+  return {
+    calls,
+    config: { mode },
+    async decide(request) {
+      calls.push(request)
+      return {
+        mode,
+        accepted: true,
+        char,
+        raw: char,
+        durationMs: 1,
+        model: "test-model",
+        templateId: request.templateId,
+        meaning:
+          char === "C"
+            ? "continue_now"
+            : char === "U"
+              ? "unclear"
+              : "no_pending",
+      }
+    },
+  }
+}
+
 test("todo-continuation-enforcer injects on idle when pending marker exists", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
   try {
@@ -335,6 +361,145 @@ test("todo-continuation-enforcer auto-continues soft next-steps cues when contin
     })
 
     assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer uses LLM fallback for mixed-signal next-slice wording", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const decisionRuntime = mockDecisionRuntime("C")
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      decisionRuntime,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-llm-1" },
+      output: {
+        output: `I checked before proceeding: the broader label support is already included in the current released state.
+
+Current state
+- v0.7.0 already contains the broader label rollout
+- v0.7.1 adds JSON/output contract hardening
+
+So there is nothing additional to release for labels right now.
+
+Best next safe slice
+1. README/spec full runtime alignment
+2. then cut a docs/runtime-alignment release if the diff is meaningful
+
+If you want, I'll continue directly with that docs alignment pass.`,
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-llm-1" },
+    })
+
+    assert.equal(promptCalls, 1)
+    assert.equal(decisionRuntime.calls.length, 1)
+    assert.equal(decisionRuntime.calls[0].templateId, "todo-continuation-decision-v1")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer defers LLM continuation in shadow mode", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const decisionRuntime = mockDecisionRuntime("C", "shadow")
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      decisionRuntime,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-llm-2" },
+      output: {
+        output: "Task complete for now. Best next safe slice: docs alignment. If you want, I'll continue directly with that pass.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-llm-2" },
+    })
+
+    assert.equal(promptCalls, 0)
+    assert.equal(decisionRuntime.calls.length, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer does not call LLM for generic future suggestions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const decisionRuntime = mockDecisionRuntime("C")
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      decisionRuntime,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-llm-3" },
+      output: {
+        output: "Task is complete. If you want, you may want to update the README later.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-llm-3" },
+    })
+
+    assert.equal(promptCalls, 0)
+    assert.equal(decisionRuntime.calls.length, 0)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

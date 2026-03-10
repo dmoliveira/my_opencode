@@ -271,7 +271,7 @@ function configuredHooks(ctx) {
         createAgentDeniedToolEnforcerHook({
             directory,
             enabled: true,
-            decisionRuntime: llmDecisionRuntimeForHook("agent-model-resolver"),
+            decisionRuntime: llmDecisionRuntimeForHook("agent-denied-tool-enforcer"),
         }),
         createHookSemanticBridgeHook({
             directory,
@@ -283,7 +283,7 @@ function configuredHooks(ctx) {
             defaultOverrideDelta: cfg.adaptiveDelegationPolicy.defaultOverrideDelta,
             defaultIntentThreshold: cfg.adaptiveDelegationPolicy.defaultIntentThreshold,
             agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
-            decisionRuntime: llmDecisionRuntimeForHook("agent-denied-tool-enforcer"),
+            decisionRuntime: llmDecisionRuntimeForHook("agent-model-resolver"),
         }),
         createDelegationOutcomeLearnerHook({
             directory,
@@ -296,7 +296,7 @@ function configuredHooks(ctx) {
         createDelegationFallbackOrchestratorHook({
             directory,
             enabled: cfg.delegationFallbackOrchestrator.enabled,
-            decisionRuntime: llmDecisionRuntimeForHook("auto-slash-command"),
+            decisionRuntime: llmDecisionRuntimeForHook("delegation-fallback-orchestrator"),
         }),
         createAgentDiscoverabilityInjectorHook({
             directory,
@@ -351,7 +351,7 @@ function configuredHooks(ctx) {
         createValidationEvidenceLedgerHook({
             directory,
             enabled: cfg.validationEvidenceLedger.enabled,
-            decisionRuntime: llmDecisionRuntimeForHook("provider-error-classifier"),
+            decisionRuntime: llmDecisionRuntimeForHook("validation-evidence-ledger"),
         }),
         createParallelOpportunityDetectorHook({
             directory,
@@ -379,7 +379,7 @@ function configuredHooks(ctx) {
         createAutoSlashCommandHook({
             directory,
             enabled: cfg.autoSlashCommand.enabled,
-            decisionRuntime: llmDecisionRuntimeForHook("delegation-fallback-orchestrator"),
+            decisionRuntime: llmDecisionRuntimeForHook("auto-slash-command"),
         }),
         createContextInjectorHook({
             directory,
@@ -436,6 +436,7 @@ function configuredHooks(ctx) {
             enabled: cfg.todoContinuationEnforcer.enabled,
             client: ctx.client,
             stopGuard,
+            decisionRuntime: llmDecisionRuntimeForHook("todo-continuation-enforcer"),
             cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
             maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
         }),
@@ -484,7 +485,7 @@ function configuredHooks(ctx) {
             enabled: cfg.providerErrorClassifier.enabled,
             client: ctx.client,
             cooldownMs: cfg.providerErrorClassifier.cooldownMs,
-            decisionRuntime: llmDecisionRuntimeForHook("validation-evidence-ledger"),
+            decisionRuntime: llmDecisionRuntimeForHook("provider-error-classifier"),
         }),
         createCodexHeaderInjectorHook({
             directory,
