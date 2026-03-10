@@ -6,6 +6,7 @@ import { join, resolve } from "node:path"
 
 import { createTodoContinuationEnforcerHook } from "../plugin/gateway-core/dist/hooks/todo-continuation-enforcer/index.js"
 import { createDoneProofEnforcerHook } from "../plugin/gateway-core/dist/hooks/done-proof-enforcer/index.js"
+import { createTaskResumeInfoHook } from "../plugin/gateway-core/dist/hooks/task-resume-info/index.js"
 import GatewayCorePlugin from "../plugin/gateway-core/dist/index.js"
 import {
   renderWorkflowScenarioMarkdown,
@@ -19,6 +20,24 @@ const markdownIndex = args.indexOf("--markdown-out")
 const markdownOut = markdownIndex >= 0 ? resolve(args[markdownIndex + 1] || "") : ""
 
 const results = []
+
+function decisionRuntime(char, meaning, mode = "assist") {
+  return {
+    config: { mode },
+    async decide(request) {
+      return {
+        mode,
+        accepted: true,
+        char,
+        raw: char,
+        durationMs: 1,
+        model: "test-model",
+        templateId: request.templateId,
+        meaning,
+      }
+    },
+  }
+}
 
 {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
@@ -42,6 +61,44 @@ const results = []
     })
     await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-1" } })
     results.push({ id: "todo-pending-marker", workflow: "todo-continuation-enforcer", requestType: "pending_marker", description: "idle with pending marker", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    const hook = createTaskResumeInfoHook({
+      enabled: true,
+      decisionRuntime: decisionRuntime("C", "continue_only"),
+    })
+    const output = { output: "Follow-up cleanup still remains in the same worker thread before final handoff." }
+    await hook.event("tool.execute.after", {
+      input: { tool: "task", sessionID: "workflow-task-resume-1" },
+      output,
+      directory,
+    })
+    results.push({ id: "task-resume-llm-continuation", workflow: "task-resume-info", requestType: "semantic_continuation", description: "ambiguous follow-up wording adds continuation hint", expectedAction: "append_continuation_hint", actualAction: String(output.output).includes("Continuation hint:") ? "append_continuation_hint" : "no_hint", correct: String(output.output).includes("Continuation hint:") })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    const hook = createTaskResumeInfoHook({
+      enabled: true,
+      decisionRuntime: decisionRuntime("C", "continue_only", "shadow"),
+    })
+    const output = { output: "More follow-up work remains in the same thread before final handoff." }
+    await hook.event("tool.execute.after", {
+      input: { tool: "task", sessionID: "workflow-task-resume-2" },
+      output,
+      directory,
+    })
+    results.push({ id: "task-resume-shadow-continuation", workflow: "task-resume-info", requestType: "semantic_continuation_shadow", description: "shadow mode does not append semantic continuation hint", expectedAction: "no_hint", actualAction: String(output.output).includes("Continuation hint:") ? "append_continuation_hint" : "no_hint", correct: !String(output.output).includes("Continuation hint:") })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -106,6 +106,19 @@ export function truncateDecisionText(text: string, maxChars: number): string {
   return `${normalized.slice(0, Math.max(0, maxChars - 16)).trimEnd()}\n[truncated]`
 }
 
+export function buildCompactDecisionCacheKey(options: {
+  prefix: string
+  parts?: string[]
+  text: string
+  maxTextChars?: number
+}): string {
+  const prefix = String(options.prefix ?? "").trim()
+  const parts = (options.parts ?? []).map((part) => String(part ?? "").trim()).filter(Boolean)
+  const maxTextChars = safePositiveInt(options.maxTextChars ?? 240, 240)
+  const normalizedText = String(options.text ?? "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, maxTextChars)
+  return [prefix, ...parts, normalizedText].filter(Boolean).join(":")
+}
+
 export function buildSingleCharDecisionPrompt(request: {
   instruction: string
   context: string

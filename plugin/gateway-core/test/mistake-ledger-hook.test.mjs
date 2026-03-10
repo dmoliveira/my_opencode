@@ -94,3 +94,104 @@ test("mistake-ledger records structured output deferrals", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+function mockDecisionRuntime(char, mode = "assist") {
+  return {
+    config: { mode },
+    async decide(request) {
+      return {
+        mode,
+        accepted: true,
+        char,
+        raw: char,
+        durationMs: 1,
+        model: "test-model",
+        templateId: request.templateId,
+        meaning: char === "Y" ? "record_completion_without_validation" : "ignore",
+      }
+    },
+  }
+}
+
+test("mistake-ledger uses LLM fallback for ambiguous deferral wording", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+      decisionRuntime: mockDecisionRuntime("Y"),
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-mistake-llm-1" },
+      output: {
+        output:
+          "done\n<promise>PENDING_VALIDATION</promise>\n\nCompletion is held until the missing validation proof is included.",
+      },
+      directory,
+    })
+
+    const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
+    assert.equal(existsSync(ledgerPath), true)
+    const entry = JSON.parse(readFileSync(ledgerPath, "utf-8").trim())
+    assert.equal(entry.sessionId, "session-mistake-llm-1")
+    assert.equal(entry.category, "completion_without_validation")
+    const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    const recorded = events.find((event) => event.reason_code === "llm_mistake_ledger_decision_recorded")
+    assert.ok(recorded)
+    assert.equal(recorded.session_id, "session-mistake-llm-1")
+    assert.equal(recorded.llm_decision_char, "Y")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("mistake-ledger shadow mode defers semantic recording", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+      decisionRuntime: mockDecisionRuntime("Y", "shadow"),
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-mistake-llm-2" },
+      output: {
+        output:
+          "done\n<promise>PENDING_VALIDATION</promise>\n\nCompletion is held until the missing validation proof is included.",
+      },
+      directory,
+    })
+
+    const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
+    assert.equal(existsSync(ledgerPath), false)
+    const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    const deferred = events.find((event) => event.reason_code === "llm_mistake_ledger_shadow_deferred")
+    assert.ok(deferred)
+    assert.equal(deferred.session_id, "session-mistake-llm-2")
+    assert.equal(deferred.llm_decision_char, "Y")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

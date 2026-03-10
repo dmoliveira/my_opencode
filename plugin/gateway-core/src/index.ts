@@ -204,7 +204,9 @@ export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
   agentModelResolver: "agent-model-resolver",
   delegationFallbackOrchestrator: "delegation-fallback-orchestrator",
   validationEvidenceLedger: "validation-evidence-ledger",
+  mistakeLedger: "mistake-ledger",
   autoSlashCommand: "auto-slash-command",
+  taskResumeInfo: "task-resume-info",
   providerErrorClassifier: "provider-error-classifier",
   todoContinuationEnforcer: "todo-continuation-enforcer",
   doneProofEnforcer: "done-proof-enforcer",
@@ -622,6 +624,16 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         ),
       }),
     ),
+    safeHook("mistake-ledger", () =>
+      createMistakeLedgerHook({
+        directory,
+        enabled: cfg.mistakeLedger.enabled,
+        path: cfg.mistakeLedger.path,
+        decisionRuntime: llmDecisionRuntimeForHook(
+          GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.mistakeLedger,
+        ),
+      }),
+    ),
     safeHook("parallel-opportunity-detector", () =>
       createParallelOpportunityDetectorHook({
         directory,
@@ -734,6 +746,9 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     safeHook("task-resume-info", () =>
       createTaskResumeInfoHook({
         enabled: cfg.taskResumeInfo.enabled,
+        decisionRuntime: llmDecisionRuntimeForHook(
+          GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.taskResumeInfo,
+        ),
       }),
     ),
     safeHook("todo-continuation-enforcer", () =>
