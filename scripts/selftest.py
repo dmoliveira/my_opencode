@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -1524,6 +1525,126 @@ exit 0
         expect(
             session_doctor_payload.get("result") == "PASS",
             "session doctor should pass when index is readable",
+        )
+
+        runtime_db_path = Path(tmpdir) / "opencode.db"
+        conn = sqlite3.connect(runtime_db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE session (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    title TEXT,
+                    directory TEXT,
+                    time_created INTEGER,
+                    time_updated INTEGER
+                );
+                CREATE TABLE message (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                CREATE TABLE part (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                """
+            )
+            now_ms = int(time.time() * 1000)
+            stale_parent_ms = now_ms - 700_000
+            stale_child_ms = now_ms - 650_000
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "parent-session",
+                    None,
+                    "parent stuck session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "child-session",
+                    "parent-session",
+                    "child completed session",
+                    str(REPO_ROOT),
+                    stale_child_ms,
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "parent-message",
+                    "parent-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "parent-part",
+                    "parent-message",
+                    "parent-session",
+                    json.dumps(
+                        {"type": "tool", "tool": "task", "state": {"status": "running"}}
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "child-message",
+                    "child-session",
+                    json.dumps(
+                        {"role": "assistant", "time": {"completed": stale_child_ms}}
+                    ),
+                    stale_child_ms,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        runtime_env = dict(digest_env)
+        runtime_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(runtime_db_path)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "session doctor should fail on stuck parent-child mismatch",
+        )
+        session_runtime_doctor_payload = parse_json_output(result.stdout)
+        expect(
+            session_runtime_doctor_payload.get("result") == "FAIL",
+            "session doctor should report FAIL when stuck parent-child mismatch is detected",
+        )
+        expect(
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 1,
+            "session doctor should report one stuck parent-child finding",
         )
 
         result = subprocess.run(

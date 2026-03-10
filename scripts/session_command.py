@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -21,11 +22,20 @@ DEFAULT_DIGEST_PATH = Path(
     )
 ).expanduser()
 
+DEFAULT_RUNTIME_DB_PATH = Path(
+    os.environ.get("MY_OPENCODE_RUNTIME_DB_PATH", "~/.local/share/opencode/opencode.db")
+).expanduser()
+
+DEFAULT_STALE_SESSION_SECONDS = max(
+    60,
+    int(os.environ.get("MY_OPENCODE_STUCK_SESSION_THRESHOLD_SECONDS", "300") or "300"),
+)
+
 
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--json]"
     )
     return 2
 
@@ -40,6 +50,30 @@ def _parse_limit(argv: list[str], default: int = 10) -> int:
         return max(1, int(argv[idx + 1]))
     except ValueError as exc:
         raise ValueError("invalid limit value") from exc
+
+
+def _parse_positive_int_option(argv: list[str], name: str, default: int) -> int:
+    if name not in argv:
+        return default
+    idx = argv.index(name)
+    if idx + 1 >= len(argv):
+        raise ValueError(f"missing value for {name}")
+    try:
+        value = int(argv[idx + 1])
+    except ValueError as exc:
+        raise ValueError(f"invalid value for {name}") from exc
+    if value <= 0:
+        raise ValueError(f"invalid value for {name}")
+    return value
+
+
+def _parse_path_option(argv: list[str], name: str, default: Path) -> Path:
+    if name not in argv:
+        return default
+    idx = argv.index(name)
+    if idx + 1 >= len(argv):
+        raise ValueError(f"missing value for {name}")
+    return Path(argv[idx + 1]).expanduser()
 
 
 def _load_index(path: Path) -> dict:
@@ -114,11 +148,28 @@ def _emit(payload: dict, json_output: bool) -> int:
         print("session doctor")
         print("--------------")
         print(f"index: {payload.get('index_path')}")
+        if payload.get("runtime_db_path"):
+            print(f"runtime_db: {payload.get('runtime_db_path')}")
         print(f"exists: {'yes' if payload.get('exists') else 'no'}")
         if payload.get("warnings"):
             print("warnings:")
             for warning in payload.get("warnings", []):
                 print(f"- {warning}")
+        if payload.get("problems"):
+            print("problems:")
+            for problem in payload.get("problems", []):
+                print(f"- {problem}")
+        findings = payload.get("stuck_findings") or []
+        if findings:
+            print("stuck_findings:")
+            for finding in findings[:10]:
+                print(
+                    "- "
+                    f"parent={finding.get('parent_session_id')} child={finding.get('child_session_id')} "
+                    f"age={finding.get('parent_stale_seconds')}s "
+                    f"parent_tool={finding.get('parent_last_tool') or 'none'} "
+                    f"child_state={finding.get('child_state')}"
+                )
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
     if payload.get("command") == "handoff":
@@ -152,6 +203,132 @@ def _load_digest(path: Path) -> dict:
         return {}
     loaded = json.loads(path.read_text(encoding="utf-8"))
     return loaded if isinstance(loaded, dict) else {}
+
+
+def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
+    warnings: list[str] = []
+    problems: list[str] = []
+    findings: list[dict] = []
+    if not db_path.exists():
+        warnings.append("runtime session database does not exist yet")
+        return {
+            "warnings": warnings,
+            "problems": problems,
+            "stuck_findings": findings,
+            "generic_stale_count": 0,
+        }
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+    except Exception as exc:
+        problems.append(f"failed to open runtime session database: {exc}")
+        return {
+            "warnings": warnings,
+            "problems": problems,
+            "stuck_findings": findings,
+            "generic_stale_count": 0,
+        }
+
+    try:
+        parent_child_rows = conn.execute(
+            """
+            WITH parent_last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            ),
+            parent_last_part AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
+            ),
+            child_last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            ),
+            child_last_part AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
+            )
+            SELECT
+              p.id AS parent_session_id,
+              p.title AS parent_title,
+              c.id AS child_session_id,
+              c.title AS child_title,
+              CAST((strftime('%s','now') - (p.time_updated / 1000)) AS INT) AS parent_stale_seconds,
+              CAST((strftime('%s','now') - (c.time_updated / 1000)) AS INT) AS child_stale_seconds,
+              COALESCE(json_extract(pp.data,'$.type'),'none') AS parent_last_part_type,
+              COALESCE(json_extract(pp.data,'$.tool'),'') AS parent_last_tool,
+              COALESCE(json_extract(pp.data,'$.state.status'),'') AS parent_last_tool_status,
+              COALESCE(json_extract(cp.data,'$.type'),'none') AS child_last_part_type,
+              CASE
+                WHEN json_extract(cm.data,'$.time.completed') IS NOT NULL THEN 'completed'
+                WHEN json_extract(cm.data,'$.error') IS NOT NULL THEN 'failed'
+                ELSE 'active_or_unknown'
+              END AS child_state
+            FROM session p
+            JOIN session c ON c.parent_id = p.id
+            JOIN parent_last_msg plm ON plm.session_id = p.id
+            JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
+            LEFT JOIN parent_last_part plp ON plp.session_id = p.id
+            LEFT JOIN part pp ON pp.session_id = p.id AND pp.time_created = plp.max_time
+            LEFT JOIN child_last_msg clm ON clm.session_id = c.id
+            LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
+            LEFT JOIN child_last_part clp ON clp.session_id = c.id
+            LEFT JOIN part cp ON cp.session_id = c.id AND cp.time_created = clp.max_time
+            WHERE json_extract(pm.data,'$.role') = 'assistant'
+              AND json_extract(pm.data,'$.time.completed') IS NULL
+              AND p.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND c.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND COALESCE(json_extract(pp.data,'$.type'),'') = 'tool'
+              AND COALESCE(json_extract(pp.data,'$.tool'),'') = 'task'
+              AND COALESCE(json_extract(pp.data,'$.state.status'),'') = 'running'
+              AND c.time_updated > p.time_updated
+              AND (
+                json_extract(cm.data,'$.time.completed') IS NOT NULL
+                OR json_extract(cm.data,'$.error') IS NOT NULL
+              )
+            ORDER BY p.time_updated DESC
+            LIMIT 20
+            """,
+            (stale_seconds, stale_seconds),
+        ).fetchall()
+        for row in parent_child_rows:
+            findings.append(dict(row))
+
+        generic_stale_count = int(
+            conn.execute(
+                """
+                WITH last_msg AS (
+                  SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+                )
+                SELECT COUNT(*)
+                FROM session s
+                JOIN last_msg lm ON lm.session_id = s.id
+                JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
+                WHERE json_extract(m.data,'$.role') = 'assistant'
+                  AND json_extract(m.data,'$.time.completed') IS NULL
+                  AND s.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+                """,
+                (stale_seconds,),
+            ).fetchone()[0]
+        )
+    except sqlite3.DatabaseError as exc:
+        problems.append(f"failed to query runtime session database: {exc}")
+        generic_stale_count = 0
+    finally:
+        conn.close()
+
+    if findings:
+        problems.append(
+            f"detected {len(findings)} stale parent-child session mismatch(es) older than {stale_seconds}s"
+        )
+    elif generic_stale_count > 0:
+        warnings.append(
+            f"detected {generic_stale_count} stale incomplete assistant session(s) older than {stale_seconds}s"
+        )
+
+    return {
+        "warnings": warnings,
+        "problems": problems,
+        "stuck_findings": findings,
+        "generic_stale_count": generic_stale_count,
+    }
 
 
 def _resolve_current_session(rows: list[dict]) -> tuple[dict | None, str]:
@@ -332,17 +509,32 @@ def _command_search(argv: list[str], index_path: Path) -> int:
 
 def _command_doctor(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
+    try:
+        db_path = _parse_path_option(argv, "--db-path", DEFAULT_RUNTIME_DB_PATH)
+        stale_seconds = _parse_positive_int_option(
+            argv, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
+        )
+    except ValueError:
+        return _usage()
     warnings: list[str] = []
+    problems: list[str] = []
     exists = index_path.exists()
     if not exists:
         warnings.append("session index does not exist yet; run /digest run first")
+        runtime = _scan_runtime_stuck_sessions(db_path, stale_seconds)
+        warnings.extend(runtime["warnings"])
+        problems.extend(runtime["problems"])
         return _emit(
             {
-                "result": "PASS",
+                "result": "PASS" if not problems else "FAIL",
                 "command": "doctor",
                 "index_path": str(index_path),
+                "runtime_db_path": str(db_path),
                 "exists": False,
                 "warnings": warnings,
+                "problems": problems,
+                "stuck_findings": runtime["stuck_findings"],
+                "stale_seconds": stale_seconds,
             },
             json_output,
         )
@@ -355,22 +547,38 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "command": "doctor",
                 "error": f"failed to parse index: {exc}",
                 "index_path": str(index_path),
+                "runtime_db_path": str(db_path),
                 "exists": True,
                 "warnings": warnings,
+                "problems": problems,
             },
             json_output,
         )
     rows = _session_rows(index)
     if not rows:
         warnings.append("session index exists but no sessions are recorded yet")
+    runtime = _scan_runtime_stuck_sessions(db_path, stale_seconds)
+    warnings.extend(runtime["warnings"])
+    problems.extend(runtime["problems"])
     return _emit(
         {
-            "result": "PASS",
+            "result": "PASS" if not problems else "FAIL",
             "command": "doctor",
             "index_path": str(index_path),
+            "runtime_db_path": str(db_path),
             "exists": True,
             "warnings": warnings,
+            "problems": problems,
             "count": len(rows),
+            "stuck_findings": runtime["stuck_findings"],
+            "generic_stale_count": runtime["generic_stale_count"],
+            "stale_seconds": stale_seconds,
+            "quick_fixes": [
+                "/doctor run",
+                f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --json",
+            ]
+            if problems
+            else [],
         },
         json_output,
     )
