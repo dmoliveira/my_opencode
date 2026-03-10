@@ -204,6 +204,7 @@ export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
   agentModelResolver: "agent-model-resolver",
   delegationFallbackOrchestrator: "delegation-fallback-orchestrator",
   validationEvidenceLedger: "validation-evidence-ledger",
+  mistakeLedger: "mistake-ledger",
   autoSlashCommand: "auto-slash-command",
   taskResumeInfo: "task-resume-info",
   providerErrorClassifier: "provider-error-classifier",
@@ -619,6 +620,16 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         enabled: cfg.validationEvidenceLedger.enabled,
         decisionRuntime: llmDecisionRuntimeForHook(
           GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.validationEvidenceLedger,
+        ),
+      }),
+    ),
+    safeHook("mistake-ledger", () =>
+      createMistakeLedgerHook({
+        directory,
+        enabled: cfg.mistakeLedger.enabled,
+        path: cfg.mistakeLedger.path,
+        decisionRuntime: llmDecisionRuntimeForHook(
+          GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.mistakeLedger,
         ),
       }),
     ),

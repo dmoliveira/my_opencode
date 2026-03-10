@@ -78,6 +78,7 @@ import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validat
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
 import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
 import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
+import { createMistakeLedgerHook } from "./hooks/mistake-ledger/index.js";
 import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
 import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook, } from "./hooks/shared/llm-decision-runtime.js";
@@ -109,6 +110,7 @@ export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
     agentModelResolver: "agent-model-resolver",
     delegationFallbackOrchestrator: "delegation-fallback-orchestrator",
     validationEvidenceLedger: "validation-evidence-ledger",
+    mistakeLedger: "mistake-ledger",
     autoSlashCommand: "auto-slash-command",
     taskResumeInfo: "task-resume-info",
     providerErrorClassifier: "provider-error-classifier",
@@ -387,6 +389,12 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.validationEvidenceLedger.enabled,
             decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.validationEvidenceLedger),
+        })),
+        safeHook("mistake-ledger", () => createMistakeLedgerHook({
+            directory,
+            enabled: cfg.mistakeLedger.enabled,
+            path: cfg.mistakeLedger.path,
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.mistakeLedger),
         })),
         safeHook("parallel-opportunity-detector", () => createParallelOpportunityDetectorHook({
             directory,
