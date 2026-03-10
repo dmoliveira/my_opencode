@@ -1393,6 +1393,7 @@ exit 0
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
+        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(tmp / "missing-runtime.db")
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
 
         result = subprocess.run(
@@ -4747,8 +4748,8 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
         ).read_text(encoding="utf-8")
         expect(
-            "| v0.4.19 |" in release_index_text,
-            "release index update helper should preserve latest v0.4.19 index entry",
+            "| v0.4.20 |" in release_index_text,
+            "release index update helper should preserve latest v0.4.20 index entry",
         )
 
         docs_automation_summary_update = subprocess.run(
@@ -4767,7 +4768,7 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
         ).read_text(encoding="utf-8")
         expect(
-            "latest_indexed_release: v0.4.19" in docs_automation_summary_text,
+            "latest_indexed_release: v0.4.20" in docs_automation_summary_text,
             "docs automation summary should include latest indexed release marker",
         )
         expect(
