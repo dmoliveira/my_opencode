@@ -127,6 +127,8 @@ function mockDecisionRuntime(char, mode = "assist") {
 
 test("mistake-ledger uses LLM fallback for ambiguous deferral wording", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   try {
     const hook = createMistakeLedgerHook({
       directory,
@@ -148,13 +150,28 @@ test("mistake-ledger uses LLM fallback for ambiguous deferral wording", async ()
     const entry = JSON.parse(readFileSync(ledgerPath, "utf-8").trim())
     assert.equal(entry.sessionId, "session-mistake-llm-1")
     assert.equal(entry.category, "completion_without_validation")
+    const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    const recorded = events.find((event) => event.reason_code === "llm_mistake_ledger_decision_recorded")
+    assert.ok(recorded)
+    assert.equal(recorded.session_id, "session-mistake-llm-1")
+    assert.equal(recorded.llm_decision_char, "Y")
   } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
 test("mistake-ledger shadow mode defers semantic recording", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   try {
     const hook = createMistakeLedgerHook({
       directory,
@@ -173,7 +190,20 @@ test("mistake-ledger shadow mode defers semantic recording", async () => {
 
     const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
     assert.equal(existsSync(ledgerPath), false)
+    const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    const deferred = events.find((event) => event.reason_code === "llm_mistake_ledger_shadow_deferred")
+    assert.ok(deferred)
+    assert.equal(deferred.session_id, "session-mistake-llm-2")
+    assert.equal(deferred.llm_decision_char, "Y")
   } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
