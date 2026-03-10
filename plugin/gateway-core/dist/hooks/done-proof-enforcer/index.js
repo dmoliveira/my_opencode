@@ -1,6 +1,7 @@
 import { markerCategory, validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
+import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js";
 function buildMarkerInstruction(marker) {
     return `Does this completion text include evidence-equivalent wording for '${marker}'? Y=yes, N=no.`;
 }
@@ -18,14 +19,14 @@ export function createDoneProofEnforcerHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            if (typeof eventPayload.output?.output !== "string") {
-                return;
-            }
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim();
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory ?? process.cwd();
-            const text = eventPayload.output.output;
+            const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output);
+            if (!text) {
+                return;
+            }
             if (!/<promise>\s*DONE\s*<\/promise>/i.test(text)) {
                 return;
             }
@@ -108,9 +109,11 @@ export function createDoneProofEnforcerHook(options) {
             if (missingMarkers.length === 0) {
                 return;
             }
-            eventPayload.output.output = text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>");
-            eventPayload.output.output +=
+            const rewritten = text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
                 `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`;
+            if (!writeToolAfterOutputText(eventPayload.output?.output, rewritten, channel) && eventPayload.output) {
+                eventPayload.output.output = rewritten;
+            }
         },
     };
 }

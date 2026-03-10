@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { readToolAfterOutputText } from "../shared/tool-after-output.js"
 
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
@@ -39,8 +40,8 @@ export function createMistakeLedgerHook(options: {
         return
       }
       const eventPayload = (payload ?? {}) as ToolAfterPayload
-      const text = eventPayload.output?.output
-      if (typeof text !== "string" || !text.includes(DONE_PROOF_MARKER)) {
+      const text = readToolAfterOutputText(eventPayload.output?.output)
+      if (!text || !text.includes(DONE_PROOF_MARKER)) {
         return
       }
       const directory =

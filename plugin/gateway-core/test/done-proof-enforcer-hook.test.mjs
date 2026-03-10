@@ -107,3 +107,30 @@ test("done-proof-enforcer shadow mode records semantic evidence but keeps pendin
   await hook.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-proof-shadow-1" }, output })
   assert.equal(output.output.includes("PENDING_VALIDATION"), true)
 })
+
+test("done-proof-enforcer rewrites structured bash output payloads", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-done-proof-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["done-proof-enforcer"], disabled: [] },
+        doneProofEnforcer: { enabled: true, requiredMarkers: ["validation"] },
+      },
+    })
+    const output = { output: { stdout: "all complete\n<promise>DONE</promise>", stderr: "" } }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-proof-structured" }, output)
+    assert.match(String(output.output.stdout), /PENDING_VALIDATION/)
+    assert.equal(String(output.output.stderr), "")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("done-proof-enforcer rewrites stderr-only structured payloads in place", async () => {
+  const hook = createDoneProofEnforcerHook({ enabled: true, requiredMarkers: ["validation"] })
+  const output = { output: { stdout: "", stderr: "all complete\n<promise>DONE</promise>" } }
+  await hook.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-proof-stderr" }, output })
+  assert.match(String(output.output.stderr), /PENDING_VALIDATION/)
+  assert.equal(String(output.output.stdout), "")
+})
