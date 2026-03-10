@@ -347,6 +347,11 @@ export interface AgentUserReminderConfig {
   enabled: boolean;
 }
 
+export interface DirectWorkWarningConfig {
+  enabled: boolean;
+  blockRepeatedEdits: boolean;
+}
+
 // Declares unstable agent babysitter settings.
 export interface UnstableAgentBabysitterConfig {
   enabled: boolean;
@@ -620,6 +625,7 @@ export interface GatewayConfig {
   planHandoffReminder: PlanHandoffReminderConfig;
   commentChecker: CommentCheckerConfig;
   agentUserReminder: AgentUserReminderConfig;
+  directWorkWarning: DirectWorkWarningConfig;
   unstableAgentBabysitter: UnstableAgentBabysitterConfig;
   questionLabelTruncator: QuestionLabelTruncatorConfig;
   semanticOutputSummarizer: SemanticOutputSummarizerConfig;
@@ -713,6 +719,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "plan-handoff-reminder",
       "comment-checker",
       "agent-user-reminder",
+      "direct-work-warning",
       "unstable-agent-babysitter",
       "question-label-truncator",
       "dangerous-command-guard",
@@ -1072,6 +1079,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   agentUserReminder: {
     enabled: true,
+  },
+  directWorkWarning: {
+    enabled: true,
+    blockRepeatedEdits: false,
   },
   unstableAgentBabysitter: {
     enabled: true,

@@ -5,25 +5,25 @@ Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-post-merge-parity-back
 
 ## Purpose
 
-Capture the next high-value parity work after PR `#443` merged the hook hardening and atlas-inspired task shaping slices.
+Capture the next high-value parity work after PR `#443` merged the hook hardening and delegation-focused task shaping slices.
 
 ## Completed baseline
 
 - gateway LLM decision hook bindings are corrected
 - hook startup and runtime failure handling are hardened
-- atlas-inspired post-task and pre-task shaping are present locally
+- delegation-focused post-task and pre-task shaping are present locally
 - continuity wording is canonicalized
 - agent metadata discovery is dynamic
 
 ## Remaining high-value backlog
 
-### 1. Atlas runtime parity: direct-edit and tool-time enforcement
+### 1. Delegation-first direct-work discipline
 
-Status: `proposed`
+Status: `in_progress`
 
 Why it matters:
 
-- local runtime now covers task-shaping reminders, but still does not mirror the stronger Atlas-style tool-time behavior for execution discipline and direct-edit avoidance
+- local runtime now covers task-shaping reminders, but still lacks stronger tool-time discipline around direct primary-agent edits during work that should usually be delegated
 
 Evidence:
 
@@ -32,7 +32,7 @@ Evidence:
 
 Suggested slice:
 
-- prototype one additional runtime behavior in gateway-core that warns or blocks when delegated work drifts into direct edits without the expected orchestration flow
+- first slice implemented in `plugin/gateway-core/src/hooks/direct-work-warning/index.ts`; it ships as warn-first by default and exposes optional repeated-edit blocking, while broader path-aware exceptions remain follow-up work
 
 ### 2. `claude-code-hooks` compatibility decision
 
@@ -88,6 +88,6 @@ Suggested slice:
 
 ## Recommended execution order
 
-1. Decide whether Atlas direct-edit/tool-time enforcement is still in scope
+1. Extend delegation-first direct-work discipline beyond warn-only reminders
 2. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
 3. Revisit `todo-continuation-enforcer` promotion only after fresh live disagreement telemetry is collected
