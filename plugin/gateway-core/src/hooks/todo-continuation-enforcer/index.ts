@@ -470,11 +470,13 @@ export function createTodoContinuationEnforcerHook(options: {
         if (isStopIntent(prompt)) {
           state.continueIntentArmed = false
           state.pendingContinuation = false
+          state.markerProbeAttempted = false
           return
         }
         if (isContinueIntent(prompt)) {
           state.continueIntentArmed = true
         }
+        state.markerProbeAttempted = false
         return
       }
 

@@ -2,6 +2,9 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadGatewayState } from "../../state/storage.js";
 import { injectHookMessage } from "../hook-message-injector/index.js";
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
+function compactDecisionCacheKey(text) {
+    return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240);
+}
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>";
 const TODO_CONTINUATION_PROMPT = [
     "[SYSTEM DIRECTIVE: TODO CONTINUATION]",
@@ -117,9 +120,6 @@ function hasDirectContinuationOfferCue(text) {
     return (/\bi\s+will\s+continue\b/.test(normalized) ||
         /\bi'?ll\s+continue\b/.test(normalized) ||
         normalized.includes("continue directly"));
-}
-function compactDecisionCacheKey(text) {
-    return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240);
 }
 function shouldUseLlmContinuationFallback(text) {
     return hasCompletionClosureCue(text) && hasActionableNextSliceCue(text) && hasDirectContinuationOfferCue(text);
@@ -330,11 +330,13 @@ export function createTodoContinuationEnforcerHook(options) {
                 if (isStopIntent(prompt)) {
                     state.continueIntentArmed = false;
                     state.pendingContinuation = false;
+                    state.markerProbeAttempted = false;
                     return;
                 }
                 if (isContinueIntent(prompt)) {
                     state.continueIntentArmed = true;
                 }
+                state.markerProbeAttempted = false;
                 return;
             }
             if (type === "tool.execute.after") {
@@ -343,18 +345,18 @@ export function createTodoContinuationEnforcerHook(options) {
                 const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
                 if (!sessionId || tool !== "task" || typeof eventPayload.output?.output !== "string") {
                     return;
-        }
-        const state = getSessionState(sessionState, sessionId);
-        state.lastTraceId = resolveTraceId(eventPayload);
-        state.pendingContinuation = await resolvePendingContinuationDecision({
-            text: eventPayload.output.output,
-            continueIntentArmed: state.continueIntentArmed,
-            source: "task_output",
-            sessionId,
-            directory: resolveDirectory(eventPayload, options.directory),
-            traceId: state.lastTraceId,
-            decisionRuntime: options.decisionRuntime,
-        });
+                }
+                const state = getSessionState(sessionState, sessionId);
+                state.lastTraceId = resolveTraceId(eventPayload);
+                state.pendingContinuation = await resolvePendingContinuationDecision({
+                    text: eventPayload.output.output,
+                    continueIntentArmed: state.continueIntentArmed,
+                    source: "task_output",
+                    sessionId,
+                    directory: resolveDirectory(eventPayload, options.directory),
+                    traceId: state.lastTraceId,
+                    decisionRuntime: options.decisionRuntime,
+                });
                 state.markerProbeAttempted = true;
                 return;
             }
@@ -432,12 +434,12 @@ export function createTodoContinuationEnforcerHook(options) {
                             pending = await resolvePendingContinuationDecision({
                                 text,
                                 continueIntentArmed: state.continueIntentArmed,
-                        source: "message_probe",
-                        sessionId,
-                        directory,
-                        traceId: state.lastTraceId,
-                        decisionRuntime: options.decisionRuntime,
-                    });
+                                source: "message_probe",
+                                sessionId,
+                                directory,
+                                traceId: state.lastTraceId,
+                                decisionRuntime: options.decisionRuntime,
+                            });
                             break;
                         }
                     }

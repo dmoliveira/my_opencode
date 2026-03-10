@@ -167,6 +167,49 @@ test("todo-continuation-enforcer avoids repeated message polling after no-marker
   }
 })
 
+test("todo-continuation-enforcer refreshes message probe after a later chat turn", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let messageCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            return {
+              data: messageCalls === 1
+                ? [{ info: { role: "assistant" }, parts: [{ type: "text", text: "no todo marker here" }] }]
+                : [{ info: { role: "assistant" }, parts: [{ type: "text", text: "pending work\n<CONTINUE-LOOP>" }] }],
+            }
+          },
+          async promptAsync() {},
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-refresh" },
+    })
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-refresh", prompt: "please keep going" },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-refresh" },
+    })
+
+    assert.ok(messageCalls >= 2)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("todo-continuation-enforcer skips when active loop is running", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
   try {

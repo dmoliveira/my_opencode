@@ -86,7 +86,10 @@ export function createValidationEvidenceLedgerHook(options) {
                     return;
                 }
                 const queue = pendingCommandsBySession.get(sid) ?? [];
-                queue.push(command);
+                queue.push({
+                    command,
+                    categories: classifyValidationCommand(command),
+                });
                 pendingCommandsBySession.set(sid, queue);
                 return;
             }
@@ -103,20 +106,35 @@ export function createValidationEvidenceLedgerHook(options) {
                 return;
             }
             const queue = pendingCommandsBySession.get(sid) ?? [];
-            const command = queue.shift() ?? "";
+            if (queue.length > 1) {
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                writeGatewayEventAudit(directory, {
+                    hook: "validation-evidence-ledger",
+                    stage: "skip",
+                    reason_code: "validation_evidence_ambiguous_pending_commands",
+                    session_id: sid,
+                    pending_commands: queue.length,
+                });
+                pendingCommandsBySession.delete(sid);
+                return;
+            }
+            const pending = queue.shift();
             if (queue.length > 0) {
                 pendingCommandsBySession.set(sid, queue);
             }
             else {
                 pendingCommandsBySession.delete(sid);
             }
-            if (!command) {
+            if (!pending?.command) {
                 return;
             }
             if (typeof eventPayload.output?.output !== "string") {
                 return;
             }
-            let categories = classifyValidationCommand(command);
+            const command = pending.command;
+            let categories = pending.categories;
             if (categories.length === 0 && options.decisionRuntime) {
                 const decision = await options.decisionRuntime.decide({
                     hookId: "validation-evidence-ledger",
