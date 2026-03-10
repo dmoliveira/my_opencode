@@ -135,21 +135,15 @@ Note: MCP OAuth parity was intentionally out-of-scope for cycle 1 and remains de
 
 Intentional divergence registry: `docs/upstream-divergence-registry.md`.
 
-Status: `doing` (targeted parity-hardening and E2E refinement follow-up is active)
+Status: `done` for merged hardening baseline; remaining items moved to post-merge backlog
 
-Gaps:
-
-- Fix gateway LLM decision runtime hook-id wiring so per-hook rollout modes and telemetry hit the intended hooks.
-- Add safe hook creation/fault isolation in `plugin/gateway-core` so a single hook init failure degrades locally instead of breaking startup.
-- Keep `atlas` runtime behavior injection and `claude-code-hooks` compatibility explicitly documented as intentional divergences unless owner reopens direct upstream semantics.
-- Add end-to-end hardening so critical hook failures surface visibly, runtime hook exceptions isolate safely, continuity hints stay canonical, and agent metadata discovery follows `agent/specs/*.json` dynamically.
+Remaining items now live in `docs/plan/post-merge-parity-backlog-2026-03-10.md`.
 
 Current focus:
-- Land gateway parity-hardening fixes for LLM runtime binding correctness and startup fault isolation.
-- Land E2E gateway refinements for critical hook fail-closed behavior, execution isolation, canonical continuity wording, and dynamic metadata discovery.
 - Monitor deferred E7 and revisit only if owner reopens OAuth/provider scope.
+- Use the post-merge backlog doc to decide whether Atlas direct-edit/tool-time enforcement or `claude-code-hooks` compatibility should reopen.
 
-No new scope has been added beyond parity hardening; remaining direct upstream deltas are documented intentional divergences unless reopened by owner.
+The merged parity baseline now covers the hardening and atlas-inspired shaping slices from PR `#443`; remaining direct upstream deltas stay intentional divergences unless reopened by owner.
 
 ## Naming and accessibility policy (plain-English, low cognitive load)
 
