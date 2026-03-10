@@ -288,3 +288,39 @@ test("gateway event audit derives OTLP auth header from Langfuse keys", async ()
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("gateway child mode records minimal hook activation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousChildMode = process.env.MY_OPENCODE_LLM_DECISION_CHILD
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_LLM_DECISION_CHILD = "1"
+  try {
+    const plugin = GatewayCorePlugin({ directory, config: {} })
+    await plugin.event({ event: { type: "session.idle", properties: {} } })
+
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const lines = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    const childMode = lines.find(
+      (item) => item.reason_code === "child_mode_minimal_hooks_enabled",
+    )
+    const dispatch = lines.find((item) => item.reason_code === "event_dispatch")
+    assert.equal(childMode?.child_mode, "llm_decision")
+    assert.equal(dispatch?.hook_count, 0)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousChildMode === undefined) {
+      delete process.env.MY_OPENCODE_LLM_DECISION_CHILD
+    } else {
+      process.env.MY_OPENCODE_LLM_DECISION_CHILD = previousChildMode
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

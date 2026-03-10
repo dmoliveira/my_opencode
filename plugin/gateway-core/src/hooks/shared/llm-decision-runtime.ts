@@ -319,6 +319,16 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
         }
       }
       if (process.env[LLM_DECISION_CHILD_ENV] === "1") {
+        writeGatewayEventAudit(options.directory, {
+          hook: request.hookId,
+          stage: "skip",
+          reason_code: "llm_decision_nested_child_skipped",
+          session_id: request.sessionId,
+          trace_id: request.traceId,
+          template_id: request.templateId,
+          decision_mode: config.mode,
+          model: config.model,
+        })
         return {
           ...baseResult,
           durationMs: Date.now() - start,
