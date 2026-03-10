@@ -22,7 +22,7 @@ export interface LlmDisagreementSummary {
 }
 export interface LlmRolloutRecommendation {
     hook: string;
-    action: "investigate" | "tune" | "observe" | "promote_candidate";
+    action: "investigate" | "tune" | "observe";
     reason: string;
     disagreementCount: number;
     thresholds: LlmRolloutThresholds;
@@ -37,9 +37,22 @@ export interface LlmRolloutThresholdMap {
     hooks?: Record<string, Partial<LlmRolloutThresholds>>;
 }
 export interface LlmRolloutReport {
+    metadata?: {
+        generatedAt?: string;
+        sourceAuditPath?: string;
+        worktreePath?: string;
+        branch?: string;
+        invalidLines?: number;
+        sourceAuditShared?: boolean;
+    };
     summary: LlmDisagreementSummary;
     recommendations: LlmRolloutRecommendation[];
 }
+export interface ParsedGatewayAuditJsonl {
+    events: GatewayAuditEvent[];
+    invalidLines: number;
+}
+export declare function parseGatewayAuditJsonlWithDiagnostics(text: string): ParsedGatewayAuditJsonl;
 export declare function parseGatewayAuditJsonl(text: string): GatewayAuditEvent[];
 export declare function summarizeLlmDecisionDisagreements(events: GatewayAuditEvent[]): LlmDisagreementSummary;
 export declare function recommendLlmRolloutActions(summary: LlmDisagreementSummary, overrides?: LlmRolloutThresholdMap): LlmRolloutRecommendation[];

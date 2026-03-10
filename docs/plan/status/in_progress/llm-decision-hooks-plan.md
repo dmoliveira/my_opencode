@@ -2,8 +2,8 @@
 
 Date: 2026-03-09
 Status: `in_progress`
-Branch: `fix/next-parity-item`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item`
+Branch: `fix/next-parity-item-2`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item-2`
 
 ## Goal
 

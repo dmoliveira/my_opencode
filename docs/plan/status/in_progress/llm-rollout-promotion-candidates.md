@@ -16,7 +16,7 @@ Branch: `fix/next-parity-item-2`
 
 - `delegation-fallback-orchestrator`
   - Why: fallback mutation is helpful, deterministic fallback already exists, and it still looks like the best next assist candidate once fresh disagreement data confirms stability.
-  - Suggested mode: keep in `shadow` until the refreshed disagreement report clears promotion.
+  - Suggested mode: keep in `shadow` until a non-empty refreshed disagreement report clears promotion.
 - `pr-body-evidence-guard`
   - Why: semantic section detection is useful but still affects release workflow gates.
 - `done-proof-enforcer`

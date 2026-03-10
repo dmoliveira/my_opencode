@@ -153,7 +153,7 @@ Remaining:
 1. Continue post-merge verification for protected-main guard behavior in real operator flows.
 2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 3. Keep active docs canonical-first as new command/runtime slices land.
-4. Refresh disagreement evidence for `delegation-fallback-orchestrator`, then promote it only if the next window still stays low/stable; keep `todo-continuation-enforcer` and `validation-evidence-ledger` in shadow until then.
+4. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer` and `validation-evidence-ledger` in shadow until then.
 5. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
