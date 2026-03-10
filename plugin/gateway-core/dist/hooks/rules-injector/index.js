@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const TRACKED_TOOLS = new Set(["read", "write", "edit", "multiedit"]);
+const RULES_SYSTEM_MARKER = "[runtime-rules]";
 const RULES_DIRS = [
     [".github", "instructions"],
     [".claude", "rules"],
@@ -300,6 +301,38 @@ export function createRulesInjectorHook(options) {
                 if (sessionId && TRACKED_TOOLS.has(tool)) {
                     pendingToolBySession.set(sessionId, tool);
                 }
+                return;
+            }
+            if (type === "experimental.chat.system.transform") {
+                const eventPayload = (payload ?? {});
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                const system = eventPayload.output?.system;
+                if (!Array.isArray(system) || system.some((entry) => typeof entry === "string" && entry.includes(RULES_SYSTEM_MARKER))) {
+                    return;
+                }
+                let cachedRules = ruleCacheByDirectory.get(directory);
+                if (!cachedRules) {
+                    cachedRules = collectRuleFiles(directory);
+                    ruleCacheByDirectory.set(directory, cachedRules);
+                }
+                const sessionId = resolveSessionId(eventPayload);
+                const blocks = [];
+                for (const rule of cachedRules.filter((candidate) => candidate.alwaysApply)) {
+                    blocks.push(`[Rule: ${rule.path}]\n[Match: alwaysApply]\n${rule.body}`);
+                }
+                if (blocks.length === 0) {
+                    return;
+                }
+                system.unshift(`${RULES_SYSTEM_MARKER}\n${blocks.join("\n\n")}`);
+                writeGatewayEventAudit(directory, {
+                    hook: "rules-injector",
+                    stage: "inject",
+                    reason_code: "runtime_rule_system_injected",
+                    session_id: sessionId || undefined,
+                    matched_rule_count: blocks.length,
+                });
                 return;
             }
             if (type !== "tool.execute.after") {

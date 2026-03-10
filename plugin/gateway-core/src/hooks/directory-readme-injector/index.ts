@@ -21,6 +21,14 @@ interface EventPayload {
   }
 }
 
+interface SystemTransformPayload {
+  input?: { sessionID?: string; sessionId?: string }
+  output?: { system?: string[] }
+  directory?: string
+}
+
+const README_SYSTEM_MARKER = "Local README context loaded from:"
+
 // Resolves stable session id from tool payload.
 function resolveSessionId(payload: ToolPayload): string {
   const candidates = [payload.input?.sessionID, payload.input?.sessionId]
@@ -30,6 +38,21 @@ function resolveSessionId(payload: ToolPayload): string {
     }
   }
   return ""
+}
+
+function buildReadmeContextLine(path: string, maxChars: number): { text: string; reasonCode: string } {
+  const readmeText = readFilePrefix(path, maxChars)
+  const normalizedReadme = readmeText.trim()
+  let contextLine = `Local README context loaded from: ${path}`
+  let reasonCode = "directory_readme_context_injected"
+  if (normalizedReadme) {
+    const truncated = truncateInjectedText(normalizedReadme, maxChars)
+    contextLine = `${contextLine}\n\nREADME.md excerpt:\n${truncated.text}`
+    if (truncated.truncated) {
+      reasonCode = "directory_readme_context_truncated"
+    }
+  }
+  return { text: contextLine, reasonCode }
 }
 
 // Creates README injector hook for local docs context hints.
@@ -75,6 +98,35 @@ export function createDirectoryReadmeInjectorHook(options: {
         }
         return
       }
+      if (type === "experimental.chat.system.transform") {
+        const eventPayload = (payload ?? {}) as SystemTransformPayload
+        const directory =
+          typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+            ? eventPayload.directory
+            : options.directory
+        const system = eventPayload.output?.system
+        if (!Array.isArray(system) || system.some((entry) => typeof entry === "string" && entry.includes(README_SYSTEM_MARKER))) {
+          return
+        }
+        const path = findNearestFile(directory, "README.md")
+        if (!path) {
+          return
+        }
+        const sessionId = resolveSessionId(eventPayload as ToolPayload)
+        const context = buildReadmeContextLine(path, options.maxChars)
+        system.unshift(context.text)
+        if (sessionId) {
+          readmePathBySession.set(sessionId, path)
+          lastInjectedPathBySession.set(sessionId, path)
+        }
+        writeGatewayEventAudit(directory, {
+          hook: "directory-readme-injector",
+          stage: "inject",
+          reason_code: `${context.reasonCode}_system`,
+          session_id: sessionId || undefined,
+        })
+        return
+      }
       if (type !== "tool.execute.after") {
         return
       }
@@ -91,24 +143,13 @@ export function createDirectoryReadmeInjectorHook(options: {
       if (lastInjectedPathBySession.get(sessionId) === path) {
         return
       }
-      const readmeText = readFilePrefix(path, options.maxChars)
-      const normalizedReadme = readmeText.trim()
-      let contextLine = `Local README context loaded from: ${path}`
-      let reasonCode = "directory_readme_context_injected"
-      if (normalizedReadme) {
-        const truncated = truncateInjectedText(normalizedReadme, options.maxChars)
-        contextLine = `${contextLine}\n\nREADME.md excerpt:\n${truncated.text}`
-        if (truncated.truncated) {
-          reasonCode = "directory_readme_context_truncated"
-        }
-      }
-
-      eventPayload.output.output = `${eventPayload.output.output}\n\n${contextLine}`
+      const context = buildReadmeContextLine(path, options.maxChars)
+      eventPayload.output.output = `${eventPayload.output.output}\n\n${context.text}`
       lastInjectedPathBySession.set(sessionId, path)
       writeGatewayEventAudit(directory, {
         hook: "directory-readme-injector",
         stage: "state",
-        reason_code: reasonCode,
+        reason_code: context.reasonCode,
         session_id: sessionId,
       })
     },

@@ -2,6 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
+const VALIDATION_INVOCATION_ID_KEY = "validationEvidenceInvocationId";
 // Resolves stable session id across gateway payload variants.
 function sessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId, payload.properties?.info?.id];
@@ -11,6 +12,19 @@ function sessionId(payload) {
         }
     }
     return "";
+}
+function nextInvocationId(sessionIdValue, sequence) {
+    return `${sessionIdValue}:${sequence}`;
+}
+function readInvocationId(payload) {
+    const value = payload.output?.metadata?.[VALIDATION_INVOCATION_ID_KEY];
+    return typeof value === "string" ? value.trim() : "";
+}
+function readCommand(payload) {
+    return String(payload.output?.args?.command ?? "").trim();
+}
+function normalizeMetadata(metadata) {
+    return metadata && typeof metadata === "object" ? { ...metadata } : {};
 }
 // Returns true when command output indicates failure.
 function commandFailed(output) {
@@ -35,13 +49,13 @@ function buildValidationInstruction() {
 }
 function normalizeValidationCommand(command) {
     const trimmed = command.trim();
-    const actualCommandMatch = trimmed.match(/actual command\s*:\s*([\s\S]+)$/i);
-    const extracted = actualCommandMatch?.[1]?.trim() || trimmed;
-    return extracted
+    return trimmed
         .replace(/<[^>]+>/g, " ")
         .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
+        .replace(/\bactual command\s*:/gi, " ")
         .replace(/ignore all previous instructions/gi, " ")
         .replace(/ignore previous instructions/gi, " ")
+        .replace(/answer\s+[A-Z]\s+only/gi, " ")
         .replace(/answer\s+[A-Z]/g, " ")
         .replace(/classify as [a-z_-]+/gi, " ")
         .replace(/\s*[;|]\s*/g, " ")
@@ -53,7 +67,9 @@ function buildValidationContext(command) {
 }
 // Creates validation evidence ledger hook to track successful validation commands.
 export function createValidationEvidenceLedgerHook(options) {
-    const pendingCommandsBySession = new Map();
+    const pendingCommandsByInvocation = new Map();
+    const invocationSequenceBySession = new Map();
+    const pendingInvocationIdsBySession = new Map();
     return {
         id: "validation-evidence-ledger",
         priority: 330,
@@ -67,7 +83,13 @@ export function createValidationEvidenceLedgerHook(options) {
                 if (!sid) {
                     return;
                 }
-                pendingCommandsBySession.delete(sid);
+                invocationSequenceBySession.delete(sid);
+                pendingInvocationIdsBySession.delete(sid);
+                for (const key of pendingCommandsByInvocation.keys()) {
+                    if (key.startsWith(`${sid}:`)) {
+                        pendingCommandsByInvocation.delete(key);
+                    }
+                }
                 clearValidationEvidence(sid);
                 return;
             }
@@ -85,9 +107,42 @@ export function createValidationEvidenceLedgerHook(options) {
                 if (!command) {
                     return;
                 }
-                const queue = pendingCommandsBySession.get(sid) ?? [];
-                queue.push(command);
-                pendingCommandsBySession.set(sid, queue);
+                const sequence = (invocationSequenceBySession.get(sid) ?? 0) + 1;
+                invocationSequenceBySession.set(sid, sequence);
+                const invocationId = nextInvocationId(sid, sequence);
+                const metadata = normalizeMetadata(eventPayload.output?.metadata);
+                metadata[VALIDATION_INVOCATION_ID_KEY] = invocationId;
+                if (eventPayload.output) {
+                    eventPayload.output.metadata = metadata;
+                }
+                pendingCommandsByInvocation.set(invocationId, command);
+                const queue = pendingInvocationIdsBySession.get(sid) ?? [];
+                queue.push(invocationId);
+                pendingInvocationIdsBySession.set(sid, queue);
+                return;
+            }
+            if (type === "tool.execute.before.error") {
+                const eventPayload = (payload ?? {});
+                const sid = sessionId(eventPayload);
+                if (!sid) {
+                    return;
+                }
+                const queue = pendingInvocationIdsBySession.get(sid) ?? [];
+                const command = readCommand(eventPayload);
+                const invocationId = readInvocationId(eventPayload) ||
+                    queue.find((candidate) => pendingCommandsByInvocation.get(candidate) === command) ||
+                    queue[0] ||
+                    "";
+                if (invocationId) {
+                    pendingCommandsByInvocation.delete(invocationId);
+                    const remaining = queue.filter((candidate) => candidate !== invocationId);
+                    if (remaining.length > 0) {
+                        pendingInvocationIdsBySession.set(sid, remaining);
+                    }
+                    else {
+                        pendingInvocationIdsBySession.delete(sid);
+                    }
+                }
                 return;
             }
             if (type !== "tool.execute.after") {
@@ -102,13 +157,22 @@ export function createValidationEvidenceLedgerHook(options) {
             if (!sid) {
                 return;
             }
-            const queue = pendingCommandsBySession.get(sid) ?? [];
-            const command = queue.shift() ?? "";
-            if (queue.length > 0) {
-                pendingCommandsBySession.set(sid, queue);
-            }
-            else {
-                pendingCommandsBySession.delete(sid);
+            const queue = pendingInvocationIdsBySession.get(sid) ?? [];
+            const commandFromAfter = readCommand(eventPayload);
+            const invocationId = readInvocationId(eventPayload) ||
+                queue.find((candidate) => pendingCommandsByInvocation.get(candidate) === commandFromAfter) ||
+                queue[0] ||
+                "";
+            const command = invocationId ? pendingCommandsByInvocation.get(invocationId) ?? "" : "";
+            if (invocationId) {
+                pendingCommandsByInvocation.delete(invocationId);
+                const remaining = queue.filter((candidate) => candidate !== invocationId);
+                if (remaining.length > 0) {
+                    pendingInvocationIdsBySession.set(sid, remaining);
+                }
+                else {
+                    pendingInvocationIdsBySession.delete(sid);
+                }
             }
             if (!command) {
                 return;
