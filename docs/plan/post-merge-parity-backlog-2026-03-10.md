@@ -68,7 +68,7 @@ Suggested slice:
 
 ### 4. LLM decision rollout completion
 
-Status: `active on main` (no duplicate implementation needed in this worktree)
+Status: `reviewed` - keep in shadow for now
 
 Why it matters:
 
@@ -84,10 +84,10 @@ Evidence:
 
 Suggested slice:
 
-- do not re-implement the hook in this worktree; instead, review rollout evidence on `main`, then either promote from shadow or explicitly defer in the LLM rollout docs
+- do not re-implement the hook in this worktree; rollout decision captured in `docs/plan/status/in_progress/todo-continuation-rollout-decision-2026-03-10.md` keeps it in `shadow` until live disagreement telemetry exists
 
 ## Recommended execution order
 
-1. Review and close the `todo-continuation-enforcer` rollout decision on the existing mainline implementation
-2. Decide whether Atlas direct-edit/tool-time enforcement is still in scope
-3. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
+1. Decide whether Atlas direct-edit/tool-time enforcement is still in scope
+2. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
+3. Revisit `todo-continuation-enforcer` promotion only after fresh live disagreement telemetry is collected
