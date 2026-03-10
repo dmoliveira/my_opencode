@@ -145,6 +145,7 @@ Remaining:
 | Committed Atlas post-task reminder prototype | done | Created `fa270cf` to add local verification/reminder shaping for delegated task results. |
 | Committed Atlas pre-task shaping prototype | done | Created `d090f80` to prepend delegated task focus guidance before subagent execution. |
 | Merged parity hardening and atlas shaping PR | done | `#443` merged to `main`, including E2E gateway hook-failure hardening in `b9a7f05`. |
+| Normalized parity tracker after merge | done | Replaced merged parity execution slices with a single post-merge backlog triage stream and moved remaining decisions into `docs/plan/post-merge-parity-backlog-2026-03-10.md`. |
 
 ## Next Tasks
 
@@ -152,8 +153,7 @@ Remaining:
 2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 3. Keep active docs canonical-first as new command/runtime slices land.
 4. Land the mixed-signal `todo-continuation-enforcer` LLM fallback with shadow-first rollout and targeted workflow coverage.
-5. Triage the remaining post-merge parity backlog in `docs/plan/post-merge-parity-backlog-2026-03-10.md`.
-6. Keep this tracker and the CLI todo list synchronized at each task handoff.
+5. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 

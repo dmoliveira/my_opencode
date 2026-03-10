@@ -52,19 +52,19 @@ Suggested slice:
 
 ### 3. Parity tracker normalization after merge
 
-Status: `proposed`
+Status: `done`
 
 Why it matters:
 
-- several tracker entries still read as active implementation slices even though the core parity hardening work already merged in `#443`
+- tracker state needed normalization because the core parity hardening work had already merged in `#443`
 
 Evidence:
 
-- `docs/plan/current-roadmap-tracker.md` still lists parity-hardening, atlas prototype, and E2E parity refinements as `doing`
+- normalized in `docs/plan/current-roadmap-tracker.md` by replacing the merged parity slices with a single post-merge backlog triage stream and moving the merged work into `done`
 
 Suggested slice:
 
-- convert merged items to `done`, keep only true active streams in `doing`, and point next tasks at the remaining decisions/prototypes
+- completed in this worktree
 
 ### 4. LLM decision rollout completion
 
@@ -85,7 +85,6 @@ Suggested slice:
 
 ## Recommended execution order
 
-1. Normalize parity trackers after `#443`
-2. Finish the `todo-continuation-enforcer` rollout decision
-3. Decide whether Atlas direct-edit/tool-time enforcement is still in scope
-4. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
+1. Finish the `todo-continuation-enforcer` rollout decision
+2. Decide whether Atlas direct-edit/tool-time enforcement is still in scope
+3. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
