@@ -40,6 +40,14 @@ interface EventPayload {
     info?: { id?: string }
   }
 }
+const TRANSFORM_MESSAGE_LOOKBACK_LIMIT = 64
+
+function recentMessages<T>(messages: T[], limit = TRANSFORM_MESSAGE_LOOKBACK_LIMIT): T[] {
+  if (!Array.isArray(messages) || messages.length <= limit) {
+    return messages
+  }
+  return messages.slice(messages.length - limit)
+}
 
 // Resolves session id from known payload variants.
 function resolveSessionId(payload: ChatPayload | TransformPayload, fallbackSessionId = ""): string {
@@ -62,8 +70,8 @@ function resolveSessionId(payload: ChatPayload | TransformPayload, fallbackSessi
   const transformPayload = payload as TransformPayload
   const messages = transformPayload.output?.messages
   if (Array.isArray(messages)) {
-    for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-      const sessionIdCandidates = [messages[idx]?.info?.sessionID, messages[idx]?.info?.sessionId]
+    for (const message of [...recentMessages(messages)].reverse()) {
+      const sessionIdCandidates = [message?.info?.sessionID, message?.info?.sessionId]
       for (const value of sessionIdCandidates) {
         if (typeof value === "string" && value.trim()) {
           return value.trim()
@@ -188,10 +196,11 @@ export function createContextInjectorHook(options: {
       if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
         return
       }
+      const recent = recentMessages(messages)
       let lastUserIndex = -1
-      for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-        if (messages[idx]?.info?.role === "user") {
-          lastUserIndex = idx
+      for (let idx = recent.length - 1; idx >= 0; idx -= 1) {
+        if (recent[idx]?.info?.role === "user") {
+          lastUserIndex = messages.length - recent.length + idx
           break
         }
       }

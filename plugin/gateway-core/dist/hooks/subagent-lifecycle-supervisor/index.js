@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function fallbackDelegationKey(sid, args) {
     const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
@@ -22,7 +23,7 @@ function lifecycleKey(sid, childRunId, traceId, args) {
     return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args);
 }
 function sessionId(payload) {
-    return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
+    return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.sessionID ?? payload.properties?.sessionId ?? payload.properties?.info?.id ?? "").trim();
 }
 function effectiveDirectory(payload, fallbackDirectory) {
     return typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : fallbackDirectory;
@@ -66,6 +67,58 @@ function isFailureOutput(output) {
 }
 export function createSubagentLifecycleSupervisorHook(options) {
     const byDelegation = new Map();
+    function finalizeLinkedLifecycle(args) {
+        const matches = args.traceId
+            ? matchingSessionTraceLifecycleKeys(byDelegation, args.parentSessionId, args.traceId)
+            : sessionLifecycleKeys(byDelegation, args.parentSessionId);
+        if (matches.length !== 1) {
+            return false;
+        }
+        const activeKey = matches[0];
+        const state = byDelegation.get(activeKey);
+        if (!state || state.status !== "running") {
+            return false;
+        }
+        if (args.failed) {
+            const failedCount = state.failureCount + 1;
+            byDelegation.set(activeKey, {
+                ...state,
+                status: "failed",
+                failureCount: failedCount,
+                lastUpdatedAt: nowMs(),
+                lastReasonCode: args.reasonCode,
+            });
+            writeGatewayEventAudit(args.directory, {
+                hook: "subagent-lifecycle-supervisor",
+                stage: "state",
+                reason_code: args.reasonCode,
+                session_id: args.parentSessionId,
+                child_run_id: state.childRunId,
+                trace_id: state.traceId,
+                subagent_type: state.subagentType,
+                failure_count: String(failedCount),
+            });
+            return true;
+        }
+        byDelegation.set(activeKey, {
+            ...state,
+            status: "completed",
+            lastUpdatedAt: nowMs(),
+            lastReasonCode: args.reasonCode,
+        });
+        writeGatewayEventAudit(args.directory, {
+            hook: "subagent-lifecycle-supervisor",
+            stage: "state",
+            reason_code: args.reasonCode,
+            session_id: args.parentSessionId,
+            child_run_id: state.childRunId,
+            trace_id: state.traceId,
+            subagent_type: state.subagentType,
+            failure_count: String(state.failureCount),
+        });
+        byDelegation.delete(activeKey);
+        return true;
+    }
     function resolveLifecycleState(eventPayload) {
         const sid = sessionId(eventPayload);
         if (!sid) {
@@ -110,9 +163,72 @@ export function createSubagentLifecycleSupervisorHook(options) {
             if (!options.enabled) {
                 return;
             }
+            if (type === "session.created" || type === "session.updated") {
+                registerDelegationChildSession((payload ?? {}));
+                return;
+            }
+            if (type === "session.idle") {
+                const childSessionId = sessionId((payload ?? {}));
+                const link = getDelegationChildSessionLink(childSessionId);
+                if (!link) {
+                    return;
+                }
+                const eventPayload = (payload ?? {});
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                finalizeLinkedLifecycle({
+                    parentSessionId: link.parentSessionId,
+                    traceId: link.traceId,
+                    directory,
+                    failed: false,
+                    reasonCode: "subagent_lifecycle_child_idle_reconciled",
+                });
+                return;
+            }
+            if (type === "message.updated") {
+                const eventPayload = (payload ?? {});
+                const info = eventPayload.properties?.info;
+                if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+                    return;
+                }
+                const childSessionId = String(info?.sessionID ?? "").trim();
+                const link = getDelegationChildSessionLink(childSessionId);
+                if (!link) {
+                    return;
+                }
+                const completed = Number.isFinite(Number(info?.time?.completed ?? NaN));
+                const failed = info?.error !== undefined && info?.error !== null;
+                if (!completed && !failed) {
+                    return;
+                }
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                finalizeLinkedLifecycle({
+                    parentSessionId: link.parentSessionId,
+                    traceId: link.traceId,
+                    directory,
+                    failed,
+                    reasonCode: failed
+                        ? "subagent_lifecycle_child_message_failed_reconciled"
+                        : "subagent_lifecycle_child_message_completed_reconciled",
+                });
+                return;
+            }
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
+                    const childLink = clearDelegationChildSessionLink(sid);
+                    if (childLink) {
+                        finalizeLinkedLifecycle({
+                            parentSessionId: childLink.parentSessionId,
+                            traceId: childLink.traceId,
+                            directory: options.directory,
+                            failed: false,
+                            reasonCode: "subagent_lifecycle_child_deleted_reconciled",
+                        });
+                    }
                     for (const key of byDelegation.keys()) {
                         if (key === sid || key.startsWith(`${sid}:`)) {
                             byDelegation.delete(key);

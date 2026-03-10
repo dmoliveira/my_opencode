@@ -63,3 +63,22 @@ test("codex-header-injector injects into transform user message", async () => {
 
   assert.match(String(payload.output.messages[1].parts[0].text), /\[codex HEADER\]/)
 })
+
+test("codex-header-injector limits transform model scan to recent messages", async () => {
+  const hook = createCodexHeaderInjectorHook({ enabled: true, directory: process.cwd() })
+  const messages = [
+    { info: { role: "assistant", modelID: "gpt-5-codex" }, parts: [{ type: "text", text: "old" }] },
+    ...Array.from({ length: 70 }, (_, idx) => ({
+      info: { role: idx === 69 ? "user" : "assistant" },
+      parts: [{ type: "text", text: `m${idx}` }],
+    })),
+  ]
+  const payload = {
+    input: { sessionID: "s5" },
+    output: { messages },
+  }
+
+  await hook.event("experimental.chat.messages.transform", payload)
+
+  assert.equal(payload.output.messages.at(-1).parts[0].text, "m69")
+})

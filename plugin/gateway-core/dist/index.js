@@ -100,6 +100,10 @@ const DISPATCH_NOISY_REASON_CODES = new Set([
     "event_dispatch",
     "chat_messages_transform_dispatch",
 ]);
+const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
+function isLlmDecisionChildProcess() {
+    return process.env[LLM_DECISION_CHILD_ENV] === "1";
+}
 function dispatchSampleRate() {
     const parsed = Number.parseInt(String(process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE ?? ""), 10);
     if (!Number.isFinite(parsed) || parsed < 1) {
@@ -113,6 +117,15 @@ function configuredHooks(ctx) {
         ? ctx.directory
         : process.cwd();
     const cfg = loadGatewayConfig(loadGatewayConfigSource(directory, ctx.config));
+    if (isLlmDecisionChildProcess()) {
+        writeGatewayEventAudit(directory, {
+            hook: "gateway-core",
+            stage: "state",
+            reason_code: "child_mode_minimal_hooks_enabled",
+            child_mode: "llm_decision",
+        });
+        return [];
+    }
     const llmDecisionRuntimeForHook = (hookId) => createLlmDecisionRuntime({
         directory,
         config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),
