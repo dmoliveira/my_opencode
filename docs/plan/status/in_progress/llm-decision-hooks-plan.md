@@ -2,8 +2,8 @@
 
 Date: 2026-03-09
 Status: `in_progress`
-Branch: `plan/llm-decision-hooks`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-llm-decision-hooks`
+Branch: `feature/llm-todo-continuation`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-llm-todo-continuation`
 
 ## Goal
 
@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, and done-proof semantic slices are implemented in this worktree and validated with real-session probes
-- Current active slice: Epic 5 hardening is active; live rollout is unblocked through the gateway sidecar config path while assist telemetry accumulates
+- Current active slice: Epic 5 hardening is active; live rollout is unblocked through the gateway sidecar config path while assist telemetry accumulates, and a `todo-continuation-enforcer` mixed-signal continuation classifier slice is now being wired through the centralized runtime in shadow-first mode
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
@@ -55,7 +55,7 @@ Do not use LLM decisions for:
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry collection is now waiting on real traffic volume. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, and sanitized fallback failure classification are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; current checked semantic set passes 11/11 and workflow set passes 11/11, including epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 16/16, now including the mixed-signal `todo-continuation-enforcer` LLM fallback case alongside epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
 | Epic 7 - Rollout and cleanup | pending | No rollout promotion or heuristic removal yet. |
 
 ### Task status by backlog item
@@ -70,6 +70,7 @@ Do not use LLM decisions for:
 | `delegation-fallback-orchestrator` | done | Ambiguous failure output now classifies into fallback reason codes. |
 | validation command and output semantic fallback | done | Wrapper command classification shipped in validation ledger. |
 | done-proof and PR-body semantic fallback | done | Both `pr-body-evidence-guard` and `done-proof-enforcer` semantic fallback paths are implemented and validated. |
+| `todo-continuation-enforcer` mixed-signal fallback | doing | Add centralized runtime fallback only for contradictory completion-plus-next-slice wording, keep deterministic hard cues primary, and validate with targeted workflow scenarios before rollout. |
 
 ## Next scenario expansion
 

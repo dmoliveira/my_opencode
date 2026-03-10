@@ -7,7 +7,8 @@
     "mode": "shadow",
     "hookModes": {
       "auto-slash-command": "assist",
-      "provider-error-classifier": "assist"
+      "provider-error-classifier": "assist",
+      "todo-continuation-enforcer": "shadow"
     },
     "command": "opencode",
     "model": "openai/gpt-5.1-codex-mini",

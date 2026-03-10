@@ -111,6 +111,20 @@ function promptText(payload) {
     }
     return "";
 }
+function resolveSessionId(payload) {
+    const candidates = [
+        payload.properties?.sessionID,
+        payload.properties?.sessionId,
+        payload.input?.sessionID,
+        payload.input?.sessionId,
+    ];
+    for (const candidate of candidates) {
+        if (typeof candidate === "string" && candidate.trim()) {
+            return candidate.trim();
+        }
+    }
+    return "";
+}
 function normalizePromptForAi(prompt) {
     const trimmed = prompt.trim();
     const actualRequestMatch = trimmed.match(/actual request\s*:\s*([\s\S]+)$/i);
@@ -145,6 +159,9 @@ function detectSlash(prompt) {
 function shouldSkipAiAutoSlash(prompt) {
     return HIGH_RISK_SKIP_PATTERN.test(prompt);
 }
+function shouldSkipAutoSlash(prompt) {
+    return HIGH_RISK_SKIP_PATTERN.test(prompt);
+}
 function buildAiSlashInstruction() {
     return "Classify only the sanitized user request text for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics.";
 }
@@ -168,34 +185,51 @@ export function createAutoSlashCommandHook(options) {
                 const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                     ? eventPayload.directory
                     : options.directory;
-                const sessionId = eventPayload.properties?.sessionID;
+                const sessionId = resolveSessionId(eventPayload);
                 const prompt = promptText(eventPayload);
                 if (!prompt) {
+                    return;
+                }
+                if (shouldSkipAutoSlash(prompt)) {
                     return;
                 }
                 const detection = detectSlash(prompt);
                 let slash = detection.slash;
                 if (!slash && !detection.excludedExplicit && options.decisionRuntime && !shouldSkipAiAutoSlash(prompt)) {
-                    const decision = await options.decisionRuntime.decide({
-                        hookId: "auto-slash-command",
-                        sessionId: typeof sessionId === "string" ? sessionId : "",
-                        templateId: "auto-slash-v1",
-                        instruction: buildAiSlashInstruction(),
-                        context: buildAiSlashContext(prompt),
-                        userContext: prompt,
-                        allowedChars: ["D", "N"],
-                        decisionMeaning: {
-                            D: "route_doctor",
-                            N: "no_slash",
-                        },
-                        cacheKey: `auto-slash:${prompt.trim().toLowerCase()}`,
-                    });
+                    let decision;
+                    try {
+                        decision = await options.decisionRuntime.decide({
+                            hookId: "auto-slash-command",
+                            sessionId,
+                            templateId: "auto-slash-v1",
+                            instruction: buildAiSlashInstruction(),
+                            context: buildAiSlashContext(prompt),
+                            userContext: prompt,
+                            allowedChars: ["D", "N"],
+                            decisionMeaning: {
+                                D: "route_doctor",
+                                N: "no_slash",
+                            },
+                            cacheKey: `auto-slash:${prompt.trim().toLowerCase()}`,
+                        });
+                    }
+                    catch (error) {
+                        writeGatewayEventAudit(directory, {
+                            hook: "auto-slash-command",
+                            stage: "skip",
+                            reason_code: "llm_auto_slash_decision_failed",
+                            session_id: sessionId,
+                            llm_decision_mode: options.decisionRuntime.config.mode,
+                            error: error instanceof Error ? error.message : String(error ?? "unknown_error"),
+                        });
+                        return;
+                    }
                     if (decision.accepted) {
                         const aiSlash = AI_AUTO_SLASH_CHAR_TO_COMMAND[decision.char] ?? null;
                         writeDecisionComparisonAudit({
                             directory,
                             hookId: "auto-slash-command",
-                            sessionId: typeof sessionId === "string" ? sessionId : "",
+                            sessionId,
                             mode: options.decisionRuntime.config.mode,
                             deterministicMeaning: "no_slash",
                             aiMeaning: decision.meaning || (aiSlash ? "route_doctor" : "no_slash"),
@@ -206,7 +240,7 @@ export function createAutoSlashCommandHook(options) {
                             hook: "auto-slash-command",
                             stage: "state",
                             reason_code: "llm_auto_slash_decision_recorded",
-                            session_id: typeof sessionId === "string" ? sessionId : "",
+                            session_id: sessionId,
                             llm_decision_char: decision.char,
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
@@ -217,7 +251,7 @@ export function createAutoSlashCommandHook(options) {
                                 hook: "auto-slash-command",
                                 stage: "state",
                                 reason_code: "llm_auto_slash_shadow_deferred",
-                                session_id: typeof sessionId === "string" ? sessionId : "",
+                                session_id: sessionId,
                                 llm_decision_char: decision.char,
                                 llm_decision_meaning: decision.meaning,
                                 llm_decision_mode: options.decisionRuntime.config.mode,
@@ -244,7 +278,7 @@ export function createAutoSlashCommandHook(options) {
                     hook: "auto-slash-command",
                     stage: "state",
                     reason_code: "auto_slash_command_detected",
-                    session_id: typeof sessionId === "string" ? sessionId : "",
+                    session_id: sessionId,
                     slash_command: slash,
                 });
                 return;
@@ -256,7 +290,7 @@ export function createAutoSlashCommandHook(options) {
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
-            const sessionId = eventPayload.input?.sessionID;
+            const sessionId = resolveSessionId(eventPayload);
             const command = typeof eventPayload.input?.command === "string" ? eventPayload.input.command.trim() : "";
             const args = typeof eventPayload.input?.arguments === "string" && eventPayload.input.arguments.trim()
                 ? eventPayload.input.arguments.trim()
@@ -284,7 +318,7 @@ export function createAutoSlashCommandHook(options) {
                 hook: "auto-slash-command",
                 stage: "state",
                 reason_code: "auto_slash_command_detected",
-                session_id: typeof sessionId === "string" ? sessionId : "",
+                session_id: sessionId,
                 slash_command: raw,
             });
         },

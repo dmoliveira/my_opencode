@@ -39,6 +39,11 @@ interface ToolAfterPayload {
   directory?: string
 }
 
+interface PendingCommandEntry {
+  command: string
+  categories: ValidationEvidenceCategory[]
+}
+
 interface SessionDeletedPayload {
   properties?: {
     info?: { id?: string }
@@ -167,7 +172,7 @@ export function createValidationEvidenceLedgerHook(options: {
   enabled: boolean
   decisionRuntime?: LlmDecisionRuntime
 }): GatewayHook {
-  const pendingCommandsByInvocation = new Map<string, string>()
+  const pendingCommandsByInvocation = new Map<string, PendingCommandEntry>()
   const invocationSequenceBySession = new Map<string, number>()
   const pendingInvocationIdsBySession = new Map<string, string[]>()
   return {
@@ -215,7 +220,10 @@ export function createValidationEvidenceLedgerHook(options: {
         if (eventPayload.output) {
           eventPayload.output.metadata = metadata
         }
-        pendingCommandsByInvocation.set(invocationId, command)
+        pendingCommandsByInvocation.set(invocationId, {
+          command,
+          categories: classifyValidationCommand(command),
+        })
         const queue = pendingInvocationIdsBySession.get(sid) ?? []
         queue.push(invocationId)
         pendingInvocationIdsBySession.set(sid, queue)
@@ -229,11 +237,10 @@ export function createValidationEvidenceLedgerHook(options: {
         }
         const queue = pendingInvocationIdsBySession.get(sid) ?? []
         const command = readCommand(eventPayload)
-        const invocationId =
-          readInvocationId(eventPayload) ||
-          queue.find((candidate) => pendingCommandsByInvocation.get(candidate) === command) ||
-          queue[0] ||
-          ""
+        const byCommand = command
+          ? queue.filter((candidate) => pendingCommandsByInvocation.get(candidate)?.command === command)
+          : []
+        const invocationId = readInvocationId(eventPayload) || byCommand[0] || (queue.length === 1 ? queue[0] : "")
         if (invocationId) {
           pendingCommandsByInvocation.delete(invocationId)
           const remaining = queue.filter((candidate) => candidate !== invocationId)
@@ -259,12 +266,29 @@ export function createValidationEvidenceLedgerHook(options: {
       }
       const queue = pendingInvocationIdsBySession.get(sid) ?? []
       const commandFromAfter = readCommand(eventPayload)
-      const invocationId =
-        readInvocationId(eventPayload) ||
-        queue.find((candidate) => pendingCommandsByInvocation.get(candidate) === commandFromAfter) ||
-        queue[0] ||
-        ""
-      const command = invocationId ? pendingCommandsByInvocation.get(invocationId) ?? "" : ""
+      const byCommand = commandFromAfter
+        ? queue.filter((candidate) => pendingCommandsByInvocation.get(candidate)?.command === commandFromAfter)
+        : []
+      const invocationId = readInvocationId(eventPayload) || byCommand[0] || (queue.length === 1 ? queue[0] : "")
+      if (!invocationId && queue.length > 1) {
+        const directory =
+          typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+            ? eventPayload.directory
+            : options.directory
+        writeGatewayEventAudit(directory, {
+          hook: "validation-evidence-ledger",
+          stage: "skip",
+          reason_code: "validation_evidence_ambiguous_pending_commands",
+          session_id: sid,
+          pending_commands: queue.length,
+        })
+        for (const pendingId of queue) {
+          pendingCommandsByInvocation.delete(pendingId)
+        }
+        pendingInvocationIdsBySession.delete(sid)
+        return
+      }
+      const pending = invocationId ? pendingCommandsByInvocation.get(invocationId) : undefined
       if (invocationId) {
         pendingCommandsByInvocation.delete(invocationId)
         const remaining = queue.filter((candidate) => candidate !== invocationId)
@@ -274,14 +298,15 @@ export function createValidationEvidenceLedgerHook(options: {
           pendingInvocationIdsBySession.delete(sid)
         }
       }
-      if (!command) {
+      if (!pending?.command) {
         return
       }
       if (!hasUsableOutput(eventPayload.output?.output)) {
         return
       }
+      const command = pending.command
       const output = outputText(eventPayload.output?.output)
-      let categories = classifyValidationCommand(command)
+      let categories = pending.categories
       if (categories.length === 0 && options.decisionRuntime) {
         const decision = await options.decisionRuntime.decide({
           hookId: "validation-evidence-ledger",

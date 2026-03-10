@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -103,14 +103,13 @@ test("validation-evidence-ledger correlates queued bash commands by invocation m
     const testRun = { args: { command: "npm test" } }
     await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-ledger-queue" }, lintRun)
     await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-ledger-queue" }, testRun)
-
     await plugin["tool.execute.after"](
       { tool: "bash", sessionID: "session-ledger-queue" },
-      { args: { command: "npm test" }, output: "tests passed" },
+      { ...testRun, output: "tests passed" },
     )
     await plugin["tool.execute.after"](
       { tool: "bash", sessionID: "session-ledger-queue" },
-      { args: { command: "npm run lint" }, output: "lint passed" },
+      { ...lintRun, output: "lint passed" },
     )
 
     await plugin["tool.execute.before"](
@@ -125,6 +124,61 @@ test("validation-evidence-ledger correlates queued bash commands by invocation m
 
     assert.equal(done.output.includes("PENDING_VALIDATION"), false)
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("validation-evidence-ledger does not misattribute overlapping pending bash commands", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-overlap" },
+      { args: { command: "npm run lint" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-overlap" },
+      { args: { command: "git status" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-overlap" },
+      { output: "On branch feature/llm-todo-continuation" },
+    )
+
+    const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    const ambiguous = events.find((entry) => entry.reason_code === "validation_evidence_ambiguous_pending_commands")
+    assert.ok(ambiguous)
+    assert.equal(ambiguous.pending_commands, 2)
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
