@@ -57,3 +57,45 @@ test("provider-error-classifier skips context-overflow non-retryable errors", as
 
   assert.equal(prompts.length, 0)
 })
+
+test("provider-error-classifier uses LLM fallback for ambiguous provider wording", async () => {
+  const prompts = []
+  const hook = createProviderErrorClassifierHook({
+    directory: process.cwd(),
+    enabled: true,
+    cooldownMs: 1,
+    client: { session: { async promptAsync(args) { prompts.push(args) } } },
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "O",
+        raw: "O",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "provider-error-classifier-v1",
+        meaning: "provider_overloaded",
+      }),
+    },
+  })
+
+  await hook.event("session.error", {
+    properties: { sessionID: "s5", error: "Service temporarily saturated, please retry later" },
+  })
+
+  assert.equal(prompts.length, 1)
+  assert.match(String(prompts[0].body.parts[0].text), /overload/i)
+  assert.match(String(prompts[0].body.parts[0].text), /llm:provider_overloaded/i)
+})

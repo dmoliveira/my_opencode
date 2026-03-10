@@ -1,5 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import {
+  type LlmDecisionRuntime,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
 import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js"
 import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js"
 
@@ -15,6 +19,16 @@ interface ToolBeforePayload {
   directory?: string
 }
 
+function buildSectionInstruction(section: "summary" | "validation"): string {
+  return section === "summary"
+    ? "Does this PR body contain summary-equivalent content? Y=yes, N=no."
+    : "Does this PR body contain validation-or-testing-equivalent content? Y=yes, N=no."
+}
+
+function buildSectionContext(body: string): string {
+  return `body=${body.trim() || "(empty)"}`
+}
+
 // Creates PR body evidence guard for structured PR metadata quality.
 export function createPrBodyEvidenceGuardHook(options: {
   directory: string
@@ -24,6 +38,7 @@ export function createPrBodyEvidenceGuardHook(options: {
   requireValidationEvidence: boolean
   allowUninspectableBody: boolean
   requiredMarkers: string[]
+  decisionRuntime?: LlmDecisionRuntime
 }): GatewayHook {
   const requiredMarkers = options.requiredMarkers.map((item) => item.trim().toLowerCase()).filter(Boolean)
   return {
@@ -81,8 +96,103 @@ export function createPrBodyEvidenceGuardHook(options: {
       }
 
       const body = inspection.body
-      const hasSummary = /(^|\n)\s*##\s*summary\b/i.test(body)
-      const hasValidation = /(^|\n)\s*##\s*validation\b/i.test(body)
+      let hasSummary = /(^|\n)\s*##\s*summary\b/i.test(body)
+      let hasValidation = /(^|\n)\s*##\s*validation\b/i.test(body)
+
+      if ((!hasSummary || !hasValidation) && options.decisionRuntime) {
+        if (!hasSummary) {
+          const decision = await options.decisionRuntime.decide({
+            hookId: "pr-body-evidence-guard",
+            sessionId,
+            templateId: "pr-body-summary-v1",
+            instruction: buildSectionInstruction("summary"),
+            context: buildSectionContext(body),
+            allowedChars: ["Y", "N"],
+            decisionMeaning: { Y: "summary_present", N: "summary_missing" },
+            cacheKey: `pr-body-summary:${body.trim().toLowerCase()}`,
+          })
+          if (decision.accepted) {
+            writeDecisionComparisonAudit({
+              directory,
+              hookId: "pr-body-evidence-guard",
+              sessionId,
+              mode: options.decisionRuntime.config.mode,
+              deterministicMeaning: "summary_missing",
+              aiMeaning: decision.meaning || "summary_missing",
+              deterministicValue: "missing",
+              aiValue: decision.char === "Y" ? "present" : "missing",
+            })
+            writeGatewayEventAudit(directory, {
+              hook: "pr-body-evidence-guard",
+              stage: "state",
+              reason_code: "llm_pr_body_summary_decision_recorded",
+              session_id: sessionId,
+              llm_decision_char: decision.char,
+              llm_decision_meaning: decision.meaning,
+              llm_decision_mode: options.decisionRuntime.config.mode,
+            })
+            if (options.decisionRuntime.config.mode === "shadow" && decision.char === "Y") {
+              writeGatewayEventAudit(directory, {
+                hook: "pr-body-evidence-guard",
+                stage: "state",
+                reason_code: "llm_pr_body_summary_shadow_deferred",
+                session_id: sessionId,
+                llm_decision_char: decision.char,
+                llm_decision_meaning: decision.meaning,
+                llm_decision_mode: options.decisionRuntime.config.mode,
+              })
+            } else {
+              hasSummary = decision.char === "Y"
+            }
+          }
+        }
+        if (!hasValidation) {
+          const decision = await options.decisionRuntime.decide({
+            hookId: "pr-body-evidence-guard",
+            sessionId,
+            templateId: "pr-body-validation-v1",
+            instruction: buildSectionInstruction("validation"),
+            context: buildSectionContext(body),
+            allowedChars: ["Y", "N"],
+            decisionMeaning: { Y: "validation_present", N: "validation_missing" },
+            cacheKey: `pr-body-validation:${body.trim().toLowerCase()}`,
+          })
+          if (decision.accepted) {
+            writeDecisionComparisonAudit({
+              directory,
+              hookId: "pr-body-evidence-guard",
+              sessionId,
+              mode: options.decisionRuntime.config.mode,
+              deterministicMeaning: "validation_missing",
+              aiMeaning: decision.meaning || "validation_missing",
+              deterministicValue: "missing",
+              aiValue: decision.char === "Y" ? "present" : "missing",
+            })
+            writeGatewayEventAudit(directory, {
+              hook: "pr-body-evidence-guard",
+              stage: "state",
+              reason_code: "llm_pr_body_validation_decision_recorded",
+              session_id: sessionId,
+              llm_decision_char: decision.char,
+              llm_decision_meaning: decision.meaning,
+              llm_decision_mode: options.decisionRuntime.config.mode,
+            })
+            if (options.decisionRuntime.config.mode === "shadow" && decision.char === "Y") {
+              writeGatewayEventAudit(directory, {
+                hook: "pr-body-evidence-guard",
+                stage: "state",
+                reason_code: "llm_pr_body_validation_shadow_deferred",
+                session_id: sessionId,
+                llm_decision_char: decision.char,
+                llm_decision_meaning: decision.meaning,
+                llm_decision_mode: options.decisionRuntime.config.mode,
+              })
+            } else {
+              hasValidation = decision.char === "Y"
+            }
+          }
+        }
+      }
 
       if (options.requireSummarySection && !hasSummary) {
         writeGatewayEventAudit(directory, {

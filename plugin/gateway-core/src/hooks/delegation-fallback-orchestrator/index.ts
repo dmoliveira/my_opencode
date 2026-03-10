@@ -1,10 +1,22 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  type LlmDecisionRuntime,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
+import {
   annotateDelegationMetadata,
   extractDelegationTraceId,
   resolveDelegationTraceId,
 } from "../shared/delegation-trace.js"
+
+const FAILURE_REASON_BY_CHAR: Record<string, string> = {
+  U: "delegation_unknown_agent",
+  C: "delegation_unknown_category",
+  I: "delegation_invalid_arguments",
+  B: "delegation_blocked_forbidden_tool",
+  R: "delegation_runtime_error",
+}
 
 interface ToolPayload {
   input?: {
@@ -81,6 +93,34 @@ function detectFailureReason(output: string): string | null {
   return null
 }
 
+function buildFailureInstruction(): string {
+  return "Classify only the sanitized delegation failure evidence. U=unknown_agent, C=unknown_category, I=invalid_arguments, B=blocked_forbidden_tool, R=runtime_error, N=no_match."
+}
+
+function sanitizeFailureText(text: string): string {
+  const trimmed = text.trim()
+  const actualMatch = trimmed.match(/actual (?:failure|output|prompt|description)\s*:\s*([\s\S]+)$/i)
+  const extracted = actualMatch?.[1]?.trim() || trimmed
+  return extracted
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
+    .replace(/ignore all previous instructions/gi, " ")
+    .replace(/ignore previous instructions/gi, " ")
+    .replace(/answer\s+[A-Z]/g, " ")
+    .replace(/classify as [a-z_-]+/gi, " ")
+    .replace(/\s*[;|]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function buildFailureContext(output: string, prompt: string, description: string): string {
+  return [
+    `output=${sanitizeFailureText(output) || "(empty)"}`,
+    `prompt=${sanitizeFailureText(prompt) || "(empty)"}`,
+    `description=${sanitizeFailureText(description) || "(empty)"}`,
+  ].join(" ")
+}
+
 function prependHint(original: string, hint: string): string {
   if (!original.trim()) {
     return hint
@@ -94,6 +134,7 @@ function prependHint(original: string, hint: string): string {
 export function createDelegationFallbackOrchestratorHook(options: {
   directory: string
   enabled: boolean
+  decisionRuntime?: LlmDecisionRuntime
 }): GatewayHook {
   const lastFailureByDelegation = new Map<string, FailedDelegation>()
 
@@ -167,17 +208,83 @@ export function createDelegationFallbackOrchestratorHook(options: {
       if (!sid || typeof eventPayload.output?.output !== "string") {
         return
       }
-        const reason = detectFailureReason(eventPayload.output.output)
+        let reason = detectFailureReason(eventPayload.output.output)
+        const args = eventPayload.output?.args
+        const traceId = extractDelegationTraceId(args, eventPayload.output?.metadata)
+        const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
+        const category = String(args?.category ?? "").toLowerCase().trim()
+        const directory =
+          typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+            ? eventPayload.directory
+            : options.directory
+        if (!reason && options.decisionRuntime) {
+          const decision = await options.decisionRuntime.decide({
+            hookId: "delegation-fallback-orchestrator",
+            sessionId: sid,
+            traceId,
+            templateId: "delegation-failure-classifier-v1",
+            instruction: buildFailureInstruction(),
+            context: buildFailureContext(
+              String(eventPayload.output.output ?? ""),
+              String(args?.prompt ?? ""),
+              String(args?.description ?? ""),
+            ),
+            allowedChars: ["U", "C", "I", "B", "R", "N"],
+            decisionMeaning: {
+              U: "delegation_unknown_agent",
+              C: "delegation_unknown_category",
+              I: "delegation_invalid_arguments",
+              B: "delegation_blocked_forbidden_tool",
+              R: "delegation_runtime_error",
+              N: "no_match",
+            },
+            cacheKey: `delegation-failure:${subagentType}:${category}:${String(eventPayload.output.output ?? "").trim().toLowerCase()}`,
+          })
+          if (decision.accepted) {
+            const aiReason = FAILURE_REASON_BY_CHAR[decision.char] ?? null
+            writeDecisionComparisonAudit({
+              directory,
+              hookId: "delegation-fallback-orchestrator",
+              sessionId: sid,
+              traceId,
+              mode: options.decisionRuntime.config.mode,
+              deterministicMeaning: "no_match",
+              aiMeaning: decision.meaning || aiReason || "no_match",
+              deterministicValue: "none",
+              aiValue: aiReason ?? "none",
+            })
+            writeGatewayEventAudit(directory, {
+              hook: "delegation-fallback-orchestrator",
+              stage: "state",
+              reason_code: "llm_delegation_failure_decision_recorded",
+              session_id: sid,
+              trace_id: traceId,
+              llm_decision_char: decision.char,
+              llm_decision_meaning: decision.meaning,
+              llm_decision_mode: options.decisionRuntime.config.mode,
+            })
+            if (options.decisionRuntime.config.mode === "shadow" && aiReason) {
+              writeGatewayEventAudit(directory, {
+                hook: "delegation-fallback-orchestrator",
+                stage: "state",
+                reason_code: "llm_delegation_failure_shadow_deferred",
+                session_id: sid,
+                trace_id: traceId,
+                llm_decision_char: decision.char,
+                llm_decision_meaning: decision.meaning,
+                llm_decision_mode: options.decisionRuntime.config.mode,
+              })
+            } else {
+              reason = aiReason
+            }
+          }
+        }
         if (!reason) {
           for (const key of sessionFailureKeys(lastFailureByDelegation, sid)) {
             lastFailureByDelegation.delete(key)
           }
           return
         }
-        const args = eventPayload.output?.args
-        const traceId = extractDelegationTraceId(args, eventPayload.output?.metadata)
-        const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim()
-        const category = String(args?.category ?? "").toLowerCase().trim()
         const key = delegationKey(sid, traceId)
         lastFailureByDelegation.set(key, {
           traceId,
@@ -185,10 +292,6 @@ export function createDelegationFallbackOrchestratorHook(options: {
           category,
           reasonCode: reason,
       })
-      const directory =
-        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-          ? eventPayload.directory
-          : options.directory
       writeGatewayEventAudit(directory, {
         hook: "delegation-fallback-orchestrator",
         stage: "state",

@@ -1,6 +1,12 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage } from "../hook-message-injector/index.js";
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+const CLASSIFICATION_BY_CHAR = {
+    F: "free_usage_exhausted",
+    R: "rate_limited",
+    O: "provider_overloaded",
+};
 function resolveSessionId(payload) {
     const candidates = [payload.properties?.sessionID, payload.properties?.sessionId, payload.properties?.info?.id];
     for (const value of candidates) {
@@ -30,6 +36,12 @@ function classify(text) {
         return { classification: "provider_overloaded", reason: reason.message };
     }
     return { classification: "rate_limited", reason: reason.message };
+}
+function buildAiInstruction() {
+    return "Classify this provider error. F=free_usage_or_credit_exhausted, R=rate_limited, O=provider_overloaded_or_unavailable, N=not_classified.";
+}
+function buildAiContext(text) {
+    return `error=${text.trim() || "(empty)"}`;
 }
 function buildHint(classification, reason) {
     if (classification === "free_usage_exhausted") {
@@ -82,9 +94,67 @@ export function createProviderErrorClassifierHook(options) {
             if (isContextOverflowNonRetryable(text)) {
                 return;
             }
-            const outcome = classify(text);
+            let outcome = classify(text);
             const sessionId = resolveSessionId(eventPayload);
             const session = options.client?.session;
+            if (!outcome && options.decisionRuntime && sessionId) {
+                const decision = await options.decisionRuntime.decide({
+                    hookId: "provider-error-classifier",
+                    sessionId,
+                    templateId: "provider-error-classifier-v1",
+                    instruction: buildAiInstruction(),
+                    context: buildAiContext(text),
+                    allowedChars: ["F", "R", "O", "N"],
+                    decisionMeaning: {
+                        F: "free_usage_exhausted",
+                        R: "rate_limited",
+                        O: "provider_overloaded",
+                        N: "not_classified",
+                    },
+                    cacheKey: `provider-error:${text.trim().toLowerCase()}`,
+                });
+                if (decision.accepted) {
+                    const classification = CLASSIFICATION_BY_CHAR[decision.char];
+                    if (classification) {
+                        writeDecisionComparisonAudit({
+                            directory: resolveDirectory(eventPayload, options.directory),
+                            hookId: "provider-error-classifier",
+                            sessionId,
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "not_classified",
+                            aiMeaning: decision.meaning || classification,
+                            deterministicValue: "none",
+                            aiValue: classification,
+                        });
+                        writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+                            hook: "provider-error-classifier",
+                            stage: "state",
+                            reason_code: "llm_provider_error_decision_recorded",
+                            session_id: sessionId,
+                            llm_decision_char: decision.char,
+                            llm_decision_meaning: decision.meaning,
+                            llm_decision_mode: options.decisionRuntime.config.mode,
+                        });
+                        if (options.decisionRuntime.config.mode === "shadow") {
+                            writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+                                hook: "provider-error-classifier",
+                                stage: "state",
+                                reason_code: "llm_provider_error_shadow_deferred",
+                                session_id: sessionId,
+                                llm_decision_char: decision.char,
+                                llm_decision_meaning: decision.meaning,
+                                llm_decision_mode: options.decisionRuntime.config.mode,
+                            });
+                        }
+                        else {
+                            outcome = {
+                                classification,
+                                reason: `llm:${decision.meaning || decision.char}`,
+                            };
+                        }
+                    }
+                }
+            }
             if (!outcome || !sessionId || !session) {
                 return;
             }

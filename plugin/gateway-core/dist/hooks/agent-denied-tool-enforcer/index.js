@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -88,6 +89,18 @@ function suggestAllowedTool(deniedTool, allowedTools) {
     }
     return allowedTools[0] ?? null;
 }
+function compactDecisionText(prompt, description) {
+    return [
+        `prompt=${prompt.trim() || "(empty)"}`,
+        `description=${description.trim() || "(empty)"}`,
+    ].join(" ");
+}
+function buildMutationInstruction() {
+    return "Classify this delegation for a read-only subagent. M=mutating work requested, R=read-only-safe, N=unclear.";
+}
+function buildToolInstruction(denied, allowed) {
+    return `Decide if the request implies a denied tool. D=denied tool implied, A=allowed or no issue, N=unclear. Denied=${denied.join(",") || "none"}. Allowed=${allowed.join(",") || "none"}.`;
+}
 export function createAgentDeniedToolEnforcerHook(options) {
     return {
         id: "agent-denied-tool-enforcer",
@@ -123,9 +136,12 @@ export function createAgentDeniedToolEnforcerHook(options) {
                 prompt: args.prompt,
                 description: args.description,
             }).join("\n");
+            const promptText = String(args.prompt ?? "");
+            const descriptionText = String(args.description ?? "");
             const mutatingSignals = detectMutatingIntent(combinedText);
+            const readOnlySurface = enforcesReadOnlySurface(denied);
             if (mutatingSignals.length > 0 &&
-                enforcesReadOnlySurface(denied) &&
+                readOnlySurface &&
                 !allowsEphemeralVerifierIntent(subagentType, combinedText, mutatingSignals)) {
                 writeGatewayEventAudit(directory, {
                     hook: "agent-denied-tool-enforcer",
@@ -138,8 +154,101 @@ export function createAgentDeniedToolEnforcerHook(options) {
                 });
                 throw new Error(`Blocked task delegation for ${subagentType}: prompt requests mutating work (${mutatingSignals.join(", ")}) but this subagent is read-only. Run commit/PR/edit actions directly with the primary agent.`);
             }
+            if (options.decisionRuntime &&
+                readOnlySurface &&
+                mutatingSignals.length === 0 &&
+                !allowsEphemeralVerifierIntent(subagentType, combinedText, ["code_edit"])) {
+                const mutationDecision = await options.decisionRuntime.decide({
+                    hookId: "agent-denied-tool-enforcer",
+                    sessionId: sessionId(eventPayload),
+                    traceId,
+                    templateId: "mutation-safety-v1",
+                    instruction: buildMutationInstruction(),
+                    context: compactDecisionText(promptText, descriptionText),
+                    allowedChars: ["M", "R", "N"],
+                    decisionMeaning: {
+                        M: "mutating_requested",
+                        R: "read_only_safe",
+                        N: "unclear",
+                    },
+                    cacheKey: `mutation:${subagentType}:${combinedText}`,
+                });
+                if (mutationDecision.accepted && mutationDecision.char === "M") {
+                    writeDecisionComparisonAudit({
+                        directory,
+                        hookId: "agent-denied-tool-enforcer",
+                        sessionId: sessionId(eventPayload),
+                        traceId,
+                        mode: options.decisionRuntime.config.mode,
+                        deterministicMeaning: "read_only_safe",
+                        aiMeaning: mutationDecision.meaning || "mutating_requested",
+                        deterministicValue: "R",
+                        aiValue: mutationDecision.char,
+                    });
+                    writeGatewayEventAudit(directory, {
+                        hook: "agent-denied-tool-enforcer",
+                        stage: "state",
+                        reason_code: "llm_mutation_decision_recorded",
+                        session_id: sessionId(eventPayload),
+                        trace_id: traceId,
+                        subagent_type: subagentType,
+                        llm_decision_char: mutationDecision.char,
+                        llm_decision_meaning: mutationDecision.meaning,
+                        llm_decision_mode: options.decisionRuntime.config.mode,
+                    });
+                    if (options.decisionRuntime.config.mode === "enforce") {
+                        throw new Error(`Blocked task delegation for ${subagentType}: LLM mutation classifier marked the request as mutating for a read-only subagent. Run commit/PR/edit actions directly with the primary agent.`);
+                    }
+                }
+            }
             const violating = denied.filter((deniedTool) => referencesDeniedTool(combinedText, String(deniedTool).toLowerCase().trim()));
             if (violating.length === 0) {
+                if (options.decisionRuntime && denied.length > 0) {
+                    const toolDecision = await options.decisionRuntime.decide({
+                        hookId: "agent-denied-tool-enforcer",
+                        sessionId: sessionId(eventPayload),
+                        traceId,
+                        templateId: "denied-tool-intent-v1",
+                        instruction: buildToolInstruction(denied.map((item) => String(item).toLowerCase().trim()), allowed.map((item) => String(item).toLowerCase().trim())),
+                        context: compactDecisionText(promptText, descriptionText),
+                        allowedChars: ["D", "A", "N"],
+                        decisionMeaning: {
+                            D: "denied_tool_implied",
+                            A: "allowed_or_no_issue",
+                            N: "unclear",
+                        },
+                        cacheKey: `tool:${subagentType}:${denied.join(",")}:${combinedText}`,
+                    });
+                    if (toolDecision.accepted && toolDecision.char === "D") {
+                        const suggestion = suggestAllowedTool(String(denied[0]), allowed);
+                        writeDecisionComparisonAudit({
+                            directory,
+                            hookId: "agent-denied-tool-enforcer",
+                            sessionId: sessionId(eventPayload),
+                            traceId,
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "allowed_or_no_issue",
+                            aiMeaning: toolDecision.meaning || "denied_tool_implied",
+                            deterministicValue: "A",
+                            aiValue: toolDecision.char,
+                        });
+                        writeGatewayEventAudit(directory, {
+                            hook: "agent-denied-tool-enforcer",
+                            stage: "state",
+                            reason_code: "llm_denied_tool_decision_recorded",
+                            session_id: sessionId(eventPayload),
+                            trace_id: traceId,
+                            subagent_type: subagentType,
+                            denied_tools: denied.join(","),
+                            llm_decision_char: toolDecision.char,
+                            llm_decision_meaning: toolDecision.meaning,
+                            llm_decision_mode: options.decisionRuntime.config.mode,
+                        });
+                        if (options.decisionRuntime.config.mode === "enforce") {
+                            throw new Error(`Blocked task delegation for ${subagentType}: LLM tool-surface classifier marked the request as implying denied tooling.${suggestion ? ` Use allowed tool '${suggestion}' instead.` : ""}`);
+                        }
+                    }
+                }
                 return;
             }
             const suggestion = suggestAllowedTool(String(violating[0]), allowed);

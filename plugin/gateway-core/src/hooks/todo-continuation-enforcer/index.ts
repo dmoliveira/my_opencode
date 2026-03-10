@@ -151,6 +151,12 @@ function hasHardContinuationCue(text: string): boolean {
   return (
     normalized.includes("still left to do") ||
     normalized.includes("remaining actionable") ||
+    normalized.includes("remaining epic") ||
+    normalized.includes("next remaining epic") ||
+    normalized.includes("remaining tasks") ||
+    normalized.includes("remaining items") ||
+    normalized.includes("next items") ||
+    normalized.includes("continue loop") ||
     normalized.includes("in-progress right now") ||
     normalized.includes("still left to do (next") ||
     normalized.includes("need finish")
@@ -161,6 +167,7 @@ function hasSoftContinuationCue(text: string): boolean {
   const normalized = text.toLowerCase()
   const hasNextSteps =
     normalized.includes("next steps") ||
+    normalized.includes("next safe steps") ||
     normalized.includes("natural next") ||
     normalized.includes("if you want")
   const hasOfferToExecute =
@@ -171,6 +178,9 @@ function hasSoftContinuationCue(text: string): boolean {
 
 function hasPendingCueText(text: string, continueIntentArmed: boolean): boolean {
   if (!text.trim()) {
+    return false
+  }
+  if (NEGATED_CONTINUE_INTENT_PATTERN.test(text) || isStopIntent(text)) {
     return false
   }
   if (hasHardContinuationCue(text)) {

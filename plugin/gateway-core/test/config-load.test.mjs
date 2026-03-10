@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { loadGatewayConfig } from "../dist/config/load.js"
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+import { loadGatewayConfig, loadGatewayConfigSource } from "../dist/config/load.js"
 
 test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   const config = loadGatewayConfig({})
@@ -90,6 +94,13 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.adaptiveDelegationPolicy.highFailureRate, 0.5)
   assert.equal(config.adaptiveDelegationPolicy.cooldownMs, 180000)
   assert.equal(config.adaptiveDelegationPolicy.blockExpensiveDuringCooldown, true)
+  assert.equal(config.llmDecisionRuntime.enabled, false)
+  assert.equal(config.llmDecisionRuntime.mode, "disabled")
+  assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
+  assert.equal(config.llmDecisionRuntime.model, "openai/gpt-5.1-codex-mini")
+  assert.equal(config.llmDecisionRuntime.enableCache, true)
+  assert.equal(config.llmDecisionRuntime.cacheTtlMs, 300000)
+  assert.equal(config.llmDecisionRuntime.maxCacheEntries, 256)
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
@@ -216,6 +227,14 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.globalProcessPressure.notifyOnCritical, true)
   assert.equal(config.globalProcessPressure.selfSeverityOperator, "any")
   assert.equal(config.globalProcessPressure.selfHighCpuPct, 100)
+  assert.equal(config.llmDecisionRuntime.mode, "disabled")
+  assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
+  assert.equal(config.llmDecisionRuntime.timeoutMs, 30000)
+  assert.equal(config.llmDecisionRuntime.maxPromptChars, 1200)
+  assert.equal(config.llmDecisionRuntime.maxContextChars, 2400)
+  assert.equal(config.llmDecisionRuntime.enableCache, true)
+  assert.equal(config.llmDecisionRuntime.cacheTtlMs, 300000)
+  assert.equal(config.llmDecisionRuntime.maxCacheEntries, 256)
   assert.equal(config.globalProcessPressure.selfHighRssMb, 10240)
   assert.equal(config.globalProcessPressure.selfHighElapsed, "5h")
   assert.equal(config.globalProcessPressure.selfHighLabel, "HIGH")
@@ -261,6 +280,57 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
   assert.equal(config.codexHeaderInjector.enabled, true)
   assert.equal(config.planHandoffReminder.enabled, true)
+})
+
+test("loadGatewayConfig normalizes llm hook mode overrides", () => {
+  const config = loadGatewayConfig({
+    llmDecisionRuntime: {
+      enabled: true,
+      mode: "shadow",
+      hookModes: {
+        "auto-slash-command": "assist",
+        "provider-error-classifier": "assist",
+        ignored: "invalid",
+      },
+    },
+  })
+  assert.equal(config.llmDecisionRuntime.mode, "shadow")
+  assert.deepEqual(config.llmDecisionRuntime.hookModes, {
+    "auto-slash-command": "assist",
+    "provider-error-classifier": "assist",
+  })
+})
+
+test("loadGatewayConfigSource merges sidecar config with runtime source", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-source-"))
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(
+      join(directory, ".opencode", "gateway-core.config.json"),
+      JSON.stringify({
+        llmDecisionRuntime: {
+          enabled: true,
+          mode: "shadow",
+          hookModes: { "auto-slash-command": "assist" },
+        },
+      }),
+      "utf-8",
+    )
+    const merged = loadGatewayConfigSource(directory, {
+      llmDecisionRuntime: {
+        hookModes: { "provider-error-classifier": "assist" },
+      },
+    })
+    const config = loadGatewayConfig(merged)
+    assert.equal(config.llmDecisionRuntime.enabled, true)
+    assert.equal(config.llmDecisionRuntime.mode, "shadow")
+    assert.deepEqual(config.llmDecisionRuntime.hookModes, {
+      "auto-slash-command": "assist",
+      "provider-error-classifier": "assist",
+    })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test("loadGatewayConfig keeps default maxIgnoredCompletionCycles", () => {

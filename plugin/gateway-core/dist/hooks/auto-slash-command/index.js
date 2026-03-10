@@ -1,9 +1,14 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const AUTO_SLASH_COMMAND_TAG_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_TAG_CLOSE = "</auto-slash-command>";
 const SLASH_COMMAND_PATTERN = /^\/([a-zA-Z][\w-]*)\s*(.*)/;
 const EXCLUDED_COMMANDS = new Set(["ulw-loop"]);
 const INLINE_SLASH_TOKEN_PATTERN = /(^|\s)\/([a-zA-Z][\w-]*)\b/g;
+const HIGH_RISK_SKIP_PATTERN = /\b(install|npm\s+install|brew\s+install|setup|configure|deploy|production)\b/i;
+const AI_AUTO_SLASH_CHAR_TO_COMMAND = {
+    D: "/doctor",
+};
 // Removes fenced code blocks before slash-command detection.
 function removeCodeBlocks(text) {
     return text.replace(/```[\s\S]*?```/g, "");
@@ -105,6 +110,21 @@ function promptText(payload) {
     }
     return "";
 }
+function normalizePromptForAi(prompt) {
+    const trimmed = prompt.trim();
+    const actualRequestMatch = trimmed.match(/actual request\s*:\s*([\s\S]+)$/i);
+    const extracted = actualRequestMatch?.[1]?.trim() || trimmed;
+    return extracted
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
+        .replace(/ignore all previous instructions/gi, " ")
+        .replace(/ignore previous instructions/gi, " ")
+        .replace(/answer\s+[A-Z]/g, " ")
+        .replace(/force\s+no\s+slash/gi, " ")
+        .replace(/\[tool-output\]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
 // Maps natural language prompts to slash commands.
 function detectSlash(prompt) {
     const cleaned = removeCodeBlocks(prompt);
@@ -120,6 +140,15 @@ function detectSlash(prompt) {
         return { slash: "/doctor", excludedExplicit: false };
     }
     return { slash: null, excludedExplicit: false };
+}
+function shouldSkipAiAutoSlash(prompt) {
+    return HIGH_RISK_SKIP_PATTERN.test(prompt);
+}
+function buildAiSlashInstruction() {
+    return "Classify only the sanitized user request text for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics.";
+}
+function buildAiSlashContext(prompt) {
+    return `request=${normalizePromptForAi(prompt) || "(empty)"}`;
 }
 // Creates auto slash command hook that rewrites prompt text when output parts are mutable.
 export function createAutoSlashCommandHook(options) {
@@ -141,10 +170,64 @@ export function createAutoSlashCommandHook(options) {
                     return;
                 }
                 const detection = detectSlash(prompt);
-                if (detection.excludedExplicit || !detection.slash) {
+                let slash = detection.slash;
+                if (!slash && !detection.excludedExplicit && options.decisionRuntime && !shouldSkipAiAutoSlash(prompt)) {
+                    const decision = await options.decisionRuntime.decide({
+                        hookId: "auto-slash-command",
+                        sessionId: typeof sessionId === "string" ? sessionId : "",
+                        templateId: "auto-slash-v1",
+                        instruction: buildAiSlashInstruction(),
+                        context: buildAiSlashContext(prompt),
+                        userContext: prompt,
+                        allowedChars: ["D", "N"],
+                        decisionMeaning: {
+                            D: "route_doctor",
+                            N: "no_slash",
+                        },
+                        cacheKey: `auto-slash:${prompt.trim().toLowerCase()}`,
+                    });
+                    if (decision.accepted) {
+                        const aiSlash = AI_AUTO_SLASH_CHAR_TO_COMMAND[decision.char] ?? null;
+                        writeDecisionComparisonAudit({
+                            directory,
+                            hookId: "auto-slash-command",
+                            sessionId: typeof sessionId === "string" ? sessionId : "",
+                            mode: options.decisionRuntime.config.mode,
+                            deterministicMeaning: "no_slash",
+                            aiMeaning: decision.meaning || (aiSlash ? "route_doctor" : "no_slash"),
+                            deterministicValue: "none",
+                            aiValue: aiSlash ?? "none",
+                        });
+                        writeGatewayEventAudit(directory, {
+                            hook: "auto-slash-command",
+                            stage: "state",
+                            reason_code: "llm_auto_slash_decision_recorded",
+                            session_id: typeof sessionId === "string" ? sessionId : "",
+                            llm_decision_char: decision.char,
+                            llm_decision_meaning: decision.meaning,
+                            llm_decision_mode: options.decisionRuntime.config.mode,
+                            slash_command: aiSlash ?? undefined,
+                        });
+                        if (options.decisionRuntime.config.mode === "shadow" && aiSlash) {
+                            writeGatewayEventAudit(directory, {
+                                hook: "auto-slash-command",
+                                stage: "state",
+                                reason_code: "llm_auto_slash_shadow_deferred",
+                                session_id: typeof sessionId === "string" ? sessionId : "",
+                                llm_decision_char: decision.char,
+                                llm_decision_meaning: decision.meaning,
+                                llm_decision_mode: options.decisionRuntime.config.mode,
+                                slash_command: aiSlash,
+                            });
+                        }
+                        else {
+                            slash = aiSlash;
+                        }
+                    }
+                }
+                if (detection.excludedExplicit || !slash) {
                     return;
                 }
-                const slash = detection.slash;
                 const parts = eventPayload.output?.parts;
                 const idx = Array.isArray(parts) ? findSlashCommandPartIndex(parts) : -1;
                 if (idx >= 0 && parts) {

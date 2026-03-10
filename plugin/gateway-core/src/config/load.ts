@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
 import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js";
 
 // Coerces unknown value into a normalized string array.
@@ -13,6 +17,54 @@ function stringList(value: unknown): string[] {
 
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function deepMergeRecords(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(override)) {
+    const current = result[key]
+    if (isRecord(current) && isRecord(value)) {
+      result[key] = deepMergeRecords(current, value)
+    } else {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+function resolveGatewayConfigSidecarPath(directory: string): string {
+  const envPath = String(process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "").trim()
+  if (envPath) {
+    return resolve(envPath)
+  }
+  const localPath = join(directory, ".opencode", "gateway-core.config.json")
+  if (existsSync(localPath)) {
+    return localPath
+  }
+  return join(homedir(), ".config", "opencode", "my_opencode", "gateway-core.config.json")
+}
+
+export function loadGatewayConfigSource(directory: string, source: unknown): Record<string, unknown> {
+  const sidecarPath = resolveGatewayConfigSidecarPath(directory)
+  let sidecar: Record<string, unknown> = {}
+  try {
+    if (existsSync(sidecarPath)) {
+      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown
+      if (isRecord(parsed)) {
+        sidecar = parsed
+      }
+    }
+  } catch {
+    sidecar = {}
+  }
+  if (!isRecord(source)) {
+    return sidecar
+  }
+  return deepMergeRecords(sidecar, source)
 }
 
 function parseAgentPolicyOverrides(
@@ -159,6 +211,30 @@ function durationThreshold(value: unknown, fallback: string): string {
     : fallback;
 }
 
+function llmDecisionMode(
+  value: unknown,
+  fallback: "disabled" | "shadow" | "assist" | "enforce",
+): "disabled" | "shadow" | "assist" | "enforce" {
+  if (value === "disabled" || value === "shadow" || value === "assist" || value === "enforce") {
+    return value
+  }
+  return fallback
+}
+
+function llmDecisionHookModes(value: unknown): Record<string, "disabled" | "shadow" | "assist" | "enforce"> {
+  if (!value || typeof value !== "object") {
+    return {}
+  }
+  const result: Record<string, "disabled" | "shadow" | "assist" | "enforce"> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const mode = llmDecisionMode(raw, "disabled")
+    if (key.trim() && mode !== "disabled") {
+      result[key.trim()] = mode
+    }
+  }
+  return result
+}
+
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source =
@@ -253,6 +329,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.adaptiveDelegationPolicy &&
     typeof source.adaptiveDelegationPolicy === "object"
       ? (source.adaptiveDelegationPolicy as Record<string, unknown>)
+      : {};
+  const llmDecisionRuntimeSource =
+    source.llmDecisionRuntime && typeof source.llmDecisionRuntime === "object"
+      ? (source.llmDecisionRuntime as Record<string, unknown>)
       : {};
   const validationEvidenceLedgerSource =
     source.validationEvidenceLedger &&
@@ -974,6 +1054,51 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       agentPolicyOverrides: parseAgentPolicyOverrides(
         adaptiveDelegationPolicySource.agentPolicyOverrides,
         DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.agentPolicyOverrides,
+      ),
+    },
+    llmDecisionRuntime: {
+      enabled:
+        typeof llmDecisionRuntimeSource.enabled === "boolean"
+          ? llmDecisionRuntimeSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enabled,
+      mode: llmDecisionMode(
+        llmDecisionRuntimeSource.mode,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.mode,
+      ),
+      hookModes: llmDecisionHookModes(llmDecisionRuntimeSource.hookModes),
+      command:
+        typeof llmDecisionRuntimeSource.command === "string" &&
+        llmDecisionRuntimeSource.command.trim().length > 0
+          ? llmDecisionRuntimeSource.command.trim()
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.command,
+      model:
+        typeof llmDecisionRuntimeSource.model === "string" &&
+        llmDecisionRuntimeSource.model.trim().length > 0
+          ? llmDecisionRuntimeSource.model.trim()
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
+      timeoutMs: positiveInt(
+        llmDecisionRuntimeSource.timeoutMs,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs,
+      ),
+      maxPromptChars: positiveInt(
+        llmDecisionRuntimeSource.maxPromptChars,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars,
+      ),
+      maxContextChars: positiveInt(
+        llmDecisionRuntimeSource.maxContextChars,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxContextChars,
+      ),
+      enableCache:
+        typeof llmDecisionRuntimeSource.enableCache === "boolean"
+          ? llmDecisionRuntimeSource.enableCache
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enableCache,
+      cacheTtlMs: positiveInt(
+        llmDecisionRuntimeSource.cacheTtlMs,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.cacheTtlMs,
+      ),
+      maxCacheEntries: positiveInt(
+        llmDecisionRuntimeSource.maxCacheEntries,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxCacheEntries,
       ),
     },
     validationEvidenceLedger: {
