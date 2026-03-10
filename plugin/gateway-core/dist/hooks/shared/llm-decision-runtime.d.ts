@@ -63,6 +63,12 @@ interface RuntimeOptions {
     runner?: (args: string[], timeoutMs: number, cwd: string) => Promise<RunnerResult>;
 }
 export declare function truncateDecisionText(text: string, maxChars: number): string;
+export declare function buildCompactDecisionCacheKey(options: {
+    prefix: string;
+    parts?: string[];
+    text: string;
+    maxTextChars?: number;
+}): string;
 export declare function buildSingleCharDecisionPrompt(request: {
     instruction: string;
     context: string;

@@ -24,6 +24,13 @@ export function truncateDecisionText(text, maxChars) {
     }
     return `${normalized.slice(0, Math.max(0, maxChars - 16)).trimEnd()}\n[truncated]`;
 }
+export function buildCompactDecisionCacheKey(options) {
+    const prefix = String(options.prefix ?? "").trim();
+    const parts = (options.parts ?? []).map((part) => String(part ?? "").trim()).filter(Boolean);
+    const maxTextChars = safePositiveInt(options.maxTextChars ?? 240, 240);
+    const normalizedText = String(options.text ?? "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, maxTextChars);
+    return [prefix, ...parts, normalizedText].filter(Boolean).join(":");
+}
 export function buildSingleCharDecisionPrompt(request) {
     const compactContext = (request.context.trim() || "(empty)").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
     const serializedContext = JSON.stringify(compactContext);

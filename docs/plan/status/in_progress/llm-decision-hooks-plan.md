@@ -55,7 +55,7 @@ Do not use LLM decisions for:
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry collection is now waiting on real traffic volume. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, and sanitized fallback failure classification are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 16/16, now including the mixed-signal `todo-continuation-enforcer` LLM fallback case alongside epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 18/18, now including `task-resume-info` semantic continuation/shadow cases alongside the mixed-signal `todo-continuation-enforcer` LLM fallback, epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
 | Epic 7 - Rollout and cleanup | pending | No rollout promotion or heuristic removal yet. |
 
 ### Task status by backlog item
@@ -71,8 +71,8 @@ Do not use LLM decisions for:
 | validation command and output semantic fallback | done | Wrapper command classification shipped in validation ledger. |
 | done-proof and PR-body semantic fallback | done | Both `pr-body-evidence-guard` and `done-proof-enforcer` semantic fallback paths are implemented and validated. |
 | `todo-continuation-enforcer` mixed-signal fallback | done | Centralized runtime fallback ships for contradictory completion-plus-next-slice wording with shadow-first rollout, workflow coverage, audit telemetry, and follow-up hardening fixes merged in PR `#444`. |
-| `task-resume-info` semantic resume/continue hints | doing | Centralized runtime fallback now covers ambiguous continuation and verification/reuse-context outputs while deterministic markers still win; remaining work is rollout config, broader scenario coverage, and merge. |
-| `mistake-ledger` done-proof detection | doing | Centralized runtime fallback now covers ambiguous `PENDING_VALIDATION` deferral wording when the literal done-proof marker is absent; remaining work is plan promotion, audit assertions, and merge. |
+| `task-resume-info` semantic resume/continue hints | doing | Centralized runtime fallback now covers ambiguous continuation and verification/reuse-context outputs while deterministic markers still win; workflow coverage and audit assertions are now in place, with rollout config and merge remaining. |
+| `mistake-ledger` done-proof detection | doing | Centralized runtime fallback now covers ambiguous `PENDING_VALIDATION` deferral wording when the literal done-proof marker is absent; audit assertions are now in place, with rollout config and merge remaining. |
 
 ## Semantic decision inventory by status band
 
@@ -94,15 +94,15 @@ Do not use LLM decisions for:
 
 | Hook / decision | Status | Notes |
 |---|---|---|
-| `task-resume-info` | doing | Centralized runtime now handles ambiguous resume-worthy outputs and verification/continuation hints; keep shadow-first rollout and expand scenario coverage before promoting to done. |
-| `mistake-ledger` | doing | Centralized runtime now handles ambiguous completion-deferral wording before recording `completion_without_validation`; keep shadow-first rollout and add audit assertions before promoting to done. |
+| `task-resume-info` | doing | Centralized runtime now handles ambiguous resume-worthy outputs and verification/continuation hints; keep shadow-first rollout and gather rollout telemetry before promoting to done. |
+| `mistake-ledger` | doing | Centralized runtime now handles ambiguous completion-deferral wording before recording `completion_without_validation`; keep shadow-first rollout and gather rollout telemetry before promoting to done. |
 
 ### Pending semantic migrations
 
 | Hook / decision | Status | Notes |
 |---|---|---|
-| `task-resume-info` continuation-vs-resume intent split | doing | New single-char fallback now distinguishes continuation-only vs verification-only vs both when deterministic markers are absent; still needs workflow-scenario coverage and rollout evidence. |
-| `mistake-ledger` done-proof detection | doing | New binary fallback now records only when semantic deferral wording indicates missing validation/done-proof evidence; still needs audit assertions and broader rollout evidence. |
+| `task-resume-info` continuation-vs-resume intent split | doing | New single-char fallback now distinguishes continuation-only vs verification-only vs both when deterministic markers are absent; workflow coverage is in place and rollout evidence is the remaining step. |
+| `mistake-ledger` done-proof detection | doing | New binary fallback now records only when semantic deferral wording indicates missing validation/done-proof evidence; audit assertions are in place and rollout evidence is the remaining step. |
 | `semantic-output-summarizer` style/intent shaping | pending | If this hook starts making route/classification decisions instead of pure formatting, it should use the centralized runtime rather than bespoke heuristics. |
 
 ### Intentionally deterministic

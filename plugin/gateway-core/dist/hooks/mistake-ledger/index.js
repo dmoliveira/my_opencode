@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
 import { readToolAfterOutputText } from "../shared/tool-after-output.js";
 const DONE_PROOF_MARKER = "[done-proof-enforcer] Completion token deferred";
 const PENDING_VALIDATION_MARKER = "<promise>PENDING_VALIDATION</promise>";
@@ -46,7 +46,10 @@ export function createMistakeLedgerHook(options) {
                         Y: "record_completion_without_validation",
                         N: "ignore",
                     },
-                    cacheKey: `mistake-ledger:${text.trim().toLowerCase()}`,
+                    cacheKey: buildCompactDecisionCacheKey({
+                        prefix: "mistake-ledger",
+                        text,
+                    }),
                 });
                 if (decision.accepted) {
                     writeDecisionComparisonAudit({

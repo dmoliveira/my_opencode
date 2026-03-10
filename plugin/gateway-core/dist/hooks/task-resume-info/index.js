@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
 const RESUME_HINT = "Resume hint: keep the returned task_id and reuse it to continue the same subagent session.";
 const CONTINUE_HINT = "Continuation hint: pending work remains; continue execution directly and avoid asking for extra confirmation turns.";
 const VERIFICATION_HEADER = "Verification hint: review the subagent result before moving on.";
@@ -63,7 +63,11 @@ async function resolveSemanticHints(options) {
         context: buildSemanticHintContext(options.text, options.resumeTarget),
         allowedChars,
         decisionMeaning,
-        cacheKey: `task-resume-info:${hasResumeTarget ? options.resumeTarget : "none"}:${options.text.trim().toLowerCase()}`,
+        cacheKey: buildCompactDecisionCacheKey({
+            prefix: "task-resume-info",
+            parts: [hasResumeTarget ? options.resumeTarget : "none"],
+            text: options.text,
+        }),
     });
     if (!decision.accepted) {
         return { addContinuation: false, addVerification: false };

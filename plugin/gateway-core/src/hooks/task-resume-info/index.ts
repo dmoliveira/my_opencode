@@ -1,7 +1,10 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import type { GatewayHook } from "../registry.js";
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
+import {
+  buildCompactDecisionCacheKey,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js";
 
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string };
@@ -86,7 +89,11 @@ async function resolveSemanticHints(options: {
     context: buildSemanticHintContext(options.text, options.resumeTarget),
     allowedChars,
     decisionMeaning,
-    cacheKey: `task-resume-info:${hasResumeTarget ? options.resumeTarget : "none"}:${options.text.trim().toLowerCase()}`,
+    cacheKey: buildCompactDecisionCacheKey({
+      prefix: "task-resume-info",
+      parts: [hasResumeTarget ? options.resumeTarget : "none"],
+      text: options.text,
+    }),
   })
   if (!decision.accepted) {
     return { addContinuation: false, addVerification: false }

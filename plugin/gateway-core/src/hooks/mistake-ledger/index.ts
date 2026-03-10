@@ -4,7 +4,10 @@ import { dirname, resolve } from "node:path"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
+import {
+  buildCompactDecisionCacheKey,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js"
 import { readToolAfterOutputText } from "../shared/tool-after-output.js"
 
 interface ToolAfterPayload {
@@ -67,7 +70,10 @@ export function createMistakeLedgerHook(options: {
             Y: "record_completion_without_validation",
             N: "ignore",
           },
-          cacheKey: `mistake-ledger:${text.trim().toLowerCase()}`,
+          cacheKey: buildCompactDecisionCacheKey({
+            prefix: "mistake-ledger",
+            text,
+          }),
         })
         if (decision.accepted) {
           writeDecisionComparisonAudit({
