@@ -68,23 +68,26 @@ Suggested slice:
 
 ### 4. LLM decision rollout completion
 
-Status: `active`
+Status: `active on main` (no duplicate implementation needed in this worktree)
 
 Why it matters:
 
-- the roadmap still has an unfinished mixed-signal `todo-continuation-enforcer` fallback rollout, which is the main remaining live runtime-control stream adjacent to parity work
+- the roadmap still has an unfinished mixed-signal `todo-continuation-enforcer` fallback rollout, but the core hook wiring, tests, and workflow scenarios are already present on `main`
 
 Evidence:
 
 - `docs/plan/current-roadmap-tracker.md`
 - `docs/plan/status/in_progress/llm-decision-hooks-plan.md`
+- `plugin/gateway-core/src/hooks/todo-continuation-enforcer/index.ts`
+- `plugin/gateway-core/test/todo-continuation-enforcer-hook.test.mjs`
+- `docs/plan/status/in_progress/workflow-scenario-report.md`
 
 Suggested slice:
 
-- finish shadow-first rollout, gather workflow evidence, then either promote or explicitly defer
+- do not re-implement the hook in this worktree; instead, review rollout evidence on `main`, then either promote from shadow or explicitly defer in the LLM rollout docs
 
 ## Recommended execution order
 
-1. Finish the `todo-continuation-enforcer` rollout decision
+1. Review and close the `todo-continuation-enforcer` rollout decision on the existing mainline implementation
 2. Decide whether Atlas direct-edit/tool-time enforcement is still in scope
 3. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
