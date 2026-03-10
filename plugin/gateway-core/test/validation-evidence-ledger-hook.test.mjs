@@ -254,6 +254,54 @@ test("validation-evidence-ledger treats repo selftest commands as test evidence"
   }
 })
 
+test("validation-evidence-ledger records make validate from structured bash output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "done-proof-enforcer"],
+          disabled: [],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-make-validate" },
+      { args: { command: "make validate" } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-make-validate" },
+      { output: { stdout: "validate passed", stderr: "" } },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-ledger-make-validate" },
+      { args: { command: "git status" } },
+    )
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-ledger-make-validate" },
+      done,
+    )
+
+    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("validation-evidence-ledger treats make install-test as test evidence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
   try {

@@ -92,6 +92,43 @@ function commandFailed(output: string): boolean {
   return false
 }
 
+function outputText(output: unknown): string {
+  if (typeof output === "string") {
+    return output
+  }
+  if (!output || typeof output !== "object") {
+    return ""
+  }
+  const record = output as Record<string, unknown>
+  const parts = [record.stdout, record.stderr, record.output, record.message]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim())
+  return parts.join("\n")
+}
+
+function hasUsableOutput(output: unknown): boolean {
+  if (typeof output === "string") {
+    return true
+  }
+  if (!output || typeof output !== "object") {
+    return false
+  }
+  const record = output as Record<string, unknown>
+  if (typeof record.stdout === "string" && record.stdout.trim()) {
+    return true
+  }
+  if (typeof record.stderr === "string" && record.stderr.trim()) {
+    return true
+  }
+  if (typeof record.output === "string" && record.output.trim()) {
+    return true
+  }
+  if (typeof record.message === "string" && record.message.trim()) {
+    return true
+  }
+  return record.exitCode === 0 || record.ok === true || record.success === true
+}
+
 const VALIDATION_CATEGORY_BY_CHAR: Record<string, ValidationEvidenceCategory> = {
   L: "lint",
   T: "test",
@@ -240,9 +277,10 @@ export function createValidationEvidenceLedgerHook(options: {
       if (!command) {
         return
       }
-      if (typeof eventPayload.output?.output !== "string") {
+      if (!hasUsableOutput(eventPayload.output?.output)) {
         return
       }
+      const output = outputText(eventPayload.output?.output)
       let categories = classifyValidationCommand(command)
       if (categories.length === 0 && options.decisionRuntime) {
         const decision = await options.decisionRuntime.decide({
@@ -305,7 +343,7 @@ export function createValidationEvidenceLedgerHook(options: {
       if (categories.length === 0) {
         return
       }
-      if (commandFailed(eventPayload.output.output)) {
+      if (commandFailed(output)) {
         return
       }
       const directory =
