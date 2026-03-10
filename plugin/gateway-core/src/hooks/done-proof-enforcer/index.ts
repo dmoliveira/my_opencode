@@ -3,6 +3,7 @@ import type { GatewayHook } from "../registry.js"
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
+import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js"
 
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
@@ -35,11 +36,11 @@ export function createDoneProofEnforcerHook(options: {
         return
       }
       const eventPayload = (payload ?? {}) as ToolAfterPayload
-      if (typeof eventPayload.output?.output !== "string") {
+      const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim()
+      const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output)
+      if (!text) {
         return
       }
-      const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim()
-      const text = eventPayload.output.output
       if (!/<promise>\s*DONE\s*<\/promise>/i.test(text)) {
         return
       }
@@ -122,9 +123,12 @@ export function createDoneProofEnforcerHook(options: {
       if (missingMarkers.length === 0) {
         return
       }
-      eventPayload.output.output = text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>")
-      eventPayload.output.output +=
+      const rewritten =
+        text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
         `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`
+      if (!writeToolAfterOutputText(eventPayload.output?.output, rewritten, channel) && eventPayload.output) {
+        eventPayload.output.output = rewritten
+      }
     },
   }
 }

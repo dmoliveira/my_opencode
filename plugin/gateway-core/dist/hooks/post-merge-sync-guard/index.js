@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
+import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js";
 const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command) {
@@ -149,16 +150,23 @@ export function createPostMergeSyncGuardHook(options) {
             }
             pendingReminderSessions.delete(sessionId);
             const toolOutput = eventPayload.output;
-            if (typeof toolOutput?.output !== "string") {
+            const { text: originalText, channel } = inspectToolAfterOutputText(toolOutput?.output);
+            if (!originalText) {
                 return;
             }
-            toolOutput.output = normalizeMergeOutput(toolOutput.output);
+            let nextText = normalizeMergeOutput(originalText);
             if (reminderCommands.length === 0) {
+                if (!writeToolAfterOutputText(toolOutput?.output, nextText, channel) && toolOutput) {
+                    toolOutput.output = nextText;
+                }
                 return;
             }
             const reminderState = resolveReminder(directory, reminderCommands);
             const reminder = `\n\n[post-merge-sync-guard] ${reminderState.intro}\n${reminderState.commands.map((cmd) => `- ${cmd}`).join("\n")}`;
-            toolOutput.output = `${toolOutput.output}${reminder}`;
+            nextText = `${nextText}${reminder}`;
+            if (!writeToolAfterOutputText(toolOutput?.output, nextText, channel) && toolOutput) {
+                toolOutput.output = nextText;
+            }
             writeGatewayEventAudit(directory, {
                 hook: "post-merge-sync-guard",
                 stage: "state",

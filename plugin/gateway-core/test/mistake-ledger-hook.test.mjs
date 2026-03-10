@@ -82,3 +82,26 @@ test("mistake-ledger records done-proof deferrals in default execution order", a
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("mistake-ledger records structured output deferrals", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["mistake-ledger"], disabled: [] },
+        mistakeLedger: { enabled: true, path: ".opencode/mistake-ledger.jsonl" },
+      },
+    })
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-mistake-structured" },
+      { output: { stdout: "done\n<promise>PENDING_VALIDATION</promise>\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (validation).", stderr: "warning text" } },
+    )
+    const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
+    assert.equal(existsSync(ledgerPath), true)
+    const entry = JSON.parse(readFileSync(ledgerPath, "utf-8").trim())
+    assert.equal(entry.sessionId, "session-mistake-structured")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
