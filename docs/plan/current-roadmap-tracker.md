@@ -127,6 +127,7 @@ Remaining:
 | LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes Epic 5 hardening progress, sidecar-based gateway config wiring, passing semantic/workflow scenario reports, alternating-task continuation coverage, and a combined rollout signal summary. |
 | Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
 | Atlas runtime prototype | doing | Prototype local post-task verification/reminder shaping through `task-resume-info` without importing full Atlas persona semantics. |
+| Atlas pre-task shaping prototype | doing | Add delegated task focus shaping through `agent-context-shaper` before subagent execution. |
 
 ## Done Recently
 
@@ -143,10 +144,11 @@ Remaining:
 | Synced local `main` while preserving local docs edit | done | Used targeted stash + `git pull --rebase` + stash pop for `docs/plan/docs-automation-summary.md`. |
 | Reviewed parity plan against upstream runtime behavior | done | Identified crossed hook LLM bindings, missing safe hook creation, and remaining intentional divergence around Atlas runtime injection and Claude compatibility hooks. |
 | Committed parity hardening gateway fixes | done | Created `55ad23f` to fix LLM hook bindings, add safe hook startup isolation, and refresh parity tracking evidence. |
+| Committed Atlas post-task reminder prototype | done | Created `fa270cf` to add local verification/reminder shaping for delegated task results. |
 
 ## Next Tasks
 
-1. Validate whether the Atlas runtime prototype should expand from post-task reminders into pre-task prompt shaping.
+1. Decide whether to keep extending Atlas parity into direct-edit warning semantics or stop at the current task shaping slices.
 2. Continue post-merge verification for protected-main guard behavior in real operator flows.
 3. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 4. Keep active docs canonical-first as new command/runtime slices land.
