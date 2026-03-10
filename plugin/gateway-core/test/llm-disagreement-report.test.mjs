@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   buildLlmRolloutReport,
   parseGatewayAuditJsonl,
+  parseGatewayAuditJsonlWithDiagnostics,
   recommendLlmRolloutActions,
   renderLlmRolloutMarkdown,
   summarizeLlmDecisionDisagreements,
@@ -36,6 +37,15 @@ test("llm disagreement report parses jsonl and groups by hook and meaning pair",
       count: 1,
     },
   ])
+})
+
+test("llm disagreement report tracks invalid jsonl lines", () => {
+  const parsed = parseGatewayAuditJsonlWithDiagnostics(`
+{"hook":"auto-slash-command","reason_code":"llm_decision_disagreement","deterministic_decision_meaning":"no_slash","llm_decision_meaning":"route_doctor"}
+not-json
+`)
+  assert.equal(parsed.invalidLines, 1)
+  assert.equal(parsed.events.length, 1)
 })
 
 test("llm disagreement report recommends rollout actions by disagreement volume", () => {
@@ -110,6 +120,14 @@ test("llm disagreement report builds rollout report from events", () => {
 
 test("llm disagreement report renders markdown artifact", () => {
   const markdown = renderLlmRolloutMarkdown({
+    metadata: {
+      generatedAt: "2026-03-11T09:00:00.000Z",
+      branch: "fix/next-parity-item-2",
+      worktreePath: "/tmp/my_opencode-wt-next-parity-item-2",
+      sourceAuditPath: "/tmp/gateway-events.jsonl",
+      sourceAuditShared: true,
+      invalidLines: 2,
+    },
     summary: {
       total: 3,
       byHook: [{ hook: "agent-model-resolver", count: 3 }],
@@ -133,6 +151,11 @@ test("llm disagreement report renders markdown artifact", () => {
     ],
   })
   assert.match(markdown, /# LLM Disagreement Rollout Report/)
+  assert.match(markdown, /Generated at: 2026-03-11T09:00:00.000Z/)
+  assert.match(markdown, /Branch: `fix\/next-parity-item-2`/)
+  assert.match(markdown, /Source audit: `\/tmp\/gateway-events.jsonl`/)
+  assert.match(markdown, /Audit source scope: shared primary repo audit feed/)
+  assert.match(markdown, /Invalid audit lines skipped: 2/)
   assert.match(markdown, /agent-model-resolver: observe \(3\)/)
   assert.match(markdown, /thresholds: investigate>=10, tune>=4, observe>=1/)
   assert.match(markdown, /route_explore -> route_librarian \(3\)/)

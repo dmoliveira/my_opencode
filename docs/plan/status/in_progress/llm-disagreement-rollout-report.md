@@ -1,20 +1,18 @@
 # LLM Disagreement Rollout Report
 
-- Total disagreements: 6
-- Hooks with disagreements: 2
+- Generated at: 2026-03-10T22:31:49.622Z
+- Branch: `fix/next-parity-item-2`
+- Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item-2`
+- Source audit: `/Users/cauhirsch/Codes/Projects/my_opencode/.opencode/gateway-events.jsonl`
+- Audit source scope: shared primary repo audit feed
+- Invalid audit lines skipped: 0
+- Total disagreements: 0
+- Hooks with disagreements: 0
 
 ## Recommendations
 
-- validation-evidence-ledger: tune (4)
-  - moderate disagreement volume; refine prompt, context shaping, or fallback policy
-  - thresholds: investigate>=10, tune>=4, observe>=1
-
-- delegation-fallback-orchestrator: observe (2)
-  - low disagreement volume; continue shadow sampling before promotion
-  - thresholds: investigate>=10, tune>=4, observe>=1
+- No disagreement data found.
 
 ## Top disagreement pairs
 
-- validation-evidence-ledger: not_validation -> test (4)
-
-- delegation-fallback-orchestrator: no_match -> delegation_invalid_arguments (2)
+- No disagreement pairs found.
