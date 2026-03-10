@@ -89,6 +89,7 @@ interface RuntimeOptions {
   config: LlmDecisionRuntimeConfig
   runner?: (args: string[], timeoutMs: number, cwd: string) => Promise<RunnerResult>
 }
+const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD"
 
 function safePositiveInt(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
@@ -213,6 +214,7 @@ async function defaultRunner(args: string[], timeoutMs: number, cwd: string): Pr
         GIT_EDITOR: process.env.GIT_EDITOR ?? "true",
         GIT_PAGER: process.env.GIT_PAGER ?? "cat",
         PAGER: process.env.PAGER ?? "cat",
+        [LLM_DECISION_CHILD_ENV]: "1",
       },
     })
     let stdout = ""
@@ -314,6 +316,13 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
           ...baseResult,
           durationMs: Date.now() - start,
           skippedReason: "runtime_disabled",
+        }
+      }
+      if (process.env[LLM_DECISION_CHILD_ENV] === "1") {
+        return {
+          ...baseResult,
+          durationMs: Date.now() - start,
+          skippedReason: "nested_decision_child",
         }
       }
       if (!request.instruction.trim() || allowedChars.length === 0) {

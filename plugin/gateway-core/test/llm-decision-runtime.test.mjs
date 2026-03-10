@@ -131,6 +131,50 @@ test("llm decision runtime rejects invalid multi-character output", async () => 
   assert.equal(result.skippedReason, "invalid_response")
 })
 
+test("llm decision runtime skips nested helper child processes", async () => {
+  const previous = process.env.MY_OPENCODE_LLM_DECISION_CHILD
+  process.env.MY_OPENCODE_LLM_DECISION_CHILD = "1"
+  try {
+    let calls = 0
+    const runtime = createLlmDecisionRuntime({
+      directory: process.cwd(),
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: false,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      runner: async () => {
+        calls += 1
+        return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      },
+    })
+    const result = await runtime.decide({
+      hookId: "test-hook",
+      sessionId: "session-nested-child",
+      templateId: "continue-v1",
+      instruction: "Continue loop?",
+      context: "Pending tasks remain.",
+      allowedChars: ["Y", "N"],
+    })
+    assert.equal(result.accepted, false)
+    assert.equal(result.skippedReason, "nested_decision_child")
+    assert.equal(calls, 0)
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_LLM_DECISION_CHILD
+    } else {
+      process.env.MY_OPENCODE_LLM_DECISION_CHILD = previous
+    }
+  }
+})
+
 test("llm decision runtime rejects refusal-style text output", async () => {
   const runtime = createLlmDecisionRuntime({
     directory: process.cwd(),

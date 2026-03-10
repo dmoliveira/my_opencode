@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
 export function resolveLlmDecisionRuntimeConfigForHook(config, hookId) {
     const override = config.hookModes[String(hookId ?? "").trim()] || config.hookModes[String(hookId ?? "").trim().toLowerCase()];
     if (!override || override === config.mode) {
@@ -118,6 +119,7 @@ async function defaultRunner(args, timeoutMs, cwd) {
                 GIT_EDITOR: process.env.GIT_EDITOR ?? "true",
                 GIT_PAGER: process.env.GIT_PAGER ?? "cat",
                 PAGER: process.env.PAGER ?? "cat",
+                [LLM_DECISION_CHILD_ENV]: "1",
             },
         });
         let stdout = "";
@@ -216,6 +218,13 @@ export function createLlmDecisionRuntime(options) {
                     ...baseResult,
                     durationMs: Date.now() - start,
                     skippedReason: "runtime_disabled",
+                };
+            }
+            if (process.env[LLM_DECISION_CHILD_ENV] === "1") {
+                return {
+                    ...baseResult,
+                    durationMs: Date.now() - start,
+                    skippedReason: "nested_decision_child",
                 };
             }
             if (!request.instruction.trim() || allowedChars.length === 0) {

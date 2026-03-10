@@ -14,6 +14,7 @@ const HIGH_RISK_SKIP_PATTERN = /\b(install|npm\s+install|brew\s+install|setup|co
 const AI_AUTO_SLASH_CHAR_TO_COMMAND: Record<string, string> = {
   D: "/doctor",
 }
+const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD"
 
 interface ChatPayload {
   directory?: string
@@ -211,6 +212,10 @@ function buildAiSlashContext(prompt: string): string {
   return `request=${normalizePromptForAi(prompt) || "(empty)"}`
 }
 
+function isLlmDecisionChildProcess(): boolean {
+  return process.env[LLM_DECISION_CHILD_ENV] === "1"
+}
+
 // Creates auto slash command hook that rewrites prompt text when output parts are mutable.
 export function createAutoSlashCommandHook(options: {
   directory: string
@@ -221,7 +226,7 @@ export function createAutoSlashCommandHook(options: {
     id: "auto-slash-command",
     priority: 297,
     async event(type: string, payload: unknown): Promise<void> {
-      if (!options.enabled) {
+      if (!options.enabled || isLlmDecisionChildProcess()) {
         return
       }
 

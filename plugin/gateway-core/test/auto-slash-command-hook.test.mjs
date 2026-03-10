@@ -302,6 +302,42 @@ test("auto-slash-command uses assist-mode LLM for ambiguous doctor intent", asyn
   assert.equal(String(output.parts[0].text).includes("/doctor"), true)
 })
 
+test("auto-slash-command skips rewrites inside llm decision child process", async () => {
+  const previous = process.env.MY_OPENCODE_LLM_DECISION_CHILD
+  process.env.MY_OPENCODE_LLM_DECISION_CHILD = "1"
+  try {
+    const hook = createAutoSlashCommandHook({
+      directory: process.cwd(),
+      enabled: true,
+      decisionRuntime: {
+        config: { mode: "assist" },
+        async decide() {
+          throw new Error("should not be called")
+        },
+      },
+    })
+    const output = {
+      parts: [{ type: "text", text: "please diagnose this" }],
+    }
+    await hook.event("chat.message", {
+      properties: {
+        sessionID: "session-auto-slash-child",
+        prompt: "please diagnose this",
+      },
+      output,
+      directory: process.cwd(),
+    })
+
+    assert.equal(output.parts[0].text, "please diagnose this")
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_LLM_DECISION_CHILD
+    } else {
+      process.env.MY_OPENCODE_LLM_DECISION_CHILD = previous
+    }
+  }
+})
+
 test("auto-slash-command skips LLM rewrite for high-risk install prompt", async () => {
   const hook = createAutoSlashCommandHook({
     directory: process.cwd(),

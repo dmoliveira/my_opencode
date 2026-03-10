@@ -9,6 +9,7 @@ const HIGH_RISK_SKIP_PATTERN = /\b(install|npm\s+install|brew\s+install|setup|co
 const AI_AUTO_SLASH_CHAR_TO_COMMAND = {
     D: "/doctor",
 };
+const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
 // Removes fenced code blocks before slash-command detection.
 function removeCodeBlocks(text) {
     return text.replace(/```[\s\S]*?```/g, "");
@@ -150,13 +151,16 @@ function buildAiSlashInstruction() {
 function buildAiSlashContext(prompt) {
     return `request=${normalizePromptForAi(prompt) || "(empty)"}`;
 }
+function isLlmDecisionChildProcess() {
+    return process.env[LLM_DECISION_CHILD_ENV] === "1";
+}
 // Creates auto slash command hook that rewrites prompt text when output parts are mutable.
 export function createAutoSlashCommandHook(options) {
     return {
         id: "auto-slash-command",
         priority: 297,
         async event(type, payload) {
-            if (!options.enabled) {
+            if (!options.enabled || isLlmDecisionChildProcess()) {
                 return;
             }
             if (type === "chat.message") {
