@@ -29,8 +29,8 @@ function extractResumeTarget(text: string): string {
 
 function buildVerificationHint(resumeTarget: string): string {
   const retryLine = resumeTarget
-    ? `If follow-up fixes are needed, continue the same worker context with \`task_id/session_id=${resumeTarget}\` instead of spawning a brand new thread.`
-    : "If follow-up fixes are needed, continue the same worker context instead of spawning a brand new thread.";
+    ? `If follow-up fixes are needed, use the canonical continuity flow (\`/plan-handoff resume\`, \`/resume-now\`, then \`/autopilot-resume\`) and reuse \`${resumeTarget}\` as the worker context reference.`
+    : "If follow-up fixes are needed, use the canonical continuity flow (\`/plan-handoff resume\`, \`/resume-now\`, then \`/autopilot-resume\`) instead of spawning a brand new thread.";
   return [
     VERIFICATION_HEADER,
     "- Check the subagent's claimed changes and validation evidence before proceeding.",

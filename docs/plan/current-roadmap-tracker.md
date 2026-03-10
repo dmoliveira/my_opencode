@@ -128,6 +128,7 @@ Remaining:
 | Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
 | Atlas runtime prototype | doing | Prototype local post-task verification/reminder shaping through `task-resume-info` without importing full Atlas persona semantics. |
 | Atlas pre-task shaping prototype | doing | Add delegated task focus shaping through `agent-context-shaper` before subagent execution. |
+| Gateway E2E parity refinements | doing | Tighten fail-closed behavior for critical hooks, isolate hook execution failures, align continuity wording with canonical commands, and remove hard-coded agent metadata discovery. |
 
 ## Done Recently
 
@@ -145,10 +146,11 @@ Remaining:
 | Reviewed parity plan against upstream runtime behavior | done | Identified crossed hook LLM bindings, missing safe hook creation, and remaining intentional divergence around Atlas runtime injection and Claude compatibility hooks. |
 | Committed parity hardening gateway fixes | done | Created `55ad23f` to fix LLM hook bindings, add safe hook startup isolation, and refresh parity tracking evidence. |
 | Committed Atlas post-task reminder prototype | done | Created `fa270cf` to add local verification/reminder shaping for delegated task results. |
+| Committed Atlas pre-task shaping prototype | done | Created `d090f80` to prepend delegated task focus guidance before subagent execution. |
 
 ## Next Tasks
 
-1. Decide whether to keep extending Atlas parity into direct-edit warning semantics or stop at the current task shaping slices.
+1. Land gateway E2E refinements for critical hook failure handling, execution isolation, canonical continuity wording, and dynamic agent metadata discovery.
 2. Continue post-merge verification for protected-main guard behavior in real operator flows.
 3. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 4. Keep active docs canonical-first as new command/runtime slices land.

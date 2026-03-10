@@ -82,6 +82,8 @@ import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validati
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
 import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook, } from "./hooks/shared/llm-decision-runtime.js";
 import { safeCreateHook } from "./hooks/shared/safe-create-hook.js";
+import { dispatchGatewayHookEvent } from "./hooks/shared/hook-dispatch.js";
+import { isCriticalGatewayHookId } from "./hooks/shared/hook-failure.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
@@ -141,7 +143,12 @@ function configuredHooks(ctx) {
         directory,
         config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),
     });
-    const safeHook = (hookId, factory) => safeCreateHook({ directory, hookId, factory });
+    const safeHook = (hookId, factory) => safeCreateHook({
+        directory,
+        hookId,
+        factory,
+        critical: isCriticalGatewayHookId(hookId),
+    });
     const stopGuard = safeHook("stop-continuation-guard", () => createStopContinuationGuardHook({
         directory,
         enabled: cfg.stopContinuationGuard.enabled,
@@ -702,10 +709,18 @@ export default function GatewayCorePlugin(ctx) {
             });
         }
         for (const hook of hooks) {
-            await hook.event(input.event.type, {
-                properties: input.event.properties,
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: input.event.type,
+                payload: {
+                    properties: input.event.properties,
+                    directory,
+                },
                 directory,
             });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     // Dispatches slash command interception event to ordered hooks.
@@ -723,7 +738,18 @@ export default function GatewayCorePlugin(ctx) {
         const executedHooks = [];
         try {
             for (const hook of hooks) {
-                await hook.event("tool.execute.before", { input, output, directory });
+                const result = await dispatchGatewayHookEvent({
+                    hook,
+                    eventType: "tool.execute.before",
+                    payload: { input, output, directory },
+                    directory,
+                });
+                if (!result.ok) {
+                    if (result.critical || result.blocked) {
+                        throw result.error;
+                    }
+                    continue;
+                }
                 executedHooks.push(hook);
             }
         }
@@ -738,12 +764,20 @@ export default function GatewayCorePlugin(ctx) {
             });
             for (const hook of executedHooks.reverse()) {
                 try {
-                    await hook.event("tool.execute.before.error", {
-                        input,
-                        output,
+                    const result = await dispatchGatewayHookEvent({
+                        hook,
+                        eventType: "tool.execute.before.error",
+                        payload: {
+                            input,
+                            output,
+                            directory,
+                            error,
+                        },
                         directory,
-                        error,
                     });
+                    if (!result.ok && result.critical) {
+                        throw result.error;
+                    }
                 }
                 catch {
                     // Keep the original before-hook failure as the surfaced error.
@@ -763,7 +797,15 @@ export default function GatewayCorePlugin(ctx) {
             hook_count: hooks.length,
         });
         for (const hook of hooks) {
-            await hook.event("command.execute.before", { input, output, directory });
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "command.execute.before",
+                payload: { input, output, directory },
+                directory,
+            });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     // Dispatches command post-execution event to ordered hooks.
@@ -778,7 +820,15 @@ export default function GatewayCorePlugin(ctx) {
             has_output: output.output !== undefined,
         });
         for (const hook of hooks) {
-            await hook.event("command.execute.after", { input, output, directory });
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "command.execute.after",
+                payload: { input, output, directory },
+                directory,
+            });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     // Dispatches slash command post-execution event to ordered hooks.
@@ -793,7 +843,15 @@ export default function GatewayCorePlugin(ctx) {
             has_output: typeof output.output === "string" && output.output.trim().length > 0,
         });
         for (const hook of hooks) {
-            await hook.event("tool.execute.after", { input, output, directory });
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "tool.execute.after",
+                payload: { input, output, directory },
+                directory,
+            });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     // Dispatches chat message lifecycle signal to ordered hooks.
@@ -808,13 +866,21 @@ export default function GatewayCorePlugin(ctx) {
             hook_count: hooks.length,
         });
         for (const hook of hooks) {
-            await hook.event("chat.message", {
-                properties: {
-                    ...input,
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "chat.message",
+                payload: {
+                    properties: {
+                        ...input,
+                    },
+                    output,
+                    directory,
                 },
-                output,
                 directory,
             });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     // Dispatches experimental chat transform lifecycle signal to ordered hooks.
@@ -831,11 +897,19 @@ export default function GatewayCorePlugin(ctx) {
             });
         }
         for (const hook of hooks) {
-            await hook.event("experimental.chat.messages.transform", {
-                input,
-                output,
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "experimental.chat.messages.transform",
+                payload: {
+                    input,
+                    output,
+                    directory,
+                },
                 directory,
             });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     async function chatSystemTransform(input, output) {
@@ -851,11 +925,19 @@ export default function GatewayCorePlugin(ctx) {
             });
         }
         for (const hook of hooks) {
-            await hook.event("experimental.chat.system.transform", {
-                input,
-                output,
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "experimental.chat.system.transform",
+                payload: {
+                    input,
+                    output,
+                    directory,
+                },
                 directory,
             });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
         }
     }
     return {

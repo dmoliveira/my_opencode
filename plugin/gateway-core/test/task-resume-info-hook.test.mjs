@@ -84,7 +84,8 @@ test("task-resume-info appends verification hint with subagent session id", asyn
     );
     const text = String(output.output);
     assert.match(text, /Verification hint:/);
-    assert.match(text, /task_id\/session_id=ses_child123/);
+    assert.match(text, /\/plan-handoff resume/);
+    assert.match(text, /ses_child123/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -101,7 +102,8 @@ test("task-resume-info appends verification hint with task id fallback", async (
     );
     const text = String(output.output);
     assert.match(text, /Verification hint:/);
-    assert.match(text, /task_id\/session_id=abc-123/);
+    assert.match(text, /\/autopilot-resume/);
+    assert.match(text, /abc-123/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
