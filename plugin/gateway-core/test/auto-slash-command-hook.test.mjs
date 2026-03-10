@@ -302,6 +302,56 @@ test("auto-slash-command uses assist-mode LLM for ambiguous doctor intent", asyn
   assert.equal(String(output.parts[0].text).includes("/doctor"), true)
 })
 
+test("auto-slash-command accepts sessionId payload variant for LLM decisions", async () => {
+  let capturedSessionId = ""
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async (request) => {
+        capturedSessionId = request.sessionId
+        return {
+          mode: "assist",
+          accepted: true,
+          char: "D",
+          raw: "D",
+          durationMs: 1,
+          model: "openai/gpt-5.1-codex-mini",
+          templateId: request.templateId,
+          meaning: "route_doctor",
+        }
+      },
+    },
+  })
+
+  const output = {
+    parts: [{ type: "text", text: "can you inspect this issue and help me understand the environment state" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionId: "session-auto-slash-sessionid",
+      prompt: "can you inspect this issue and help me understand the environment state",
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(capturedSessionId, "session-auto-slash-sessionid")
+  assert.equal(String(output.parts[0].text).includes("/doctor"), true)
+})
+
 test("auto-slash-command skips rewrites inside llm decision child process", async () => {
   const previous = process.env.MY_OPENCODE_LLM_DECISION_CHILD
   process.env.MY_OPENCODE_LLM_DECISION_CHILD = "1"
@@ -374,6 +424,71 @@ test("auto-slash-command skips LLM rewrite for high-risk install prompt", async 
   })
 
   assert.equal(output.parts[0].text, "please install and configure devtools for me")
+})
+
+test("auto-slash-command does not deterministically rewrite install prompt with doctor keyword", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: { mode: "assist" },
+      async decide() {
+        throw new Error("should not be called")
+      },
+    },
+  })
+
+  const output = {
+    parts: [{ type: "text", text: "please install doctor diagnostics for me" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-install-doctor",
+      prompt: "please install doctor diagnostics for me",
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(output.parts[0].text, "please install doctor diagnostics for me")
+})
+
+test("auto-slash-command tolerates LLM decision failures", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      async decide() {
+        throw new Error("decision runtime unavailable")
+      },
+    },
+  })
+
+  const output = {
+    parts: [{ type: "text", text: "can you inspect this issue and help me understand the environment state" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-error",
+      prompt: "can you inspect this issue and help me understand the environment state",
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(output.parts[0].text, "can you inspect this issue and help me understand the environment state")
 })
 
 test("auto-slash-command shadow mode records but does not rewrite ambiguous prompt", async () => {

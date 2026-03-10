@@ -16,6 +16,9 @@ function buildSystemContext(sessionId) {
         "If the user asks for the current runtime session id, return it exactly.",
     ].join("\n");
 }
+function runtimeContextEntryIndex(system) {
+    return system.findIndex((entry) => typeof entry === "string" && entry.includes(SYSTEM_CONTEXT_MARKER));
+}
 export function createSessionRuntimeSystemContextHook(options) {
     return {
         id: "session-runtime-system-context",
@@ -33,14 +36,19 @@ export function createSessionRuntimeSystemContextHook(options) {
             if (!sessionId || !Array.isArray(system)) {
                 return;
             }
-            if (system.some((entry) => typeof entry === "string" && entry.includes(SYSTEM_CONTEXT_MARKER))) {
+            const nextContext = buildSystemContext(sessionId);
+            const existingIndex = runtimeContextEntryIndex(system);
+            if (existingIndex >= 0 && system[existingIndex] === nextContext) {
                 return;
             }
-            system.unshift(buildSystemContext(sessionId));
+            if (existingIndex >= 0) {
+                system.splice(existingIndex, 1);
+            }
+            system.unshift(nextContext);
             writeGatewayEventAudit(directory, {
                 hook: "session-runtime-system-context",
                 stage: "inject",
-                reason_code: "session_runtime_system_context_injected",
+                reason_code: existingIndex >= 0 ? "session_runtime_system_context_replaced" : "session_runtime_system_context_injected",
                 session_id: sessionId,
             });
         },

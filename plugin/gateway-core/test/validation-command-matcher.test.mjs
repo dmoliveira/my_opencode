@@ -19,6 +19,7 @@ test("validation-command-matcher covers run and prefix package-manager forms", (
 
 test("validation-command-matcher exposes validation truthiness", () => {
   assert.equal(isValidationCommand("make validate"), true)
+  assert.deepEqual(classifyValidationCommand("make validate"), ["lint"])
   assert.equal(isValidationCommand("git status --short"), false)
 })
 

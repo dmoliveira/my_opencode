@@ -715,6 +715,271 @@ test("runtime delegation hooks sustain five same-session subagents with varied c
   })
 })
 
+test("runtime delegation hooks reconcile orphaned child session idle events", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-idle-reconcile"
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "[DELEGATION TRACE child-idle-trace] inspect runtime",
+      },
+    },
+  })
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-idle-1",
+        parentID: sessionID,
+        title: "[DELEGATION TRACE child-idle-trace] explore child",
+      },
+    },
+  })
+  await dispatch("session.idle", {
+    properties: {
+      sessionID: "child-session-idle-1",
+    },
+  })
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "follow-up after idle reconciliation",
+      },
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === sessionID && item.traceId === "child-idle-trace")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "completed")
+})
+
+test("runtime delegation hooks reconcile child assistant failure messages", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 1,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-message-failure"
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "[DELEGATION TRACE child-failure-trace] review release risk",
+      },
+    },
+  })
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-failure-1",
+        parentID: sessionID,
+        title: "[DELEGATION TRACE child-failure-trace] reviewer child",
+      },
+    },
+  })
+  await dispatch("message.updated", {
+    properties: {
+      info: {
+        role: "assistant",
+        sessionID: "child-session-failure-1",
+        error: { name: "UnknownError", data: { message: "subagent crashed" } },
+        time: { completed: Date.now() },
+      },
+    },
+  })
+
+  await assert.rejects(
+    () =>
+      dispatch("tool.execute.before", {
+        input: { tool: "task", sessionID },
+        output: {
+          args: {
+            subagent_type: "reviewer",
+            category: "critical",
+            prompt: "[DELEGATION TRACE child-failure-trace] retry same failed child",
+          },
+        },
+      }),
+    /retry budget exhausted/i,
+  )
+  await dispatch("tool.execute.before.error", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "[DELEGATION TRACE child-failure-trace] retry same failed child",
+      },
+    },
+  })
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "different follow-up after failure cleanup",
+      },
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === sessionID && item.traceId === "child-failure-trace")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "failed")
+})
+
+test("runtime delegation hooks ignore child sessions without delegation trace markers", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-no-trace"
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "[DELEGATION TRACE explicit-parent-trace] inspect runtime",
+      },
+    },
+  })
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-no-trace-1",
+        parentID: sessionID,
+        title: "child session without trace marker",
+      },
+    },
+  })
+  await dispatch("session.idle", {
+    properties: {
+      sessionID: "child-session-no-trace-1",
+    },
+  })
+
+  await assert.rejects(
+    () =>
+      dispatch("tool.execute.before", {
+        input: { tool: "task", sessionID },
+        output: {
+          args: {
+            subagent_type: "reviewer",
+            category: "critical",
+            prompt: "follow-up should still be blocked",
+          },
+        },
+      }),
+    /maxTotalConcurrent/i,
+  )
+})
+
 test("default hook ordering runs concurrency guard before lifecycle and telemetry state hooks", async () => {
   const hooks = resolveHookOrder(
     [

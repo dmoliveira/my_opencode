@@ -78,6 +78,7 @@ import { createThinkingBlockValidatorHook } from "./hooks/thinking-block-validat
 import { createToolOutputTruncatorHook } from "./hooks/tool-output-truncator/index.js";
 import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysitter/index.js";
 import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
+import { createMistakeLedgerHook } from "./hooks/mistake-ledger/index.js";
 import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
 import {
@@ -1029,6 +1030,75 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
       }),
     ),
+    createStaleLoopExpiryGuardHook({
+      directory,
+      enabled: cfg.staleLoopExpiryGuard.enabled,
+      maxAgeMinutes: cfg.staleLoopExpiryGuard.maxAgeMinutes,
+    }),
+    createParallelWriterConflictGuardHook({
+      directory,
+      enabled: cfg.parallelWriterConflictGuard.enabled,
+      maxConcurrentWriters:
+        cfg.parallelWriterConflictGuard.maxConcurrentWriters,
+      writerCountEnvKeys: cfg.parallelWriterConflictGuard.writerCountEnvKeys,
+      reservationPathsEnvKeys:
+        cfg.parallelWriterConflictGuard.reservationPathsEnvKeys,
+      activeReservationPathsEnvKeys:
+        cfg.parallelWriterConflictGuard.activeReservationPathsEnvKeys,
+      enforceReservationCoverage:
+        cfg.parallelWriterConflictGuard.enforceReservationCoverage,
+      stateFile: cfg.parallelWriterConflictGuard.stateFile,
+    }),
+    createBranchFreshnessGuardHook({
+      directory,
+      enabled: cfg.branchFreshnessGuard.enabled,
+      baseRef: cfg.branchFreshnessGuard.baseRef,
+      maxBehind: cfg.branchFreshnessGuard.maxBehind,
+      enforceOnPrCreate: cfg.branchFreshnessGuard.enforceOnPrCreate,
+      enforceOnPrMerge: cfg.branchFreshnessGuard.enforceOnPrMerge,
+    }),
+    createPrReadinessGuardHook({
+      directory,
+      enabled: cfg.prReadinessGuard.enabled,
+      requireCleanWorktree: cfg.prReadinessGuard.requireCleanWorktree,
+      requireValidationEvidence: cfg.prReadinessGuard.requireValidationEvidence,
+      requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+    }),
+    createPrBodyEvidenceGuardHook({
+      directory,
+      enabled: cfg.prBodyEvidenceGuard.enabled,
+      requireSummarySection: cfg.prBodyEvidenceGuard.requireSummarySection,
+      requireValidationSection:
+        cfg.prBodyEvidenceGuard.requireValidationSection,
+      requireValidationEvidence:
+        cfg.prBodyEvidenceGuard.requireValidationEvidence,
+      allowUninspectableBody: cfg.prBodyEvidenceGuard.allowUninspectableBody,
+      requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
+      decisionRuntime: llmDecisionRuntimeForHook("pr-body-evidence-guard"),
+    }),
+    createMergeReadinessGuardHook({
+      directory,
+      enabled: cfg.mergeReadinessGuard.enabled,
+      requireDeleteBranch: cfg.mergeReadinessGuard.requireDeleteBranch,
+      requireStrategy: cfg.mergeReadinessGuard.requireStrategy,
+      disallowAdminBypass: cfg.mergeReadinessGuard.disallowAdminBypass,
+    }),
+    createGhChecksMergeGuardHook({
+      directory,
+      enabled: cfg.ghChecksMergeGuard.enabled,
+      blockDraft: cfg.ghChecksMergeGuard.blockDraft,
+      requireApprovedReview: cfg.ghChecksMergeGuard.requireApprovedReview,
+      requirePassingChecks: cfg.ghChecksMergeGuard.requirePassingChecks,
+      blockedMergeStates: cfg.ghChecksMergeGuard.blockedMergeStates,
+      failOpenOnError: cfg.ghChecksMergeGuard.failOpenOnError,
+    }),
+    createPostMergeSyncGuardHook({
+      directory,
+      enabled: cfg.postMergeSyncGuard.enabled,
+      requireDeleteBranch: cfg.postMergeSyncGuard.requireDeleteBranch,
+      enforceMainSyncInline: cfg.postMergeSyncGuard.enforceMainSyncInline,
+      reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
+    }),
   ];
   if (!cfg.hooks.enabled) {
     return [];

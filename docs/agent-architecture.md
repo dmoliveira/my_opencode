@@ -6,6 +6,7 @@ This document is the single reference for agent structure, role boundaries, and 
 
 | Agent | Mode | Can Edit | Cost Tier | Default Category | Primary Use |
 | --- | --- | --- | --- | --- | --- |
+| `build` | primary | yes | cheap | `balanced` | direct implementation for clear, scoped work |
 | `orchestrator` | primary | yes | expensive | `balanced` | end-to-end multi-step execution |
 | `explore` | subagent | no | free | `quick` | internal codebase discovery |
 | `librarian` | subagent | no | cheap | `balanced` | external docs/upstream lookup |

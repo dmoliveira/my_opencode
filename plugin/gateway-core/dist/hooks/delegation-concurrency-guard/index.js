@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
+import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function matchingSessionDelegationKeys(activeByDelegation, sid, subagentType) {
     const matches = [];
@@ -53,13 +54,48 @@ function sessionDelegationKeys(activeByDelegation, sid) {
     return matches;
 }
 function sessionId(payload) {
-    return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
+    return String(payload.input?.sessionID ??
+        payload.input?.sessionId ??
+        payload.properties?.sessionID ??
+        payload.properties?.sessionId ??
+        payload.properties?.info?.id ??
+        "").trim();
 }
 function effectiveDirectory(payload, fallbackDirectory) {
     return typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : fallbackDirectory;
 }
 export function createDelegationConcurrencyGuardHook(options) {
     const activeByDelegation = new Map();
+    function releaseLinkedDelegation(args) {
+        const fallbackEventPayload = {
+            input: { tool: "task", sessionID: args.parentSessionId },
+            output: {
+                args: {
+                    ...(args.traceId ? { prompt: `[DELEGATION TRACE ${args.traceId}]` } : {}),
+                },
+                metadata: {
+                    gateway: {
+                        delegation: {
+                            ...(args.traceId ? { traceId: args.traceId } : {}),
+                        },
+                    },
+                },
+            },
+            directory: args.directory,
+        };
+        const releaseMode = releaseDelegationReservation(fallbackEventPayload, args.directory);
+        if (releaseMode === "none" || releaseMode === "ambiguous_skip") {
+            return false;
+        }
+        writeGatewayEventAudit(args.directory, {
+            hook: "delegation-concurrency-guard",
+            stage: "state",
+            reason_code: args.reasonCode,
+            session_id: args.parentSessionId,
+            trace_id: args.traceId || undefined,
+        });
+        return true;
+    }
     function releaseDelegationReservation(eventPayload, directory) {
         const sid = sessionId(eventPayload);
         if (!sid) {
@@ -141,9 +177,64 @@ export function createDelegationConcurrencyGuardHook(options) {
             if (!options.enabled) {
                 return;
             }
+            if (type === "session.created" || type === "session.updated") {
+                registerDelegationChildSession((payload ?? {}));
+                return;
+            }
+            if (type === "session.idle") {
+                const childSessionId = sessionId((payload ?? {}));
+                const link = getDelegationChildSessionLink(childSessionId);
+                if (!link) {
+                    return;
+                }
+                releaseLinkedDelegation({
+                    parentSessionId: link.parentSessionId,
+                    traceId: link.traceId,
+                    directory: options.directory,
+                    reasonCode: "delegation_concurrency_child_idle_released",
+                });
+                return;
+            }
+            if (type === "message.updated") {
+                const eventPayload = (payload ?? {});
+                const info = eventPayload.properties?.info;
+                if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+                    return;
+                }
+                const childSessionId = String(info?.sessionID ?? "").trim();
+                const link = getDelegationChildSessionLink(childSessionId);
+                if (!link) {
+                    return;
+                }
+                const completed = Number.isFinite(Number(info?.time?.completed ?? NaN));
+                const failed = info?.error !== undefined && info?.error !== null;
+                if (!completed && !failed) {
+                    return;
+                }
+                releaseLinkedDelegation({
+                    parentSessionId: link.parentSessionId,
+                    traceId: link.traceId,
+                    directory: typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                        ? eventPayload.directory
+                        : options.directory,
+                    reasonCode: failed
+                        ? "delegation_concurrency_child_message_failed_released"
+                        : "delegation_concurrency_child_message_completed_released",
+                });
+                return;
+            }
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
+                    const childLink = clearDelegationChildSessionLink(sid);
+                    if (childLink) {
+                        releaseLinkedDelegation({
+                            parentSessionId: childLink.parentSessionId,
+                            traceId: childLink.traceId,
+                            directory: options.directory,
+                            reasonCode: "delegation_concurrency_child_deleted_released",
+                        });
+                    }
                     for (const key of activeByDelegation.keys()) {
                         if (key === sid || key.startsWith(`${sid}:`)) {
                             activeByDelegation.delete(key);

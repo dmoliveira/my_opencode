@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -1392,6 +1393,7 @@ exit 0
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
+        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(tmp / "missing-runtime.db")
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
 
         result = subprocess.run(
@@ -1524,6 +1526,170 @@ exit 0
         expect(
             session_doctor_payload.get("result") == "PASS",
             "session doctor should pass when index is readable",
+        )
+
+        runtime_db_path = Path(tmpdir) / "opencode.db"
+        conn = sqlite3.connect(runtime_db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE session (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    title TEXT,
+                    directory TEXT,
+                    time_created INTEGER,
+                    time_updated INTEGER
+                );
+                CREATE TABLE message (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                CREATE TABLE part (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                """
+            )
+            now_ms = int(time.time() * 1000)
+            stale_parent_ms = now_ms - 700_000
+            stale_child_ms = now_ms - 650_000
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "parent-session",
+                    None,
+                    "parent stuck session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "child-session",
+                    "parent-session",
+                    "child completed session",
+                    str(REPO_ROOT),
+                    stale_child_ms,
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "parent-message",
+                    "parent-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "parent-part",
+                    "parent-message",
+                    "parent-session",
+                    json.dumps(
+                        {"type": "tool", "tool": "task", "state": {"status": "running"}}
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "child-message",
+                    "child-session",
+                    json.dumps(
+                        {"role": "assistant", "time": {"completed": stale_child_ms}}
+                    ),
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "question-session",
+                    None,
+                    "stale question session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "question-message",
+                    "question-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "question-part",
+                    "question-message",
+                    "question-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "question",
+                            "state": {"status": "running"},
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        runtime_env = dict(digest_env)
+        runtime_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(runtime_db_path)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "session doctor should fail on stuck parent-child mismatch",
+        )
+        session_runtime_doctor_payload = parse_json_output(result.stdout)
+        expect(
+            session_runtime_doctor_payload.get("result") == "FAIL",
+            "session doctor should report FAIL when stuck parent-child mismatch is detected",
+        )
+        expect(
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 2,
+            "session doctor should report parent-child and stale tool findings",
+        )
+        expect(
+            any(
+                item.get("issue_type") == "stale_running_tool"
+                and item.get("last_tool") == "question"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should detect stale running question sessions",
         )
 
         result = subprocess.run(
@@ -4582,8 +4748,8 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
         ).read_text(encoding="utf-8")
         expect(
-            "| v0.4.19 |" in release_index_text,
-            "release index update helper should preserve latest v0.4.19 index entry",
+            "| v0.4.20 |" in release_index_text,
+            "release index update helper should preserve latest v0.4.20 index entry",
         )
 
         docs_automation_summary_update = subprocess.run(
@@ -4602,7 +4768,7 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
         ).read_text(encoding="utf-8")
         expect(
-            "latest_indexed_release: v0.4.19" in docs_automation_summary_text,
+            "latest_indexed_release: v0.4.20" in docs_automation_summary_text,
             "docs automation summary should include latest indexed release marker",
         )
         expect(
