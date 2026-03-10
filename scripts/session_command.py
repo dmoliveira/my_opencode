@@ -163,13 +163,24 @@ def _emit(payload: dict, json_output: bool) -> int:
         if findings:
             print("stuck_findings:")
             for finding in findings[:10]:
-                print(
-                    "- "
-                    f"parent={finding.get('parent_session_id')} child={finding.get('child_session_id')} "
-                    f"age={finding.get('parent_stale_seconds')}s "
-                    f"parent_tool={finding.get('parent_last_tool') or 'none'} "
-                    f"child_state={finding.get('child_state')}"
-                )
+                issue_type = str(finding.get("issue_type") or "stuck")
+                if issue_type == "parent_child_mismatch":
+                    print(
+                        "- "
+                        f"type={issue_type} parent={finding.get('parent_session_id')} "
+                        f"child={finding.get('child_session_id')} "
+                        f"age={finding.get('parent_stale_seconds')}s "
+                        f"parent_tool={finding.get('parent_last_tool') or 'none'} "
+                        f"child_state={finding.get('child_state')}"
+                    )
+                else:
+                    print(
+                        "- "
+                        f"type={issue_type} session={finding.get('session_id')} "
+                        f"age={finding.get('stale_seconds')}s "
+                        f"tool={finding.get('last_tool') or 'none'} "
+                        f"status={finding.get('last_tool_status') or 'unknown'}"
+                    )
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
     if payload.get("command") == "handoff":
@@ -289,7 +300,45 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             (stale_seconds, stale_seconds),
         ).fetchall()
         for row in parent_child_rows:
-            findings.append(dict(row))
+            item = dict(row)
+            item["issue_type"] = "parent_child_mismatch"
+            findings.append(item)
+
+        stale_tool_rows = conn.execute(
+            """
+            WITH last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            ),
+            last_part AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
+            )
+            SELECT
+              s.id AS session_id,
+              s.title AS session_title,
+              CAST((strftime('%s','now') - (s.time_updated / 1000)) AS INT) AS stale_seconds,
+              COALESCE(json_extract(p.data,'$.type'),'none') AS last_part_type,
+              COALESCE(json_extract(p.data,'$.tool'),'') AS last_tool,
+              COALESCE(json_extract(p.data,'$.state.status'),'') AS last_tool_status
+            FROM session s
+            JOIN last_msg lm ON lm.session_id = s.id
+            JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
+            LEFT JOIN last_part lp ON lp.session_id = s.id
+            LEFT JOIN part p ON p.session_id = s.id AND p.time_created = lp.max_time
+            WHERE json_extract(m.data,'$.role') = 'assistant'
+              AND json_extract(m.data,'$.time.completed') IS NULL
+              AND s.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND COALESCE(json_extract(p.data,'$.type'),'') = 'tool'
+              AND COALESCE(json_extract(p.data,'$.state.status'),'') = 'running'
+              AND COALESCE(json_extract(p.data,'$.tool'),'') IN ('question', 'apply_patch')
+            ORDER BY s.time_updated DESC
+            LIMIT 20
+            """,
+            (stale_seconds,),
+        ).fetchall()
+        for row in stale_tool_rows:
+            item = dict(row)
+            item["issue_type"] = "stale_running_tool"
+            findings.append(item)
 
         generic_stale_count = int(
             conn.execute(
@@ -316,7 +365,7 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
 
     if findings:
         problems.append(
-            f"detected {len(findings)} stale parent-child session mismatch(es) older than {stale_seconds}s"
+            f"detected {len(findings)} stuck session health finding(s) older than {stale_seconds}s"
         )
     elif generic_stale_count > 0:
         warnings.append(

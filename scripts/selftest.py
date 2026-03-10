@@ -1612,6 +1612,42 @@ exit 0
                     stale_child_ms,
                 ),
             )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "question-session",
+                    None,
+                    "stale question session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "question-message",
+                    "question-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "question-part",
+                    "question-message",
+                    "question-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "question",
+                            "state": {"status": "running"},
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
             conn.commit()
         finally:
             conn.close()
@@ -1643,8 +1679,16 @@ exit 0
             "session doctor should report FAIL when stuck parent-child mismatch is detected",
         )
         expect(
-            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 1,
-            "session doctor should report one stuck parent-child finding",
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 2,
+            "session doctor should report parent-child and stale tool findings",
+        )
+        expect(
+            any(
+                item.get("issue_type") == "stale_running_tool"
+                and item.get("last_tool") == "question"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should detect stale running question sessions",
         )
 
         result = subprocess.run(
