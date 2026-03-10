@@ -25,6 +25,8 @@ interface ToolAfterPayload {
     tool?: string
     sessionID?: string
     sessionId?: string
+    trace_id?: string
+    traceId?: string
   }
   output?: {
     output?: unknown
@@ -32,6 +34,8 @@ interface ToolAfterPayload {
   properties?: {
     sessionID?: string
     sessionId?: string
+    trace_id?: string
+    traceId?: string
     info?: { id?: string }
   }
   directory?: string
@@ -72,6 +76,11 @@ interface SessionState {
   inFlight: boolean
   markerProbeAttempted: boolean
   continueIntentArmed: boolean
+  lastTraceId?: string
+}
+
+function compactDecisionCacheKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240)
 }
 
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>"
@@ -254,6 +263,7 @@ async function resolvePendingContinuationDecision(options: {
   source: "task_output" | "message_probe"
   sessionId: string
   directory: string
+  traceId?: string
   decisionRuntime?: LlmDecisionRuntime
 }): Promise<boolean> {
   const deterministicPending = hasPendingCueText(options.text, options.continueIntentArmed)
@@ -263,27 +273,55 @@ async function resolvePendingContinuationDecision(options: {
   if (!options.sessionId || !options.decisionRuntime || !shouldUseLlmContinuationFallback(options.text)) {
     return false
   }
-  const decision = await options.decisionRuntime.decide({
-    hookId: "todo-continuation-enforcer",
-    sessionId: options.sessionId,
-    templateId: "todo-continuation-decision-v1",
-    instruction: buildContinuationInstruction(),
-    context: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
-    allowedChars: ["C", "S", "U"],
-    decisionMeaning: {
-      C: "continue_now",
-      S: "no_pending",
-      U: "unclear",
-    },
-    cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${options.text.trim().toLowerCase()}`,
-  })
+  let decision
+  try {
+    decision = await options.decisionRuntime.decide({
+      hookId: "todo-continuation-enforcer",
+      sessionId: options.sessionId,
+      traceId: options.traceId,
+      templateId: "todo-continuation-decision-v1",
+      instruction: buildContinuationInstruction(),
+      context: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
+      allowedChars: ["C", "S", "U"],
+      decisionMeaning: {
+        C: "continue_now",
+        S: "no_pending",
+        U: "unclear",
+      },
+      cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${compactDecisionCacheKey(options.text)}`,
+    })
+  } catch (error) {
+    writeGatewayEventAudit(options.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "state",
+      reason_code: "llm_todo_continuation_decision_failed",
+      session_id: options.sessionId,
+      trace_id: options.traceId,
+      llm_decision_mode: options.decisionRuntime.config.mode,
+      decision_source: options.source,
+      error: error instanceof Error ? error.message : String(error ?? "unknown_error"),
+    })
+    return false
+  }
   if (!decision.accepted) {
+    writeGatewayEventAudit(options.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "state",
+      reason_code: "llm_todo_continuation_decision_skipped",
+      session_id: options.sessionId,
+      trace_id: options.traceId,
+      llm_decision_mode: options.decisionRuntime.config.mode,
+      decision_source: options.source,
+      llm_decision_reason: decision.skippedReason || "not_accepted",
+      error: decision.error,
+    })
     return false
   }
   writeDecisionComparisonAudit({
     directory: options.directory,
     hookId: "todo-continuation-enforcer",
     sessionId: options.sessionId,
+    traceId: options.traceId,
     mode: options.decisionRuntime.config.mode,
     deterministicMeaning: "no_pending",
     aiMeaning: decision.meaning || "no_pending",
@@ -295,6 +333,7 @@ async function resolvePendingContinuationDecision(options: {
     stage: "state",
     reason_code: "llm_todo_continuation_decision_recorded",
     session_id: options.sessionId,
+    trace_id: options.traceId,
     llm_decision_char: decision.char,
     llm_decision_meaning: decision.meaning,
     llm_decision_mode: options.decisionRuntime.config.mode,
@@ -306,6 +345,7 @@ async function resolvePendingContinuationDecision(options: {
       stage: "state",
       reason_code: "llm_todo_continuation_shadow_deferred",
       session_id: options.sessionId,
+      trace_id: options.traceId,
       llm_decision_char: decision.char,
       llm_decision_meaning: decision.meaning,
       llm_decision_mode: options.decisionRuntime.config.mode,
@@ -314,6 +354,24 @@ async function resolvePendingContinuationDecision(options: {
     return false
   }
   return decision.char === "C"
+}
+
+function resolveTraceId(payload: {
+  properties?: { trace_id?: string; traceId?: string }
+  input?: { trace_id?: string; traceId?: string }
+}): string | undefined {
+  const candidates = [
+    payload.properties?.trace_id,
+    payload.properties?.traceId,
+    payload.input?.trace_id,
+    payload.input?.traceId,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
 }
 
 function resolveSessionId(payload: {
@@ -365,6 +423,7 @@ function getSessionState(store: Map<string, SessionState>, sessionId: string): S
     inFlight: false,
     markerProbeAttempted: false,
     continueIntentArmed: false,
+    lastTraceId: undefined,
   }
   store.set(sessionId, created)
   return created
@@ -427,12 +486,14 @@ export function createTodoContinuationEnforcerHook(options: {
           return
         }
         const state = getSessionState(sessionState, sessionId)
+        state.lastTraceId = resolveTraceId(eventPayload)
         state.pendingContinuation = await resolvePendingContinuationDecision({
           text: eventPayload.output.output,
           continueIntentArmed: state.continueIntentArmed,
           source: "task_output",
           sessionId,
           directory: resolveDirectory(eventPayload, options.directory),
+          traceId: state.lastTraceId,
           decisionRuntime: options.decisionRuntime,
         })
         state.markerProbeAttempted = true
@@ -518,6 +579,7 @@ export function createTodoContinuationEnforcerHook(options: {
                 source: "message_probe",
                 sessionId,
                 directory,
+                traceId: state.lastTraceId,
                 decisionRuntime: options.decisionRuntime,
               })
               break

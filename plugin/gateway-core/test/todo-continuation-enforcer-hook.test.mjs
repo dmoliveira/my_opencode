@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -31,6 +31,14 @@ function mockDecisionRuntime(char, mode = "assist") {
       }
     },
   }
+}
+
+function readGatewayAuditEvents(directory) {
+  const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+  return readFileSync(auditPath, "utf-8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
 }
 
 test("todo-continuation-enforcer injects on idle when pending marker exists", async () => {
@@ -501,6 +509,129 @@ test("todo-continuation-enforcer does not call LLM for generic future suggestion
     assert.equal(promptCalls, 0)
     assert.equal(decisionRuntime.calls.length, 0)
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer skips on invalid LLM decision response", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      decisionRuntime: {
+        config: { mode: "assist" },
+        async decide() {
+          return {
+            mode: "assist",
+            accepted: false,
+            char: "",
+            raw: "maybe continue",
+            durationMs: 1,
+            model: "test-model",
+            templateId: "todo-continuation-decision-v1",
+            skippedReason: "invalid_response",
+          }
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-llm-invalid", traceId: "trace-invalid" },
+      output: {
+        output: "Task complete for now. Best next safe slice: docs alignment. If you want, I'll continue directly with that pass.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-llm-invalid" },
+    })
+
+    assert.equal(promptCalls, 0)
+    const events = readGatewayAuditEvents(directory)
+    const skipped = events.find((entry) => entry.reason_code === "llm_todo_continuation_decision_skipped")
+    assert.ok(skipped)
+    assert.equal(skipped.trace_id, "trace-invalid")
+    assert.equal(skipped.llm_decision_reason, "invalid_response")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer tolerates LLM runtime failures", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      decisionRuntime: {
+        config: { mode: "assist" },
+        async decide() {
+          throw new Error("decision runtime unavailable")
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-llm-error", trace_id: "trace-error" },
+      output: {
+        output: "There is nothing additional to release right now. Best next safe slice: align README and spec. If you want, I'll continue directly with that docs alignment pass.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-llm-error" },
+    })
+
+    assert.equal(promptCalls, 0)
+    const events = readGatewayAuditEvents(directory)
+    const failed = events.find((entry) => entry.reason_code === "llm_todo_continuation_decision_failed")
+    assert.ok(failed)
+    assert.equal(failed.trace_id, "trace-error")
+    assert.match(String(failed.error ?? ""), /decision runtime unavailable/)
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })

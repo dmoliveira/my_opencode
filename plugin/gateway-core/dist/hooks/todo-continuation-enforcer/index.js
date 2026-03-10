@@ -118,6 +118,9 @@ function hasDirectContinuationOfferCue(text) {
         /\bi'?ll\s+continue\b/.test(normalized) ||
         normalized.includes("continue directly"));
 }
+function compactDecisionCacheKey(text) {
+    return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240);
+}
 function shouldUseLlmContinuationFallback(text) {
     return hasCompletionClosureCue(text) && hasActionableNextSliceCue(text) && hasDirectContinuationOfferCue(text);
 }
@@ -154,27 +157,56 @@ async function resolvePendingContinuationDecision(options) {
     if (!options.sessionId || !options.decisionRuntime || !shouldUseLlmContinuationFallback(options.text)) {
         return false;
     }
-    const decision = await options.decisionRuntime.decide({
-        hookId: "todo-continuation-enforcer",
-        sessionId: options.sessionId,
-        templateId: "todo-continuation-decision-v1",
-        instruction: buildContinuationInstruction(),
-        context: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
-        allowedChars: ["C", "S", "U"],
-        decisionMeaning: {
-            C: "continue_now",
-            S: "no_pending",
-            U: "unclear",
-        },
-        cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${options.text.trim().toLowerCase()}`,
-    });
+    let decision;
+    try {
+        decision = await options.decisionRuntime.decide({
+            hookId: "todo-continuation-enforcer",
+            sessionId: options.sessionId,
+            traceId: options.traceId,
+            templateId: "todo-continuation-decision-v1",
+            instruction: buildContinuationInstruction(),
+            context: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
+            allowedChars: ["C", "S", "U"],
+            decisionMeaning: {
+                C: "continue_now",
+                S: "no_pending",
+                U: "unclear",
+            },
+            cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${compactDecisionCacheKey(options.text)}`,
+        });
+    }
+    catch (error) {
+        writeGatewayEventAudit(options.directory, {
+            hook: "todo-continuation-enforcer",
+            stage: "state",
+            reason_code: "llm_todo_continuation_decision_failed",
+            session_id: options.sessionId,
+            trace_id: options.traceId,
+            llm_decision_mode: options.decisionRuntime.config.mode,
+            decision_source: options.source,
+            error: error instanceof Error ? error.message : String(error ?? "unknown_error"),
+        });
+        return false;
+    }
     if (!decision.accepted) {
+        writeGatewayEventAudit(options.directory, {
+            hook: "todo-continuation-enforcer",
+            stage: "state",
+            reason_code: "llm_todo_continuation_decision_skipped",
+            session_id: options.sessionId,
+            trace_id: options.traceId,
+            llm_decision_mode: options.decisionRuntime.config.mode,
+            decision_source: options.source,
+            llm_decision_reason: decision.skippedReason || "not_accepted",
+            error: decision.error,
+        });
         return false;
     }
     writeDecisionComparisonAudit({
         directory: options.directory,
         hookId: "todo-continuation-enforcer",
         sessionId: options.sessionId,
+        traceId: options.traceId,
         mode: options.decisionRuntime.config.mode,
         deterministicMeaning: "no_pending",
         aiMeaning: decision.meaning || "no_pending",
@@ -186,6 +218,7 @@ async function resolvePendingContinuationDecision(options) {
         stage: "state",
         reason_code: "llm_todo_continuation_decision_recorded",
         session_id: options.sessionId,
+        trace_id: options.traceId,
         llm_decision_char: decision.char,
         llm_decision_meaning: decision.meaning,
         llm_decision_mode: options.decisionRuntime.config.mode,
@@ -197,6 +230,7 @@ async function resolvePendingContinuationDecision(options) {
             stage: "state",
             reason_code: "llm_todo_continuation_shadow_deferred",
             session_id: options.sessionId,
+            trace_id: options.traceId,
             llm_decision_char: decision.char,
             llm_decision_meaning: decision.meaning,
             llm_decision_mode: options.decisionRuntime.config.mode,
@@ -205,6 +239,20 @@ async function resolvePendingContinuationDecision(options) {
         return false;
     }
     return decision.char === "C";
+}
+function resolveTraceId(payload) {
+    const candidates = [
+        payload.properties?.trace_id,
+        payload.properties?.traceId,
+        payload.input?.trace_id,
+        payload.input?.traceId,
+    ];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return undefined;
 }
 function resolveSessionId(payload) {
     const candidates = [
@@ -246,6 +294,7 @@ function getSessionState(store, sessionId) {
         inFlight: false,
         markerProbeAttempted: false,
         continueIntentArmed: false,
+        lastTraceId: undefined,
     };
     store.set(sessionId, created);
     return created;
@@ -294,16 +343,18 @@ export function createTodoContinuationEnforcerHook(options) {
                 const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
                 if (!sessionId || tool !== "task" || typeof eventPayload.output?.output !== "string") {
                     return;
-                }
-                const state = getSessionState(sessionState, sessionId);
-                state.pendingContinuation = await resolvePendingContinuationDecision({
-                    text: eventPayload.output.output,
-                    continueIntentArmed: state.continueIntentArmed,
-                    source: "task_output",
-                    sessionId,
-                    directory: resolveDirectory(eventPayload, options.directory),
-                    decisionRuntime: options.decisionRuntime,
-                });
+        }
+        const state = getSessionState(sessionState, sessionId);
+        state.lastTraceId = resolveTraceId(eventPayload);
+        state.pendingContinuation = await resolvePendingContinuationDecision({
+            text: eventPayload.output.output,
+            continueIntentArmed: state.continueIntentArmed,
+            source: "task_output",
+            sessionId,
+            directory: resolveDirectory(eventPayload, options.directory),
+            traceId: state.lastTraceId,
+            decisionRuntime: options.decisionRuntime,
+        });
                 state.markerProbeAttempted = true;
                 return;
             }
@@ -381,11 +432,12 @@ export function createTodoContinuationEnforcerHook(options) {
                             pending = await resolvePendingContinuationDecision({
                                 text,
                                 continueIntentArmed: state.continueIntentArmed,
-                                source: "message_probe",
-                                sessionId,
-                                directory,
-                                decisionRuntime: options.decisionRuntime,
-                            });
+                        source: "message_probe",
+                        sessionId,
+                        directory,
+                        traceId: state.lastTraceId,
+                        decisionRuntime: options.decisionRuntime,
+                    });
                             break;
                         }
                     }
