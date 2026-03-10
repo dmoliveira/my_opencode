@@ -111,6 +111,7 @@ export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
     validationEvidenceLedger: "validation-evidence-ledger",
     autoSlashCommand: "auto-slash-command",
     providerErrorClassifier: "provider-error-classifier",
+    todoContinuationEnforcer: "todo-continuation-enforcer",
     doneProofEnforcer: "done-proof-enforcer",
     prBodyEvidenceGuard: "pr-body-evidence-guard",
 };
@@ -469,6 +470,7 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.todoContinuationEnforcer.enabled,
             client: ctx.client,
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.todoContinuationEnforcer),
             stopGuard,
             cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
             maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,

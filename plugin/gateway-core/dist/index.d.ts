@@ -106,6 +106,7 @@ export declare const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS: {
     readonly validationEvidenceLedger: "validation-evidence-ledger";
     readonly autoSlashCommand: "auto-slash-command";
     readonly providerErrorClassifier: "provider-error-classifier";
+    readonly todoContinuationEnforcer: "todo-continuation-enforcer";
     readonly doneProofEnforcer: "done-proof-enforcer";
     readonly prBodyEvidenceGuard: "pr-body-evidence-guard";
 };

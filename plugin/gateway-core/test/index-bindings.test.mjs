@@ -11,6 +11,7 @@ test("gateway llm decision runtime bindings stay aligned to hook ids", () => {
     validationEvidenceLedger: "validation-evidence-ledger",
     autoSlashCommand: "auto-slash-command",
     providerErrorClassifier: "provider-error-classifier",
+    todoContinuationEnforcer: "todo-continuation-enforcer",
     doneProofEnforcer: "done-proof-enforcer",
     prBodyEvidenceGuard: "pr-body-evidence-guard",
   });
