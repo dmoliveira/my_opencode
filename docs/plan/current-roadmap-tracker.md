@@ -124,7 +124,7 @@ Remaining:
 |---|---|---|
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
-| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint now records all semantic-decision hooks by status band, has `task-resume-info` implemented locally with targeted tests, and has `mistake-ledger` semantic deferral detection actively migrating in the same worktree. |
+| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes refreshed rollout guidance, passing semantic/workflow scenario coverage, `task-resume-info` implemented locally with targeted tests, and `mistake-ledger` semantic deferral detection actively migrating in the same worktree. |
 | Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
 | Atlas runtime prototype | doing | Prototype local post-task verification/reminder shaping through `task-resume-info` without importing full Atlas persona semantics. |
 | Atlas pre-task shaping prototype | doing | Add delegated task focus shaping through `agent-context-shaper` before subagent execution. |
@@ -155,8 +155,9 @@ Remaining:
 3. Keep active docs canonical-first as new command/runtime slices land.
 4. Land the `task-resume-info` semantic migration through the centralized LLM runtime with shadow-first rollout.
 5. Land the `mistake-ledger` semantic deferral migration with audit assertions and shadow-first rollout.
-6. Expand the semantic decision inventory so every ambiguous classification path is tracked by `done` / `doing` / `pending` status band.
-7. Keep this tracker and the CLI todo list synchronized at each task handoff.
+6. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer` and `validation-evidence-ledger` in shadow until then.
+7. Expand the semantic decision inventory so every ambiguous classification path is tracked by `done` / `doing` / `pending` status band.
+8. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 
