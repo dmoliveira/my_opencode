@@ -5,6 +5,8 @@ import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createSubagentTelemetryTimelineHook } from "../dist/hooks/subagent-telemetry-timeline/index.js"
+import { getRecentDelegationOutcomes } from "../dist/hooks/shared/delegation-runtime-state.js"
 
 test("adaptive-delegation-policy blocks critical category during cooldown", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-adaptive-delegation-"))
@@ -67,4 +69,31 @@ test("adaptive-delegation-policy blocks critical category during cooldown", asyn
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("subagent telemetry timeline reads structured task failure output", async () => {
+  const hook = createSubagentTelemetryTimelineHook({
+    directory: process.cwd(),
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  await hook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-adapt-s1" },
+    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } },
+  })
+  await hook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-adapt-s1" },
+    output: { output: { stdout: "[ERROR] Failed delegation", stderr: "warning text" } },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === "session-adapt-s1")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "failed")
+  assert.equal(record.subagentType, "reviewer")
 })

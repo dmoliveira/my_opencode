@@ -36,3 +36,28 @@ test("semantic-output-summarizer compresses repetitive large output", async () =
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("semantic-output-summarizer compresses structured stdout payloads in place", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-semantic-summarizer-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["semantic-output-summarizer"], disabled: [] },
+        semanticOutputSummarizer: {
+          enabled: true,
+          minChars: 200,
+          minLines: 10,
+          maxSummaryLines: 3,
+        },
+      },
+    })
+    const noisy = Array.from({ length: 20 }, () => "ERROR timeout while fetching dependency").join("\n")
+    const output = { output: { stdout: noisy, stderr: "warning text" } }
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-summarizer-structured" }, output)
+    assert.match(String(output.output.stdout), /semantic-output-summarizer/)
+    assert.equal(String(output.output.stderr), "warning text")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

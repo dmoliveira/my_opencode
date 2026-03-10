@@ -68,3 +68,18 @@ test("agent-user-reminder resets on session.compacted", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("agent-user-reminder also triggers on implementation-style prompts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-agent-reminder-"))
+  try {
+    const plugin = createPlugin(directory)
+    const output = { parts: [{ type: "text", text: "user prompt" }] }
+    await plugin["chat.message"](
+      { sessionID: "session-agent-4", prompt: "implement the migration and ship the feature" },
+      output,
+    )
+    assert.match(String(output.parts[0].text), /session guidance/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

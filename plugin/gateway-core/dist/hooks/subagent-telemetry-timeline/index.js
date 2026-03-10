@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { readToolAfterOutputText } from "../shared/tool-after-output.js";
 import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
 import { clearActiveDelegation, clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
@@ -195,7 +196,7 @@ export function createSubagentTelemetryTimelineHook(options) {
             if (!sid) {
                 return;
             }
-            const output = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : "";
+            const output = readToolAfterOutputText(eventPayload.output?.output);
             const failed = isFailureOutput(output);
             const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata);
             const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);

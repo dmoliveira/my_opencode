@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
-import { readToolAfterOutputText } from "../shared/tool-after-output.js"
+import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js"
 
 interface ToolAfterPayload {
   input?: { tool?: string; sessionID?: string; sessionId?: string }
@@ -40,7 +40,7 @@ export function createMistakeLedgerHook(options: {
         return
       }
       const eventPayload = (payload ?? {}) as ToolAfterPayload
-      const text = readToolAfterOutputText(eventPayload.output?.output)
+      const text = readCombinedToolAfterOutputText(eventPayload.output?.output)
       if (!text || !text.includes(DONE_PROOF_MARKER)) {
         return
       }

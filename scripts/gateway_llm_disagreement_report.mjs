@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
 import { join, resolve } from "node:path"
 
 import {
   buildLlmRolloutReport,
-  parseGatewayAuditJsonl,
+  parseGatewayAuditJsonlWithDiagnostics,
   renderLlmRolloutMarkdown,
   summarizeLlmDecisionDisagreements,
 } from "../plugin/gateway-core/dist/audit/llm-disagreement-report.js"
@@ -32,11 +33,46 @@ if (!existsSync(target)) {
 }
 
 const text = readFileSync(target, "utf-8")
-const events = parseGatewayAuditJsonl(text)
-const thresholds = thresholdsPath && existsSync(thresholdsPath)
-  ? JSON.parse(readFileSync(thresholdsPath, "utf-8"))
-  : undefined
+const parsedAudit = parseGatewayAuditJsonlWithDiagnostics(text)
+const events = parsedAudit.events
+if (thresholdsIndex >= 0) {
+  if (!thresholdsPath || !existsSync(thresholdsPath)) {
+    console.error(`gateway disagreement report: thresholds file not found: ${thresholdsPath || "(missing path)"}`)
+    process.exit(1)
+  }
+}
+let thresholds
+if (thresholdsPath) {
+  try {
+    thresholds = JSON.parse(readFileSync(thresholdsPath, "utf-8"))
+  } catch (error) {
+    console.error(
+      `gateway disagreement report: failed to parse thresholds file: ${thresholdsPath}: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    process.exit(1)
+  }
+}
 const report = buildLlmRolloutReport(events, thresholds)
+let branch = ""
+try {
+  branch = String(
+    execFileSync("git", ["branch", "--show-current"], {
+      cwd: process.cwd(),
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }),
+  ).trim()
+} catch {
+  branch = ""
+}
+report.metadata = {
+  generatedAt: new Date().toISOString(),
+  sourceAuditPath: target,
+  worktreePath: process.cwd(),
+  branch: branch || undefined,
+  invalidLines: parsedAudit.invalidLines,
+  sourceAuditShared: !target.startsWith(process.cwd()),
+}
 const legacySummary = summarizeLlmDecisionDisagreements(events)
 console.log(
   JSON.stringify(

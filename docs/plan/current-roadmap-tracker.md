@@ -124,7 +124,7 @@ Remaining:
 |---|---|---|
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
-| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes Epic 5 hardening progress, sidecar-based gateway config wiring, passing semantic/workflow scenario reports, alternating-task continuation coverage, and a mixed-signal `todo-continuation-enforcer` LLM fallback slice in progress. |
+| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes Epic 5 hardening progress, sidecar-based gateway config wiring, passing semantic/workflow scenario reports, alternating-task continuation coverage, wired `todo-continuation-enforcer` fallback, and refreshed rollout guidance that keeps `delegation-fallback-orchestrator` as the next promotion candidate pending fresh disagreement evidence. |
 | Post-merge parity backlog triage | doing | Active backlog lives in `docs/plan/post-merge-parity-backlog-2026-03-10.md`; use it to sequence remaining divergence decisions and any reopened parity slices. |
 
 ## Done Recently
@@ -152,7 +152,7 @@ Remaining:
 1. Continue post-merge verification for protected-main guard behavior in real operator flows.
 2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 3. Keep active docs canonical-first as new command/runtime slices land.
-4. Keep `todo-continuation-enforcer` in shadow until fresh live disagreement telemetry exists, then revisit promotion.
+4. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer` and `validation-evidence-ledger` in shadow until then.
 5. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes

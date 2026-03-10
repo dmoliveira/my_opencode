@@ -101,3 +101,31 @@ test("gateway plugin dispatches tool.execute.after to truncator hook", async () 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("tool-output-truncator truncates structured stdout payloads in place", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-truncator-hook-"))
+  try {
+    const hook = createToolOutputTruncatorHook({
+      directory,
+      enabled: true,
+      maxChars: 500,
+      maxLines: 20,
+      tools: ["bash"],
+    })
+    const output = {
+      output: {
+        stdout: Array.from({ length: 25 }, (_, idx) => `line-${idx + 1}`).join("\n"),
+        stderr: "warning text",
+      },
+    }
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-structured" },
+      output,
+      directory,
+    })
+    assert.equal(String(output.output.stdout).split("\n").length, 20)
+    assert.equal(String(output.output.stderr), "warning text")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

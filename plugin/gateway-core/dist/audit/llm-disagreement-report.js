@@ -3,20 +3,24 @@ const DEFAULT_THRESHOLDS = {
     tuneAt: 4,
     observeAt: 1,
 };
-export function parseGatewayAuditJsonl(text) {
-    return String(text ?? "")
+export function parseGatewayAuditJsonlWithDiagnostics(text) {
+    const events = [];
+    let invalidLines = 0;
+    for (const line of String(text ?? "")
         .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
+        .map((item) => item.trim())
+        .filter(Boolean)) {
         try {
-            return JSON.parse(line);
+            events.push(JSON.parse(line));
         }
         catch {
-            return null;
+            invalidLines += 1;
         }
-    })
-        .filter((item) => Boolean(item));
+    }
+    return { events, invalidLines };
+}
+export function parseGatewayAuditJsonl(text) {
+    return parseGatewayAuditJsonlWithDiagnostics(text).events;
 }
 function normalized(value) {
     return String(value ?? "").trim().toLowerCase();
@@ -68,43 +72,40 @@ function resolvedThresholds(hook, overrides) {
     return merged;
 }
 export function recommendLlmRolloutActions(summary, overrides) {
-    return summary.byHook.map(({ hook, count }) => {
+    const actions = [];
+    for (const { hook, count } of summary.byHook) {
         const thresholds = resolvedThresholds(hook, overrides);
         if (count >= thresholds.investigateAt) {
-            return {
+            actions.push({
                 hook,
                 action: "investigate",
                 reason: "high disagreement volume; keep in shadow and inspect top disagreement pairs",
                 disagreementCount: count,
                 thresholds,
-            };
+            });
+            continue;
         }
         if (count >= thresholds.tuneAt) {
-            return {
+            actions.push({
                 hook,
                 action: "tune",
                 reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
                 disagreementCount: count,
                 thresholds,
-            };
+            });
+            continue;
         }
         if (count >= thresholds.observeAt) {
-            return {
+            actions.push({
                 hook,
                 action: "observe",
                 reason: "low disagreement volume; continue shadow sampling before promotion",
                 disagreementCount: count,
                 thresholds,
-            };
+            });
         }
-        return {
-            hook,
-            action: "promote_candidate",
-            reason: "no disagreements recorded in current sample; candidate for wider assist-mode evaluation",
-            disagreementCount: count,
-            thresholds,
-        };
-    });
+    }
+    return actions;
 }
 export function buildLlmRolloutReport(events, overrides) {
     const summary = summarizeLlmDecisionDisagreements(events);
@@ -117,6 +118,14 @@ export function renderLlmRolloutMarkdown(report) {
     const lines = [
         "# LLM Disagreement Rollout Report",
         "",
+        ...(report.metadata?.generatedAt ? [`- Generated at: ${report.metadata.generatedAt}`] : []),
+        ...(report.metadata?.branch ? [`- Branch: \`${report.metadata.branch}\``] : []),
+        ...(report.metadata?.worktreePath ? [`- Worktree: \`${report.metadata.worktreePath}\``] : []),
+        ...(report.metadata?.sourceAuditPath ? [`- Source audit: \`${report.metadata.sourceAuditPath}\``] : []),
+        ...(report.metadata?.sourceAuditShared ? ["- Audit source scope: shared primary repo audit feed"] : []),
+        ...(typeof report.metadata?.invalidLines === "number"
+            ? [`- Invalid audit lines skipped: ${report.metadata.invalidLines}`]
+            : []),
         `- Total disagreements: ${report.summary.total}`,
         `- Hooks with disagreements: ${report.summary.byHook.length}`,
         "",

@@ -172,6 +172,121 @@ def gateway_event_audit_path(cwd: Path) -> Path:
     return cwd / ".opencode" / "gateway-events.jsonl"
 
 
+def resolve_gateway_sidecar_path(cwd: Path) -> Path:
+    raw = os.environ.get("MY_OPENCODE_GATEWAY_CONFIG_PATH", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    local = cwd / ".opencode" / "gateway-core.config.json"
+    if local.exists():
+        return local
+    return (
+        Path.home()
+        / ".config"
+        / "opencode"
+        / "my_opencode"
+        / "gateway-core.config.json"
+    )
+
+
+def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = deep_merge_dicts(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_gateway_sidecar_config(
+    cwd: Path, root_config: dict[str, Any]
+) -> dict[str, Any]:
+    sidecar_path = resolve_gateway_sidecar_path(cwd)
+    sidecar: dict[str, Any] = {}
+    try:
+        if sidecar_path.exists():
+            parsed = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                sidecar = parsed
+    except (OSError, json.JSONDecodeError):
+        sidecar = {}
+    return deep_merge_dicts(sidecar, root_config)
+
+
+def gateway_mistake_ledger_path(cwd: Path) -> Path:
+    raw = os.environ.get("MY_OPENCODE_MISTAKE_LEDGER_PATH", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    root_config, _ = load_config()
+    gateway_config = load_gateway_sidecar_config(cwd, root_config)
+    mistake_config = gateway_config.get("mistakeLedger")
+    if isinstance(mistake_config, dict):
+        configured = str(mistake_config.get("path") or "").strip()
+        if configured:
+            return (
+                (cwd / configured).expanduser().resolve()
+                if not Path(configured).expanduser().is_absolute()
+                else Path(configured).expanduser()
+            )
+    return cwd / ".opencode" / "mistake-ledger.jsonl"
+
+
+def gateway_mistake_ledger_summary(cwd: Path) -> dict[str, Any]:
+    path = gateway_mistake_ledger_path(cwd)
+    if not path.exists():
+        return {
+            "path": str(path),
+            "exists": False,
+            "total_entries": 0,
+            "invalid_lines": 0,
+            "recent_categories": {},
+            "last_entry": None,
+        }
+    total_entries = 0
+    invalid_lines = 0
+    recent_categories: dict[str, int] = {}
+    last_entry: dict[str, Any] | None = None
+    try:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                invalid_lines += 1
+                continue
+            if isinstance(entry, dict):
+                total_entries += 1
+                category = str(entry.get("category") or "unknown").strip() or "unknown"
+                recent_categories[category] = recent_categories.get(category, 0) + 1
+                last_entry = {
+                    "ts": entry.get("ts"),
+                    "category": category,
+                    "summary": entry.get("summary"),
+                    "sessionId": entry.get("sessionId"),
+                }
+    except OSError:
+        return {
+            "path": str(path),
+            "exists": True,
+            "error": "read_failed",
+            "total_entries": 0,
+            "invalid_lines": 0,
+            "recent_categories": {},
+            "last_entry": None,
+        }
+    return {
+        "path": str(path),
+        "exists": True,
+        "total_entries": total_entries,
+        "invalid_lines": invalid_lines,
+        "recent_categories": recent_categories,
+        "last_entry": last_entry,
+    }
+
+
 def gateway_event_counters(cwd: Path) -> dict[str, Any]:
     path = gateway_event_audit_path(cwd)
     if not path.exists():
@@ -1098,6 +1213,7 @@ def status_payload(
         "event_audit_enabled": gateway_event_audit_enabled(),
         "event_audit_path": str(gateway_event_audit_path(cwd)),
         "event_audit_exists": gateway_event_audit_path(cwd).exists(),
+        "mistake_ledger": gateway_mistake_ledger_summary(cwd),
         "guard_event_counters": gateway_event_counters(cwd),
         "runtime_staleness": runtime_staleness(home),
         "process_pressure": process_pressure(config),
