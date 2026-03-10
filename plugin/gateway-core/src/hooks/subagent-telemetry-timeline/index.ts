@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { readToolAfterOutputText } from "../shared/tool-after-output.js"
 import {
   clearDelegationChildSessionLink,
   getDelegationChildSessionLink,
@@ -299,7 +300,7 @@ export function createSubagentTelemetryTimelineHook(options: {
       if (!sid) {
         return
       }
-      const output = typeof eventPayload.output?.output === "string" ? eventPayload.output.output : ""
+      const output = readToolAfterOutputText(eventPayload.output?.output)
       const failed = isFailureOutput(output)
       const childRunId = extractDelegationChildRunId(eventPayload.output?.metadata)
       const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata)

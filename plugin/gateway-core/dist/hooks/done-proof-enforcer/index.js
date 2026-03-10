@@ -1,7 +1,7 @@
 import { markerCategory, validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
-import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js";
+import { listToolAfterOutputTexts, readCombinedToolAfterOutputText, writeToolAfterOutputChannelText } from "../shared/tool-after-output.js";
 function buildMarkerInstruction(marker) {
     return `Does this completion text include evidence-equivalent wording for '${marker}'? Y=yes, N=no.`;
 }
@@ -23,10 +23,11 @@ export function createDoneProofEnforcerHook(options) {
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory ?? process.cwd();
-            const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output);
-            if (!text) {
+            const entries = listToolAfterOutputTexts(eventPayload.output?.output);
+            if (entries.length === 0) {
                 return;
             }
+            const text = readCombinedToolAfterOutputText(eventPayload.output?.output);
             if (!/<promise>\s*DONE\s*<\/promise>/i.test(text)) {
                 return;
             }
@@ -109,10 +110,18 @@ export function createDoneProofEnforcerHook(options) {
             if (missingMarkers.length === 0) {
                 return;
             }
-            const rewritten = text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
-                `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`;
-            if (!writeToolAfterOutputText(eventPayload.output?.output, rewritten, channel) && eventPayload.output) {
-                eventPayload.output.output = rewritten;
+            let rewrote = false;
+            for (const entry of entries) {
+                if (!/<promise>\s*DONE\s*<\/promise>/i.test(entry.text)) {
+                    continue;
+                }
+                const rewritten = entry.text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
+                    `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`;
+                rewrote = writeToolAfterOutputChannelText(eventPayload.output?.output, entry.channel, rewritten) || rewrote;
+            }
+            if (!rewrote && eventPayload.output) {
+                eventPayload.output.output = text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
+                    `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`;
             }
         },
     };

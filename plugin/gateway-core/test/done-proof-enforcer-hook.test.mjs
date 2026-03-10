@@ -134,3 +134,16 @@ test("done-proof-enforcer rewrites stderr-only structured payloads in place", as
   assert.match(String(output.output.stderr), /PENDING_VALIDATION/)
   assert.equal(String(output.output.stdout), "")
 })
+
+test("done-proof-enforcer rewrites DONE markers in both stdout and stderr", async () => {
+  const hook = createDoneProofEnforcerHook({ enabled: true, requiredMarkers: ["validation"] })
+  const output = {
+    output: {
+      stdout: "ok\n<promise>DONE</promise>",
+      stderr: "warning\n<promise>DONE</promise>",
+    },
+  }
+  await hook.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-proof-both" }, output })
+  assert.match(String(output.output.stdout), /PENDING_VALIDATION/)
+  assert.match(String(output.output.stderr), /PENDING_VALIDATION/)
+})

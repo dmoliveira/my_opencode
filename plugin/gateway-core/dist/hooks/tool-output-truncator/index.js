@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js";
 // Truncates text by max lines and max chars.
 function truncateText(text, maxChars, maxLines) {
     const lines = text.split(/\r?\n/);
@@ -48,7 +49,8 @@ export function createToolOutputTruncatorHook(options) {
             if (!tool || !configuredTools.has(tool)) {
                 return;
             }
-            if (typeof eventPayload.output?.output !== "string") {
+            const { text: raw, channel } = inspectToolAfterOutputText(eventPayload.output?.output);
+            if (!raw) {
                 writeGatewayEventAudit(directory, {
                     hook: "tool-output-truncator",
                     stage: "skip",
@@ -57,7 +59,6 @@ export function createToolOutputTruncatorHook(options) {
                 });
                 return;
             }
-            const raw = eventPayload.output.output;
             const truncated = truncateText(raw, maxChars, maxLines);
             if (!truncated.lineTruncated && !truncated.charTruncated) {
                 writeGatewayEventAudit(directory, {
@@ -69,7 +70,9 @@ export function createToolOutputTruncatorHook(options) {
                 });
                 return;
             }
-            eventPayload.output.output = truncated.text;
+            if (!writeToolAfterOutputText(eventPayload.output?.output, truncated.text, channel) && eventPayload.output) {
+                eventPayload.output.output = truncated.text;
+            }
             writeGatewayEventAudit(directory, {
                 hook: "tool-output-truncator",
                 stage: "state",
