@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
-import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js";
+import { listToolAfterOutputTexts, writeToolAfterOutputChannelText } from "../shared/tool-after-output.js";
 const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command) {
@@ -150,22 +150,28 @@ export function createPostMergeSyncGuardHook(options) {
             }
             pendingReminderSessions.delete(sessionId);
             const toolOutput = eventPayload.output;
-            const { text: originalText, channel } = inspectToolAfterOutputText(toolOutput?.output);
-            if (!originalText) {
+            const entries = listToolAfterOutputTexts(toolOutput?.output);
+            if (entries.length === 0) {
                 return;
             }
-            let nextText = normalizeMergeOutput(originalText);
+            let rewrote = false;
             if (reminderCommands.length === 0) {
-                if (!writeToolAfterOutputText(toolOutput?.output, nextText, channel) && toolOutput) {
-                    toolOutput.output = nextText;
+                for (const entry of entries) {
+                    rewrote = writeToolAfterOutputChannelText(toolOutput?.output, entry.channel, normalizeMergeOutput(entry.text)) || rewrote;
+                }
+                if (!rewrote && toolOutput) {
+                    toolOutput.output = normalizeMergeOutput(entries[0].text);
                 }
                 return;
             }
             const reminderState = resolveReminder(directory, reminderCommands);
             const reminder = `\n\n[post-merge-sync-guard] ${reminderState.intro}\n${reminderState.commands.map((cmd) => `- ${cmd}`).join("\n")}`;
-            nextText = `${nextText}${reminder}`;
-            if (!writeToolAfterOutputText(toolOutput?.output, nextText, channel) && toolOutput) {
-                toolOutput.output = nextText;
+            for (const [index, entry] of entries.entries()) {
+                const nextText = `${normalizeMergeOutput(entry.text)}${index === 0 ? reminder : ""}`;
+                rewrote = writeToolAfterOutputChannelText(toolOutput?.output, entry.channel, nextText) || rewrote;
+            }
+            if (!rewrote && toolOutput) {
+                toolOutput.output = `${normalizeMergeOutput(entries[0].text)}${reminder}`;
             }
             writeGatewayEventAudit(directory, {
                 hook: "post-merge-sync-guard",

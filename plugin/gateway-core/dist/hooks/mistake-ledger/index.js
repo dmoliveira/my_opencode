@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { readToolAfterOutputText } from "../shared/tool-after-output.js";
+import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js";
 const DONE_PROOF_MARKER = "[done-proof-enforcer] Completion token deferred";
 function resolveSessionId(payload) {
     const value = payload.input?.sessionID ?? payload.input?.sessionId ?? "";
@@ -23,7 +23,7 @@ export function createMistakeLedgerHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const text = readToolAfterOutputText(eventPayload.output?.output);
+            const text = readCombinedToolAfterOutputText(eventPayload.output?.output);
             if (!text || !text.includes(DONE_PROOF_MARKER)) {
                 return;
             }
