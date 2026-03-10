@@ -3,7 +3,12 @@ import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registe
 import { clearActiveDelegation, clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
-    return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.sessionID ?? payload.properties?.sessionId ?? payload.properties?.info?.id ?? "").trim();
+    return String(payload.input?.sessionID ??
+        payload.input?.sessionId ??
+        payload.properties?.sessionID ??
+        payload.properties?.sessionId ??
+        payload.properties?.info?.id ??
+        "").trim();
 }
 function isFailureOutput(output) {
     return /(\[error\]|invalid arguments|failed|exception|traceback|unknown\s+agent|unknown\s+category|blocked delegation)/i.test(output);

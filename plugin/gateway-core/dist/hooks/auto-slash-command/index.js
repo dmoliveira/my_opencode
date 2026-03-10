@@ -318,7 +318,7 @@ export function createAutoSlashCommandHook(options) {
                 hook: "auto-slash-command",
                 stage: "state",
                 reason_code: "auto_slash_command_detected",
-                session_id: sessionId,
+                session_id: typeof sessionId === "string" ? sessionId : "",
                 slash_command: raw,
             });
         },

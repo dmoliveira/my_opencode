@@ -23,7 +23,12 @@ function lifecycleKey(sid, childRunId, traceId, args) {
     return traceId ? `${sid}:${traceId}` : fallbackDelegationKey(sid, args);
 }
 function sessionId(payload) {
-    return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.sessionID ?? payload.properties?.sessionId ?? payload.properties?.info?.id ?? "").trim();
+    return String(payload.input?.sessionID ??
+        payload.input?.sessionId ??
+        payload.properties?.sessionID ??
+        payload.properties?.sessionId ??
+        payload.properties?.info?.id ??
+        "").trim();
 }
 function effectiveDirectory(payload, fallbackDirectory) {
     return typeof payload.directory === "string" && payload.directory.trim() ? payload.directory : fallbackDirectory;

@@ -99,6 +99,16 @@ interface CommandAfterInput {
 interface CommandAfterOutput {
     output?: unknown;
 }
+export declare const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS: {
+    readonly agentDeniedToolEnforcer: "agent-denied-tool-enforcer";
+    readonly agentModelResolver: "agent-model-resolver";
+    readonly delegationFallbackOrchestrator: "delegation-fallback-orchestrator";
+    readonly validationEvidenceLedger: "validation-evidence-ledger";
+    readonly autoSlashCommand: "auto-slash-command";
+    readonly providerErrorClassifier: "provider-error-classifier";
+    readonly doneProofEnforcer: "done-proof-enforcer";
+    readonly prBodyEvidenceGuard: "pr-body-evidence-guard";
+};
 interface ToolAfterOutput {
     output?: unknown;
     metadata?: unknown;

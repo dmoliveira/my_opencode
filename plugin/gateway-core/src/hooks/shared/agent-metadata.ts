@@ -1,98 +1,104 @@
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 export interface AgentRoutingMetadata {
-  cost_tier?: string
-  default_category?: string
-  fallback_policy?: string
-  triggers?: string[]
-  avoid_when?: string[]
-  denied_tools?: string[]
-  allowed_tools?: string[]
+  cost_tier?: string;
+  default_category?: string;
+  fallback_policy?: string;
+  triggers?: string[];
+  avoid_when?: string[];
+  denied_tools?: string[];
+  allowed_tools?: string[];
 }
 
-const cacheByDirectory = new Map<string, Map<string, AgentRoutingMetadata>>()
+const cacheByDirectory = new Map<string, Map<string, AgentRoutingMetadata>>();
 
 function cleanStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
-    return []
+    return [];
   }
   return value
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
-    .filter((item) => item.length > 0)
+    .filter((item) => item.length > 0);
 }
 
 function normalizeMetadata(value: unknown): AgentRoutingMetadata {
   if (!value || typeof value !== "object") {
-    return {}
+    return {};
   }
-  const source = value as Record<string, unknown>
+  const source = value as Record<string, unknown>;
   return {
     cost_tier:
       typeof source.cost_tier === "string" && source.cost_tier.trim()
         ? source.cost_tier.trim()
         : undefined,
     default_category:
-      typeof source.default_category === "string" && source.default_category.trim()
+      typeof source.default_category === "string" &&
+      source.default_category.trim()
         ? source.default_category.trim()
         : undefined,
     fallback_policy:
-      typeof source.fallback_policy === "string" && source.fallback_policy.trim()
+      typeof source.fallback_policy === "string" &&
+      source.fallback_policy.trim()
         ? source.fallback_policy.trim()
         : undefined,
     triggers: cleanStringArray(source.triggers),
     avoid_when: cleanStringArray(source.avoid_when),
     denied_tools: cleanStringArray(source.denied_tools),
-  }
+  };
 }
 
 function collectAllowedTools(value: unknown): string[] {
   if (!value || typeof value !== "object") {
-    return []
+    return [];
   }
-  const source = value as Record<string, unknown>
+  const source = value as Record<string, unknown>;
   return Object.entries(source)
     .filter(([tool, enabled]) => typeof tool === "string" && enabled === true)
     .map(([tool]) => tool.trim())
-    .filter((tool) => tool.length > 0)
+    .filter((tool) => tool.length > 0);
 }
 
 function buildMap(directory: string): Map<string, AgentRoutingMetadata> {
-  const map = new Map<string, AgentRoutingMetadata>()
-  const names = [
-    "orchestrator",
-    "explore",
-    "librarian",
-    "oracle",
-    "verifier",
-    "reviewer",
-    "release-scribe",
-    "strategic-planner",
-    "ambiguity-analyst",
-    "plan-critic",
-  ]
+  const map = new Map<string, AgentRoutingMetadata>();
+  const specsDir = join(directory, "agent", "specs");
+  let names: string[] = [];
+  try {
+    names = readdirSync(specsDir)
+      .filter((entry) => entry.endsWith(".json"))
+      .map((entry) => basename(entry, ".json").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    names = [];
+  }
   for (const name of names) {
-    const path = join(directory, "agent", "specs", `${name}.json`)
+    const path = join(specsDir, `${name}.json`);
     try {
-      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>
+      const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<
+        string,
+        unknown
+      >;
       map.set(name, {
         ...normalizeMetadata(raw.metadata),
         allowed_tools: collectAllowedTools(raw.tools),
-      })
+      });
     } catch {
-      map.set(name, {})
+      map.set(name, {});
     }
   }
-  return map
+  return map;
 }
 
-export function loadAgentMetadata(directory: string): Map<string, AgentRoutingMetadata> {
-  const cached = cacheByDirectory.get(directory)
+export function loadAgentMetadata(
+  directory: string,
+): Map<string, AgentRoutingMetadata> {
+  const cached = cacheByDirectory.get(directory);
   if (cached && cached.size > 0) {
-    return cached
+    return cached;
   }
-  const built = buildMap(directory)
-  cacheByDirectory.set(directory, built)
-  return built
+  const built = buildMap(directory);
+  cacheByDirectory.set(directory, built);
+  return built;
 }
