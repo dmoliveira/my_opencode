@@ -1007,14 +1007,17 @@ Use:
 /rules doctor --json
 ```
 
-Rules are discovered from:
-- user scope: `~/.config/opencode/rules/**/*.md`
-- project scope: `.opencode/rules/**/*.md`
+Gateway runtime rule injection currently scans project-local markdown from:
+- `.github/instructions/**/*.md`
+- `.github/copilot-instructions.md`
+- `.claude/rules/**/*.md`
+- `.cursor/rules/**/*.md`
+- `.sisyphus/rules/**/*.md`
 
-Precedence is deterministic: priority desc, then scope (`project` before `user`), then lexical rule id.
+For runtime behavior, keep active project rules in one of the directories above. The `/rules` command can still be used to inspect rule-engine behavior, but gateway hook injection should be documented against the actual runtime loader surface.
 
 Recommended workflow:
-- create project rules under `.opencode/rules/`
+- create project rules under `.github/instructions/` or a supported `*/rules/` directory
 - run `/rules status` after edits to validate discovery
 - use `/rules explain <path> --json` to verify effective rule stack before relying on behavior
 
