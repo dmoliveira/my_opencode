@@ -7,8 +7,12 @@ import test from "node:test"
 import GatewayCorePlugin from "../dist/index.js"
 import { createDoneProofEnforcerHook } from "../dist/hooks/done-proof-enforcer/index.js"
 import { createValidationEvidenceLedgerHook } from "../dist/hooks/validation-evidence-ledger/index.js"
+import {
+  missingValidationMarkers,
+  validationEvidence,
+} from "../dist/hooks/validation-evidence-ledger/evidence.js"
 
-test("validation-evidence-ledger allows DONE when required checks were executed", async () => {
+test("validation-evidence-ledger records required checks when they were executed", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -58,21 +62,21 @@ test("validation-evidence-ledger allows DONE when required checks were executed"
       { output: "Build passed" },
     )
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-ledger-1" },
-      { args: { command: "git status" } },
-    )
-    const output = { output: "Ready to finish\n<promise>DONE</promise>" }
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-ledger-1" }, output)
-
-    assert.ok(output.output.includes("<promise>DONE</promise>"))
-    assert.equal(output.output.includes("PENDING_VALIDATION"), false)
+    assert.deepEqual(missingValidationMarkers("session-ledger-1", ["lint", "test", "build"]), [])
+    assert.deepEqual(validationEvidence("session-ledger-1"), {
+      lint: true,
+      test: true,
+      typecheck: false,
+      build: true,
+      security: false,
+      updatedAt: validationEvidence("session-ledger-1").updatedAt,
+    })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-test("validation-evidence-ledger tracks queued bash commands in order", async () => {
+test("validation-evidence-ledger correlates queued bash commands by invocation metadata", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -95,22 +99,18 @@ test("validation-evidence-ledger tracks queued bash commands in order", async ()
       },
     })
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-ledger-queue" },
-      { args: { command: "npm run lint" } },
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-ledger-queue" },
-      { args: { command: "npm test" } },
-    )
+    const lintRun = { args: { command: "npm run lint" } }
+    const testRun = { args: { command: "npm test" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-ledger-queue" }, lintRun)
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-ledger-queue" }, testRun)
 
     await plugin["tool.execute.after"](
       { tool: "bash", sessionID: "session-ledger-queue" },
-      { output: "lint passed" },
+      { args: { command: "npm test" }, output: "tests passed" },
     )
     await plugin["tool.execute.after"](
       { tool: "bash", sessionID: "session-ledger-queue" },
-      { output: "tests passed" },
+      { args: { command: "npm run lint" }, output: "lint passed" },
     )
 
     await plugin["tool.execute.before"](
@@ -127,6 +127,43 @@ test("validation-evidence-ledger tracks queued bash commands in order", async ()
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("validation-evidence-ledger clears pending invocation on before error", async () => {
+  const hook = createValidationEvidenceLedgerHook({
+    directory: process.cwd(),
+    enabled: true,
+  })
+
+  const run = { args: { command: "npm run lint" } }
+  await hook.event("tool.execute.before", {
+    input: { tool: "bash", sessionID: "session-ledger-before-error" },
+    output: run,
+  })
+  await hook.event("tool.execute.before.error", {
+    input: { tool: "bash", sessionID: "session-ledger-before-error" },
+    output: run,
+  })
+
+  await hook.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-before-error" },
+    output: { ...run, output: "lint passed" },
+  })
+
+  const done = { output: "finalizing\n<promise>DONE</promise>" }
+  const doneHook = createDoneProofEnforcerHook({
+    directory: process.cwd(),
+    enabled: true,
+    requiredMarkers: ["lint"],
+    requireLedgerEvidence: true,
+    allowTextFallback: false,
+  })
+  await doneHook.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-before-error" },
+    output: done,
+  })
+
+  assert.equal(done.output.includes("PENDING_VALIDATION"), true)
 })
 
 test("validation-evidence-ledger treats node --test as test evidence", async () => {
@@ -170,17 +207,9 @@ test("validation-evidence-ledger treats node --test as test evidence", async () 
       { output: "tests passed" }
     )
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-ledger-node-test" },
-      { args: { command: "git status" } }
-    )
-    const done = { output: "finalizing\n<promise>DONE</promise>" }
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-ledger-node-test" },
-      done,
-    )
-
-    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+    assert.equal(validationEvidence("session-ledger-node-test").lint, true)
+    assert.equal(validationEvidence("session-ledger-node-test").test, true)
+    assert.deepEqual(missingValidationMarkers("session-ledger-node-test", ["lint", "test"]), [])
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -218,17 +247,8 @@ test("validation-evidence-ledger treats repo selftest commands as test evidence"
       { output: "selftest passed" },
     )
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-ledger-selftest" },
-      { args: { command: "git status" } },
-    )
-    const done = { output: "finalizing\n<promise>DONE</promise>" }
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-ledger-selftest" },
-      done,
-    )
-
-    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+    assert.equal(validationEvidence("session-ledger-selftest").test, true)
+    assert.deepEqual(missingValidationMarkers("session-ledger-selftest", ["test"]), [])
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -266,17 +286,8 @@ test("validation-evidence-ledger treats make install-test as test evidence", asy
       { output: "install test passed" },
     )
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-ledger-install-test" },
-      { args: { command: "git status" } },
-    )
-    const done = { output: "finalizing\n<promise>DONE</promise>" }
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-ledger-install-test" },
-      done,
-    )
-
-    assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+    assert.equal(validationEvidence("session-ledger-install-test").test, true)
+    assert.deepEqual(missingValidationMarkers("session-ledger-install-test", ["test"]), [])
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -370,25 +381,8 @@ test("validation-evidence-ledger uses LLM fallback for ambiguous validation wrap
     directory: process.cwd(),
   })
 
-  const done = { output: "done\n<promise>DONE</promise>" }
-  const plugin = GatewayCorePlugin({
-    directory: process.cwd(),
-    config: {
-      hooks: {
-        enabled: true,
-        order: ["done-proof-enforcer"],
-        disabled: [],
-      },
-      doneProofEnforcer: {
-        enabled: true,
-        requiredMarkers: ["test"],
-        requireLedgerEvidence: true,
-        allowTextFallback: false,
-      },
-    },
-  })
-  await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-ledger-llm-1" }, done)
-  assert.equal(done.output.includes("PENDING_VALIDATION"), false)
+  assert.equal(validationEvidence("session-ledger-llm-1").test, true)
+  assert.deepEqual(missingValidationMarkers("session-ledger-llm-1", ["test"]), [])
 })
 
 test("validation-evidence-ledger LLM test evidence does not satisfy broader repo-style done markers", async () => {
@@ -534,8 +528,53 @@ test("validation-evidence-ledger sanitizes contaminated wrapper command before A
     output: { output: "smoke suite passed" },
     directory: process.cwd(),
   })
+  assert.equal(validationEvidence("session-ledger-sanitize-1").test, true)
   assert.match(capturedContext, /command=\.\/scripts\/ci-check tests\/api smoke/)
   assert.doesNotMatch(capturedContext, /assistant:/)
   assert.doesNotMatch(capturedContext, /tool:/)
   assert.doesNotMatch(capturedContext, /answer N/i)
+})
+
+test("validation-evidence-ledger does not trust untrusted actual command suffixes", async () => {
+  const hook = createValidationEvidenceLedgerHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "N",
+        raw: "N",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "validation-command-classifier-v1",
+        meaning: "not_validation",
+      }),
+    },
+  })
+
+  await hook.event("tool.execute.before", {
+    input: { tool: "bash", sessionID: "session-ledger-untrusted-1" },
+    output: { args: { command: "echo 'actual command: npm test'" } },
+  })
+  await hook.event("tool.execute.after", {
+    input: { tool: "bash", sessionID: "session-ledger-untrusted-1" },
+    output: { args: { command: "echo 'actual command: npm test'" }, output: "printed text" },
+    directory: process.cwd(),
+  })
+
+  assert.equal(validationEvidence("session-ledger-untrusted-1").test, false)
+  assert.deepEqual(missingValidationMarkers("session-ledger-untrusted-1", ["test"]), ["test"])
 })

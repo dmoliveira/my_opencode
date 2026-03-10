@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
 export function resolveLlmDecisionRuntimeConfigForHook(config, hookId) {
     const override = config.hookModes[String(hookId ?? "").trim()] || config.hookModes[String(hookId ?? "").trim().toLowerCase()];
     if (!override || override === config.mode) {
@@ -11,6 +10,7 @@ export function resolveLlmDecisionRuntimeConfigForHook(config, hookId) {
         mode: override,
     };
 }
+const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
 function safePositiveInt(value, fallback) {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
