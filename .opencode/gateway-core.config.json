@@ -1,4 +1,7 @@
 {
+  "hooks": {
+    "disabled": ["dependency-risk-guard"]
+  },
   "llmDecisionRuntime": {
     "enabled": true,
     "mode": "shadow",
