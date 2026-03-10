@@ -125,6 +125,7 @@ Remaining:
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
 | LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes Epic 5 hardening progress, sidecar-based gateway config wiring, passing semantic/workflow scenario reports, alternating-task continuation coverage, and a combined rollout signal summary. |
+| Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
 
 ## Done Recently
 
@@ -139,13 +140,15 @@ Remaining:
 | Merged E2/E3 guard hardening slice | done | `#423` merged with chained protected-command parsing and branch-freshness fallback guidance updates. |
 | Final canonical active-doc sweep complete | done | Active operator docs now keep compatibility aliases explicitly secondary. |
 | Synced local `main` while preserving local docs edit | done | Used targeted stash + `git pull --rebase` + stash pop for `docs/plan/docs-automation-summary.md`. |
+| Reviewed parity plan against upstream runtime behavior | done | Identified crossed hook LLM bindings, missing safe hook creation, and remaining intentional divergence around Atlas runtime injection and Claude compatibility hooks. |
 
 ## Next Tasks
 
-1. Continue post-merge verification for protected-main guard behavior in real operator flows.
-2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
-3. Keep active docs canonical-first as new command/runtime slices land.
-4. Keep this tracker and the CLI todo list synchronized at each task handoff.
+1. Finish parity-hardening implementation and validation for gateway LLM hook bindings plus safe hook startup isolation.
+2. Continue post-merge verification for protected-main guard behavior in real operator flows.
+3. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
+4. Keep active docs canonical-first as new command/runtime slices land.
+5. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 

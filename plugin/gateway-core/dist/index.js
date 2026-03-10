@@ -80,7 +80,8 @@ import { createUnstableAgentBabysitterHook } from "./hooks/unstable-agent-babysi
 import { createValidationEvidenceLedgerHook } from "./hooks/validation-evidence-ledger/index.js";
 import { createAdaptiveValidationSchedulerHook } from "./hooks/adaptive-validation-scheduler/index.js";
 import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard/index.js";
-import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook } from "./hooks/shared/llm-decision-runtime.js";
+import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook, } from "./hooks/shared/llm-decision-runtime.js";
+import { safeCreateHook } from "./hooks/shared/safe-create-hook.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
@@ -101,6 +102,16 @@ const DISPATCH_NOISY_REASON_CODES = new Set([
     "chat_messages_transform_dispatch",
 ]);
 const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
+export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
+    agentDeniedToolEnforcer: "agent-denied-tool-enforcer",
+    agentModelResolver: "agent-model-resolver",
+    delegationFallbackOrchestrator: "delegation-fallback-orchestrator",
+    validationEvidenceLedger: "validation-evidence-ledger",
+    autoSlashCommand: "auto-slash-command",
+    providerErrorClassifier: "provider-error-classifier",
+    doneProofEnforcer: "done-proof-enforcer",
+    prBodyEvidenceGuard: "pr-body-evidence-guard",
+};
 function isLlmDecisionChildProcess() {
     return process.env[LLM_DECISION_CHILD_ENV] === "1";
 }
@@ -130,16 +141,32 @@ function configuredHooks(ctx) {
         directory,
         config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),
     });
-    const stopGuard = createStopContinuationGuardHook({
+    const safeHook = (hookId, factory) => safeCreateHook({ directory, hookId, factory });
+    const stopGuard = safeHook("stop-continuation-guard", () => createStopContinuationGuardHook({
         directory,
         enabled: cfg.stopContinuationGuard.enabled,
-    });
-    const keywordDetector = createKeywordDetectorHook({
+    })) ?? {
+        id: "stop-continuation-guard",
+        priority: 295,
+        isStopped() {
+            return false;
+        },
+        forceStop() { },
+        async event() { },
+    };
+    const keywordDetector = safeHook("keyword-detector", () => createKeywordDetectorHook({
         directory,
         enabled: cfg.keywordDetector.enabled,
-    });
+    })) ?? {
+        id: "keyword-detector",
+        priority: 296,
+        modeForSession() {
+            return null;
+        },
+        async event() { },
+    };
     const hooks = [
-        createAutopilotLoopHook({
+        safeHook("autopilot-loop", () => createAutopilotLoopHook({
             directory,
             defaults: {
                 enabled: cfg.autopilotLoop.enabled,
@@ -148,34 +175,34 @@ function configuredHooks(ctx) {
                 completionPromise: cfg.autopilotLoop.completionPromise,
             },
             collector: contextCollector,
-        }),
-        createContinuationHook({
+        })),
+        safeHook("continuation", () => createContinuationHook({
             directory,
             client: ctx.client,
             stopGuard,
             keywordDetector,
             bootstrapFromRuntime: cfg.autopilotLoop.bootstrapFromRuntimeOnIdle,
             maxIgnoredCompletionCycles: cfg.autopilotLoop.maxIgnoredCompletionCycles,
-        }),
-        createSafetyHook({
+        })),
+        safeHook("safety", () => createSafetyHook({
             directory,
             orphanMaxAgeHours: cfg.autopilotLoop.orphanMaxAgeHours,
-        }),
-        createToolOutputTruncatorHook({
+        })),
+        safeHook("tool-output-truncator", () => createToolOutputTruncatorHook({
             directory,
             enabled: cfg.toolOutputTruncator.enabled,
             maxChars: cfg.toolOutputTruncator.maxChars,
             maxLines: cfg.toolOutputTruncator.maxLines,
             tools: cfg.toolOutputTruncator.tools,
-        }),
-        createSemanticOutputSummarizerHook({
+        })),
+        safeHook("semantic-output-summarizer", () => createSemanticOutputSummarizerHook({
             directory,
             enabled: cfg.semanticOutputSummarizer.enabled,
             minChars: cfg.semanticOutputSummarizer.minChars,
             minLines: cfg.semanticOutputSummarizer.minLines,
             maxSummaryLines: cfg.semanticOutputSummarizer.maxSummaryLines,
-        }),
-        createContextWindowMonitorHook({
+        })),
+        safeHook("context-window-monitor", () => createContextWindowMonitorHook({
             directory,
             client: ctx.client,
             enabled: cfg.contextWindowMonitor.enabled,
@@ -186,8 +213,8 @@ function configuredHooks(ctx) {
             guardMarkerMode: cfg.contextWindowMonitor.guardMarkerMode,
             guardVerbosity: cfg.contextWindowMonitor.guardVerbosity,
             maxSessionStateEntries: cfg.contextWindowMonitor.maxSessionStateEntries,
-        }),
-        createPreemptiveCompactionHook({
+        })),
+        safeHook("preemptive-compaction", () => createPreemptiveCompactionHook({
             directory,
             client: ctx.client,
             enabled: cfg.preemptiveCompaction.enabled,
@@ -198,12 +225,12 @@ function configuredHooks(ctx) {
             guardMarkerMode: cfg.preemptiveCompaction.guardMarkerMode,
             guardVerbosity: cfg.preemptiveCompaction.guardVerbosity,
             maxSessionStateEntries: cfg.preemptiveCompaction.maxSessionStateEntries,
-        }),
-        createCompactionContextInjectorHook({
+        })),
+        safeHook("compaction-context-injector", () => createCompactionContextInjectorHook({
             directory,
             enabled: cfg.compactionContextInjector.enabled,
-        }),
-        createGlobalProcessPressureHook({
+        })),
+        safeHook("global-process-pressure", () => createGlobalProcessPressureHook({
             directory,
             stopGuard,
             enabled: cfg.globalProcessPressure.enabled,
@@ -229,37 +256,37 @@ function configuredHooks(ctx) {
             selfHighLabel: cfg.globalProcessPressure.selfHighLabel,
             selfLowLabel: cfg.globalProcessPressure.selfLowLabel,
             selfAppendMarker: cfg.globalProcessPressure.selfAppendMarker,
-        }),
-        createLongTurnWatchdogHook({
+        })),
+        safeHook("long-turn-watchdog", () => createLongTurnWatchdogHook({
             directory,
             enabled: cfg.longTurnWatchdog.enabled,
             warningThresholdMs: cfg.longTurnWatchdog.warningThresholdMs,
             reminderCooldownMs: cfg.longTurnWatchdog.reminderCooldownMs,
             maxSessionStateEntries: cfg.longTurnWatchdog.maxSessionStateEntries,
             prefix: cfg.longTurnWatchdog.prefix,
-        }),
-        createNotifyEventsHook({
+        })),
+        safeHook("notify-events", () => createNotifyEventsHook({
             directory,
             enabled: cfg.notifyEvents.enabled,
             cooldownMs: cfg.notifyEvents.cooldownMs,
             style: cfg.notifyEvents.style,
-        }),
-        createPressureEscalationGuardHook({
+        })),
+        safeHook("pressure-escalation-guard", () => createPressureEscalationGuardHook({
             directory,
             enabled: cfg.pressureEscalationGuard.enabled,
             maxContinueBeforeBlock: cfg.pressureEscalationGuard.maxContinueBeforeBlock,
             blockedSubagentTypes: cfg.pressureEscalationGuard.blockedSubagentTypes,
             allowPromptPatterns: cfg.pressureEscalationGuard.allowPromptPatterns,
-        }),
-        createProviderModelBudgetEnforcerHook({
+        })),
+        safeHook("provider-model-budget-enforcer", () => createProviderModelBudgetEnforcerHook({
             directory,
             enabled: cfg.providerModelBudgetEnforcer.enabled,
             windowMs: cfg.providerModelBudgetEnforcer.windowMs,
             maxDelegationsPerWindow: cfg.providerModelBudgetEnforcer.maxDelegationsPerWindow,
             maxEstimatedTokensPerWindow: cfg.providerModelBudgetEnforcer.maxEstimatedTokensPerWindow,
             maxPerModelDelegationsPerWindow: cfg.providerModelBudgetEnforcer.maxPerModelDelegationsPerWindow,
-        }),
-        createDelegationConcurrencyGuardHook({
+        })),
+        safeHook("delegation-concurrency-guard", () => createDelegationConcurrencyGuardHook({
             directory,
             enabled: cfg.delegationConcurrencyGuard.enabled,
             maxTotalConcurrent: cfg.delegationConcurrencyGuard.maxTotalConcurrent,
@@ -267,62 +294,62 @@ function configuredHooks(ctx) {
             maxDeepConcurrent: cfg.delegationConcurrencyGuard.maxDeepConcurrent,
             maxCriticalConcurrent: cfg.delegationConcurrencyGuard.maxCriticalConcurrent,
             staleReservationMs: cfg.subagentLifecycleSupervisor.staleRunningMs,
-        }),
-        createAgentDeniedToolEnforcerHook({
+        })),
+        safeHook("agent-denied-tool-enforcer", () => createAgentDeniedToolEnforcerHook({
             directory,
             enabled: true,
-            decisionRuntime: llmDecisionRuntimeForHook("agent-model-resolver"),
-        }),
-        createHookSemanticBridgeHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.agentDeniedToolEnforcer),
+        })),
+        safeHook("hook-semantic-bridge", () => createHookSemanticBridgeHook({
             directory,
             enabled: true,
-        }),
-        createAgentModelResolverHook({
+        })),
+        safeHook("agent-model-resolver", () => createAgentModelResolverHook({
             directory,
             enabled: true,
             defaultOverrideDelta: cfg.adaptiveDelegationPolicy.defaultOverrideDelta,
             defaultIntentThreshold: cfg.adaptiveDelegationPolicy.defaultIntentThreshold,
             agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
-            decisionRuntime: llmDecisionRuntimeForHook("agent-denied-tool-enforcer"),
-        }),
-        createDelegationOutcomeLearnerHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.agentModelResolver),
+        })),
+        safeHook("delegation-outcome-learner", () => createDelegationOutcomeLearnerHook({
             directory,
             enabled: true,
             windowMs: cfg.adaptiveDelegationPolicy.windowMs,
             minSamples: cfg.adaptiveDelegationPolicy.minSamples,
             highFailureRate: cfg.adaptiveDelegationPolicy.highFailureRate,
             agentPolicyOverrides: cfg.adaptiveDelegationPolicy.agentPolicyOverrides,
-        }),
-        createDelegationFallbackOrchestratorHook({
+        })),
+        safeHook("delegation-fallback-orchestrator", () => createDelegationFallbackOrchestratorHook({
             directory,
             enabled: cfg.delegationFallbackOrchestrator.enabled,
-            decisionRuntime: llmDecisionRuntimeForHook("auto-slash-command"),
-        }),
-        createAgentDiscoverabilityInjectorHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.delegationFallbackOrchestrator),
+        })),
+        safeHook("agent-discoverability-injector", () => createAgentDiscoverabilityInjectorHook({
             directory,
             enabled: true,
             cooldownMs: cfg.adaptiveDelegationPolicy.discoverabilityCooldownMs,
-        }),
-        createDelegationDecisionAuditHook({
+        })),
+        safeHook("delegation-decision-audit", () => createDelegationDecisionAuditHook({
             directory,
             enabled: true,
-        }),
-        createSubagentLifecycleSupervisorHook({
+        })),
+        safeHook("subagent-lifecycle-supervisor", () => createSubagentLifecycleSupervisorHook({
             directory,
             enabled: cfg.subagentLifecycleSupervisor.enabled,
             maxRetriesPerSession: cfg.subagentLifecycleSupervisor.maxRetriesPerSession,
             staleRunningMs: cfg.subagentLifecycleSupervisor.staleRunningMs,
             blockOnExhausted: cfg.subagentLifecycleSupervisor.blockOnExhausted,
-        }),
-        createSubagentTelemetryTimelineHook({
+        })),
+        safeHook("subagent-telemetry-timeline", () => createSubagentTelemetryTimelineHook({
             directory,
             enabled: cfg.subagentTelemetryTimeline.enabled,
             maxTimelineEntries: cfg.subagentTelemetryTimeline.maxTimelineEntries,
             persistState: cfg.adaptiveDelegationPolicy.persistState,
             stateFile: cfg.adaptiveDelegationPolicy.stateFile,
             stateMaxEntries: cfg.adaptiveDelegationPolicy.stateMaxEntries,
-        }),
-        createAdaptiveDelegationPolicyHook({
+        })),
+        safeHook("adaptive-delegation-policy", () => createAdaptiveDelegationPolicyHook({
             directory,
             enabled: cfg.adaptiveDelegationPolicy.enabled,
             windowMs: cfg.adaptiveDelegationPolicy.windowMs,
@@ -330,256 +357,256 @@ function configuredHooks(ctx) {
             highFailureRate: cfg.adaptiveDelegationPolicy.highFailureRate,
             cooldownMs: cfg.adaptiveDelegationPolicy.cooldownMs,
             blockExpensiveDuringCooldown: cfg.adaptiveDelegationPolicy.blockExpensiveDuringCooldown,
-        }),
-        createSessionRecoveryHook({
+        })),
+        safeHook("session-recovery", () => createSessionRecoveryHook({
             directory,
             client: ctx.client,
             enabled: cfg.sessionRecovery.enabled,
             autoResume: cfg.sessionRecovery.autoResume,
-        }),
-        createSessionRuntimeSystemContextHook({
+        })),
+        safeHook("session-runtime-system-context", () => createSessionRuntimeSystemContextHook({
             directory,
             enabled: cfg.sessionRuntimeSystemContext.enabled,
-        }),
-        createDelegateTaskRetryHook({
+        })),
+        safeHook("delegate-task-retry", () => createDelegateTaskRetryHook({
             enabled: cfg.delegateTaskRetry.enabled,
-        }),
-        createAgentContextShaperHook({
+        })),
+        safeHook("agent-context-shaper", () => createAgentContextShaperHook({
             directory,
             enabled: true,
-        }),
-        createValidationEvidenceLedgerHook({
+        })),
+        safeHook("validation-evidence-ledger", () => createValidationEvidenceLedgerHook({
             directory,
             enabled: cfg.validationEvidenceLedger.enabled,
-            decisionRuntime: llmDecisionRuntimeForHook("provider-error-classifier"),
-        }),
-        createParallelOpportunityDetectorHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.validationEvidenceLedger),
+        })),
+        safeHook("parallel-opportunity-detector", () => createParallelOpportunityDetectorHook({
             directory,
             enabled: cfg.parallelOpportunityDetector.enabled,
-        }),
-        createReadBudgetOptimizerHook({
+        })),
+        safeHook("read-budget-optimizer", () => createReadBudgetOptimizerHook({
             directory,
             enabled: cfg.readBudgetOptimizer.enabled,
             smallReadLimit: cfg.readBudgetOptimizer.smallReadLimit,
             maxConsecutiveSmallReads: cfg.readBudgetOptimizer.maxConsecutiveSmallReads,
-        }),
-        createAdaptiveValidationSchedulerHook({
+        })),
+        safeHook("adaptive-validation-scheduler", () => createAdaptiveValidationSchedulerHook({
             directory,
             enabled: cfg.adaptiveValidationScheduler.enabled,
             reminderEditThreshold: cfg.adaptiveValidationScheduler.reminderEditThreshold,
-        }),
+        })),
         stopGuard,
         keywordDetector,
-        createThinkModeHook({
+        safeHook("think-mode", () => createThinkModeHook({
             enabled: cfg.thinkMode.enabled,
-        }),
-        createThinkingBlockValidatorHook({
+        })),
+        safeHook("thinking-block-validator", () => createThinkingBlockValidatorHook({
             enabled: cfg.thinkingBlockValidator.enabled,
-        }),
-        createAutoSlashCommandHook({
+        })),
+        safeHook("auto-slash-command", () => createAutoSlashCommandHook({
             directory,
             enabled: cfg.autoSlashCommand.enabled,
-            decisionRuntime: llmDecisionRuntimeForHook("delegation-fallback-orchestrator"),
-        }),
-        createContextInjectorHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.autoSlashCommand),
+        })),
+        safeHook("context-injector", () => createContextInjectorHook({
             directory,
             enabled: cfg.hooks.enabled,
             collector: contextCollector,
-        }),
-        createRulesInjectorHook({
+        })),
+        safeHook("rules-injector", () => createRulesInjectorHook({
             directory,
             enabled: cfg.rulesInjector.enabled,
-        }),
-        createDirectoryAgentsInjectorHook({
+        })),
+        safeHook("directory-agents-injector", () => createDirectoryAgentsInjectorHook({
             directory,
             enabled: cfg.directoryAgentsInjector.enabled,
             maxChars: cfg.directoryAgentsInjector.maxChars,
-        }),
-        createDirectoryReadmeInjectorHook({
+        })),
+        safeHook("directory-readme-injector", () => createDirectoryReadmeInjectorHook({
             directory,
             enabled: cfg.directoryReadmeInjector.enabled,
             maxChars: cfg.directoryReadmeInjector.maxChars,
-        }),
-        createNoninteractiveShellGuardHook({
+        })),
+        safeHook("noninteractive-shell-guard", () => createNoninteractiveShellGuardHook({
             directory,
             enabled: cfg.noninteractiveShellGuard.enabled,
             injectEnvPrefix: cfg.noninteractiveShellGuard.injectEnvPrefix,
             envPrefixes: cfg.noninteractiveShellGuard.envPrefixes,
             prefixCommands: cfg.noninteractiveShellGuard.prefixCommands,
             blockedPatterns: cfg.noninteractiveShellGuard.blockedPatterns,
-        }),
-        createWriteExistingFileGuardHook({
+        })),
+        safeHook("write-existing-file-guard", () => createWriteExistingFileGuardHook({
             directory,
             enabled: cfg.writeExistingFileGuard.enabled,
-        }),
-        createAgentReservationGuardHook({
+        })),
+        safeHook("agent-reservation-guard", () => createAgentReservationGuardHook({
             directory,
             enabled: cfg.agentReservationGuard.enabled,
             enforce: cfg.agentReservationGuard.enforce,
             reservationEnvKeys: cfg.agentReservationGuard.reservationEnvKeys,
             stateFile: cfg.agentReservationGuard.stateFile,
-        }),
-        createSubagentQuestionBlockerHook({
+        })),
+        safeHook("subagent-question-blocker", () => createSubagentQuestionBlockerHook({
             directory,
             enabled: cfg.subagentQuestionBlocker.enabled,
             sessionPatterns: cfg.subagentQuestionBlocker.sessionPatterns,
-        }),
-        createTasksTodowriteDisablerHook({
+        })),
+        safeHook("tasks-todowrite-disabler", () => createTasksTodowriteDisablerHook({
             directory,
             enabled: cfg.tasksTodowriteDisabler.enabled,
-        }),
-        createTaskResumeInfoHook({
+        })),
+        safeHook("task-resume-info", () => createTaskResumeInfoHook({
             enabled: cfg.taskResumeInfo.enabled,
-        }),
-        createTodoContinuationEnforcerHook({
+        })),
+        safeHook("todo-continuation-enforcer", () => createTodoContinuationEnforcerHook({
             directory,
             enabled: cfg.todoContinuationEnforcer.enabled,
             client: ctx.client,
             stopGuard,
             cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
             maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
-        }),
-        createCompactionTodoPreserverHook({
+        })),
+        safeHook("compaction-todo-preserver", () => createCompactionTodoPreserverHook({
             directory,
             enabled: cfg.compactionTodoPreserver.enabled,
             client: ctx.client,
             maxChars: cfg.compactionTodoPreserver.maxChars,
-        }),
-        createEmptyTaskResponseDetectorHook({
+        })),
+        safeHook("empty-task-response-detector", () => createEmptyTaskResponseDetectorHook({
             enabled: cfg.emptyTaskResponseDetector.enabled,
-        }),
-        createEditErrorRecoveryHook({
+        })),
+        safeHook("edit-error-recovery", () => createEditErrorRecoveryHook({
             enabled: cfg.editErrorRecovery.enabled,
-        }),
-        createJsonErrorRecoveryHook({
+        })),
+        safeHook("json-error-recovery", () => createJsonErrorRecoveryHook({
             enabled: cfg.jsonErrorRecovery.enabled,
-        }),
-        createProviderTokenLimitRecoveryHook({
+        })),
+        safeHook("provider-token-limit-recovery", () => createProviderTokenLimitRecoveryHook({
             directory,
             enabled: cfg.providerTokenLimitRecovery.enabled,
             client: ctx.client,
             cooldownMs: cfg.providerTokenLimitRecovery.cooldownMs,
-        }),
-        createHashlineReadEnhancerHook({
+        })),
+        safeHook("hashline-read-enhancer", () => createHashlineReadEnhancerHook({
             enabled: cfg.hashlineReadEnhancer.enabled,
-        }),
-        createMaxStepRecoveryHook({
+        })),
+        safeHook("max-step-recovery", () => createMaxStepRecoveryHook({
             enabled: cfg.maxStepRecovery.enabled,
-        }),
-        createModeTransitionReminderHook({
+        })),
+        safeHook("mode-transition-reminder", () => createModeTransitionReminderHook({
             enabled: cfg.modeTransitionReminder.enabled,
-        }),
-        createTodoreadCadenceReminderHook({
+        })),
+        safeHook("todoread-cadence-reminder", () => createTodoreadCadenceReminderHook({
             enabled: cfg.todoreadCadenceReminder.enabled,
             cooldownEvents: cfg.todoreadCadenceReminder.cooldownEvents,
-        }),
-        createProviderRetryBackoffGuidanceHook({
+        })),
+        safeHook("provider-retry-backoff-guidance", () => createProviderRetryBackoffGuidanceHook({
             directory,
             enabled: cfg.providerRetryBackoffGuidance.enabled,
             client: ctx.client,
             cooldownMs: cfg.providerRetryBackoffGuidance.cooldownMs,
-        }),
-        createProviderErrorClassifierHook({
+        })),
+        safeHook("provider-error-classifier", () => createProviderErrorClassifierHook({
             directory,
             enabled: cfg.providerErrorClassifier.enabled,
             client: ctx.client,
             cooldownMs: cfg.providerErrorClassifier.cooldownMs,
-            decisionRuntime: llmDecisionRuntimeForHook("validation-evidence-ledger"),
-        }),
-        createCodexHeaderInjectorHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.providerErrorClassifier),
+        })),
+        safeHook("codex-header-injector", () => createCodexHeaderInjectorHook({
             directory,
             enabled: cfg.codexHeaderInjector.enabled,
-        }),
-        createPlanHandoffReminderHook({
+        })),
+        safeHook("plan-handoff-reminder", () => createPlanHandoffReminderHook({
             enabled: cfg.planHandoffReminder.enabled,
-        }),
-        createCommentCheckerHook({
+        })),
+        safeHook("comment-checker", () => createCommentCheckerHook({
             enabled: cfg.commentChecker.enabled,
-        }),
-        createAgentUserReminderHook({
+        })),
+        safeHook("agent-user-reminder", () => createAgentUserReminderHook({
             enabled: cfg.agentUserReminder.enabled,
-        }),
-        createUnstableAgentBabysitterHook({
+        })),
+        safeHook("unstable-agent-babysitter", () => createUnstableAgentBabysitterHook({
             enabled: cfg.unstableAgentBabysitter.enabled,
             riskyPatterns: cfg.unstableAgentBabysitter.riskyPatterns,
-        }),
-        createQuestionLabelTruncatorHook({
+        })),
+        safeHook("question-label-truncator", () => createQuestionLabelTruncatorHook({
             enabled: cfg.questionLabelTruncator.enabled,
             maxLength: cfg.questionLabelTruncator.maxLength,
-        }),
-        createDangerousCommandGuardHook({
+        })),
+        safeHook("dangerous-command-guard", () => createDangerousCommandGuardHook({
             directory,
             enabled: cfg.dangerousCommandGuard.enabled,
             blockedPatterns: cfg.dangerousCommandGuard.blockedPatterns,
-        }),
-        createSecretLeakGuardHook({
+        })),
+        safeHook("secret-leak-guard", () => createSecretLeakGuardHook({
             directory,
             enabled: cfg.secretLeakGuard.enabled,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
-        }),
-        createPrimaryWorktreeGuardHook({
+        })),
+        safeHook("primary-worktree-guard", () => createPrimaryWorktreeGuardHook({
             directory,
             enabled: cfg.primaryWorktreeGuard.enabled,
             allowedBranches: cfg.primaryWorktreeGuard.allowedBranches,
             blockEdits: cfg.primaryWorktreeGuard.blockEdits,
             blockBranchSwitches: cfg.primaryWorktreeGuard.blockBranchSwitches,
-        }),
-        createSecretCommitGuardHook({
+        })),
+        safeHook("secret-commit-guard", () => createSecretCommitGuardHook({
             directory,
             enabled: cfg.secretCommitGuard.enabled,
             patterns: cfg.secretCommitGuard.patterns,
-        }),
-        createWorkflowConformanceGuardHook({
+        })),
+        safeHook("workflow-conformance-guard", () => createWorkflowConformanceGuardHook({
             directory,
             enabled: cfg.workflowConformanceGuard.enabled,
             protectedBranches: cfg.workflowConformanceGuard.protectedBranches,
             blockEditsOnProtectedBranches: cfg.workflowConformanceGuard.blockEditsOnProtectedBranches,
-        }),
-        createScopeDriftGuardHook({
+        })),
+        safeHook("scope-drift-guard", () => createScopeDriftGuardHook({
             directory,
             enabled: cfg.scopeDriftGuard.enabled,
             allowedPaths: cfg.scopeDriftGuard.allowedPaths,
             blockOnDrift: cfg.scopeDriftGuard.blockOnDrift,
-        }),
-        createDoneProofEnforcerHook({
+        })),
+        safeHook("done-proof-enforcer", () => createDoneProofEnforcerHook({
             directory,
             enabled: cfg.doneProofEnforcer.enabled,
             requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
             requireLedgerEvidence: cfg.doneProofEnforcer.requireLedgerEvidence,
             allowTextFallback: cfg.doneProofEnforcer.allowTextFallback,
-            decisionRuntime: llmDecisionRuntimeForHook("done-proof-enforcer"),
-        }),
-        createDependencyRiskGuardHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.doneProofEnforcer),
+        })),
+        safeHook("dependency-risk-guard", () => createDependencyRiskGuardHook({
             directory,
             enabled: cfg.dependencyRiskGuard.enabled,
             lockfilePatterns: cfg.dependencyRiskGuard.lockfilePatterns,
             commandPatterns: cfg.dependencyRiskGuard.commandPatterns,
-        }),
-        createDocsDriftGuardHook({
+        })),
+        safeHook("docs-drift-guard", () => createDocsDriftGuardHook({
             directory,
             enabled: cfg.docsDriftGuard.enabled,
             sourcePatterns: cfg.docsDriftGuard.sourcePatterns,
             docsPatterns: cfg.docsDriftGuard.docsPatterns,
             blockOnDrift: cfg.docsDriftGuard.blockOnDrift,
-        }),
-        createHookTestParityGuardHook({
+        })),
+        safeHook("hook-test-parity-guard", () => createHookTestParityGuardHook({
             directory,
             enabled: cfg.hookTestParityGuard.enabled,
             sourcePatterns: cfg.hookTestParityGuard.sourcePatterns,
             testPatterns: cfg.hookTestParityGuard.testPatterns,
             blockOnMismatch: cfg.hookTestParityGuard.blockOnMismatch,
-        }),
-        createRetryBudgetGuardHook({
+        })),
+        safeHook("retry-budget-guard", () => createRetryBudgetGuardHook({
             enabled: cfg.retryBudgetGuard.enabled,
             maxRetries: cfg.retryBudgetGuard.maxRetries,
-        }),
-        createStaleLoopExpiryGuardHook({
+        })),
+        safeHook("stale-loop-expiry-guard", () => createStaleLoopExpiryGuardHook({
             directory,
             enabled: cfg.staleLoopExpiryGuard.enabled,
             maxAgeMinutes: cfg.staleLoopExpiryGuard.maxAgeMinutes,
-        }),
-        createParallelWriterConflictGuardHook({
+        })),
+        safeHook("parallel-writer-conflict-guard", () => createParallelWriterConflictGuardHook({
             directory,
             enabled: cfg.parallelWriterConflictGuard.enabled,
             maxConcurrentWriters: cfg.parallelWriterConflictGuard.maxConcurrentWriters,
@@ -588,23 +615,23 @@ function configuredHooks(ctx) {
             activeReservationPathsEnvKeys: cfg.parallelWriterConflictGuard.activeReservationPathsEnvKeys,
             enforceReservationCoverage: cfg.parallelWriterConflictGuard.enforceReservationCoverage,
             stateFile: cfg.parallelWriterConflictGuard.stateFile,
-        }),
-        createBranchFreshnessGuardHook({
+        })),
+        safeHook("branch-freshness-guard", () => createBranchFreshnessGuardHook({
             directory,
             enabled: cfg.branchFreshnessGuard.enabled,
             baseRef: cfg.branchFreshnessGuard.baseRef,
             maxBehind: cfg.branchFreshnessGuard.maxBehind,
             enforceOnPrCreate: cfg.branchFreshnessGuard.enforceOnPrCreate,
             enforceOnPrMerge: cfg.branchFreshnessGuard.enforceOnPrMerge,
-        }),
-        createPrReadinessGuardHook({
+        })),
+        safeHook("pr-readiness-guard", () => createPrReadinessGuardHook({
             directory,
             enabled: cfg.prReadinessGuard.enabled,
             requireCleanWorktree: cfg.prReadinessGuard.requireCleanWorktree,
             requireValidationEvidence: cfg.prReadinessGuard.requireValidationEvidence,
             requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
-        }),
-        createPrBodyEvidenceGuardHook({
+        })),
+        safeHook("pr-body-evidence-guard", () => createPrBodyEvidenceGuardHook({
             directory,
             enabled: cfg.prBodyEvidenceGuard.enabled,
             requireSummarySection: cfg.prBodyEvidenceGuard.requireSummarySection,
@@ -612,16 +639,16 @@ function configuredHooks(ctx) {
             requireValidationEvidence: cfg.prBodyEvidenceGuard.requireValidationEvidence,
             allowUninspectableBody: cfg.prBodyEvidenceGuard.allowUninspectableBody,
             requiredMarkers: cfg.doneProofEnforcer.requiredMarkers,
-            decisionRuntime: llmDecisionRuntimeForHook("pr-body-evidence-guard"),
-        }),
-        createMergeReadinessGuardHook({
+            decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.prBodyEvidenceGuard),
+        })),
+        safeHook("merge-readiness-guard", () => createMergeReadinessGuardHook({
             directory,
             enabled: cfg.mergeReadinessGuard.enabled,
             requireDeleteBranch: cfg.mergeReadinessGuard.requireDeleteBranch,
             requireStrategy: cfg.mergeReadinessGuard.requireStrategy,
             disallowAdminBypass: cfg.mergeReadinessGuard.disallowAdminBypass,
-        }),
-        createGhChecksMergeGuardHook({
+        })),
+        safeHook("gh-checks-merge-guard", () => createGhChecksMergeGuardHook({
             directory,
             enabled: cfg.ghChecksMergeGuard.enabled,
             blockDraft: cfg.ghChecksMergeGuard.blockDraft,
@@ -629,19 +656,19 @@ function configuredHooks(ctx) {
             requirePassingChecks: cfg.ghChecksMergeGuard.requirePassingChecks,
             blockedMergeStates: cfg.ghChecksMergeGuard.blockedMergeStates,
             failOpenOnError: cfg.ghChecksMergeGuard.failOpenOnError,
-        }),
-        createPostMergeSyncGuardHook({
+        })),
+        safeHook("post-merge-sync-guard", () => createPostMergeSyncGuardHook({
             directory,
             enabled: cfg.postMergeSyncGuard.enabled,
             requireDeleteBranch: cfg.postMergeSyncGuard.requireDeleteBranch,
             enforceMainSyncInline: cfg.postMergeSyncGuard.enforceMainSyncInline,
             reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
-        }),
+        })),
     ];
     if (!cfg.hooks.enabled) {
         return [];
     }
-    return resolveHookOrder(hooks, cfg.hooks.order, cfg.hooks.disabled);
+    return resolveHookOrder(hooks.filter((hook) => hook !== null), cfg.hooks.order, cfg.hooks.disabled);
 }
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx) {
@@ -711,7 +738,12 @@ export default function GatewayCorePlugin(ctx) {
             });
             for (const hook of executedHooks.reverse()) {
                 try {
-                    await hook.event("tool.execute.before.error", { input, output, directory, error });
+                    await hook.event("tool.execute.before.error", {
+                        input,
+                        output,
+                        directory,
+                        error,
+                    });
                 }
                 catch {
                     // Keep the original before-hook failure as the surfaced error.
@@ -813,7 +845,8 @@ export default function GatewayCorePlugin(ctx) {
                 stage: "dispatch",
                 reason_code: "chat_system_transform_dispatch",
                 event_type: "experimental.chat.system.transform",
-                has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+                has_session_id: typeof input.sessionID === "string" &&
+                    input.sessionID.trim().length > 0,
                 hook_count: hooks.length,
             });
         }

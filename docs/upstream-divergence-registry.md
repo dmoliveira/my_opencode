@@ -17,7 +17,7 @@ Purpose: keep a single, explicit record of intentional differences so parity aud
 | --- | --- | --- |
 | `sisyphus` primary orchestrator persona | `intentional-divergence` | Local canonical primary is `orchestrator` (`agent/specs/orchestrator.json`) with governance-first execution contract. |
 | `hephaestus` implementation specialist | `intentional-divergence` | Coverage split across local `orchestrator` + `reviewer` + `verifier`; avoids duplicate primary-runtime personas. |
-| `atlas` planning persona | `local-equivalent` | Planning responsibilities are covered by `strategic-planner`, `ambiguity-analyst`, and `plan-critic` (`agent/specs/*.json`). |
+| `atlas` planning persona | `local-equivalent` | Planning responsibilities are covered by `strategic-planner`, `ambiguity-analyst`, and `plan-critic` (`agent/specs/*.json`); this maps planning coverage only, not Atlas-specific runtime tool-injection behavior. |
 | `metis` / `momus` / `multimodal-looker` | `intentional-divergence` | Not currently required by local operator workflows; keep agent surface compact and role-based. |
 
 ## Hook semantics
@@ -32,9 +32,9 @@ Purpose: keep a single, explicit record of intentional differences so parity aud
 | `anthropic-context-window-limit-recovery` | `local-equivalent` | `context-window-monitor` + `preemptive-compaction` + `provider-token-limit-recovery`. |
 | `model-fallback` / `runtime-fallback` | `local-equivalent` | `provider-error-classifier` + `provider-retry-backoff-guidance` + model routing policy commands. |
 | `interactive-bash-session` | `intentional-divergence` | Local shell strategy is explicitly non-interactive by policy (`instructions/shell_strategy.md`). |
-| `claude-code-hooks` | `intentional-divergence` | Local runtime uses gateway-core hook pipeline instead of Claude-specific compatibility layer. |
+| `claude-code-hooks` | `intentional-divergence` | Local runtime uses gateway-core hook pipeline instead of Claude-specific compatibility handlers for chat/tool/compaction events; reopen only if direct Claude-session transcript semantics become a requirement. |
 | `category-skill-reminder` / `prometheus-md-only` / `sisyphus-junior-notepad` | `intentional-divergence` | Tied to upstream persona/task system; not part of local canonical runtime contract. |
-| `atlas` hook, `no-sisyphus-gpt`, `no-hephaestus-non-gpt` | `intentional-divergence` | Upstream persona-specific model guards are not applicable without those personas. |
+| `atlas` runtime hook, `no-sisyphus-gpt`, `no-hephaestus-non-gpt` | `intentional-divergence` | Upstream Atlas-specific tool-time behavior injection and persona-specific model guards are not applied locally; local orchestration relies on canonical orchestrator policy plus gateway guards instead. |
 | `start-work` | `local-equivalent` | Implemented as command/runtime flow (`scripts/start_work_command.py`) instead of same-named plugin hook. |
 | `anthropic-effort` | `intentional-divergence` | Local model-routing controls own effort/category policy (`/model-routing`). |
 | `auto-update-checker` | `intentional-divergence` | Keep update behavior explicit via install/update workflows; no runtime auto-check hook. |
