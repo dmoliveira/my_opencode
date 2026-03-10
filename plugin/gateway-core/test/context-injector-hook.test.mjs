@@ -439,3 +439,44 @@ test("context-injector records granular reason when transform user message has n
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("context-injector limits transform user scan to recent messages", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-tail-window", {
+      source: "test",
+      id: "tail-window",
+      content: "Tail-window context",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+    })
+    const output = {
+      messages: [
+        {
+          info: { role: "user", id: "old-user", sessionID: "session-context-tail-window" },
+          parts: [{ type: "text", text: "Old prompt" }],
+        },
+        ...Array.from({ length: 70 }, (_, idx) => ({
+          info: { role: "assistant", id: `a-${idx}` },
+          parts: [{ type: "text", text: `A${idx}` }],
+        })),
+      ],
+    }
+
+    await hook.event("experimental.chat.messages.transform", {
+      input: {},
+      output,
+      directory,
+    })
+
+    assert.equal(output.messages[0].parts[0].text, "Old prompt")
+    assert.equal(collector.hasPending("session-context-tail-window"), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
