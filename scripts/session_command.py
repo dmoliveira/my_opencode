@@ -105,9 +105,6 @@ def _emit(payload: dict, json_output: bool) -> int:
     if json_output:
         print(json.dumps(payload, indent=2))
         return 0 if payload.get("result") == "PASS" else 1
-    if payload.get("result") != "PASS":
-        print(f"error: {payload.get('error', 'session command failed')}")
-        return 1
     if payload.get("command") == "current":
         row = payload.get("session", {})
         print(f"session_id: {row.get('session_id')}")
@@ -190,6 +187,14 @@ def _emit(payload: dict, json_output: bool) -> int:
         print(f"stale_seconds: {payload.get('stale_seconds')}")
         print(f"apply: {'yes' if payload.get('apply') else 'no'}")
         print(f"include_generic: {'yes' if payload.get('include_generic') else 'no'}")
+        if payload.get("warnings"):
+            print("warnings:")
+            for warning in payload.get("warnings", []):
+                print(f"- {warning}")
+        if payload.get("problems"):
+            print("problems:")
+            for problem in payload.get("problems", []):
+                print(f"- {problem}")
         print(f"candidate_count: {payload.get('candidate_count', 0)}")
         print(f"repaired_count: {payload.get('repaired_count', 0)}")
         for item in payload.get("repairs", [])[:10]:
@@ -199,8 +204,15 @@ def _emit(payload: dict, json_output: bool) -> int:
                 f"session={item.get('session_id') or item.get('parent_session_id')} "
                 f"tool={item.get('tool') or item.get('parent_last_tool') or 'none'}"
             )
+        if payload.get("quick_fixes"):
+            print("quick_fixes:")
+            for fix in payload.get("quick_fixes", []):
+                print(f"- {fix}")
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("result") != "PASS":
+        print(f"error: {payload.get('error', 'session command failed')}")
+        return 1
     if payload.get("command") == "handoff":
         print("session handoff")
         print("---------------")
@@ -266,14 +278,8 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             WITH parent_last_msg AS (
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
             ),
-            parent_last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
-            ),
             child_last_msg AS (
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-            ),
-            child_last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
             )
             SELECT
               p.id AS parent_session_id,
@@ -300,12 +306,14 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             JOIN session c ON c.parent_id = p.id
             JOIN parent_last_msg plm ON plm.session_id = p.id
             JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
-            LEFT JOIN parent_last_part plp ON plp.session_id = p.id
-            LEFT JOIN part pp ON pp.session_id = p.id AND pp.time_created = plp.max_time
+            LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = pm.id
+            )
             LEFT JOIN child_last_msg clm ON clm.session_id = c.id
             LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
-            LEFT JOIN child_last_part clp ON clp.session_id = c.id
-            LEFT JOIN part cp ON cp.session_id = c.id AND cp.time_created = clp.max_time
+            LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = cm.id
+            )
             WHERE json_extract(pm.data,'$.role') = 'assistant'
               AND json_extract(pm.data,'$.time.completed') IS NULL
               AND p.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
@@ -332,9 +340,6 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             """
             WITH last_msg AS (
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-            ),
-            last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
             )
             SELECT
               s.id AS session_id,
@@ -349,8 +354,9 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             FROM session s
             JOIN last_msg lm ON lm.session_id = s.id
             JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
-            LEFT JOIN last_part lp ON lp.session_id = s.id
-            LEFT JOIN part p ON p.session_id = s.id AND p.time_created = lp.max_time
+            LEFT JOIN part p ON p.message_id = m.id AND p.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = m.id
+            )
             WHERE json_extract(m.data,'$.role') = 'assistant'
               AND json_extract(m.data,'$.time.completed') IS NULL
               AND s.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
@@ -372,15 +378,15 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
             ),
             last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
+              SELECT message_id, MAX(time_created) AS max_time FROM part GROUP BY message_id
             )
         """
         generic_stale_from_sql = """
             FROM session s
             JOIN last_msg lm ON lm.session_id = s.id
             JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
-            LEFT JOIN last_part lp ON lp.session_id = s.id
-            LEFT JOIN part p ON p.session_id = s.id AND p.time_created = lp.max_time
+            LEFT JOIN last_part lp ON lp.message_id = m.id
+            LEFT JOIN part p ON p.message_id = m.id AND p.time_created = lp.max_time
             WHERE json_extract(m.data,'$.role') = 'assistant'
               AND json_extract(m.data,'$.time.completed') IS NULL
               AND json_extract(m.data,'$.error') IS NULL
@@ -489,8 +495,8 @@ def _repair_message_and_tool(
         (message_id, session_id),
     ).fetchone()
     part_row = conn.execute(
-        "SELECT data FROM part WHERE id = ? AND session_id = ?",
-        (part_id, session_id),
+        "SELECT data FROM part WHERE id = ? AND session_id = ? AND message_id = ?",
+        (part_id, session_id, message_id),
     ).fetchone()
     if message_row is None or part_row is None:
         return False
@@ -603,8 +609,8 @@ def _repair_stale_assistant_session(
         return False
     if expected_running_tool and part_id:
         part_row = conn.execute(
-            "SELECT data FROM part WHERE id = ? AND session_id = ?",
-            (part_id, session_id),
+            "SELECT data FROM part WHERE id = ? AND session_id = ? AND message_id = ?",
+            (part_id, session_id, message_id),
         ).fetchone()
         if part_row is None:
             return False
@@ -620,8 +626,13 @@ def _repair_stale_assistant_session(
         state_payload["reason"] = reason_code
         part_data["state"] = state_payload
         part_update = conn.execute(
-            "UPDATE part SET data = ? WHERE id = ? AND session_id = ? AND COALESCE(json_extract(data,'$.state.status'),'') = 'running'",
-            (json.dumps(part_data, separators=(",", ":")), part_id, session_id),
+            "UPDATE part SET data = ? WHERE id = ? AND session_id = ? AND message_id = ? AND COALESCE(json_extract(data,'$.state.status'),'') = 'running'",
+            (
+                json.dumps(part_data, separators=(",", ":")),
+                part_id,
+                session_id,
+                message_id,
+            ),
         )
         if part_update.rowcount != 1:
             return False
