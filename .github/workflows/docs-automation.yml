@@ -95,24 +95,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .docs_build
-          if git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" .docs_build/wiki-repo; then
-            echo "Cloned existing wiki repository"
+          wiki_remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          if git ls-remote "$wiki_remote" >/dev/null 2>&1; then
+            git clone "$wiki_remote" .docs_build/wiki-repo
+            rsync -av --delete --exclude='.git/' .docs_build/wiki/ .docs_build/wiki-repo/
+            git -C .docs_build/wiki-repo config user.name "github-actions[bot]"
+            git -C .docs_build/wiki-repo config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if [ -n "$(git -C .docs_build/wiki-repo status --porcelain)" ]; then
+              git -C .docs_build/wiki-repo add .
+              git -C .docs_build/wiki-repo commit -m "docs: sync automated wiki pages"
+              git -C .docs_build/wiki-repo push origin HEAD:master
+            else
+              echo "No wiki changes to publish"
+            fi
           else
-            echo "Wiki repository not initialized yet; creating local wiki checkout"
-            mkdir -p .docs_build/wiki-repo
-            git -C .docs_build/wiki-repo init
-            git -C .docs_build/wiki-repo checkout -b master
-            git -C .docs_build/wiki-repo remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
-          fi
-          rsync -av --delete .docs_build/wiki/ .docs_build/wiki-repo/
-          git -C .docs_build/wiki-repo config user.name "github-actions[bot]"
-          git -C .docs_build/wiki-repo config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git -C .docs_build/wiki-repo status --porcelain)" ]; then
-            git -C .docs_build/wiki-repo add .
-            git -C .docs_build/wiki-repo commit -m "docs: sync automated wiki pages"
-            git -C .docs_build/wiki-repo push origin HEAD:master
-          else
-            echo "No wiki changes to publish"
+            echo "Wiki repository is not initialized or is unavailable; skipping wiki sync"
           fi
 
   deploy-pages:
@@ -126,6 +123,8 @@ jobs:
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

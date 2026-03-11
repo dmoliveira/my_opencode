@@ -70,7 +70,7 @@ async function resolveSemanticHints(options: {
   }
   const hasResumeTarget = Boolean(options.resumeTarget)
   const allowedChars = hasResumeTarget ? ["B", "C", "V", "N"] : ["C", "N"]
-  const decisionMeaning = hasResumeTarget
+  const decisionMeaning: Record<string, string> = hasResumeTarget
     ? {
         B: "continue_and_verify",
         C: "continue_only",
