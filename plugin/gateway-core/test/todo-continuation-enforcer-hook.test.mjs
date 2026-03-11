@@ -301,6 +301,342 @@ test("todo-continuation-enforcer tracks task output marker before idle", async (
   }
 })
 
+test("todo-continuation-enforcer injects when todowrite leaves open todos", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when todowrite state is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-1" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "completed", priority: "high" },
+          { content: "second", status: "in_progress", priority: "high" },
+          { content: "third", status: "pending", priority: "medium" },
+        ]),
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-write-1" },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer audits todowrite state updates", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when todowrite state is tracked")
+          },
+          async promptAsync() {},
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-audit", trace_id: "trace-todo" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "pending", priority: "high" },
+          { content: "second", status: "completed", priority: "low" },
+        ]),
+      },
+    })
+
+    const events = readGatewayAuditEvents(directory)
+    const recorded = events.find((entry) => entry.reason_code === "todo_continuation_todowrite_state_recorded")
+    assert.ok(recorded)
+    assert.equal(recorded.session_id, "session-todo-write-audit")
+    assert.equal(recorded.trace_id, "trace-todo")
+    assert.equal(recorded.open_todo_count, 1)
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer falls back to message probe after non-pending task output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    let promptCalls = 0
+    let messageCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "Still pending\n<CONTINUE-LOOP>" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-probe-after-task", trace_id: "trace-probe" },
+      output: { output: "Status update only." },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-probe-after-task" },
+    })
+
+    assert.ok(messageCalls >= 1)
+    assert.equal(promptCalls, 1)
+    const events = readGatewayAuditEvents(directory)
+    const retained = events.find((entry) => entry.reason_code === "todo_continuation_task_probe_retained")
+    assert.ok(retained)
+    assert.equal(retained.session_id, "session-todo-probe-after-task")
+    assert.equal(retained.trace_id, "trace-probe")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer clears pending state when todowrite closes all todos", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when todowrite state is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-2" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "pending", priority: "high" },
+        ]),
+      },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-2" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "completed", priority: "high" },
+        ]),
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-write-2" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer keeps todowrite state authoritative after later task completion wording", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called while todowrite pending state remains authoritative")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-clear-after-task" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "pending", priority: "high" },
+        ]),
+      },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-write-clear-after-task" },
+      output: { output: "Task complete." },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-write-clear-after-task" },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer preserves todowrite state after non-closure task output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called while todowrite pending state remains authoritative")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-keep-after-task" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "pending", priority: "high" },
+        ]),
+      },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-write-keep-after-task" },
+      output: { output: "Status update recorded." },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-write-keep-after-task" },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer respects explicit stop after todowrite leaves open todos", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when todowrite state is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "todowrite", sessionID: "session-todo-write-stop" },
+      output: {
+        output: JSON.stringify([
+          { content: "first", status: "pending", priority: "high" },
+        ]),
+      },
+    })
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-write-stop", prompt: "stop for now" },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-write-stop" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("todo-continuation-enforcer handles probe failures without throwing", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
   try {
@@ -472,6 +808,48 @@ If you want, I'll continue directly with that docs alignment pass.`,
   }
 })
 
+test("todo-continuation-enforcer treats active continuing wording as actionable next-slice cue", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const decisionRuntime = mockDecisionRuntime("C")
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      decisionRuntime,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-llm-continue-now" },
+      output: {
+        output: "Work from this slice is done. Best next safe slice: wire explicit failure recovery. I'm continuing with the next swarm slice now.",
+      },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-llm-continue-now" },
+    })
+
+    assert.equal(promptCalls, 1)
+    assert.equal(decisionRuntime.calls.length, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("todo-continuation-enforcer defers LLM continuation in shadow mode", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
   try {
@@ -551,6 +929,43 @@ test("todo-continuation-enforcer does not call LLM for generic future suggestion
 
     assert.equal(promptCalls, 0)
     assert.equal(decisionRuntime.calls.length, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("todo-continuation-enforcer ignores non-actionable next items summaries", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("messages should not be called when task output is tracked")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-next-items-none" },
+      output: { output: "Task complete. Next items: none." },
+    })
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-next-items-none" },
+    })
+
+    assert.equal(promptCalls, 0)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
