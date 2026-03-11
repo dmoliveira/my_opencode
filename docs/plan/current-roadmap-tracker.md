@@ -147,6 +147,8 @@ Remaining:
 | Committed Atlas pre-task shaping prototype | done | Created `d090f80` to prepend delegated task focus guidance before subagent execution. |
 | Merged parity hardening and atlas shaping PR | done | `#443` merged to `main`, including E2E gateway hook-failure hardening in `b9a7f05`. |
 | Normalized parity tracker after merge | done | Replaced merged parity execution slices with a single post-merge backlog triage stream and moved remaining decisions into `docs/plan/post-merge-parity-backlog-2026-03-10.md`. |
+| Reviewed `claude-code-hooks` compatibility divergence | done | Captured keep-closed decision in `docs/plan/claude-code-hooks-decision-2026-03-11.md` unless direct Claude transcript/session compatibility becomes a real requirement. |
+| Refined direct-work discipline documentation exceptions | done | `direct-work-warning` now supports configurable allowlisted docs paths across relative, absolute, `apply_patch`, and `multiedit` payloads while staying warn-first by default. |
 
 ## Next Tasks
 
@@ -157,7 +159,8 @@ Remaining:
 5. Land the `mistake-ledger` semantic deferral migration with audit assertions and shadow-first rollout.
 6. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer` and `validation-evidence-ledger` in shadow until then.
 7. Expand the semantic decision inventory so every ambiguous classification path is tracked by `done` / `doing` / `pending` status band.
-8. Keep this tracker and the CLI todo list synchronized at each task handoff.
+8. Decide whether direct-work discipline should remain warn-first by default or gain a broader escalation policy.
+9. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 

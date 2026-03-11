@@ -19,7 +19,7 @@ Capture the next high-value parity work after PR `#443` merged the hook hardenin
 
 ### 1. Delegation-first direct-work discipline
 
-Status: `in_progress`
+Status: `reviewed` - warn-first baseline plus doc-path exceptions are in place
 
 Why it matters:
 
@@ -32,7 +32,7 @@ Evidence:
 
 Suggested slice:
 
-- first slice implemented in `plugin/gateway-core/src/hooks/direct-work-warning/index.ts`; it ships as warn-first by default, exposes optional repeated-edit blocking, and now supports path-aware documentation exceptions while broader policy tuning remains follow-up work
+- current baseline in `plugin/gateway-core/src/hooks/direct-work-warning/index.ts` ships as warn-first by default, exposes optional repeated-edit blocking, and supports path-aware documentation exceptions across relative, absolute, `apply_patch`, and `multiedit` payloads; broader policy tuning remains follow-up work
 
 ### 2. `claude-code-hooks` compatibility decision
 
@@ -88,5 +88,11 @@ Suggested slice:
 
 ## Recommended execution order
 
-1. Extend delegation-first direct-work discipline beyond warn-only reminders
+1. Decide whether direct-work discipline should gain stronger escalation rules beyond the current warn-first + opt-in block model
 2. Revisit `todo-continuation-enforcer` promotion only after fresh live disagreement telemetry is collected
+
+## Continuation note for next AI
+
+- Current branch `wt/claude-hooks-decision` now contains two clean commits: the `claude-code-hooks` divergence decision and the direct-work discipline exception refinement.
+- If continuing implementation, the highest-value next step is not more path matching; it is policy design for when repeated direct edits should escalate automatically versus remain warn-only.
+- Keep `gateway-core` canonical. If a future compatibility layer is reopened, implement only adapters, not a second hook runtime.
