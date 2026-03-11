@@ -66,6 +66,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "plan-handoff-reminder",
             "comment-checker",
             "agent-user-reminder",
+            "direct-work-warning",
             "unstable-agent-babysitter",
             "question-label-truncator",
             "dangerous-command-guard",
@@ -425,6 +426,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     agentUserReminder: {
         enabled: true,
+    },
+    directWorkWarning: {
+        enabled: true,
+        blockRepeatedEdits: false,
     },
     unstableAgentBabysitter: {
         enabled: true,

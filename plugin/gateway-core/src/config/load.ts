@@ -16,114 +16,139 @@ function stringList(value: unknown): string[] {
 }
 
 function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function deepMergeRecords(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...base }
+function deepMergeRecords(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(override)) {
-    const current = result[key]
+    const current = result[key];
     if (isRecord(current) && isRecord(value)) {
-      result[key] = deepMergeRecords(current, value)
+      result[key] = deepMergeRecords(current, value);
     } else {
-      result[key] = value
+      result[key] = value;
     }
   }
-  return result
+  return result;
 }
 
 function resolveGatewayConfigSidecarPath(directory: string): string {
-  const envPath = String(process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "").trim()
+  const envPath = String(
+    process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "",
+  ).trim();
   if (envPath) {
-    return resolve(envPath)
+    return resolve(envPath);
   }
-  const localPath = join(directory, ".opencode", "gateway-core.config.json")
+  const localPath = join(directory, ".opencode", "gateway-core.config.json");
   if (existsSync(localPath)) {
-    return localPath
+    return localPath;
   }
-  return join(homedir(), ".config", "opencode", "my_opencode", "gateway-core.config.json")
+  return join(
+    homedir(),
+    ".config",
+    "opencode",
+    "my_opencode",
+    "gateway-core.config.json",
+  );
 }
 
-export function loadGatewayConfigSource(directory: string, source: unknown): Record<string, unknown> {
-  const sidecarPath = resolveGatewayConfigSidecarPath(directory)
-  let sidecar: Record<string, unknown> = {}
+export function loadGatewayConfigSource(
+  directory: string,
+  source: unknown,
+): Record<string, unknown> {
+  const sidecarPath = resolveGatewayConfigSidecarPath(directory);
+  let sidecar: Record<string, unknown> = {};
   try {
     if (existsSync(sidecarPath)) {
-      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown
+      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown;
       if (isRecord(parsed)) {
-        sidecar = parsed
+        sidecar = parsed;
       }
     }
   } catch {
-    sidecar = {}
+    sidecar = {};
   }
   if (!isRecord(source)) {
-    return sidecar
+    return sidecar;
   }
-  return deepMergeRecords(sidecar, source)
+  return deepMergeRecords(sidecar, source);
 }
 
 function parseAgentPolicyOverrides(
   value: unknown,
-  fallback: Record<string, {
-    overrideDelta?: number
-    intentThreshold?: number
-    minSamples?: number
-    highFailureRate?: number
-    protectCategories?: string[]
-  }>,
-): Record<string, {
-  overrideDelta?: number
-  intentThreshold?: number
-  minSamples?: number
-  highFailureRate?: number
-  protectCategories?: string[]
-}> {
-  if (!value || typeof value !== "object") {
-    return fallback
+  fallback: Record<
+    string,
+    {
+      overrideDelta?: number;
+      intentThreshold?: number;
+      minSamples?: number;
+      highFailureRate?: number;
+      protectCategories?: string[];
+    }
+  >,
+): Record<
+  string,
+  {
+    overrideDelta?: number;
+    intentThreshold?: number;
+    minSamples?: number;
+    highFailureRate?: number;
+    protectCategories?: string[];
   }
-  const source = value as Record<string, unknown>
-  const output: Record<string, {
-    overrideDelta?: number
-    intentThreshold?: number
-    minSamples?: number
-    highFailureRate?: number
-    protectCategories?: string[]
-  }> = {}
+> {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+  const source = value as Record<string, unknown>;
+  const output: Record<
+    string,
+    {
+      overrideDelta?: number;
+      intentThreshold?: number;
+      minSamples?: number;
+      highFailureRate?: number;
+      protectCategories?: string[];
+    }
+  > = {};
   for (const [agent, rawPolicy] of Object.entries(source)) {
     if (typeof agent !== "string" || !agent.trim()) {
-      continue
+      continue;
     }
-    const policy = recordValue(rawPolicy)
+    const policy = recordValue(rawPolicy);
     const parsed: {
-      overrideDelta?: number
-      intentThreshold?: number
-      minSamples?: number
-      highFailureRate?: number
-      protectCategories?: string[]
-    } = {}
+      overrideDelta?: number;
+      intentThreshold?: number;
+      minSamples?: number;
+      highFailureRate?: number;
+      protectCategories?: string[];
+    } = {};
     if ("overrideDelta" in policy) {
-      parsed.overrideDelta = nonNegativeInt(policy.overrideDelta, 0)
+      parsed.overrideDelta = nonNegativeInt(policy.overrideDelta, 0);
     }
     if ("intentThreshold" in policy) {
-      parsed.intentThreshold = nonNegativeInt(policy.intentThreshold, 0)
+      parsed.intentThreshold = nonNegativeInt(policy.intentThreshold, 0);
     }
     if ("minSamples" in policy) {
-      parsed.minSamples = positiveInt(policy.minSamples, 1)
+      parsed.minSamples = positiveInt(policy.minSamples, 1);
     }
     if ("highFailureRate" in policy) {
-      parsed.highFailureRate = boundedFloat(policy.highFailureRate, 0, 1, 0.5)
+      parsed.highFailureRate = boundedFloat(policy.highFailureRate, 0, 1, 0.5);
     }
     if ("protectCategories" in policy) {
-      parsed.protectCategories = stringList(policy.protectCategories)
+      parsed.protectCategories = stringList(policy.protectCategories);
     }
-    output[agent.trim().toLowerCase()] = parsed
+    output[agent.trim().toLowerCase()] = parsed;
   }
-  return Object.keys(output).length > 0 ? output : fallback
+  return Object.keys(output).length > 0 ? output : fallback;
 }
 
 // Coerces unknown value into a safe non-negative integer fallback.
@@ -215,24 +240,32 @@ function llmDecisionMode(
   value: unknown,
   fallback: "disabled" | "shadow" | "assist" | "enforce",
 ): "disabled" | "shadow" | "assist" | "enforce" {
-  if (value === "disabled" || value === "shadow" || value === "assist" || value === "enforce") {
-    return value
+  if (
+    value === "disabled" ||
+    value === "shadow" ||
+    value === "assist" ||
+    value === "enforce"
+  ) {
+    return value;
   }
-  return fallback
+  return fallback;
 }
 
-function llmDecisionHookModes(value: unknown): Record<string, "disabled" | "shadow" | "assist" | "enforce"> {
+function llmDecisionHookModes(
+  value: unknown,
+): Record<string, "disabled" | "shadow" | "assist" | "enforce"> {
   if (!value || typeof value !== "object") {
-    return {}
+    return {};
   }
-  const result: Record<string, "disabled" | "shadow" | "assist" | "enforce"> = {}
+  const result: Record<string, "disabled" | "shadow" | "assist" | "enforce"> =
+    {};
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const mode = llmDecisionMode(raw, "disabled")
+    const mode = llmDecisionMode(raw, "disabled");
     if (key.trim() && mode !== "disabled") {
-      result[key.trim()] = mode
+      result[key.trim()] = mode;
     }
   }
-  return result
+  return result;
 }
 
 // Loads and normalizes gateway plugin config from unknown input.
@@ -293,7 +326,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ? (source.sessionRecovery as Record<string, unknown>)
       : {};
   const sessionRuntimeSystemContextSource =
-    source.sessionRuntimeSystemContext && typeof source.sessionRuntimeSystemContext === "object"
+    source.sessionRuntimeSystemContext &&
+    typeof source.sessionRuntimeSystemContext === "object"
       ? (source.sessionRuntimeSystemContext as Record<string, unknown>)
       : {};
   const delegateTaskRetrySource =
@@ -495,6 +529,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.agentUserReminder && typeof source.agentUserReminder === "object"
       ? (source.agentUserReminder as Record<string, unknown>)
       : {};
+  const directWorkWarningSource =
+    source.directWorkWarning && typeof source.directWorkWarning === "object"
+      ? (source.directWorkWarning as Record<string, unknown>)
+      : {};
   const unstableBabysitterSource =
     source.unstableAgentBabysitter &&
     typeof source.unstableAgentBabysitter === "object"
@@ -520,7 +558,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ? (source.secretLeakGuard as Record<string, unknown>)
       : {};
   const primaryWorktreeSource =
-    source.primaryWorktreeGuard && typeof source.primaryWorktreeGuard === "object"
+    source.primaryWorktreeGuard &&
+    typeof source.primaryWorktreeGuard === "object"
       ? (source.primaryWorktreeGuard as Record<string, unknown>)
       : {};
   const workflowConformanceSource =
@@ -952,7 +991,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       maxExpensiveConcurrent: positiveInt(
         delegationConcurrencyGuardSource.maxExpensiveConcurrent,
-        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxExpensiveConcurrent,
+        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard
+          .maxExpensiveConcurrent,
       ),
       maxDeepConcurrent: positiveInt(
         delegationConcurrencyGuardSource.maxDeepConcurrent,
@@ -1049,7 +1089,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       discoverabilityCooldownMs: positiveInt(
         adaptiveDelegationPolicySource.discoverabilityCooldownMs,
-        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.discoverabilityCooldownMs,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
+          .discoverabilityCooldownMs,
       ),
       agentPolicyOverrides: parseAgentPolicyOverrides(
         adaptiveDelegationPolicySource.agentPolicyOverrides,
@@ -1397,6 +1438,16 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof agentUserReminderSource.enabled === "boolean"
           ? agentUserReminderSource.enabled
           : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
+    },
+    directWorkWarning: {
+      enabled:
+        typeof directWorkWarningSource.enabled === "boolean"
+          ? directWorkWarningSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.directWorkWarning.enabled,
+      blockRepeatedEdits:
+        typeof directWorkWarningSource.blockRepeatedEdits === "boolean"
+          ? directWorkWarningSource.blockRepeatedEdits
+          : DEFAULT_GATEWAY_CONFIG.directWorkWarning.blockRepeatedEdits,
     },
     unstableAgentBabysitter: {
       enabled:

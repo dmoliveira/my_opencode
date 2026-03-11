@@ -44,6 +44,7 @@ import { createHookTestParityGuardHook } from "./hooks/hook-test-parity-guard/in
 import { createHookSemanticBridgeHook } from "./hooks/hook-semantic-bridge/index.js";
 import { createDirectoryAgentsInjectorHook } from "./hooks/directory-agents-injector/index.js";
 import { createDirectoryReadmeInjectorHook } from "./hooks/directory-readme-injector/index.js";
+import { createDirectWorkWarningHook } from "./hooks/direct-work-warning/index.js";
 import { createKeywordDetectorHook } from "./hooks/keyword-detector/index.js";
 import { createMergeReadinessGuardHook } from "./hooks/merge-readiness-guard/index.js";
 import { createNoninteractiveShellGuardHook } from "./hooks/noninteractive-shell-guard/index.js";
@@ -544,6 +545,11 @@ function configuredHooks(ctx) {
         })),
         safeHook("agent-user-reminder", () => createAgentUserReminderHook({
             enabled: cfg.agentUserReminder.enabled,
+        })),
+        safeHook("direct-work-warning", () => createDirectWorkWarningHook({
+            directory,
+            enabled: cfg.directWorkWarning.enabled,
+            blockRepeatedEdits: cfg.directWorkWarning.blockRepeatedEdits,
         })),
         safeHook("unstable-agent-babysitter", () => createUnstableAgentBabysitterHook({
             enabled: cfg.unstableAgentBabysitter.enabled,

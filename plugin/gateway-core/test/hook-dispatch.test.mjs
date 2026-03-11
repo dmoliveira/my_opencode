@@ -83,3 +83,80 @@ test("hook dispatch does not misclassify generic runtime 'must' errors as policy
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("hook dispatch treats known tool-disable wording as intentional block", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-hook-dispatch-"));
+  const previousWrite = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    const result = await dispatchGatewayHookEvent({
+      hook: {
+        id: "tasks-todowrite-disabler",
+        priority: 1,
+        async event() {
+          throw new Error(
+            "Task/TodoWrite tools are disabled in this workflow by gateway configuration.",
+          );
+        },
+      },
+      eventType: "tool.execute.before",
+      payload: {},
+      directory,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.blocked, true);
+  } finally {
+    process.stderr.write = previousWrite;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("hook dispatch does not treat generic feature-disabled wording as intentional block", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-hook-dispatch-"));
+  const previousWrite = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    const result = await dispatchGatewayHookEvent({
+      hook: {
+        id: "task-resume-info",
+        priority: 1,
+        async event() {
+          throw new Error("feature disabled by config");
+        },
+      },
+      eventType: "tool.execute.after",
+      payload: {},
+      directory,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.blocked, false);
+  } finally {
+    process.stderr.write = previousWrite;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("hook dispatch does not treat generic must-include wording as intentional block", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-hook-dispatch-"));
+  const previousWrite = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    const result = await dispatchGatewayHookEvent({
+      hook: {
+        id: "task-resume-info",
+        priority: 1,
+        async event() {
+          throw new Error("payload must include a session id");
+        },
+      },
+      eventType: "tool.execute.after",
+      payload: {},
+      directory,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.blocked, false);
+  } finally {
+    process.stderr.write = previousWrite;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

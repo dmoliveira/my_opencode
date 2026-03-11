@@ -1,10 +1,3 @@
-export function inspectToolAfterOutputText(output) {
-    const first = listToolAfterOutputTexts(output)[0];
-    return first ?? { text: "", channel: "unknown" };
-}
-export function readToolAfterOutputText(output) {
-    return inspectToolAfterOutputText(output).text;
-}
 export function listToolAfterOutputTexts(output) {
     if (typeof output === "string") {
         return output.trim() ? [{ channel: "string", text: output }] : [];
@@ -21,6 +14,13 @@ export function listToolAfterOutputTexts(output) {
         }
     }
     return entries;
+}
+export function inspectToolAfterOutputText(output) {
+    const first = listToolAfterOutputTexts(output)[0];
+    return first ?? { text: "", channel: "unknown" };
+}
+export function readToolAfterOutputText(output) {
+    return inspectToolAfterOutputText(output).text;
 }
 export function readCombinedToolAfterOutputText(output) {
     return listToolAfterOutputTexts(output)

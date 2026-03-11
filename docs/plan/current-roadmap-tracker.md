@@ -124,11 +124,8 @@ Remaining:
 |---|---|---|
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
-| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes refreshed rollout guidance, passing semantic/workflow scenario coverage, `task-resume-info` implemented locally with targeted tests, and `mistake-ledger` semantic deferral detection actively migrating in the same worktree. |
-| Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
-| Atlas runtime prototype | doing | Prototype local post-task verification/reminder shaping through `task-resume-info` without importing full Atlas persona semantics. |
-| Atlas pre-task shaping prototype | doing | Add delegated task focus shaping through `agent-context-shaper` before subagent execution. |
-| Gateway E2E parity refinements | doing | Tighten fail-closed behavior for critical hooks, isolate hook execution failures, align continuity wording with canonical commands, and remove hard-coded agent metadata discovery. |
+| LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes refreshed rollout guidance, passing semantic/workflow scenario coverage, wired `todo-continuation-enforcer` fallback, and `delegation-fallback-orchestrator` as the next promotion candidate pending fresh disagreement evidence. |
+| Post-merge parity backlog triage | doing | Active backlog lives in `docs/plan/post-merge-parity-backlog-2026-03-10.md`; use it to sequence remaining divergence decisions and any reopened parity slices. |
 
 ## Done Recently
 
@@ -148,6 +145,8 @@ Remaining:
 | Committed parity hardening gateway fixes | done | Created `55ad23f` to fix LLM hook bindings, add safe hook startup isolation, and refresh parity tracking evidence. |
 | Committed Atlas post-task reminder prototype | done | Created `fa270cf` to add local verification/reminder shaping for delegated task results. |
 | Committed Atlas pre-task shaping prototype | done | Created `d090f80` to prepend delegated task focus guidance before subagent execution. |
+| Merged parity hardening and atlas shaping PR | done | `#443` merged to `main`, including E2E gateway hook-failure hardening in `b9a7f05`. |
+| Normalized parity tracker after merge | done | Replaced merged parity execution slices with a single post-merge backlog triage stream and moved remaining decisions into `docs/plan/post-merge-parity-backlog-2026-03-10.md`. |
 
 ## Next Tasks
 
