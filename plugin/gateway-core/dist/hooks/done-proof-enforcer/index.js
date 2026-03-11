@@ -1,7 +1,7 @@
 import { markerCategory, validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
-import { listToolAfterOutputTexts, readCombinedToolAfterOutputText, writeToolAfterOutputChannelText } from "../shared/tool-after-output.js";
+import { listToolAfterOutputTexts, readCombinedToolAfterOutputText, writeToolAfterOutputChannelText, } from "../shared/tool-after-output.js";
 function buildMarkerInstruction(marker) {
     return `Does this completion text include evidence-equivalent wording for '${marker}'? Y=yes, N=no.`;
 }
@@ -120,8 +120,9 @@ export function createDoneProofEnforcerHook(options) {
                 rewrote = writeToolAfterOutputChannelText(eventPayload.output?.output, entry.channel, rewritten) || rewrote;
             }
             if (!rewrote && eventPayload.output) {
-                eventPayload.output.output = text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
-                    `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`;
+                eventPayload.output.output =
+                    text.replace(/<promise>\s*DONE\s*<\/promise>/gi, "<promise>PENDING_VALIDATION</promise>") +
+                        `\n\n[done-proof-enforcer] Completion token deferred until validation evidence is included (${missingMarkers.join(", ")}).`;
             }
         },
     };

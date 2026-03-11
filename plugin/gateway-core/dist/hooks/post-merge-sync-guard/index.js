@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
-import { listToolAfterOutputTexts, writeToolAfterOutputChannelText } from "../shared/tool-after-output.js";
+import { listToolAfterOutputTexts, writeToolAfterOutputChannelText, } from "../shared/tool-after-output.js";
 const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command) {
@@ -157,7 +157,9 @@ export function createPostMergeSyncGuardHook(options) {
             let rewrote = false;
             if (reminderCommands.length === 0) {
                 for (const entry of entries) {
-                    rewrote = writeToolAfterOutputChannelText(toolOutput?.output, entry.channel, normalizeMergeOutput(entry.text)) || rewrote;
+                    rewrote =
+                        writeToolAfterOutputChannelText(toolOutput?.output, entry.channel, normalizeMergeOutput(entry.text)) ||
+                            rewrote;
                 }
                 if (!rewrote && toolOutput) {
                     toolOutput.output = normalizeMergeOutput(entries[0].text);
