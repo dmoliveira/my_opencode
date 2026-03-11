@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "../dist/index.js";
+import gatewayCorePlugin from "../dist/index.js";
+import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "../dist/llm-decision-bindings.js";
+
+test("gateway plugin entrypoint exports only the default plugin factory", async () => {
+  const entrypoint = await import("../dist/index.js");
+
+  assert.deepEqual(Object.keys(entrypoint), ["default"]);
+  assert.equal(entrypoint.default, gatewayCorePlugin);
+  assert.equal(typeof gatewayCorePlugin, "function");
+});
 
 test("gateway llm decision runtime bindings stay aligned to hook ids", () => {
   assert.deepEqual(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS, {
