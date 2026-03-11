@@ -100,7 +100,33 @@ Interpreting regressions:
 - Keep diff scoped to release changelog and release-notes docs
 - Merge only after CI checks are green
 
-5) Publish release tag and notes
+5) Confirm GitHub Pages readiness for docs automation
+
+```bash
+python3 scripts/pages_readiness_check.py --json
+```
+
+- If the checker reports `github_pages_site_uninitialized`, bootstrap Pages once with:
+
+```bash
+gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow
+```
+
+- This is mainly needed once per repository before the docs automation workflow can deploy successfully.
+
+6) Publish release tag and notes
+
+Recommended path (auto-resolves the canonical versioned release-notes file from `docs/plan/`):
+
+```bash
+python3 scripts/release_train_command.py publish \
+  --version X.Y.Z \
+  --profile runtime \
+  --confirm \
+  --json
+```
+
+Direct manual path:
 
 ```bash
 gh release create vX.Y.Z \
@@ -108,7 +134,7 @@ gh release create vX.Y.Z \
   --notes-file docs/plan/release-notes-YYYY-MM-DD-vX-Y-Z.md
 ```
 
-6) Optional release-train dry-run verification (no publish side effects)
+7) Optional release-train dry-run verification (no publish side effects)
 
 ```bash
 python3 scripts/release_train_command.py publish \
@@ -122,7 +148,7 @@ python3 scripts/release_train_command.py publish \
 ```
 
 - This check is useful for validating deterministic reason codes and publish planning behavior.
-- For docs-only release repackaging where changelog/version gates are intentionally not advanced, `gh release create` remains the canonical publish path.
+- For docs-only release repackaging where changelog/version gates are intentionally not advanced, direct `gh release create` or `gh release edit --notes-file ...` remains the canonical publish path.
 
 Release rollup artifacts now include a `## Provenance` block (`generated_by`, `generated_at_utc`, source counts).
 Downstream consumers should treat this as additive metadata and avoid strict section-order assumptions in parsers.

@@ -259,3 +259,30 @@ test("task-resume-info does not append verification for bare session token witho
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("task-resume-info plugin wiring honors shadow mode without appending semantic hints", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-task-resume-info-"));
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = createPlugin(directory, mockDecisionRuntime("C", "shadow"));
+    const output = { output: "More follow-up work remains in the same thread." };
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-task-plugin-shadow" },
+      output,
+    );
+    assert.doesNotMatch(String(output.output), /Continuation hint:/);
+    const events = readGatewayAuditEvents(directory)
+    const deferred = events.find((entry) => entry.reason_code === "llm_task_resume_shadow_deferred")
+    assert.ok(deferred)
+    assert.equal(deferred.session_id, "session-task-plugin-shadow")
+    assert.equal(deferred.llm_decision_char, "C")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
