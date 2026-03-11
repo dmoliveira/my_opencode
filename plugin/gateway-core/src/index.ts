@@ -108,6 +108,10 @@ interface GatewayEventPayload {
 interface GatewayContext {
   config?: unknown;
   directory?: string;
+  createLlmDecisionRuntime?: (options: {
+    directory: string;
+    config: LlmDecisionRuntime["config"];
+  }) => LlmDecisionRuntime;
   client?: {
     session?: {
       messages(args: {
@@ -277,7 +281,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     return [];
   }
   const llmDecisionRuntimeForHook = (hookId: string): LlmDecisionRuntime =>
-    createLlmDecisionRuntime({
+    (ctx.createLlmDecisionRuntime ?? createLlmDecisionRuntime)({
       directory,
       config: resolveLlmDecisionRuntimeConfigForHook(
         cfg.llmDecisionRuntime,

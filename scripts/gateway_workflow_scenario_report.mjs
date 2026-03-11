@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 import { createTodoContinuationEnforcerHook } from "../plugin/gateway-core/dist/hooks/todo-continuation-enforcer/index.js"
 import { createDoneProofEnforcerHook } from "../plugin/gateway-core/dist/hooks/done-proof-enforcer/index.js"
+import { createMistakeLedgerHook } from "../plugin/gateway-core/dist/hooks/mistake-ledger/index.js"
 import { createTaskResumeInfoHook } from "../plugin/gateway-core/dist/hooks/task-resume-info/index.js"
 import GatewayCorePlugin from "../plugin/gateway-core/dist/index.js"
 import {
@@ -61,6 +62,54 @@ function decisionRuntime(char, meaning, mode = "assist") {
     })
     await hook.event("session.idle", { directory, properties: { sessionID: "workflow-todo-1" } })
     results.push({ id: "todo-pending-marker", workflow: "todo-continuation-enforcer", requestType: "pending_marker", description: "idle with pending marker", expectedAction: "inject_prompt", actualAction: promptCalls === 1 ? "inject_prompt" : "no_inject", correct: promptCalls === 1 })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+      decisionRuntime: decisionRuntime("Y", "record_completion_without_validation"),
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "workflow-mistake-ledger-1" },
+      output: {
+        output:
+          "done\n<promise>PENDING_VALIDATION</promise>\n\nCompletion is held until the missing validation proof is included.",
+      },
+      directory,
+    })
+    const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
+    results.push({ id: "mistake-ledger-llm-deferral", workflow: "mistake-ledger", requestType: "semantic_deferral", description: "ambiguous deferral wording records a mistake-ledger entry", expectedAction: "write_ledger_entry", actualAction: existsSync(ledgerPath) ? "write_ledger_entry" : "no_ledger_entry", correct: existsSync(ledgerPath) })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+{
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  try {
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+      decisionRuntime: decisionRuntime("Y", "record_completion_without_validation", "shadow"),
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "workflow-mistake-ledger-2" },
+      output: {
+        output:
+          "done\n<promise>PENDING_VALIDATION</promise>\n\nCompletion is held until the missing validation proof is included.",
+      },
+      directory,
+    })
+    const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
+    results.push({ id: "mistake-ledger-shadow-deferral", workflow: "mistake-ledger", requestType: "semantic_deferral_shadow", description: "shadow mode records audit only without writing the mistake ledger", expectedAction: "no_ledger_entry", actualAction: existsSync(ledgerPath) ? "write_ledger_entry" : "no_ledger_entry", correct: !existsSync(ledgerPath) })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
