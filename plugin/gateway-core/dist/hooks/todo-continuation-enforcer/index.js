@@ -70,13 +70,17 @@ function hasHardContinuationCue(text) {
     if (text.includes(CONTINUE_LOOP_MARKER)) {
         return true;
     }
+    const hasActionableNextItemsCue = normalized.includes("next items") &&
+        !normalized.includes("next items: none") &&
+        !normalized.includes("next items none") &&
+        !normalized.includes("next items: n/a");
     return (normalized.includes("still left to do") ||
         normalized.includes("remaining actionable") ||
         normalized.includes("remaining epic") ||
         normalized.includes("next remaining epic") ||
         normalized.includes("remaining tasks") ||
         normalized.includes("remaining items") ||
-        normalized.includes("next items") ||
+        hasActionableNextItemsCue ||
         normalized.includes("continue loop") ||
         normalized.includes("in-progress right now") ||
         normalized.includes("still left to do (next") ||
@@ -98,6 +102,8 @@ function hasCompletionClosureCue(text) {
         normalized.includes("nothing more to") ||
         normalized.includes("nothing left to") ||
         normalized.includes("there is nothing additional") ||
+        normalized.includes("this slice is done") ||
+        normalized.includes("work from this slice is done") ||
         normalized.includes("task is finished") ||
         normalized.includes("task complete") ||
         normalized.includes("complete for now") ||
@@ -119,7 +125,41 @@ function hasDirectContinuationOfferCue(text) {
     const normalized = text.toLowerCase();
     return (/\bi\s+will\s+continue\b/.test(normalized) ||
         /\bi'?ll\s+continue\b/.test(normalized) ||
+        /\bi\s+am\s+continuing\b/.test(normalized) ||
+        /\bi'?m\s+continuing\b/.test(normalized) ||
+        /\bcontinuing\s+with\s+the\s+next\b/.test(normalized) ||
         normalized.includes("continue directly"));
+}
+function parseTodoContinuationCount(raw) {
+    let parsed = raw;
+    if (typeof raw === "string") {
+        const trimmed = raw.trim();
+        if (!trimmed) {
+            return null;
+        }
+        try {
+            parsed = JSON.parse(trimmed);
+        }
+        catch {
+            return null;
+        }
+    }
+    if (!Array.isArray(parsed)) {
+        return null;
+    }
+    let openTodos = 0;
+    for (const item of parsed) {
+        if (!item || typeof item !== "object") {
+            continue;
+        }
+        const status = String(item.status ?? "")
+            .trim()
+            .toLowerCase();
+        if (status === "pending" || status === "in_progress") {
+            openTodos += 1;
+        }
+    }
+    return openTodos;
 }
 function shouldUseLlmContinuationFallback(text) {
     return hasCompletionClosureCue(text) && hasActionableNextSliceCue(text) && hasDirectContinuationOfferCue(text);
@@ -289,6 +329,7 @@ function getSessionState(store, sessionId) {
     }
     const created = {
         pendingContinuation: false,
+        pendingTodoCount: 0,
         lastInjectedAt: 0,
         consecutiveFailures: 0,
         inFlight: false,
@@ -330,6 +371,7 @@ export function createTodoContinuationEnforcerHook(options) {
                 if (isStopIntent(prompt)) {
                     state.continueIntentArmed = false;
                     state.pendingContinuation = false;
+                    state.pendingTodoCount = 0;
                     state.markerProbeAttempted = false;
                     return;
                 }
@@ -343,11 +385,31 @@ export function createTodoContinuationEnforcerHook(options) {
                 const eventPayload = (payload ?? {});
                 const sessionId = resolveSessionId(eventPayload);
                 const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-                if (!sessionId || tool !== "task" || typeof eventPayload.output?.output !== "string") {
+                if (!sessionId) {
                     return;
                 }
                 const state = getSessionState(sessionState, sessionId);
                 state.lastTraceId = resolveTraceId(eventPayload);
+                if (tool === "todowrite") {
+                    const pendingTodoCount = parseTodoContinuationCount(eventPayload.output?.output);
+                    if (pendingTodoCount !== null) {
+                        state.pendingTodoCount = pendingTodoCount;
+                        state.pendingContinuation = pendingTodoCount > 0;
+                        state.markerProbeAttempted = true;
+                        writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+                            hook: "todo-continuation-enforcer",
+                            stage: "state",
+                            reason_code: "todo_continuation_todowrite_state_recorded",
+                            session_id: sessionId,
+                            trace_id: state.lastTraceId,
+                            open_todo_count: pendingTodoCount,
+                        });
+                    }
+                    return;
+                }
+                if (tool !== "task" || typeof eventPayload.output?.output !== "string") {
+                    return;
+                }
                 state.pendingContinuation = await resolvePendingContinuationDecision({
                     text: eventPayload.output.output,
                     continueIntentArmed: state.continueIntentArmed,
@@ -357,7 +419,17 @@ export function createTodoContinuationEnforcerHook(options) {
                     traceId: state.lastTraceId,
                     decisionRuntime: options.decisionRuntime,
                 });
-                state.markerProbeAttempted = true;
+                const hasExplicitCompletion = hasCompletionClosureCue(eventPayload.output.output);
+                state.markerProbeAttempted = state.pendingContinuation || hasExplicitCompletion;
+                if (!state.pendingContinuation && !hasExplicitCompletion) {
+                    writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+                        hook: "todo-continuation-enforcer",
+                        stage: "state",
+                        reason_code: "todo_continuation_task_probe_retained",
+                        session_id: sessionId,
+                        trace_id: state.lastTraceId,
+                    });
+                }
                 return;
             }
             if (type !== "session.idle") {
@@ -415,7 +487,7 @@ export function createTodoContinuationEnforcerHook(options) {
             if (state.lastInjectedAt > 0 && now - state.lastInjectedAt < cooldownMs) {
                 return;
             }
-            let pending = state.pendingContinuation;
+            let pending = state.pendingContinuation || state.pendingTodoCount > 0;
             const client = options.client?.session;
             if (!pending && client && !state.markerProbeAttempted) {
                 try {
