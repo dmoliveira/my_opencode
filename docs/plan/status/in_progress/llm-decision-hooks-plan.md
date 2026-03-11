@@ -2,8 +2,8 @@
 
 Date: 2026-03-11
 Status: `in_progress`
-Branch: `fix/next-parity-item-3`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item-3`
+Branch: `fix/task-resume-info-llm-runtime`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-task-resume-info-llm-runtime`
 
 ## Goal
 
@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, done-proof, and mixed-signal continuation semantic slices are implemented and merged; the remaining work is to inventory every semantic decision path and migrate the still-deterministic ones through the centralized runtime in priority order
-- Current active slice: `task-resume-info` is implemented locally with targeted tests, and `mistake-ledger` semantic deferral detection is now the next in-flight migration in this worktree; rollout expectation remains shadow-first for new hook decisions
+- Current active slice: `task-resume-info` finish-and-reconcile work is active in this worktree: binding drift, workflow artifact parity, and plan metadata are being aligned now that the centralized runtime path is already in code; rollout expectation remains shadow-first for new hook decisions
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
@@ -54,13 +54,8 @@ Do not use LLM decisions for:
 | Epic 2 - Hybrid delegation decisions | done | `agent-model-resolver` and `agent-denied-tool-enforcer` use the centralized runtime with real simulation evidence. |
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry remains active for `auto-slash-command` and `provider-error-classifier`, while `delegation-fallback-orchestrator` stays the next shadow-to-assist candidate pending a fresh disagreement window. |
-<<<<<<< HEAD
-| Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, and sanitized fallback failure classification are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 18/18, now including `task-resume-info` semantic continuation/shadow cases alongside the mixed-signal `todo-continuation-enforcer` LLM fallback, epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
-=======
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, sanitized fallback failure classification, and hidden-unicode/code-fence neutralization are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 16/16, now including the mixed-signal `todo-continuation-enforcer` LLM fallback case alongside epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
->>>>>>> 1797cc2 (harden shared llm decision runtime prompts)
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 18/18, now including `task-resume-info` semantic continuation/shadow cases alongside the mixed-signal `todo-continuation-enforcer` LLM fallback, epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
 | Epic 7 - Rollout and cleanup | in_progress | `auto-slash-command` and `provider-error-classifier` remain the active assist cohort; `delegation-fallback-orchestrator` is the next promotion candidate once refreshed disagreement evidence clears it. |
 
 ### Task status by backlog item
@@ -76,7 +71,7 @@ Do not use LLM decisions for:
 | validation command and output semantic fallback | done | Wrapper command classification shipped in validation ledger. |
 | done-proof and PR-body semantic fallback | done | Both `pr-body-evidence-guard` and `done-proof-enforcer` semantic fallback paths are implemented and validated. |
 | `todo-continuation-enforcer` mixed-signal fallback | done | Centralized runtime fallback ships for contradictory completion-plus-next-slice wording with shadow-first rollout, workflow coverage, audit telemetry, and follow-up hardening fixes merged in PR `#444`. |
-| `task-resume-info` semantic resume/continue hints | doing | Centralized runtime fallback now covers ambiguous continuation and verification/reuse-context outputs while deterministic markers still win; workflow coverage and audit assertions are now in place, with rollout config and merge remaining. |
+| `task-resume-info` semantic resume/continue hints | doing | Centralized runtime fallback now covers ambiguous continuation and verification/reuse-context outputs while deterministic markers still win; binding drift and workflow artifact parity are being reconciled in this worktree before rollout tracking advances. |
 | `mistake-ledger` done-proof detection | doing | Centralized runtime fallback now covers ambiguous `PENDING_VALIDATION` deferral wording when the literal done-proof marker is absent; audit assertions are now in place, with rollout config and merge remaining. |
 
 ## Semantic decision inventory by status band
