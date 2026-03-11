@@ -2,8 +2,8 @@
 
 Date: 2026-03-11
 Status: `in_progress`
-Branch: `fix/task-resume-info-llm-runtime`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-task-resume-info-llm-runtime`
+Branch: `fix/mistake-ledger-llm-migration`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-mistake-ledger-llm-migration`
 
 ## Goal
 
@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, done-proof, and mixed-signal continuation semantic slices are implemented and merged; the remaining work is to inventory every semantic decision path and migrate the still-deterministic ones through the centralized runtime in priority order
-- Current active slice: `task-resume-info` finish-and-reconcile work is active in this worktree: binding drift, workflow artifact parity, and plan metadata are being aligned now that the centralized runtime path is already in code; rollout expectation remains shadow-first for new hook decisions
+- Current active slice: `mistake-ledger` parity evidence is active in this worktree: plugin-level shadow wiring, workflow artifact parity, and rollout-tracker alignment are being added now that the centralized runtime path is already in code; rollout expectation remains shadow-first for new hook decisions
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
@@ -55,7 +55,7 @@ Do not use LLM decisions for:
 | Epic 3 - Medium-risk semantic classifiers | done | `auto-slash-command`, `provider-error-classifier`, `delegation-fallback-orchestrator`, `validation-evidence-ledger`, `pr-body-evidence-guard`, and `done-proof-enforcer` semantic fallback slices are implemented. |
 | Epic 4 - Safety, cost, and performance controls | in_progress | Modes, per-hook mode overrides, timeouts, cache TTL, cache size, compact prompts, audit meanings, representative shadow-deferred behavior, disagreement aggregation, rollout recommendations, markdown artifact generation, per-hook threshold tuning, and sidecar-based live config wiring are implemented; assist telemetry remains active for `auto-slash-command` and `provider-error-classifier`, while `delegation-fallback-orchestrator` stays the next shadow-to-assist candidate pending a fresh disagreement window. |
 | Epic 5 - Prompt and protocol hardening | in_progress | Single-char contract, parser tests, prompt refinements, refusal rejection, untrusted-context serialization, stronger adversarial phrase neutralization, mixed-context coverage, hook-specific auto-slash sanitization, successful provider/done-proof mixed-context probes, validation-ledger command sanitization, sanitized fallback failure classification, and hidden-unicode/code-fence neutralization are in place; remaining work is broader adversarial expansion rather than a known blocking hotspot. |
-| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 18/18, now including `task-resume-info` semantic continuation/shadow cases alongside the mixed-signal `todo-continuation-enforcer` LLM fallback, epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
+| Epic 6 - Real scenario simulation loop | in_progress | Each implemented slice has fresh-session simulation evidence recorded in validation docs, and scenario-report harnesses now exist for semantic hook accuracy/latency and workflow/enforcer trigger accuracy; the current checked workflow set passes 20/20, now including `mistake-ledger` semantic deferral/shadow cases alongside `task-resume-info`, the mixed-signal `todo-continuation-enforcer` LLM fallback, epic progress, alternating-task completion, chained progress, cooldown, and stop/resume cases. |
 | Epic 7 - Rollout and cleanup | in_progress | `auto-slash-command` and `provider-error-classifier` remain the active assist cohort; `delegation-fallback-orchestrator` is the next promotion candidate once refreshed disagreement evidence clears it. |
 
 ### Task status by backlog item
@@ -71,8 +71,8 @@ Do not use LLM decisions for:
 | validation command and output semantic fallback | done | Wrapper command classification shipped in validation ledger. |
 | done-proof and PR-body semantic fallback | done | Both `pr-body-evidence-guard` and `done-proof-enforcer` semantic fallback paths are implemented and validated. |
 | `todo-continuation-enforcer` mixed-signal fallback | done | Centralized runtime fallback ships for contradictory completion-plus-next-slice wording with shadow-first rollout, workflow coverage, audit telemetry, and follow-up hardening fixes merged in PR `#444`. |
-| `task-resume-info` semantic resume/continue hints | doing | Centralized runtime fallback now covers ambiguous continuation and verification/reuse-context outputs while deterministic markers still win; binding drift and workflow artifact parity are being reconciled in this worktree before rollout tracking advances. |
-| `mistake-ledger` done-proof detection | doing | Centralized runtime fallback now covers ambiguous `PENDING_VALIDATION` deferral wording when the literal done-proof marker is absent; audit assertions are now in place, with rollout config and merge remaining. |
+| `task-resume-info` semantic resume/continue hints | doing | Centralized runtime fallback now covers ambiguous continuation and verification/reuse-context outputs while deterministic markers still win; rollout evidence is the remaining step. |
+| `mistake-ledger` done-proof detection | doing | Centralized runtime fallback now covers ambiguous `PENDING_VALIDATION` deferral wording when the literal done-proof marker is absent; plugin-level shadow wiring and workflow evidence are being reconciled in this worktree before rollout tracking advances. |
 
 ## Semantic decision inventory by status band
 
@@ -95,14 +95,14 @@ Do not use LLM decisions for:
 | Hook / decision | Status | Notes |
 |---|---|---|
 | `task-resume-info` | doing | Centralized runtime now handles ambiguous resume-worthy outputs and verification/continuation hints; keep shadow-first rollout and gather rollout telemetry before promoting to done. |
-| `mistake-ledger` | doing | Centralized runtime now handles ambiguous completion-deferral wording before recording `completion_without_validation`; keep shadow-first rollout and gather rollout telemetry before promoting to done. |
+| `mistake-ledger` | doing | Centralized runtime now handles ambiguous completion-deferral wording before recording `completion_without_validation`; plugin-level shadow wiring and workflow artifact coverage are now being added before rollout telemetry becomes the only remaining gate. |
 
 ### Pending semantic migrations
 
 | Hook / decision | Status | Notes |
 |---|---|---|
 | `task-resume-info` continuation-vs-resume intent split | doing | New single-char fallback now distinguishes continuation-only vs verification-only vs both when deterministic markers are absent; workflow coverage is in place and rollout evidence is the remaining step. |
-| `mistake-ledger` done-proof detection | doing | New binary fallback now records only when semantic deferral wording indicates missing validation/done-proof evidence; audit assertions are in place and rollout evidence is the remaining step. |
+| `mistake-ledger` done-proof detection | doing | New binary fallback now records only when semantic deferral wording indicates missing validation/done-proof evidence; workflow evidence and plugin-level wiring assertions are being reconciled in this worktree before rollout evidence becomes the only remaining step. |
 | `semantic-output-summarizer` style/intent shaping | pending | If this hook starts making route/classification decisions instead of pure formatting, it should use the centralized runtime rather than bespoke heuristics. |
 
 ### Intentionally deterministic

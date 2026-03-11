@@ -143,7 +143,7 @@ function configuredHooks(ctx) {
         });
         return [];
     }
-    const llmDecisionRuntimeForHook = (hookId) => createLlmDecisionRuntime({
+    const llmDecisionRuntimeForHook = (hookId) => (ctx.createLlmDecisionRuntime ?? createLlmDecisionRuntime)({
         directory,
         config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),
     });

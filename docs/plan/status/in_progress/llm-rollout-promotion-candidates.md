@@ -1,7 +1,7 @@
 # LLM Rollout Promotion Candidates
 
-Date: 2026-03-10
-Branch: `fix/next-parity-item-2`
+Date: 2026-03-11
+Branch: `fix/mistake-ledger-llm-migration`
 
 ## Initial assist candidates
 
@@ -32,6 +32,8 @@ Branch: `fix/next-parity-item-2`
   - Why: semantic validation classification can affect downstream done-proof outcomes and needs more longitudinal data.
 - `todo-continuation-enforcer`
   - Why: mixed-signal continuation decisions can create autonomous follow-on execution, so shadow evidence should accumulate before any assist promotion.
+- `mistake-ledger`
+  - Why: semantic deferral classification writes operator-facing learning records, so shadow evidence and workflow parity should land before any assist promotion.
 
 ## Promotion rule of thumb
 
