@@ -1,11 +1,11 @@
 # Direct Work Warning Validation - 2026-03-10
 
-Branch: `wt/post-merge-parity-backlog`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-post-merge-parity-backlog`
+Branch: `wt/claude-hooks-decision`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-claude-hooks-decision`
 
 ## Scope
 
-Validation for the first local delegation-first direct-work discipline slice and its repeat-edit escalation follow-up.
+Validation for the delegation-first direct-work discipline slice, including repeat-edit escalation and documentation-path exceptions.
 
 Covered changes:
 
@@ -30,6 +30,12 @@ Covered changes:
 - the first primary-session direct edit warns by default
 - optional repeated-edit blocking exists behind `directWorkWarning.blockRepeatedEdits`
 - when enabled, the next write-like direct edit in the same session is blocked and the block resets on `session.deleted`
+
+### 4. Documentation-safe path exceptions are now configurable
+
+- `directWorkWarning.allowPaths` supports glob-based exemptions
+- default exemptions cover documentation-oriented paths such as `docs/**/*.md`, `README*.md`, and `AGENTS.md`
+- exemptions now work for relative paths, absolute file paths inside the repo, and `apply_patch` / `multiedit` payloads
 
 ## Validation commands
 

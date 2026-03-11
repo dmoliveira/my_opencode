@@ -550,6 +550,7 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.directWorkWarning.enabled,
             blockRepeatedEdits: cfg.directWorkWarning.blockRepeatedEdits,
+            allowPaths: cfg.directWorkWarning.allowPaths,
         })),
         safeHook("unstable-agent-babysitter", () => createUnstableAgentBabysitterHook({
             enabled: cfg.unstableAgentBabysitter.enabled,

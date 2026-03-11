@@ -1,3 +1,4 @@
+import { type LlmDecisionRuntime } from "./hooks/shared/llm-decision-runtime.js";
 interface GatewayEventPayload {
     event: {
         type: string;
@@ -7,6 +8,10 @@ interface GatewayEventPayload {
 interface GatewayContext {
     config?: unknown;
     directory?: string;
+    createLlmDecisionRuntime?: (options: {
+        directory: string;
+        config: LlmDecisionRuntime["config"];
+    }) => LlmDecisionRuntime;
     client?: {
         session?: {
             messages(args: {

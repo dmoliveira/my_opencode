@@ -938,6 +938,13 @@ export function loadGatewayConfig(raw) {
             blockRepeatedEdits: typeof directWorkWarningSource.blockRepeatedEdits === "boolean"
                 ? directWorkWarningSource.blockRepeatedEdits
                 : DEFAULT_GATEWAY_CONFIG.directWorkWarning.blockRepeatedEdits,
+            allowPaths: Array.isArray(directWorkWarningSource.allowPaths)
+                ? directWorkWarningSource.allowPaths
+                    .map((value) => typeof value === "string"
+                    ? value.trim()
+                    : String(value ?? "").trim())
+                    .filter(Boolean)
+                : DEFAULT_GATEWAY_CONFIG.directWorkWarning.allowPaths,
         },
         unstableAgentBabysitter: {
             enabled: typeof unstableBabysitterSource.enabled === "boolean"

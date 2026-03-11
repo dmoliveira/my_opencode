@@ -350,6 +350,7 @@ export interface AgentUserReminderConfig {
 export interface DirectWorkWarningConfig {
   enabled: boolean;
   blockRepeatedEdits: boolean;
+  allowPaths: string[];
 }
 
 // Declares unstable agent babysitter settings.
@@ -1083,6 +1084,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   directWorkWarning: {
     enabled: true,
     blockRepeatedEdits: false,
+    allowPaths: ["docs/**/*.md", "**/README*.md", "**/AGENTS.md"],
   },
   unstableAgentBabysitter: {
     enabled: true,

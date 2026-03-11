@@ -261,6 +261,7 @@ export interface AgentUserReminderConfig {
 export interface DirectWorkWarningConfig {
     enabled: boolean;
     blockRepeatedEdits: boolean;
+    allowPaths: string[];
 }
 export interface UnstableAgentBabysitterConfig {
     enabled: boolean;

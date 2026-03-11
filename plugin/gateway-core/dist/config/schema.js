@@ -430,6 +430,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
     directWorkWarning: {
         enabled: true,
         blockRepeatedEdits: false,
+        allowPaths: ["docs/**/*.md", "**/README*.md", "**/AGENTS.md"],
     },
     unstableAgentBabysitter: {
         enabled: true,
