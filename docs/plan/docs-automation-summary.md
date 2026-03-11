@@ -10,9 +10,9 @@ Generated artifact that tracks docs-automation publication coverage.
 - reason_groups: none
 - recommended_next_step: none
 
-- generated_at_utc: 2026-03-10T12:34:29Z
-- indexed_release_count: 21
-- latest_indexed_release: v0.4.20
+- generated_at_utc: 2026-03-11T01:06:44Z
+- indexed_release_count: 22
+- latest_indexed_release: v0.4.21
 - publication_target_coverage: 3/3
 - target_wiki_sync_job: ok
 - target_pages_deploy_job: ok
@@ -21,8 +21,8 @@ Generated artifact that tracks docs-automation publication coverage.
 - workflow_source: .github/workflows/docs-automation.yml
 
 ## Latest Indexed Releases
-- v0.4.16
 - v0.4.17
 - v0.4.18
 - v0.4.19
 - v0.4.20
+- v0.4.21
