@@ -242,3 +242,20 @@ test("task-resume-info shadow mode records but does not add semantic hints", asy
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("task-resume-info does not append verification for bare session token without semantic approval", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-task-resume-info-"));
+  try {
+    const hook = createTaskResumeInfoHook({ enabled: true });
+    const output = { output: "Worker context ses_child999 is mentioned here, but the task is complete with no follow-up." };
+    await hook.event("tool.execute.after", {
+      input: { tool: "task", sessionID: "session-task-9" },
+      output,
+      directory,
+    });
+    const text = String(output.output);
+    assert.doesNotMatch(text, /Verification hint:/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
