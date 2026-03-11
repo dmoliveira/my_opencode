@@ -1,7 +1,7 @@
 # Atlas Runtime Prototype Validation - 2026-03-10
 
-Branch: `wt/parity-gap-fixes`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-parity-gap-fixes`
+Branch: `fix/next-parity-item-4`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item-4`
 
 ## Scope
 
@@ -47,3 +47,7 @@ Outcome:
 
 - Status: pass
 - No blocker regressions found in the prototype slice
+
+## Follow-up
+
+- The prototype behavior now ships through the centralized LLM runtime path, with workflow coverage and plugin-level shadow-mode assertions added after the initial prototype validation.

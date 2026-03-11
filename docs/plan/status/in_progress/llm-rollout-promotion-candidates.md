@@ -1,7 +1,7 @@
 # LLM Rollout Promotion Candidates
 
 Date: 2026-03-11
-Branch: `fix/mistake-ledger-llm-migration`
+Branch: `fix/next-parity-item-4`
 
 ## Initial assist candidates
 
@@ -34,6 +34,8 @@ Branch: `fix/mistake-ledger-llm-migration`
   - Why: mixed-signal continuation decisions can create autonomous follow-on execution, so shadow evidence should accumulate before any assist promotion.
 - `mistake-ledger`
   - Why: semantic deferral classification writes operator-facing learning records, so shadow evidence and workflow parity should land before any assist promotion.
+- `task-resume-info`
+  - Why: semantic continuation/verification hints can steer follow-up execution, so it should remain shadow-first until live disagreement data exists beyond synthetic workflow coverage.
 
 ## Promotion rule of thumb
 
