@@ -45,6 +45,7 @@ export function isIntentionalHookBlock(error: unknown): boolean {
   return (
     /^\[[^\]]+\]/.test(trimmed) ||
     /^blocked\b/i.test(trimmed) ||
+    /\bdisabled\b/i.test(trimmed) ||
     /require(?:s|d)? explicit/i.test(trimmed) ||
     /\bmust include\b/i.test(trimmed) ||
     /\bmust use\b/i.test(trimmed) ||

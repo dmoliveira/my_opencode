@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const RESUME_HINT = "Resume hint: keep the returned task_id and reuse it to continue the same subagent session.";
 const CONTINUE_HINT = "Continuation hint: pending work remains; continue execution directly and avoid asking for extra confirmation turns.";
 const VERIFICATION_HEADER = "Verification hint: review the subagent result before moving on.";
