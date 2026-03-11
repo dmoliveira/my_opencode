@@ -35,7 +35,7 @@ DEFAULT_STALE_SESSION_SECONDS = max(
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic] [--apply] [--json]"
     )
     return 2
 
@@ -105,9 +105,6 @@ def _emit(payload: dict, json_output: bool) -> int:
     if json_output:
         print(json.dumps(payload, indent=2))
         return 0 if payload.get("result") == "PASS" else 1
-    if payload.get("result") != "PASS":
-        print(f"error: {payload.get('error', 'session command failed')}")
-        return 1
     if payload.get("command") == "current":
         row = payload.get("session", {})
         print(f"session_id: {row.get('session_id')}")
@@ -183,6 +180,39 @@ def _emit(payload: dict, json_output: bool) -> int:
                     )
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("command") == "repair-stale":
+        print("session repair-stale")
+        print("--------------------")
+        print(f"runtime_db: {payload.get('runtime_db_path')}")
+        print(f"stale_seconds: {payload.get('stale_seconds')}")
+        print(f"apply: {'yes' if payload.get('apply') else 'no'}")
+        print(f"include_generic: {'yes' if payload.get('include_generic') else 'no'}")
+        if payload.get("warnings"):
+            print("warnings:")
+            for warning in payload.get("warnings", []):
+                print(f"- {warning}")
+        if payload.get("problems"):
+            print("problems:")
+            for problem in payload.get("problems", []):
+                print(f"- {problem}")
+        print(f"candidate_count: {payload.get('candidate_count', 0)}")
+        print(f"repaired_count: {payload.get('repaired_count', 0)}")
+        for item in payload.get("repairs", [])[:10]:
+            print(
+                "- "
+                f"type={item.get('issue_type')} "
+                f"session={item.get('session_id') or item.get('parent_session_id')} "
+                f"tool={item.get('tool') or item.get('parent_last_tool') or 'none'}"
+            )
+        if payload.get("quick_fixes"):
+            print("quick_fixes:")
+            for fix in payload.get("quick_fixes", []):
+                print(f"- {fix}")
+        print(f"result: {payload.get('result')}")
+        return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("result") != "PASS":
+        print(f"error: {payload.get('error', 'session command failed')}")
+        return 1
     if payload.get("command") == "handoff":
         print("session handoff")
         print("---------------")
@@ -220,6 +250,7 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
     warnings: list[str] = []
     problems: list[str] = []
     findings: list[dict] = []
+    generic_stale_findings: list[dict] = []
     if not db_path.exists():
         warnings.append("runtime session database does not exist yet")
         return {
@@ -247,20 +278,19 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             WITH parent_last_msg AS (
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
             ),
-            parent_last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
-            ),
             child_last_msg AS (
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-            ),
-            child_last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
             )
             SELECT
               p.id AS parent_session_id,
+              pm.id AS parent_message_id,
+              pp.id AS parent_part_id,
               p.title AS parent_title,
               c.id AS child_session_id,
+              cm.id AS child_message_id,
               c.title AS child_title,
+              p.time_updated AS parent_time_updated,
+              c.time_updated AS child_time_updated,
               CAST((strftime('%s','now') - (p.time_updated / 1000)) AS INT) AS parent_stale_seconds,
               CAST((strftime('%s','now') - (c.time_updated / 1000)) AS INT) AS child_stale_seconds,
               COALESCE(json_extract(pp.data,'$.type'),'none') AS parent_last_part_type,
@@ -276,12 +306,14 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             JOIN session c ON c.parent_id = p.id
             JOIN parent_last_msg plm ON plm.session_id = p.id
             JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
-            LEFT JOIN parent_last_part plp ON plp.session_id = p.id
-            LEFT JOIN part pp ON pp.session_id = p.id AND pp.time_created = plp.max_time
+            LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = pm.id
+            )
             LEFT JOIN child_last_msg clm ON clm.session_id = c.id
             LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
-            LEFT JOIN child_last_part clp ON clp.session_id = c.id
-            LEFT JOIN part cp ON cp.session_id = c.id AND cp.time_created = clp.max_time
+            LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = cm.id
+            )
             WHERE json_extract(pm.data,'$.role') = 'assistant'
               AND json_extract(pm.data,'$.time.completed') IS NULL
               AND p.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
@@ -308,13 +340,13 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             """
             WITH last_msg AS (
               SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-            ),
-            last_part AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM part GROUP BY session_id
             )
             SELECT
               s.id AS session_id,
+              m.id AS message_id,
+              p.id AS part_id,
               s.title AS session_title,
+              s.time_updated AS session_time_updated,
               CAST((strftime('%s','now') - (s.time_updated / 1000)) AS INT) AS stale_seconds,
               COALESCE(json_extract(p.data,'$.type'),'none') AS last_part_type,
               COALESCE(json_extract(p.data,'$.tool'),'') AS last_tool,
@@ -322,8 +354,9 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             FROM session s
             JOIN last_msg lm ON lm.session_id = s.id
             JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
-            LEFT JOIN last_part lp ON lp.session_id = s.id
-            LEFT JOIN part p ON p.session_id = s.id AND p.time_created = lp.max_time
+            LEFT JOIN part p ON p.message_id = m.id AND p.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = m.id
+            )
             WHERE json_extract(m.data,'$.role') = 'assistant'
               AND json_extract(m.data,'$.time.completed') IS NULL
               AND s.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
@@ -340,19 +373,68 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             item["issue_type"] = "stale_running_tool"
             findings.append(item)
 
+        generic_stale_with_sql = """
+            WITH last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            ),
+            last_part AS (
+              SELECT message_id, MAX(time_created) AS max_time FROM part GROUP BY message_id
+            )
+        """
+        generic_stale_from_sql = """
+            FROM session s
+            JOIN last_msg lm ON lm.session_id = s.id
+            JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
+            LEFT JOIN last_part lp ON lp.message_id = m.id
+            LEFT JOIN part p ON p.message_id = m.id AND p.time_created = lp.max_time
+            WHERE json_extract(m.data,'$.role') = 'assistant'
+              AND json_extract(m.data,'$.time.completed') IS NULL
+              AND json_extract(m.data,'$.error') IS NULL
+              AND s.parent_id IS NULL
+              AND s.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND NOT EXISTS (
+                SELECT 1
+                FROM session c
+                WHERE c.parent_id = s.id
+              )
+              AND NOT (
+                COALESCE(json_extract(p.data,'$.type'),'') = 'tool'
+                AND COALESCE(json_extract(p.data,'$.state.status'),'') = 'running'
+                AND COALESCE(json_extract(p.data,'$.tool'),'') IN ('question', 'apply_patch')
+              )
+        """
+
+        generic_stale_rows = conn.execute(
+            f"""
+            {generic_stale_with_sql}
+            SELECT
+              s.id AS session_id,
+              m.id AS message_id,
+              p.id AS part_id,
+              s.title AS session_title,
+              s.time_updated AS session_time_updated,
+              CAST((strftime('%s','now') - (s.time_updated / 1000)) AS INT) AS stale_seconds,
+              COALESCE(json_extract(p.data,'$.type'),'none') AS last_part_type,
+              COALESCE(json_extract(p.data,'$.tool'),'') AS last_tool,
+              COALESCE(json_extract(p.data,'$.state.status'),'') AS last_tool_status
+            {generic_stale_from_sql}
+            ORDER BY s.time_updated DESC
+            LIMIT 20
+            """,
+            (stale_seconds,),
+        ).fetchall()
+        generic_stale_findings: list[dict] = []
+        for row in generic_stale_rows:
+            item = dict(row)
+            item["issue_type"] = "generic_stale_incomplete_assistant"
+            generic_stale_findings.append(item)
+
         generic_stale_count = int(
             conn.execute(
-                """
-                WITH last_msg AS (
-                  SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-                )
+                f"""
+                {generic_stale_with_sql}
                 SELECT COUNT(*)
-                FROM session s
-                JOIN last_msg lm ON lm.session_id = s.id
-                JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
-                WHERE json_extract(m.data,'$.role') = 'assistant'
-                  AND json_extract(m.data,'$.time.completed') IS NULL
-                  AND s.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+                {generic_stale_from_sql}
                 """,
                 (stale_seconds,),
             ).fetchone()[0]
@@ -376,7 +458,368 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
         "warnings": warnings,
         "problems": problems,
         "stuck_findings": findings,
+        "generic_stale_findings": generic_stale_findings,
         "generic_stale_count": generic_stale_count,
+    }
+
+
+def _repair_message_and_tool(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    message_id: str,
+    part_id: str,
+    expected_session_time_updated: int,
+    tool_name: str,
+    reason_code: str,
+) -> bool:
+    if (
+        not session_id
+        or not message_id
+        or not part_id
+        or expected_session_time_updated <= 0
+    ):
+        return False
+
+    session_row = conn.execute(
+        "SELECT time_updated FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+    if session_row is None or int(session_row["time_updated"] or 0) != int(
+        expected_session_time_updated
+    ):
+        return False
+
+    message_row = conn.execute(
+        "SELECT data FROM message WHERE id = ? AND session_id = ?",
+        (message_id, session_id),
+    ).fetchone()
+    part_row = conn.execute(
+        "SELECT data FROM part WHERE id = ? AND session_id = ? AND message_id = ?",
+        (part_id, session_id, message_id),
+    ).fetchone()
+    if message_row is None or part_row is None:
+        return False
+
+    now_ms = int(
+        conn.execute("SELECT CAST(strftime('%s','now') * 1000 AS INT)").fetchone()[0]
+    )
+    message_data = json.loads(message_row["data"] or "{}")
+    if not isinstance(message_data, dict):
+        message_data = {}
+    existing_time_payload = message_data.get("time")
+    if (
+        isinstance(existing_time_payload, dict)
+        and existing_time_payload.get("completed") is not None
+    ):
+        return False
+    time_payload = message_data.get("time")
+    if not isinstance(time_payload, dict):
+        time_payload = {}
+    time_payload["completed"] = now_ms
+    message_data["time"] = time_payload
+    if message_data.get("error") is None:
+        message_data["error"] = {
+            "name": "RecoveredStaleSession",
+            "message": reason_code,
+        }
+
+    part_data = json.loads(part_row["data"] or "{}")
+    if not isinstance(part_data, dict):
+        part_data = {}
+    state_payload = part_data.get("state")
+    if not isinstance(state_payload, dict):
+        state_payload = {}
+    if str(state_payload.get("status") or "").lower() != "running":
+        return False
+    state_payload["status"] = "failed"
+    state_payload["reason"] = reason_code
+    part_data["state"] = state_payload
+    if tool_name and not part_data.get("tool"):
+        part_data["tool"] = tool_name
+
+    message_update = conn.execute(
+        "UPDATE message SET data = ? WHERE id = ? AND session_id = ? AND json_extract(data,'$.time.completed') IS NULL",
+        (json.dumps(message_data, separators=(",", ":")), message_id, session_id),
+    )
+    if message_update.rowcount != 1:
+        return False
+    part_update = conn.execute(
+        "UPDATE part SET data = ? WHERE id = ? AND session_id = ? AND COALESCE(json_extract(data,'$.state.status'),'') = 'running'",
+        (json.dumps(part_data, separators=(",", ":")), part_id, session_id),
+    )
+    if part_update.rowcount != 1:
+        return False
+    session_update = conn.execute(
+        "UPDATE session SET time_updated = ? WHERE id = ? AND time_updated = ?",
+        (now_ms, session_id, expected_session_time_updated),
+    )
+    return session_update.rowcount == 1
+
+
+def _repair_stale_assistant_session(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    message_id: str,
+    expected_session_time_updated: int,
+    reason_code: str,
+    part_id: str = "",
+    expected_running_tool: bool = False,
+) -> bool:
+    if not session_id or not message_id or expected_session_time_updated <= 0:
+        return False
+    session_row = conn.execute(
+        "SELECT time_updated FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+    if session_row is None or int(session_row["time_updated"] or 0) != int(
+        expected_session_time_updated
+    ):
+        return False
+    message_row = conn.execute(
+        "SELECT data FROM message WHERE id = ? AND session_id = ?",
+        (message_id, session_id),
+    ).fetchone()
+    if message_row is None:
+        return False
+    message_data = json.loads(message_row["data"] or "{}")
+    if not isinstance(message_data, dict):
+        return False
+    time_payload = message_data.get("time")
+    if isinstance(time_payload, dict) and time_payload.get("completed") is not None:
+        return False
+    now_ms = int(
+        conn.execute("SELECT CAST(strftime('%s','now') * 1000 AS INT)").fetchone()[0]
+    )
+    if not isinstance(time_payload, dict):
+        time_payload = {}
+    time_payload["completed"] = now_ms
+    message_data["time"] = time_payload
+    if message_data.get("error") is None:
+        message_data["error"] = {
+            "name": "RecoveredStaleSession",
+            "message": reason_code,
+        }
+    message_update = conn.execute(
+        "UPDATE message SET data = ? WHERE id = ? AND session_id = ? AND json_extract(data,'$.time.completed') IS NULL",
+        (json.dumps(message_data, separators=(",", ":")), message_id, session_id),
+    )
+    if message_update.rowcount != 1:
+        return False
+    if expected_running_tool and part_id:
+        part_row = conn.execute(
+            "SELECT data FROM part WHERE id = ? AND session_id = ? AND message_id = ?",
+            (part_id, session_id, message_id),
+        ).fetchone()
+        if part_row is None:
+            return False
+        part_data = json.loads(part_row["data"] or "{}")
+        if not isinstance(part_data, dict):
+            return False
+        state_payload = part_data.get("state")
+        if not isinstance(state_payload, dict):
+            state_payload = {}
+        if str(state_payload.get("status") or "").lower() != "running":
+            return False
+        state_payload["status"] = "failed"
+        state_payload["reason"] = reason_code
+        part_data["state"] = state_payload
+        part_update = conn.execute(
+            "UPDATE part SET data = ? WHERE id = ? AND session_id = ? AND message_id = ? AND COALESCE(json_extract(data,'$.state.status'),'') = 'running'",
+            (
+                json.dumps(part_data, separators=(",", ":")),
+                part_id,
+                session_id,
+                message_id,
+            ),
+        )
+        if part_update.rowcount != 1:
+            return False
+    session_update = conn.execute(
+        "UPDATE session SET time_updated = ? WHERE id = ? AND time_updated = ?",
+        (now_ms, session_id, expected_session_time_updated),
+    )
+    return session_update.rowcount == 1
+
+
+def _child_session_still_terminal(
+    conn: sqlite3.Connection,
+    *,
+    parent_session_id: str,
+    child_session_id: str,
+    child_message_id: str,
+    expected_child_time_updated: int,
+) -> bool:
+    if (
+        not parent_session_id
+        or not child_session_id
+        or not child_message_id
+        or expected_child_time_updated <= 0
+    ):
+        return False
+    session_row = conn.execute(
+        "SELECT time_updated FROM session WHERE id = ? AND parent_id = ?",
+        (child_session_id, parent_session_id),
+    ).fetchone()
+    if session_row is None or int(session_row["time_updated"] or 0) != int(
+        expected_child_time_updated
+    ):
+        return False
+    message_row = conn.execute(
+        "SELECT data FROM message WHERE id = ? AND session_id = ?",
+        (child_message_id, child_session_id),
+    ).fetchone()
+    if message_row is None:
+        return False
+    message_data = json.loads(message_row["data"] or "{}")
+    if not isinstance(message_data, dict):
+        return False
+    time_payload = message_data.get("time")
+    return bool(
+        (isinstance(time_payload, dict) and time_payload.get("completed") is not None)
+        or message_data.get("error") is not None
+    )
+
+
+def _repair_runtime_stuck_sessions(
+    db_path: Path, stale_seconds: int, apply_changes: bool, include_generic: bool
+) -> dict:
+    scan = _scan_runtime_stuck_sessions(db_path, stale_seconds)
+    repairs: list[dict] = []
+    candidate_findings = list(scan["stuck_findings"])
+    if include_generic:
+        candidate_findings.extend(scan.get("generic_stale_findings") or [])
+    if not apply_changes or not candidate_findings or not db_path.exists():
+        return {
+            "warnings": scan["warnings"],
+            "problems": scan["problems"],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": 0,
+            "repairs": repairs,
+        }
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for finding in candidate_findings:
+            savepoint_name = (
+                f"repair_{len(repairs)}_{str(finding.get('issue_type') or 'item')}"
+            )
+            conn.execute(f"SAVEPOINT {savepoint_name}")
+            repaired = False
+            issue_type = str(finding.get("issue_type") or "")
+            if issue_type == "parent_child_mismatch":
+                session_id = str(finding.get("parent_session_id") or "")
+                if not _child_session_still_terminal(
+                    conn,
+                    parent_session_id=session_id,
+                    child_session_id=str(finding.get("child_session_id") or ""),
+                    child_message_id=str(finding.get("child_message_id") or ""),
+                    expected_child_time_updated=int(
+                        finding.get("child_time_updated") or 0
+                    ),
+                ):
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                    conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+                    continue
+                repaired = _repair_message_and_tool(
+                    conn,
+                    session_id=session_id,
+                    message_id=str(finding.get("parent_message_id") or ""),
+                    part_id=str(finding.get("parent_part_id") or ""),
+                    expected_session_time_updated=int(
+                        finding.get("parent_time_updated") or 0
+                    ),
+                    tool_name=str(finding.get("parent_last_tool") or "task"),
+                    reason_code="stale_parent_reconciled_from_child_completion",
+                )
+                if repaired:
+                    repairs.append(
+                        {
+                            "issue_type": issue_type,
+                            "parent_session_id": session_id,
+                            "child_session_id": finding.get("child_session_id"),
+                            "tool": finding.get("parent_last_tool") or "task",
+                        }
+                    )
+            elif issue_type == "stale_running_tool":
+                session_id = str(finding.get("session_id") or "")
+                repaired = _repair_message_and_tool(
+                    conn,
+                    session_id=session_id,
+                    message_id=str(finding.get("message_id") or ""),
+                    part_id=str(finding.get("part_id") or ""),
+                    expected_session_time_updated=int(
+                        finding.get("session_time_updated") or 0
+                    ),
+                    tool_name=str(finding.get("last_tool") or ""),
+                    reason_code="stale_running_tool_repaired",
+                )
+                if repaired:
+                    repairs.append(
+                        {
+                            "issue_type": issue_type,
+                            "session_id": session_id,
+                            "tool": finding.get("last_tool") or "",
+                        }
+                    )
+            elif issue_type == "generic_stale_incomplete_assistant":
+                session_id = str(finding.get("session_id") or "")
+                repaired = _repair_stale_assistant_session(
+                    conn,
+                    session_id=session_id,
+                    message_id=str(finding.get("message_id") or ""),
+                    expected_session_time_updated=int(
+                        finding.get("session_time_updated") or 0
+                    ),
+                    reason_code="generic_stale_incomplete_assistant_repaired",
+                    part_id=str(finding.get("part_id") or ""),
+                    expected_running_tool=bool(
+                        str(finding.get("last_part_type") or "") == "tool"
+                        and str(finding.get("last_tool_status") or "") == "running"
+                    ),
+                )
+                if repaired:
+                    repairs.append(
+                        {
+                            "issue_type": issue_type,
+                            "session_id": session_id,
+                            "tool": finding.get("last_tool") or "",
+                        }
+                    )
+            if not repaired:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+            conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+        conn.commit()
+    except sqlite3.DatabaseError as exc:
+        conn.rollback()
+        return {
+            "warnings": scan["warnings"],
+            "problems": [
+                *scan["problems"],
+                f"failed to repair runtime session database: {exc}",
+            ],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": len(repairs),
+            "repairs": repairs,
+        }
+    finally:
+        conn.close()
+
+    problems = []
+    if len(repairs) != len(candidate_findings):
+        problems.append(
+            f"repaired {len(repairs)} of {len(candidate_findings)} stale finding(s); rerun doctor before trusting the result"
+        )
+
+    return {
+        "warnings": scan["warnings"],
+        "problems": problems,
+        "candidate_count": len(candidate_findings),
+        "repaired_count": len(repairs),
+        "repairs": repairs,
     }
 
 
@@ -625,6 +1068,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "quick_fixes": [
                 "/doctor run",
                 f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --json",
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
             ]
             if problems
             else [],
@@ -762,6 +1207,51 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
     return _emit(payload, json_output)
 
 
+def _command_repair_stale(argv: list[str], index_path: Path) -> int:
+    del index_path
+    json_output = "--json" in argv
+    apply_changes = "--apply" in argv
+    include_generic = "--include-generic" in argv
+    args = [
+        arg for arg in argv if arg not in {"--json", "--apply", "--include-generic"}
+    ]
+    try:
+        db_path = _parse_path_option(args, "--db-path", DEFAULT_RUNTIME_DB_PATH)
+        stale_seconds = _parse_positive_int_option(
+            args, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
+        )
+    except ValueError:
+        return _usage()
+
+    repair = _repair_runtime_stuck_sessions(
+        db_path, stale_seconds, apply_changes, include_generic
+    )
+    result = "PASS"
+    if repair["problems"]:
+        result = "FAIL"
+    elif not apply_changes and repair["candidate_count"]:
+        result = "FAIL"
+    payload = {
+        "result": result,
+        "command": "repair-stale",
+        "runtime_db_path": str(db_path),
+        "stale_seconds": stale_seconds,
+        "apply": apply_changes,
+        "include_generic": include_generic,
+        "warnings": repair["warnings"],
+        "problems": repair["problems"],
+        "candidate_count": repair["candidate_count"],
+        "repaired_count": repair["repaired_count"],
+        "repairs": repair["repairs"],
+        "quick_fixes": []
+        if apply_changes or not repair["candidate_count"]
+        else [
+            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds}{' --include-generic' if include_generic else ''} --apply --json"
+        ],
+    }
+    return _emit(payload, json_output)
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         return _usage()
@@ -783,6 +1273,8 @@ def main(argv: list[str]) -> int:
         return _command_handoff(rest, index_path)
     if command == "doctor":
         return _command_doctor(rest, index_path)
+    if command == "repair-stale":
+        return _command_repair_stale(rest, index_path)
     return _usage()
 
 
