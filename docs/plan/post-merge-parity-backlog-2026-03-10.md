@@ -36,7 +36,7 @@ Suggested slice:
 
 ### 2. `claude-code-hooks` compatibility decision
 
-Status: `proposed`
+Status: `reviewed` - keep divergence closed for now
 
 Why it matters:
 
@@ -48,7 +48,7 @@ Evidence:
 
 Suggested slice:
 
-- decide explicitly between (a) keep divergence closed, or (b) open a compatibility epic with concrete event mapping requirements
+- decision captured in `docs/plan/claude-code-hooks-decision-2026-03-11.md`: keep divergence closed unless direct Claude transcript/session compatibility becomes a real requirement
 
 ### 3. Parity tracker normalization after merge
 
@@ -89,5 +89,4 @@ Suggested slice:
 ## Recommended execution order
 
 1. Extend delegation-first direct-work discipline beyond warn-only reminders
-2. Decide whether `claude-code-hooks` compatibility should remain a closed divergence
-3. Revisit `todo-continuation-enforcer` promotion only after fresh live disagreement telemetry is collected
+2. Revisit `todo-continuation-enforcer` promotion only after fresh live disagreement telemetry is collected
