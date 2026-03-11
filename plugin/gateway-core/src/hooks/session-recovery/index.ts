@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
-import { injectHookMessage } from "../hook-message-injector/index.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 
 // Declares minimal session prompt API used for recovery resume.
@@ -16,6 +16,8 @@ interface GatewayClient {
           model?: { providerID?: string; modelID?: string; variant?: string }
           providerID?: string
           modelID?: string
+          error?: unknown
+          time?: { completed?: number }
         }
       }>
     }>
@@ -150,6 +152,20 @@ export function createSessionRecoveryHook(options: {
       }
       recoveringSessions.add(sessionId)
       try {
+        const safety = await inspectHookMessageSafety({
+          session: client,
+          sessionId,
+          directory,
+        })
+        if (!safety.safe) {
+          writeGatewayEventAudit(directory, {
+            hook: "session-recovery",
+            stage: "skip",
+            reason_code: `session_recovery_${safety.reason}`,
+            session_id: sessionId,
+          })
+          return
+        }
         const injected = await injectHookMessage({
           session: client,
           sessionId,

@@ -158,7 +158,7 @@ test("subagent-lifecycle-supervisor allows mixed subagents in one session withou
   }
 })
 
-test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace-less after events without user-visible warning noise", async () => {
+test("subagent-lifecycle-supervisor force-cleans ambiguous trace-less after events", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -193,14 +193,9 @@ test("subagent-lifecycle-supervisor preserves running entries on ambiguous trace
       afterOutput,
     )
 
-    assert.doesNotMatch(afterOutput.output, /ambiguous trace-less completion observed/i)
-    await assert.rejects(
-      () =>
-        plugin["tool.execute.before"](
-          { tool: "task", sessionID: "session-life-5" },
-          { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE explore-trace] retry" } },
-        ),
-      /already running/i,
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-5" },
+      { args: { subagent_type: "explore", prompt: "[DELEGATION TRACE explore-trace] retry" } },
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -497,7 +492,7 @@ test("subagent-lifecycle-supervisor records fallback and ambiguous cleanup audit
       .filter(Boolean)
       .map((line) => JSON.parse(line))
     assert.ok(events.some((entry) => entry.reason_code === "subagent_lifecycle_subagent_fallback_matched"))
-    assert.ok(events.some((entry) => entry.reason_code === "subagent_lifecycle_after_ambiguous_skip"))
+    assert.ok(events.some((entry) => entry.reason_code === "subagent_lifecycle_after_ambiguous_forced_completed"))
   } finally {
     rmSync(directory, { recursive: true, force: true })
     if (previousAudit === undefined) {
@@ -505,6 +500,72 @@ test("subagent-lifecycle-supervisor records fallback and ambiguous cleanup audit
     } else {
       process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
     }
+  }
+})
+
+test("subagent-lifecycle-supervisor reconciles child sessions from metadata-only links", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["subagent-lifecycle-supervisor"],
+          disabled: [],
+        },
+        subagentLifecycleSupervisor: {
+          enabled: true,
+          maxRetriesPerSession: 3,
+          staleRunningMs: 60000,
+          blockOnExhausted: true,
+        },
+      },
+    })
+
+    const beforeOutput = { args: { subagent_type: "explore", prompt: "first" } }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-metadata-link" },
+      beforeOutput,
+    )
+    const delegation = beforeOutput.metadata?.gateway?.delegation
+
+    await plugin.event({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-life-metadata-link",
+            parentID: "session-life-metadata-link",
+            title: "delegated child without trace title",
+            metadata: {
+              gateway: {
+                delegation,
+              },
+            },
+          },
+        },
+      },
+    })
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            role: "assistant",
+            sessionID: "child-life-metadata-link",
+            time: { completed: Date.now() },
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-life-metadata-link" },
+      { args: { subagent_type: "explore", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
   }
 })
 

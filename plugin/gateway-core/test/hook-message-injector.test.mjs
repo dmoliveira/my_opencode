@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   buildHookMessageBody,
   injectHookMessage,
+  inspectHookMessageSafety,
   resolveHookMessageIdentity,
 } from "../dist/hooks/hook-message-injector/index.js"
 
@@ -151,4 +152,75 @@ test("injectHookMessage respects tiny maxChars limits", async () => {
   assert.equal(result, true)
   assert.ok(capturedText.length > 0)
   assert.ok(capturedText.length <= 10)
+})
+
+test("inspectHookMessageSafety treats missing history API as safe fallback", async () => {
+  const result = await inspectHookMessageSafety({
+    session: {
+      async promptAsync() {},
+    },
+    sessionId: "session-safety-no-history",
+    directory: "/tmp",
+  })
+
+  assert.equal(result.safe, true)
+  assert.equal(result.reason, "history_unavailable")
+})
+
+test("inspectHookMessageSafety flags incomplete latest assistant turn", async () => {
+  const result = await inspectHookMessageSafety({
+    session: {
+      async promptAsync() {},
+    },
+    sessionId: "session-safety-incomplete",
+    directory: "/tmp",
+    messages: [
+      {
+        info: {
+          role: "assistant",
+          time: {},
+        },
+      },
+    ],
+  })
+
+  assert.equal(result.safe, false)
+  assert.equal(result.reason, "assistant_turn_incomplete")
+})
+
+test("inspectHookMessageSafety allows completed latest assistant turn", async () => {
+  const result = await inspectHookMessageSafety({
+    session: {
+      async promptAsync() {},
+    },
+    sessionId: "session-safety-complete",
+    directory: "/tmp",
+    messages: [
+      {
+        info: {
+          role: "assistant",
+          time: { completed: Date.now() },
+        },
+      },
+    ],
+  })
+
+  assert.equal(result.safe, true)
+  assert.equal(result.reason, "ok")
+})
+
+test("inspectHookMessageSafety treats probe failures as safe fallback", async () => {
+  const result = await inspectHookMessageSafety({
+    session: {
+      async messages() {
+        throw new Error("history unavailable")
+      },
+      async promptAsync() {},
+    },
+    sessionId: "session-safety-probe-fail",
+    directory: "/tmp",
+  })
+
+  assert.equal(result.safe, true)
+  assert.equal(result.reason, "history_probe_failed")
 })

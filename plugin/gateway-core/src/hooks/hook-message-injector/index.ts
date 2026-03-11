@@ -6,10 +6,15 @@ interface SessionMessageInfo {
   model?: { providerID?: string; modelID?: string; variant?: string }
   providerID?: string
   modelID?: string
+  error?: unknown
+  time?: {
+    completed?: number
+  }
 }
 
 interface SessionMessage {
   info?: SessionMessageInfo
+  parts?: Array<{ type?: string; text?: string; synthetic?: boolean }>
 }
 
 interface SessionClient {
@@ -31,6 +36,15 @@ interface SessionClient {
 export interface HookMessageIdentity {
   agent?: string
   model?: { providerID: string; modelID: string; variant?: string }
+}
+
+export interface HookMessageSafetyResult {
+  safe: boolean
+  reason:
+    | "ok"
+    | "history_unavailable"
+    | "history_probe_failed"
+    | "assistant_turn_incomplete"
 }
 
 // Resolves latest reusable agent/model identity from session history.
@@ -85,6 +99,57 @@ export async function resolveHookMessageIdentity(args: {
     }
   } catch {
     return {}
+  }
+}
+
+function hasCompletedAssistantTurn(message: SessionMessage | undefined): boolean {
+  const info = message?.info
+  if (!info || info.role !== "assistant") {
+    return true
+  }
+  if (info.error !== undefined && info.error !== null) {
+    return true
+  }
+  if (!info.time || typeof info.time !== "object") {
+    return true
+  }
+  return Number.isFinite(Number(info.time?.completed ?? NaN))
+}
+
+export async function inspectHookMessageSafety(args: {
+  session: SessionClient
+  sessionId: string
+  directory: string
+  messages?: SessionMessage[]
+}): Promise<HookMessageSafetyResult> {
+  if (Array.isArray(args.messages)) {
+    for (let idx = args.messages.length - 1; idx >= 0; idx -= 1) {
+      const message = args.messages[idx]
+      if (message?.info?.role !== "assistant") {
+        continue
+      }
+      return hasCompletedAssistantTurn(message)
+        ? { safe: true, reason: "ok" }
+        : { safe: false, reason: "assistant_turn_incomplete" }
+    }
+    return { safe: true, reason: "ok" }
+  }
+  if (typeof args.session.messages !== "function") {
+    return { safe: true, reason: "history_unavailable" }
+  }
+  try {
+    const response = await args.session.messages({
+      path: { id: args.sessionId },
+      query: { directory: args.directory },
+    })
+    return inspectHookMessageSafety({
+      session: args.session,
+      sessionId: args.sessionId,
+      directory: args.directory,
+      messages: Array.isArray(response.data) ? response.data : [],
+    })
+  } catch {
+    return { safe: true, reason: "history_probe_failed" }
   }
 }
 

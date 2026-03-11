@@ -188,3 +188,100 @@ test("session-recovery handles prompt injection failure without throwing", async
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("session-recovery skips injection while assistant turn is incomplete", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: {},
+                  },
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "session-recovery-incomplete",
+          error: { message: "temporary network timeout" },
+        },
+      },
+    })
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery falls back to injection when history probe fails", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            throw new Error("history unavailable")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "session-recovery-probe-fail",
+          error: { message: "temporary network timeout" },
+        },
+      },
+    })
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

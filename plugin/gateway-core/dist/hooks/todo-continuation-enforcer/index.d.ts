@@ -14,10 +14,15 @@ interface GatewayClient {
             data?: Array<{
                 info?: {
                     role?: string;
+                    error?: unknown;
+                    time?: {
+                        completed?: number;
+                    };
                 };
                 parts?: Array<{
                     type: string;
                     text?: string;
+                    synthetic?: boolean;
                 }>;
             }>;
         }>;

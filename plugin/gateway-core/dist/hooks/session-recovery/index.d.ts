@@ -20,6 +20,10 @@ interface GatewayClient {
                     };
                     providerID?: string;
                     modelID?: string;
+                    error?: unknown;
+                    time?: {
+                        completed?: number;
+                    };
                 };
             }>;
         }>;

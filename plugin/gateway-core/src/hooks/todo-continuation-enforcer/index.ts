@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState } from "../../state/storage.js"
-import { injectHookMessage } from "../hook-message-injector/index.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
@@ -11,7 +11,12 @@ interface GatewayClient {
     messages(args: {
       path: { id: string }
       query?: { directory?: string }
-    }): Promise<{ data?: Array<{ info?: { role?: string }; parts?: Array<{ type: string; text?: string }> }> }>
+    }): Promise<{
+      data?: Array<{
+        info?: { role?: string; error?: unknown; time?: { completed?: number } }
+        parts?: Array<{ type: string; text?: string; synthetic?: boolean }>
+      }>
+    }>
     promptAsync(args: {
       path: { id: string }
       body: { parts: Array<{ type: string; text: string }> }
@@ -71,6 +76,7 @@ interface ChatPayload {
 
 interface SessionState {
   pendingContinuation: boolean
+  pendingSource?: "task_output" | "message_probe"
   pendingTodoCount: number
   lastInjectedAt: number
   consecutiveFailures: number
@@ -460,6 +466,7 @@ function getSessionState(store: Map<string, SessionState>, sessionId: string): S
   }
   const created: SessionState = {
     pendingContinuation: false,
+    pendingSource: undefined,
     pendingTodoCount: 0,
     lastInjectedAt: 0,
     consecutiveFailures: 0,
@@ -513,6 +520,9 @@ export function createTodoContinuationEnforcerHook(options: {
         if (isStopIntent(prompt)) {
           state.continueIntentArmed = false
           state.pendingContinuation = false
+          state.pendingSource = undefined
+          state.pendingTodoCount = 0
+          state.pendingSource = undefined
           state.pendingTodoCount = 0
           state.markerProbeAttempted = false
           return
@@ -573,6 +583,7 @@ export function createTodoContinuationEnforcerHook(options: {
             trace_id: state.lastTraceId,
           })
         }
+        state.pendingSource = state.pendingContinuation ? "task_output" : undefined
         return
       }
 
@@ -634,6 +645,12 @@ export function createTodoContinuationEnforcerHook(options: {
       }
 
       let pending = state.pendingContinuation || state.pendingTodoCount > 0
+      let probeMessages:
+        | Array<{
+            info?: { role?: string; error?: unknown; time?: { completed?: number } }
+            parts?: Array<{ type?: string; text?: string; synthetic?: boolean }>
+          }>
+        | undefined
       const client = options.client?.session
       if (!pending && client && !state.markerProbeAttempted) {
         try {
@@ -642,6 +659,7 @@ export function createTodoContinuationEnforcerHook(options: {
             query: { directory },
           })
           const messages = Array.isArray(response.data) ? response.data : []
+          probeMessages = messages
           pending = hasPendingCue(messages, state.continueIntentArmed)
           if (!pending) {
             for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -662,6 +680,7 @@ export function createTodoContinuationEnforcerHook(options: {
             }
           }
           state.markerProbeAttempted = true
+          state.pendingSource = pending ? "message_probe" : undefined
         } catch {
           writeGatewayEventAudit(directory, {
             hook: "todo-continuation-enforcer",
@@ -683,6 +702,26 @@ export function createTodoContinuationEnforcerHook(options: {
         return
       }
 
+      const safety =
+        state.pendingSource === "task_output"
+          ? { safe: true, reason: "ok" as const }
+          : await inspectHookMessageSafety({
+              session: client,
+              sessionId,
+              directory,
+              messages: probeMessages,
+            })
+      if (!safety.safe) {
+        state.markerProbeAttempted = false
+        writeGatewayEventAudit(directory, {
+          hook: "todo-continuation-enforcer",
+          stage: "skip",
+          reason_code: `todo_continuation_${safety.reason}`,
+          session_id: sessionId,
+        })
+        return
+      }
+
       state.inFlight = true
       try {
         const injected = await injectHookMessage({
@@ -694,6 +733,10 @@ export function createTodoContinuationEnforcerHook(options: {
         state.lastInjectedAt = now
         if (injected) {
           state.consecutiveFailures = 0
+          state.pendingContinuation = false
+          state.pendingSource = undefined
+          state.continueIntentArmed = false
+          state.markerProbeAttempted = false
           writeGatewayEventAudit(directory, {
             hook: "todo-continuation-enforcer",
             stage: "inject",

@@ -1464,3 +1464,42 @@ test("todo-continuation-enforcer does not inject on remaining epic when user ask
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("todo-continuation-enforcer defers injection while latest assistant turn is incomplete", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant", time: {} },
+                  parts: [{ type: "text", text: "Next remaining epic - E6 parity scoreboard and drift checks. Continue Loop." }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-incomplete" },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

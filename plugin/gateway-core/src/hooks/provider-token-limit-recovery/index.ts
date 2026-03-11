@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
-import { injectHookMessage } from "../hook-message-injector/index.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 
 interface AssistantMessageInfo {
@@ -175,12 +175,35 @@ export function createProviderTokenLimitRecoveryHook(options: {
           },
           query: { directory },
         })
-        await injectHookMessage({
+        const safety = await inspectHookMessageSafety({
+          session,
+          sessionId,
+          directory,
+        })
+        if (!safety.safe) {
+          writeGatewayEventAudit(directory, {
+            hook: "provider-token-limit-recovery",
+            stage: "skip",
+            reason_code: `token_limit_recovery_${safety.reason}`,
+            session_id: sessionId,
+          })
+          return
+        }
+        const injected = await injectHookMessage({
           session,
           sessionId,
           content: RECOVERY_HINT,
           directory,
         })
+        if (!injected) {
+          writeGatewayEventAudit(directory, {
+            hook: "provider-token-limit-recovery",
+            stage: "skip",
+            reason_code: "token_limit_recovery_inject_failed",
+            session_id: sessionId,
+          })
+          return
+        }
         writeGatewayEventAudit(directory, {
           hook: "provider-token-limit-recovery",
           stage: "state",
