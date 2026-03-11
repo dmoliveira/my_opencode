@@ -48,6 +48,51 @@ export async function resolveHookMessageIdentity(args) {
         return {};
     }
 }
+function hasCompletedAssistantTurn(message) {
+    const info = message?.info;
+    if (!info || info.role !== "assistant") {
+        return true;
+    }
+    if (info.error !== undefined && info.error !== null) {
+        return true;
+    }
+    if (!info.time || typeof info.time !== "object") {
+        return true;
+    }
+    return Number.isFinite(Number(info.time?.completed ?? NaN));
+}
+export async function inspectHookMessageSafety(args) {
+    if (Array.isArray(args.messages)) {
+        for (let idx = args.messages.length - 1; idx >= 0; idx -= 1) {
+            const message = args.messages[idx];
+            if (message?.info?.role !== "assistant") {
+                continue;
+            }
+            return hasCompletedAssistantTurn(message)
+                ? { safe: true, reason: "ok" }
+                : { safe: false, reason: "assistant_turn_incomplete" };
+        }
+        return { safe: true, reason: "ok" };
+    }
+    if (typeof args.session.messages !== "function") {
+        return { safe: true, reason: "history_unavailable" };
+    }
+    try {
+        const response = await args.session.messages({
+            path: { id: args.sessionId },
+            query: { directory: args.directory },
+        });
+        return inspectHookMessageSafety({
+            session: args.session,
+            sessionId: args.sessionId,
+            directory: args.directory,
+            messages: Array.isArray(response.data) ? response.data : [],
+        });
+    }
+    catch {
+        return { safe: true, reason: "history_probe_failed" };
+    }
+}
 // Builds promptAsync body payload from content and optional identity.
 export function buildHookMessageBody(content, identity) {
     const normalized = content.trim();

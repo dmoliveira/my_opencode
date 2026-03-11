@@ -74,6 +74,7 @@ interface MessageUpdatedPayload {
     info?: {
       role?: string
       sessionID?: string
+      sessionId?: string
       error?: unknown
       time?: {
         completed?: number
@@ -199,14 +200,20 @@ export function createSubagentLifecycleSupervisorHook(options: {
 
   function finalizeLinkedLifecycle(args: {
     parentSessionId: string
+    childRunId?: string
     traceId?: string
+    subagentType?: string
     directory: string
     failed: boolean
     reasonCode: string
   }): boolean {
-    const matches = args.traceId
-      ? matchingSessionTraceLifecycleKeys(byDelegation, args.parentSessionId, args.traceId)
-      : sessionLifecycleKeys(byDelegation, args.parentSessionId)
+    const matches = args.childRunId
+      ? [`${args.parentSessionId}:${args.childRunId}`].filter((key) => byDelegation.has(key))
+      : args.traceId
+        ? matchingSessionTraceLifecycleKeys(byDelegation, args.parentSessionId, args.traceId)
+        : args.subagentType
+          ? matchingSessionLifecycleKeys(byDelegation, args.parentSessionId, args.subagentType)
+          : sessionLifecycleKeys(byDelegation, args.parentSessionId)
     if (matches.length !== 1) {
       return false
     }
@@ -295,6 +302,59 @@ export function createSubagentLifecycleSupervisorHook(options: {
     return { sid, activeKey, state, resolution: state ? "direct" : "none" }
   }
 
+  function forceFinalizeMatches(args: {
+    sid: string
+    activeKeys: string[]
+    failed: boolean
+    directory: string
+    reasonCode: string
+  }): void {
+    for (const activeKey of args.activeKeys) {
+      const state = byDelegation.get(activeKey)
+      if (!state) {
+        continue
+      }
+      if (args.failed) {
+        const failureCount = state.failureCount + 1
+        byDelegation.set(activeKey, {
+          ...state,
+          status: "failed",
+          failureCount,
+          lastUpdatedAt: nowMs(),
+          lastReasonCode: args.reasonCode,
+        })
+        writeGatewayEventAudit(args.directory, {
+          hook: "subagent-lifecycle-supervisor",
+          stage: "state",
+          reason_code: args.reasonCode,
+          session_id: args.sid,
+          child_run_id: state.childRunId,
+          trace_id: state.traceId,
+          subagent_type: state.subagentType,
+          failure_count: String(failureCount),
+        })
+        continue
+      }
+      byDelegation.set(activeKey, {
+        ...state,
+        status: "completed",
+        lastUpdatedAt: nowMs(),
+        lastReasonCode: args.reasonCode,
+      })
+      writeGatewayEventAudit(args.directory, {
+        hook: "subagent-lifecycle-supervisor",
+        stage: "state",
+        reason_code: args.reasonCode,
+        session_id: args.sid,
+        child_run_id: state.childRunId,
+        trace_id: state.traceId,
+        subagent_type: state.subagentType,
+        failure_count: String(state.failureCount),
+      })
+      byDelegation.delete(activeKey)
+    }
+  }
+
   return {
     id: "subagent-lifecycle-supervisor",
     priority: 295,
@@ -319,7 +379,9 @@ export function createSubagentLifecycleSupervisorHook(options: {
             : options.directory
         finalizeLinkedLifecycle({
           parentSessionId: link.parentSessionId,
+          childRunId: link.childRunId,
           traceId: link.traceId,
+          subagentType: link.subagentType,
           directory,
           failed: false,
           reasonCode: "subagent_lifecycle_child_idle_reconciled",
@@ -332,7 +394,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
         if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
           return
         }
-        const childSessionId = String(info?.sessionID ?? "").trim()
+        const childSessionId = String(info?.sessionID ?? info?.sessionId ?? "").trim()
         const link = getDelegationChildSessionLink(childSessionId)
         if (!link) {
           return
@@ -348,7 +410,9 @@ export function createSubagentLifecycleSupervisorHook(options: {
             : options.directory
         finalizeLinkedLifecycle({
           parentSessionId: link.parentSessionId,
+          childRunId: link.childRunId,
           traceId: link.traceId,
+          subagentType: link.subagentType,
           directory,
           failed,
           reasonCode: failed
@@ -362,12 +426,14 @@ export function createSubagentLifecycleSupervisorHook(options: {
         if (sid) {
           const childLink = clearDelegationChildSessionLink(sid)
           if (childLink) {
-            finalizeLinkedLifecycle({
-              parentSessionId: childLink.parentSessionId,
-              traceId: childLink.traceId,
-              directory: options.directory,
-              failed: false,
-              reasonCode: "subagent_lifecycle_child_deleted_reconciled",
+              finalizeLinkedLifecycle({
+                parentSessionId: childLink.parentSessionId,
+                childRunId: childLink.childRunId,
+                traceId: childLink.traceId,
+                subagentType: childLink.subagentType,
+                directory: options.directory,
+                failed: false,
+                reasonCode: "subagent_lifecycle_child_deleted_reconciled",
             })
           }
           for (const key of byDelegation.keys()) {
@@ -531,12 +597,15 @@ export function createSubagentLifecycleSupervisorHook(options: {
           ? matchingSessionLifecycleKeys(byDelegation, sid, outputSubagentType)
           : sessionLifecycleKeys(byDelegation, sid)
         if (matches.length > 1) {
-          writeGatewayEventAudit(directory, {
-            hook: "subagent-lifecycle-supervisor",
-            stage: "skip",
-            reason_code: "subagent_lifecycle_after_ambiguous_skip",
-            session_id: sid,
-            concurrent_total: String(matches.length),
+          const outputFailed = isFailureOutput(outputText)
+          forceFinalizeMatches({
+            sid,
+            activeKeys: matches,
+            failed: outputFailed,
+            directory,
+            reasonCode: outputFailed
+              ? "subagent_lifecycle_after_ambiguous_forced_failed"
+              : "subagent_lifecycle_after_ambiguous_forced_completed",
           })
           return
         }

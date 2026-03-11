@@ -76,7 +76,9 @@ export function createDelegationConcurrencyGuardHook(options) {
                 metadata: {
                     gateway: {
                         delegation: {
+                            ...(args.childRunId ? { childRunId: args.childRunId } : {}),
                             ...(args.traceId ? { traceId: args.traceId } : {}),
+                            ...(args.subagentType ? { subagentType: args.subagentType } : {}),
                         },
                     },
                 },
@@ -141,10 +143,13 @@ export function createDelegationConcurrencyGuardHook(options) {
             return "subagent_fallback";
         }
         if (fallbackKeys.length > 1) {
+            for (const key of fallbackKeys) {
+                activeByDelegation.delete(key);
+            }
             writeGatewayEventAudit(directory, {
                 hook: "delegation-concurrency-guard",
-                stage: "skip",
-                reason_code: "delegation_concurrency_after_ambiguous_skip",
+                stage: "state",
+                reason_code: "delegation_concurrency_after_ambiguous_forced_release",
                 session_id: sid,
                 concurrent_total: String(fallbackKeys.length),
             });
@@ -189,7 +194,9 @@ export function createDelegationConcurrencyGuardHook(options) {
                 }
                 releaseLinkedDelegation({
                     parentSessionId: link.parentSessionId,
+                    childRunId: link.childRunId,
                     traceId: link.traceId,
+                    subagentType: link.subagentType,
                     directory: options.directory,
                     reasonCode: "delegation_concurrency_child_idle_released",
                 });
@@ -201,7 +208,7 @@ export function createDelegationConcurrencyGuardHook(options) {
                 if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
                     return;
                 }
-                const childSessionId = String(info?.sessionID ?? "").trim();
+                const childSessionId = String(info?.sessionID ?? info?.sessionId ?? "").trim();
                 const link = getDelegationChildSessionLink(childSessionId);
                 if (!link) {
                     return;
@@ -213,7 +220,9 @@ export function createDelegationConcurrencyGuardHook(options) {
                 }
                 releaseLinkedDelegation({
                     parentSessionId: link.parentSessionId,
+                    childRunId: link.childRunId,
                     traceId: link.traceId,
+                    subagentType: link.subagentType,
                     directory: typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                         ? eventPayload.directory
                         : options.directory,
@@ -230,7 +239,9 @@ export function createDelegationConcurrencyGuardHook(options) {
                     if (childLink) {
                         releaseLinkedDelegation({
                             parentSessionId: childLink.parentSessionId,
+                            childRunId: childLink.childRunId,
                             traceId: childLink.traceId,
+                            subagentType: childLink.subagentType,
                             directory: options.directory,
                             reasonCode: "delegation_concurrency_child_deleted_released",
                         });

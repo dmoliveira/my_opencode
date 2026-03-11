@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { injectHookMessage } from "../hook-message-injector/index.js";
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
 // Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error) {
     const candidate = error && typeof error === "object" && "message" in error
@@ -95,6 +95,20 @@ export function createSessionRecoveryHook(options) {
             }
             recoveringSessions.add(sessionId);
             try {
+                const safety = await inspectHookMessageSafety({
+                    session: client,
+                    sessionId,
+                    directory,
+                });
+                if (!safety.safe) {
+                    writeGatewayEventAudit(directory, {
+                        hook: "session-recovery",
+                        stage: "skip",
+                        reason_code: `session_recovery_${safety.reason}`,
+                        session_id: sessionId,
+                    });
+                    return;
+                }
                 const injected = await injectHookMessage({
                     session: client,
                     sessionId,

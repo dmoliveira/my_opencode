@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadGatewayState } from "../../state/storage.js";
-import { injectHookMessage } from "../hook-message-injector/index.js";
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
 function compactDecisionCacheKey(text) {
     return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240);
@@ -289,6 +289,7 @@ function getSessionState(store, sessionId) {
     }
     const created = {
         pendingContinuation: false,
+        pendingSource: undefined,
         lastInjectedAt: 0,
         consecutiveFailures: 0,
         inFlight: false,
@@ -330,6 +331,7 @@ export function createTodoContinuationEnforcerHook(options) {
                 if (isStopIntent(prompt)) {
                     state.continueIntentArmed = false;
                     state.pendingContinuation = false;
+                    state.pendingSource = undefined;
                     state.markerProbeAttempted = false;
                     return;
                 }
@@ -357,6 +359,7 @@ export function createTodoContinuationEnforcerHook(options) {
                     traceId: state.lastTraceId,
                     decisionRuntime: options.decisionRuntime,
                 });
+                state.pendingSource = state.pendingContinuation ? "task_output" : undefined;
                 state.markerProbeAttempted = true;
                 return;
             }
@@ -416,6 +419,7 @@ export function createTodoContinuationEnforcerHook(options) {
                 return;
             }
             let pending = state.pendingContinuation;
+            let probeMessages;
             const client = options.client?.session;
             if (!pending && client && !state.markerProbeAttempted) {
                 try {
@@ -424,6 +428,7 @@ export function createTodoContinuationEnforcerHook(options) {
                         query: { directory },
                     });
                     const messages = Array.isArray(response.data) ? response.data : [];
+                    probeMessages = messages;
                     pending = hasPendingCue(messages, state.continueIntentArmed);
                     if (!pending) {
                         for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -444,6 +449,7 @@ export function createTodoContinuationEnforcerHook(options) {
                         }
                     }
                     state.markerProbeAttempted = true;
+                    state.pendingSource = pending ? "message_probe" : undefined;
                 }
                 catch {
                     writeGatewayEventAudit(directory, {
@@ -465,6 +471,24 @@ export function createTodoContinuationEnforcerHook(options) {
                 });
                 return;
             }
+            const safety = state.pendingSource === "task_output"
+                ? { safe: true, reason: "ok" }
+                : await inspectHookMessageSafety({
+                    session: client,
+                    sessionId,
+                    directory,
+                    messages: probeMessages,
+                });
+            if (!safety.safe) {
+                state.markerProbeAttempted = false;
+                writeGatewayEventAudit(directory, {
+                    hook: "todo-continuation-enforcer",
+                    stage: "skip",
+                    reason_code: `todo_continuation_${safety.reason}`,
+                    session_id: sessionId,
+                });
+                return;
+            }
             state.inFlight = true;
             try {
                 const injected = await injectHookMessage({
@@ -476,6 +500,10 @@ export function createTodoContinuationEnforcerHook(options) {
                 state.lastInjectedAt = now;
                 if (injected) {
                     state.consecutiveFailures = 0;
+                    state.pendingContinuation = false;
+                    state.pendingSource = undefined;
+                    state.continueIntentArmed = false;
+                    state.markerProbeAttempted = false;
                     writeGatewayEventAudit(directory, {
                         hook: "todo-continuation-enforcer",
                         stage: "inject",

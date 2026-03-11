@@ -51,7 +51,7 @@ test("delegation-concurrency-guard counts mixed subagents separately without exp
   }
 })
 
-test("delegation-concurrency-guard keeps parallel reservations when after event is trace-less and ambiguous", async () => {
+test("delegation-concurrency-guard force-releases ambiguous trace-less reservations", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -86,13 +86,9 @@ test("delegation-concurrency-guard keeps parallel reservations when after event 
       { output: "done" },
     )
 
-    await assert.rejects(
-      () =>
-        plugin["tool.execute.before"](
-          { tool: "task", sessionID: "session-concurrency-2" },
-          { args: { subagent_type: "reviewer" } },
-        ),
-      /maxTotalConcurrent/i,
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-2" },
+      { args: { subagent_type: "reviewer" } },
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -420,11 +416,7 @@ test("delegation-concurrency-guard records fallback-match and stale-prune audit 
     await fallbackPlugin["tool.execute.after"](
       { tool: "task", sessionID: "session-concurrency-fallback-audit" },
       {
-        output: `done
-
-[agent-context-shaper] delegation context
-- subagent: strategic-planner
-- recommended_category: deep`,
+        output: "done",
       },
     )
 
@@ -461,10 +453,6 @@ test("delegation-concurrency-guard records fallback-match and stale-prune audit 
       { tool: "task", sessionID: "session-concurrency-stale-audit" },
       { args: { subagent_type: "strategic-planner", prompt: "fourth" } },
     )
-    await stalePlugin["tool.execute.after"](
-      { tool: "task", sessionID: "session-concurrency-stale-audit" },
-      { output: "done" },
-    )
     await delay(5)
     await stalePlugin["tool.execute.before"](
       { tool: "task", sessionID: "session-concurrency-stale-audit" },
@@ -480,7 +468,7 @@ test("delegation-concurrency-guard records fallback-match and stale-prune audit 
       .filter(Boolean)
       .map((line) => JSON.parse(line))
     assert.ok(
-      fallbackEvents.some((entry) => entry.reason_code === "delegation_concurrency_subagent_fallback_matched"),
+      fallbackEvents.some((entry) => entry.reason_code === "delegation_concurrency_after_ambiguous_forced_release"),
     )
     assert.ok(staleEvents.some((entry) => entry.reason_code === "delegation_concurrency_stale_pruned"))
   } finally {
@@ -491,6 +479,73 @@ test("delegation-concurrency-guard records fallback-match and stale-prune audit 
     } else {
       process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
     }
+  }
+})
+
+test("delegation-concurrency-guard releases metadata-only child links on child completion", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegation-concurrency-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegation-concurrency-guard"],
+          disabled: [],
+        },
+        delegationConcurrencyGuard: {
+          enabled: true,
+          maxTotalConcurrent: 1,
+          maxExpensiveConcurrent: 1,
+          maxDeepConcurrent: 1,
+          maxCriticalConcurrent: 1,
+        },
+      },
+    })
+
+    const beforeOutput = { args: { subagent_type: "explore", prompt: "first" } }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-metadata-link" },
+      beforeOutput,
+    )
+    const delegation = beforeOutput.metadata?.gateway?.delegation
+
+    await plugin.event({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: "child-concurrency-metadata-link",
+            parentID: "session-concurrency-metadata-link",
+            title: "delegated child without trace title",
+            metadata: {
+              gateway: {
+                delegation,
+              },
+            },
+          },
+        },
+      },
+    })
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            role: "assistant",
+            sessionID: "child-concurrency-metadata-link",
+            time: { completed: Date.now() },
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-concurrency-metadata-link" },
+      { args: { subagent_type: "reviewer", prompt: "second" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
   }
 })
 

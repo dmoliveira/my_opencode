@@ -980,6 +980,97 @@ test("runtime delegation hooks ignore child sessions without delegation trace ma
   )
 })
 
+test("runtime delegation hooks reconcile metadata-linked child completion with camelCase sessionId", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-metadata-camel"
+  const beforePayload = {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "review release risk",
+      },
+    },
+  }
+  await dispatch("tool.execute.before", beforePayload)
+  const delegation = beforePayload.output.metadata?.gateway?.delegation
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-metadata-camel-1",
+        parentID: sessionID,
+        title: "child session without trace marker",
+        metadata: {
+          gateway: {
+            delegation,
+          },
+        },
+      },
+    },
+  })
+  await dispatch("message.updated", {
+    properties: {
+      info: {
+        role: "assistant",
+        sessionId: "child-session-metadata-camel-1",
+        time: { completed: Date.now() },
+      },
+    },
+  })
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "follow-up after child completion",
+      },
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === sessionID)
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "completed")
+  assert.equal(record.childRunId, delegation.childRunId)
+})
+
 test("default hook ordering runs concurrency guard before lifecycle and telemetry state hooks", async () => {
   const hooks = resolveHookOrder(
     [
