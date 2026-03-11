@@ -99,6 +99,7 @@ from autopilot_runtime import (  # type: ignore
     validate_objective,
 )
 from autopilot_integration import integrate_controls  # type: ignore
+from pages_readiness_check import evaluate_pages_readiness  # type: ignore
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -5015,6 +5016,55 @@ jobs:
             "docs automation summary updater should converge summary-only drift to ok status in one run",
         )
 
+        pages_readiness_fixture = tmp / "pages_readiness_fixture"
+        (pages_readiness_fixture / ".github" / "workflows").mkdir(
+            parents=True, exist_ok=True
+        )
+        (
+            pages_readiness_fixture / ".github" / "workflows" / "docs-automation.yml"
+        ).write_text(
+            """name: Docs Automation
+jobs:
+  deploy-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/pages
+      - uses: actions/deploy-pages@v4
+""",
+            encoding="utf-8",
+        )
+        pages_readiness_uninitialized = evaluate_pages_readiness(
+            repo_root=pages_readiness_fixture,
+            repo="owner/repo",
+            pages_payload=None,
+            fetch_error="gh: Not Found (HTTP 404)",
+            fetch_status=404,
+        )
+        expect(
+            pages_readiness_uninitialized.get("result") == "FAIL"
+            and "github_pages_site_uninitialized"
+            in set(pages_readiness_uninitialized.get("reason_codes", [])),
+            "pages readiness check should report an uninitialized site clearly",
+        )
+        pages_readiness_ready = evaluate_pages_readiness(
+            repo_root=pages_readiness_fixture,
+            repo="owner/repo",
+            pages_payload={
+                "html_url": "https://example.github.io/repo/",
+                "build_type": "workflow",
+            },
+            fetch_error=None,
+            fetch_status=None,
+        )
+        expect(
+            pages_readiness_ready.get("result") == "PASS"
+            and pages_readiness_ready.get("build_type") == "workflow",
+            "pages readiness check should pass when workflow publishing is configured",
+        )
+
         release_note_validation_check = subprocess.run(
             [sys.executable, str(RELEASE_NOTE_VALIDATION_CHECK_SCRIPT)],
             capture_output=True,
@@ -6031,7 +6081,28 @@ jobs:
             cwd=release_repo,
         )
 
-        release_publish_release_missing_notes = subprocess.run(
+        canonical_release_notes_path = (
+            release_repo / "docs" / "plan" / "release-notes-2026-03-11-v1-0-1.md"
+        )
+        canonical_release_notes_path.parent.mkdir(parents=True, exist_ok=True)
+        canonical_release_notes_path.write_text(
+            "# Release Notes\n\n- Canonical fixture release\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "add", str(canonical_release_notes_path.relative_to(release_repo))],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "add canonical release notes fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        release_publish_release_auto_notes = subprocess.run(
             [
                 sys.executable,
                 str(RELEASE_TRAIN_COMMAND_SCRIPT),
@@ -6053,18 +6124,20 @@ jobs:
             cwd=REPO_ROOT,
         )
         expect(
-            release_publish_release_missing_notes.returncode == 1,
-            "release-train publish should require notes file for create-release",
+            release_publish_release_auto_notes.returncode == 1,
+            "release-train publish should still require an existing tag when auto-notes resolution succeeds",
         )
-        release_publish_release_missing_notes_payload = parse_json_output(
-            release_publish_release_missing_notes.stdout
+        release_publish_release_auto_notes_payload = parse_json_output(
+            release_publish_release_auto_notes.stdout
         )
         expect(
-            "release_notes_required_for_create_release"
-            in set(
-                release_publish_release_missing_notes_payload.get("reason_codes", [])
-            ),
-            "release-train publish should emit release-notes-required reason code",
+            release_publish_release_auto_notes_payload.get("notes_file_resolution")
+            == "auto"
+            and release_publish_release_auto_notes_payload.get("notes_file")
+            == str(canonical_release_notes_path.resolve())
+            and "publish_release_tag_missing"
+            in set(release_publish_release_auto_notes_payload.get("reason_codes", [])),
+            "release-train publish should auto-resolve canonical release notes before tag preflight",
         )
 
         release_notes_path = release_repo / "release-notes.md"

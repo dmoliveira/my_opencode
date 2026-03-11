@@ -203,6 +203,40 @@ def _local_tag_exists(repo_root: Path, tag_name: str) -> bool:
     return proc.returncode == 0
 
 
+def _auto_release_notes_candidates(repo_root: Path, version: str) -> list[Path]:
+    version_slug = version.replace(".", "-")
+    pattern = f"release-notes-*-v{version_slug}.md"
+    return sorted((repo_root / "docs" / "plan").glob(pattern))
+
+
+def _resolve_release_notes_path(
+    repo_root: Path, version: str, notes_file: Path | None
+) -> tuple[Path | None, str, list[str], list[str]]:
+    if notes_file is not None:
+        return notes_file, "manual", [], []
+
+    candidates = _auto_release_notes_candidates(repo_root, version)
+    if len(candidates) == 1:
+        return candidates[0], "auto", [], []
+    if len(candidates) > 1:
+        return (
+            None,
+            "auto",
+            ["release_notes_auto_ambiguous"],
+            [
+                "provide --notes-file <path> when multiple versioned release-note files match"
+            ],
+        )
+    return (
+        None,
+        "auto",
+        ["release_notes_auto_not_found"],
+        [
+            "add docs/plan/release-notes-YYYY-MM-DD-vX-Y-Z.md or provide --notes-file <path>"
+        ],
+    )
+
+
 def _resolve_publish_profile(
     *,
     profile: str | None,
@@ -430,11 +464,15 @@ def command_publish(args: list[str]) -> int:
         emit_with_summary(payload)
         return 1
 
+    notes_file_resolution = "manual" if notes_file is not None else "none"
     reason_codes: list[str] = []
     remediation: list[str] = []
-    if create_release and notes_file is None:
-        reason_codes.append("release_notes_required_for_create_release")
-        remediation.append("provide --notes-file <path> when using --create-release")
+    if create_release:
+        notes_file, notes_file_resolution, auto_reason_codes, auto_remediation = (
+            _resolve_release_notes_path(repo_root, version, notes_file)
+        )
+        reason_codes.extend(auto_reason_codes)
+        remediation.extend(auto_remediation)
     if notes_file is not None and not notes_file.exists():
         reason_codes.append("release_notes_missing_file")
         remediation.append("ensure --notes-file path exists")
@@ -447,6 +485,7 @@ def command_publish(args: list[str]) -> int:
             "dry_run": dry_run,
             "confirmed": confirm,
             "publish_profile": publish_profile,
+            "notes_file_resolution": notes_file_resolution,
         }
         emit_with_summary(payload)
         return 1
@@ -470,6 +509,7 @@ def command_publish(args: list[str]) -> int:
             "publish_plan": publish_plan,
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+            "notes_file_resolution": notes_file_resolution,
             "reason_codes": preflight_reason_codes,
             "remediation": preflight_remediation,
         }
@@ -508,6 +548,7 @@ def command_publish(args: list[str]) -> int:
             "publish_plan": publish_plan,
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+            "notes_file_resolution": notes_file_resolution,
             "action_matrix": action_matrix,
             "reason_codes": [],
             "remediation": [],
@@ -524,6 +565,7 @@ def command_publish(args: list[str]) -> int:
             "publish_plan": publish_plan,
             "tag_name": tag_name,
             "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+            "notes_file_resolution": notes_file_resolution,
         }
         emit_with_summary(payload)
         return 1
@@ -603,6 +645,7 @@ def command_publish(args: list[str]) -> int:
         "publish_plan": publish_plan,
         "tag_name": tag_name,
         "notes_file": str(notes_file.resolve()) if notes_file is not None else None,
+        "notes_file_resolution": notes_file_resolution,
         "action_matrix": action_matrix,
         "executed_actions": executed_actions,
         "reason_codes": failure_reason_codes,
