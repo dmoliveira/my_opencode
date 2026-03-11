@@ -1,8 +1,15 @@
+import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import type { GatewayHook } from "../registry.js";
+import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
+import {
+  buildCompactDecisionCacheKey,
+  writeDecisionComparisonAudit,
+} from "../shared/llm-decision-runtime.js";
 
 interface ToolAfterPayload {
-  input?: { tool?: string };
+  input?: { tool?: string; sessionID?: string; sessionId?: string };
   output?: { output?: unknown };
+  directory?: string;
 }
 
 const RESUME_HINT =
@@ -12,19 +19,121 @@ const CONTINUE_HINT =
 const VERIFICATION_HEADER =
   "Verification hint: review the subagent result before moving on.";
 
-function extractResumeTarget(text: string): string {
+function extractResumeTargetInfo(text: string): { target: string; trusted: boolean } {
   const patterns = [
-    /Session ID:\s*(ses_[a-zA-Z0-9]+)/,
-    /session_id["':\s]+(ses_[a-zA-Z0-9]+)/i,
-    /task_id["':\s]+([a-zA-Z0-9_-]+)/i,
+    { pattern: /Session ID:\s*(ses_[a-zA-Z0-9]+)/, trusted: true },
+    { pattern: /session_id["':\s]+(ses_[a-zA-Z0-9]+)/i, trusted: true },
+    { pattern: /task_id\s*[:=]\s*([a-zA-Z0-9_-]{3,})/i, trusted: true },
+    { pattern: /\b(ses_[a-zA-Z0-9]+)\b/, trusted: false },
   ];
-  for (const pattern of patterns) {
+  for (const { pattern, trusted } of patterns) {
     const match = text.match(pattern);
     if (match?.[1]) {
-      return match[1];
+      return { target: match[1], trusted };
     }
   }
-  return "";
+  return { target: "", trusted: false };
+}
+
+function resolveSessionId(payload: ToolAfterPayload): string {
+  const candidates = [payload.input?.sessionID, payload.input?.sessionId]
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+  return ""
+}
+
+function buildSemanticHintInstruction(hasResumeTarget: boolean): string {
+  return hasResumeTarget
+    ? "Classify whether this task result needs follow-up continuation and/or verification guidance. B=both continuation and verification, C=continuation only, V=verification only, N=none."
+    : "Classify whether this task result still implies pending follow-up work that should continue in the same thread. C=continuation needed, N=no continuation."
+}
+
+function buildSemanticHintContext(text: string, resumeTarget: string): string {
+  return [
+    `resume_target=${resumeTarget || "(none)"}`,
+    `task_output=${text.trim() || "(empty)"}`,
+  ].join("\n")
+}
+
+async function resolveSemanticHints(options: {
+  text: string
+  resumeTarget: string
+  sessionId: string
+  directory: string
+  decisionRuntime?: LlmDecisionRuntime
+}): Promise<{ addContinuation: boolean; addVerification: boolean }> {
+  if (!options.sessionId || !options.decisionRuntime) {
+    return { addContinuation: false, addVerification: false }
+  }
+  const hasResumeTarget = Boolean(options.resumeTarget)
+  const allowedChars = hasResumeTarget ? ["B", "C", "V", "N"] : ["C", "N"]
+  const decisionMeaning: Record<string, string> = hasResumeTarget
+    ? {
+        B: "continue_and_verify",
+        C: "continue_only",
+        V: "verify_only",
+        N: "none",
+      }
+    : {
+        C: "continue_only",
+        N: "none",
+      }
+  const decision = await options.decisionRuntime.decide({
+    hookId: "task-resume-info",
+    sessionId: options.sessionId,
+    templateId: hasResumeTarget ? "task-resume-info-v1" : "task-continue-info-v1",
+    instruction: buildSemanticHintInstruction(hasResumeTarget),
+    context: buildSemanticHintContext(options.text, options.resumeTarget),
+    allowedChars,
+    decisionMeaning,
+    cacheKey: buildCompactDecisionCacheKey({
+      prefix: "task-resume-info",
+      parts: [hasResumeTarget ? options.resumeTarget : "none"],
+      text: options.text,
+    }),
+  })
+  if (!decision.accepted) {
+    return { addContinuation: false, addVerification: false }
+  }
+  const addContinuation = decision.char === "B" || decision.char === "C"
+  const addVerification = hasResumeTarget && (decision.char === "B" || decision.char === "V")
+  writeDecisionComparisonAudit({
+    directory: options.directory,
+    hookId: "task-resume-info",
+    sessionId: options.sessionId,
+    mode: options.decisionRuntime.config.mode,
+    deterministicMeaning: "none",
+    aiMeaning: decision.meaning || "none",
+    deterministicValue: "none",
+    aiValue: decision.char,
+  })
+  writeGatewayEventAudit(options.directory, {
+    hook: "task-resume-info",
+    stage: "state",
+    reason_code: "llm_task_resume_decision_recorded",
+    session_id: options.sessionId,
+    llm_decision_char: decision.char,
+    llm_decision_meaning: decision.meaning,
+    llm_decision_mode: options.decisionRuntime.config.mode,
+    resume_target: options.resumeTarget || undefined,
+  })
+  if (options.decisionRuntime.config.mode === "shadow" && (addContinuation || addVerification)) {
+    writeGatewayEventAudit(options.directory, {
+      hook: "task-resume-info",
+      stage: "state",
+      reason_code: "llm_task_resume_shadow_deferred",
+      session_id: options.sessionId,
+      llm_decision_char: decision.char,
+      llm_decision_meaning: decision.meaning,
+      llm_decision_mode: options.decisionRuntime.config.mode,
+      resume_target: options.resumeTarget || undefined,
+    })
+    return { addContinuation: false, addVerification: false }
+  }
+  return { addContinuation, addVerification }
 }
 
 function buildVerificationHint(resumeTarget: string): string {
@@ -42,6 +151,7 @@ function buildVerificationHint(resumeTarget: string): string {
 // Creates hook that appends resume hints after task tool responses.
 export function createTaskResumeInfoHook(options: {
   enabled: boolean;
+  decisionRuntime?: LlmDecisionRuntime;
 }): GatewayHook {
   return {
     id: "task-resume-info",
@@ -59,6 +169,11 @@ export function createTaskResumeInfoHook(options: {
       if (!output || typeof output.output !== "string") {
         return;
       }
+      const sessionId = resolveSessionId(eventPayload)
+      const directory =
+        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+          ? eventPayload.directory
+          : process.cwd()
       const text = output.output;
       let next = text;
       if (next.includes("task_id") && !next.includes(RESUME_HINT)) {
@@ -67,8 +182,24 @@ export function createTaskResumeInfoHook(options: {
       if (next.includes("<CONTINUE-LOOP>") && !next.includes(CONTINUE_HINT)) {
         next += `\n\n${CONTINUE_HINT}`;
       }
-      const resumeTarget = extractResumeTarget(next);
-      if (resumeTarget && !next.includes(VERIFICATION_HEADER)) {
+      const resumeTargetInfo = extractResumeTargetInfo(text);
+      const resumeTarget = resumeTargetInfo.target;
+      if (!next.includes(CONTINUE_HINT) || (resumeTarget && !next.includes(VERIFICATION_HEADER))) {
+        const semanticHints = await resolveSemanticHints({
+          text,
+          resumeTarget,
+          sessionId,
+          directory,
+          decisionRuntime: options.decisionRuntime,
+        })
+        if (semanticHints.addContinuation && !next.includes(CONTINUE_HINT)) {
+          next += `\n\n${CONTINUE_HINT}`
+        }
+        if (semanticHints.addVerification && !next.includes(VERIFICATION_HEADER)) {
+          next += `\n\n${buildVerificationHint(resumeTarget)}`
+        }
+      }
+      if (resumeTargetInfo.trusted && resumeTarget && !next.includes(VERIFICATION_HEADER)) {
         next += `\n\n${buildVerificationHint(resumeTarget)}`;
       }
       output.output = next;

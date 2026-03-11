@@ -1,15 +1,21 @@
 # Workflow Scenario Reliability Report
 
-- Total scenarios: 16
-- Correct actions: 16
+- Total scenarios: 20
+- Correct actions: 20
 - Accuracy: 100%
 
 ## By Workflow
 - todo-continuation-enforcer: 14/14 (100%)
+- mistake-ledger: 2/2 (100%)
+- task-resume-info: 2/2 (100%)
 - done-proof-enforcer: 2/2 (100%)
 
 ## Scenario Results
 - todo-pending-marker: PASS | todo-continuation-enforcer | pending_marker | expected=inject_prompt actual=inject_prompt
+- mistake-ledger-llm-deferral: PASS | mistake-ledger | semantic_deferral | expected=write_ledger_entry actual=write_ledger_entry
+- mistake-ledger-shadow-deferral: PASS | mistake-ledger | semantic_deferral_shadow | expected=no_ledger_entry actual=no_ledger_entry
+- task-resume-llm-continuation: PASS | task-resume-info | semantic_continuation | expected=append_continuation_hint actual=append_continuation_hint
+- task-resume-shadow-continuation: PASS | task-resume-info | semantic_continuation_shadow | expected=no_hint actual=no_hint
 - todo-mixed-signal-llm: PASS | todo-continuation-enforcer | llm_soft_cue | expected=inject_prompt actual=inject_prompt
 - todo-informational-in-progress: PASS | todo-continuation-enforcer | false_positive | expected=no_inject actual=no_inject
 - todo-remaining-epic-wait: PASS | todo-continuation-enforcer | false_positive | expected=no_inject actual=no_inject

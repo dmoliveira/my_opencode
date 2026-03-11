@@ -4747,9 +4747,22 @@ index 3333333..4444444 100644
         release_index_text = (
             REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
         ).read_text(encoding="utf-8")
+        release_index_lines = [
+            line
+            for line in release_index_text.splitlines()
+            if line.startswith("| v0.4.")
+        ]
+        latest_release_index_line = (
+            release_index_lines[-1] if release_index_lines else ""
+        )
+        latest_release_token = (
+            latest_release_index_line.split("|")[1].strip()
+            if latest_release_index_line
+            else ""
+        )
         expect(
-            "| v0.4.20 |" in release_index_text,
-            "release index update helper should preserve latest v0.4.20 index entry",
+            latest_release_token.startswith("v0.4."),
+            "release index update helper should preserve the latest v0.4.x index entry",
         )
 
         docs_automation_summary_update = subprocess.run(
@@ -4768,7 +4781,9 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
         ).read_text(encoding="utf-8")
         expect(
-            "latest_indexed_release: v0.4.20" in docs_automation_summary_text,
+            bool(latest_release_token)
+            and f"latest_indexed_release: {latest_release_token}"
+            in docs_automation_summary_text,
             "docs automation summary should include latest indexed release marker",
         )
         expect(
