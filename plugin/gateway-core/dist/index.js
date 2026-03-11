@@ -92,6 +92,7 @@ import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/
 import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
+import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 const DISPATCH_NOISY_EVENTS = new Set([
     "message.part.delta",
     "message.part.updated",
@@ -106,19 +107,6 @@ const DISPATCH_NOISY_REASON_CODES = new Set([
     "chat_messages_transform_dispatch",
 ]);
 const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
-export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
-    agentDeniedToolEnforcer: "agent-denied-tool-enforcer",
-    agentModelResolver: "agent-model-resolver",
-    delegationFallbackOrchestrator: "delegation-fallback-orchestrator",
-    validationEvidenceLedger: "validation-evidence-ledger",
-    mistakeLedger: "mistake-ledger",
-    autoSlashCommand: "auto-slash-command",
-    taskResumeInfo: "task-resume-info",
-    providerErrorClassifier: "provider-error-classifier",
-    todoContinuationEnforcer: "todo-continuation-enforcer",
-    doneProofEnforcer: "done-proof-enforcer",
-    prBodyEvidenceGuard: "pr-body-evidence-guard",
-};
 function isLlmDecisionChildProcess() {
     return process.env[LLM_DECISION_CHILD_ENV] === "1";
 }
