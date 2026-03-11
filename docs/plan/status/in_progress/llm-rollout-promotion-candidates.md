@@ -1,7 +1,7 @@
 # LLM Rollout Promotion Candidates
 
 Date: 2026-03-11
-Branch: `fix/next-parity-item-4`
+Branch: `fix/semantic-inventory-cleanup`
 
 ## Initial assist candidates
 
@@ -33,9 +33,9 @@ Branch: `fix/next-parity-item-4`
 - `todo-continuation-enforcer`
   - Why: mixed-signal continuation decisions can create autonomous follow-on execution, so shadow evidence should accumulate before any assist promotion.
 - `mistake-ledger`
-  - Why: semantic deferral classification writes operator-facing learning records, so shadow evidence and workflow parity should land before any assist promotion.
+  - Why: semantic deferral classification writes operator-facing learning records; implementation and workflow parity are done, but it should remain shadow-first until live disagreement data exists.
 - `task-resume-info`
-  - Why: semantic continuation/verification hints can steer follow-up execution, so it should remain shadow-first until live disagreement data exists beyond synthetic workflow coverage.
+  - Why: semantic continuation/verification hints can steer follow-up execution; implementation and workflow parity are done, but it should remain shadow-first until live disagreement data exists beyond synthetic workflow coverage.
 
 ## Promotion rule of thumb
 

@@ -2,8 +2,8 @@
 
 Date: 2026-03-11
 Status: `in_progress`
-Branch: `fix/next-parity-item-4`
-Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-next-parity-item-4`
+Branch: `fix/semantic-inventory-cleanup`
+Worktree: `/Users/cauhirsch/Codes/Projects/my_opencode-wt-semantic-inventory-cleanup`
 
 ## Goal
 
@@ -36,7 +36,7 @@ Do not use LLM decisions for:
 
 - Overall status: `in_progress`
 - Current checkpoint: runtime plus delegation, validation, PR-body, done-proof, and mixed-signal continuation semantic slices are implemented and merged; the remaining work is to inventory every semantic decision path and migrate the still-deterministic ones through the centralized runtime in priority order
-- Current active slice: `task-resume-info` rollout/evidence alignment is active in this worktree: plugin-level shadow wiring, rollout tracker cleanup, and Atlas-adjacent validation notes are being reconciled now that the centralized runtime path is already merged; rollout expectation remains shadow-first for new hook decisions
+- Current active slice: semantic inventory cleanup is active in this worktree: status-band drift, rollout tracker wording, and parity-facing summaries are being normalized now that `task-resume-info` and `mistake-ledger` implementation slices are merged; rollout expectation remains shadow-first for new hook decisions
 - Current rollout baseline template: `docs/plan/status/in_progress/llm-rollout-thresholds.template.json`
 - Initial assist candidates are tracked in `docs/plan/status/in_progress/llm-rollout-promotion-candidates.md`
 - Per-hook assist rollout is now supported through `llmDecisionRuntime.hookModes`
@@ -89,20 +89,20 @@ Do not use LLM decisions for:
 | `done-proof-enforcer` | done | Centralized runtime handles ambiguous done-proof evidence after deterministic markers fail. |
 | `pr-body-evidence-guard` | done | Centralized runtime handles ambiguous PR validation/body evidence. |
 | `todo-continuation-enforcer` | done | Centralized runtime handles contradictory complete-plus-next-slice continuation cases. |
+| `task-resume-info` | done | Centralized runtime handles ambiguous continuation and verification/reuse-context hints; plugin-level shadow coverage and workflow evidence are in place while rollout remains shadow-first pending live disagreement data. |
+| `mistake-ledger` | done | Centralized runtime handles ambiguous completion-deferral wording before recording `completion_without_validation`; plugin-level shadow coverage and workflow evidence are in place while rollout remains shadow-first pending live disagreement data. |
 
 ### Doing
 
 | Hook / decision | Status | Notes |
 |---|---|---|
-| `task-resume-info` | done | Centralized runtime now handles ambiguous resume-worthy outputs and verification/continuation hints; workflow evidence and plugin-level shadow coverage are in place, so the remaining step is only future rollout telemetry before any assist promotion. |
-| `mistake-ledger` | done | Centralized runtime now handles ambiguous completion-deferral wording before recording `completion_without_validation`; workflow evidence and plugin-level shadow coverage landed, so future rollout telemetry is the remaining promotion gate. |
+| `delegation-fallback-orchestrator` rollout promotion | doing | Semantic fallback implementation is done, but assist promotion remains blocked until a fresh non-empty live disagreement window exists. |
+| rollout evidence accumulation | doing | `task-resume-info`, `mistake-ledger`, `todo-continuation-enforcer`, and `validation-evidence-ledger` remain shadow-first until new live disagreement data supports promotion decisions. |
 
 ### Pending semantic migrations
 
 | Hook / decision | Status | Notes |
 |---|---|---|
-| `task-resume-info` continuation-vs-resume intent split | done | New single-char fallback now distinguishes continuation-only vs verification-only vs both when deterministic markers are absent; workflow coverage, plugin-level shadow wiring, and rollout docs are aligned. |
-| `mistake-ledger` done-proof detection | done | New binary fallback now records only when semantic deferral wording indicates missing validation/done-proof evidence; workflow evidence and plugin-level wiring assertions are aligned. |
 | `semantic-output-summarizer` style/intent shaping | pending | If this hook starts making route/classification decisions instead of pure formatting, it should use the centralized runtime rather than bespoke heuristics. |
 
 ### Intentionally deterministic

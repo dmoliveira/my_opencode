@@ -124,7 +124,6 @@ Remaining:
 |---|---|---|
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
-<<<<<<< HEAD
 | LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes refreshed rollout guidance, passing semantic/workflow scenario coverage, and completed `task-resume-info` plus `mistake-ledger` rollout-evidence reconciliation on top of the shared runtime. |
 | Post-merge parity backlog triage | doing | Active backlog lives in `docs/plan/post-merge-parity-backlog-2026-03-10.md`; use it to sequence remaining divergence decisions and any reopened parity slices. |
 | Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
