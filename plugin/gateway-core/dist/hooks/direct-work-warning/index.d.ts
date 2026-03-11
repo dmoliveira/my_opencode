@@ -3,4 +3,5 @@ export declare function createDirectWorkWarningHook(options: {
     directory: string;
     enabled: boolean;
     blockRepeatedEdits: boolean;
+    allowPaths: string[];
 }): GatewayHook;

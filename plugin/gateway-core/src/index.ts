@@ -867,6 +867,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         directory,
         enabled: cfg.directWorkWarning.enabled,
         blockRepeatedEdits: cfg.directWorkWarning.blockRepeatedEdits,
+        allowPaths: cfg.directWorkWarning.allowPaths,
       }),
     ),
     safeHook("unstable-agent-babysitter", () =>

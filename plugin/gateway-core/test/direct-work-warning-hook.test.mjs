@@ -13,6 +13,7 @@ test("direct-work-warning appends reminder for primary-session write-like tools"
     directory: "/tmp/project",
     enabled: true,
     blockRepeatedEdits: false,
+    allowPaths: [],
   });
   const payload = {
     input: { tool: "edit", sessionID: "ses_parent1" },
@@ -39,6 +40,7 @@ test("direct-work-warning skips delegated child sessions", async () => {
     directory: "/tmp/project",
     enabled: true,
     blockRepeatedEdits: false,
+    allowPaths: [],
   });
   const payload = {
     input: { tool: "write", sessionID: "ses_child1" },
@@ -55,6 +57,7 @@ test("direct-work-warning ignores non write-like tools", async () => {
     directory: "/tmp/project",
     enabled: true,
     blockRepeatedEdits: false,
+    allowPaths: [],
   });
   const payload = {
     input: { tool: "read", sessionID: "ses_parent2" },
@@ -71,6 +74,7 @@ test("direct-work-warning blocks repeated primary-session direct edits", async (
     directory: "/tmp/project",
     enabled: true,
     blockRepeatedEdits: true,
+    allowPaths: [],
   });
   const firstPayload = {
     input: { tool: "edit", sessionID: "ses_repeat1" },
@@ -92,6 +96,7 @@ test("direct-work-warning resets repeated-edit block after session deletion", as
     directory: "/tmp/project",
     enabled: true,
     blockRepeatedEdits: true,
+    allowPaths: [],
   });
   await hook.event("tool.execute.before", {
     input: { tool: "edit", sessionID: "ses_reset1" },
@@ -108,6 +113,69 @@ test("direct-work-warning resets repeated-edit block after session deletion", as
   await hook.event("tool.execute.before", payload);
 
   assert.match(String(payload.output.message), /direct-work-warning/);
+});
+
+test("direct-work-warning skips configured documentation paths", async () => {
+  const hook = createDirectWorkWarningHook({
+    directory: "/tmp/project",
+    enabled: true,
+    blockRepeatedEdits: true,
+    allowPaths: ["docs/**/*.md", "**/README*.md", "**/AGENTS.md"],
+  });
+
+  const nestedPlanDoc = {
+    input: { tool: "edit", sessionID: "ses_docs1" },
+    output: { args: { filePath: "docs/plan/notes.md" } },
+  };
+  await hook.event("tool.execute.before", nestedPlanDoc);
+  assert.equal(nestedPlanDoc.output.message, undefined);
+
+  const rootDoc = {
+    input: { tool: "edit", sessionID: "ses_docs2" },
+    output: { args: { filePath: "docs/notes.md" } },
+  };
+  await hook.event("tool.execute.before", rootDoc);
+  assert.equal(rootDoc.output.message, undefined);
+
+  const rootReadme = {
+    input: { tool: "edit", sessionID: "ses_docs3" },
+    output: { args: { filePath: "README.md" } },
+  };
+  await hook.event("tool.execute.before", rootReadme);
+  assert.equal(rootReadme.output.message, undefined);
+
+  const rootAgents = {
+    input: { tool: "edit", sessionID: "ses_docs4" },
+    output: { args: { filePath: "AGENTS.md" } },
+  };
+  await hook.event("tool.execute.before", rootAgents);
+  assert.equal(rootAgents.output.message, undefined);
+
+  const absoluteDoc = {
+    input: { tool: "edit", sessionID: "ses_docs5" },
+    output: { args: { filePath: "/tmp/project/docs/reference.md" } },
+  };
+  await hook.event("tool.execute.before", absoluteDoc);
+  assert.equal(absoluteDoc.output.message, undefined);
+
+  const patchPayload = {
+    input: { tool: "apply_patch", sessionID: "ses_docs6" },
+    output: {
+      args: {
+        patchText:
+          "*** Begin Patch\n*** Update File: docs/guide.md\n@@\n-old\n+new\n*** End Patch",
+      },
+    },
+  };
+  await hook.event("tool.execute.before", patchPayload);
+  assert.equal(patchPayload.output.message, undefined);
+
+  const multieditPayload = {
+    input: { tool: "multiedit", sessionID: "ses_docs7" },
+    output: { args: { filePath: "docs/guide.md" } },
+  };
+  await hook.event("tool.execute.before", multieditPayload);
+  assert.equal(multieditPayload.output.message, undefined);
 });
 
 test("direct-work-warning is active in default gateway hook order", async () => {

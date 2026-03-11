@@ -31,6 +31,12 @@ Covered changes:
 - optional repeated-edit blocking exists behind `directWorkWarning.blockRepeatedEdits`
 - when enabled, the next write-like direct edit in the same session is blocked and the block resets on `session.deleted`
 
+### 4. Documentation-safe path exceptions are now configurable
+
+- `directWorkWarning.allowPaths` supports glob-based exemptions
+- default exemptions cover documentation-oriented paths such as `docs/**/*.md`, `README*.md`, and `AGENTS.md`
+- exemptions now work for relative paths, absolute file paths inside the repo, and `apply_patch` / `multiedit` payloads
+
 ## Validation commands
 
 - `npm --prefix plugin/gateway-core run build`

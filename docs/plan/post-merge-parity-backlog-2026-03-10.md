@@ -32,7 +32,7 @@ Evidence:
 
 Suggested slice:
 
-- first slice implemented in `plugin/gateway-core/src/hooks/direct-work-warning/index.ts`; it ships as warn-first by default and exposes optional repeated-edit blocking, while broader path-aware exceptions remain follow-up work
+- first slice implemented in `plugin/gateway-core/src/hooks/direct-work-warning/index.ts`; it ships as warn-first by default, exposes optional repeated-edit blocking, and now supports path-aware documentation exceptions while broader policy tuning remains follow-up work
 
 ### 2. `claude-code-hooks` compatibility decision
 
