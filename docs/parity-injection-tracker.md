@@ -164,3 +164,9 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 ## Remaining Deferred Gap (Intentional)
 
 - [x] MCP OAuth/websearch provider parity remains deferred by owner decision (tracked in `docs/plan/oh-my-opencode-parity-high-value-plan.md` and `docs/upstream-divergence-registry.md`).
+
+## Semantic Rollout Snapshot
+
+- `task-resume-info`: implemented, workflow-covered, and plugin-shadow-covered; remains shadow-first pending live disagreement evidence.
+- `mistake-ledger`: implemented, workflow-covered, and plugin-shadow-covered; remains shadow-first pending live disagreement evidence.
+- `delegation-fallback-orchestrator`: implementation done; next promotion candidate once a fresh non-empty disagreement window exists.
