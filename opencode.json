@@ -56,207 +56,207 @@
   "command": {
     "mcp": {
       "description": "Manage MCP usage (status|help|doctor|profile|enable|disable)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/mcp_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before mcp --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "doctor": {
       "description": "Run diagnostics and reason-code registry export",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/doctor_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before doctor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "agent-doctor": {
       "description": "Validate custom agent contracts and runtime discovery",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" run $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/agent_doctor.py\" --fixed-before run --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "agent-catalog": {
       "description": "Explore runtime agent catalog and per-agent guidance (list|explain|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_catalog_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before agent-catalog --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "audit": {
       "description": "Inspect runtime audit trail (status|list|report|export|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/audit_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before audit --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "governance": {
       "description": "Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/governance_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before governance --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "claims": {
       "description": "Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/claims_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before claims --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "reservation": {
       "description": "Manage file reservation state for parallel writer guardrails (status|set|clear|export)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/reservation_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before reservation --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "changes": {
       "description": "Explain local change narrative for handoff/release notes (explain|--since)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/changes_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before changes --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "workflow": {
       "description": "Run the low-level reusable workflow engine (run|validate|list|status|resume|stop|template|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/workflow_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before workflow --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "daemon": {
       "description": "Manage observability daemon controls (start|stop|status|tick|summary|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/daemon_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before daemon --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "delivery": {
       "description": "Run the recommended day-to-day delivery flow (start|status|handoff|close|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delivery_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before delivery --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "agent-pool": {
       "description": "Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/agent_pool_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before agent-pool --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "memory-lifecycle": {
       "description": "Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/memory_lifecycle_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before memory-lifecycle --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "hook-learning": {
       "description": "Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hook_learning_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before hook-learning --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "init-deep": {
       "description": "Initialize hierarchical AGENTS.md scaffolding for current repo",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/init_deep_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before init-deep --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "config": {
       "description": "Backup and restore OpenCode config files",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/config_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before config --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "bg": {
       "description": "Manage background jobs (start|status|list|read|cancel|cleanup|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/background_task_manager.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before bg --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "refactor-lite": {
       "description": "Run safe refactor workflow backend",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/refactor_lite_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before refactor-lite --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "hooks": {
       "description": "Manage safety hooks (status|help|enable|disable|run)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hooks_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before hooks --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "model-routing": {
       "description": "Manage model routing (status|set-category|resolve|trace|recommend)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/model_routing_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before model-routing --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "auto-slash": {
       "description": "Detect and preview natural-language slash intents",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/auto_slash_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before auto-slash --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "rules": {
       "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/rules_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before rules --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "stack": {
       "description": "Apply cross-command profile bundles",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before stack --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "ship": {
       "description": "Run release intent preflight with safety gates and policy-aware reviewer routing",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/ship_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before ship --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "browser": {
       "description": "Manage browser automation provider profile (status|profile|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before browser --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "autopilot": {
       "description": "Run open-ended autonomous execution with autopilot guardrails",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" go --goal \"$ARGUMENTS\" --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>DONE</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" --fixed-before go --fixed-before --goal --literal \"$ARGUMENTS\" --fixed-after --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
     "autoflow": {
       "description": "Run the public deterministic plan-file execution flow (start|status|report|resume|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autoflow_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before autoflow --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "continuation-stop": {
       "description": "Stop active continuation loops and disable auto-resume",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/continuation_stop_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before continuation-stop --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "pr-review": {
       "description": "Run PR review copilot analysis with checklist output",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/pr_review_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before pr-review --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "review": {
       "description": "Run local review pass with diagnostics and checklist artifacts/findings (local|apply-checklist|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/review_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before review --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "release-train": {
       "description": "Run release-train workflow controls (status|prepare|draft|rollup|publish)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/release_train_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before release-train --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "hotfix": {
       "description": "Run incident hotfix controls with strict close gating, followup linking, and followup-open previews (start|status|close|postmortem|remind|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/hotfix_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before hotfix --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "health": {
       "description": "Show repo health score and drift insights",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/health_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before health --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "learn": {
       "description": "Capture and manage reusable task knowledge (capture|review|publish|search|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/learn_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before learn --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "budget": {
       "description": "Manage execution budget controls (status|profile|override|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/budget_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before budget --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "todo": {
       "description": "Inspect todo compliance state (status|enforce)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/todo_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before todo --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "resume": {
       "description": "Manage runtime recovery controls (status|now|smart|disable)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before resume --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "safe-edit": {
       "description": "Plan semantic safe-edit execution (status|plan|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/safe_edit_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before safe-edit --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "checkpoint": {
       "description": "Manage checkpoint snapshots and runtime rollback (create|restore|list|show|prune|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/checkpoint_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before checkpoint --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "plan": {
       "description": "Run the legacy/internal contract-checking plan wrapper (run|status|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plan_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before plan --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "nvim": {
       "description": "Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/nvim_integration_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before nvim --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "devtools": {
       "description": "Manage external productivity tools (status|doctor|install|hooks-install)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/devtools_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before devtools --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "plugin": {
       "description": "Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/plugin_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before plugin --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "notify": {
       "description": "Manage notification controls and inbox feed (status|doctor|inbox|profile|enable|disable|channel|policy)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/notify_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before notify --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "session": {
       "description": "Inspect current/indexed sessions (current|list|show|search|handoff|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before session --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "digest": {
       "description": "Generate or inspect session digests (run|show|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before digest --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "post-session": {
       "description": "Manage post-session hook config (status|enable|disable|set)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/post_session_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before post-session --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "gateway": {
       "description": "Manage gateway runtime controls (status|enable|disable|doctor|tune memory|recover memory|protection)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/gateway_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before gateway --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "delegation-health": {
       "description": "Summarize delegation health and detect routing drift (status|doctor)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/delegation_health_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before delegation-health --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "telemetry": {
       "description": "Manage telemetry forwarding (status|doctor|profile|enable|disable|set)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/telemetry_command.py\" $ARGUMENTS`\nShow only the command output."
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before telemetry --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     }
   },
   "plugin": [

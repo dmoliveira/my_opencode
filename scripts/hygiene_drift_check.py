@@ -16,11 +16,15 @@ OPENCODE_CONFIG = REPO_ROOT / "opencode.json"
 GATEWAY_SCHEMA = REPO_ROOT / "plugin/gateway-core/src/config/schema.ts"
 HOOKS_DIR = REPO_ROOT / "plugin/gateway-core/src/hooks"
 PARITY_PLAN = REPO_ROOT / "docs/plan/oh-my-opencode-parity-high-value-plan.md"
+PARITY_SCOREBOARD = REPO_ROOT / "docs/parity-scoreboard.md"
 
 ALLOWED_DUPLICATE_CLUSTERS = {
     frozenset({"model-routing", "model-profile"}),
     frozenset({"model-routing-status", "model-profile-status"}),
     frozenset({"autopilot-go", "continue-work"}),
+}
+ALLOWED_DUPLICATE_TEMPLATE_MARKERS = {
+    "scripts/slash_command_wrapper.py",
 }
 
 # Transitional allowlist for hook IDs present in config order but not yet
@@ -28,6 +32,9 @@ ALLOWED_DUPLICATE_CLUSTERS = {
 ALLOWED_MISSING_HOOK_IDS = set()
 MAX_COMMAND_SURFACE = 51
 MAX_COMMANDS_PER_SCRIPT = 3
+ALLOWED_MULTI_COMMAND_SCRIPTS = {
+    "slash_command_wrapper.py",
+}
 
 
 @dataclass
@@ -39,6 +46,7 @@ class DriftReport:
     extra_hook_ids: list[str]
     parity_plan_issues: list[str]
     parity_plan_warnings: list[str]
+    parity_scoreboard_issues: list[str]
     command_surface_issues: list[str]
     script_alias_issues: list[str]
 
@@ -49,6 +57,7 @@ class DriftReport:
             or self.missing_hook_ids
             or self.extra_hook_ids
             or self.parity_plan_issues
+            or self.parity_scoreboard_issues
             or self.command_surface_issues
             or self.script_alias_issues
         )
@@ -88,7 +97,14 @@ def _duplicate_template_audit(
     duplicates.sort(key=lambda values: (len(values), values), reverse=True)
 
     unexpected: list[list[str]] = []
-    for cluster in duplicates:
+    for template, names in clusters.items():
+        if len(names) <= 1:
+            continue
+        cluster = sorted(names)
+        if frozenset(cluster) in ALLOWED_DUPLICATE_CLUSTERS:
+            continue
+        if any(marker in template for marker in ALLOWED_DUPLICATE_TEMPLATE_MARKERS):
+            continue
         if frozenset(cluster) not in ALLOWED_DUPLICATE_CLUSTERS:
             unexpected.append(cluster)
     return duplicates, unexpected
@@ -146,6 +162,23 @@ def _parity_plan_watchdog(commands: dict[str, dict[str, object]]) -> list[str]:
             )
 
     return issues
+
+
+def _parity_scoreboard_watchdog() -> list[str]:
+    if not PARITY_SCOREBOARD.exists():
+        return ["missing parity scoreboard: docs/parity-scoreboard.md"]
+    text = PARITY_SCOREBOARD.read_text(encoding="utf-8")
+    required_markers = [
+        "## Current Scoreboard",
+        "## Intentional Divergences",
+        "## Remaining Drift Watch",
+        "docs/upstream-divergence-registry.md",
+    ]
+    return [
+        f"parity scoreboard missing marker: {marker}"
+        for marker in required_markers
+        if marker not in text
+    ]
 
 
 def _parse_finished_epics(plan_text: str) -> set[str]:
@@ -333,6 +366,8 @@ def _script_alias_audit(commands: dict[str, dict[str, object]]) -> list[str]:
 
     issues: list[str] = []
     for script_name, command_names in sorted(by_script.items()):
+        if script_name in ALLOWED_MULTI_COMMAND_SCRIPTS:
+            continue
         if len(command_names) > MAX_COMMANDS_PER_SCRIPT:
             sorted_names = ", ".join(sorted(command_names))
             issues.append(
@@ -348,6 +383,7 @@ def run() -> int:
     missing_hook_ids, extra_hook_ids = _hook_inventory_audit()
     parity_plan_issues = _parity_plan_watchdog(commands)
     parity_plan_warnings = _parity_plan_warning_audit(commands)
+    parity_scoreboard_issues = _parity_scoreboard_watchdog()
     command_surface_issues = _command_surface_audit(commands)
     script_alias_issues = _script_alias_audit(commands)
 
@@ -359,6 +395,7 @@ def run() -> int:
         extra_hook_ids=extra_hook_ids,
         parity_plan_issues=parity_plan_issues,
         parity_plan_warnings=parity_plan_warnings,
+        parity_scoreboard_issues=parity_scoreboard_issues,
         command_surface_issues=command_surface_issues,
         script_alias_issues=script_alias_issues,
     )
@@ -393,6 +430,10 @@ def run() -> int:
     if report.parity_plan_issues:
         print("parity plan watchdog issues:")
         for issue in report.parity_plan_issues:
+            print(f"- {issue}")
+    if report.parity_scoreboard_issues:
+        print("parity scoreboard issues:")
+        for issue in report.parity_scoreboard_issues:
             print(f"- {issue}")
     if report.command_surface_issues:
         print("command surface issues:")

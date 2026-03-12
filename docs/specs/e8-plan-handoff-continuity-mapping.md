@@ -33,6 +33,13 @@ Canonical surfaces to reuse:
 3. Resume behavior remains deterministic and guardrail-aware (`todo`, budget, stop guards).
 4. Handoff evidence is available through existing report/digest/status commands.
 
+## Shared Runtime Contract (E2-T2)
+
+- `task_graph.json` is the authoritative dependency graph store for canonical local flows.
+- `/workflow` projects explicit step dependencies into the shared graph and returns `task_graph_path` in machine-readable output.
+- `/autoflow` and `/autopilot` keep their own runtime/checkpoint files for command-local lifecycle metadata only; they must reference the shared task graph via `task_graph_path` instead of creating a second dependency graph store.
+- `/task ready --json` remains the durable pending-work query surface across command families.
+
 ## Follow-up for E8-T2+
 
 - Add a thin compatibility profile/entrypoint that points users to the canonical flow above.

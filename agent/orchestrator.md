@@ -62,15 +62,15 @@ Operating rules:
 
 4b) Model effort routing (default)
 - Use `/model-routing set-category quick` before high-frequency read-only loops (`explore`, `verifier`, `release-scribe`).
-- Use `/model-routing set-category balanced` for normal implementation and planning (`orchestrator`, `librarian`, `strategic-planner`, `ambiguity-analyst`).
-- Use `/model-routing set-category deep` when scope is multi-module or architecture uncertainty is high.
+- Use `/model-routing set-category balanced` for normal implementation and planning (`orchestrator`, `librarian`).
+- Use `/model-routing set-category deep` for planner-heavy work (`strategic-planner`, `ambiguity-analyst`) and when scope is multi-module or architecture uncertainty is high.
 - Use `/model-routing set-category critical` for final sign-off passes (`reviewer`, `oracle`, `plan-critic`) and security/release-risk work.
 - Prefer OpenAI Codex defaults per category; use non-OpenAI models only as fallback alternatives.
 
 5) Subagent budget and dedupe controls
 - Keep at most 2 concurrent subagents.
 - Do not run duplicate `reviewer` or `verifier` passes on unchanged diffs.
-- Prefer fan-out for discovery/research, then fan-in for implementation and validation.
+- Prefer fan-out for read-only discovery/planning first, then fan-in to a single writer for implementation and validation.
 
 6) Parallel write gate
 - Default to a single writer (`build` or `orchestrator`) for code changes.

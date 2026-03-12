@@ -88,25 +88,21 @@ export function configureDelegationRuntimeState(options) {
     loaded = false;
     load();
 }
-function delegationKey(sessionId, childRunId, traceId, subagentType) {
+function delegationKey(sessionId, childRunId) {
     const normalizedChildRunId = String(childRunId ?? "").trim();
     if (normalizedChildRunId) {
         return `${sessionId}:${normalizedChildRunId}`;
     }
-    const normalizedTrace = String(traceId ?? "").trim();
-    if (normalizedTrace) {
-        return `${sessionId}:${normalizedTrace}`;
-    }
-    const normalizedSubagent = String(subagentType ?? "").trim().toLowerCase() || "unknown";
-    return `${sessionId}:agent:${normalizedSubagent}`;
+    return "";
 }
 export function registerDelegationStart(input) {
-    if (!input.sessionId.trim()) {
+    const childRunId = String(input.childRunId ?? "").trim();
+    if (!input.sessionId.trim() || !childRunId) {
         return;
     }
     load();
-    activeByDelegation.set(delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType), {
-        childRunId: input.childRunId,
+    activeByDelegation.set(delegationKey(input.sessionId, childRunId), {
+        childRunId,
         subagentType: input.subagentType,
         category: input.category,
         startedAt: input.startedAt,
@@ -115,60 +111,26 @@ export function registerDelegationStart(input) {
 }
 export function clearActiveDelegation(input) {
     load();
-    const directKey = delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType);
+    const directKey = delegationKey(input.sessionId, input.childRunId);
+    if (!directKey) {
+        return false;
+    }
     if (activeByDelegation.delete(directKey)) {
         return true;
-    }
-    if (input.traceId) {
-        const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
-            candidate.traceId === input.traceId);
-        if (matches.length === 1) {
-            activeByDelegation.delete(matches[0][0]);
-            return true;
-        }
-    }
-    if (!input.childRunId && !input.traceId && input.subagentType) {
-        const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
-            candidate.subagentType === input.subagentType);
-        if (matches.length === 1) {
-            activeByDelegation.delete(matches[0][0]);
-            return true;
-        }
     }
     return false;
 }
 export function registerDelegationOutcome(input, maxEntries) {
     load();
-    const directKey = delegationKey(input.sessionId, input.childRunId, input.traceId, input.subagentType);
-    let active = activeByDelegation.get(directKey);
-    let activeKey = directKey;
-    if (!active && input.traceId) {
-        const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
-            candidate.traceId === input.traceId);
-        if (matches.length === 1) {
-            ;
-            [[activeKey, active]] = matches;
-        }
+    const directKey = delegationKey(input.sessionId, input.childRunId);
+    if (!directKey) {
+        return null;
     }
-    if (!active && !input.childRunId && !input.traceId && input.subagentType) {
-        const matches = [...activeByDelegation.entries()].filter(([candidateKey, candidate]) => (candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`)) &&
-            candidate.subagentType === input.subagentType);
-        if (matches.length === 1) {
-            ;
-            [[activeKey, active]] = matches;
-        }
-    }
-    if (!active && !input.childRunId && !input.traceId && !input.subagentType) {
-        const matches = [...activeByDelegation.entries()].filter(([candidateKey]) => candidateKey === input.sessionId || candidateKey.startsWith(`${input.sessionId}:`));
-        if (matches.length === 1) {
-            ;
-            [[activeKey, active]] = matches;
-        }
-    }
+    const active = activeByDelegation.get(directKey);
     if (!active) {
         return null;
     }
-    activeByDelegation.delete(activeKey);
+    activeByDelegation.delete(directKey);
     const durationMs = Math.max(0, input.endedAt - active.startedAt);
     const record = {
         sessionId: input.sessionId,

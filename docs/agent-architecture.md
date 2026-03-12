@@ -34,6 +34,12 @@ Metadata source of truth: `agent/specs/*.json`.
 5. Run verifier + reviewer gates before completion.
 6. Produce release communication artifacts when needed.
 
+Task-graph-aware default:
+
+- fan out read-only discovery and planning first
+- fan back in to one writer for implementation by default
+- use the shared task graph to inspect ready lanes, blocked reasons, and resumable work before opening more execution paths
+
 ## Delegation Guidance
 
 - Discovery unknowns: `explore`

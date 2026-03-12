@@ -12,8 +12,6 @@ export interface DelegationOutcomeInput {
     reasonCode?: string;
     endedAt: number;
     childRunId?: string;
-    traceId?: string;
-    subagentType?: string;
 }
 export interface DelegationOutcomeRecord {
     sessionId: string;
@@ -37,8 +35,6 @@ export declare function registerDelegationStart(input: DelegationStartInput): vo
 export declare function clearActiveDelegation(input: {
     sessionId: string;
     childRunId?: string;
-    traceId?: string;
-    subagentType?: string;
 }): boolean;
 export declare function registerDelegationOutcome(input: DelegationOutcomeInput, maxEntries: number): DelegationOutcomeRecord | null;
 export declare function clearDelegationSession(sessionId: string): void;

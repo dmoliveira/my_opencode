@@ -26,6 +26,7 @@ from gateway_plugin_bridge import (  # type: ignore
     cleanup_orphan_loop,
     gateway_loop_state_path,
 )
+from task_graph_bridge import task_graph_runtime_path, task_graph_status_snapshot  # type: ignore
 
 
 def usage() -> int:
@@ -654,8 +655,13 @@ def command_status(args: list[str]) -> int:
     if not runtime:
         idle_payload = {
             "result": "PASS",
+            "run_id": None,
+            "state": "idle",
             "status": "idle",
             "reason_code": "autopilot_runtime_missing",
+            "objective": {},
+            "budget": {},
+            "progress": {},
             "warnings": [
                 "autopilot has no active runtime yet; start a run to track status"
             ],
@@ -663,6 +669,7 @@ def command_status(args: list[str]) -> int:
                 "run /autopilot start with required objective fields",
                 "use /autopilot doctor --json to inspect subsystem readiness",
             ],
+            **task_graph_status_snapshot(),
         }
         idle_payload.update(gateway_state_snapshot(Path.cwd(), config))
         emit(
@@ -677,8 +684,25 @@ def command_status(args: list[str]) -> int:
         confidence_score=confidence,
         interruption_class=interruption_class,
     )
-    integrated.update(gateway_state_snapshot(Path.cwd(), config))
-    emit(integrated, as_json=as_json)
+    integrated_run = (
+        integrated.get("run") if isinstance(integrated.get("run"), dict) else {}
+    )
+    status_payload = {
+        "result": "PASS",
+        "run_id": integrated_run.get("run_id"),
+        "state": integrated_run.get("status"),
+        "status": integrated_run.get("status"),
+        "reason_code": integrated_run.get("reason_code"),
+        "objective": integrated_run.get("objective", {}),
+        "budget": integrated_run.get("budget", {}),
+        "progress": integrated_run.get("progress", {}),
+        "blockers": integrated_run.get("blockers", []),
+        "next_actions": integrated_run.get("next_actions", []),
+        "control_integrations": integrated.get("control_integrations", {}),
+        **task_graph_status_snapshot(),
+    }
+    status_payload.update(gateway_state_snapshot(Path.cwd(), config))
+    emit(status_payload, as_json=as_json)
     return 0
 
 
@@ -802,6 +826,7 @@ def command_resume(args: list[str]) -> int:
             resumed["gateway_loop_state_path"] = str(bridge_start_loop(Path.cwd(), run))
     if inferred_touched_paths:
         resumed["inferred_touched_paths"] = inferred_touched_paths
+    resumed.update(task_graph_status_snapshot())
     resumed.update(gateway_state_snapshot(Path.cwd(), config))
     emit(resumed, as_json=as_json)
     return 0 if resumed.get("result") == "PASS" else 1
@@ -861,12 +886,24 @@ def command_report(args: list[str]) -> int:
     if runtime is None:
         return code
 
+    integrated = integrate_controls(
+        run=runtime,
+        write_path=write_path,
+        confidence_score=1.0,
+        interruption_class="tool_failure",
+    )
     progress = (
         runtime.get("progress", {}) if isinstance(runtime.get("progress"), dict) else {}
+    )
+    control_integrations = (
+        integrated.get("control_integrations")
+        if isinstance(integrated.get("control_integrations"), dict)
+        else {}
     )
     payload = {
         "result": "PASS",
         "run_id": runtime.get("run_id"),
+        "state": runtime.get("status"),
         "status": runtime.get("status"),
         "reason_code": runtime.get("reason_code"),
         "summary": {
@@ -877,7 +914,10 @@ def command_report(args: list[str]) -> int:
             "pending_cycles": progress.get("pending_cycles", 0),
         },
         "blockers": runtime.get("blockers", []),
+        "decisions": control_integrations,
+        "recommendations": runtime.get("next_actions", []),
         "next_actions": runtime.get("next_actions", []),
+        **task_graph_status_snapshot(),
     }
     payload.update(gateway_state_snapshot(Path.cwd(), config))
     emit(payload, as_json=as_json)

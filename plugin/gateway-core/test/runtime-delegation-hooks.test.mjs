@@ -16,6 +16,41 @@ import { getRecentDelegationOutcomes } from "../dist/hooks/shared/delegation-run
 
 const REPO_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 
+function createRuntimeDelegationHooks() {
+  return [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 5,
+      maxExpensiveConcurrent: 2,
+      maxDeepConcurrent: 5,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+}
+
+async function dispatchRuntimeDelegationHooks(hooks, type, payload) {
+  for (const hook of hooks) {
+    await hook.event(type, payload)
+  }
+}
+
 test("delegation confidence gate overrides low-confidence explicit subagent", async () => {
   const hook = createAgentModelResolverHook({
     directory: REPO_DIRECTORY,
@@ -260,22 +295,24 @@ test("delegation outcome learner adapts risky category after repeated failures",
     agentPolicyOverrides: {},
   })
 
+  const firstOutput = { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } }
   await timelineHook.event("tool.execute.before", {
     input: { tool: "task", sessionID: "session-learn-1" },
-    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } },
+    output: firstOutput,
   })
   await timelineHook.event("tool.execute.after", {
     input: { tool: "task", sessionID: "session-learn-1" },
-    output: { output: "[ERROR] Failed delegation" },
+    output: { metadata: firstOutput.metadata, output: "[ERROR] Failed delegation" },
   })
 
+  const secondOutput = { args: { subagent_type: "reviewer", category: "critical", prompt: "second" } }
   await timelineHook.event("tool.execute.before", {
     input: { tool: "task", sessionID: "session-learn-2" },
-    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "second" } },
+    output: secondOutput,
   })
   await timelineHook.event("tool.execute.after", {
     input: { tool: "task", sessionID: "session-learn-2" },
-    output: { output: "[ERROR] Failed delegation" },
+    output: { metadata: secondOutput.metadata, output: "[ERROR] Failed delegation" },
   })
 
   const output = {
@@ -599,6 +636,43 @@ test("subagent telemetry timeline refreshes child run id when legacy metadata om
   assert.equal(beforeOutput.metadata?.gateway?.delegation?.traceId, "trace-legacy-refresh")
 })
 
+test("subagent telemetry timeline normalizes malformed child run id to canonical trace-based identity", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+
+  const beforeOutput = {
+    args: {
+      subagent_type: "explore",
+      category: "balanced",
+      prompt: "[DELEGATION TRACE trace-normalize-child-run] telemetry malformed child run",
+    },
+    metadata: {
+      gateway: {
+        delegation: {
+          childRunId: "legacy-run-id",
+          traceId: "trace-normalize-child-run",
+        },
+      },
+    },
+  }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-normalize-child-run" },
+    output: beforeOutput,
+  })
+
+  assert.equal(
+    beforeOutput.metadata?.gateway?.delegation?.childRunId,
+    "subagent-run/trace-normalize-child-run",
+  )
+  assert.equal(beforeOutput.metadata?.gateway?.delegation?.traceId, "trace-normalize-child-run")
+})
+
 test("subagent telemetry timeline records outcome from child-run-only after metadata", async () => {
   const timelineHook = createSubagentTelemetryTimelineHook({
     directory: REPO_DIRECTORY,
@@ -640,80 +714,120 @@ test("subagent telemetry timeline records outcome from child-run-only after meta
   assert.equal(record.traceId, String(childRunId).replace(/^subagent-run\//, ""))
 })
 
-test("runtime delegation hooks sustain five same-session subagents with varied completion order", async () => {
-  const hooks = [
-    createDelegationConcurrencyGuardHook({
-      directory: REPO_DIRECTORY,
-      enabled: true,
-      maxTotalConcurrent: 5,
-      maxExpensiveConcurrent: 2,
-      maxDeepConcurrent: 5,
-      maxCriticalConcurrent: 1,
-      staleReservationMs: 60000,
-    }),
-    createSubagentLifecycleSupervisorHook({
-      directory: REPO_DIRECTORY,
-      enabled: true,
-      maxRetriesPerSession: 3,
-      staleRunningMs: 60000,
-      blockOnExhausted: true,
-    }),
-    createSubagentTelemetryTimelineHook({
-      directory: REPO_DIRECTORY,
-      enabled: true,
-      maxTimelineEntries: 100,
-      persistState: false,
-      stateFile: ".opencode/test-runtime-state.json",
-      stateMaxEntries: 100,
-    }),
-  ]
-
-  async function dispatch(type, payload) {
-    for (const hook of hooks) {
-      await hook.event(type, payload)
-    }
-  }
-
-  const sessionID = "session-stress-five-subagents"
-  const delegations = [
-    { subagent_type: "explore", category: "quick", prompt: "stress alpha" },
-    { subagent_type: "strategic-planner", category: "deep", prompt: "stress beta" },
-    { subagent_type: "librarian", category: "balanced", prompt: "stress gamma" },
-    { subagent_type: "verifier", category: "quick", prompt: "stress delta" },
-    { subagent_type: "reviewer", category: "critical", prompt: "stress epsilon" },
-  ].map((args) => ({ args }))
-
-  for (const output of delegations) {
-    await dispatch("tool.execute.before", {
-      input: { tool: "task", sessionID },
-      output,
-    })
-  }
-
-  for (const index of [2, 4, 1, 3, 0]) {
-    await dispatch("tool.execute.after", {
-      input: { tool: "task", sessionID },
-      output: {
-        metadata: delegations[index].metadata,
-        output: "done",
-      },
-    })
-  }
-
-  const records = getRecentDelegationOutcomes(60000).filter((item) => item.sessionId === sessionID)
-  assert.equal(records.length, 5)
-  assert.deepEqual(
-    records.map((item) => item.subagentType).sort(),
-    ["explore", "librarian", "reviewer", "strategic-planner", "verifier"],
-  )
-  assert.equal(new Set(records.map((item) => item.childRunId)).size, 5)
-  assert.ok(records.every((item) => item.status === "completed"))
-
-  await dispatch("tool.execute.before", {
-    input: { tool: "task", sessionID },
-    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "stress follow-up" } },
+test("subagent telemetry timeline skips outcome when after-event identity is missing", async () => {
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
   })
+
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-telemetry-missing-identity" },
+    output: { args: { subagent_type: "explore", category: "balanced", prompt: "telemetry missing identity" } },
+  })
+
+  await timelineHook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-telemetry-missing-identity" },
+    output: {
+      output: "done\n\n[agent-context-shaper] delegation context\n- subagent: explore\n- recommended_category: balanced",
+    },
+  })
+
+  const records = getRecentDelegationOutcomes(60000).filter(
+    (item) => item.sessionId === "session-telemetry-missing-identity",
+  )
+  assert.equal(records.length, 0)
 })
+
+for (const scenario of [
+  {
+    count: 2,
+    sessionID: "session-stress-two-subagents",
+    completionOrder: [1, 0],
+    agents: [
+      { subagent_type: "explore", category: "quick", prompt: "stress alpha" },
+      { subagent_type: "strategic-planner", category: "deep", prompt: "stress beta" },
+    ],
+    followUp: { subagent_type: "explore", category: "quick", prompt: "stress follow-up two" },
+  },
+  {
+    count: 3,
+    sessionID: "session-stress-three-subagents",
+    completionOrder: [1, 2, 0],
+    agents: [
+      { subagent_type: "explore", category: "quick", prompt: "stress alpha" },
+      { subagent_type: "librarian", category: "balanced", prompt: "stress gamma" },
+      { subagent_type: "verifier", category: "quick", prompt: "stress delta" },
+    ],
+    followUp: { subagent_type: "librarian", category: "balanced", prompt: "stress follow-up three" },
+  },
+  {
+    count: 4,
+    sessionID: "session-stress-four-subagents",
+    completionOrder: [2, 0, 3, 1],
+    agents: [
+      { subagent_type: "explore", category: "quick", prompt: "stress alpha" },
+      { subagent_type: "strategic-planner", category: "deep", prompt: "stress beta" },
+      { subagent_type: "librarian", category: "balanced", prompt: "stress gamma" },
+      { subagent_type: "verifier", category: "quick", prompt: "stress delta" },
+    ],
+    followUp: { subagent_type: "verifier", category: "quick", prompt: "stress follow-up four" },
+  },
+  {
+    count: 5,
+    sessionID: "session-stress-five-subagents",
+    completionOrder: [2, 4, 1, 3, 0],
+    agents: [
+      { subagent_type: "explore", category: "quick", prompt: "stress alpha" },
+      { subagent_type: "strategic-planner", category: "deep", prompt: "stress beta" },
+      { subagent_type: "librarian", category: "balanced", prompt: "stress gamma" },
+      { subagent_type: "verifier", category: "quick", prompt: "stress delta" },
+      { subagent_type: "reviewer", category: "critical", prompt: "stress epsilon" },
+    ],
+    followUp: { subagent_type: "reviewer", category: "critical", prompt: "stress follow-up five" },
+  },
+]) {
+  test(`runtime delegation hooks sustain ${scenario.count} same-session subagents with varied completion order`, async () => {
+    const hooks = createRuntimeDelegationHooks()
+    const delegations = scenario.agents.map((args) => ({ args }))
+
+    for (const output of delegations) {
+      await dispatchRuntimeDelegationHooks(hooks, "tool.execute.before", {
+        input: { tool: "task", sessionID: scenario.sessionID },
+        output,
+      })
+    }
+
+    for (const index of scenario.completionOrder) {
+      await dispatchRuntimeDelegationHooks(hooks, "tool.execute.after", {
+        input: { tool: "task", sessionID: scenario.sessionID },
+        output: {
+          metadata: delegations[index].metadata,
+          output: "done",
+        },
+      })
+    }
+
+    const records = getRecentDelegationOutcomes(60000).filter(
+      (item) => item.sessionId === scenario.sessionID,
+    )
+    assert.equal(records.length, scenario.count)
+    assert.deepEqual(
+      records.map((item) => item.subagentType).sort(),
+      scenario.agents.map((item) => item.subagent_type).sort(),
+    )
+    assert.equal(new Set(records.map((item) => item.childRunId)).size, scenario.count)
+    assert.ok(records.every((item) => item.status === "completed"))
+
+    await dispatchRuntimeDelegationHooks(hooks, "tool.execute.before", {
+      input: { tool: "task", sessionID: scenario.sessionID },
+      output: { args: scenario.followUp },
+    })
+  })
+}
 
 test("runtime delegation hooks reconcile orphaned child session idle events", async () => {
   const hooks = [
@@ -750,15 +864,16 @@ test("runtime delegation hooks reconcile orphaned child session idle events", as
   }
 
   const sessionID = "session-child-idle-reconcile"
+  const idleBeforeOutput = {
+    args: {
+      subagent_type: "explore",
+      category: "quick",
+      prompt: "[DELEGATION TRACE child-idle-trace] inspect runtime",
+    },
+  }
   await dispatch("tool.execute.before", {
     input: { tool: "task", sessionID },
-    output: {
-      args: {
-        subagent_type: "explore",
-        category: "quick",
-        prompt: "[DELEGATION TRACE child-idle-trace] inspect runtime",
-      },
-    },
+    output: idleBeforeOutput,
   })
 
   await dispatch("session.created", {
@@ -767,6 +882,11 @@ test("runtime delegation hooks reconcile orphaned child session idle events", as
         id: "child-session-idle-1",
         parentID: sessionID,
         title: "[DELEGATION TRACE child-idle-trace] explore child",
+        metadata: {
+          gateway: {
+            delegation: idleBeforeOutput.metadata?.gateway?.delegation,
+          },
+        },
       },
     },
   })
@@ -829,15 +949,16 @@ test("runtime delegation hooks reconcile child assistant failure messages", asyn
   }
 
   const sessionID = "session-child-message-failure"
+  const failureBeforeOutput = {
+    args: {
+      subagent_type: "reviewer",
+      category: "critical",
+      prompt: "[DELEGATION TRACE child-failure-trace] review release risk",
+    },
+  }
   await dispatch("tool.execute.before", {
     input: { tool: "task", sessionID },
-    output: {
-      args: {
-        subagent_type: "reviewer",
-        category: "critical",
-        prompt: "[DELEGATION TRACE child-failure-trace] review release risk",
-      },
-    },
+    output: failureBeforeOutput,
   })
 
   await dispatch("session.created", {
@@ -846,6 +967,11 @@ test("runtime delegation hooks reconcile child assistant failure messages", asyn
         id: "child-session-failure-1",
         parentID: sessionID,
         title: "[DELEGATION TRACE child-failure-trace] reviewer child",
+        metadata: {
+          gateway: {
+            delegation: failureBeforeOutput.metadata?.gateway?.delegation,
+          },
+        },
       },
     },
   })

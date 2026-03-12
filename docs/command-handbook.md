@@ -222,6 +222,12 @@ Use these directly in OpenCode:
 `/claims claim --role <role>` auto-assigns the least-loaded active agent from `/agent-pool` for that role.
 `/workflow run` now supports dependency-aware step ordering (`depends_on`) and records per-step execution results (status, timestamps, failure reason codes). Use `--execute` to run guarded command steps.
 
+Background runtime triage split:
+
+- use `/bg doctor --json` for backend execution health, queue depth, stale-running jobs, and failure triage
+- use `/agent-pool doctor --json` and `/agent-pool health --json` for manual capacity registry visibility plus backend health passthrough
+- use `/agent-pool drain --id <agent_id> --json` to mark capacity unavailable, and `/bg cleanup --json` to prune stale/terminal backend jobs
+
 ## Post-session hook inside OpenCode ✅
 
 Use these directly in OpenCode:
@@ -362,6 +368,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `/workflow` -> lower-level engine behind reusable workflow runs
 - `/autopilot` -> open-ended autonomous execution surface
 - `/autoflow` -> public deterministic plan-file execution surface
+- `/autopilot` and `/autoflow` share the same task-graph mental model; prefer `/autopilot` for open-ended objectives and `/autoflow` for plan-file-driven work
 
 - compatibility aliases are listed below; keep operator guidance canonical-first
 
@@ -382,9 +389,9 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /auto-slash - Detect and preview natural-language slash intents
 /autopilot - Continue current task autonomously with autopilot guardrails
 /autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)
-/agent-pool - Manage runtime agent pool lifecycle (spawn|list|health|drain|logs|doctor)
+/agent-pool - Manage manual runtime capacity registry and lifecycle controls (spawn|list|health|drain|logs|doctor); capacity registration does not start workers, and `/bg` remains the execution backend
 /continuation-stop - Stop active continuation loops and disable auto-resume
-/bg - Manage background jobs (start|status|list|read|cancel|cleanup|doctor)
+/bg - Manage background jobs as the execution backend (start|status|list|read|cancel|cleanup|doctor)
 /browser - Manage browser automation provider profile (status|profile|doctor)
 /budget - Manage execution budget controls (status|profile|override|doctor)
 /changes - Explain local change narrative for handoff/release notes (explain|--since)

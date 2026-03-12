@@ -7,7 +7,7 @@ Canonical operational flows for day-to-day delivery with the current command sur
 - Start every implementation task in a dedicated git worktree branch created from the current root branch.
 - Keep the main project folder on `main`; use it for sync/inspection, not for task edits.
 - Never `git checkout` or `git switch` the main project folder onto a task branch.
-- The primary project folder on protected branches (`main`, `master`) is edit-blocked by default, and bash there is limited to inspection, validation, and exact sync commands: `git fetch`, `git fetch --prune`, and `git pull --rebase`.
+- The primary project folder on protected branches (`main`, `master`) is edit-blocked by default, and bash there is limited to inspection, validation, and sync/setup commands such as `git fetch`, `git fetch --prune`, `git pull --rebase`, `git worktree add ...`, and `git stash push|pop|list|show`.
 - Linked worktrees are the normal place for task edits; a linked worktree is only blocked when that worktree itself is on a protected branch.
 - Use `docs/parallel-wt-playbook.md` as the checklist before delegating or editing.
 
@@ -17,6 +17,20 @@ Canonical operational flows for day-to-day delivery with the current command sur
 - Use `/workflow` only when you need direct engine validation, resume, or template control beneath `/delivery`.
 - Use `/autopilot` for open-ended autonomous execution that is not centered on a workflow file.
 - Use `/autoflow` for deterministic execution of a plan artifact; treat legacy `/start-work` references as backend history, not the recommended surface.
+
+## Fan-Out Then Fan-In
+
+- Start with read-only fan-out when discovery, sequencing, or ambiguity is the main unknown.
+- Use `explore` for codebase mapping, `strategic-planner` for sequencing, and `ambiguity-analyst` when acceptance criteria or assumptions are still fuzzy.
+- Fan back in to one writer for implementation by default.
+- Only open parallel writer lanes when reservations are explicit and the target paths are disjoint.
+- Finish with `verifier`, then `reviewer`; add `plan-critic` when plan feasibility or missing gates is the main risk.
+
+Canonical command mental model:
+
+- `/autopilot` and `/autoflow` are orchestration siblings over the same shared task-graph surface.
+- `/autopilot` is the open-ended objective runner.
+- `/autoflow` is the deterministic plan-file runner.
 
 For a reusable external delivery-policy reference, search your local `agents.md` clone first when available, then use the public `agents.md` playbook docs (`AGENTS.md`, `docs/index.md`, `docs/validation-policy.md`) when you need canonical shareable links.
 

@@ -18,6 +18,8 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 /autoflow status --json
 /digest run --reason manual
 /gateway status
+/bg doctor --json
+/agent-pool doctor --json
 ```
 
 Optional next step when you want lightweight repo or docs context:
@@ -27,6 +29,8 @@ Optional next step when you want lightweight repo or docs context:
 ```
 
 Run `/session handoff --json` after you have at least one indexed digest. If you need to reopen work in a different linked worktree, use `/session handoff --launch-cwd <worktree-path> --fork --json` to get a ready-to-run launch command.
+
+For background runtime ownership, use `/agent-pool` to register or drain visible manual capacity and `/bg` to actually run, inspect, and clean up jobs.
 
 For automation-friendly help output, prefer command-specific help from this repo (for example `python3 scripts/session_command.py help`) because the upstream `opencode --help` banner formatting is not controlled here.
 

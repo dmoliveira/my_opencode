@@ -14,6 +14,11 @@ from typing import Any
 from runtime_audit import append_event  # type: ignore
 from governance_policy import check_operation  # type: ignore
 from model_routing_command import resolve_for_entrypoint  # type: ignore
+from task_graph_bridge import (  # type: ignore
+    sync_workflow_run_to_task_graph,
+    task_graph_status_snapshot,
+    task_graph_runtime_path,
+)
 
 
 DEFAULT_STATE_PATH = Path(
@@ -82,6 +87,7 @@ def active_record(state: dict[str, Any]) -> dict[str, Any]:
     state["active"] = {}
     return state["active"]
 
+
 def next_run_id(state: dict[str, Any]) -> str:
     max_seq = 0
     candidates: list[dict[str, Any]] = []
@@ -98,7 +104,6 @@ def next_run_id(state: dict[str, Any]) -> str:
         if suffix.isdigit():
             max_seq = max(max_seq, int(suffix))
     return f"{prefix}{max_seq + 1:06d}"
-
 
 
 def parse_flag_value(argv: list[str], flag: str) -> str | None:
@@ -126,6 +131,33 @@ def emit(payload: dict[str, Any], as_json: bool) -> int:
         if payload.get("status"):
             print(f"status: {payload.get('status')}")
     return 0 if payload.get("result") == "PASS" else 1
+
+
+def merge_step_results(
+    ordered_steps: list[dict[str, Any]],
+    previous_results: list[dict[str, Any]],
+    current_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    previous_by_id = {
+        str(item.get("id") or "").strip(): item
+        for item in previous_results
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    current_by_id = {
+        str(item.get("id") or "").strip(): item
+        for item in current_results
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    merged: list[dict[str, Any]] = []
+    for step in ordered_steps:
+        step_id = str(step.get("id") or "").strip()
+        if not step_id:
+            continue
+        if step_id in current_by_id:
+            merged.append(current_by_id[step_id])
+        elif step_id in previous_by_id:
+            merged.append(previous_by_id[step_id])
+    return merged
 
 
 def validate_workflow(workflow: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -292,11 +324,15 @@ def run_command_step(step: dict[str, Any]) -> tuple[str, str | None, str, int | 
 
 
 def execute_steps(
-    steps: list[dict[str, Any]], execute_commands: bool
+    steps: list[dict[str, Any]],
+    execute_commands: bool,
+    on_step_settled: Any = None,
+    interrupt_after_steps: int = 0,
 ) -> tuple[str, list[dict[str, Any]], str | None]:
     results: list[dict[str, Any]] = []
     failed_step_id: str | None = None
     failure_seen = False
+    results_by_id: dict[str, dict[str, Any]] = {}
 
     for step in steps:
         step_id = str(step.get("id") or "unknown-step")
@@ -322,6 +358,16 @@ def execute_steps(
                     "finished_at": now_iso(),
                 }
             )
+            results_by_id[step_id] = results[-1]
+            if callable(on_step_settled):
+                on_step_settled(results, step_id)
+            if (
+                interrupt_after_steps > 0
+                and len(results) >= interrupt_after_steps
+                and step != steps[-1]
+            ):
+                next_step_id = str(steps[steps.index(step) + 1].get("id") or "")
+                return "interrupted", results, next_step_id or None
             continue
         if when == "on_failure" and not failure_seen:
             results.append(
@@ -341,6 +387,58 @@ def execute_steps(
                     "finished_at": now_iso(),
                 }
             )
+            results_by_id[step_id] = results[-1]
+            if callable(on_step_settled):
+                on_step_settled(results, step_id)
+            if (
+                interrupt_after_steps > 0
+                and len(results) >= interrupt_after_steps
+                and step != steps[-1]
+            ):
+                next_step_id = str(steps[steps.index(step) + 1].get("id") or "")
+                return "interrupted", results, next_step_id or None
+            continue
+
+        raw_depends_on = step.get("depends_on")
+        depends_on: list[Any] = (
+            raw_depends_on if isinstance(raw_depends_on, list) else []
+        )
+        unmet_dependency = next(
+            (
+                dep_id
+                for dep_id in [
+                    str(dep).strip() for dep in depends_on if str(dep).strip()
+                ]
+                if str(results_by_id.get(dep_id, {}).get("status") or "") != "passed"
+            ),
+            None,
+        )
+        if unmet_dependency:
+            results.append(
+                {
+                    "id": step_id,
+                    "action": action,
+                    "status": "skipped",
+                    "reason_code": "skipped_dependency_not_passed",
+                    "detail": f"skipped because dependency did not pass: {unmet_dependency}",
+                    "depends_on": depends_on,
+                    "when": when,
+                    "retry": int(step.get("retry", 0) or 0),
+                    "attempts": 0,
+                    "started_at": started_at,
+                    "finished_at": now_iso(),
+                }
+            )
+            results_by_id[step_id] = results[-1]
+            if callable(on_step_settled):
+                on_step_settled(results, step_id)
+            if (
+                interrupt_after_steps > 0
+                and len(results) >= interrupt_after_steps
+                and step != steps[-1]
+            ):
+                next_step_id = str(steps[steps.index(step) + 1].get("id") or "")
+                return "interrupted", results, next_step_id or None
             continue
 
         retry_count = 0
@@ -403,6 +501,16 @@ def execute_steps(
                 "finished_at": now_iso(),
             }
         )
+        results_by_id[step_id] = results[-1]
+        if callable(on_step_settled):
+            on_step_settled(results, step_id)
+        if (
+            interrupt_after_steps > 0
+            and len(results) >= interrupt_after_steps
+            and step != steps[-1]
+        ):
+            next_step_id = str(steps[steps.index(step) + 1].get("id") or "")
+            return "interrupted", results, next_step_id or None
 
     if failed_step_id:
         return "failed", results, failed_step_id
@@ -523,10 +631,73 @@ def cmd_run(argv: list[str]) -> int:
             as_json,
         )
 
-    status, step_results, failed_step_id = execute_steps(
-        ordered_steps, execute_commands
-    )
     run_id = next_run_id(state)
+    started_at = now_iso()
+    interrupt_after_steps = 0
+    try:
+        interrupt_after_steps = max(
+            0,
+            int(os.environ.get("MY_OPENCODE_WORKFLOW_INTERRUPT_AFTER_STEP", "0") or 0),
+        )
+    except ValueError:
+        interrupt_after_steps = 0
+    active_run = {
+        "run_id": run_id,
+        "name": workflow.get("name"),
+        "path": str(workflow_path),
+        "status": "running" if execute_commands else "dry-run",
+        "execution_mode": "execute" if execute_commands else "dry-run",
+        "step_count": len(ordered_steps),
+        "completed_steps": 0,
+        "failed_step_id": None,
+        "ordered_step_ids": [str(step.get("id") or "") for step in ordered_steps],
+        "steps": [],
+        "started_at": started_at,
+        "updated_at": started_at,
+    }
+    state["active"] = active_run
+    save_json_file(DEFAULT_STATE_PATH, state)
+
+    def persist_partial(step_results: list[dict[str, Any]], next_step_id: str) -> None:
+        partial_state = load_json_file(DEFAULT_STATE_PATH)
+        partial_active = active_record(partial_state)
+        partial_active.update(
+            {
+                "run_id": run_id,
+                "name": workflow.get("name"),
+                "path": str(workflow_path),
+                "status": "running",
+                "execution_mode": "execute" if execute_commands else "dry-run",
+                "step_count": len(ordered_steps),
+                "completed_steps": sum(
+                    1 for item in step_results if item.get("status") == "passed"
+                ),
+                "failed_step_id": next_step_id or None,
+                "ordered_step_ids": [
+                    str(step.get("id") or "") for step in ordered_steps
+                ],
+                "steps": step_results,
+                "started_at": started_at,
+                "updated_at": now_iso(),
+            }
+        )
+        partial_state["active"] = partial_active
+        save_json_file(DEFAULT_STATE_PATH, partial_state)
+        if execute_commands:
+            sync_workflow_run_to_task_graph(
+                workflow_path=workflow_path,
+                workflow=workflow,
+                ordered_steps=ordered_steps,
+                step_results=step_results,
+                run_record=partial_active,
+            )
+
+    status, step_results, failed_step_id = execute_steps(
+        ordered_steps,
+        execute_commands,
+        on_step_settled=persist_partial if execute_commands else None,
+        interrupt_after_steps=interrupt_after_steps if execute_commands else 0,
+    )
     run_record = {
         "run_id": run_id,
         "name": workflow.get("name"),
@@ -540,18 +711,47 @@ def cmd_run(argv: list[str]) -> int:
         "failed_step_id": failed_step_id,
         "ordered_step_ids": [str(step.get("id") or "") for step in ordered_steps],
         "steps": step_results,
-        "started_at": now_iso(),
+        "started_at": started_at,
         "finished_at": now_iso(),
     }
-    history = history_list(state)
-    history.insert(0, run_record)
-    state["history"] = history[:50]
-    state["active"] = {}
-    save_json_file(DEFAULT_STATE_PATH, state)
+    if status == "interrupted":
+        state = load_json_file(DEFAULT_STATE_PATH)
+        state["active"] = run_record
+        save_json_file(DEFAULT_STATE_PATH, state)
+    else:
+        history = history_list(state)
+        history.insert(0, run_record)
+        state["history"] = history[:50]
+        state["active"] = {}
+        save_json_file(DEFAULT_STATE_PATH, state)
+    task_graph_path = task_graph_runtime_path()
+    if execute_commands:
+        task_graph_path = sync_workflow_run_to_task_graph(
+            workflow_path=workflow_path,
+            workflow=workflow,
+            ordered_steps=ordered_steps,
+            step_results=step_results,
+            run_record=run_record,
+        )
     append_event("workflow", "run", "PASS", {"run_id": run_id, "status": status})
     return emit(
         attach_model_routing(
-            {"result": "PASS", "command": "run", **run_record}, routing
+            (
+                {
+                    "result": "PASS" if status != "interrupted" else "FAIL",
+                    "command": "run",
+                    **run_record,
+                    **(
+                        {
+                            **task_graph_status_snapshot(),
+                            "task_graph_path": str(task_graph_path),
+                        }
+                        if execute_commands
+                        else {}
+                    ),
+                }
+            ),
+            routing,
         ),
         as_json,
     )
@@ -598,9 +798,13 @@ def cmd_resume(argv: list[str]) -> int:
             as_json,
         )
     history = history_list(state)
-    source_run = next(
-        (row for row in history if str(row.get("run_id") or "") == run_id), None
-    )
+    source_run = None
+    if active and str(active.get("run_id") or "") == run_id:
+        source_run = active
+    if not isinstance(source_run, dict):
+        source_run = next(
+            (row for row in history if str(row.get("run_id") or "") == run_id), None
+        )
     if not isinstance(source_run, dict):
         return emit(
             {
@@ -611,12 +815,12 @@ def cmd_resume(argv: list[str]) -> int:
             },
             as_json,
         )
-    if str(source_run.get("status") or "") != "failed":
+    if str(source_run.get("status") or "") not in {"failed", "interrupted"}:
         return emit(
             {
                 "result": "FAIL",
                 "command": "resume",
-                "error": "run is not failed",
+                "error": "run is not resumable",
                 "reason_code": "workflow_resume_not_failed",
             },
             as_json,
@@ -673,8 +877,73 @@ def cmd_resume(argv: list[str]) -> int:
             )
     resumed_steps = ordered_steps[start_index:]
 
-    status, step_results, new_failed = execute_steps(resumed_steps, execute_commands)
-    new_run_id = next_run_id(state)
+    started_at = now_iso()
+    active_resume = {
+        "run_id": next_run_id(state),
+        "name": workflow.get("name"),
+        "path": str(workflow_path),
+        "status": "running" if execute_commands else "dry-run",
+        "execution_mode": "execute" if execute_commands else "dry-run",
+        "resumed_from": run_id,
+        "step_count": len(resumed_steps),
+        "completed_steps": 0,
+        "failed_step_id": None,
+        "ordered_step_ids": [str(step.get("id") or "") for step in resumed_steps],
+        "steps": [],
+        "started_at": started_at,
+        "updated_at": started_at,
+    }
+    state["active"] = active_resume
+    save_json_file(DEFAULT_STATE_PATH, state)
+
+    def persist_resumed_partial(
+        step_results: list[dict[str, Any]], next_step_id: str
+    ) -> None:
+        partial_state = load_json_file(DEFAULT_STATE_PATH)
+        partial_active = active_record(partial_state)
+        partial_active.update(
+            {
+                **active_resume,
+                "completed_steps": sum(
+                    1 for item in step_results if item.get("status") == "passed"
+                ),
+                "failed_step_id": next_step_id or None,
+                "steps": step_results,
+                "updated_at": now_iso(),
+            }
+        )
+        partial_state["active"] = partial_active
+        save_json_file(DEFAULT_STATE_PATH, partial_state)
+        if execute_commands:
+            previous_step_results = [
+                item for item in source_run.get("steps", []) if isinstance(item, dict)
+            ]
+            merged_step_results = merge_step_results(
+                ordered_steps, previous_step_results, step_results
+            )
+            sync_workflow_run_to_task_graph(
+                workflow_path=workflow_path,
+                workflow=workflow,
+                ordered_steps=ordered_steps,
+                step_results=merged_step_results,
+                run_record=partial_active,
+            )
+
+    interrupt_after_steps = 0
+    try:
+        interrupt_after_steps = max(
+            0,
+            int(os.environ.get("MY_OPENCODE_WORKFLOW_INTERRUPT_AFTER_STEP", "0") or 0),
+        )
+    except ValueError:
+        interrupt_after_steps = 0
+    status, step_results, new_failed = execute_steps(
+        resumed_steps,
+        execute_commands,
+        on_step_settled=persist_resumed_partial if execute_commands else None,
+        interrupt_after_steps=interrupt_after_steps if execute_commands else 0,
+    )
+    new_run_id = active_resume["run_id"]
     run_record = {
         "run_id": new_run_id,
         "name": workflow.get("name"),
@@ -689,13 +958,33 @@ def cmd_resume(argv: list[str]) -> int:
         "failed_step_id": new_failed,
         "ordered_step_ids": [str(step.get("id") or "") for step in resumed_steps],
         "steps": step_results,
-        "started_at": now_iso(),
+        "started_at": started_at,
         "finished_at": now_iso(),
     }
-    history.insert(0, run_record)
-    state["history"] = history[:50]
-    state["active"] = {}
-    save_json_file(DEFAULT_STATE_PATH, state)
+    if status == "interrupted":
+        state = load_json_file(DEFAULT_STATE_PATH)
+        state["active"] = run_record
+        save_json_file(DEFAULT_STATE_PATH, state)
+    else:
+        history.insert(0, run_record)
+        state["history"] = history[:50]
+        state["active"] = {}
+        save_json_file(DEFAULT_STATE_PATH, state)
+    task_graph_path = task_graph_runtime_path()
+    if execute_commands:
+        previous_step_results = [
+            item for item in source_run.get("steps", []) if isinstance(item, dict)
+        ]
+        merged_step_results = merge_step_results(
+            ordered_steps, previous_step_results, step_results
+        )
+        task_graph_path = sync_workflow_run_to_task_graph(
+            workflow_path=workflow_path,
+            workflow=workflow,
+            ordered_steps=ordered_steps,
+            step_results=merged_step_results,
+            run_record=run_record,
+        )
     append_event(
         "workflow",
         "resume",
@@ -704,7 +993,22 @@ def cmd_resume(argv: list[str]) -> int:
     )
     return emit(
         attach_model_routing(
-            {"result": "PASS", "command": "resume", **run_record}, routing
+            (
+                {
+                    "result": "PASS" if status != "interrupted" else "FAIL",
+                    "command": "resume",
+                    **run_record,
+                    **(
+                        {
+                            **task_graph_status_snapshot(),
+                            "task_graph_path": str(task_graph_path),
+                        }
+                        if execute_commands
+                        else {}
+                    ),
+                }
+            ),
+            routing,
         ),
         as_json,
     )
@@ -726,6 +1030,7 @@ def cmd_status(argv: list[str]) -> int:
                     "status": "idle",
                     "warnings": ["no active workflow run"],
                     "latest": latest,
+                    **task_graph_status_snapshot(),
                 },
                 routing,
             ),
@@ -733,7 +1038,13 @@ def cmd_status(argv: list[str]) -> int:
         )
     return emit(
         attach_model_routing(
-            {"result": "PASS", "command": "status", **active}, routing
+            {
+                "result": "PASS",
+                "command": "status",
+                **active,
+                **task_graph_status_snapshot(),
+            },
+            routing,
         ),
         as_json,
     )

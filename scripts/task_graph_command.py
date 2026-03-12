@@ -15,6 +15,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import resolve_write_path  # type: ignore  # noqa: E402
 from task_graph_runtime import (  # type: ignore  # noqa: E402
     TASK_STATUS,
+    graph_snapshot,
     load_state,
     now_iso,
     ready_tasks,
@@ -42,6 +43,14 @@ def _csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _metadata_payload(args: argparse.Namespace) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    reservation_paths = _csv(getattr(args, "reservation_paths", ""))
+    if reservation_paths:
+        metadata["reservation_paths"] = reservation_paths
+    return metadata
 
 
 def _get_task(state: dict[str, Any], task_id: str) -> dict[str, Any] | None:
@@ -88,7 +97,7 @@ def command_create(args: argparse.Namespace) -> dict[str, Any]:
             "blockedBy": _csv(args.blocked_by),
             "blocks": [],
             "owner": (args.owner or "").strip(),
-            "metadata": {},
+            "metadata": _metadata_payload(args),
             "threadID": (args.thread_id or "").strip(),
             "created_at": now_iso(),
             "updated_at": now_iso(),
@@ -155,6 +164,7 @@ def command_update(args: argparse.Namespace) -> dict[str, Any]:
             args.owner,
             args.active_form,
             args.blocked_by,
+            args.reservation_paths,
             args.thread_id,
         ]
     ):
@@ -182,6 +192,17 @@ def command_update(args: argparse.Namespace) -> dict[str, Any]:
             task["activeForm"] = args.active_form.strip()
         if args.blocked_by is not None:
             task["blockedBy"] = _csv(args.blocked_by)
+        if getattr(args, "reservation_paths", None) is not None:
+            raw_metadata = task.get("metadata")
+            metadata: dict[str, Any] = (
+                raw_metadata if isinstance(raw_metadata, dict) else {}
+            )
+            reservation_paths = _csv(args.reservation_paths)
+            if reservation_paths:
+                metadata["reservation_paths"] = reservation_paths
+            else:
+                metadata.pop("reservation_paths", None)
+            task["metadata"] = metadata
         if args.thread_id:
             task["threadID"] = args.thread_id.strip()
         task["updated_at"] = now_iso()
@@ -208,12 +229,19 @@ def command_update(args: argparse.Namespace) -> dict[str, Any]:
 def command_ready(args: argparse.Namespace) -> dict[str, Any]:
     locked = load_state(_write_path())
     tasks = [item for item in locked.state.get("tasks", []) if isinstance(item, dict)]
-    ready = ready_tasks(tasks)
+    snapshot = graph_snapshot(tasks)
     return {
         "result": "PASS",
         "reason_code": "task_ready_list",
-        "count": len(ready),
-        "tasks": ready,
+        "count": snapshot["ready_count"],
+        "tasks": snapshot["ready"],
+        "runnable_lanes": snapshot["runnable_lanes"],
+        "blocked": snapshot["blocked"],
+        "summary": {
+            "ready_count": snapshot["ready_count"],
+            "blocked_count": snapshot["blocked_count"],
+            "lane_count": snapshot["lane_count"],
+        },
         "runtime_path": str(locked.runtime_path),
     }
 
@@ -227,6 +255,7 @@ def command_doctor(args: argparse.Namespace) -> dict[str, Any]:
         for dep in task.get("blockedBy", []):
             if dep not in by_id:
                 problems.append(f"task {task.get('id')} blockedBy missing task {dep}")
+    snapshot = graph_snapshot(tasks)
     return {
         "result": "PASS" if not problems else "FAIL",
         "reason_code": "task_graph_healthy"
@@ -234,7 +263,9 @@ def command_doctor(args: argparse.Namespace) -> dict[str, Any]:
         else "task_graph_invalid_dependencies",
         "problems": problems,
         "task_count": len(tasks),
-        "ready_count": len(ready_tasks(tasks)),
+        "ready_count": snapshot["ready_count"],
+        "lane_count": snapshot["lane_count"],
+        "blocked_count": snapshot["blocked_count"],
         "runtime_path": str(locked.runtime_path),
     }
 
@@ -254,6 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--thread-id", default="")
     create.add_argument("--active-form", default="")
     create.add_argument("--blocked-by", default="")
+    create.add_argument("--reservation-paths", default="")
     create.add_argument("--json", action="store_true")
 
     list_cmd = sub.add_parser("list", help="List tasks")
@@ -273,6 +305,7 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--thread-id", default="")
     update.add_argument("--active-form", default="")
     update.add_argument("--blocked-by")
+    update.add_argument("--reservation-paths")
     update.add_argument("--json", action="store_true")
 
     ready = sub.add_parser("ready", help="List dependency-unblocked tasks")
