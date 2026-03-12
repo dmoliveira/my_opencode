@@ -174,7 +174,7 @@ Profiles:
 - `scripts/autoflow_command.py` - backend script for `/autoflow`
 - `scripts/init_deep_command.py` - backend script for `/init-deep`
 - `scripts/continuation_stop_command.py` - backend script for `/continuation-stop`
-- `scripts/opencode_session.sh` - optional wrapper to run digest on process exit
+- `scripts/opencode_session.sh` - optional wrapper to run digest on process exit and enable `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` by default with rotation; after a wrapped session, `/gateway continuation report` is the fastest check for recent `todo-continuation-enforcer` activity
 - `scripts/telemetry_command.py` - backend script for `/telemetry`
 - `scripts/post_session_command.py` - backend script for `/post-session`
 - `scripts/policy_command.py` - policy profile helper used by `/notify policy ...` and stack presets

@@ -74,9 +74,31 @@ interface ChatPayload {
   }
 }
 
+interface MessageUpdatedPayload {
+  directory?: string
+  properties?: {
+    sessionID?: string
+    sessionId?: string
+    trace_id?: string
+    traceId?: string
+    info?: {
+      id?: string
+      role?: string
+      sessionID?: string
+      sessionId?: string
+      error?: unknown
+      time?: { completed?: number }
+    }
+    parts?: Array<{ type?: string; text?: string; synthetic?: boolean }>
+  }
+  output?: {
+    parts?: Array<{ type?: string; text?: string; synthetic?: boolean }>
+  }
+}
+
 interface SessionState {
   pendingContinuation: boolean
-  pendingSource?: "task_output" | "message_probe"
+  pendingSource?: "assistant_message" | "task_output" | "message_probe"
   pendingTodoCount: number
   lastInjectedAt: number
   consecutiveFailures: number
@@ -308,7 +330,7 @@ function hasPendingCueText(text: string, continueIntentArmed: boolean): boolean 
 async function resolvePendingContinuationDecision(options: {
   text: string
   continueIntentArmed: boolean
-  source: "task_output" | "message_probe"
+  source: "assistant_message" | "task_output" | "message_probe"
   sessionId: string
   directory: string
   traceId?: string
@@ -584,6 +606,47 @@ export function createTodoContinuationEnforcerHook(options: {
           })
         }
         state.pendingSource = state.pendingContinuation ? "task_output" : undefined
+        return
+      }
+
+      if (type === "message.updated") {
+        const eventPayload = (payload ?? {}) as MessageUpdatedPayload
+        const sessionId = resolveSessionId(eventPayload)
+        if (!sessionId) {
+          return
+        }
+        const info = eventPayload.properties?.info
+        if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+          return
+        }
+        const completed = Number.isFinite(Number(info?.time?.completed ?? Number.NaN))
+        const failed = info?.error !== undefined && info?.error !== null
+        if (!completed && !failed) {
+          return
+        }
+        const state = getSessionState(sessionState, sessionId)
+        state.lastTraceId = resolveTraceId(eventPayload)
+        if (state.pendingTodoCount <= 0) {
+          return
+        }
+        const text = assistantText({
+          info: { role: "assistant" },
+          parts: eventPayload.output?.parts ?? eventPayload.properties?.parts,
+        })
+        if (!text) {
+          return
+        }
+        state.pendingContinuation = true
+        state.pendingSource = "assistant_message"
+        state.markerProbeAttempted = false
+        writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+          hook: "todo-continuation-enforcer",
+          stage: "state",
+          reason_code: "todo_continuation_assistant_message_with_open_todos",
+          session_id: sessionId,
+          trace_id: state.lastTraceId,
+          open_todo_count: state.pendingTodoCount,
+        })
         return
       }
 
