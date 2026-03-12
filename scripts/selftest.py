@@ -124,10 +124,13 @@ ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
+SLASH_WRAPPER_SCRIPT = REPO_ROOT / "scripts" / "slash_command_wrapper.py"
 CONTINUATION_STOP_SCRIPT = REPO_ROOT / "scripts" / "continuation_stop_command.py"
 COMPLETE_SCRIPT = REPO_ROOT / "scripts" / "command_completion_command.py"
 CLAIMS_SCRIPT = REPO_ROOT / "scripts" / "claims_command.py"
 WORKFLOW_SCRIPT = REPO_ROOT / "scripts" / "workflow_command.py"
+AUTOFLOW_SCRIPT = REPO_ROOT / "scripts" / "autoflow_command.py"
+TASK_GRAPH_SCRIPT = REPO_ROOT / "scripts" / "task_graph_command.py"
 DAEMON_SCRIPT = REPO_ROOT / "scripts" / "daemon_command.py"
 DELIVERY_SCRIPT = REPO_ROOT / "scripts" / "delivery_command.py"
 AUDIT_SCRIPT = REPO_ROOT / "scripts" / "audit_command.py"
@@ -382,9 +385,74 @@ exit 0
                 (command_map.get(command_name, {}) or {}).get("template", "")
             )
             expect(
-                '--goal "$ARGUMENTS"' in template,
+                "--fixed-before go" in template
+                and "--fixed-before --goal" in template
+                and "--fixed-after --json" in template
+                and '--literal "$ARGUMENTS"' in template,
                 f"{command_name} command template should pass slash arguments as explicit goal",
             )
+        wrapper_result = subprocess.run(
+            [
+                sys.executable,
+                str(SLASH_WRAPPER_SCRIPT),
+                "--script",
+                str(SESSION_SCRIPT.resolve()),
+                "--raw-args",
+                "doctor --json",
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            wrapper_result.returncode == 0
+            and '"result": "PASS"' in wrapper_result.stdout,
+            f"slash wrapper should safely forward shlex-split args: {wrapper_result.stderr}",
+        )
+        literal_result = subprocess.run(
+            [
+                sys.executable,
+                str(SLASH_WRAPPER_SCRIPT),
+                "--script",
+                str(SESSION_SCRIPT.resolve()),
+                "--literal",
+                "doctor",
+                "--fixed-after",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            literal_result.returncode == 0
+            and '"result": "PASS"' in literal_result.stdout,
+            f"slash wrapper should safely forward literal args: {literal_result.stderr}",
+        )
+        untrusted_script = tmp / "wrapper-untrusted.py"
+        untrusted_script.write_text("print('nope')\n", encoding="utf-8")
+        rejected_result = subprocess.run(
+            [
+                sys.executable,
+                str(SLASH_WRAPPER_SCRIPT),
+                "--script",
+                str(untrusted_script.resolve()),
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            rejected_result.returncode == 2
+            and "wrapper rejected untrusted script path" in rejected_result.stderr,
+            "slash wrapper should reject scripts outside the trusted scripts directory",
+        )
 
         install_script = (REPO_ROOT / "install.sh").read_text(encoding="utf-8")
         expect(
@@ -1395,6 +1463,7 @@ exit 0
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
+        digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
         digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
 
         result = subprocess.run(
@@ -2003,6 +2072,32 @@ exit 0
             wf_payload.get("model_routing", {}).get("entrypoint") == "workflow",
             "workflow run should expose entrypoint model routing metadata",
         )
+        expect(
+            "task_graph_path" not in wf_payload,
+            "workflow dry-run should not claim shared task graph snapshot state",
+        )
+        workflow_task_graph_path = Path(str(tmp / "task-graph-dry-run.json"))
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(workflow_task_graph_path)
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"task graph ready failed: {result.stderr}")
+        task_ready_payload = parse_json_output(result.stdout)
+        expect(
+            task_ready_payload.get("count") == 0,
+            "workflow dry-run should not mutate shared ready tasks",
+        )
+        expect(
+            isinstance(task_ready_payload.get("summary", {}), dict)
+            and task_ready_payload.get("summary", {}).get("lane_count") == 0,
+            "task graph ready should expose lane summary for empty graph state",
+        )
 
         wf_exec_path = tmp / "wf-selftest-exec.json"
         wf_exec_path.write_text(
@@ -2054,6 +2149,336 @@ exit 0
             wf_exec_payload.get("execution_mode") == "execute"
             and wf_exec_payload.get("ordered_step_ids") == ["prep", "verify"],
             "workflow execute should respect dependency ordering",
+        )
+
+        wf_skip_path = tmp / "wf-selftest-skip.json"
+        wf_skip_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-skip",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {
+                            "id": "only-on-failure",
+                            "action": "run-fallback",
+                            "when": "on_failure",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_skip_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow skip run failed: {result.stderr}")
+        wf_skip_payload = parse_json_output(result.stdout)
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(
+            wf_skip_payload.get("task_graph_path") or ""
+        )
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph ready failed after skip workflow: {result.stderr}",
+        )
+        wf_skip_ready_payload = parse_json_output(result.stdout)
+        wf_skip_ready_tasks = [
+            item
+            for item in wf_skip_ready_payload.get("tasks", [])
+            if isinstance(item, dict)
+            and item.get("metadata", {}).get("run_id") == wf_skip_payload.get("run_id")
+        ]
+        expect(
+            not wf_skip_ready_tasks,
+            "workflow on_failure steps skipped on success should not become ready tasks",
+        )
+        expect(
+            isinstance(wf_skip_ready_payload.get("blocked", []), list)
+            and isinstance(wf_skip_ready_payload.get("summary", {}), dict),
+            "task graph ready should expose blocked detail payloads",
+        )
+
+        wf_prefix_path = tmp / "wf-selftest-prefix.json"
+        wf_prefix_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-prefix",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {"id": "verify", "action": "run-fixed"},
+                        {
+                            "id": "after-success",
+                            "action": "run-after",
+                            "when": "on_success",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_prefix_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow prefix run failed: {result.stderr}")
+        wf_prefix_payload = parse_json_output(result.stdout)
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(
+            wf_prefix_payload.get("task_graph_path") or ""
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TASK_GRAPH_SCRIPT),
+                "get",
+                "workflow:" + str(wf_prefix_path.resolve()) + "#after-success",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph get failed after prefix workflow: {result.stderr}",
+        )
+        wf_prefix_task = parse_json_output(result.stdout).get("task", {})
+        expect(
+            sorted(wf_prefix_task.get("blockedBy", []))
+            == sorted(
+                [
+                    "workflow:" + str(wf_prefix_path.resolve()) + "#prep",
+                    "workflow:" + str(wf_prefix_path.resolve()) + "#verify",
+                ]
+            ),
+            "implicit on_success task graph dependencies should include the full settled prefix",
+        )
+
+        wf_mixed_prefix_path = tmp / "wf-selftest-mixed-prefix.json"
+        wf_mixed_prefix_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-mixed-prefix",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {"id": "verify", "action": "run-fixed"},
+                        {
+                            "id": "publish",
+                            "action": "run-after",
+                            "depends_on": ["verify"],
+                            "when": "on_success",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_mixed_prefix_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow mixed prefix run failed: {result.stderr}"
+        )
+        wf_mixed_prefix_payload = parse_json_output(result.stdout)
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(
+            wf_mixed_prefix_payload.get("task_graph_path") or ""
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TASK_GRAPH_SCRIPT),
+                "get",
+                "workflow:" + str(wf_mixed_prefix_path.resolve()) + "#publish",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph get failed after mixed prefix workflow: {result.stderr}",
+        )
+        wf_mixed_prefix_task = parse_json_output(result.stdout).get("task", {})
+        expect(
+            sorted(wf_mixed_prefix_task.get("blockedBy", []))
+            == sorted(
+                [
+                    "workflow:" + str(wf_mixed_prefix_path.resolve()) + "#prep",
+                    "workflow:" + str(wf_mixed_prefix_path.resolve()) + "#verify",
+                ]
+            ),
+            "explicit depends_on plus on_success should still include the full settled prefix",
+        )
+
+        wf_reservation_path = tmp / "wf-selftest-reservation.json"
+        wf_reservation_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-reservation",
+                    "steps": [
+                        {
+                            "id": "write-step",
+                            "action": "run-fixed",
+                            "reservation_paths": ["src/owned.py"],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_reservation_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow reservation run failed: {result.stderr}"
+        )
+        wf_reservation_payload = parse_json_output(result.stdout)
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(
+            wf_reservation_payload.get("task_graph_path") or ""
+        )
+        task_id = "workflow:" + str(wf_reservation_path.resolve()) + "#write-step"
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "get", task_id, "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph get failed after reservation workflow: {result.stderr}",
+        )
+        reservation_task = parse_json_output(result.stdout).get("task", {})
+        expect(
+            reservation_task.get("metadata", {}).get("reservation_paths")
+            == ["src/owned.py"],
+            "workflow projection should persist reservation path metadata",
+        )
+        wf_reservation_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-reservation",
+                    "steps": [{"id": "write-step", "action": "run-fixed"}],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_reservation_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow reservation-clear run failed: {result.stderr}",
+        )
+        wf_reservation_clear_payload = parse_json_output(result.stdout)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(
+            wf_reservation_clear_payload.get("task_graph_path") or ""
+        )
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "get", task_id, "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph get failed after reservation clear workflow: {result.stderr}",
+        )
+        reservation_task = parse_json_output(result.stdout).get("task", {})
+        expect(
+            "reservation_paths" not in reservation_task.get("metadata", {}),
+            "workflow projection should clear stale reservation path metadata when removed",
         )
 
         result = subprocess.run(
@@ -2263,6 +2688,7 @@ exit 0
                 "run",
                 "--file",
                 str(wf_resume_path),
+                "--execute",
                 "--json",
             ],
             capture_output=True,
@@ -2282,6 +2708,46 @@ exit 0
         expect(
             str(wf_fail_payload.get("run_id") or "").startswith("wf-run-"),
             "workflow runs should use deterministic state-derived run ids",
+        )
+        fail_task_graph_path = Path(str(wf_fail_payload.get("task_graph_path") or ""))
+        expect(
+            fail_task_graph_path.exists(),
+            "failed workflow run should still persist shared task graph path",
+        )
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(fail_task_graph_path)
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph ready failed after workflow fail: {result.stderr}",
+        )
+        wf_fail_ready_payload = parse_json_output(result.stdout)
+        wf_fail_ready_tasks = [
+            item
+            for item in wf_fail_ready_payload.get("tasks", [])
+            if isinstance(item, dict)
+        ]
+        expect(
+            any(
+                item.get("metadata", {}).get("step_id") == "blocking"
+                for item in wf_fail_ready_tasks
+            )
+            and not any(
+                item.get("metadata", {}).get("step_id") == "after"
+                for item in wf_fail_ready_tasks
+            ),
+            "failed workflow run should keep the failed step ready and downstream conditional steps blocked",
+        )
+        expect(
+            wf_fail_ready_payload.get("summary", {}).get("lane_count") == 1,
+            "failed workflow run should expose one runnable lane",
         )
         wf_resume_path.write_text(
             json.dumps(
@@ -2304,6 +2770,7 @@ exit 0
                 "resume",
                 "--run-id",
                 str(wf_fail_payload.get("run_id") or ""),
+                "--execute",
                 "--json",
             ],
             capture_output=True,
@@ -2323,6 +2790,415 @@ exit 0
             str(wf_resume_payload.get("run_id") or "").startswith("wf-run-")
             and wf_resume_payload.get("run_id") != wf_fail_payload.get("run_id"),
             "workflow resume should allocate a new deterministic run id",
+        )
+        expect(
+            str(wf_resume_payload.get("task_graph_path") or "")
+            == str(fail_task_graph_path),
+            "workflow resume should keep updating the shared task graph path",
+        )
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph ready failed after workflow resume: {result.stderr}",
+        )
+        wf_resume_ready_payload = parse_json_output(result.stdout)
+        wf_resume_ready_tasks = [
+            item
+            for item in wf_resume_ready_payload.get("tasks", [])
+            if isinstance(item, dict)
+            and item.get("metadata", {}).get("workflow_name")
+            == "selftest-workflow-resume"
+        ]
+        expect(
+            not wf_resume_ready_tasks,
+            "resumed workflow completion should clear ready tasks for that workflow from the shared graph",
+        )
+        expect(
+            wf_resume_ready_payload.get("summary", {}).get("lane_count") == 0,
+            "workflow resume completion should clear runnable lanes",
+        )
+
+        wf_interrupt_path = tmp / "wf-selftest-interrupt.json"
+        wf_interrupt_path.write_text(
+            json.dumps(
+                {
+                    "name": "selftest-workflow-interrupt",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {"id": "verify", "action": "run-fixed"},
+                        {"id": "after", "action": "run-after", "when": "on_success"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        interrupt_env = dict(productivity_env)
+        interrupt_env["MY_OPENCODE_WORKFLOW_INTERRUPT_AFTER_STEP"] = "1"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(wf_interrupt_path),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=interrupt_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 1, "workflow interrupt fixture should stop mid-run")
+        wf_interrupt_payload = parse_json_output(result.stdout)
+        expect(
+            wf_interrupt_payload.get("status") == "interrupted"
+            and wf_interrupt_payload.get("failed_step_id") == "verify",
+            "interrupted workflow run should preserve the next step id for resume",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow status failed after interruption: {result.stderr}",
+        )
+        wf_interrupt_status = parse_json_output(result.stdout)
+        expect(
+            wf_interrupt_status.get("status") == "interrupted"
+            and wf_interrupt_status.get("run_id") == wf_interrupt_payload.get("run_id"),
+            "workflow status should expose active interrupted run state",
+        )
+        interrupt_task_graph_path = Path(
+            str(wf_interrupt_status.get("task_graph_path") or "")
+        )
+        task_graph_env = dict(productivity_env)
+        task_graph_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(interrupt_task_graph_path)
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=task_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph ready failed after interruption: {result.stderr}",
+        )
+        wf_interrupt_ready = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("metadata", {}).get("step_id") == "verify"
+                for item in wf_interrupt_ready.get("tasks", [])
+            ),
+            "interrupted workflow graph should keep the next resumable step ready",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "resume",
+                "--run-id",
+                str(wf_interrupt_payload.get("run_id") or ""),
+                "--execute",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow resume failed after interruption: {result.stderr}",
+        )
+        wf_interrupt_resume = parse_json_output(result.stdout)
+        expect(
+            wf_interrupt_resume.get("status") == "completed"
+            and wf_interrupt_resume.get("resumed_from")
+            == wf_interrupt_payload.get("run_id"),
+            "workflow resume should complete interrupted runs",
+        )
+
+        direct_task_graph_path = tmp / "task-graph-direct.json"
+        direct_task_env = dict(productivity_env)
+        direct_task_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(direct_task_graph_path)
+        for command in [
+            ["create", "--id", "A", "--subject", "alpha"],
+            ["create", "--id", "B", "--subject", "beta", "--blocked-by", "A"],
+            ["create", "--id", "C", "--subject", "gamma"],
+        ]:
+            result = subprocess.run(
+                [sys.executable, str(TASK_GRAPH_SCRIPT), *command, "--json"],
+                capture_output=True,
+                text=True,
+                env=direct_task_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+        expect(result.returncode == 0, f"task graph create failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TASK_GRAPH_SCRIPT),
+                "update",
+                "A",
+                "--reservation-paths",
+                "src/owned.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=direct_task_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph update should allow reservation-path-only updates: {result.stderr}",
+        )
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=direct_task_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"task graph ready direct failed: {result.stderr}"
+        )
+        direct_ready_payload = parse_json_output(result.stdout)
+        expect(
+            direct_ready_payload.get("summary", {}).get("lane_count") == 2,
+            "independent ready tasks should surface as separate runnable lanes",
+        )
+        expect(
+            any(
+                item.get("id") == "B"
+                for item in direct_ready_payload.get("blocked", [])
+            ),
+            "task graph ready should report blocked tasks with dependency reasons",
+        )
+        direct_failed_graph_path = tmp / "task-graph-failed-parent.json"
+        direct_failed_graph_path.write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "updated_at": "2026-03-09T00:00:00Z",
+                    "tasks": [
+                        {
+                            "id": "A",
+                            "subject": "alpha",
+                            "description": "",
+                            "status": "pending",
+                            "activeForm": "",
+                            "blockedBy": [],
+                            "blocks": ["B"],
+                            "owner": "workflow",
+                            "metadata": {"step_status": "failed"},
+                            "threadID": "wf-run-failed",
+                            "created_at": "2026-03-09T00:00:00Z",
+                            "updated_at": "2026-03-09T00:00:00Z",
+                        },
+                        {
+                            "id": "B",
+                            "subject": "beta",
+                            "description": "",
+                            "status": "pending",
+                            "activeForm": "",
+                            "blockedBy": ["A"],
+                            "blocks": [],
+                            "owner": "workflow",
+                            "metadata": {},
+                            "threadID": "wf-run-failed",
+                            "created_at": "2026-03-09T00:00:00Z",
+                            "updated_at": "2026-03-09T00:00:00Z",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        failed_reason_env = dict(productivity_env)
+        failed_reason_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(direct_failed_graph_path)
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=failed_reason_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph ready failed for failed-parent fixture: {result.stderr}",
+        )
+        direct_failed_payload = parse_json_output(result.stdout)
+        expect(
+            any(
+                blocker.get("reason_code") == "dependency_failed"
+                for item in direct_failed_payload.get("blocked", [])
+                if item.get("id") == "B"
+                for blocker in item.get("blocked_by", [])
+            ),
+            "task graph ready should preserve failure-specific blocked reasons",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(TASK_GRAPH_SCRIPT),
+                "create",
+                "--id",
+                "D",
+                "--subject",
+                "delta",
+                "--blocked-by",
+                "A,C",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=direct_task_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"task graph fan-in create failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=direct_task_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"task graph ready fan-in failed: {result.stderr}"
+        )
+        direct_fanin_payload = parse_json_output(result.stdout)
+        expect(
+            not any(
+                "D" in lane.get("task_ids", [])
+                for lane in direct_fanin_payload.get("runnable_lanes", [])
+                if isinstance(lane, dict)
+            ),
+            "fan-in dependent tasks should stay out of runnable lanes until all parents are satisfied",
+        )
+
+        reservation_graph_path = tmp / "task-graph-reservation.json"
+        reservation_graph_path.write_text(
+            json.dumps(
+                {
+                    "format_version": 1,
+                    "updated_at": "2026-03-09T00:00:00Z",
+                    "tasks": [
+                        {
+                            "id": "writer-owned",
+                            "subject": "owned writer lane",
+                            "status": "pending",
+                            "blockedBy": [],
+                            "blocks": [],
+                            "metadata": {"reservation_paths": ["src/owned.py"]},
+                            "created_at": "2026-03-09T00:00:00Z",
+                            "updated_at": "2026-03-09T00:00:00Z",
+                        },
+                        {
+                            "id": "writer-conflict",
+                            "subject": "conflicting writer lane",
+                            "status": "pending",
+                            "blockedBy": [],
+                            "blocks": [],
+                            "metadata": {"reservation_paths": ["src/conflict.py"]},
+                            "created_at": "2026-03-09T00:00:00Z",
+                            "updated_at": "2026-03-09T00:00:00Z",
+                        },
+                        {
+                            "id": "writer-uncovered",
+                            "subject": "uncovered writer lane",
+                            "status": "pending",
+                            "blockedBy": [],
+                            "blocks": [],
+                            "metadata": {"reservation_paths": ["src/uncovered.py"]},
+                            "created_at": "2026-03-09T00:00:00Z",
+                            "updated_at": "2026-03-09T00:00:00Z",
+                        },
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        reservation_state_path = tmp / "reservation-state.json"
+        reservation_state_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/owned.py"],
+                    "activePaths": ["src/owned.py", "src/conflict.py"],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        reservation_env = dict(productivity_env)
+        reservation_env["MY_OPENCODE_TASK_GRAPH_PATH"] = str(reservation_graph_path)
+        reservation_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            reservation_state_path
+        )
+        result = subprocess.run(
+            [sys.executable, str(TASK_GRAPH_SCRIPT), "ready", "--json"],
+            capture_output=True,
+            text=True,
+            env=reservation_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"task graph ready reservation failed: {result.stderr}",
+        )
+        reservation_payload = parse_json_output(result.stdout)
+        expect(
+            [item.get("id") for item in reservation_payload.get("tasks", [])]
+            == ["writer-owned"],
+            "reservation-aware ready view should keep only owned non-conflicting writer lanes runnable",
+        )
+        expect(
+            any(
+                item.get("id") == "writer-conflict"
+                and item.get("reason_code") == "reservation_conflict"
+                for item in reservation_payload.get("blocked", [])
+            )
+            and any(
+                item.get("id") == "writer-uncovered"
+                and item.get("reason_code") == "reservation_uncovered"
+                for item in reservation_payload.get("blocked", [])
+            ),
+            "reservation-aware ready view should explain conflict and uncovered writer lanes",
         )
 
         workflow_state_path = (
@@ -2646,6 +3522,58 @@ exit 0
         expect(
             pool_payload.get("count") == 2,
             "agent-pool spawn should create requested count",
+        )
+        expect(
+            pool_payload.get("owns_execution") is False
+            and pool_payload.get("execution_backend") == "/bg"
+            and pool_payload.get("contract")
+            == "manual capacity registry only; /bg runs jobs",
+            "agent-pool spawn should explicitly declare the thin registry contract",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(AGENT_POOL_SCRIPT), "health", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"agent-pool health failed: {result.stderr}")
+        agent_pool_health = parse_json_output(result.stdout)
+        expect(
+            agent_pool_health.get("runtime_owner", {}).get("execution_backend") == "/bg"
+            and agent_pool_health.get("runtime_owner", {}).get("control_surface")
+            == "/agent-pool",
+            "agent-pool health should declare bg as execution backend and agent-pool as control surface",
+        )
+        expect(
+            isinstance(agent_pool_health.get("backend_health", {}), dict)
+            and "queue_depth" in agent_pool_health.get("backend_health", {})
+            and "stale_running" in agent_pool_health.get("backend_health", {})
+            and "failed_jobs" in agent_pool_health.get("backend_health", {}),
+            "agent-pool health should surface backend queue depth, stale-running, and failed-job signals",
+        )
+        result = subprocess.run(
+            [sys.executable, str(AGENT_POOL_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"agent-pool doctor failed: {result.stderr}")
+        agent_pool_doctor = parse_json_output(result.stdout)
+        expect(
+            agent_pool_doctor.get("execution_backend") == "/bg"
+            and agent_pool_doctor.get("control_surface") == "/agent-pool",
+            "agent-pool doctor should expose the ownership split",
+        )
+        expect(
+            agent_pool_doctor.get("owns_execution") is False
+            and agent_pool_doctor.get("contract")
+            == "manual capacity registry only; /bg runs jobs",
+            "agent-pool doctor should declare that bg owns execution",
         )
 
         result = subprocess.run(
@@ -3616,7 +4544,7 @@ exit 0
         )
         expect(
             Path(str(timeout_payload.get("stdout_path", ""))).parent
-            == timeout_output_dir,
+            == timeout_output_dir.resolve(),
             "timeout smoke should still report artifact paths",
         )
         for rel in [
@@ -4047,6 +4975,27 @@ exit 0
         expect(
             isinstance(bg_status_report.get("counts"), dict),
             "bg status --json should return counts object",
+        )
+        expect(
+            bg_status_report.get("runtime_owner", {}).get("execution_backend") == "/bg"
+            and bg_status_report.get("runtime_owner", {}).get("observability_surface")
+            == "/agent-pool",
+            "bg status should declare bg as execution backend and agent-pool as observability surface",
+        )
+        expect(
+            "queue_depth" in bg_status_report
+            and "stale_running" in bg_status_report
+            and isinstance(bg_status_report.get("counts"), dict),
+            "bg status should expose queue depth and stale-running signals",
+        )
+        result = run_bg("doctor", "--json")
+        expect(result.returncode == 0, f"bg doctor json failed: {result.stderr}")
+        bg_doctor_report = parse_json_output(result.stdout)
+        expect(
+            "queue_depth" in bg_doctor_report
+            and "stale_running" in bg_doctor_report
+            and "failed_jobs" in bg_doctor_report,
+            "bg doctor should expose queue depth, stale-running, and failed-job signals",
         )
 
         result = run_bg("start", "--", sys.executable, "-c", 'print("bg-start")')
@@ -7915,6 +8864,81 @@ jobs:
             "model routing schema should route deep/critical categories to GPT-5.4",
         )
 
+        strategic_planner_recommend = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "recommend",
+                "--agent",
+                "strategic-planner",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            strategic_planner_recommend.returncode == 0,
+            "model-routing recommend should succeed for strategic-planner",
+        )
+        strategic_planner_report = parse_json_output(strategic_planner_recommend.stdout)
+        expect(
+            strategic_planner_report.get("recommended_category") == "deep",
+            "strategic-planner should recommend deep routing by default",
+        )
+
+        ambiguity_analyst_recommend = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "recommend",
+                "--agent",
+                "ambiguity-analyst",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ambiguity_analyst_recommend.returncode == 0,
+            "model-routing recommend should succeed for ambiguity-analyst",
+        )
+        ambiguity_analyst_report = parse_json_output(ambiguity_analyst_recommend.stdout)
+        expect(
+            ambiguity_analyst_report.get("recommended_category") == "deep",
+            "ambiguity-analyst should recommend deep routing by default",
+        )
+
+        plan_critic_recommend = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "recommend",
+                "--agent",
+                "plan-critic",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            plan_critic_recommend.returncode == 0,
+            "model-routing recommend should succeed for plan-critic",
+        )
+        plan_critic_report = parse_json_output(plan_critic_recommend.stdout)
+        expect(
+            plan_critic_report.get("recommended_category") == "critical",
+            "plan-critic should recommend critical routing by default",
+        )
+
         resolved_requested = resolve_category(routing_schema, "deep")
         expect(
             resolved_requested.get("category") == "deep"
@@ -8730,8 +9754,33 @@ version: 1
             autopilot_command_status_report.get("result") == "PASS"
             and isinstance(
                 autopilot_command_status_report.get("control_integrations", {}), dict
+            )
+            and autopilot_command_status_report.get("state")
+            == autopilot_command_status_report.get("status")
+            and isinstance(autopilot_command_status_report.get("objective", {}), dict)
+            and isinstance(autopilot_command_status_report.get("budget", {}), dict)
+            and isinstance(autopilot_command_status_report.get("progress", {}), dict)
+            and isinstance(
+                autopilot_command_status_report.get("next_actions", []), list
+            )
+            and bool(str(autopilot_command_status_report.get("task_graph_path") or "")),
+            "autopilot status should expose the contracted top-level state, progress, and task graph fields",
+        )
+        expect(
+            isinstance(autopilot_command_status_report.get("task_graph", {}), dict)
+            and isinstance(
+                autopilot_command_status_report.get("task_graph", {}).get(
+                    "runnable_lanes", []
+                ),
+                list,
+            )
+            and isinstance(
+                autopilot_command_status_report.get("task_graph", {}).get(
+                    "blocked", []
+                ),
+                list,
             ),
-            "autopilot status should include control integration diagnostics",
+            "autopilot status should expose task graph lanes and blocked details",
         )
         expect(
             autopilot_command_status_report.get("model_routing", {}).get("entrypoint")
@@ -9012,8 +10061,7 @@ version: 1
             autopilot_command_status_after_pause.stdout
         )
         expect(
-            autopilot_command_status_after_pause_report.get("run", {}).get("status")
-            == "paused",
+            autopilot_command_status_after_pause_report.get("state") == "paused",
             "autopilot status should retain paused state after pause transition",
         )
 
@@ -9052,6 +10100,10 @@ version: 1
             .get("completed_cycles", 0)
             >= 1,
             "autopilot resume should increment cycle progress after resume",
+        )
+        expect(
+            bool(str(autopilot_command_resume_report.get("task_graph_path") or "")),
+            "autopilot resume should expose shared task graph path",
         )
 
         autopilot_command_start_budget = subprocess.run(
@@ -9131,8 +10183,27 @@ version: 1
         )
         expect(
             autopilot_command_report_payload.get("result") == "PASS"
-            and isinstance(autopilot_command_report_payload.get("summary", {}), dict),
-            "autopilot report should include summary payload",
+            and autopilot_command_report_payload.get("state")
+            == autopilot_command_report_payload.get("status")
+            and isinstance(autopilot_command_report_payload.get("summary", {}), dict)
+            and isinstance(autopilot_command_report_payload.get("decisions", {}), dict)
+            and isinstance(
+                autopilot_command_report_payload.get("recommendations", []), list
+            )
+            and bool(
+                str(autopilot_command_report_payload.get("task_graph_path") or "")
+            ),
+            "autopilot report should include contracted summary, decision, recommendation, and task graph fields",
+        )
+        expect(
+            isinstance(autopilot_command_report_payload.get("task_graph", {}), dict)
+            and isinstance(
+                autopilot_command_report_payload.get("task_graph", {}).get(
+                    "summary", {}
+                ),
+                dict,
+            ),
+            "autopilot report should expose task graph summary snapshot",
         )
         expect(
             autopilot_command_report_payload.get("gateway_runtime_mode")
@@ -9180,8 +10251,7 @@ version: 1
             autopilot_command_status_after_stop.stdout
         )
         expect(
-            autopilot_command_status_after_stop_report.get("run", {}).get("status")
-            == "stopped",
+            autopilot_command_status_after_stop_report.get("state") == "stopped",
             "autopilot status should retain stopped state after stop transition",
         )
 
@@ -9501,7 +10571,92 @@ version: 1
             and bool(start_work_background_report.get("job_id")),
             "start-work background mode should return queued job id",
         )
+        expect(
+            start_work_background_report.get("evidence", {}).get("parent_command")
+            == "/start-work"
+            and start_work_background_report.get("evidence", {}).get(
+                "parent_session_id"
+            )
+            == str(refactor_env.get("OPENCODE_SESSION_ID") or "")
+            and bool(
+                start_work_background_report.get("evidence", {}).get("task_graph_path")
+            ),
+            "start-work background mode should expose parent/task-graph evidence links",
+        )
         queued_job_id = str(start_work_background_report.get("job_id"))
+        bg_read_before_run = subprocess.run(
+            [sys.executable, str(BG_MANAGER_SCRIPT), "read", queued_job_id, "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            bg_read_before_run.returncode == 0,
+            f"bg read failed: {bg_read_before_run.stderr}",
+        )
+        bg_read_before_run_payload = parse_json_output(bg_read_before_run.stdout)
+        expect(
+            bg_read_before_run_payload.get("evidence", {}).get("parent_command")
+            == "/start-work"
+            and bg_read_before_run_payload.get("evidence", {}).get("parent_session_id")
+            == str(refactor_env.get("OPENCODE_SESSION_ID") or "")
+            and bool(
+                bg_read_before_run_payload.get("evidence", {}).get("task_graph_path")
+            ),
+            "bg read should expose parent/task-graph evidence for queued start-work jobs",
+        )
+        bg_status_before_run = subprocess.run(
+            [sys.executable, str(BG_MANAGER_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            bg_status_before_run.returncode == 0,
+            f"bg status failed: {bg_status_before_run.stderr}",
+        )
+        bg_status_before_run_payload = parse_json_output(bg_status_before_run.stdout)
+        expect(
+            str(refactor_env.get("OPENCODE_SESSION_ID") or "")
+            in bg_status_before_run_payload.get("evidence_links", {}).get(
+                "parent_session_ids", []
+            )
+            and bool(
+                bg_status_before_run_payload.get("evidence_links", {}).get(
+                    "task_graph_paths", []
+                )
+            ),
+            "bg status should aggregate parent-session and task-graph evidence links",
+        )
+        bg_doctor_before_run = subprocess.run(
+            [sys.executable, str(BG_MANAGER_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            bg_doctor_before_run.returncode == 0,
+            f"bg doctor failed: {bg_doctor_before_run.stderr}",
+        )
+        bg_doctor_before_run_payload = parse_json_output(bg_doctor_before_run.stdout)
+        expect(
+            str(refactor_env.get("OPENCODE_SESSION_ID") or "")
+            in bg_doctor_before_run_payload.get("evidence_links", {}).get(
+                "parent_session_ids", []
+            )
+            and bool(
+                bg_doctor_before_run_payload.get("evidence_links", {}).get(
+                    "task_graph_paths", []
+                )
+            ),
+            "bg doctor should aggregate parent-session and task-graph evidence links",
+        )
 
         bg_run_plan = subprocess.run(
             [
@@ -10108,6 +11263,57 @@ version: 1
             recover_allowed_report.get("result") == "PASS"
             and recover_allowed_report.get("status") == "completed",
             "start-work recover should complete failed run when recovery eligibility is satisfied",
+        )
+        expect(
+            bool(str(recover_allowed_report.get("task_graph_path") or "")),
+            "start-work recover should expose shared task graph path",
+        )
+
+        autoflow_status = subprocess.run(
+            [sys.executable, str(AUTOFLOW_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_status.returncode == 0,
+            f"autoflow status failed: {autoflow_status.stderr}",
+        )
+        autoflow_status_report = parse_json_output(autoflow_status.stdout)
+        expect(
+            autoflow_status_report.get("state") == autoflow_status_report.get("status")
+            and autoflow_status_report.get("phase")
+            == autoflow_status_report.get("status")
+            and autoflow_status_report.get("model_routing", {}).get("entrypoint")
+            == "autoflow"
+            and bool(str(autoflow_status_report.get("task_graph_path") or "")),
+            "autoflow status should expose the shared orchestration identity and graph path",
+        )
+
+        autoflow_report = subprocess.run(
+            [sys.executable, str(AUTOFLOW_SCRIPT), "report", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            autoflow_report.returncode == 0,
+            f"autoflow report failed: {autoflow_report.stderr}",
+        )
+        autoflow_report_payload = parse_json_output(autoflow_report.stdout)
+        expect(
+            autoflow_report_payload.get("state")
+            == autoflow_report_payload.get("status")
+            and isinstance(autoflow_report_payload.get("summary", {}), dict)
+            and isinstance(autoflow_report_payload.get("recommendations", []), list)
+            and autoflow_report_payload.get("model_routing", {}).get("entrypoint")
+            == "autoflow"
+            and isinstance(autoflow_report_payload.get("deviations", {}), dict),
+            "autoflow report should expose a normalized orchestration summary payload",
         )
         recover_persistence = recover_allowed_report.get("snapshot", {})
         expect(
@@ -11598,7 +12804,10 @@ version: 1
             check=False,
             cwd=REPO_ROOT,
         )
-        expect(result.returncode == 0, f"doctor run --json failed: {result.stderr}")
+        expect(
+            result.returncode == 0,
+            f"doctor run --json failed: stderr={result.stderr} stdout={result.stdout}",
+        )
         report = parse_json_output(result.stdout)
         expect(report.get("result") == "PASS", "doctor summary should pass")
         expect(
@@ -11884,6 +13093,34 @@ version: 1
             agent_pool_checks[0].get("ok") is True,
             "doctor agent-pool check should pass",
         )
+        for check_name in ["gateway", "quality", "devtools", "nvim"]:
+            matching_checks = [
+                check
+                for check in report.get("checks", [])
+                if check.get("name") == check_name
+            ]
+            expect(
+                bool(matching_checks),
+                f"doctor summary should include {check_name} check",
+            )
+            expect(
+                matching_checks[0].get("ok") is True,
+                f"doctor {check_name} check should pass",
+            )
+        for check_name in ["gateway", "quality", "devtools", "nvim"]:
+            matching_checks = [
+                check
+                for check in report.get("checks", [])
+                if check.get("name") == check_name
+            ]
+            expect(
+                bool(matching_checks),
+                f"doctor summary should include {check_name} check",
+            )
+            expect(
+                matching_checks[0].get("ok") is True,
+                f"doctor {check_name} check should pass",
+            )
 
         memory_lifecycle_checks = [
             check
