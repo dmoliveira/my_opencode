@@ -118,6 +118,37 @@ Delivered:
 Remaining:
 - keep this tracker updated at each milestone boundary
 
+### E7 Shared Memory, Swarm, Plugin Platform, and Ops Automation
+
+Status: doing
+
+Goal:
+- close the next high-value platform gaps with local shared memory first, then current-runtime swarm coordination, plugin-pack extensibility, and deterministic ops automation
+
+Delivered:
+- opened execution tracker at `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`
+- shipped initial `/memory` baseline with local SQLite storage, lexical retrieval, recall, pinning, summarization, doctor integration, and selftests
+- added `/memory promote` for digest, session, workflow, claims, and doctor-report artifact promotion into shared memory
+- converged `/memory-lifecycle` admin flows onto the same shared-memory SQLite runtime
+- started the swarm prototype with `/workflow swarm` planning/status/doctor/close on top of current workflow, claims, agent-pool, and reservation contracts
+- extended the swarm prototype with `/workflow swarm handoff` and `/workflow swarm rebalance` for safe lane mutation
+- added the first swarm execution bridge with `/workflow swarm accept-handoff` and controlled `/bg` enqueueing for allowed commands
+- added explicit lane completion/failure transitions and swarm-level progress summaries
+- added follow-up guidance plus deterministic auto-progression of the next planned lane when no lane remains active
+- added explicit failure-recovery policy output and conservative single-active-lane coordination rules
+- added executable recovery actions (`reset-lane`, `retry-lane`) and conservative ordered coordination with surfaced read-only parallel capacity
+- added recommended recovery decisions and `resolve-failure` execution on top of reset/retry recovery flows
+- added explicit lane dependency metadata and dependency-aware activation/failure blocking logic
+- added `--graph-file` support for custom swarm lane graphs with validation
+- added explicit reservation-safe read metadata and enabled dependency-satisfied parallel activation for read-only lanes when reservation guarantees are present
+- added explicit lane `path_scopes` and overlap-aware coordination checks
+- added lease-backed writer guarantee diagnostics and surfaced disjoint write parallel candidates
+- enabled a tiny lease-backed write-capable parallel allowlist for disjoint `implement` lanes
+- added lane-level `lease_identity` metadata and enforced it for writer activation
+
+Remaining:
+- broaden write-capable parallelism beyond the tiny `implement` allowlist only when stronger lane-level lease identity and ownership guarantees exist
+
 ## Doing Now
 
 | Item | Status | Notes |
@@ -131,6 +162,7 @@ Remaining:
 | Atlas pre-task shaping prototype | doing | Add delegated task focus shaping through `agent-context-shaper` before subagent execution. |
 | AI-native autopilot orchestration design | doing | New design plan in `docs/plan/ai-native-autopilot-orchestration-plan.md` proposes autonomous task claims, same-worktree write leases, hard completion gates, policy injection, and retry routing for lower-touch autopilot execution; first execution slice now lives in `docs/plan/ai-autopilot-completion-gates-execution-plan.md` and is intentionally `/autopilot` + shared task-metadata first, with `/autoflow` convergence documented as follow-up adoption work rather than current-slice behavior. |
 | Gateway E2E parity refinements | doing | Tighten fail-closed behavior for critical hooks, isolate hook execution failures, align continuity wording with canonical commands, and remove hard-coded agent metadata discovery. |
+| E13 lane lease identity | doing | Active implementation tracker lives at `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`; current slice adds lane-level lease identity to writer activation. |
 
 ## Done Recently
 
@@ -157,6 +189,7 @@ Remaining:
 
 ## Next Tasks
 
+<<<<<<< HEAD
 1. Continue post-merge verification for protected-main guard behavior in real operator flows.
 2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 3. Keep active docs canonical-first as new command/runtime slices land.
@@ -165,9 +198,17 @@ Remaining:
 6. Decide whether direct-work discipline should remain warn-first by default or gain a broader escalation policy.
 7. Convert the AI-native autopilot design into a first execution slice, starting with completion-gate unification plus machine-readable task ownership.
 8. Keep this tracker and the CLI todo list synchronized at each task handoff.
+=======
+1. Continue E7/E13 by strengthening lane-level lease identity/ownership guarantees before broadening write-capable parallelism beyond the tiny implement-lane allowlist.
+2. Continue post-merge verification for protected-main guard behavior in real operator flows.
+3. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
+4. Keep active docs canonical-first as new command/runtime slices land.
+5. Keep this tracker and the CLI todo list synchronized at each task handoff.
+>>>>>>> 551182d (Build local shared-memory and swarm execution foundation)
 
 ## Handoff Notes
 
 - Before starting new implementation, re-check that local `main` matches the latest remote `main`.
-- Use a dedicated worktree for each new slice, even for docs/tracking follow-ups when practical.
+- Use a dedicated worktree for each new slice, even for docs/tracking follow-ups.
 - Keep the CLI todo list and this tracker aligned: epics here, active steps in the runtime todo list.
+- For the platform wave, use `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md` as the source of truth for E7/E13 execution status.

@@ -48,6 +48,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
 - 🔔 Built-in `/notify` command to tune notification behavior and inspect a repo-local notification inbox feed.
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
+- 🧠 Built-in `/memory` command for local shared-memory capture, retrieval, recall, and summarization.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Policy profiles available via `/notify policy profile <strict|balanced|fast>`.

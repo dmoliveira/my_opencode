@@ -19,6 +19,7 @@ DEFAULT_POLICY_PATH = Path(
 GUARDED_OPERATIONS = {
     "workflow.execute",
     "workflow.resume_execute",
+    "workflow.swarm_accept_handoff_bg",
     "delivery.execute",
     "delivery.close",
     "agent-pool.drain",
@@ -62,7 +63,8 @@ def authorize_operation(
     operation: str, ttl_minutes: int = 30, path: Path = DEFAULT_POLICY_PATH
 ) -> dict[str, Any]:
     policy = load_policy(path)
-    grants = policy.get("grants") if isinstance(policy.get("grants"), dict) else {}
+    raw_grants = policy.get("grants")
+    grants: dict[str, Any] = raw_grants if isinstance(raw_grants, dict) else {}
     expires_at = (now_utc() + timedelta(minutes=max(1, ttl_minutes))).replace(
         microsecond=0
     )
@@ -74,7 +76,8 @@ def authorize_operation(
 
 def revoke_operation(operation: str, path: Path = DEFAULT_POLICY_PATH) -> bool:
     policy = load_policy(path)
-    grants = policy.get("grants") if isinstance(policy.get("grants"), dict) else {}
+    raw_grants = policy.get("grants")
+    grants: dict[str, Any] = raw_grants if isinstance(raw_grants, dict) else {}
     existed = operation in grants
     if existed:
         del grants[operation]
@@ -107,7 +110,8 @@ def check_operation(
     if override_flag:
         return {"allowed": True, "reason_code": "override_flag", "profile": profile}
 
-    grants = policy.get("grants") if isinstance(policy.get("grants"), dict) else {}
+    raw_grants = policy.get("grants")
+    grants: dict[str, Any] = raw_grants if isinstance(raw_grants, dict) else {}
     now = now_utc()
     for key in (operation, "*"):
         raw_expiry = str(grants.get(key) or "")
