@@ -864,15 +864,16 @@ test("runtime delegation hooks reconcile orphaned child session idle events", as
   }
 
   const sessionID = "session-child-idle-reconcile"
+  const idleBeforeOutput = {
+    args: {
+      subagent_type: "explore",
+      category: "quick",
+      prompt: "[DELEGATION TRACE child-idle-trace] inspect runtime",
+    },
+  }
   await dispatch("tool.execute.before", {
     input: { tool: "task", sessionID },
-    output: {
-      args: {
-        subagent_type: "explore",
-        category: "quick",
-        prompt: "[DELEGATION TRACE child-idle-trace] inspect runtime",
-      },
-    },
+    output: idleBeforeOutput,
   })
 
   await dispatch("session.created", {
@@ -881,6 +882,11 @@ test("runtime delegation hooks reconcile orphaned child session idle events", as
         id: "child-session-idle-1",
         parentID: sessionID,
         title: "[DELEGATION TRACE child-idle-trace] explore child",
+        metadata: {
+          gateway: {
+            delegation: idleBeforeOutput.metadata?.gateway?.delegation,
+          },
+        },
       },
     },
   })
@@ -943,15 +949,16 @@ test("runtime delegation hooks reconcile child assistant failure messages", asyn
   }
 
   const sessionID = "session-child-message-failure"
+  const failureBeforeOutput = {
+    args: {
+      subagent_type: "reviewer",
+      category: "critical",
+      prompt: "[DELEGATION TRACE child-failure-trace] review release risk",
+    },
+  }
   await dispatch("tool.execute.before", {
     input: { tool: "task", sessionID },
-    output: {
-      args: {
-        subagent_type: "reviewer",
-        category: "critical",
-        prompt: "[DELEGATION TRACE child-failure-trace] review release risk",
-      },
-    },
+    output: failureBeforeOutput,
   })
 
   await dispatch("session.created", {
@@ -960,6 +967,11 @@ test("runtime delegation hooks reconcile child assistant failure messages", asyn
         id: "child-session-failure-1",
         parentID: sessionID,
         title: "[DELEGATION TRACE child-failure-trace] reviewer child",
+        metadata: {
+          gateway: {
+            delegation: failureBeforeOutput.metadata?.gateway?.delegation,
+          },
+        },
       },
     },
   })

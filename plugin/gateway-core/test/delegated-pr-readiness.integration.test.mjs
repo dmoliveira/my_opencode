@@ -68,15 +68,16 @@ test("integration: delegated task completion, validation evidence, DONE proof, a
     })
 
     const sessionID = "session-e2e-pr-flow"
+    const beforeOutput = {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "[DELEGATION TRACE e2e-pr-flow] review branch readiness",
+      },
+    }
     await plugin["tool.execute.before"](
       { tool: "task", sessionID },
-      {
-        args: {
-          subagent_type: "reviewer",
-          category: "critical",
-          prompt: "[DELEGATION TRACE e2e-pr-flow] review branch readiness",
-        },
-      },
+      beforeOutput,
     )
 
     await plugin.event({
@@ -87,6 +88,11 @@ test("integration: delegated task completion, validation evidence, DONE proof, a
             id: "child-e2e-pr-flow-1",
             parentID: sessionID,
             title: "[DELEGATION TRACE e2e-pr-flow] reviewer child",
+            metadata: {
+              gateway: {
+                delegation: beforeOutput.metadata?.gateway?.delegation,
+              },
+            },
           },
         },
       },

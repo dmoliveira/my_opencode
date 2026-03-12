@@ -40,22 +40,24 @@ test("adaptive-delegation-policy blocks critical category during cooldown", asyn
       },
     })
 
+    const firstOutput = { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } }
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-adapt-1" },
-      { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } },
+      firstOutput,
     )
     await plugin["tool.execute.after"](
       { tool: "task", sessionID: "session-adapt-1" },
-      { output: "[ERROR] Failed delegation" },
+      { metadata: firstOutput.metadata, output: "[ERROR] Failed delegation" },
     )
 
+    const secondOutput = { args: { subagent_type: "reviewer", category: "critical", prompt: "second" } }
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-adapt-2" },
-      { args: { subagent_type: "reviewer", category: "critical", prompt: "second" } },
+      secondOutput,
     )
     await plugin["tool.execute.after"](
       { tool: "task", sessionID: "session-adapt-2" },
-      { output: "[ERROR] Failed delegation" },
+      { metadata: secondOutput.metadata, output: "[ERROR] Failed delegation" },
     )
 
     await assert.rejects(
@@ -81,13 +83,19 @@ test("subagent telemetry timeline reads structured task failure output", async (
     stateMaxEntries: 100,
   })
 
+  const beforeOutput = {
+    args: { subagent_type: "reviewer", category: "critical", prompt: "first" },
+  }
   await hook.event("tool.execute.before", {
     input: { tool: "task", sessionID: "session-adapt-s1" },
-    output: { args: { subagent_type: "reviewer", category: "critical", prompt: "first" } },
+    output: beforeOutput,
   })
   await hook.event("tool.execute.after", {
     input: { tool: "task", sessionID: "session-adapt-s1" },
-    output: { output: { stdout: "[ERROR] Failed delegation", stderr: "warning text" } },
+    output: {
+      metadata: beforeOutput.metadata,
+      output: { stdout: "[ERROR] Failed delegation", stderr: "warning text" },
+    },
   })
 
   const record = getRecentDelegationOutcomes(60000)
