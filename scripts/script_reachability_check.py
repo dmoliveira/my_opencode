@@ -19,6 +19,13 @@ ROOT_FILES = [
     REPO_ROOT / "scripts" / "doctor_command.py",
 ]
 
+WRAPPER_SCRIPT_OVERRIDES = {
+    "bg": "background_task_manager.py",
+    "stack": "stack_profile_command.py",
+    "nvim": "nvim_integration_command.py",
+    "digest": "session_digest.py",
+}
+
 
 def _load_script_names() -> list[str]:
     return sorted(path.name for path in SCRIPTS_DIR.glob("*.py"))
@@ -33,6 +40,22 @@ def _command_roots() -> set[str]:
     for meta in commands.values():
         template = str(meta.get("template", "")) if isinstance(meta, dict) else ""
         roots.update(re.findall(r"scripts/([A-Za-z0-9_\-]+\.py)", template))
+        if "scripts/slash_command_wrapper.py" not in template:
+            continue
+        match = re.search(r"--fixed-before\s+([A-Za-z0-9_\-]+)", template)
+        if not match:
+            continue
+        command_name = match.group(1).strip().lower()
+        normalized = command_name.replace("-", "_")
+        candidates = []
+        override = WRAPPER_SCRIPT_OVERRIDES.get(command_name)
+        if override:
+            candidates.append(override)
+        candidates.extend([f"{normalized}_command.py", f"{normalized}.py"])
+        for candidate in candidates:
+            if (SCRIPTS_DIR / candidate).exists():
+                roots.add(candidate)
+                break
     return roots
 
 

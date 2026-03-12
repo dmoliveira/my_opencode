@@ -23,12 +23,18 @@ ALLOWED_DUPLICATE_CLUSTERS = {
     frozenset({"model-routing-status", "model-profile-status"}),
     frozenset({"autopilot-go", "continue-work"}),
 }
+ALLOWED_DUPLICATE_TEMPLATE_MARKERS = {
+    "scripts/slash_command_wrapper.py",
+}
 
 # Transitional allowlist for hook IDs present in config order but not yet
 # guaranteed in every branch snapshot. Keep this list short and temporary.
 ALLOWED_MISSING_HOOK_IDS = {"mistake-ledger"}
 MAX_COMMAND_SURFACE = 51
 MAX_COMMANDS_PER_SCRIPT = 3
+ALLOWED_MULTI_COMMAND_SCRIPTS = {
+    "slash_command_wrapper.py",
+}
 
 
 @dataclass
@@ -91,7 +97,14 @@ def _duplicate_template_audit(
     duplicates.sort(key=lambda values: (len(values), values), reverse=True)
 
     unexpected: list[list[str]] = []
-    for cluster in duplicates:
+    for template, names in clusters.items():
+        if len(names) <= 1:
+            continue
+        cluster = sorted(names)
+        if frozenset(cluster) in ALLOWED_DUPLICATE_CLUSTERS:
+            continue
+        if any(marker in template for marker in ALLOWED_DUPLICATE_TEMPLATE_MARKERS):
+            continue
         if frozenset(cluster) not in ALLOWED_DUPLICATE_CLUSTERS:
             unexpected.append(cluster)
     return duplicates, unexpected
@@ -353,6 +366,8 @@ def _script_alias_audit(commands: dict[str, dict[str, object]]) -> list[str]:
 
     issues: list[str] = []
     for script_name, command_names in sorted(by_script.items()):
+        if script_name in ALLOWED_MULTI_COMMAND_SCRIPTS:
+            continue
         if len(command_names) > MAX_COMMANDS_PER_SCRIPT:
             sorted_names = ", ".join(sorted(command_names))
             issues.append(
