@@ -131,6 +131,21 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-doctor-safe" },
+      { args: { command: 'python3 "/tmp/my_opencode/scripts/doctor_command.py"' } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-doctor-json-safe" },
+      {
+        args: {
+          command:
+            'python3 "/tmp/my_opencode/scripts/doctor_command.py" run --json',
+        },
+      }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-worktree-add-safe" },
       {
         args: {
