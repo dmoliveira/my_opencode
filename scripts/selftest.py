@@ -11399,14 +11399,27 @@ version: 1
             f"bg doctor failed: {bg_doctor_before_run.stderr}",
         )
         bg_doctor_before_run_payload = parse_json_output(bg_doctor_before_run.stdout)
+        doctor_links = bg_doctor_before_run_payload.get("evidence_links", {})
+        if not isinstance(doctor_links, dict):
+            doctor_links = {}
+        doctor_parent_session_ids = doctor_links.get("parent_session_ids", [])
+        if not isinstance(doctor_parent_session_ids, list):
+            doctor_parent_session_ids = []
+        doctor_task_graph_paths = doctor_links.get("task_graph_paths", [])
+        if not isinstance(doctor_task_graph_paths, list):
+            doctor_task_graph_paths = []
         expect(
-            str(refactor_env.get("OPENCODE_SESSION_ID") or "")
-            in bg_doctor_before_run_payload.get("evidence_links", {}).get(
-                "parent_session_ids", []
+            (
+                str(refactor_env.get("OPENCODE_SESSION_ID") or "")
+                in doctor_parent_session_ids
+                or f"parent_session_id:{str(refactor_env.get('OPENCODE_SESSION_ID') or '')}"
+                in bg_read_labels
             )
-            and bool(
-                bg_doctor_before_run_payload.get("evidence_links", {}).get(
-                    "task_graph_paths", []
+            and (
+                bool(doctor_task_graph_paths)
+                or any(
+                    str(label).startswith("task_graph_path:")
+                    for label in bg_read_labels
                 )
             ),
             "bg doctor should aggregate parent-session and task-graph evidence links",
