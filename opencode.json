@@ -110,6 +110,10 @@
       "description": "Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before memory-lifecycle --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "memory": {
+      "description": "Manage shared memory content (add|find|recall|pin|summarize|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/memory_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "hook-learning": {
       "description": "Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before hook-learning --raw-args \"$ARGUMENTS\"`\nShow only the command output."

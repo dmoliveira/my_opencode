@@ -50,10 +50,15 @@ ENTRYPOINT_CATEGORY_DEFAULTS = {
 }
 
 
-def usage() -> int:
+def print_help() -> int:
     print(
         "usage: /model-routing status [--json] | /model-routing set-category <quick|balanced|deep|critical|visual|writing> | /model-routing resolve [--category <name>] [--override-model <id>] [--override-temperature <value>] [--override-reasoning <value>] [--override-verbosity <value>] [--available-models <csv>] [--json] | /model-routing trace [--json] | /model-routing recommend [--agent <name>] [--apply] [--json]"
     )
+    return 0
+
+
+def usage() -> int:
+    print_help()
     return 2
 
 
@@ -369,6 +374,39 @@ def command_trace(argv: list[str]) -> int:
     return 0
 
 
+def command_doctor(argv: list[str]) -> int:
+    if any(arg not in ("--json",) for arg in argv):
+        return usage()
+    json_output = "--json" in argv
+    _, state, write_path = load_state_snapshot(persist_missing=False)
+    schema = default_schema()
+    problems = validate_schema(schema)
+    payload = {
+        "result": "PASS" if not problems else "FAIL",
+        "active_category": state.get("active_category"),
+        "system_defaults": state.get("system_defaults"),
+        "has_latest_trace": bool(state.get("latest_trace")),
+        "config": str(active_config_path(write_path)),
+        "problems": problems,
+        "warnings": [],
+        "quick_fixes": [
+            "/model-routing status --json",
+            "/model-routing resolve --json",
+        ],
+    }
+    if json_output:
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["result"] == "PASS" else 1
+    print(f"result: {payload['result']}")
+    print(f"active_category: {payload['active_category']}")
+    print(f"config: {payload['config']}")
+    if payload["problems"]:
+        print("problems:")
+        for problem in payload["problems"]:
+            print(f"- {problem}")
+    return 0 if payload["result"] == "PASS" else 1
+
+
 def command_recommend(argv: list[str]) -> int:
     json_output = "--json" in argv
     apply_change = "--apply" in argv
@@ -441,10 +479,12 @@ def main(argv: list[str]) -> int:
         return command_resolve(argv[1:])
     if argv[0] == "trace":
         return command_trace(argv[1:])
+    if argv[0] == "doctor":
+        return command_doctor(argv[1:])
     if argv[0] == "recommend":
         return command_recommend(argv[1:])
     if argv[0] == "help":
-        return usage()
+        return print_help()
     return usage()
 
 

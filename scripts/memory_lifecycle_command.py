@@ -4,10 +4,25 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from shared_memory_runtime import (  # type: ignore
+    _row_to_record,
+    _upsert_fts,
+    DEFAULT_DB_PATH,
+    connect,
+    doctor_report,
+    normalize_confidence,
+    normalize_kind,
+    normalize_scope,
+    normalize_tags,
+    now_iso,
+    upsert_memory_by_source,
+)
 
 
 DEFAULT_MEMORY_PATH = Path(
@@ -18,8 +33,145 @@ DEFAULT_MEMORY_PATH = Path(
 ).expanduser()
 
 
-def now_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+def runtime_path() -> Path:
+    return DEFAULT_DB_PATH
+
+
+def _query_counts(conn: sqlite3.Connection) -> tuple[int, int]:
+    active = int(
+        conn.execute(
+            "SELECT COUNT(*) AS count FROM memories WHERE archived = 0"
+        ).fetchone()["count"]
+    )
+    archived = int(
+        conn.execute(
+            "SELECT COUNT(*) AS count FROM memories WHERE archived = 1"
+        ).fetchone()["count"]
+    )
+    return active, archived
+
+
+def _export_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = conn.execute(
+        "SELECT * FROM memories ORDER BY archived ASC, updated_at DESC, created_at DESC"
+    ).fetchall()
+    entries: list[dict[str, Any]] = []
+    archive: list[dict[str, Any]] = []
+    for row in rows:
+        payload = {
+            "id": str(row["id"]),
+            "kind": str(row["kind"]),
+            "scope": str(row["scope"]),
+            "namespace": str(row["namespace"]),
+            "title": str(row["title"]),
+            "content": str(row["content"]),
+            "summary": str(row["summary"]),
+            "tags": json.loads(str(row["tags_json"] or "[]")),
+            "links": json.loads(str(row["links_json"] or "[]")),
+            "source_type": str(row["source_type"]) if row["source_type"] else None,
+            "source_ref": str(row["source_ref"]) if row["source_ref"] else None,
+            "session_id": str(row["session_id"]) if row["session_id"] else None,
+            "cwd": str(row["cwd"]),
+            "pinned": bool(row["pinned"]),
+            "archived": bool(row["archived"]),
+            "confidence": int(row["confidence"] or 0),
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+        if payload["archived"]:
+            archive.append(payload)
+        else:
+            entries.append(payload)
+    return {
+        "version": 2,
+        "path": str(runtime_path()),
+        "entries": entries,
+        "archive": archive,
+    }
+
+
+def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
+    source_type = entry.get("source_type")
+    source_ref = entry.get("source_ref")
+    if (
+        isinstance(source_type, str)
+        and source_type.strip()
+        and isinstance(source_ref, str)
+        and source_ref.strip()
+    ):
+        record = upsert_memory_by_source(
+            conn,
+            title=str(entry.get("title") or "Imported memory"),
+            content=str(entry.get("content") or ""),
+            summary=str(entry.get("summary") or entry.get("content") or ""),
+            kind=str(entry.get("kind") or "note"),
+            scope=str(entry.get("scope") or "repo"),
+            namespace=str(entry.get("namespace") or "shared"),
+            tags=entry.get("tags") if isinstance(entry.get("tags"), list) else [],
+            links=entry.get("links") if isinstance(entry.get("links"), list) else [],
+            source_type=source_type,
+            source_ref=source_ref,
+            confidence=normalize_confidence(entry.get("confidence")),
+            session_id=str(entry.get("session_id") or "") or None,
+            cwd=str(entry.get("cwd") or os.getcwd()),
+        )
+        if bool(entry.get("archived")):
+            conn.execute(
+                "UPDATE memories SET archived = 1, updated_at = ? WHERE id = ?",
+                (str(entry.get("updated_at") or now_iso()), record.memory_id),
+            )
+        if bool(entry.get("pinned")):
+            conn.execute(
+                "UPDATE memories SET pinned = 1, updated_at = ? WHERE id = ?",
+                (str(entry.get("updated_at") or now_iso()), record.memory_id),
+            )
+        return
+    memory_id = str(entry.get("id") or f"legacy-{os.urandom(4).hex()}")
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO memories(
+            id, kind, scope, namespace, title, content, summary, tags_json, tags_text,
+            links_json, source_type, source_ref, session_id, cwd, pinned, archived,
+            confidence, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            memory_id,
+            normalize_kind(str(entry.get("kind") or "note")),
+            normalize_scope(str(entry.get("scope") or "repo")),
+            str(entry.get("namespace") or "shared"),
+            str(entry.get("title") or "Imported memory"),
+            str(entry.get("content") or ""),
+            str(entry.get("summary") or entry.get("content") or ""),
+            json.dumps(
+                normalize_tags(
+                    entry.get("tags") if isinstance(entry.get("tags"), list) else []
+                )
+            ),
+            " ".join(
+                normalize_tags(
+                    entry.get("tags") if isinstance(entry.get("tags"), list) else []
+                )
+            ),
+            json.dumps(
+                entry.get("links") if isinstance(entry.get("links"), list) else []
+            ),
+            None,
+            None,
+            str(entry.get("session_id") or "") or None,
+            str(entry.get("cwd") or os.getcwd()),
+            1 if bool(entry.get("pinned")) else 0,
+            1 if bool(entry.get("archived")) else 0,
+            normalize_confidence(entry.get("confidence")),
+            str(entry.get("created_at") or now_iso()),
+            str(entry.get("updated_at") or now_iso()),
+        ),
+    )
+    row = conn.execute(
+        "SELECT rowid, * FROM memories WHERE id = ?", (memory_id,)
+    ).fetchone()
+    if row is not None:
+        _upsert_fts(conn, int(row["rowid"]), _row_to_record(row))
 
 
 def usage() -> int:
@@ -77,16 +229,15 @@ def emit(payload: dict[str, Any], as_json: bool) -> int:
 
 def cmd_stats(argv: list[str]) -> int:
     as_json = "--json" in argv
-    store = load_store(DEFAULT_MEMORY_PATH)
-    entries = store.get("entries") if isinstance(store.get("entries"), list) else []
-    archive = store.get("archive") if isinstance(store.get("archive"), list) else []
+    conn = connect()
+    entry_count, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "stats",
-            "path": str(DEFAULT_MEMORY_PATH),
-            "entry_count": len(entries),
-            "archive_count": len(archive),
+            "path": str(runtime_path()),
+            "entry_count": entry_count,
+            "archive_count": archive_count,
         },
         as_json,
     )
@@ -102,36 +253,27 @@ def cmd_cleanup(argv: list[str]) -> int:
             older_days = max(1, int(raw))
     except (ValueError, TypeError):
         return usage()
-    store = load_store(DEFAULT_MEMORY_PATH)
-    entries = store.get("entries") if isinstance(store.get("entries"), list) else []
-    archive = store.get("archive") if isinstance(store.get("archive"), list) else []
+    conn = connect()
     cutoff = datetime.now(UTC) - timedelta(days=older_days)
-    kept: list[dict[str, Any]] = []
-    moved = 0
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        when_raw = str(entry.get("updated_at") or entry.get("created_at") or "")
-        try:
-            when = datetime.fromisoformat(when_raw.replace("Z", "+00:00"))
-        except ValueError:
-            kept.append(entry)
-            continue
-        if when < cutoff:
-            archive.append(entry)
-            moved += 1
-        else:
-            kept.append(entry)
-    store["entries"] = kept
-    store["archive"] = archive
-    save_store(DEFAULT_MEMORY_PATH, store)
+    moved = conn.execute(
+        """
+        UPDATE memories
+        SET archived = 1, updated_at = ?
+        WHERE archived = 0
+          AND pinned = 0
+          AND COALESCE(updated_at, created_at, '') < ?
+        """,
+        (now_iso(), cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")),
+    ).rowcount
+    conn.commit()
+    entry_count, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "cleanup",
             "moved": moved,
-            "entry_count": len(kept),
-            "archive_count": len(archive),
+            "entry_count": entry_count,
+            "archive_count": archive_count,
         },
         as_json,
     )
@@ -139,27 +281,50 @@ def cmd_cleanup(argv: list[str]) -> int:
 
 def cmd_compress(argv: list[str]) -> int:
     as_json = "--json" in argv
-    store = load_store(DEFAULT_MEMORY_PATH)
-    entries = store.get("entries") if isinstance(store.get("entries"), list) else []
-    dedup: dict[str, dict[str, Any]] = {}
-    for entry in entries:
-        if not isinstance(entry, dict):
+    conn = connect()
+    rows = conn.execute(
+        "SELECT rowid, * FROM memories WHERE archived = 0 ORDER BY pinned DESC, updated_at DESC, created_at DESC"
+    ).fetchall()
+    before = len(rows)
+    seen: set[str] = set()
+    removed = 0
+    for row in rows:
+        key = str(row["source_type"] or "") + ":" + str(row["source_ref"] or "")
+        if (
+            not str(row["source_type"] or "").strip()
+            or not str(row["source_ref"] or "").strip()
+        ):
+            key = (
+                str(row["scope"] or "")
+                + ":"
+                + str(row["namespace"] or "")
+                + ":"
+                + str(row["title"] or "")
+                + ":"
+                + str(row["summary"] or "")
+                + ":"
+                + str(row["content"] or "")
+            )
+        if key in seen:
+            if bool(row["pinned"]):
+                continue
+            conn.execute(
+                "UPDATE memories SET archived = 1, updated_at = ? WHERE rowid = ?",
+                (now_iso(), int(row["rowid"])),
+            )
+            removed += 1
             continue
-        key = str(entry.get("id") or entry.get("title") or entry.get("summary") or "")
-        if not key:
-            key = json.dumps(entry, sort_keys=True)
-        dedup[key] = entry
-    before = len(entries)
-    after = len(dedup)
-    store["entries"] = list(dedup.values())
-    save_store(DEFAULT_MEMORY_PATH, store)
+        seen.add(key)
+    conn.commit()
+    after, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "compress",
             "before": before,
             "after": after,
-            "removed": max(0, before - after),
+            "removed": removed,
+            "archive_count": archive_count,
         },
         as_json,
     )
@@ -175,7 +340,8 @@ def cmd_export(argv: list[str]) -> int:
     if not path_arg:
         return usage()
     target = Path(path_arg).expanduser()
-    store = load_store(DEFAULT_MEMORY_PATH)
+    conn = connect()
+    store = _export_payload(conn)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(store, indent=2) + "\n", encoding="utf-8")
     return emit(
@@ -183,7 +349,8 @@ def cmd_export(argv: list[str]) -> int:
             "result": "PASS",
             "command": "export",
             "path": str(target),
-            "entry_count": len(store.get("entries", [])),
+            "entry_count": len(store["entries"]),
+            "archive_count": len(store["archive"]),
         },
         as_json,
     )
@@ -218,20 +385,28 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
-    store = load_store(DEFAULT_MEMORY_PATH)
-    current = store.get("entries") if isinstance(store.get("entries"), list) else []
+    conn = connect()
     new_entries = (
-        incoming.get("entries") if isinstance(incoming.get("entries"), list) else []
+        [entry for entry in incoming.get("entries", []) if isinstance(entry, dict)]
+        if isinstance(incoming.get("entries"), list)
+        else []
     )
-    merged = current + [entry for entry in new_entries if isinstance(entry, dict)]
-    store["entries"] = merged
-    save_store(DEFAULT_MEMORY_PATH, store)
+    archived_entries = (
+        [entry for entry in incoming.get("archive", []) if isinstance(entry, dict)]
+        if isinstance(incoming.get("archive"), list)
+        else []
+    )
+    for entry in new_entries + archived_entries:
+        _import_row(conn, entry)
+    conn.commit()
+    entry_count, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "import",
-            "imported": len(new_entries),
-            "entry_count": len(merged),
+            "imported": len(new_entries) + len(archived_entries),
+            "entry_count": entry_count,
+            "archive_count": archive_count,
         },
         as_json,
     )
@@ -239,25 +414,17 @@ def cmd_import(argv: list[str]) -> int:
 
 def cmd_doctor(argv: list[str]) -> int:
     as_json = "--json" in argv
-    store = load_store(DEFAULT_MEMORY_PATH)
-    entries = store.get("entries") if isinstance(store.get("entries"), list) else []
-    warnings: list[str] = []
-    if not entries:
-        warnings.append("memory store has no entries yet")
-    return emit(
-        {
-            "result": "PASS",
-            "command": "doctor",
-            "path": str(DEFAULT_MEMORY_PATH),
-            "entry_count": len(entries),
-            "warnings": warnings,
-            "quick_fixes": [
-                "/learn capture --json",
-                "/memory-lifecycle stats --json",
-            ],
-        },
-        as_json,
+    conn = connect()
+    report = doctor_report(conn, runtime_path())
+    report["command"] = "doctor"
+    report.setdefault(
+        "quick_fixes",
+        [
+            '/memory add --title "note" --content "..." --json',
+            "/memory-lifecycle stats --json",
+        ],
     )
+    return emit(report, as_json)
 
 
 def main(argv: list[str]) -> int:
