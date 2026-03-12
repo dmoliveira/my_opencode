@@ -98,12 +98,49 @@ import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 
+const AUTO_SLASH_COMMAND_OPEN_TAG = "<auto-slash-command>";
+const AUTO_SLASH_COMMAND_CLOSE_TAG = "</auto-slash-command>";
+
 // Declares minimal plugin event payload shape for gateway dispatch.
 interface GatewayEventPayload {
   event: {
     type: string;
     properties?: Record<string, unknown>;
   };
+}
+
+function unwrapAutoSlashCommandText(text: string): string {
+  if (!text.includes(AUTO_SLASH_COMMAND_OPEN_TAG)) {
+    return text;
+  }
+
+  return text.replace(
+    /<auto-slash-command>\s*([\s\S]*?)\s*<\/auto-slash-command>/g,
+    (_match, command: string) => command.trim(),
+  );
+}
+
+function unwrapAutoSlashCommandParts(parts: Array<{ type: string; text?: string }> | undefined): void {
+  if (!Array.isArray(parts)) {
+    return;
+  }
+
+  for (const part of parts) {
+    if (part.type !== "text" || typeof part.text !== "string") {
+      continue;
+    }
+    part.text = unwrapAutoSlashCommandText(part.text);
+  }
+}
+
+function unwrapAutoSlashCommandMessages(messages: ChatMessagesTransformOutput["messages"] | undefined): void {
+  if (!Array.isArray(messages)) {
+    return;
+  }
+
+  for (const message of messages) {
+    unwrapAutoSlashCommandParts(message.parts as Array<{ type: string; text?: string }> | undefined);
+  }
 }
 
 // Declares minimal context shape passed by plugin host.
@@ -1306,6 +1343,8 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         throw result.error;
       }
     }
+
+    unwrapAutoSlashCommandParts(output.parts);
   }
 
   // Dispatches command post-execution event to ordered hooks.
@@ -1395,6 +1434,8 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         throw result.error;
       }
     }
+
+    unwrapAutoSlashCommandParts(output?.parts);
   }
 
   // Dispatches experimental chat transform lifecycle signal to ordered hooks.
@@ -1434,6 +1475,8 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         throw result.error;
       }
     }
+
+    unwrapAutoSlashCommandMessages(output.messages);
   }
 
   async function chatSystemTransform(

@@ -93,6 +93,33 @@ import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
+const AUTO_SLASH_COMMAND_OPEN_TAG = "<auto-slash-command>";
+const AUTO_SLASH_COMMAND_CLOSE_TAG = "</auto-slash-command>";
+function unwrapAutoSlashCommandText(text) {
+    if (!text.includes(AUTO_SLASH_COMMAND_OPEN_TAG)) {
+        return text;
+    }
+    return text.replace(/<auto-slash-command>\s*([\s\S]*?)\s*<\/auto-slash-command>/g, (_match, command) => command.trim());
+}
+function unwrapAutoSlashCommandParts(parts) {
+    if (!Array.isArray(parts)) {
+        return;
+    }
+    for (const part of parts) {
+        if (part.type !== "text" || typeof part.text !== "string") {
+            continue;
+        }
+        part.text = unwrapAutoSlashCommandText(part.text);
+    }
+}
+function unwrapAutoSlashCommandMessages(messages) {
+    if (!Array.isArray(messages)) {
+        return;
+    }
+    for (const message of messages) {
+        unwrapAutoSlashCommandParts(message.parts);
+    }
+}
 const DISPATCH_NOISY_EVENTS = new Set([
     "message.part.delta",
     "message.part.updated",
@@ -877,6 +904,7 @@ export default function GatewayCorePlugin(ctx) {
                 throw result.error;
             }
         }
+        unwrapAutoSlashCommandParts(output.parts);
     }
     // Dispatches command post-execution event to ordered hooks.
     async function commandExecuteAfter(input, output) {
@@ -952,6 +980,7 @@ export default function GatewayCorePlugin(ctx) {
                 throw result.error;
             }
         }
+        unwrapAutoSlashCommandParts(output?.parts);
     }
     // Dispatches experimental chat transform lifecycle signal to ordered hooks.
     async function chatMessagesTransform(input, output) {
@@ -981,6 +1010,7 @@ export default function GatewayCorePlugin(ctx) {
                 throw result.error;
             }
         }
+        unwrapAutoSlashCommandMessages(output.messages);
     }
     async function chatSystemTransform(input, output) {
         if (shouldWriteDispatchAudit("chat_system_transform_dispatch", "experimental.chat.system.transform")) {

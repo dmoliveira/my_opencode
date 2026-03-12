@@ -7,9 +7,6 @@ import test from "node:test"
 import GatewayCorePlugin from "../dist/index.js"
 import { createAutoSlashCommandHook } from "../dist/hooks/auto-slash-command/index.js"
 
-const TAG_OPEN = "<auto-slash-command>"
-const TAG_CLOSE = "</auto-slash-command>"
-
 test("auto-slash-command rewrites natural prompt to slash command", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-auto-slash-"))
   try {
@@ -38,7 +35,7 @@ test("auto-slash-command rewrites natural prompt to slash command", async () => 
       output,
     )
 
-    assert.match(String(output.parts[0].text), new RegExp(`${TAG_OPEN}[\\s\\S]*/doctor[\\s\\S]*${TAG_CLOSE}`))
+    assert.equal(String(output.parts[0].text), "/doctor")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -72,7 +69,7 @@ test("auto-slash-command wraps explicit slash prompts with tag markers", async (
       output,
     )
 
-    assert.match(String(output.parts[0].text), new RegExp(`${TAG_OPEN}[\\s\\S]*/doctor[\\s\\S]*${TAG_CLOSE}`))
+    assert.equal(String(output.parts[0].text), "/doctor")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -110,10 +107,47 @@ test("auto-slash-command handles command.execute.before payloads", async () => {
 
     assert.ok(Array.isArray(output.parts))
     assert.equal(output.parts.length > 0, true)
-    assert.match(
-      String(output.parts[0]?.text),
-      new RegExp(`${TAG_OPEN}[\\s\\S]*/doctor --json[\\s\\S]*${TAG_CLOSE}`),
+    assert.equal(String(output.parts[0]?.text), "/doctor --json")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("gateway unwraps tagged auto-slash text in chat message transforms", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-auto-slash-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: [],
+          disabled: [],
+        },
+      },
+    })
+
+    const output = {
+      messages: [
+        { info: { role: "assistant" }, parts: [{ type: "text", text: "A" }] },
+        {
+          info: { role: "user", id: "m1", sessionID: "session-auto-slash-transform-1" },
+          parts: [
+            {
+              type: "text",
+              text: "<auto-slash-command>\n/doctor\n</auto-slash-command>",
+            },
+          ],
+        },
+      ],
+    }
+
+    await plugin["experimental.chat.messages.transform"](
+      { sessionID: "session-auto-slash-transform-1" },
+      output,
     )
+
+    assert.equal(String(output.messages[1].parts?.[0]?.text), "/doctor")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
