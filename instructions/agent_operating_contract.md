@@ -27,7 +27,7 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 ## Default behavior ✅
 
 - `default_agent` remains `build` in `opencode.json` for quick direct execution.
-- `orchestrator` is the primary default for larger, multi-step work.
+- `orchestrator` is the preferred primary for larger, multi-step work.
 - Specialist subagents are read-only and support the active primary agent.
 - Single-writer is the default for code edits; parallel writers are opt-in and gated.
 
