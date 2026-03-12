@@ -419,8 +419,7 @@ exit 0
                 str(SESSION_SCRIPT.resolve()),
                 "--literal",
                 "doctor",
-                "--fixed-after",
-                "--json",
+                "--fixed-after=--json",
             ],
             capture_output=True,
             text=True,
@@ -433,6 +432,29 @@ exit 0
             and '"result": "PASS"' in literal_result.stdout,
             f"slash wrapper should safely forward literal args: {literal_result.stderr}",
         )
+        for command_name in ("delivery", "workflow", "autoflow"):
+            self_dispatch = subprocess.run(
+                [
+                    sys.executable,
+                    str(SLASH_WRAPPER_SCRIPT),
+                    "--script",
+                    str(SLASH_WRAPPER_SCRIPT.resolve()),
+                    "--fixed-before",
+                    command_name,
+                    "--raw-args",
+                    "doctor --json",
+                ],
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(
+                self_dispatch.returncode == 0
+                and '"result": "PASS"' in self_dispatch.stdout,
+                f"slash wrapper should self-dispatch {command_name} to its trusted backend: {self_dispatch.stderr}",
+            )
         untrusted_script = tmp / "wrapper-untrusted.py"
         untrusted_script.write_text("print('nope')\n", encoding="utf-8")
         rejected_result = subprocess.run(
