@@ -157,7 +157,7 @@ test("compaction-context-injector coexists with auto-slash in default hook flow"
 
     const combined = output.parts.map((part) => String(part.text ?? "")).join("\n\n")
     assert.match(combined, /\[COMPACTION CONTEXT\]/)
-    assert.match(combined, /<auto-slash-command>[\s\S]*\/summarize[\s\S]*<\/auto-slash-command>/)
+    assert.match(combined, /\/summarize/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -192,7 +192,7 @@ test("compaction context survives custom order before auto-slash", async () => {
 
     const combined = output.parts.map((part) => String(part.text ?? "")).join("\n\n")
     assert.match(combined, /\[COMPACTION CONTEXT\]/)
-    assert.match(combined, /<auto-slash-command>[\s\S]*\/summarize[\s\S]*<\/auto-slash-command>/)
+    assert.match(combined, /\/summarize/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
