@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
 
 // Declares evidence categories tracked by validation ledger.
 export type ValidationEvidenceCategory = "lint" | "test" | "typecheck" | "build" | "security"
@@ -18,6 +20,11 @@ export interface ValidationEvidenceSnapshot {
 const evidenceBySession = new Map<string, ValidationEvidenceSnapshot>()
 const evidenceByWorktree = new Map<string, ValidationEvidenceSnapshot>()
 
+interface PersistedValidationEvidence {
+  sessions: Record<string, ValidationEvidenceSnapshot>
+  worktrees: Record<string, ValidationEvidenceSnapshot>
+}
+
 // Returns blank evidence snapshot.
 function emptyEvidence(): ValidationEvidenceSnapshot {
   return {
@@ -28,6 +35,48 @@ function emptyEvidence(): ValidationEvidenceSnapshot {
     security: false,
     updatedAt: "",
   }
+}
+
+function evidenceFilePath(directory: string): string {
+  const cwd = directory.trim() || process.cwd()
+  try {
+    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString("utf-8")
+      .trim()
+    return resolve(root || cwd, ".opencode", "runtime", "validation-evidence.json")
+  } catch {
+    return resolve(cwd, ".opencode", "runtime", "validation-evidence.json")
+  }
+}
+
+function readPersistedEvidence(directory: string): PersistedValidationEvidence {
+  try {
+    const payload = JSON.parse(readFileSync(evidenceFilePath(directory), "utf-8")) as PersistedValidationEvidence
+    return {
+      sessions: payload && typeof payload.sessions === "object" ? payload.sessions : {},
+      worktrees: payload && typeof payload.worktrees === "object" ? payload.worktrees : {},
+    }
+  } catch {
+    return { sessions: {}, worktrees: {} }
+  }
+}
+
+function writePersistedEvidence(directory: string): void {
+  const filePath = evidenceFilePath(directory)
+  const persisted = readPersistedEvidence(directory)
+  const sessions = {
+    ...persisted.sessions,
+    ...Object.fromEntries(evidenceBySession.entries()),
+  }
+  const worktrees = {
+    ...persisted.worktrees,
+    ...Object.fromEntries(evidenceByWorktree.entries()),
+  }
+  mkdirSync(dirname(filePath), { recursive: true })
+  writeFileSync(filePath, JSON.stringify({ sessions, worktrees }, null, 2) + "\n", "utf-8")
 }
 
 function evidenceScopeKey(directory: string): string {
@@ -77,6 +126,7 @@ function computeMissing(snapshot: ValidationEvidenceSnapshot, markers: string[])
     }
     const category = markerCategory(normalized)
     if (!category) {
+      missing.push(normalized)
       continue
     }
     if (!snapshot[category]) {
@@ -122,6 +172,11 @@ export function validationEvidence(sessionId: string): ValidationEvidenceSnapsho
   }
   const current = evidenceBySession.get(sessionId.trim())
   if (!current) {
+    const persisted = readPersistedEvidence(process.cwd()).sessions[sessionId.trim()]
+    if (persisted) {
+      evidenceBySession.set(sessionId.trim(), persisted)
+      return { ...persisted }
+    }
     return emptyEvidence()
   }
   return { ...current }
@@ -135,6 +190,11 @@ export function worktreeValidationEvidence(directory: string): ValidationEvidenc
   }
   const current = evidenceByWorktree.get(key)
   if (!current) {
+    const persisted = readPersistedEvidence(directory).worktrees[key]
+    if (persisted) {
+      evidenceByWorktree.set(key, persisted)
+      return { ...persisted }
+    }
     return emptyEvidence()
   }
   return { ...current }
@@ -169,6 +229,7 @@ export function markValidationEvidence(
     scoped.updatedAt = next.updatedAt
     evidenceByWorktree.set(scopeKey, scoped)
   }
+  writePersistedEvidence(directory)
   return { ...next }
 }
 
@@ -179,6 +240,11 @@ export function clearValidationEvidence(sessionId: string): void {
     return
   }
   evidenceBySession.delete(key)
+  const persisted = readPersistedEvidence(process.cwd())
+  delete persisted.sessions[key]
+  const filePath = evidenceFilePath(process.cwd())
+  mkdirSync(dirname(filePath), { recursive: true })
+  writeFileSync(filePath, JSON.stringify(persisted, null, 2) + "\n", "utf-8")
 }
 
 // Returns missing marker list based on current ledger evidence.

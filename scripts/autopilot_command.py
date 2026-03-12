@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 from copy import deepcopy
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +33,8 @@ from task_graph_bridge import task_graph_runtime_path, task_graph_status_snapsho
 def usage() -> int:
     print(
         "usage: /autopilot [start|go|status|pause|resume|stop|report|doctor] [--json] "
-        "| /autopilot start --goal <text> --scope <text> [--done-criteria <text>] [--completion-mode <promise|objective>] [--completion-promise <text>] --max-budget <profile> [--json] "
-        "| /autopilot go [--goal <text>] [--scope <text>] [--done-criteria <text>] [--completion-mode <promise|objective>] [--completion-promise <text>] [--max-budget <profile>] "
+        "| /autopilot start --goal <text> --scope <text> [--done-criteria <text>] [--required-validation <csv>] [--required-markers <csv>] [--evidence-mode <ledger_only|text_fallback|hybrid>] [--completion-mode <promise|objective>] [--completion-promise <text>] --max-budget <profile> [--json] "
+        "| /autopilot go [--goal <text>] [--scope <text>] [--done-criteria <text>] [--required-validation <csv>] [--required-markers <csv>] [--evidence-mode <ledger_only|text_fallback|hybrid>] [--completion-mode <promise|objective>] [--completion-promise <text>] [--max-budget <profile>] "
         "[--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--max-cycles <n>] [--compact] [--json] "
         "| /autopilot resume [--confidence <0-1>] [--tool-calls <n>] [--token-estimate <n>] [--touched-paths <csv>] [--completion-signal] [--assistant-text <text>] [--json]"
     )
@@ -248,6 +249,28 @@ def infer_touched_paths(cwd: Path) -> list[str]:
     return discovered
 
 
+def filter_paths_for_scope(paths: list[str], raw_scope: str | None) -> list[str]:
+    scope = str(raw_scope or "").strip()
+    if not scope:
+        return list(paths)
+    patterns = [
+        part.strip() for part in scope.replace(";", ",").split(",") if part.strip()
+    ]
+    if not patterns:
+        return list(paths)
+    filtered: list[str] = []
+    for path in paths:
+        for pattern in patterns:
+            if fnmatch(path, pattern):
+                filtered.append(path)
+                break
+            normalized = pattern.rstrip("/")
+            if normalized and path.startswith(normalized + "/"):
+                filtered.append(path)
+                break
+    return filtered
+
+
 def _runtime_or_fail(
     write_path: Path, *, as_json: bool
 ) -> tuple[dict[str, Any] | None, int]:
@@ -274,6 +297,13 @@ def command_start(args: list[str]) -> int:
         goal = pop_optional_value(args, "--goal", "")
         scope = pop_optional_value(args, "--scope", "")
         done_criteria = pop_optional_value(args, "--done-criteria", "")
+        required_validation = (
+            pop_optional_value(args, "--required-validation", "") or ""
+        )
+        required_markers = pop_optional_value(args, "--required-markers", "") or ""
+        evidence_mode = (
+            pop_optional_value(args, "--evidence-mode", "hybrid") or "hybrid"
+        )
         completion_mode = (
             (pop_value(args, "--completion-mode", "promise") or "promise")
             .strip()
@@ -290,7 +320,7 @@ def command_start(args: list[str]) -> int:
     goal = normalize_goal(goal)
     if completion_mode not in {"promise", "objective"}:
         return usage()
-    inferred_continuous = completion_mode == "objective"
+    inferred_continuous = False
     if not goal:
         goal = (
             "continue the active user request from current session context until done"
@@ -318,12 +348,16 @@ def command_start(args: list[str]) -> int:
         "continuous_mode": inferred_continuous,
         "completion_mode": completion_mode,
         "completion_promise": completion_promise,
+        "required_validation": required_validation,
+        "required_markers": required_markers,
+        "evidence_mode": evidence_mode,
     }
     initialized = initialize_run(
         config=config,
         write_path=write_path,
         objective=objective,
         actor="autopilot",
+        directory=Path.cwd(),
     )
     attach_model_routing(initialized, routing)
     if inferred_defaults:
@@ -366,6 +400,9 @@ def command_go(args: list[str]) -> int:
     explicit_goal = "--goal" in args
     explicit_scope = "--scope" in args
     explicit_done_criteria = "--done-criteria" in args
+    explicit_required_validation = "--required-validation" in args
+    explicit_required_markers = "--required-markers" in args
+    explicit_evidence_mode = "--evidence-mode" in args
     explicit_completion_mode = "--completion-mode" in args
     explicit_completion_promise = "--completion-promise" in args
     explicit_max_budget = "--max-budget" in args
@@ -373,6 +410,13 @@ def command_go(args: list[str]) -> int:
         goal = pop_optional_value(args, "--goal", "")
         scope = pop_optional_value(args, "--scope", "")
         done_criteria = pop_optional_value(args, "--done-criteria", "")
+        required_validation = (
+            pop_optional_value(args, "--required-validation", "") or ""
+        )
+        required_markers = pop_optional_value(args, "--required-markers", "") or ""
+        evidence_mode = (
+            pop_optional_value(args, "--evidence-mode", "hybrid") or "hybrid"
+        )
         completion_mode = (
             (pop_value(args, "--completion-mode", "promise") or "promise")
             .strip()
@@ -423,7 +467,7 @@ def command_go(args: list[str]) -> int:
     inferred_defaults: list[str] = []
     if completion_mode not in {"promise", "objective"}:
         return usage()
-    inferred_continuous = completion_mode == "objective"
+    inferred_continuous = False
     terminal_states = {
         "completed",
         "budget_stopped",
@@ -463,12 +507,21 @@ def command_go(args: list[str]) -> int:
         wall = int(counters.get("wall_clock_seconds", 0) or 0)
         wall_limit = int(limits.get("wall_clock_seconds", 0) or 0)
         runtime_budget_exhausted = wall_limit > 0 and wall >= wall_limit
+        if inferred_touched_paths and not explicit_scope:
+            filtered_inferred = filter_paths_for_scope(
+                inferred_touched_paths,
+                str(objective.get("scope") or ""),
+            )
+            touched_paths = list(filtered_inferred)
 
     explicit_objective_override = any(
         [
             explicit_goal,
             explicit_scope,
             explicit_done_criteria,
+            explicit_required_validation,
+            explicit_required_markers,
+            explicit_evidence_mode,
             explicit_completion_mode,
             explicit_completion_promise,
             explicit_max_budget,
@@ -497,6 +550,8 @@ def command_go(args: list[str]) -> int:
                 "repeat until the objective is fully complete",
             ]
             inferred_defaults.append("done-criteria")
+        if inferred_touched_paths:
+            touched_paths = list(filter_paths_for_scope(inferred_touched_paths, scope))
         objective = {
             "goal": goal or "",
             "scope": scope or "",
@@ -505,12 +560,16 @@ def command_go(args: list[str]) -> int:
             "continuous_mode": inferred_continuous,
             "completion_mode": completion_mode,
             "completion_promise": completion_promise,
+            "required_validation": required_validation,
+            "required_markers": required_markers,
+            "evidence_mode": evidence_mode,
         }
         initialized = initialize_run(
             config=config,
             write_path=write_path,
             objective=objective,
             actor="autopilot",
+            directory=Path.cwd(),
         )
         if initialized.get("result") != "PASS":
             attach_model_routing(initialized, routing)
@@ -774,6 +833,14 @@ def command_resume(args: list[str]) -> int:
     runtime, code = _runtime_or_fail(write_path, as_json=as_json)
     if runtime is None:
         return code
+    if inferred_touched_paths:
+        objective_any = runtime.get("objective")
+        objective = objective_any if isinstance(objective_any, dict) else {}
+        touched_paths = list(
+            filter_paths_for_scope(
+                inferred_touched_paths, str(objective.get("scope") or "")
+            )
+        )
     runtime_status_value = str(runtime.get("status") or "")
     if runtime_status_value != "paused":
         payload = {
@@ -813,6 +880,7 @@ def command_resume(args: list[str]) -> int:
         touched_paths=touched_paths,
         completion_signal=completion_signal,
         assistant_text=assistant_text,
+        directory=Path.cwd(),
     )
     runtime_status = gateway_runtime_status(Path.cwd(), config)
     if runtime_status.get("runtime_mode") == "python_command_bridge":
@@ -918,6 +986,10 @@ def command_report(args: list[str]) -> int:
         "recommendations": runtime.get("next_actions", []),
         "next_actions": runtime.get("next_actions", []),
         **task_graph_status_snapshot(),
+        "completion_gates": runtime.get("objective", {}).get("completion_gates", {})
+        if isinstance(runtime.get("objective"), dict)
+        else {},
+        "completion_gate_status": runtime.get("completion_gate_status", {}),
     }
     payload.update(gateway_state_snapshot(Path.cwd(), config))
     emit(payload, as_json=as_json)
@@ -951,6 +1023,8 @@ def command_doctor(args: list[str]) -> int:
         ),
         "warnings": [],
         "problems": [],
+        "completion_gates": {},
+        "completion_gate_status": {},
         "quick_fixes": [
             "/autopilot start --goal 'Ship objective' --scope 'scripts/**' --done-criteria 'all checks pass' --max-budget balanced --json",
             "/autopilot go --goal 'Ship objective' --json",
@@ -958,6 +1032,22 @@ def command_doctor(args: list[str]) -> int:
             "/autopilot report --json",
         ],
     }
+    runtime = load_runtime(resolve_write_path())
+    if runtime:
+        objective = (
+            runtime.get("objective")
+            if isinstance(runtime.get("objective"), dict)
+            else {}
+        )
+        report["completion_gates"] = (
+            objective.get("completion_gates", {}) if isinstance(objective, dict) else {}
+        )
+        report["completion_gate_status"] = runtime.get("completion_gate_status", {})
+        gate_status = runtime.get("completion_gate_status")
+        if isinstance(gate_status, dict) and gate_status.get("result") == "FAIL":
+            for blocker in gate_status.get("blockers", []):
+                if isinstance(blocker, str) and blocker not in report["problems"]:
+                    report["problems"].append(blocker)
     if not report["runtime_exists"]:
         report["problems"].append("missing scripts/autopilot_runtime.py")
     if not report["integration_exists"]:

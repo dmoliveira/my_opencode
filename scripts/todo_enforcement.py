@@ -19,6 +19,7 @@ _REMEDIATION_HINTS = {
     "invalid_transition": "Move todos through pending -> in_progress -> done|skipped, or add a valid bypass annotation.",
     "missing_bypass_metadata": "Provide bypass_reason, bypass_actor, bypass_at, and bypass_type to authorize non-standard transitions.",
     "incomplete_todo_set": "Finish or explicitly skip all remaining pending/in_progress items before marking plan completion.",
+    "completion_gates_blocked": "Run the missing validation/proof steps and clear required completion gates before marking work complete.",
 }
 
 

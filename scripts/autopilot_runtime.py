@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from checkpoint_snapshot_manager import write_snapshot
+from completion_gates import (
+    VALIDATION_CATEGORIES,
+    evaluate_completion_gates,
+    normalize_completion_gates,
+)
 from execution_budget_runtime import (
     build_budget_state,
     evaluate_budget,
@@ -67,6 +72,39 @@ def _normalized_objective(objective: dict[str, Any]) -> dict[str, Any]:
     completion_promise = str(objective.get("completion_promise") or "DONE").strip()
     if not completion_promise:
         completion_promise = "DONE"
+    fallback_markers = _normalize_done_criteria(
+        objective.get("required_markers") or objective.get("required-markers")
+    )
+    completion_gates = normalize_completion_gates(
+        objective.get("completion_gates") or objective.get("completion-gates"),
+        fallback_markers=fallback_markers,
+    )
+    extra_validation = [
+        item.strip().lower()
+        for item in _normalize_done_criteria(
+            objective.get("required_validation") or objective.get("required-validation")
+        )
+        if item.strip() and item.strip().lower() in VALIDATION_CATEGORIES
+    ]
+    if extra_validation:
+        completion_gates["required_validation"] = sorted(
+            set(
+                list(completion_gates.get("required_validation") or [])
+                + extra_validation
+            )
+        )
+    evidence_mode = (
+        str(
+            objective.get("evidence_mode")
+            or objective.get("evidence-mode")
+            or completion_gates.get("evidence_mode")
+            or "hybrid"
+        )
+        .strip()
+        .lower()
+    )
+    if evidence_mode:
+        completion_gates["evidence_mode"] = evidence_mode
     return {
         "goal": str(objective.get("goal", "")).strip(),
         "scope": str(objective.get("scope", "")).strip(),
@@ -78,6 +116,7 @@ def _normalized_objective(objective: dict[str, Any]) -> dict[str, Any]:
         "continuous_mode": bool(objective.get("continuous_mode", False)),
         "completion_mode": completion_mode,
         "completion_promise": completion_promise,
+        "completion_gates": completion_gates,
     }
 
 
@@ -179,12 +218,34 @@ def _in_scope(path: str, patterns: list[str]) -> bool:
     return False
 
 
+def _evaluate_run_completion_gates(
+    run: dict[str, Any], *, directory: Path, completion_text: str = ""
+) -> dict[str, Any]:
+    objective_any = run.get("objective")
+    objective = objective_any if isinstance(objective_any, dict) else {}
+    gates = (
+        objective.get("completion_gates")
+        if isinstance(objective.get("completion_gates"), dict)
+        else {}
+    )
+    result = evaluate_completion_gates(
+        gates,
+        directory=directory,
+        completed_task_ids=[],
+        current_owner=str(run.get("actor") or ""),
+        completion_text=completion_text,
+    )
+    run["completion_gate_status"] = result
+    return result
+
+
 def initialize_run(
     *,
     config: dict[str, Any],
     write_path: Path,
     objective: dict[str, Any],
     actor: str = "autopilot",
+    directory: Path | None = None,
 ) -> dict[str, Any]:
     schema = validate_objective(objective)
     if schema.get("result") != "PASS":
@@ -232,6 +293,7 @@ def initialize_run(
             "start first execution cycle after guardrail acknowledgment",
         ],
     }
+    _evaluate_run_completion_gates(run, directory=directory or Path.cwd())
 
     runtime_file = save_runtime(write_path, run)
     snapshot = write_snapshot(
@@ -274,6 +336,7 @@ def execute_cycle(
     completion_signal: bool = False,
     assistant_text: str | None = None,
     now_ts: str | None = None,
+    directory: Path | None = None,
 ) -> dict[str, Any]:
     objective = (
         run.get("objective", {}) if isinstance(run.get("objective"), dict) else {}
@@ -294,6 +357,7 @@ def execute_cycle(
 
     updated = dict(run)
     updated["updated_at"] = now_ts or now_iso()
+    eval_directory = directory or Path.cwd()
 
     if not paths:
         cycles_any = updated.get("cycles")
@@ -328,6 +392,19 @@ def execute_cycle(
                 "completed_cycles": done,
                 "pending_cycles": pending,
             }
+            gate_status = _evaluate_run_completion_gates(
+                updated, directory=eval_directory, completion_text=normalized_assistant
+            )
+            if gate_status.get("result") != "PASS":
+                updated["status"] = "running"
+                updated["reason_code"] = str(
+                    gate_status.get("reason_code") or "completion_gates_blocked"
+                )
+                updated["blockers"] = list(gate_status.get("blockers") or [])
+                updated["next_actions"] = [
+                    "run required validation and collect evidence for missing completion gates",
+                    "resume autopilot after gate blockers are cleared",
+                ]
             runtime_file = save_runtime(write_path, updated)
             snapshot = write_snapshot(
                 write_path,
@@ -379,6 +456,19 @@ def execute_cycle(
                 "completed_cycles": done,
                 "pending_cycles": pending,
             }
+            gate_status = _evaluate_run_completion_gates(
+                updated, directory=eval_directory, completion_text=normalized_assistant
+            )
+            if gate_status.get("result") != "PASS":
+                updated["status"] = "running"
+                updated["reason_code"] = str(
+                    gate_status.get("reason_code") or "completion_gates_blocked"
+                )
+                updated["blockers"] = list(gate_status.get("blockers") or [])
+                updated["next_actions"] = [
+                    "run required validation and collect evidence for missing completion gates",
+                    "resume autopilot after gate blockers are cleared",
+                ]
             runtime_file = save_runtime(write_path, updated)
             snapshot = write_snapshot(
                 write_path,
@@ -639,6 +729,20 @@ def execute_cycle(
             "completed_cycles": done,
             "pending_cycles": pending,
         }
+        if updated["status"] == "completed":
+            gate_status = _evaluate_run_completion_gates(
+                updated, directory=eval_directory, completion_text=normalized_assistant
+            )
+            if gate_status.get("result") != "PASS":
+                updated["status"] = "running"
+                updated["reason_code"] = str(
+                    gate_status.get("reason_code") or "completion_gates_blocked"
+                )
+                updated["blockers"] = list(gate_status.get("blockers") or [])
+                updated["next_actions"] = [
+                    "run required validation and collect evidence for missing completion gates",
+                    "resume autopilot after gate blockers are cleared",
+                ]
         if updated["status"] == "completed":
             updated["next_actions"] = [
                 "review report and confirm completion criteria",

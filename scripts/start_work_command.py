@@ -42,6 +42,7 @@ from checkpoint_snapshot_manager import (  # type: ignore
     prune_snapshots,
     write_snapshot,
 )
+from completion_gates import evaluate_completion_gates, normalize_completion_gates  # type: ignore
 from execution_budget_runtime import (  # type: ignore
     build_budget_state,
     evaluate_budget,
@@ -215,6 +216,17 @@ def validate_metadata(metadata: dict[str, str]) -> list[dict[str, Any]]:
                 }
             )
     return violations
+
+
+def plan_completion_gates(metadata: dict[str, str]) -> dict[str, Any]:
+    return normalize_completion_gates(
+        {
+            "required_validation": metadata.get("completion_validation", ""),
+            "required_markers": metadata.get("completion_markers", ""),
+            "evidence_mode": metadata.get("completion_evidence_mode", "hybrid"),
+            "required_owner": metadata.get("owner", ""),
+        }
+    )
 
 
 def parse_steps(
@@ -489,6 +501,28 @@ def command_start(args: list[str]) -> int:
 
     compliance_violations.extend(validate_todo_set(steps))
     compliance_violations.extend(validate_plan_completion(steps))
+    completion_gates = plan_completion_gates(parsed["metadata"])
+    completion_gate_status = evaluate_completion_gates(
+        completion_gates,
+        directory=Path.cwd(),
+        completed_task_ids=[
+            str(step.get("ordinal"))
+            for step in steps
+            if normalize_todo_state(step.get("state")) == "done"
+        ],
+        current_owner=str(parsed["metadata"].get("owner") or ""),
+    )
+    if completion_gate_status.get("result") != "PASS":
+        compliance_violations.append(
+            {
+                "code": str(
+                    completion_gate_status.get("reason_code")
+                    or "completion_gates_blocked"
+                ),
+                "message": "plan completion is blocked because required completion gates remain unsatisfied",
+                "blockers": completion_gate_status.get("blockers", []),
+            }
+        )
     done_count = sum(
         1 for step in steps if normalize_todo_state(step.get("state")) == "done"
     )
@@ -519,6 +553,8 @@ def command_start(args: list[str]) -> int:
             "remediation": remediation_prompts(compliance_violations),
             "audit_events": audit_events,
         },
+        "completion_gates": completion_gates,
+        "completion_gate_status": completion_gate_status,
         "started_at": started_at,
         "finished_at": finished_at,
         "resume": {
@@ -766,6 +802,8 @@ def command_status(args: list[str]) -> int:
         "plan": runtime.get("plan", {}),
         "step_counts": counts,
         "todo_compliance": runtime.get("todo_compliance", {}),
+        "completion_gates": runtime.get("completion_gates", {}),
+        "completion_gate_status": runtime.get("completion_gate_status", {}),
         "budget": runtime.get("budget", {}),
         "config": str(write_path),
         **task_graph_status_snapshot(),
@@ -779,6 +817,10 @@ def command_status(args: list[str]) -> int:
         if isinstance(report.get("todo_compliance"), dict):
             print(
                 f"todo_compliance: {report['todo_compliance'].get('result', 'unknown')}"
+            )
+        if isinstance(report.get("completion_gate_status"), dict):
+            print(
+                f"completion_gates: {report['completion_gate_status'].get('result', 'unknown')}"
             )
         print(f"config: {write_path}")
     return 0
@@ -863,6 +905,14 @@ def command_doctor(args: list[str]) -> int:
         for prompt in compliance.get("remediation", []):
             if isinstance(prompt, str) and prompt not in warnings:
                 warnings.append(prompt)
+    completion_gate_status = runtime.get("completion_gate_status")
+    if (
+        isinstance(completion_gate_status, dict)
+        and completion_gate_status.get("result") == "FAIL"
+    ):
+        for blocker in completion_gate_status.get("blockers", []):
+            if isinstance(blocker, str) and blocker not in problems:
+                problems.append(blocker)
 
     resume_meta = runtime.get("resume")
     if isinstance(resume_meta, dict):
@@ -899,6 +949,8 @@ def command_doctor(args: list[str]) -> int:
         "plan": runtime.get("plan", {}),
         "step_count": len(steps),
         "todo_compliance": runtime.get("todo_compliance", {}),
+        "completion_gates": runtime.get("completion_gates", {}),
+        "completion_gate_status": runtime.get("completion_gate_status", {}),
         "resume": runtime.get("resume", {}),
         "budget": budget,
         "warnings": warnings,

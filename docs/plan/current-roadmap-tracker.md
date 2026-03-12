@@ -5,7 +5,7 @@ Tracks the active `my_opencode` improvement wave so any AI can recover context q
 ## Working Rules
 
 - Keep the primary repo on `main`.
-- Start each new implementation task in a dedicated worktree branch from the latest `main`.
+- Start each new implementation task in a dedicated worktree branch from the current root branch.
 - Treat canonical commands as the source of truth; do not reintroduce legacy aliases without a clear migration reason.
 - When a workflow is changed, align docs, health checks, and selftests in the same slice.
 
@@ -129,6 +129,7 @@ Remaining:
 | Parity hardening follow-up | doing | Fix crossed LLM decision hook bindings, add safe hook startup isolation, and keep remaining upstream runtime deltas explicit in parity docs. |
 | Atlas runtime prototype | doing | Prototype local post-task verification/reminder shaping through `task-resume-info` without importing full Atlas persona semantics. |
 | Atlas pre-task shaping prototype | doing | Add delegated task focus shaping through `agent-context-shaper` before subagent execution. |
+| AI-native autopilot orchestration design | doing | New design plan in `docs/plan/ai-native-autopilot-orchestration-plan.md` proposes autonomous task claims, same-worktree write leases, hard completion gates, policy injection, and retry routing for lower-touch autopilot execution; first execution slice now lives in `docs/plan/ai-autopilot-completion-gates-execution-plan.md` and is intentionally `/autopilot` + shared task-metadata first, with `/autoflow` convergence documented as follow-up adoption work rather than current-slice behavior. |
 | Gateway E2E parity refinements | doing | Tighten fail-closed behavior for critical hooks, isolate hook execution failures, align continuity wording with canonical commands, and remove hard-coded agent metadata discovery. |
 
 ## Done Recently
@@ -162,7 +163,8 @@ Remaining:
 4. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer`, `task-resume-info`, `mistake-ledger`, and `validation-evidence-ledger` in shadow until then.
 5. Expand the semantic decision inventory so every ambiguous classification path is tracked by `done` / `doing` / `pending` status band.
 6. Decide whether direct-work discipline should remain warn-first by default or gain a broader escalation policy.
-7. Keep this tracker and the CLI todo list synchronized at each task handoff.
+7. Convert the AI-native autopilot design into a first execution slice, starting with completion-gate unification plus machine-readable task ownership.
+8. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 

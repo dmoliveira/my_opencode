@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 const evidenceBySession = new Map();
 const evidenceByWorktree = new Map();
 // Returns blank evidence snapshot.
@@ -11,6 +13,47 @@ function emptyEvidence() {
         security: false,
         updatedAt: "",
     };
+}
+function evidenceFilePath(directory) {
+    const cwd = directory.trim() || process.cwd();
+    try {
+        const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+            cwd,
+            stdio: ["ignore", "pipe", "ignore"],
+        })
+            .toString("utf-8")
+            .trim();
+        return resolve(root || cwd, ".opencode", "runtime", "validation-evidence.json");
+    }
+    catch {
+        return resolve(cwd, ".opencode", "runtime", "validation-evidence.json");
+    }
+}
+function readPersistedEvidence(directory) {
+    try {
+        const payload = JSON.parse(readFileSync(evidenceFilePath(directory), "utf-8"));
+        return {
+            sessions: payload && typeof payload.sessions === "object" ? payload.sessions : {},
+            worktrees: payload && typeof payload.worktrees === "object" ? payload.worktrees : {},
+        };
+    }
+    catch {
+        return { sessions: {}, worktrees: {} };
+    }
+}
+function writePersistedEvidence(directory) {
+    const filePath = evidenceFilePath(directory);
+    const persisted = readPersistedEvidence(directory);
+    const sessions = {
+        ...persisted.sessions,
+        ...Object.fromEntries(evidenceBySession.entries()),
+    };
+    const worktrees = {
+        ...persisted.worktrees,
+        ...Object.fromEntries(evidenceByWorktree.entries()),
+    };
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, JSON.stringify({ sessions, worktrees }, null, 2) + "\n", "utf-8");
 }
 function evidenceScopeKey(directory) {
     const cwd = directory.trim();
@@ -55,6 +98,7 @@ function computeMissing(snapshot, markers) {
         }
         const category = markerCategory(normalized);
         if (!category) {
+            missing.push(normalized);
             continue;
         }
         if (!snapshot[category]) {
@@ -96,6 +140,11 @@ export function validationEvidence(sessionId) {
     }
     const current = evidenceBySession.get(sessionId.trim());
     if (!current) {
+        const persisted = readPersistedEvidence(process.cwd()).sessions[sessionId.trim()];
+        if (persisted) {
+            evidenceBySession.set(sessionId.trim(), persisted);
+            return { ...persisted };
+        }
         return emptyEvidence();
     }
     return { ...current };
@@ -108,6 +157,11 @@ export function worktreeValidationEvidence(directory) {
     }
     const current = evidenceByWorktree.get(key);
     if (!current) {
+        const persisted = readPersistedEvidence(directory).worktrees[key];
+        if (persisted) {
+            evidenceByWorktree.set(key, persisted);
+            return { ...persisted };
+        }
         return emptyEvidence();
     }
     return { ...current };
@@ -137,6 +191,7 @@ export function markValidationEvidence(sessionId, categories, directory = "") {
         scoped.updatedAt = next.updatedAt;
         evidenceByWorktree.set(scopeKey, scoped);
     }
+    writePersistedEvidence(directory);
     return { ...next };
 }
 // Clears evidence state for one session.
@@ -146,6 +201,11 @@ export function clearValidationEvidence(sessionId) {
         return;
     }
     evidenceBySession.delete(key);
+    const persisted = readPersistedEvidence(process.cwd());
+    delete persisted.sessions[key];
+    const filePath = evidenceFilePath(process.cwd());
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, JSON.stringify(persisted, null, 2) + "\n", "utf-8");
 }
 // Returns missing marker list based on current ledger evidence.
 export function missingValidationMarkers(sessionId, markers) {
