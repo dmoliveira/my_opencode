@@ -46,6 +46,11 @@ DEFAULT_RETENTION_DAYS = 14
 DEFAULT_MAX_TERMINAL = 200
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+RUNTIME_OWNER = {
+    "model": "execution_backend",
+    "execution_backend": "/bg",
+    "observability_surface": "/agent-pool",
+}
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -390,6 +395,26 @@ def enqueue_job(
 
     command = shlex.join(tokens)
     job_id = new_job_id()
+    evidence: dict[str, str] = {}
+    for label in labels:
+        text = str(label).strip()
+        if ":" not in text:
+            continue
+        key, value = text.split(":", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if (
+            key
+            in {
+                "parent_session_id",
+                "parent_run_id",
+                "task_graph_path",
+                "plan_path",
+                "parent_command",
+            }
+            and value
+        ):
+            evidence[key] = value
     job = {
         "id": job_id,
         "command": command,
@@ -402,6 +427,7 @@ def enqueue_job(
         "timeout_seconds": timeout_seconds,
         "stale_after_seconds": stale_after_seconds,
         "labels": labels,
+        "evidence": evidence,
         "summary": None,
         "pid": None,
         "log_path": str(RUNS_DIR / f"{job_id}.log"),
@@ -455,6 +481,7 @@ def _write_meta(job: dict, timed_out: bool, duration_seconds: float) -> None:
         "timed_out": timed_out,
         "duration_seconds": round(duration_seconds, 3),
         "timeout_seconds": job.get("timeout_seconds"),
+        "evidence": job.get("evidence", {}),
     }
     meta_path = Path(str(job.get("meta_path")))
     _atomic_write_json(meta_path, meta)
@@ -619,6 +646,7 @@ def command_read(args: argparse.Namespace) -> int:
             "job": snapshot,
             "log_tail": log_tail,
             "meta_exists": meta_path.exists(),
+            "evidence": snapshot.get("evidence", {}),
         }
         print(json.dumps(payload, indent=2))
         return 0
@@ -697,10 +725,20 @@ def command_status(args: argparse.Namespace) -> int:
         jobs = list(data.get("jobs", []))
 
     counts = {"queued": 0, "running": 0, "completed": 0, "failed": 0, "cancelled": 0}
+    stale_running = 0
     for job in jobs:
         status = str(job.get("status"))
         if status in counts:
             counts[status] += 1
+        if status == "running":
+            baseline = parse_iso(job.get("started_at")) or parse_iso(
+                job.get("created_at")
+            )
+            stale_after = int(
+                job.get("stale_after_seconds") or DEFAULT_STALE_AFTER_SECONDS
+            )
+            if baseline and now_utc() > baseline + timedelta(seconds=stale_after):
+                stale_running += 1
 
     if args.json:
         print(
@@ -709,6 +747,41 @@ def command_status(args: argparse.Namespace) -> int:
                     "root": str(BG_ROOT),
                     "jobs_total": len(jobs),
                     "counts": counts,
+                    "queue_depth": counts["queued"],
+                    "stale_running": stale_running,
+                    "evidence_links": {
+                        "parent_session_ids": sorted(
+                            {
+                                str(
+                                    job.get("evidence", {}).get("parent_session_id")
+                                    or ""
+                                )
+                                for job in jobs
+                                if isinstance(job, dict)
+                                and isinstance(job.get("evidence"), dict)
+                                and str(
+                                    job.get("evidence", {}).get("parent_session_id")
+                                    or ""
+                                )
+                            }
+                        ),
+                        "task_graph_paths": sorted(
+                            {
+                                str(
+                                    job.get("evidence", {}).get("task_graph_path") or ""
+                                )
+                                for job in jobs
+                                if isinstance(job, dict)
+                                and isinstance(job.get("evidence"), dict)
+                                and str(
+                                    job.get("evidence", {}).get("task_graph_path") or ""
+                                )
+                            }
+                        ),
+                    },
+                    "execution_backend": "/bg",
+                    "observability_surface": "/agent-pool",
+                    "runtime_owner": RUNTIME_OWNER,
                 },
                 indent=2,
             )
@@ -719,6 +792,8 @@ def command_status(args: argparse.Namespace) -> int:
     print(f"jobs_total: {len(jobs)}")
     print(f"queued: {counts['queued']}")
     print(f"running: {counts['running']}")
+    print(f"queue_depth: {counts['queued']}")
+    print(f"stale_running: {stale_running}")
     print(f"completed: {counts['completed']}")
     print(f"failed: {counts['failed']}")
     print(f"cancelled: {counts['cancelled']}")
@@ -733,6 +808,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     warnings: list[str] = []
     problems: list[str] = []
     statuses = {"queued": 0, "running": 0, "completed": 0, "failed": 0, "cancelled": 0}
+    stale_running = 0
 
     for job in jobs:
         status = str(job.get("status"))
@@ -748,6 +824,7 @@ def command_doctor(args: argparse.Namespace) -> int:
                 job.get("stale_after_seconds") or DEFAULT_STALE_AFTER_SECONDS
             )
             if baseline and now > baseline + timedelta(seconds=stale_after):
+                stale_running += 1
                 warnings.append(
                     f"job {job.get('id')} exceeds stale threshold ({stale_after}s)"
                 )
@@ -779,6 +856,32 @@ def command_doctor(args: argparse.Namespace) -> int:
         + statuses["failed"]
         + statuses["cancelled"],
         "counts": statuses,
+        "queue_depth": statuses["queued"],
+        "stale_running": stale_running,
+        "failed_jobs": statuses["failed"],
+        "evidence_links": {
+            "parent_session_ids": sorted(
+                {
+                    str(job.get("evidence", {}).get("parent_session_id") or "")
+                    for job in jobs
+                    if isinstance(job, dict)
+                    and isinstance(job.get("evidence"), dict)
+                    and str(job.get("evidence", {}).get("parent_session_id") or "")
+                }
+            ),
+            "task_graph_paths": sorted(
+                {
+                    str(job.get("evidence", {}).get("task_graph_path") or "")
+                    for job in jobs
+                    if isinstance(job, dict)
+                    and isinstance(job.get("evidence"), dict)
+                    and str(job.get("evidence", {}).get("task_graph_path") or "")
+                }
+            ),
+        },
+        "execution_backend": "/bg",
+        "observability_surface": "/agent-pool",
+        "runtime_owner": RUNTIME_OWNER,
         "notify": {
             "enabled": notify_state.get("enabled", True),
             "sound_enabled": notify_state.get("sound", {}).get("enabled", True),

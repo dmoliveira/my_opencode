@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,12 @@ DEFAULT_POOL_PATH = Path(
     )
 ).expanduser()
 
+RUNTIME_OWNER = {
+    "model": "manual_capacity_registry",
+    "execution_backend": "/bg",
+    "control_surface": "/agent-pool",
+}
+
 
 def now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -26,7 +33,7 @@ def now_iso() -> str:
 
 def usage() -> int:
     print(
-        "usage: /agent-pool spawn --type <role> [--count <n>] [--json] | "
+        "usage: /agent-pool spawn --type <role> [--count <n>] [--json] (register manual capacity; does not start bg workers) | "
         "/agent-pool list [--json] | /agent-pool health [--json] | /agent-pool drain --id <agent_id> [--override] [--json] | "
         "/agent-pool logs [--limit <n>] [--json] | /agent-pool doctor [--json]"
     )
@@ -114,6 +121,9 @@ def cmd_spawn(argv: list[str]) -> int:
             "command": "spawn",
             "count": len(created),
             "agents": created,
+            "contract": "manual capacity registry only; /bg runs jobs",
+            "owns_execution": False,
+            "execution_backend": "/bg",
         },
         as_json,
     )
@@ -124,7 +134,13 @@ def cmd_list(argv: list[str]) -> int:
     state = load_pool(DEFAULT_POOL_PATH)
     agents = state.get("agents") if isinstance(state.get("agents"), list) else []
     return emit(
-        {"result": "PASS", "command": "list", "count": len(agents), "agents": agents},
+        {
+            "result": "PASS",
+            "command": "list",
+            "count": len(agents),
+            "agents": agents,
+            "runtime_owner": RUNTIME_OWNER,
+        },
         as_json,
     )
 
@@ -139,6 +155,21 @@ def cmd_health(argv: list[str]) -> int:
     drained = sum(
         1 for a in agents if isinstance(a, dict) and a.get("status") == "drained"
     )
+    bg_report: dict[str, Any] = {}
+    bg_command = [
+        sys.executable,
+        str(Path(__file__).resolve().parent / "background_task_manager.py"),
+        "status",
+        "--json",
+    ]
+    completed = subprocess.run(bg_command, capture_output=True, text=True, check=False)
+    if completed.returncode == 0:
+        try:
+            payload = json.loads(completed.stdout)
+            if isinstance(payload, dict):
+                bg_report = payload
+        except json.JSONDecodeError:
+            bg_report = {}
     return emit(
         {
             "result": "PASS",
@@ -147,6 +178,16 @@ def cmd_health(argv: list[str]) -> int:
             "active": active,
             "drained": drained,
             "status": "healthy" if active > 0 else "idle",
+            "execution_backend": "/bg",
+            "control_surface": "/agent-pool",
+            "runtime_owner": RUNTIME_OWNER,
+            "contract": "manual capacity registry only; /bg runs jobs",
+            "owns_execution": False,
+            "backend_health": {
+                "queue_depth": int(bg_report.get("queue_depth", 0) or 0),
+                "stale_running": int(bg_report.get("stale_running", 0) or 0),
+                "failed_jobs": int(bg_report.get("failed_jobs", 0) or 0),
+            },
         },
         as_json,
     )
@@ -237,9 +278,15 @@ def cmd_doctor(argv: list[str]) -> int:
             "path": str(DEFAULT_POOL_PATH),
             "count": len(agents),
             "warnings": warnings,
+            "execution_backend": "/bg",
+            "control_surface": "/agent-pool",
+            "runtime_owner": RUNTIME_OWNER,
+            "contract": "manual capacity registry only; /bg runs jobs",
+            "owns_execution": False,
             "quick_fixes": [
                 "/agent-pool spawn --type coder --count 2 --json",
                 "/agent-pool health --json",
+                "/bg status --json",
             ],
         },
         as_json,

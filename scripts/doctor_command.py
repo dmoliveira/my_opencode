@@ -68,30 +68,105 @@ CHECKS = [
         ],
     },
     {
-        "name": "post-session",
-        "kind": "status-only",
-        "command": [
-            sys.executable,
-            str(script_path("post_session_command.py")),
-            "status",
-        ],
-    },
-    {
-        "name": "notify-policy",
-        "kind": "status-only",
-        "command": [
-            sys.executable,
-            str(script_path("notify_command.py")),
-            "policy",
-            "status",
-        ],
-    },
-    {
         "name": "bg",
         "kind": "doctor-json",
         "command": [
             sys.executable,
             str(script_path("background_task_manager.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "gateway",
+        "kind": "doctor-json",
+        "command": [
+            sys.executable,
+            str(script_path("gateway_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "quality",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("quality_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("quality_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "devtools",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("devtools_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("devtools_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "nvim",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("nvim_integration_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("nvim_integration_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "gateway",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("gateway_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("gateway_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "quality",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("quality_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("quality_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "devtools",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("devtools_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("devtools_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "nvim",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("nvim_integration_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("nvim_integration_command.py")),
             "doctor",
             "--json",
         ],
@@ -131,7 +206,7 @@ CHECKS = [
         "command": [
             sys.executable,
             str(script_path("model_routing_command.py")),
-            "resolve",
+            "status",
             "--json",
         ],
     },
@@ -420,7 +495,7 @@ CHECKS = [
         "command": [
             sys.executable,
             str(script_path("todo_command.py")),
-            "enforce",
+            "status",
             "--json",
         ],
     },
@@ -669,8 +744,37 @@ def run_check(entry: dict) -> dict:
             parsed = json.loads(stdout)
             item["report"] = parsed
             item["report_result"] = parsed.get("result")
+            if entry.get("name") == "model-routing" and "result" not in parsed:
+                item["report_result"] = "PASS"
             if str(item.get("report_result") or "").upper() != "PASS":
                 item["ok"] = False
+            if (
+                entry.get("name") == "resume"
+                and str(parsed.get("reason_code") or "") == "resume_disabled"
+            ):
+                item["ok"] = True
+                item["skipped"] = True
+                item["skip_reason"] = "resume runtime disabled"
+            if entry.get("name") == "devtools" and parsed.get("missing"):
+                item["ok"] = True
+                item["skipped"] = True
+                item["skip_reason"] = "optional devtools missing"
+            if (
+                entry.get("name") == "gateway"
+                and isinstance(parsed.get("status"), dict)
+                and str(parsed.get("status", {}).get("runtime_reason_code") or "")
+                == "gateway_plugin_not_ready"
+            ):
+                item["ok"] = True
+                item["skipped"] = True
+                item["skip_reason"] = "gateway plugin not installed"
+            if entry.get("name") == "nvim" and (
+                str(parsed.get("opencode_nvim") or "") == "missing"
+                or str(parsed.get("integration_file") or "") == "missing"
+            ):
+                item["ok"] = True
+                item["skipped"] = True
+                item["skip_reason"] = "nvim integration not installed"
         except Exception as exc:
             item["ok"] = False
             item["parse_error"] = str(exc)

@@ -33,6 +33,17 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
     ],
     "docs/agents-playbook.md": [
         "## When not to use each agent",
+        "Planner + reservation example:",
+    ],
+    "README.md": [
+        "strategic-planner",
+        "ambiguity-analyst",
+        "plan-critic",
+        "build` as the default agent",
+    ],
+    "instructions/agent_operating_contract.md": [
+        "`default_agent` remains `build`",
+        "`orchestrator` is the preferred primary for larger, multi-step work.",
     ],
 }
 

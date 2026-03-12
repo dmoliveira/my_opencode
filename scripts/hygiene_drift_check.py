@@ -16,6 +16,7 @@ OPENCODE_CONFIG = REPO_ROOT / "opencode.json"
 GATEWAY_SCHEMA = REPO_ROOT / "plugin/gateway-core/src/config/schema.ts"
 HOOKS_DIR = REPO_ROOT / "plugin/gateway-core/src/hooks"
 PARITY_PLAN = REPO_ROOT / "docs/plan/oh-my-opencode-parity-high-value-plan.md"
+PARITY_SCOREBOARD = REPO_ROOT / "docs/parity-scoreboard.md"
 
 ALLOWED_DUPLICATE_CLUSTERS = {
     frozenset({"model-routing", "model-profile"}),
@@ -39,6 +40,7 @@ class DriftReport:
     extra_hook_ids: list[str]
     parity_plan_issues: list[str]
     parity_plan_warnings: list[str]
+    parity_scoreboard_issues: list[str]
     command_surface_issues: list[str]
     script_alias_issues: list[str]
 
@@ -49,6 +51,7 @@ class DriftReport:
             or self.missing_hook_ids
             or self.extra_hook_ids
             or self.parity_plan_issues
+            or self.parity_scoreboard_issues
             or self.command_surface_issues
             or self.script_alias_issues
         )
@@ -146,6 +149,23 @@ def _parity_plan_watchdog(commands: dict[str, dict[str, object]]) -> list[str]:
             )
 
     return issues
+
+
+def _parity_scoreboard_watchdog() -> list[str]:
+    if not PARITY_SCOREBOARD.exists():
+        return ["missing parity scoreboard: docs/parity-scoreboard.md"]
+    text = PARITY_SCOREBOARD.read_text(encoding="utf-8")
+    required_markers = [
+        "## Current Scoreboard",
+        "## Intentional Divergences",
+        "## Remaining Drift Watch",
+        "docs/upstream-divergence-registry.md",
+    ]
+    return [
+        f"parity scoreboard missing marker: {marker}"
+        for marker in required_markers
+        if marker not in text
+    ]
 
 
 def _parse_finished_epics(plan_text: str) -> set[str]:
@@ -348,6 +368,7 @@ def run() -> int:
     missing_hook_ids, extra_hook_ids = _hook_inventory_audit()
     parity_plan_issues = _parity_plan_watchdog(commands)
     parity_plan_warnings = _parity_plan_warning_audit(commands)
+    parity_scoreboard_issues = _parity_scoreboard_watchdog()
     command_surface_issues = _command_surface_audit(commands)
     script_alias_issues = _script_alias_audit(commands)
 
@@ -359,6 +380,7 @@ def run() -> int:
         extra_hook_ids=extra_hook_ids,
         parity_plan_issues=parity_plan_issues,
         parity_plan_warnings=parity_plan_warnings,
+        parity_scoreboard_issues=parity_scoreboard_issues,
         command_surface_issues=command_surface_issues,
         script_alias_issues=script_alias_issues,
     )
@@ -393,6 +415,10 @@ def run() -> int:
     if report.parity_plan_issues:
         print("parity plan watchdog issues:")
         for issue in report.parity_plan_issues:
+            print(f"- {issue}")
+    if report.parity_scoreboard_issues:
+        print("parity scoreboard issues:")
+        for issue in report.parity_scoreboard_issues:
             print(f"- {issue}")
     if report.command_surface_issues:
         print("command surface issues:")
