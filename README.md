@@ -50,7 +50,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
-- 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, and `release-scribe` subagents.
+- 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, `release-scribe`, `strategic-planner`, `ambiguity-analyst`, and `plan-critic`.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
@@ -58,6 +58,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 - 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
 - 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
 - 🛑 Built-in `/continuation-stop` for one-shot continuation shutdown (autopilot stop + resume disable).
+- 🧰 `/agent-pool` tracks manual visible capacity while `/bg` remains the job execution backend.
 - 💸 Better token control with managed MCPs off by default plus MCP profiles (`minimal`, `research`, `web`, `all`) and on-demand toggling.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
@@ -65,7 +66,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 
 ## Agent roles (Tab menu)
 
-This setup keeps `build` as the default agent, and adds focused specialists for manual selection via `Tab`:
+This setup keeps `build` as the default agent for quick direct work, while adding `orchestrator` and focused specialists for manual selection via `Tab`:
 
 - `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
 - `explore` (subagent): read-only internal codebase scout.
@@ -74,6 +75,14 @@ This setup keeps `build` as the default agent, and adds focused specialists for 
 - `verifier` (subagent): read-only validation runner for test/lint/build checks.
 - `reviewer` (subagent): read-only quality/risk review pass before final delivery.
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
+- `strategic-planner` (subagent): read-only sequencing and milestone planning specialist.
+- `ambiguity-analyst` (subagent): read-only assumptions and unknowns surfacer for unclear scope.
+- `plan-critic` (subagent): read-only feasibility and gate-coverage critic for concrete plans.
+
+Default selection note:
+
+- `build` remains the configured `default_agent` in `opencode.json` for speed.
+- choose `orchestrator` when you want end-to-end multi-step execution with delegation and completion gates.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
 Agent source-of-truth specs live in `agent/specs/*.json` and generate markdown via `scripts/build_agents.py`.

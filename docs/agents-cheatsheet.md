@@ -12,9 +12,12 @@ Fast daily reference for choosing the right agent in OpenCode.
 | end-to-end delivery across multiple steps | `orchestrator` | plans, delegates, executes, verifies |
 | find where logic lives in this repo | `explore` | read-only internal discovery |
 | check external docs/upstream examples | `librarian` | read-only external evidence |
+| sequence a complex delivery plan | `strategic-planner` | read-only milestone and dependency planning |
+| surface hidden assumptions and unknowns | `ambiguity-analyst` | read-only ambiguity and risk discovery |
 | decide architecture/debug strategy | `oracle` | read-only high-signal advisor |
 | validate tests/lint/build results | `verifier` | read-only execution diagnostics |
 | final quality/risk review | `reviewer` | read-only ship/no-ship focus |
+| critique a concrete plan for gaps | `plan-critic` | read-only feasibility and testability review |
 | write PR/changelog/release notes | `release-scribe` | read-only release communication |
 
 ---
@@ -38,12 +41,13 @@ Use `orchestrator` when:
 For medium/large tasks:
 
 1. Start with `orchestrator`
-2. Delegate `explore` for internal mapping
-3. Delegate `librarian` for external references (if needed)
-4. Implement with `orchestrator`
+2. Fan out read-only mapping with `explore`
+3. Add `strategic-planner` or `ambiguity-analyst` when sequence/scope is still unclear
+4. Fan back in to one writer with `orchestrator`
 5. Run `verifier`
 6. Run `reviewer`
-7. Use `release-scribe` for PR/release text
+7. Use `plan-critic` when the plan itself needs stress-testing
+8. Use `release-scribe` for PR/release text
 
 Escalate to `oracle` after repeated failures or hard tradeoffs.
 

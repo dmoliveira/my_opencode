@@ -57,9 +57,17 @@ Machine-readable payload with stable top-level keys:
 - `step_counts` (total/done/in_progress/pending/skipped/failed)
 - `todo_compliance`, `budget`, `checkpoint`, `resume`
 - `deviations` (count + entries)
+- `task_graph_path` (shared dependency graph runtime path)
 - `trace` (decision events and fallback reasons)
 - `warnings`, `problems`, `quick_fixes`
 - `config`
+
+Shared runtime authority:
+
+- `task_graph.json` is the authoritative dependency graph store for canonical local flows.
+- `/autoflow` runtime/checkpoint files remain command-local execution metadata and must not create a second dependency graph schema.
+- `/autoflow status --json` and `/autoflow report --json` should expose `task_graph_path` so operators can inspect the shared graph with `/task` commands.
+- `/autoflow status --json` and `/autoflow report --json` should also set `model_routing.entrypoint = "autoflow"` so command identity does not leak the `/start-work` backend.
 
 ## Lifecycle states
 

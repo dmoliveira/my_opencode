@@ -101,6 +101,7 @@ Default reason codes:
 - `budget` (limits, counters, ratios)
 - `progress` (completed_steps, pending_steps, blockers)
 - `next_actions`
+- `task_graph_path`
 
 `/autopilot report --json` must include:
 
@@ -110,6 +111,12 @@ Default reason codes:
 - `decisions` (guardrails/trade-offs)
 - `blockers`
 - `recommendations`
+- `task_graph_path`
+
+Shared runtime authority:
+
+- `task_graph.json` is the authoritative dependency graph store for canonical local orchestration flows.
+- `/autopilot` runtime files remain command-local lifecycle state and must reference the shared graph instead of introducing a second dependency graph runtime.
 
 All non-pass outcomes must emit at least one remediation hint.
 

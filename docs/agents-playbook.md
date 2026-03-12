@@ -196,15 +196,38 @@ For non-trivial work:
 
 1. `orchestrator` starts
 2. `explore` if 2+ modules or unclear ownership
+3. `strategic-planner` when sequencing or milestone order is unclear
+4. `ambiguity-analyst` when assumptions, acceptance criteria, or scope boundaries are still fuzzy
 3. `librarian` if external behavior matters
-4. implementation by `orchestrator`
-5. `verifier` for checks
-6. `reviewer` final risk pass
-7. `release-scribe` if PR/release text needed
+5. implementation by `orchestrator` with a single writer by default
+6. `verifier` for checks
+7. `reviewer` final risk pass
+8. `release-scribe` if PR/release text needed
 
 Escalate to `oracle` when:
 - 2+ failed fix attempts
 - architecture/security/performance tradeoff is ambiguous
+
+Planner bundle examples:
+
+- `explore` + `strategic-planner`: when you know work is large but need file/sequence mapping first
+- `explore` + `ambiguity-analyst`: when requirements are incomplete and the main need is unknown surfacing
+- `strategic-planner` + `plan-critic`: when the plan exists but sequencing, feasibility, or testability still need stress-testing
+- after planner fan-out, return to one writer unless explicit reservations make parallel writers safe
+
+Planner + reservation example:
+
+```text
+git worktree add ../my_opencode-wt-planning -b feat/planning-slice HEAD
+/reservation set --own-paths "docs/**" --active-paths "docs/**,agent/**" --writer-count 1
+Select `orchestrator`
+Delegate `explore` + `strategic-planner` to map docs and sequencing
+If scope is still fuzzy, add `ambiguity-analyst`
+Implement with one writer in the linked worktree
+/reservation clear
+```
+
+Use this when planning work needs a real reserved path boundary before implementation starts.
 
 ---
 
