@@ -126,7 +126,7 @@ Use these directly in OpenCode:
 - event: `events.<type>`
 - per-event channel: `channels.<type>.sound|visual`
 
-`/notify inbox` reads the repo-local gateway event audit feed from `.opencode/gateway-events.jsonl` (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` when set). Enable gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to populate inbox entries.
+`/notify inbox` reads the repo-local gateway event audit feed from `.opencode/gateway-events.jsonl` (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` when set). Enable gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to populate inbox entries, but after a wrapped session use `/gateway continuation report` for the fastest `todo-continuation-enforcer` audit check.
 
 ## Session digest inside OpenCode 🧾
 
@@ -153,6 +153,9 @@ Optional environment variables:
 - `MY_OPENCODE_DIGEST_PATH` custom output path
 - `MY_OPENCODE_DIGEST_HOOK` command to run after digest is written
 - `DIGEST_REASON_ON_EXIT` custom reason label (default `exit`)
+- `MY_OPENCODE_GATEWAY_EVENT_AUDIT` audit toggle for hook diagnostics (`opencode_session.sh` defaults to `1`; set `0` to disable)
+- `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES` max audit file size before rotation (`opencode_session.sh` defaults to `8388608`)
+- `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS` rotated audit backup count (`opencode_session.sh` defaults to `5`)
 
 When `--run-post` is used, digest also evaluates `post_session` config and stores hook results in the digest JSON.
 
@@ -272,6 +275,7 @@ Use these directly in OpenCode:
 /gateway enable
 /gateway disable
 /gateway doctor
+/gateway continuation report --minutes 120 --limit 10 --json
 /gateway tune memory --json
 /gateway recover memory --apply --resume --compress --force-kill
 /gateway protection report --limit 20 --json
@@ -285,12 +289,15 @@ Notes:
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
 - `/gateway status --json` now includes `mistake_ledger` so operators can see whether validation deferrals are accumulating in `.opencode/mistake-ledger.jsonl`.
 - `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
+- `/gateway continuation report --json` summarizes recent `todo-continuation-enforcer` audit events so you can see reason codes, stages, and affected sessions quickly.
+- `/gateway continuation report --json` now also exposes `assistant_message_open_todo_events` so you can spot intermediate assistant replies that landed while todos were still open.
+- after a wrapped session, `/gateway continuation report` is the fastest check for recent `todo-continuation-enforcer` activity.
 - parity and naming differences vs upstream are tracked in `docs/upstream-divergence-registry.md`.
-- set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to write hook dispatch diagnostics to `.opencode/gateway-events.jsonl` (override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`).
+- `scripts/opencode_session.sh` now enables `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` by default with rotation; set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=0` to disable or override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`.
 - set `MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE=<n>` to reduce noisy dispatch audit events (`message.*`, `session.*`, transform dispatch); `1` logs every event, default is `20`.
 
 Debug and troubleshooting guidance:
-- keep gateway event audit off by default during normal work; enable it for time-boxed diagnosis windows (for example, 30-120 minutes).
+- if you launch through `scripts/opencode_session.sh`, gateway event audit is on by default; launch plain `opencode` or set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=0` when you want a quiet run.
 - with audit enabled, expect small extra CPU/file-I/O overhead and log growth; this is not a direct model token-cost increase by itself.
 - after diagnosis, disable audit again to reduce background noise and disk churn.
 
@@ -397,7 +404,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run diagnostics and reason-code registry export
-/gateway - Manage gateway runtime controls (status|enable|disable|doctor|tune memory|recover memory|protection)
+/gateway - Manage gateway runtime controls (status|enable|disable|doctor|continuation report|tune memory|recover memory|protection)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
 /health - Show repo health score and drift insights
 /hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
