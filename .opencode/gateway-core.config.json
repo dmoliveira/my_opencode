@@ -11,7 +11,7 @@
     "hookModes": {
       "auto-slash-command": "assist",
       "provider-error-classifier": "assist",
-      "todo-continuation-enforcer": "shadow"
+      "todo-continuation-enforcer": "assist"
     },
     "command": "opencode",
     "model": "openai/gpt-5.1-codex-mini",
