@@ -11319,14 +11319,19 @@ version: 1
             f"bg read failed: {bg_read_before_run.stderr}",
         )
         bg_read_before_run_payload = parse_json_output(bg_read_before_run.stdout)
+        bg_read_evidence = bg_read_before_run_payload.get("evidence", {})
+        if not isinstance(bg_read_evidence, dict) or not bg_read_evidence:
+            fallback_evidence = bg_read_before_run_payload.get("job", {}).get(
+                "evidence", {}
+            )
+            bg_read_evidence = (
+                fallback_evidence if isinstance(fallback_evidence, dict) else {}
+            )
         expect(
-            bg_read_before_run_payload.get("evidence", {}).get("parent_command")
-            == "/start-work"
-            and bg_read_before_run_payload.get("evidence", {}).get("parent_session_id")
+            bg_read_evidence.get("parent_command") == "/start-work"
+            and bg_read_evidence.get("parent_session_id")
             == str(refactor_env.get("OPENCODE_SESSION_ID") or "")
-            and bool(
-                bg_read_before_run_payload.get("evidence", {}).get("task_graph_path")
-            ),
+            and bool(bg_read_evidence.get("task_graph_path")),
             "bg read should expose parent/task-graph evidence for queued start-work jobs",
         )
         bg_status_before_run = subprocess.run(
