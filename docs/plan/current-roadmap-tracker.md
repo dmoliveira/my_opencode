@@ -118,6 +118,22 @@ Delivered:
 Remaining:
 - keep this tracker updated at each milestone boundary
 
+### E7 Shared Memory, Swarm, Plugin Platform, and Ops Automation
+
+Status: doing
+
+Goal:
+- close the next high-value platform gaps with a local-first shared-memory layer, current-runtime swarm coordination, safer plugin-pack extensibility, and stronger deterministic operations automation
+
+Delivered:
+- opened detailed execution plan at `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`
+- locked owner scope decisions: no external APIs for memory, no vector search, no MCP expansion in this wave
+
+Remaining:
+- define the shared-memory schema, ranking model, and retention policy
+- map swarm coordination onto current `workflow`/`claims`/`reservation` contracts before deciding whether a dedicated `/swarm` family is justified
+- translate the plan into implementation slices with docs, doctor coverage, and selftests
+
 ## Doing Now
 
 | Item | Status | Notes |
@@ -125,6 +141,7 @@ Remaining:
 | Post-merge guard behavior verification | doing | Validate protected-main behavior in real operator flows after `#423`. |
 | Canonical guidance drift watch | doing | Keep active docs canonical-first as command/runtime surfaces evolve. |
 | LLM decision hooks planning | doing | Active plan lives under `docs/plan/status/in_progress/llm-decision-hooks-plan.md`; current checkpoint includes Epic 5 hardening progress, sidecar-based gateway config wiring, passing semantic/workflow scenario reports, alternating-task continuation coverage, and a combined rollout signal summary. |
+| E13 memory/swarm/plugin/ops planning | doing | Detailed execution plan lives under `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`; next slice starts with local shared-memory schema and retrieval design. |
 
 ## Done Recently
 
@@ -142,13 +159,15 @@ Remaining:
 
 ## Next Tasks
 
-1. Continue post-merge verification for protected-main guard behavior in real operator flows.
-2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
-3. Keep active docs canonical-first as new command/runtime slices land.
-4. Keep this tracker and the CLI todo list synchronized at each task handoff.
+1. Continue E7/E13 with shared-memory schema, ranking, and retention design in `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`.
+2. Continue post-merge verification for protected-main guard behavior in real operator flows.
+3. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
+4. Keep active docs canonical-first as new command/runtime slices land.
+5. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 
 - Before starting new implementation, re-check that local `main` matches the latest remote `main`.
-- Use a dedicated worktree for each new slice, even for docs/tracking follow-ups when practical.
+- Use a dedicated worktree for each new slice, even for docs/tracking follow-ups.
 - Keep the CLI todo list and this tracker aligned: epics here, active steps in the runtime todo list.
+- For the new platform wave, use `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md` as the source of truth for epic order, owner decisions, and task status.
