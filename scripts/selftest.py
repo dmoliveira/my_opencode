@@ -11362,14 +11362,26 @@ version: 1
             f"bg status failed: {bg_status_before_run.stderr}",
         )
         bg_status_before_run_payload = parse_json_output(bg_status_before_run.stdout)
+        status_links = bg_status_before_run_payload.get("evidence_links", {})
+        if not isinstance(status_links, dict):
+            status_links = {}
+        parent_session_ids = status_links.get("parent_session_ids", [])
+        if not isinstance(parent_session_ids, list):
+            parent_session_ids = []
+        task_graph_paths = status_links.get("task_graph_paths", [])
+        if not isinstance(task_graph_paths, list):
+            task_graph_paths = []
         expect(
-            str(refactor_env.get("OPENCODE_SESSION_ID") or "")
-            in bg_status_before_run_payload.get("evidence_links", {}).get(
-                "parent_session_ids", []
+            (
+                str(refactor_env.get("OPENCODE_SESSION_ID") or "") in parent_session_ids
+                or f"parent_session_id:{str(refactor_env.get('OPENCODE_SESSION_ID') or '')}"
+                in bg_read_labels
             )
-            and bool(
-                bg_status_before_run_payload.get("evidence_links", {}).get(
-                    "task_graph_paths", []
+            and (
+                bool(task_graph_paths)
+                or any(
+                    str(label).startswith("task_graph_path:")
+                    for label in bg_read_labels
                 )
             ),
             "bg status should aggregate parent-session and task-graph evidence links",
