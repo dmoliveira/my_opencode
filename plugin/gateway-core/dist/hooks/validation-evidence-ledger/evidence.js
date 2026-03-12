@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 const evidenceBySession = new Map();
 const evidenceByWorktree = new Map();
 // Returns blank evidence snapshot.
@@ -34,6 +36,68 @@ function evidenceScopeKey(directory) {
     }
     catch {
         return cwd;
+    }
+}
+function evidenceStoragePath(directory) {
+    const cwd = directory.trim();
+    if (!cwd) {
+        return "";
+    }
+    try {
+        const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+            cwd,
+            stdio: ["ignore", "pipe", "ignore"],
+        })
+            .toString("utf-8")
+            .trim();
+        return join(root || cwd, ".opencode", "validation-evidence.json");
+    }
+    catch {
+        return join(cwd, ".opencode", "validation-evidence.json");
+    }
+}
+function normalizeSnapshot(snapshot) {
+    return {
+        lint: snapshot?.lint === true,
+        test: snapshot?.test === true,
+        typecheck: snapshot?.typecheck === true,
+        build: snapshot?.build === true,
+        security: snapshot?.security === true,
+        updatedAt: typeof snapshot?.updatedAt === "string" ? snapshot.updatedAt : "",
+    };
+}
+function loadPersistedWorktreeEvidence(directory) {
+    const path = evidenceStoragePath(directory);
+    if (!path || !existsSync(path)) {
+        return;
+    }
+    try {
+        const parsed = JSON.parse(readFileSync(path, "utf-8"));
+        const worktrees = parsed.worktrees && typeof parsed.worktrees === "object" ? parsed.worktrees : {};
+        for (const [key, snapshot] of Object.entries(worktrees)) {
+            if (key.trim()) {
+                evidenceByWorktree.set(key, normalizeSnapshot(snapshot));
+            }
+        }
+    }
+    catch {
+        return;
+    }
+}
+function persistWorktreeEvidence(directory) {
+    const path = evidenceStoragePath(directory);
+    if (!path) {
+        return;
+    }
+    try {
+        mkdirSync(dirname(path), { recursive: true });
+        const state = {
+            worktrees: Object.fromEntries(evidenceByWorktree.entries()),
+        };
+        writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
+    }
+    catch {
+        return;
     }
 }
 function mergeEvidence(sessionSnapshot, worktreeSnapshot) {
@@ -102,6 +166,7 @@ export function validationEvidence(sessionId) {
 }
 // Returns immutable snapshot for worktree/branch-scoped evidence.
 export function worktreeValidationEvidence(directory) {
+    loadPersistedWorktreeEvidence(directory);
     const key = evidenceScopeKey(directory);
     if (!key) {
         return emptyEvidence();
@@ -136,6 +201,7 @@ export function markValidationEvidence(sessionId, categories, directory = "") {
         }
         scoped.updatedAt = next.updatedAt;
         evidenceByWorktree.set(scopeKey, scoped);
+        persistWorktreeEvidence(directory);
     }
     return { ...next };
 }

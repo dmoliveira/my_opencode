@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 
 // Declares evidence categories tracked by validation ledger.
 export type ValidationEvidenceCategory = "lint" | "test" | "typecheck" | "build" | "security"
@@ -17,6 +19,10 @@ export interface ValidationEvidenceSnapshot {
 
 const evidenceBySession = new Map<string, ValidationEvidenceSnapshot>()
 const evidenceByWorktree = new Map<string, ValidationEvidenceSnapshot>()
+
+interface PersistedValidationEvidenceState {
+  worktrees?: Record<string, Partial<ValidationEvidenceSnapshot>>
+}
 
 // Returns blank evidence snapshot.
 function emptyEvidence(): ValidationEvidenceSnapshot {
@@ -51,6 +57,69 @@ function evidenceScopeKey(directory: string): string {
     return `${root}::${branch || cwd}`
   } catch {
     return cwd
+  }
+}
+
+function evidenceStoragePath(directory: string): string {
+  const cwd = directory.trim()
+  if (!cwd) {
+    return ""
+  }
+  try {
+    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString("utf-8")
+      .trim()
+    return join(root || cwd, ".opencode", "validation-evidence.json")
+  } catch {
+    return join(cwd, ".opencode", "validation-evidence.json")
+  }
+}
+
+function normalizeSnapshot(snapshot: Partial<ValidationEvidenceSnapshot> | undefined): ValidationEvidenceSnapshot {
+  return {
+    lint: snapshot?.lint === true,
+    test: snapshot?.test === true,
+    typecheck: snapshot?.typecheck === true,
+    build: snapshot?.build === true,
+    security: snapshot?.security === true,
+    updatedAt: typeof snapshot?.updatedAt === "string" ? snapshot.updatedAt : "",
+  }
+}
+
+function loadPersistedWorktreeEvidence(directory: string): void {
+  const path = evidenceStoragePath(directory)
+  if (!path || !existsSync(path)) {
+    return
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as PersistedValidationEvidenceState
+    const worktrees = parsed.worktrees && typeof parsed.worktrees === "object" ? parsed.worktrees : {}
+    for (const [key, snapshot] of Object.entries(worktrees)) {
+      if (key.trim()) {
+        evidenceByWorktree.set(key, normalizeSnapshot(snapshot))
+      }
+    }
+  } catch {
+    return
+  }
+}
+
+function persistWorktreeEvidence(directory: string): void {
+  const path = evidenceStoragePath(directory)
+  if (!path) {
+    return
+  }
+  try {
+    mkdirSync(dirname(path), { recursive: true })
+    const state: PersistedValidationEvidenceState = {
+      worktrees: Object.fromEntries(evidenceByWorktree.entries()),
+    }
+    writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`, "utf-8")
+  } catch {
+    return
   }
 }
 
@@ -129,6 +198,7 @@ export function validationEvidence(sessionId: string): ValidationEvidenceSnapsho
 
 // Returns immutable snapshot for worktree/branch-scoped evidence.
 export function worktreeValidationEvidence(directory: string): ValidationEvidenceSnapshot {
+  loadPersistedWorktreeEvidence(directory)
   const key = evidenceScopeKey(directory)
   if (!key) {
     return emptyEvidence()
@@ -168,6 +238,7 @@ export function markValidationEvidence(
     }
     scoped.updatedAt = next.updatedAt
     evidenceByWorktree.set(scopeKey, scoped)
+    persistWorktreeEvidence(directory)
   }
   return { ...next }
 }

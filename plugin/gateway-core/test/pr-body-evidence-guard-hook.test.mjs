@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { execSync } from "node:child_process"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -236,6 +237,92 @@ test("pr-body-evidence-guard accepts validation evidence from another session in
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-pr-body-b" },
       { args: { command: 'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs"' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("pr-body-evidence-guard accepts persisted lint and test evidence across plugin restarts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  try {
+    execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+
+    const recorder = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger"],
+          disabled: ["pr-readiness-guard", "pr-body-evidence-guard"],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint", "test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+      },
+    })
+
+    await recorder["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-persist-a" },
+      { args: { command: "npm run lint" } },
+    )
+    await recorder["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-persist-a" },
+      { output: "lint passed" },
+    )
+
+    await recorder["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-persist-a" },
+      { args: { command: "node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs" } },
+    )
+    await recorder["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-persist-a" },
+      { output: "tests passed" },
+    )
+
+    const approver = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["pr-readiness-guard", "pr-body-evidence-guard"],
+          disabled: [],
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint", "test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prReadinessGuard: {
+          enabled: true,
+          requireCleanWorktree: false,
+          requireValidationEvidence: true,
+        },
+        prBodyEvidenceGuard: {
+          enabled: true,
+          requireSummarySection: true,
+          requireValidationSection: true,
+          requireValidationEvidence: true,
+          allowUninspectableBody: false,
+        },
+      },
+    })
+
+    await approver["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-persist-b" },
+      {
+        args: {
+          command:
+            'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- npm run lint\n- node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs"',
+        },
+      },
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
