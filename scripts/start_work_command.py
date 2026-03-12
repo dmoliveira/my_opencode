@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +47,7 @@ from execution_budget_runtime import (  # type: ignore
     evaluate_budget,
     resolve_budget_policy,
 )
+from task_graph_bridge import task_graph_runtime_path, task_graph_status_snapshot  # type: ignore
 
 
 PLAN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-_]{2,63}$")
@@ -583,6 +585,14 @@ def command_start(args: list[str]) -> int:
             "plan-execution",
             "--label",
             f"plan:{parsed['metadata'].get('id', 'unknown')}",
+            "--label",
+            f"parent_command:/start-work",
+            "--label",
+            f"plan_path:{plan_path}",
+            "--label",
+            f"task_graph_path:{task_graph_runtime_path()}",
+            "--label",
+            f"parent_session_id:{os.environ.get('OPENCODE_SESSION_ID') or os.environ.get('MY_OPENCODE_SESSION_ID') or ''}",
             "--",
             sys.executable,
             str(Path(__file__).resolve()),
@@ -634,6 +644,14 @@ def command_start(args: list[str]) -> int:
             "status": "queued",
             "background": True,
             "job_id": job_id,
+            "evidence": {
+                "parent_command": "/start-work",
+                "plan_path": str(plan_path),
+                "task_graph_path": str(task_graph_runtime_path()),
+                "parent_session_id": os.environ.get("OPENCODE_SESSION_ID")
+                or os.environ.get("MY_OPENCODE_SESSION_ID")
+                or "",
+            },
             "plan": {"path": str(plan_path), "metadata": parsed["metadata"]},
             "hint": "run /bg run --id <job-id> to execute queued plan",
         }
@@ -680,6 +698,7 @@ def command_start(args: list[str]) -> int:
         "budget": run_state.get("budget", {}),
         "checkpoint": persistence,
         "config": str(write_path),
+        **task_graph_status_snapshot(),
     }
     attach_model_routing(report, routing)
 
@@ -749,6 +768,7 @@ def command_status(args: list[str]) -> int:
         "todo_compliance": runtime.get("todo_compliance", {}),
         "budget": runtime.get("budget", {}),
         "config": str(write_path),
+        **task_graph_status_snapshot(),
     }
     decorate_report(report)
     if json_output:
@@ -776,6 +796,7 @@ def command_deviations(args: list[str]) -> int:
         "deviations": deviations,
         "count": len(deviations),
         "config": str(write_path),
+        **task_graph_status_snapshot(),
     }
     decorate_report(report)
     if json_output:
@@ -1065,6 +1086,7 @@ def command_recover(args: list[str]) -> int:
         else {},
         "snapshot": persistence,
         "config": str(write_path),
+        **task_graph_status_snapshot(),
     }
     decorate_report(report)
     if json_output:
