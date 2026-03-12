@@ -1,6 +1,9 @@
 export interface GatewayAuditEvent {
     hook?: unknown;
     reason_code?: unknown;
+    session_id?: unknown;
+    ts?: unknown;
+    open_todo_count?: unknown;
     deterministic_decision_meaning?: unknown;
     deterministic_decision_value?: unknown;
     llm_decision_meaning?: unknown;
