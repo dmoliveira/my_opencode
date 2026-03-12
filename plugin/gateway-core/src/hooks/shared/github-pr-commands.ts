@@ -27,6 +27,10 @@ function isGhBinary(token: string): boolean {
   return /(?:^|[\\/])gh(?:\.exe)?$/i.test(token)
 }
 
+function isEnvAssignment(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)
+}
+
 function commandTokens(tokens: string[], startIndex: number): string[] {
   const command: string[] = []
   for (let index = startIndex; index < tokens.length; index += 1) {
@@ -37,6 +41,34 @@ function commandTokens(tokens: string[], startIndex: number): string[] {
     command.push(token)
   }
   return command
+}
+
+function ghCommandSlices(command: string): string[][] {
+  const tokens = tokenizeShellCommand(command)
+  const commands: string[][] = []
+  let index = 0
+  while (index < tokens.length) {
+    while (index < tokens.length && COMMAND_SEPARATOR_TOKENS.has(tokens[index])) {
+      index += 1
+    }
+    if (index >= tokens.length) {
+      break
+    }
+    let commandStart = index
+    while (commandStart < tokens.length && isEnvAssignment(tokens[commandStart])) {
+      commandStart += 1
+    }
+    if (commandStart >= tokens.length || COMMAND_SEPARATOR_TOKENS.has(tokens[commandStart])) {
+      index = commandStart + 1
+      continue
+    }
+    const slice = commandTokens(tokens, commandStart)
+    if (slice.length > 0 && isGhBinary(slice[0])) {
+      commands.push(slice)
+    }
+    index = commandStart + slice.length + 1
+  }
+  return commands
 }
 
 function inlineOptionValue(token: string, name: string): string {
@@ -182,12 +214,7 @@ function ghApiMergeHasStrategy(tokens: string[]): boolean {
 }
 
 export function isGitHubPrMergeCommand(command: string): boolean {
-  const tokens = tokenizeShellCommand(command)
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (!isGhBinary(tokens[index])) {
-      continue
-    }
-    const commandSlice = commandTokens(tokens, index)
+  for (const commandSlice of ghCommandSlices(command)) {
     if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
       return true
     }
@@ -203,12 +230,7 @@ export function isGitHubPrMergeCommand(command: string): boolean {
 }
 
 export function extractGitHubPrMergeSelector(command: string): string {
-  const tokens = tokenizeShellCommand(command)
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (!isGhBinary(tokens[index])) {
-      continue
-    }
-    const commandSlice = commandTokens(tokens, index)
+  for (const commandSlice of ghCommandSlices(command)) {
     if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
       for (let argIndex = 3; argIndex < commandSlice.length; argIndex += 1) {
         const token = commandSlice[argIndex]
@@ -238,12 +260,7 @@ export function extractGitHubPrMergeSelector(command: string): string {
 }
 
 export function gitHubPrMergeHasStrategy(command: string): boolean {
-  const tokens = tokenizeShellCommand(command)
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (!isGhBinary(tokens[index])) {
-      continue
-    }
-    const commandSlice = commandTokens(tokens, index)
+  for (const commandSlice of ghCommandSlices(command)) {
     if (commandSlice[1] == "pr" && commandSlice[2] == "merge") {
       return ghPrMergeHasStrategy(commandSlice)
     }
@@ -313,12 +330,7 @@ function ghApiPrCreateInspection(tokens: string[], directory: string): PrBodyIns
 }
 
 export function isGitHubPrCreateCommand(command: string): boolean {
-  const tokens = tokenizeShellCommand(command)
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (!isGhBinary(tokens[index])) {
-      continue
-    }
-    const commandSlice = commandTokens(tokens, index)
+  for (const commandSlice of ghCommandSlices(command)) {
     if (commandSlice[1] === "pr" && commandSlice[2] === "create") {
       return true
     }
@@ -334,12 +346,7 @@ export function isGitHubPrCreateCommand(command: string): boolean {
 }
 
 export function inspectGitHubPrCreateBody(command: string, directory: string): PrBodyInspection {
-  const tokens = tokenizeShellCommand(command)
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (!isGhBinary(tokens[index])) {
-      continue
-    }
-    const commandSlice = commandTokens(tokens, index)
+  for (const commandSlice of ghCommandSlices(command)) {
     if (commandSlice[1] === "pr" && commandSlice[2] === "create") {
       return ghPrCreateInspection(commandSlice, directory)
     }

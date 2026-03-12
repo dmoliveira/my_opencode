@@ -171,6 +171,75 @@ test("rules-injector ignores non-file tools", async () => {
   }
 })
 
+test("rules-injector adds always-apply rules on system transform", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-rules-injector-"))
+  try {
+    mkdirSync(join(directory, ".github"), { recursive: true })
+    writeFileSync(
+      join(directory, ".github", "copilot-instructions.md"),
+      "Always surface repo policy before the first decision.",
+      "utf-8",
+    )
+
+    const plugin = setupPlugin(directory)
+    const output = { system: [] }
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-rules-system-1" }, output)
+
+    assert.equal(output.system.length, 1)
+    assert.match(String(output.system[0]), /\[runtime-rules\]/)
+    assert.match(String(output.system[0]), /copilot-instructions\.md/)
+    assert.match(String(output.system[0]), /Always surface repo policy before the first decision\./)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("rules-injector reapplies always-apply rules on later system transforms", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-rules-injector-"))
+  try {
+    mkdirSync(join(directory, ".github"), { recursive: true })
+    writeFileSync(
+      join(directory, ".github", "copilot-instructions.md"),
+      "Always surface repo policy before the first decision.",
+      "utf-8",
+    )
+
+    const plugin = setupPlugin(directory)
+    const first = { system: [] }
+    const second = { system: [] }
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-rules-system-2" }, first)
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-rules-system-2" }, second)
+
+    assert.equal(first.system.length, 1)
+    assert.equal(second.system.length, 1)
+    assert.match(String(second.system[0]), /Always surface repo policy before the first decision\./)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("rules-injector reloads changed always-apply rules on later system transforms", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-rules-injector-"))
+  try {
+    mkdirSync(join(directory, ".github"), { recursive: true })
+    const rulePath = join(directory, ".github", "copilot-instructions.md")
+    writeFileSync(rulePath, "First rule version.", "utf-8")
+
+    const plugin = setupPlugin(directory)
+    const first = { system: [] }
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-rules-system-3" }, first)
+    assert.match(String(first.system[0]), /First rule version\./)
+
+    writeFileSync(rulePath, "Second rule version.", "utf-8")
+    const second = { system: [] }
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-rules-system-3" }, second)
+    assert.match(String(second.system[0]), /Second rule version\./)
+    assert.doesNotMatch(String(second.system[0]), /First rule version\./)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("rules-injector supports applyTo inline array and yaml list forms", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-rules-injector-"))
   try {

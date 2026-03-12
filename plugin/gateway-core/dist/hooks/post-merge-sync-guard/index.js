@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
+import { listToolAfterOutputTexts, writeToolAfterOutputChannelText, } from "../shared/tool-after-output.js";
+const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 // Returns true when command includes inline main sync action.
 function hasInlineMainSync(command) {
     return /\bgit\s+pull\s+--rebase\b/i.test(command);
@@ -44,7 +46,6 @@ function mainWorktreePath(directory) {
     }
     return "";
 }
-const BENIGN_GH_WORKTREE_MERGE_WARNING = /failed to run git:\s*fatal:\s*'main' is already used by worktree at '([^']+)'\s*/i;
 function resolveReminder(directory, defaults) {
     const branch = currentBranch(directory);
     const mainPath = mainWorktreePath(directory);
@@ -90,7 +91,6 @@ function normalizeMergeOutput(output) {
     }
     return `${cleaned}\n\n${note}`;
 }
-
 // Creates post-merge sync guard with cleanup enforcement and reminder injection.
 export function createPostMergeSyncGuardHook(options) {
     const pendingReminderSessions = new Set();
@@ -150,16 +150,31 @@ export function createPostMergeSyncGuardHook(options) {
             }
             pendingReminderSessions.delete(sessionId);
             const toolOutput = eventPayload.output;
-            if (typeof toolOutput?.output !== "string") {
+            const entries = listToolAfterOutputTexts(toolOutput?.output);
+            if (entries.length === 0) {
                 return;
             }
-            toolOutput.output = normalizeMergeOutput(toolOutput.output);
+            let rewrote = false;
             if (reminderCommands.length === 0) {
+                for (const entry of entries) {
+                    rewrote =
+                        writeToolAfterOutputChannelText(toolOutput?.output, entry.channel, normalizeMergeOutput(entry.text)) ||
+                            rewrote;
+                }
+                if (!rewrote && toolOutput) {
+                    toolOutput.output = normalizeMergeOutput(entries[0].text);
+                }
                 return;
             }
             const reminderState = resolveReminder(directory, reminderCommands);
             const reminder = `\n\n[post-merge-sync-guard] ${reminderState.intro}\n${reminderState.commands.map((cmd) => `- ${cmd}`).join("\n")}`;
-            toolOutput.output = `${toolOutput.output}${reminder}`;
+            for (const [index, entry] of entries.entries()) {
+                const nextText = `${normalizeMergeOutput(entry.text)}${index === 0 ? reminder : ""}`;
+                rewrote = writeToolAfterOutputChannelText(toolOutput?.output, entry.channel, nextText) || rewrote;
+            }
+            if (!rewrote && toolOutput) {
+                toolOutput.output = `${normalizeMergeOutput(entries[0].text)}${reminder}`;
+            }
             writeGatewayEventAudit(directory, {
                 hook: "post-merge-sync-guard",
                 stage: "state",

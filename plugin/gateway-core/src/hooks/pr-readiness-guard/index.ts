@@ -3,7 +3,7 @@ import { execSync } from "node:child_process"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { isGitHubPrCreateCommand } from "../shared/github-pr-commands.js"
-import { missingValidationMarkers } from "../validation-evidence-ledger/evidence.js"
+import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js"
 
 interface ToolBeforePayload {
   input?: {
@@ -73,8 +73,8 @@ export function createPrReadinessGuardHook(options: {
       if (!options.requireValidationEvidence || !sessionId || required.length === 0) {
         return
       }
-      const missing = missingValidationMarkers(sessionId, required)
-      if (missing.length === 0) {
+      const status = validationEvidenceStatus(sessionId, required, directory)
+      if (status.missing.length === 0) {
         return
       }
       writeGatewayEventAudit(directory, {
@@ -84,7 +84,9 @@ export function createPrReadinessGuardHook(options: {
         session_id: sessionId,
       })
       throw new Error(
-        `[pr-readiness-guard] Missing validation evidence before PR create: ${missing.join(", ")}.`,
+        `[pr-readiness-guard] Missing validation evidence before PR create: ${status.missing.join(
+          ", ",
+        )}. Evidence must be recorded in this session or the current worktree before PR creation.`,
       )
     },
   }

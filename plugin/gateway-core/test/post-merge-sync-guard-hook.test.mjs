@@ -198,3 +198,94 @@ test("post-merge-sync-guard downgrades benign gh merge worktree warnings", async
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("post-merge-sync-guard appends reminders to structured output payloads", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-post-merge-"))
+  try {
+    const hook = createPostMergeSyncGuardHook({
+      directory,
+      enabled: true,
+      requireDeleteBranch: true,
+      enforceMainSyncInline: false,
+      reminderCommands: ["git pull --rebase"],
+    })
+    await hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-post-merge-structured" },
+      output: { args: { command: "gh pr merge 10 --merge --delete-branch" } },
+      directory,
+    })
+    const afterPayload = {
+      input: { tool: "bash", sessionID: "session-post-merge-structured" },
+      output: { output: { stdout: "merged", stderr: "warning text" } },
+      directory,
+    }
+    await hook.event("tool.execute.after", afterPayload)
+    assert.match(String(afterPayload.output.output.stdout), /Merge complete\./)
+    assert.match(String(afterPayload.output.output.stdout), /git worktree list/)
+    assert.equal(String(afterPayload.output.output.stderr), "warning text")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("post-merge-sync-guard rewrites stderr-only structured payloads in place", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-post-merge-"))
+  try {
+    const hook = createPostMergeSyncGuardHook({
+      directory,
+      enabled: true,
+      requireDeleteBranch: true,
+      enforceMainSyncInline: false,
+      reminderCommands: ["git pull --rebase"],
+    })
+    await hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-post-merge-stderr" },
+      output: { args: { command: "gh pr merge 10 --merge --delete-branch" } },
+      directory,
+    })
+    const afterPayload = {
+      input: { tool: "bash", sessionID: "session-post-merge-stderr" },
+      output: { output: { stdout: "", stderr: "merged" } },
+      directory,
+    }
+    await hook.event("tool.execute.after", afterPayload)
+    assert.match(String(afterPayload.output.output.stderr), /Merge complete\./)
+    assert.equal(String(afterPayload.output.output.stdout), "")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("post-merge-sync-guard normalizes stderr warnings while preserving stdout", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-post-merge-"))
+  try {
+    const hook = createPostMergeSyncGuardHook({
+      directory,
+      enabled: true,
+      requireDeleteBranch: true,
+      enforceMainSyncInline: false,
+      reminderCommands: ["git pull --rebase"],
+    })
+    await hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-post-merge-mixed" },
+      output: { args: { command: "gh pr merge 10 --merge --delete-branch" } },
+      directory,
+    })
+    const afterPayload = {
+      input: { tool: "bash", sessionID: "session-post-merge-mixed" },
+      output: {
+        output: {
+          stdout: "merged",
+          stderr: "failed to run git: fatal: 'main' is already used by worktree at '/tmp/primary'",
+        },
+      },
+      directory,
+    }
+    await hook.event("tool.execute.after", afterPayload)
+    assert.match(String(afterPayload.output.output.stdout), /Merge complete\./)
+    assert.match(String(afterPayload.output.output.stdout), /git worktree list/)
+    assert.doesNotMatch(String(afterPayload.output.output.stderr), /failed to run git/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

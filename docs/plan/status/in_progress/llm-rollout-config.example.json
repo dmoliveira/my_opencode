@@ -1,0 +1,21 @@
+{
+  "llmDecisionRuntime": {
+    "enabled": true,
+    "mode": "shadow",
+    "hookModes": {
+      "auto-slash-command": "assist",
+      "provider-error-classifier": "assist",
+      "todo-continuation-enforcer": "shadow",
+      "task-resume-info": "shadow",
+      "mistake-ledger": "shadow"
+    },
+    "command": "opencode",
+    "model": "openai/gpt-5.1-codex-mini",
+    "timeoutMs": 30000,
+    "maxPromptChars": 1200,
+    "maxContextChars": 2400,
+    "enableCache": true,
+    "cacheTtlMs": 300000,
+    "maxCacheEntries": 256
+  }
+}

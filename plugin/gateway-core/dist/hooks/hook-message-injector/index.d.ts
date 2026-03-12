@@ -8,9 +8,18 @@ interface SessionMessageInfo {
     };
     providerID?: string;
     modelID?: string;
+    error?: unknown;
+    time?: {
+        completed?: number;
+    };
 }
 interface SessionMessage {
     info?: SessionMessageInfo;
+    parts?: Array<{
+        type?: string;
+        text?: string;
+        synthetic?: boolean;
+    }>;
 }
 interface SessionClient {
     messages?(args: {
@@ -52,11 +61,21 @@ export interface HookMessageIdentity {
         variant?: string;
     };
 }
+export interface HookMessageSafetyResult {
+    safe: boolean;
+    reason: "ok" | "history_unavailable" | "history_probe_failed" | "assistant_turn_incomplete";
+}
 export declare function resolveHookMessageIdentity(args: {
     session: SessionClient;
     sessionId: string;
     directory: string;
 }): Promise<HookMessageIdentity>;
+export declare function inspectHookMessageSafety(args: {
+    session: SessionClient;
+    sessionId: string;
+    directory: string;
+    messages?: SessionMessage[];
+}): Promise<HookMessageSafetyResult>;
 export declare function buildHookMessageBody(content: string, identity: HookMessageIdentity): {
     parts: Array<{
         type: string;

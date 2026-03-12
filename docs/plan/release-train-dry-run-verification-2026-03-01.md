@@ -28,5 +28,5 @@ python3 scripts/release_train_command.py publish \
 ## Interpretation
 
 - The dry-run path correctly returns deterministic guardrail reason codes.
-- For docs-only milestone repackaging, direct `gh release create ... --notes-file ...` remains the canonical path.
+- For docs-only milestone repackaging, direct `gh release create ... --notes-file ...` or `gh release edit ... --notes-file ...` remains the canonical path.
 - `release-train publish` is best used when version/changelog policy gates are intentionally satisfied for a new release increment.

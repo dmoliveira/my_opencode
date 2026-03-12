@@ -32,6 +32,10 @@ Canonical command mental model:
 - `/autopilot` is the open-ended objective runner.
 - `/autoflow` is the deterministic plan-file runner.
 
+For a reusable external delivery-policy reference, search your local `agents.md` clone first when available, then use the public `agents.md` playbook docs (`AGENTS.md`, `docs/index.md`, `docs/validation-policy.md`) when you need canonical shareable links.
+
+Gateway runtime tuning lives in `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`). Treat that sidecar file as the operator-facing control plane for hook order, LLM hook modes, and related gateway behavior, with the caveat that duplicate gateway keys set in root config still override sidecar values today.
+
 ## Flow 1: Claim -> Deliver -> Close
 
 ```text

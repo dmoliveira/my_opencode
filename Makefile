@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select reservation-status install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select reservation-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,6 +33,9 @@ docs-automation-summary-update: ## Regenerate docs automation summary artifact
 
 docs-automation-check: ## Check docs automation workflow/pages/summary synchronization
 	python3 scripts/docs_automation_sync_check.py
+
+pages-readiness-check: ## Check remote GitHub Pages readiness for docs automation
+	python3 scripts/pages_readiness_check.py --json
 
 release-note-validation-check: ## Check release-note docs include validation evidence headings
 	python3 scripts/release_note_validation_check.py
@@ -171,6 +174,4 @@ release-check: validate selftest ## Verify release prerequisites
 
 release: release-check ## Create and publish release (VERSION=0.1.1)
 	@test -n "$(VERSION)" || (echo "VERSION is required, eg: make release VERSION=0.1.1" && exit 2)
-	git tag -a "v$(VERSION)" -m "v$(VERSION)"
-	git push origin "v$(VERSION)"
-	gh release create "v$(VERSION)" --generate-notes
+	python3 scripts/release_train_command.py publish --version "$(VERSION)" --profile runtime --confirm

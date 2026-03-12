@@ -16,7 +16,10 @@ export function tokenizeShellCommand(command) {
     });
 }
 function isGhBinary(token) {
-    return /(?:^|[\/])gh(?:\.exe)?$/i.test(token);
+    return /(?:^|[\\/])gh(?:\.exe)?$/i.test(token);
+}
+function isEnvAssignment(token) {
+    return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
 }
 function commandTokens(tokens, startIndex) {
     const command = [];
@@ -28,6 +31,33 @@ function commandTokens(tokens, startIndex) {
         command.push(token);
     }
     return command;
+}
+function ghCommandSlices(command) {
+    const tokens = tokenizeShellCommand(command);
+    const commands = [];
+    let index = 0;
+    while (index < tokens.length) {
+        while (index < tokens.length && COMMAND_SEPARATOR_TOKENS.has(tokens[index])) {
+            index += 1;
+        }
+        if (index >= tokens.length) {
+            break;
+        }
+        let commandStart = index;
+        while (commandStart < tokens.length && isEnvAssignment(tokens[commandStart])) {
+            commandStart += 1;
+        }
+        if (commandStart >= tokens.length || COMMAND_SEPARATOR_TOKENS.has(tokens[commandStart])) {
+            index = commandStart + 1;
+            continue;
+        }
+        const slice = commandTokens(tokens, commandStart);
+        if (slice.length > 0 && isGhBinary(slice[0])) {
+            commands.push(slice);
+        }
+        index = commandStart + slice.length + 1;
+    }
+    return commands;
 }
 function inlineOptionValue(token, name) {
     if (token.startsWith(`${name}=`)) {
@@ -128,6 +158,95 @@ function parseGhApiInvocation(tokens) {
         tokens,
     };
 }
+function ghPrMergeHasStrategy(tokens) {
+    return tokens.some((token, index) => index >= 3 && (token === "--merge" || token === "--squash" || token === "--rebase"));
+}
+function ghApiMergeHasStrategy(tokens) {
+    for (let index = 2; index < tokens.length; index += 1) {
+        const token = tokens[index];
+        if (FIELD_FLAGS.has(token) && index + 1 < tokens.length) {
+            const assignment = parseFieldAssignment(tokens[index + 1]);
+            if (assignment?.key === "merge_method" && /^(merge|squash|rebase)$/i.test(assignment.value.trim())) {
+                return true;
+            }
+            index += 1;
+            continue;
+        }
+        if (token.startsWith("--field=") || token.startsWith("--raw-field=")) {
+            const assignment = parseFieldAssignment(token.slice(token.indexOf("=") + 1));
+            if (assignment?.key === "merge_method" && /^(merge|squash|rebase)$/i.test(assignment.value.trim())) {
+                return true;
+            }
+            continue;
+        }
+        if ((token.startsWith("-f") || token.startsWith("-F")) && token.length > 2) {
+            const assignment = parseFieldAssignment(token.slice(2));
+            if (assignment?.key === "merge_method" && /^(merge|squash|rebase)$/i.test(assignment.value.trim())) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+export function isGitHubPrMergeCommand(command) {
+    for (const commandSlice of ghCommandSlices(command)) {
+        if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
+            return true;
+        }
+        if (commandSlice[1] !== "api") {
+            continue;
+        }
+        const invocation = parseGhApiInvocation(commandSlice);
+        if (invocation.method === "PUT" && isPullRequestMergeEndpoint(invocation.endpoint)) {
+            return true;
+        }
+    }
+    return false;
+}
+export function extractGitHubPrMergeSelector(command) {
+    for (const commandSlice of ghCommandSlices(command)) {
+        if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
+            for (let argIndex = 3; argIndex < commandSlice.length; argIndex += 1) {
+                const token = commandSlice[argIndex];
+                if (!token || COMMAND_SEPARATOR_TOKENS.has(token)) {
+                    break;
+                }
+                if (token.startsWith("-")) {
+                    continue;
+                }
+                return token;
+            }
+            return "";
+        }
+        if (commandSlice[1] !== "api") {
+            continue;
+        }
+        const invocation = parseGhApiInvocation(commandSlice);
+        if (invocation.method !== "PUT") {
+            continue;
+        }
+        const match = isPullRequestMergeEndpoint(invocation.endpoint);
+        if (match) {
+            return match[1] ?? "";
+        }
+    }
+    return "";
+}
+export function gitHubPrMergeHasStrategy(command) {
+    for (const commandSlice of ghCommandSlices(command)) {
+        if (commandSlice[1] == "pr" && commandSlice[2] == "merge") {
+            return ghPrMergeHasStrategy(commandSlice);
+        }
+        if (commandSlice[1] !== "api") {
+            continue;
+        }
+        const invocation = parseGhApiInvocation(commandSlice);
+        if (invocation.method === "PUT" && isPullRequestMergeEndpoint(invocation.endpoint)) {
+            return ghApiMergeHasStrategy(invocation.tokens);
+        }
+    }
+    return false;
+}
 function ghPrCreateInspection(tokens, directory) {
     for (let index = 3; index < tokens.length; index += 1) {
         const token = tokens[index];
@@ -180,43 +299,8 @@ function ghApiPrCreateInspection(tokens, directory) {
     }
     return { body: "", inspectable: false };
 }
-function ghPrMergeHasStrategy(tokens) {
-    return tokens.some((token, index) => index >= 3 && (token === "--merge" || token === "--squash" || token === "--rebase"));
-}
-function ghApiMergeHasStrategy(tokens) {
-    for (let index = 2; index < tokens.length; index += 1) {
-        const token = tokens[index];
-        if (FIELD_FLAGS.has(token) && index + 1 < tokens.length) {
-            const assignment = parseFieldAssignment(tokens[index + 1]);
-            if (assignment?.key === "merge_method" && /^(merge|squash|rebase)$/i.test(assignment.value.trim())) {
-                return true;
-            }
-            index += 1;
-            continue;
-        }
-        if (token.startsWith("--field=") || token.startsWith("--raw-field=")) {
-            const assignment = parseFieldAssignment(token.slice(token.indexOf("=") + 1));
-            if (assignment?.key === "merge_method" && /^(merge|squash|rebase)$/i.test(assignment.value.trim())) {
-                return true;
-            }
-            continue;
-        }
-        if ((token.startsWith("-f") || token.startsWith("-F")) && token.length > 2) {
-            const assignment = parseFieldAssignment(token.slice(2));
-            if (assignment?.key === "merge_method" && /^(merge|squash|rebase)$/i.test(assignment.value.trim())) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
 export function isGitHubPrCreateCommand(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "create") {
             return true;
         }
@@ -231,12 +315,7 @@ export function isGitHubPrCreateCommand(command) {
     return false;
 }
 export function inspectGitHubPrCreateBody(command, directory) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
+    for (const commandSlice of ghCommandSlices(command)) {
         if (commandSlice[1] === "pr" && commandSlice[2] === "create") {
             return ghPrCreateInspection(commandSlice, directory);
         }
@@ -249,78 +328,4 @@ export function inspectGitHubPrCreateBody(command, directory) {
         }
     }
     return { body: "", inspectable: false };
-}
-export function isGitHubPrMergeCommand(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
-        if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
-            return true;
-        }
-        if (commandSlice[1] !== "api") {
-            continue;
-        }
-        const invocation = parseGhApiInvocation(commandSlice);
-        if (invocation.method === "PUT" && isPullRequestMergeEndpoint(invocation.endpoint)) {
-            return true;
-        }
-    }
-    return false;
-}
-export function extractGitHubPrMergeSelector(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
-        if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
-            for (let argIndex = 3; argIndex < commandSlice.length; argIndex += 1) {
-                const token = commandSlice[argIndex];
-                if (!token || COMMAND_SEPARATOR_TOKENS.has(token)) {
-                    break;
-                }
-                if (token.startsWith("-")) {
-                    continue;
-                }
-                return token;
-            }
-            return "";
-        }
-        if (commandSlice[1] !== "api") {
-            continue;
-        }
-        const invocation = parseGhApiInvocation(commandSlice);
-        if (invocation.method !== "PUT") {
-            continue;
-        }
-        const match = isPullRequestMergeEndpoint(invocation.endpoint);
-        if (match) {
-            return match[1] ?? "";
-        }
-    }
-    return "";
-}
-export function gitHubPrMergeHasStrategy(command) {
-    const tokens = tokenizeShellCommand(command);
-    for (let index = 0; index < tokens.length; index += 1) {
-        if (!isGhBinary(tokens[index])) {
-            continue;
-        }
-        const commandSlice = commandTokens(tokens, index);
-        if (commandSlice[1] === "pr" && commandSlice[2] === "merge") {
-            return ghPrMergeHasStrategy(commandSlice);
-        }
-        if (commandSlice[1] !== "api") {
-            continue;
-        }
-        const invocation = parseGhApiInvocation(commandSlice);
-        if (invocation.method === "PUT" && isPullRequestMergeEndpoint(invocation.endpoint)) {
-            return ghApiMergeHasStrategy(invocation.tokens);
-        }
-    }
-    return false;
 }

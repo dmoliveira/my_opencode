@@ -135,16 +135,15 @@ Note: MCP OAuth parity was intentionally out-of-scope for cycle 1 and remains de
 
 Intentional divergence registry: `docs/upstream-divergence-registry.md`.
 
-Status: `deferred` (no active post-parity backlog by owner decision)
+Status: `done` for merged hardening baseline; remaining items moved to post-merge backlog
 
-Gaps:
-
-- None in active scope (remaining candidates are intentionally deferred or owned by separate streams).
+Remaining items now live in `docs/plan/post-merge-parity-backlog-2026-03-10.md`.
 
 Current focus:
 - Monitor deferred E7 and revisit only if owner reopens OAuth/provider scope.
+- Use the post-merge backlog doc to decide whether Atlas direct-edit/tool-time enforcement or `claude-code-hooks` compatibility should reopen.
 
-No P0 blockers remain from the original parity scope; the above items are follow-on polish and maintainability work.
+The merged parity baseline now covers the hardening and atlas-inspired shaping slices from PR `#443`; remaining direct upstream deltas stay intentional divergences unless reopened by owner.
 
 ## Naming and accessibility policy (plain-English, low cognitive load)
 

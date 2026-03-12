@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
 import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js";
 
 // Coerces unknown value into a normalized string array.
@@ -12,66 +16,139 @@ function stringList(value: unknown): string[] {
 }
 
 function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function deepMergeRecords(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const current = result[key];
+    if (isRecord(current) && isRecord(value)) {
+      result[key] = deepMergeRecords(current, value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function resolveGatewayConfigSidecarPath(directory: string): string {
+  const envPath = String(
+    process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "",
+  ).trim();
+  if (envPath) {
+    return resolve(envPath);
+  }
+  const localPath = join(directory, ".opencode", "gateway-core.config.json");
+  if (existsSync(localPath)) {
+    return localPath;
+  }
+  return join(
+    homedir(),
+    ".config",
+    "opencode",
+    "my_opencode",
+    "gateway-core.config.json",
+  );
+}
+
+export function loadGatewayConfigSource(
+  directory: string,
+  source: unknown,
+): Record<string, unknown> {
+  const sidecarPath = resolveGatewayConfigSidecarPath(directory);
+  let sidecar: Record<string, unknown> = {};
+  try {
+    if (existsSync(sidecarPath)) {
+      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown;
+      if (isRecord(parsed)) {
+        sidecar = parsed;
+      }
+    }
+  } catch {
+    sidecar = {};
+  }
+  if (!isRecord(source)) {
+    return sidecar;
+  }
+  return deepMergeRecords(sidecar, source);
 }
 
 function parseAgentPolicyOverrides(
   value: unknown,
-  fallback: Record<string, {
-    overrideDelta?: number
-    intentThreshold?: number
-    minSamples?: number
-    highFailureRate?: number
-    protectCategories?: string[]
-  }>,
-): Record<string, {
-  overrideDelta?: number
-  intentThreshold?: number
-  minSamples?: number
-  highFailureRate?: number
-  protectCategories?: string[]
-}> {
-  if (!value || typeof value !== "object") {
-    return fallback
+  fallback: Record<
+    string,
+    {
+      overrideDelta?: number;
+      intentThreshold?: number;
+      minSamples?: number;
+      highFailureRate?: number;
+      protectCategories?: string[];
+    }
+  >,
+): Record<
+  string,
+  {
+    overrideDelta?: number;
+    intentThreshold?: number;
+    minSamples?: number;
+    highFailureRate?: number;
+    protectCategories?: string[];
   }
-  const source = value as Record<string, unknown>
-  const output: Record<string, {
-    overrideDelta?: number
-    intentThreshold?: number
-    minSamples?: number
-    highFailureRate?: number
-    protectCategories?: string[]
-  }> = {}
+> {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+  const source = value as Record<string, unknown>;
+  const output: Record<
+    string,
+    {
+      overrideDelta?: number;
+      intentThreshold?: number;
+      minSamples?: number;
+      highFailureRate?: number;
+      protectCategories?: string[];
+    }
+  > = {};
   for (const [agent, rawPolicy] of Object.entries(source)) {
     if (typeof agent !== "string" || !agent.trim()) {
-      continue
+      continue;
     }
-    const policy = recordValue(rawPolicy)
+    const policy = recordValue(rawPolicy);
     const parsed: {
-      overrideDelta?: number
-      intentThreshold?: number
-      minSamples?: number
-      highFailureRate?: number
-      protectCategories?: string[]
-    } = {}
+      overrideDelta?: number;
+      intentThreshold?: number;
+      minSamples?: number;
+      highFailureRate?: number;
+      protectCategories?: string[];
+    } = {};
     if ("overrideDelta" in policy) {
-      parsed.overrideDelta = nonNegativeInt(policy.overrideDelta, 0)
+      parsed.overrideDelta = nonNegativeInt(policy.overrideDelta, 0);
     }
     if ("intentThreshold" in policy) {
-      parsed.intentThreshold = nonNegativeInt(policy.intentThreshold, 0)
+      parsed.intentThreshold = nonNegativeInt(policy.intentThreshold, 0);
     }
     if ("minSamples" in policy) {
-      parsed.minSamples = positiveInt(policy.minSamples, 1)
+      parsed.minSamples = positiveInt(policy.minSamples, 1);
     }
     if ("highFailureRate" in policy) {
-      parsed.highFailureRate = boundedFloat(policy.highFailureRate, 0, 1, 0.5)
+      parsed.highFailureRate = boundedFloat(policy.highFailureRate, 0, 1, 0.5);
     }
     if ("protectCategories" in policy) {
-      parsed.protectCategories = stringList(policy.protectCategories)
+      parsed.protectCategories = stringList(policy.protectCategories);
     }
-    output[agent.trim().toLowerCase()] = parsed
+    output[agent.trim().toLowerCase()] = parsed;
   }
-  return Object.keys(output).length > 0 ? output : fallback
+  return Object.keys(output).length > 0 ? output : fallback;
 }
 
 // Coerces unknown value into a safe non-negative integer fallback.
@@ -159,6 +236,38 @@ function durationThreshold(value: unknown, fallback: string): string {
     : fallback;
 }
 
+function llmDecisionMode(
+  value: unknown,
+  fallback: "disabled" | "shadow" | "assist" | "enforce",
+): "disabled" | "shadow" | "assist" | "enforce" {
+  if (
+    value === "disabled" ||
+    value === "shadow" ||
+    value === "assist" ||
+    value === "enforce"
+  ) {
+    return value;
+  }
+  return fallback;
+}
+
+function llmDecisionHookModes(
+  value: unknown,
+): Record<string, "disabled" | "shadow" | "assist" | "enforce"> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const result: Record<string, "disabled" | "shadow" | "assist" | "enforce"> =
+    {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const mode = llmDecisionMode(raw, "disabled");
+    if (key.trim() && mode !== "disabled") {
+      result[key.trim()] = mode;
+    }
+  }
+  return result;
+}
+
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source =
@@ -216,17 +325,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.sessionRecovery && typeof source.sessionRecovery === "object"
       ? (source.sessionRecovery as Record<string, unknown>)
       : {};
-  const sessionRuntimeContextInjectorSource =
-    source.sessionRuntimeContextInjector && typeof source.sessionRuntimeContextInjector === "object"
-      ? (source.sessionRuntimeContextInjector as Record<string, unknown>)
-      : {};
-  const sessionRuntimeNotifierSource =
-    source.sessionRuntimeNotifier && typeof source.sessionRuntimeNotifier === "object"
-      ? (source.sessionRuntimeNotifier as Record<string, unknown>)
-      : {};
-  const sessionRuntimeVisibleNoteSource =
-    source.sessionRuntimeVisibleNote && typeof source.sessionRuntimeVisibleNote === "object"
-      ? (source.sessionRuntimeVisibleNote as Record<string, unknown>)
+  const sessionRuntimeSystemContextSource =
+    source.sessionRuntimeSystemContext &&
+    typeof source.sessionRuntimeSystemContext === "object"
+      ? (source.sessionRuntimeSystemContext as Record<string, unknown>)
       : {};
   const delegateTaskRetrySource =
     source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
@@ -261,6 +363,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.adaptiveDelegationPolicy &&
     typeof source.adaptiveDelegationPolicy === "object"
       ? (source.adaptiveDelegationPolicy as Record<string, unknown>)
+      : {};
+  const llmDecisionRuntimeSource =
+    source.llmDecisionRuntime && typeof source.llmDecisionRuntime === "object"
+      ? (source.llmDecisionRuntime as Record<string, unknown>)
       : {};
   const validationEvidenceLedgerSource =
     source.validationEvidenceLedger &&
@@ -423,6 +529,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.agentUserReminder && typeof source.agentUserReminder === "object"
       ? (source.agentUserReminder as Record<string, unknown>)
       : {};
+  const directWorkWarningSource =
+    source.directWorkWarning && typeof source.directWorkWarning === "object"
+      ? (source.directWorkWarning as Record<string, unknown>)
+      : {};
   const unstableBabysitterSource =
     source.unstableAgentBabysitter &&
     typeof source.unstableAgentBabysitter === "object"
@@ -448,7 +558,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ? (source.secretLeakGuard as Record<string, unknown>)
       : {};
   const primaryWorktreeSource =
-    source.primaryWorktreeGuard && typeof source.primaryWorktreeGuard === "object"
+    source.primaryWorktreeGuard &&
+    typeof source.primaryWorktreeGuard === "object"
       ? (source.primaryWorktreeGuard as Record<string, unknown>)
       : {};
   const workflowConformanceSource =
@@ -832,27 +943,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? sessionRecoverySource.autoResume
           : DEFAULT_GATEWAY_CONFIG.sessionRecovery.autoResume,
     },
-    sessionRuntimeContextInjector: {
+    sessionRuntimeSystemContext: {
       enabled:
-        typeof sessionRuntimeContextInjectorSource.enabled === "boolean"
-          ? sessionRuntimeContextInjectorSource.enabled
-          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeContextInjector.enabled,
-    },
-    sessionRuntimeNotifier: {
-      enabled:
-        typeof sessionRuntimeNotifierSource.enabled === "boolean"
-          ? sessionRuntimeNotifierSource.enabled
-          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeNotifier.enabled,
-      durationMs:
-        typeof sessionRuntimeNotifierSource.durationMs === "number" && Number.isFinite(sessionRuntimeNotifierSource.durationMs)
-          ? Math.max(1000, Math.trunc(sessionRuntimeNotifierSource.durationMs))
-          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeNotifier.durationMs,
-    },
-    sessionRuntimeVisibleNote: {
-      enabled:
-        typeof sessionRuntimeVisibleNoteSource.enabled === "boolean"
-          ? sessionRuntimeVisibleNoteSource.enabled
-          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeVisibleNote.enabled,
+        typeof sessionRuntimeSystemContextSource.enabled === "boolean"
+          ? sessionRuntimeSystemContextSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
     },
     delegateTaskRetry: {
       enabled:
@@ -896,7 +991,8 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       maxExpensiveConcurrent: positiveInt(
         delegationConcurrencyGuardSource.maxExpensiveConcurrent,
-        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxExpensiveConcurrent,
+        DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard
+          .maxExpensiveConcurrent,
       ),
       maxDeepConcurrent: positiveInt(
         delegationConcurrencyGuardSource.maxDeepConcurrent,
@@ -993,11 +1089,57 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
       discoverabilityCooldownMs: positiveInt(
         adaptiveDelegationPolicySource.discoverabilityCooldownMs,
-        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.discoverabilityCooldownMs,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
+          .discoverabilityCooldownMs,
       ),
       agentPolicyOverrides: parseAgentPolicyOverrides(
         adaptiveDelegationPolicySource.agentPolicyOverrides,
         DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.agentPolicyOverrides,
+      ),
+    },
+    llmDecisionRuntime: {
+      enabled:
+        typeof llmDecisionRuntimeSource.enabled === "boolean"
+          ? llmDecisionRuntimeSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enabled,
+      mode: llmDecisionMode(
+        llmDecisionRuntimeSource.mode,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.mode,
+      ),
+      hookModes: llmDecisionHookModes(llmDecisionRuntimeSource.hookModes),
+      command:
+        typeof llmDecisionRuntimeSource.command === "string" &&
+        llmDecisionRuntimeSource.command.trim().length > 0
+          ? llmDecisionRuntimeSource.command.trim()
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.command,
+      model:
+        typeof llmDecisionRuntimeSource.model === "string" &&
+        llmDecisionRuntimeSource.model.trim().length > 0
+          ? llmDecisionRuntimeSource.model.trim()
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
+      timeoutMs: positiveInt(
+        llmDecisionRuntimeSource.timeoutMs,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs,
+      ),
+      maxPromptChars: positiveInt(
+        llmDecisionRuntimeSource.maxPromptChars,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars,
+      ),
+      maxContextChars: positiveInt(
+        llmDecisionRuntimeSource.maxContextChars,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxContextChars,
+      ),
+      enableCache:
+        typeof llmDecisionRuntimeSource.enableCache === "boolean"
+          ? llmDecisionRuntimeSource.enableCache
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enableCache,
+      cacheTtlMs: positiveInt(
+        llmDecisionRuntimeSource.cacheTtlMs,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.cacheTtlMs,
+      ),
+      maxCacheEntries: positiveInt(
+        llmDecisionRuntimeSource.maxCacheEntries,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxCacheEntries,
       ),
     },
     validationEvidenceLedger: {
@@ -1296,6 +1438,25 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof agentUserReminderSource.enabled === "boolean"
           ? agentUserReminderSource.enabled
           : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
+    },
+    directWorkWarning: {
+      enabled:
+        typeof directWorkWarningSource.enabled === "boolean"
+          ? directWorkWarningSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.directWorkWarning.enabled,
+      blockRepeatedEdits:
+        typeof directWorkWarningSource.blockRepeatedEdits === "boolean"
+          ? directWorkWarningSource.blockRepeatedEdits
+          : DEFAULT_GATEWAY_CONFIG.directWorkWarning.blockRepeatedEdits,
+      allowPaths: Array.isArray(directWorkWarningSource.allowPaths)
+        ? directWorkWarningSource.allowPaths
+            .map((value) =>
+              typeof value === "string"
+                ? value.trim()
+                : String(value ?? "").trim(),
+            )
+            .filter(Boolean)
+        : DEFAULT_GATEWAY_CONFIG.directWorkWarning.allowPaths,
     },
     unstableAgentBabysitter: {
       enabled:

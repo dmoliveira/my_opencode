@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js";
+import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const MODEL_BY_CATEGORY = {
     quick: { model: "openai/gpt-5.1-codex-mini", reasoning: "low" },
     balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
@@ -80,6 +81,18 @@ const SUBAGENT_ICON_BY_TYPE = {
     "plan-critic": { nerd: "󰒠", fallback: "[critic]" },
     orchestrator: { nerd: "󰯲", fallback: "[lead]" },
 };
+const ROUTING_CHAR_BY_AGENT = {
+    explore: "E",
+    librarian: "L",
+    verifier: "V",
+    reviewer: "R",
+    "release-scribe": "S",
+    oracle: "O",
+    "ambiguity-analyst": "A",
+    "strategic-planner": "T",
+    "plan-critic": "P",
+};
+const AGENT_BY_ROUTING_CHAR = new Map(Object.entries(ROUTING_CHAR_BY_AGENT).map(([agent, code]) => [code, agent]));
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -212,6 +225,65 @@ function allowsEphemeralVerifierIntent(subagentType, text, signals) {
 function enforcesReadOnlySurface(deniedTools) {
     return deniedTools.some((tool) => MUTATION_TOOL_MARKERS.has(String(tool).toLowerCase().trim()));
 }
+function routingAlphabet(inferredSubagent, explicitSubagent) {
+    const chars = new Set();
+    const inferredChar = ROUTING_CHAR_BY_AGENT[inferredSubagent];
+    const explicitChar = ROUTING_CHAR_BY_AGENT[explicitSubagent];
+    if (inferredChar) {
+        chars.add(inferredChar);
+    }
+    if (explicitChar) {
+        chars.add(explicitChar);
+    }
+    if (explicitSubagent) {
+        chars.add("K");
+    }
+    chars.add("N");
+    return [...chars];
+}
+function buildRoutingInstruction(inferredSubagent, explicitSubagent) {
+    const options = [];
+    const inferredChar = ROUTING_CHAR_BY_AGENT[inferredSubagent];
+    const explicitChar = ROUTING_CHAR_BY_AGENT[explicitSubagent];
+    if (inferredChar) {
+        options.push(`${inferredChar}=${inferredSubagent}`);
+    }
+    if (explicitChar && explicitSubagent && explicitSubagent !== inferredSubagent) {
+        options.push(`${explicitChar}=${explicitSubagent}`);
+    }
+    if (explicitSubagent) {
+        options.push("K=keep explicit choice");
+    }
+    options.push("N=no-opinion");
+    return `Pick the best subagent for this task. ${options.join(", ")}.`;
+}
+function buildRoutingDecisionMeaning(inferredSubagent, explicitSubagent) {
+    const meaning = { N: "no_opinion" };
+    const inferredChar = ROUTING_CHAR_BY_AGENT[inferredSubagent];
+    const explicitChar = ROUTING_CHAR_BY_AGENT[explicitSubagent];
+    if (inferredChar) {
+        meaning[inferredChar] = `route_${inferredSubagent}`;
+    }
+    if (explicitChar && explicitSubagent && explicitSubagent !== inferredSubagent) {
+        meaning[explicitChar] = `route_${explicitSubagent}`;
+    }
+    if (explicitSubagent) {
+        meaning.K = "keep_explicit_choice";
+    }
+    return meaning;
+}
+function buildRoutingContext(prompt, description, explicitSubagent, inferredSubagent, inferredScore, explicitScore) {
+    return [
+        `explicit_subagent=${explicitSubagent || "none"}`,
+        `heuristic_inferred=${inferredSubagent || "none"}`,
+        `heuristic_inferred_score=${String(inferredScore)}`,
+        `heuristic_explicit_score=${String(explicitScore)}`,
+        "prompt:",
+        prompt.trim() || "(empty)",
+        "description:",
+        description.trim() || "(empty)",
+    ].join("\n");
+}
 function policyForAgent(subagentType, defaults, overrides) {
     const normalized = subagentType.trim().toLowerCase();
     const policy = overrides[normalized] ?? {};
@@ -252,23 +324,29 @@ export function createAgentModelResolverHook(options) {
             const metadataByAgent = loadAgentMetadata(directory);
             const knownAgents = new Set(metadataByAgent.keys());
             const combinedText = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
-            let subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
+            const originalExplicitSubagent = String(args.subagent_type ?? "").toLowerCase().trim();
+            let subagentType = originalExplicitSubagent;
             let routeSource = "explicit_subagent_type";
-            if (!subagentType) {
-                const inferred = inferSubagentType(combinedText, knownAgents);
+            const hadExplicitSubagent = Boolean(originalExplicitSubagent && knownAgents.has(originalExplicitSubagent));
+            const inferred = inferSubagentType(combinedText, knownAgents);
+            let explicitScore = 0;
+            let policy = {
+                overrideDelta: options.defaultOverrideDelta,
+                intentThreshold: options.defaultIntentThreshold,
+            };
+            if (!hadExplicitSubagent) {
                 if (inferred) {
                     subagentType = inferred.name;
                     args.subagent_type = inferred.name;
                     routeSource = "inferred_subagent_type";
                 }
             }
-            else if (knownAgents.has(subagentType)) {
-                const policy = policyForAgent(subagentType, {
+            else {
+                policy = policyForAgent(subagentType, {
                     overrideDelta: options.defaultOverrideDelta,
                     intentThreshold: options.defaultIntentThreshold,
                 }, options.agentPolicyOverrides);
-                const inferred = inferSubagentType(combinedText, knownAgents);
-                const explicitScore = scoreSubagentIntent(combinedText, subagentType);
+                explicitScore = scoreSubagentIntent(combinedText, subagentType);
                 if (inferred &&
                     inferred.name !== subagentType &&
                     inferred.score >= explicitScore + policy.overrideDelta &&
@@ -290,6 +368,88 @@ export function createAgentModelResolverHook(options) {
                         override_delta: String(policy.overrideDelta),
                         intent_threshold: String(policy.intentThreshold),
                     });
+                }
+            }
+            const aiInferred = inferred;
+            const alphabet = aiInferred ? routingAlphabet(aiInferred.name, originalExplicitSubagent) : [];
+            const shouldRunLlmDecision = Boolean(options.decisionRuntime &&
+                aiInferred &&
+                alphabet.length > 1 &&
+                (!hadExplicitSubagent || explicitScore <= policy.intentThreshold));
+            if (shouldRunLlmDecision && options.decisionRuntime && aiInferred) {
+                const decision = await options.decisionRuntime.decide({
+                    hookId: "agent-model-resolver",
+                    sessionId: sid,
+                    traceId,
+                    templateId: "delegation-route-v1",
+                    instruction: buildRoutingInstruction(aiInferred.name, originalExplicitSubagent),
+                    context: buildRoutingContext(String(args.prompt ?? ""), String(args.description ?? ""), originalExplicitSubagent, aiInferred.name, aiInferred.score, explicitScore),
+                    allowedChars: alphabet,
+                    decisionMeaning: buildRoutingDecisionMeaning(aiInferred.name, originalExplicitSubagent),
+                    cacheKey: `route:${originalExplicitSubagent || "none"}:${aiInferred.name}:${combinedText}`,
+                });
+                if (decision.accepted) {
+                    const resolvedChar = decision.char.toUpperCase();
+                    const aiCandidate = resolvedChar === "K"
+                        ? subagentType
+                        : resolvedChar === "N"
+                            ? ""
+                            : (AGENT_BY_ROUTING_CHAR.get(resolvedChar) ?? "");
+                    writeDecisionComparisonAudit({
+                        directory,
+                        hookId: "agent-model-resolver",
+                        sessionId: sid,
+                        traceId,
+                        mode: options.decisionRuntime.config.mode,
+                        deterministicMeaning: hadExplicitSubagent
+                            ? `route_${originalExplicitSubagent}`
+                            : aiInferred.name
+                                ? `route_${aiInferred.name}`
+                                : "no_opinion",
+                        aiMeaning: decision.meaning ||
+                            (aiCandidate ? `route_${aiCandidate}` : resolvedChar === "N" ? "no_opinion" : "keep_explicit_choice"),
+                        deterministicValue: hadExplicitSubagent ? originalExplicitSubagent : aiInferred.name,
+                        aiValue: aiCandidate || resolvedChar,
+                    });
+                    writeGatewayEventAudit(directory, {
+                        hook: "agent-model-resolver",
+                        stage: "state",
+                        reason_code: "llm_route_decision_recorded",
+                        session_id: sid,
+                        trace_id: traceId,
+                        subagent_type: subagentType,
+                        inferred_subagent_type: aiInferred.name,
+                        llm_decision_char: resolvedChar,
+                        llm_decision_mode: options.decisionRuntime.config.mode,
+                        llm_candidate_subagent_type: aiCandidate || undefined,
+                    });
+                    const canApplyInferenceOnly = !hadExplicitSubagent &&
+                        options.decisionRuntime.config.mode !== "shadow" &&
+                        aiCandidate === aiInferred.name;
+                    const canOverrideExplicit = hadExplicitSubagent &&
+                        options.decisionRuntime.config.mode === "enforce" &&
+                        aiCandidate &&
+                        knownAgents.has(aiCandidate) &&
+                        aiCandidate !== subagentType;
+                    if (canApplyInferenceOnly || canOverrideExplicit) {
+                        const previous = subagentType;
+                        subagentType = aiCandidate;
+                        args.subagent_type = aiCandidate;
+                        routeSource = hadExplicitSubagent
+                            ? "llm_decision_runtime"
+                            : "llm_confirmed_inferred_subagent_type";
+                        writeGatewayEventAudit(directory, {
+                            hook: "agent-model-resolver",
+                            stage: "guard",
+                            reason_code: "llm_route_decision_applied",
+                            session_id: sid,
+                            trace_id: traceId,
+                            original_subagent_type: previous || undefined,
+                            inferred_subagent_type: aiCandidate,
+                            llm_decision_char: resolvedChar,
+                            llm_decision_mode: options.decisionRuntime.config.mode,
+                        });
+                    }
                 }
             }
             if (!subagentType || !knownAgents.has(subagentType)) {

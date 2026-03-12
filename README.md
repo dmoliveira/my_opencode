@@ -17,6 +17,17 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 Start here: `docs/quickstart.md`
 
+## Related playbook repo
+
+For the reusable delivery contract and lighter-weight policy docs that complement this runtime repo, search your local clone first when available, and use these public references when you need a shareable or canonical link:
+
+- `https://github.com/dmoliveira/agents.md/blob/main/AGENTS.md`
+- `https://github.com/dmoliveira/agents.md/blob/main/docs/index.md`
+- `https://github.com/dmoliveira/agents.md/blob/main/docs/validation-policy.md`
+- `https://github.com/dmoliveira/agents.md/blob/main/docs/plan/README.md`
+
+Treat them as optional supporting references, not required startup context for every run.
+
 ## Support 💛
 
 If this project helps your workflow, please consider supporting ongoing maintenance:
@@ -171,6 +182,7 @@ Profiles:
 - `scripts/update_release_index.py` - helper script to regenerate `docs/plan/v0.4-release-index.md`
 - `scripts/update_docs_automation_summary.py` - helper script to regenerate `docs/plan/docs-automation-summary.md`
 - `scripts/docs_automation_sync_check.py` - checker script for docs automation workflow/pages/summary synchronization
+- `scripts/pages_readiness_check.py` - checker script for remote GitHub Pages readiness and workflow publishing mode
 - `scripts/plan_hygiene_check.py` - checker script for stale plan worklog rows missing closure evidence links
 - `scripts/update_wave_completion_doc.py` - helper script to generate wave completion docs from merged PR metadata
 - `scripts/release_note_validation_check.py` - checker script for release-note validation heading consistency

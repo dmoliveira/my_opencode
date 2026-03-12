@@ -18,13 +18,16 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 | `verifier` | subagent | test/lint/build validation and diagnosis | no |
 | `reviewer` | subagent | quality/risk review and ship-readiness | no |
 | `release-scribe` | subagent | PR/changelog/release communication drafts | no |
+| `strategic-planner` | subagent | sequencing and milestone planning | no |
+| `ambiguity-analyst` | subagent | assumptions and unknowns analysis | no |
+| `plan-critic` | subagent | feasibility and testability critique | no |
 
 ---
 
 ## Default behavior ✅
 
 - `default_agent` remains `build` in `opencode.json` for quick direct execution.
-- `orchestrator` is the preferred primary for larger, multi-step work.
+- `orchestrator` is the primary default for larger, multi-step work.
 - Specialist subagents are read-only and support the active primary agent.
 - Single-writer is the default for code edits; parallel writers are opt-in and gated.
 

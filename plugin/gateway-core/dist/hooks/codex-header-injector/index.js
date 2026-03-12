@@ -7,6 +7,13 @@ const CODEX_HEADER_LINES = [
     "- Keep output focused on actionable implementation details",
     "- Avoid redundant prose when code or command evidence is available",
 ].join("\n");
+const TRANSFORM_MESSAGE_LOOKBACK_LIMIT = 64;
+function recentMessages(messages, limit = TRANSFORM_MESSAGE_LOOKBACK_LIMIT) {
+    if (!Array.isArray(messages) || messages.length <= limit) {
+        return messages;
+    }
+    return messages.slice(messages.length - limit);
+}
 function resolveSessionId(payload) {
     const typed = payload;
     const candidates = [
@@ -38,8 +45,8 @@ function isCodexModel(payload) {
     candidates.push(transformPayload.input?.modelID);
     const messages = transformPayload.output?.messages;
     if (Array.isArray(messages) && messages.length > 0) {
-        for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-            const info = messages[idx]?.info;
+        for (const message of [...recentMessages(messages)].reverse()) {
+            const info = message?.info;
             candidates.push(info?.model);
             candidates.push(info?.providerID);
             candidates.push(info?.modelID);
@@ -109,10 +116,11 @@ export function createCodexHeaderInjectorHook(options) {
             if (!Array.isArray(messages)) {
                 return;
             }
+            const recent = recentMessages(messages);
             let target = -1;
-            for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-                if (messages[idx]?.info?.role === "user") {
-                    target = idx;
+            for (let idx = recent.length - 1; idx >= 0; idx -= 1) {
+                if (recent[idx]?.info?.role === "user") {
+                    target = messages.length - recent.length + idx;
                     break;
                 }
             }

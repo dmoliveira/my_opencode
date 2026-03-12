@@ -1,10 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isGitHubPrCreateCommand, isGitHubPrMergeCommand } from "../shared/github-pr-commands.js";
-// Returns true when command triggers PR merge.
-function isPrMerge(command) {
-    return /\bgh\s+pr\s+merge\b/i.test(command);
-}
 // Resolves commit distance behind base ref, or null when reference is unavailable.
 function commitsBehind(directory, baseRef) {
     try {
@@ -41,7 +37,7 @@ export function createBranchFreshnessGuardHook(options) {
             }
             const command = String(eventPayload.output?.args?.command ?? "");
             const checkCreate = options.enforceOnPrCreate && isGitHubPrCreateCommand(command);
-            const checkMerge = options.enforceOnPrMerge && (isPrMerge(command) || isGitHubPrMergeCommand(command));
+            const checkMerge = options.enforceOnPrMerge && isGitHubPrMergeCommand(command);
             if (!checkCreate && !checkMerge) {
                 return;
             }

@@ -22,7 +22,7 @@ export function changedPathsFromToolPayload(payload) {
     if (!args) {
         return [];
     }
-    if (tool === "write" || tool === "edit") {
+    if (tool === "write" || tool === "edit" || tool === "multiedit") {
         const value = String(args.filePath ?? args.path ?? args.file_path ?? "").trim();
         return value ? [value] : [];
     }

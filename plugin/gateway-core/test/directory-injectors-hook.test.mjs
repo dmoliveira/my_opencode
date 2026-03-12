@@ -133,3 +133,36 @@ test("directory-agents-injector truncates injected AGENTS guidance safely", asyn
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("directory injectors add AGENTS and README guidance on system transform", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-directory-injectors-"))
+  const nested = join(directory, "pkg", "src")
+  mkdirSync(nested, { recursive: true })
+  writeFileSync(join(directory, "AGENTS.md"), "# Agents\nFollow the local task policy.\n", "utf-8")
+  writeFileSync(join(directory, "README.md"), "# Readme\nSurface package context before coding.\n", "utf-8")
+  try {
+    const plugin = GatewayCorePlugin({
+      directory: nested,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["directory-agents-injector", "directory-readme-injector"],
+          disabled: [],
+        },
+        directoryAgentsInjector: { enabled: true, maxChars: 4000 },
+        directoryReadmeInjector: { enabled: true, maxChars: 4000 },
+      },
+    })
+
+    const output = { system: [] }
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-dir-system-1" }, output)
+
+    assert.equal(output.system.length, 2)
+    assert.match(String(output.system[0]), /Local README context loaded from:/)
+    assert.match(String(output.system[0]), /Surface package context before coding\./)
+    assert.match(String(output.system[1]), /Local instructions loaded from:/)
+    assert.match(String(output.system[1]), /Follow the local task policy\./)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

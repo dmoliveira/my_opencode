@@ -209,7 +209,7 @@ function otelSpanPayload(serviceName: string, entry: Record<string, unknown>): R
           {
             scope: {
               name: "my_opencode.gateway-core",
-              version: "0.1.0",
+              version: "0.1.1",
             },
             spans: [
               {

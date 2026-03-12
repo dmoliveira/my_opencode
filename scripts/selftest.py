@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -98,6 +99,7 @@ from autopilot_runtime import (  # type: ignore
     validate_objective,
 )
 from autopilot_integration import integrate_controls  # type: ignore
+from pages_readiness_check import evaluate_pages_readiness  # type: ignore
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1487,6 +1489,9 @@ exit 0
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
         digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
+        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(tmp / "missing-runtime.db")
+        digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
+        digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
 
         result = subprocess.run(
             [sys.executable, str(DIGEST_SCRIPT), "run", "--reason", "selftest"],
@@ -1618,6 +1623,614 @@ exit 0
         expect(
             session_doctor_payload.get("result") == "PASS",
             "session doctor should pass when index is readable",
+        )
+
+        runtime_db_path = Path(tmpdir) / "opencode.db"
+        conn = sqlite3.connect(runtime_db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE session (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    title TEXT,
+                    directory TEXT,
+                    time_created INTEGER,
+                    time_updated INTEGER
+                );
+                CREATE TABLE message (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                CREATE TABLE part (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                """
+            )
+            now_ms = int(time.time() * 1000)
+            stale_parent_ms = now_ms - 700_000
+            stale_child_ms = now_ms - 650_000
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "parent-session",
+                    None,
+                    "parent stuck session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "child-session",
+                    "parent-session",
+                    "child completed session",
+                    str(REPO_ROOT),
+                    stale_child_ms,
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "parent-message",
+                    "parent-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "parent-part",
+                    "parent-message",
+                    "parent-session",
+                    json.dumps(
+                        {"type": "tool", "tool": "task", "state": {"status": "running"}}
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "child-message",
+                    "child-session",
+                    json.dumps(
+                        {"role": "assistant", "time": {"completed": stale_child_ms}}
+                    ),
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "question-session",
+                    None,
+                    "stale question session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "question-message",
+                    "question-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "question-part",
+                    "question-message",
+                    "question-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "question",
+                            "state": {"status": "running"},
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "generic-session",
+                    None,
+                    "generic stale assistant session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "generic-message",
+                    "generic-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "generic-part",
+                    "generic-message",
+                    "generic-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "bash",
+                            "state": {"status": "running"},
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "active-parent-session",
+                    None,
+                    "active child parent session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "active-parent-message",
+                    "active-parent-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "active-parent-part",
+                    "active-parent-message",
+                    "active-parent-session",
+                    json.dumps(
+                        {"type": "tool", "tool": "task", "state": {"status": "running"}}
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "active-child-session",
+                    "active-parent-session",
+                    "active child session",
+                    str(REPO_ROOT),
+                    stale_child_ms,
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "active-child-message",
+                    "active-child-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "error-session",
+                    None,
+                    "already failed assistant session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "error-message",
+                    "error-session",
+                    json.dumps(
+                        {
+                            "role": "assistant",
+                            "time": {},
+                            "error": {"message": "already failed"},
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "multi-message-session",
+                    None,
+                    "multi message stale tool session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "multi-old-message",
+                    "multi-message-session",
+                    json.dumps(
+                        {
+                            "role": "assistant",
+                            "time": {"completed": stale_parent_ms - 10},
+                        }
+                    ),
+                    stale_parent_ms - 10,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "multi-old-part",
+                    "multi-old-message",
+                    "multi-message-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "question",
+                            "state": {"status": "running"},
+                        }
+                    ),
+                    stale_parent_ms - 10,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "multi-new-message",
+                    "multi-message-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        runtime_env = dict(digest_env)
+        runtime_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(runtime_db_path)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "session doctor should fail on stuck parent-child mismatch",
+        )
+        session_runtime_doctor_payload = parse_json_output(result.stdout)
+        expect(
+            session_runtime_doctor_payload.get("result") == "FAIL",
+            "session doctor should report FAIL when stuck parent-child mismatch is detected",
+        )
+        expect(
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 2,
+            "session doctor should report parent-child and stale tool findings",
+        )
+        expect(
+            session_runtime_doctor_payload.get("generic_stale_count") == 2,
+            "session doctor should count actionable generic stale assistant sessions tied to the latest assistant message",
+        )
+        expect(
+            not any(
+                item.get("session_id") == "multi-message-session"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should ignore running parts attached only to older messages in the same session",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-stale",
+                "--stale-seconds",
+                "300",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1
+            and "session repair-stale" in result.stdout
+            and "candidate_count: 2" in result.stdout,
+            "session repair-stale plain text should show dry-run details on failure",
+        )
+        expect(
+            "quick_fixes:" in result.stdout,
+            "session repair-stale plain text should show quick fixes on failure",
+        )
+        expect(
+            any(
+                item.get("issue_type") == "stale_running_tool"
+                and item.get("last_tool") == "question"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should detect stale running question sessions",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-stale",
+                "--stale-seconds",
+                "300",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "session repair-stale dry-run should fail when repair candidates exist",
+        )
+        repair_dry_run_payload = parse_json_output(result.stdout)
+        expect(
+            repair_dry_run_payload.get("candidate_count") == 2,
+            "session repair-stale dry-run should report two repair candidates",
+        )
+        expect(
+            repair_dry_run_payload.get("repaired_count") == 0,
+            "session repair-stale dry-run should not mutate the database",
+        )
+        conn = sqlite3.connect(runtime_db_path)
+        try:
+            parent_message_dry_run = json.loads(
+                conn.execute(
+                    "SELECT data FROM message WHERE id = ?", ("parent-message",)
+                ).fetchone()[0]
+            )
+            parent_part_dry_run = json.loads(
+                conn.execute(
+                    "SELECT data FROM part WHERE id = ?", ("parent-part",)
+                ).fetchone()[0]
+            )
+        finally:
+            conn.close()
+        expect(
+            parent_message_dry_run.get("time", {}).get("completed") is None,
+            "session repair-stale dry-run should leave parent message completion unchanged",
+        )
+        expect(
+            parent_part_dry_run.get("state", {}).get("status") == "running",
+            "session repair-stale dry-run should leave parent tool status running",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-stale",
+                "--stale-seconds",
+                "300",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"session repair-stale --apply --json failed: {result.stderr}",
+        )
+        repair_apply_payload = parse_json_output(result.stdout)
+        expect(
+            repair_apply_payload.get("repaired_count") == 2,
+            "session repair-stale should repair both stale findings",
+        )
+
+        conn = sqlite3.connect(runtime_db_path)
+        try:
+            parent_message_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM message WHERE id = ?", ("parent-message",)
+                ).fetchone()[0]
+            )
+            parent_part_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM part WHERE id = ?", ("parent-part",)
+                ).fetchone()[0]
+            )
+            question_message_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM message WHERE id = ?", ("question-message",)
+                ).fetchone()[0]
+            )
+            child_message_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM message WHERE id = ?", ("child-message",)
+                ).fetchone()[0]
+            )
+            question_part_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM part WHERE id = ?", ("question-part",)
+                ).fetchone()[0]
+            )
+        finally:
+            conn.close()
+
+        expect(
+            parent_message_data.get("time", {}).get("completed") is not None
+            and parent_message_data.get("error", {}).get("message")
+            == "stale_parent_reconciled_from_child_completion",
+            "session repair-stale should mark repaired parent messages completed with a recovery reason",
+        )
+        expect(
+            child_message_data.get("time", {}).get("completed") == stale_child_ms,
+            "session repair-stale should only close parents when the child terminal evidence remains intact",
+        )
+        expect(
+            parent_part_data.get("state", {}).get("status") == "failed"
+            and parent_part_data.get("state", {}).get("reason")
+            == "stale_parent_reconciled_from_child_completion",
+            "session repair-stale should mark repaired parent task parts failed with the recovery reason",
+        )
+        expect(
+            question_message_data.get("time", {}).get("completed") is not None
+            and question_message_data.get("error", {}).get("message")
+            == "stale_running_tool_repaired",
+            "session repair-stale should mark repaired stale tool messages completed with a repair reason",
+        )
+        expect(
+            question_part_data.get("state", {}).get("status") == "failed"
+            and question_part_data.get("state", {}).get("reason")
+            == "stale_running_tool_repaired",
+            "session repair-stale should mark repaired stale tool parts failed with the repair reason",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            "session doctor should pass after repair-stale applies fixes",
+        )
+        session_runtime_repaired_payload = parse_json_output(result.stdout)
+        expect(
+            session_runtime_repaired_payload.get("result") == "PASS"
+            and not (session_runtime_repaired_payload.get("stuck_findings") or []),
+            "session doctor should report no stuck findings after repair",
+        )
+        expect(
+            session_runtime_repaired_payload.get("generic_stale_count") == 2,
+            "session doctor should leave generic stale sessions untouched without --include-generic",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-stale",
+                "--stale-seconds",
+                "300",
+                "--include-generic",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"session repair-stale --include-generic --apply --json failed: {result.stderr}",
+        )
+        repair_generic_payload = parse_json_output(result.stdout)
+        expect(
+            repair_generic_payload.get("repaired_count") == 2,
+            "session repair-stale --include-generic should repair all actionable generic stale sessions",
+        )
+
+        conn = sqlite3.connect(runtime_db_path)
+        try:
+            generic_message_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM message WHERE id = ?", ("generic-message",)
+                ).fetchone()[0]
+            )
+            generic_part_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM part WHERE id = ?", ("generic-part",)
+                ).fetchone()[0]
+            )
+        finally:
+            conn.close()
+        expect(
+            generic_message_data.get("time", {}).get("completed") is not None
+            and generic_message_data.get("error", {}).get("message")
+            == "generic_stale_incomplete_assistant_repaired",
+            "session repair-stale --include-generic should mark generic stale assistant messages completed",
+        )
+        expect(
+            generic_part_data.get("state", {}).get("status") == "failed"
+            and generic_part_data.get("state", {}).get("reason")
+            == "generic_stale_incomplete_assistant_repaired",
+            "session repair-stale --include-generic should mark generic running tool parts failed",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            "session doctor should pass after include-generic repair applies fixes",
+        )
+        session_runtime_generic_repaired_payload = parse_json_output(result.stdout)
+        expect(
+            session_runtime_generic_repaired_payload.get("generic_stale_count") == 0,
+            "session doctor should report no generic stale sessions after include-generic repair",
         )
 
         result = subprocess.run(
@@ -5774,9 +6387,22 @@ index 3333333..4444444 100644
         release_index_text = (
             REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
         ).read_text(encoding="utf-8")
+        release_index_lines = [
+            line
+            for line in release_index_text.splitlines()
+            if line.startswith("| v0.4.")
+        ]
+        latest_release_index_line = (
+            release_index_lines[-1] if release_index_lines else ""
+        )
+        latest_release_token = (
+            latest_release_index_line.split("|")[1].strip()
+            if latest_release_index_line
+            else ""
+        )
         expect(
-            "| v0.4.19 |" in release_index_text,
-            "release index update helper should preserve latest v0.4.19 index entry",
+            latest_release_token.startswith("v0.4."),
+            "release index update helper should preserve the latest v0.4.x index entry",
         )
 
         docs_automation_summary_update = subprocess.run(
@@ -5795,7 +6421,9 @@ index 3333333..4444444 100644
             REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
         ).read_text(encoding="utf-8")
         expect(
-            "latest_indexed_release: v0.4.19" in docs_automation_summary_text,
+            bool(latest_release_token)
+            and f"latest_indexed_release: {latest_release_token}"
+            in docs_automation_summary_text,
             "docs automation summary should include latest indexed release marker",
         )
         expect(
@@ -6025,6 +6653,55 @@ jobs:
             "summary_status: ok" in docs_automation_summary_only_text
             and "recommended_next_step: none" in docs_automation_summary_only_text,
             "docs automation summary updater should converge summary-only drift to ok status in one run",
+        )
+
+        pages_readiness_fixture = tmp / "pages_readiness_fixture"
+        (pages_readiness_fixture / ".github" / "workflows").mkdir(
+            parents=True, exist_ok=True
+        )
+        (
+            pages_readiness_fixture / ".github" / "workflows" / "docs-automation.yml"
+        ).write_text(
+            """name: Docs Automation
+jobs:
+  deploy-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/pages
+      - uses: actions/deploy-pages@v4
+""",
+            encoding="utf-8",
+        )
+        pages_readiness_uninitialized = evaluate_pages_readiness(
+            repo_root=pages_readiness_fixture,
+            repo="owner/repo",
+            pages_payload=None,
+            fetch_error="gh: Not Found (HTTP 404)",
+            fetch_status=404,
+        )
+        expect(
+            pages_readiness_uninitialized.get("result") == "FAIL"
+            and "github_pages_site_uninitialized"
+            in set(pages_readiness_uninitialized.get("reason_codes", [])),
+            "pages readiness check should report an uninitialized site clearly",
+        )
+        pages_readiness_ready = evaluate_pages_readiness(
+            repo_root=pages_readiness_fixture,
+            repo="owner/repo",
+            pages_payload={
+                "html_url": "https://example.github.io/repo/",
+                "build_type": "workflow",
+            },
+            fetch_error=None,
+            fetch_status=None,
+        )
+        expect(
+            pages_readiness_ready.get("result") == "PASS"
+            and pages_readiness_ready.get("build_type") == "workflow",
+            "pages readiness check should pass when workflow publishing is configured",
         )
 
         release_note_validation_check = subprocess.run(
@@ -7043,7 +7720,28 @@ jobs:
             cwd=release_repo,
         )
 
-        release_publish_release_missing_notes = subprocess.run(
+        canonical_release_notes_path = (
+            release_repo / "docs" / "plan" / "release-notes-2026-03-11-v1-0-1.md"
+        )
+        canonical_release_notes_path.parent.mkdir(parents=True, exist_ok=True)
+        canonical_release_notes_path.write_text(
+            "# Release Notes\n\n- Canonical fixture release\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "add", str(canonical_release_notes_path.relative_to(release_repo))],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "add canonical release notes fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        release_publish_release_auto_notes = subprocess.run(
             [
                 sys.executable,
                 str(RELEASE_TRAIN_COMMAND_SCRIPT),
@@ -7065,18 +7763,20 @@ jobs:
             cwd=REPO_ROOT,
         )
         expect(
-            release_publish_release_missing_notes.returncode == 1,
-            "release-train publish should require notes file for create-release",
+            release_publish_release_auto_notes.returncode == 1,
+            "release-train publish should still require an existing tag when auto-notes resolution succeeds",
         )
-        release_publish_release_missing_notes_payload = parse_json_output(
-            release_publish_release_missing_notes.stdout
+        release_publish_release_auto_notes_payload = parse_json_output(
+            release_publish_release_auto_notes.stdout
         )
         expect(
-            "release_notes_required_for_create_release"
-            in set(
-                release_publish_release_missing_notes_payload.get("reason_codes", [])
-            ),
-            "release-train publish should emit release-notes-required reason code",
+            release_publish_release_auto_notes_payload.get("notes_file_resolution")
+            == "auto"
+            and release_publish_release_auto_notes_payload.get("notes_file")
+            == str(canonical_release_notes_path.resolve())
+            and "publish_release_tag_missing"
+            in set(release_publish_release_auto_notes_payload.get("reason_codes", [])),
+            "release-train publish should auto-resolve canonical release notes before tag preflight",
         )
 
         release_notes_path = release_repo / "release-notes.md"

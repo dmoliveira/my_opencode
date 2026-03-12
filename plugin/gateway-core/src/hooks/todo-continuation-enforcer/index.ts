@@ -1,7 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState } from "../../state/storage.js"
-import { injectHookMessage } from "../hook-message-injector/index.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
+import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
+import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
 import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
 interface GatewayClient {
@@ -9,7 +11,12 @@ interface GatewayClient {
     messages(args: {
       path: { id: string }
       query?: { directory?: string }
-    }): Promise<{ data?: Array<{ info?: { role?: string }; parts?: Array<{ type: string; text?: string }> }> }>
+    }): Promise<{
+      data?: Array<{
+        info?: { role?: string; error?: unknown; time?: { completed?: number } }
+        parts?: Array<{ type: string; text?: string; synthetic?: boolean }>
+      }>
+    }>
     promptAsync(args: {
       path: { id: string }
       body: { parts: Array<{ type: string; text: string }> }
@@ -23,6 +30,8 @@ interface ToolAfterPayload {
     tool?: string
     sessionID?: string
     sessionId?: string
+    trace_id?: string
+    traceId?: string
   }
   output?: {
     output?: unknown
@@ -30,6 +39,8 @@ interface ToolAfterPayload {
   properties?: {
     sessionID?: string
     sessionId?: string
+    trace_id?: string
+    traceId?: string
     info?: { id?: string }
   }
   directory?: string
@@ -65,11 +76,18 @@ interface ChatPayload {
 
 interface SessionState {
   pendingContinuation: boolean
+  pendingSource?: "task_output" | "message_probe"
+  pendingTodoCount: number
   lastInjectedAt: number
   consecutiveFailures: number
   inFlight: boolean
   markerProbeAttempted: boolean
   continueIntentArmed: boolean
+  lastTraceId?: string
+}
+
+function compactDecisionCacheKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240)
 }
 
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>"
@@ -148,9 +166,20 @@ function hasHardContinuationCue(text: string): boolean {
   if (text.includes(CONTINUE_LOOP_MARKER)) {
     return true
   }
+  const hasActionableNextItemsCue =
+    normalized.includes("next items") &&
+    !normalized.includes("next items: none") &&
+    !normalized.includes("next items none") &&
+    !normalized.includes("next items: n/a")
   return (
     normalized.includes("still left to do") ||
     normalized.includes("remaining actionable") ||
+    normalized.includes("remaining epic") ||
+    normalized.includes("next remaining epic") ||
+    normalized.includes("remaining tasks") ||
+    normalized.includes("remaining items") ||
+    hasActionableNextItemsCue ||
+    normalized.includes("continue loop") ||
     normalized.includes("in-progress right now") ||
     normalized.includes("still left to do (next") ||
     normalized.includes("need finish")
@@ -161,6 +190,7 @@ function hasSoftContinuationCue(text: string): boolean {
   const normalized = text.toLowerCase()
   const hasNextSteps =
     normalized.includes("next steps") ||
+    normalized.includes("next safe steps") ||
     normalized.includes("natural next") ||
     normalized.includes("if you want")
   const hasOfferToExecute =
@@ -169,8 +199,101 @@ function hasSoftContinuationCue(text: string): boolean {
   return hasNextSteps && hasOfferToExecute
 }
 
+function hasCompletionClosureCue(text: string): boolean {
+  const normalized = text.toLowerCase()
+  return (
+    normalized.includes("nothing additional") ||
+    normalized.includes("nothing more to") ||
+    normalized.includes("nothing left to") ||
+    normalized.includes("there is nothing additional") ||
+    normalized.includes("this slice is done") ||
+    normalized.includes("work from this slice is done") ||
+    normalized.includes("task is finished") ||
+    normalized.includes("task complete") ||
+    normalized.includes("complete for now") ||
+    normalized.includes("done for now") ||
+    normalized.includes("already included") ||
+    normalized.includes("already in the current released state") ||
+    normalized.includes("already in the released state")
+  )
+}
+
+function hasActionableNextSliceCue(text: string): boolean {
+  const normalized = text.toLowerCase()
+  return (
+    normalized.includes("next steps") ||
+    normalized.includes("next safe steps") ||
+    normalized.includes("natural next") ||
+    normalized.includes("best next safe slice") ||
+    normalized.includes("next safe slice") ||
+    normalized.includes("next slice")
+  )
+}
+
+function hasDirectContinuationOfferCue(text: string): boolean {
+  const normalized = text.toLowerCase()
+  return (
+    /\bi\s+will\s+continue\b/.test(normalized) ||
+    /\bi'?ll\s+continue\b/.test(normalized) ||
+    /\bi\s+am\s+continuing\b/.test(normalized) ||
+    /\bi'?m\s+continuing\b/.test(normalized) ||
+    /\bcontinuing\s+with\s+the\s+next\b/.test(normalized) ||
+    normalized.includes("continue directly")
+  )
+}
+
+function parseTodoContinuationCount(raw: unknown): number | null {
+  let parsed = raw
+  if (typeof raw === "string") {
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      return null
+    }
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      return null
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    return null
+  }
+  let openTodos = 0
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") {
+      continue
+    }
+    const status = String((item as { status?: unknown }).status ?? "")
+      .trim()
+      .toLowerCase()
+    if (status === "pending" || status === "in_progress") {
+      openTodos += 1
+    }
+  }
+  return openTodos
+}
+
+function shouldUseLlmContinuationFallback(text: string): boolean {
+  return hasCompletionClosureCue(text) && hasActionableNextSliceCue(text) && hasDirectContinuationOfferCue(text)
+}
+
+function buildContinuationInstruction(): string {
+  return "Does this assistant text mean the run should auto-continue now because work remains or the assistant is offering to execute the next slice immediately, even if the text also sounds complete? C=continue, S=stop, U=unclear."
+}
+
+function buildContinuationContext(text: string, continueIntentArmed: boolean, source: string): string {
+  return [
+    `continue_intent_armed=${continueIntentArmed ? "true" : "false"}`,
+    `source=${source}`,
+    `assistant_text=${text.trim() || "(empty)"}`,
+  ].join("\n")
+}
+
 function hasPendingCueText(text: string, continueIntentArmed: boolean): boolean {
   if (!text.trim()) {
+    return false
+  }
+  if (NEGATED_CONTINUE_INTENT_PATTERN.test(text) || isStopIntent(text)) {
     return false
   }
   if (hasHardContinuationCue(text)) {
@@ -180,6 +303,123 @@ function hasPendingCueText(text: string, continueIntentArmed: boolean): boolean 
     return true
   }
   return false
+}
+
+async function resolvePendingContinuationDecision(options: {
+  text: string
+  continueIntentArmed: boolean
+  source: "task_output" | "message_probe"
+  sessionId: string
+  directory: string
+  traceId?: string
+  decisionRuntime?: LlmDecisionRuntime
+}): Promise<boolean> {
+  const deterministicPending = hasPendingCueText(options.text, options.continueIntentArmed)
+  if (deterministicPending) {
+    return true
+  }
+  if (!options.sessionId || !options.decisionRuntime || !shouldUseLlmContinuationFallback(options.text)) {
+    return false
+  }
+  let decision
+  try {
+    decision = await options.decisionRuntime.decide({
+      hookId: "todo-continuation-enforcer",
+      sessionId: options.sessionId,
+      traceId: options.traceId,
+      templateId: "todo-continuation-decision-v1",
+      instruction: buildContinuationInstruction(),
+      context: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
+      allowedChars: ["C", "S", "U"],
+      decisionMeaning: {
+        C: "continue_now",
+        S: "no_pending",
+        U: "unclear",
+      },
+      cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${compactDecisionCacheKey(options.text)}`,
+    })
+  } catch (error) {
+    writeGatewayEventAudit(options.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "state",
+      reason_code: "llm_todo_continuation_decision_failed",
+      session_id: options.sessionId,
+      trace_id: options.traceId,
+      llm_decision_mode: options.decisionRuntime.config.mode,
+      decision_source: options.source,
+      error: error instanceof Error ? error.message : String(error ?? "unknown_error"),
+    })
+    return false
+  }
+  if (!decision.accepted) {
+    writeGatewayEventAudit(options.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "state",
+      reason_code: "llm_todo_continuation_decision_skipped",
+      session_id: options.sessionId,
+      trace_id: options.traceId,
+      llm_decision_mode: options.decisionRuntime.config.mode,
+      decision_source: options.source,
+      llm_decision_reason: decision.skippedReason || "not_accepted",
+      error: decision.error,
+    })
+    return false
+  }
+  writeDecisionComparisonAudit({
+    directory: options.directory,
+    hookId: "todo-continuation-enforcer",
+    sessionId: options.sessionId,
+    traceId: options.traceId,
+    mode: options.decisionRuntime.config.mode,
+    deterministicMeaning: "no_pending",
+    aiMeaning: decision.meaning || "no_pending",
+    deterministicValue: "false",
+    aiValue: decision.char === "C" ? "true" : decision.char === "U" ? "unclear" : "false",
+  })
+  writeGatewayEventAudit(options.directory, {
+    hook: "todo-continuation-enforcer",
+    stage: "state",
+    reason_code: "llm_todo_continuation_decision_recorded",
+    session_id: options.sessionId,
+    trace_id: options.traceId,
+    llm_decision_char: decision.char,
+    llm_decision_meaning: decision.meaning,
+    llm_decision_mode: options.decisionRuntime.config.mode,
+    decision_source: options.source,
+  })
+  if (options.decisionRuntime.config.mode === "shadow" && decision.char === "C") {
+    writeGatewayEventAudit(options.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "state",
+      reason_code: "llm_todo_continuation_shadow_deferred",
+      session_id: options.sessionId,
+      trace_id: options.traceId,
+      llm_decision_char: decision.char,
+      llm_decision_meaning: decision.meaning,
+      llm_decision_mode: options.decisionRuntime.config.mode,
+      decision_source: options.source,
+    })
+    return false
+  }
+  return decision.char === "C"
+}
+
+function resolveTraceId(payload: {
+  properties?: { trace_id?: string; traceId?: string }
+  input?: { trace_id?: string; traceId?: string }
+}): string | undefined {
+  const candidates = [
+    payload.properties?.trace_id,
+    payload.properties?.traceId,
+    payload.input?.trace_id,
+    payload.input?.traceId,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
 }
 
 function resolveSessionId(payload: {
@@ -226,11 +466,14 @@ function getSessionState(store: Map<string, SessionState>, sessionId: string): S
   }
   const created: SessionState = {
     pendingContinuation: false,
+    pendingSource: undefined,
+    pendingTodoCount: 0,
     lastInjectedAt: 0,
     consecutiveFailures: 0,
     inFlight: false,
     markerProbeAttempted: false,
     continueIntentArmed: false,
+    lastTraceId: undefined,
   }
   store.set(sessionId, created)
   return created
@@ -241,6 +484,7 @@ export function createTodoContinuationEnforcerHook(options: {
   enabled: boolean
   client?: GatewayClient
   stopGuard?: StopContinuationGuard
+  decisionRuntime?: LlmDecisionRuntime
   cooldownMs: number
   maxConsecutiveFailures: number
 }): GatewayHook {
@@ -276,11 +520,17 @@ export function createTodoContinuationEnforcerHook(options: {
         if (isStopIntent(prompt)) {
           state.continueIntentArmed = false
           state.pendingContinuation = false
+          state.pendingSource = undefined
+          state.pendingTodoCount = 0
+          state.pendingSource = undefined
+          state.pendingTodoCount = 0
+          state.markerProbeAttempted = false
           return
         }
         if (isContinueIntent(prompt)) {
           state.continueIntentArmed = true
         }
+        state.markerProbeAttempted = false
         return
       }
 
@@ -288,15 +538,52 @@ export function createTodoContinuationEnforcerHook(options: {
         const eventPayload = (payload ?? {}) as ToolAfterPayload
         const sessionId = resolveSessionId(eventPayload)
         const tool = String(eventPayload.input?.tool ?? "").toLowerCase()
-        if (!sessionId || tool !== "task" || typeof eventPayload.output?.output !== "string") {
+        if (!sessionId) {
           return
         }
         const state = getSessionState(sessionState, sessionId)
-        state.pendingContinuation = hasPendingCueText(
-          eventPayload.output.output,
-          state.continueIntentArmed,
-        )
-        state.markerProbeAttempted = true
+        state.lastTraceId = resolveTraceId(eventPayload)
+        if (tool === "todowrite") {
+          const pendingTodoCount = parseTodoContinuationCount(eventPayload.output?.output)
+          if (pendingTodoCount !== null) {
+            state.pendingTodoCount = pendingTodoCount
+            state.pendingContinuation = pendingTodoCount > 0
+            state.markerProbeAttempted = true
+            writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+              hook: "todo-continuation-enforcer",
+              stage: "state",
+              reason_code: "todo_continuation_todowrite_state_recorded",
+              session_id: sessionId,
+              trace_id: state.lastTraceId,
+              open_todo_count: pendingTodoCount,
+            })
+          }
+          return
+        }
+        if (tool !== "task" || typeof eventPayload.output?.output !== "string") {
+          return
+        }
+        state.pendingContinuation = await resolvePendingContinuationDecision({
+          text: eventPayload.output.output,
+          continueIntentArmed: state.continueIntentArmed,
+          source: "task_output",
+          sessionId,
+          directory: resolveDirectory(eventPayload, options.directory),
+          traceId: state.lastTraceId,
+          decisionRuntime: options.decisionRuntime,
+        })
+        const hasExplicitCompletion = hasCompletionClosureCue(eventPayload.output.output)
+        state.markerProbeAttempted = state.pendingContinuation || hasExplicitCompletion
+        if (!state.pendingContinuation && !hasExplicitCompletion) {
+          writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+            hook: "todo-continuation-enforcer",
+            stage: "state",
+            reason_code: "todo_continuation_task_probe_retained",
+            session_id: sessionId,
+            trace_id: state.lastTraceId,
+          })
+        }
+        state.pendingSource = state.pendingContinuation ? "task_output" : undefined
         return
       }
 
@@ -357,7 +644,13 @@ export function createTodoContinuationEnforcerHook(options: {
         return
       }
 
-      let pending = state.pendingContinuation
+      let pending = state.pendingContinuation || state.pendingTodoCount > 0
+      let probeMessages:
+        | Array<{
+            info?: { role?: string; error?: unknown; time?: { completed?: number } }
+            parts?: Array<{ type?: string; text?: string; synthetic?: boolean }>
+          }>
+        | undefined
       const client = options.client?.session
       if (!pending && client && !state.markerProbeAttempted) {
         try {
@@ -365,11 +658,29 @@ export function createTodoContinuationEnforcerHook(options: {
             path: { id: sessionId },
             query: { directory },
           })
-          pending = hasPendingCue(
-            Array.isArray(response.data) ? response.data : [],
-            state.continueIntentArmed,
-          )
+          const messages = Array.isArray(response.data) ? response.data : []
+          probeMessages = messages
+          pending = hasPendingCue(messages, state.continueIntentArmed)
+          if (!pending) {
+            for (let i = messages.length - 1; i >= 0; i -= 1) {
+              const text = assistantText(messages[i])
+              if (!text) {
+                continue
+              }
+              pending = await resolvePendingContinuationDecision({
+                text,
+                continueIntentArmed: state.continueIntentArmed,
+                source: "message_probe",
+                sessionId,
+                directory,
+                traceId: state.lastTraceId,
+                decisionRuntime: options.decisionRuntime,
+              })
+              break
+            }
+          }
           state.markerProbeAttempted = true
+          state.pendingSource = pending ? "message_probe" : undefined
         } catch {
           writeGatewayEventAudit(directory, {
             hook: "todo-continuation-enforcer",
@@ -391,6 +702,26 @@ export function createTodoContinuationEnforcerHook(options: {
         return
       }
 
+      const safety =
+        state.pendingSource === "task_output"
+          ? { safe: true, reason: "ok" as const }
+          : await inspectHookMessageSafety({
+              session: client,
+              sessionId,
+              directory,
+              messages: probeMessages,
+            })
+      if (!safety.safe) {
+        state.markerProbeAttempted = false
+        writeGatewayEventAudit(directory, {
+          hook: "todo-continuation-enforcer",
+          stage: "skip",
+          reason_code: `todo_continuation_${safety.reason}`,
+          session_id: sessionId,
+        })
+        return
+      }
+
       state.inFlight = true
       try {
         const injected = await injectHookMessage({
@@ -402,6 +733,10 @@ export function createTodoContinuationEnforcerHook(options: {
         state.lastInjectedAt = now
         if (injected) {
           state.consecutiveFailures = 0
+          state.pendingContinuation = false
+          state.pendingSource = undefined
+          state.continueIntentArmed = false
+          state.markerProbeAttempted = false
           writeGatewayEventAudit(directory, {
             hook: "todo-continuation-enforcer",
             stage: "inject",

@@ -1,4 +1,5 @@
 import type { GatewayHook } from "../registry.js";
+import { type LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
 interface GatewayClient {
     session?: {
         promptAsync(args: {
@@ -22,5 +23,6 @@ export declare function createProviderErrorClassifierHook(options: {
     enabled: boolean;
     client?: GatewayClient;
     cooldownMs: number;
+    decisionRuntime?: LlmDecisionRuntime;
 }): GatewayHook;
 export {};

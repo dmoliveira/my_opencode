@@ -96,14 +96,7 @@ export interface SessionRecoveryConfig {
     enabled: boolean;
     autoResume: boolean;
 }
-export interface SessionRuntimeContextInjectorConfig {
-    enabled: boolean;
-}
-export interface SessionRuntimeNotifierConfig {
-    enabled: boolean;
-    durationMs: number;
-}
-export interface SessionRuntimeVisibleNoteConfig {
+export interface SessionRuntimeSystemContextConfig {
     enabled: boolean;
 }
 export interface DelegateTaskRetryConfig {
@@ -150,6 +143,19 @@ export interface AdaptiveDelegationPolicyConfig {
     defaultIntentThreshold: number;
     discoverabilityCooldownMs: number;
     agentPolicyOverrides: Record<string, AgentRuntimePolicyOverride>;
+}
+export interface LlmDecisionRuntimeConfig {
+    enabled: boolean;
+    mode: "disabled" | "shadow" | "assist" | "enforce";
+    hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
+    command: string;
+    model: string;
+    timeoutMs: number;
+    maxPromptChars: number;
+    maxContextChars: number;
+    enableCache: boolean;
+    cacheTtlMs: number;
+    maxCacheEntries: number;
 }
 export interface AgentRuntimePolicyOverride {
     overrideDelta?: number;
@@ -251,6 +257,11 @@ export interface CommentCheckerConfig {
 }
 export interface AgentUserReminderConfig {
     enabled: boolean;
+}
+export interface DirectWorkWarningConfig {
+    enabled: boolean;
+    blockRepeatedEdits: boolean;
+    allowPaths: string[];
 }
 export interface UnstableAgentBabysitterConfig {
     enabled: boolean;
@@ -422,9 +433,7 @@ export interface GatewayConfig {
     notifyEvents: NotifyEventsConfig;
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
-    sessionRuntimeContextInjector: SessionRuntimeContextInjectorConfig;
-    sessionRuntimeNotifier: SessionRuntimeNotifierConfig;
-    sessionRuntimeVisibleNote: SessionRuntimeVisibleNoteConfig;
+    sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
     delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
@@ -432,6 +441,7 @@ export interface GatewayConfig {
     subagentLifecycleSupervisor: SubagentLifecycleSupervisorConfig;
     subagentTelemetryTimeline: SubagentTelemetryTimelineConfig;
     adaptiveDelegationPolicy: AdaptiveDelegationPolicyConfig;
+    llmDecisionRuntime: LlmDecisionRuntimeConfig;
     validationEvidenceLedger: ValidationEvidenceLedgerConfig;
     mistakeLedger: MistakeLedgerConfig;
     parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
@@ -467,6 +477,7 @@ export interface GatewayConfig {
     planHandoffReminder: PlanHandoffReminderConfig;
     commentChecker: CommentCheckerConfig;
     agentUserReminder: AgentUserReminderConfig;
+    directWorkWarning: DirectWorkWarningConfig;
     unstableAgentBabysitter: UnstableAgentBabysitterConfig;
     questionLabelTruncator: QuestionLabelTruncatorConfig;
     semanticOutputSummarizer: SemanticOutputSummarizerConfig;

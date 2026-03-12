@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { DEFAULT_GATEWAY_CONFIG } from "./schema.js";
 // Coerces unknown value into a normalized string array.
 function stringList(value) {
@@ -10,7 +13,55 @@ function stringList(value) {
         .filter((item) => item.length > 0);
 }
 function recordValue(value) {
-    return value && typeof value === "object" ? value : {};
+    return value && typeof value === "object"
+        ? value
+        : {};
+}
+function isRecord(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function deepMergeRecords(base, override) {
+    const result = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+        const current = result[key];
+        if (isRecord(current) && isRecord(value)) {
+            result[key] = deepMergeRecords(current, value);
+        }
+        else {
+            result[key] = value;
+        }
+    }
+    return result;
+}
+function resolveGatewayConfigSidecarPath(directory) {
+    const envPath = String(process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "").trim();
+    if (envPath) {
+        return resolve(envPath);
+    }
+    const localPath = join(directory, ".opencode", "gateway-core.config.json");
+    if (existsSync(localPath)) {
+        return localPath;
+    }
+    return join(homedir(), ".config", "opencode", "my_opencode", "gateway-core.config.json");
+}
+export function loadGatewayConfigSource(directory, source) {
+    const sidecarPath = resolveGatewayConfigSidecarPath(directory);
+    let sidecar = {};
+    try {
+        if (existsSync(sidecarPath)) {
+            const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8"));
+            if (isRecord(parsed)) {
+                sidecar = parsed;
+            }
+        }
+    }
+    catch {
+        sidecar = {};
+    }
+    if (!isRecord(source)) {
+        return sidecar;
+    }
+    return deepMergeRecords(sidecar, source);
 }
 function parseAgentPolicyOverrides(value, fallback) {
     if (!value || typeof value !== "object") {
@@ -104,6 +155,28 @@ function durationThreshold(value, fallback) {
         ? trimmed
         : fallback;
 }
+function llmDecisionMode(value, fallback) {
+    if (value === "disabled" ||
+        value === "shadow" ||
+        value === "assist" ||
+        value === "enforce") {
+        return value;
+    }
+    return fallback;
+}
+function llmDecisionHookModes(value) {
+    if (!value || typeof value !== "object") {
+        return {};
+    }
+    const result = {};
+    for (const [key, raw] of Object.entries(value)) {
+        const mode = llmDecisionMode(raw, "disabled");
+        if (key.trim() && mode !== "disabled") {
+            result[key.trim()] = mode;
+        }
+    }
+    return result;
+}
 // Loads and normalizes gateway plugin config from unknown input.
 export function loadGatewayConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
@@ -148,14 +221,9 @@ export function loadGatewayConfig(raw) {
     const sessionRecoverySource = source.sessionRecovery && typeof source.sessionRecovery === "object"
         ? source.sessionRecovery
         : {};
-    const sessionRuntimeContextInjectorSource = source.sessionRuntimeContextInjector && typeof source.sessionRuntimeContextInjector === "object"
-        ? source.sessionRuntimeContextInjector
-        : {};
-    const sessionRuntimeNotifierSource = source.sessionRuntimeNotifier && typeof source.sessionRuntimeNotifier === "object"
-        ? source.sessionRuntimeNotifier
-        : {};
-    const sessionRuntimeVisibleNoteSource = source.sessionRuntimeVisibleNote && typeof source.sessionRuntimeVisibleNote === "object"
-        ? source.sessionRuntimeVisibleNote
+    const sessionRuntimeSystemContextSource = source.sessionRuntimeSystemContext &&
+        typeof source.sessionRuntimeSystemContext === "object"
+        ? source.sessionRuntimeSystemContext
         : {};
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
@@ -183,6 +251,9 @@ export function loadGatewayConfig(raw) {
     const adaptiveDelegationPolicySource = source.adaptiveDelegationPolicy &&
         typeof source.adaptiveDelegationPolicy === "object"
         ? source.adaptiveDelegationPolicy
+        : {};
+    const llmDecisionRuntimeSource = source.llmDecisionRuntime && typeof source.llmDecisionRuntime === "object"
+        ? source.llmDecisionRuntime
         : {};
     const validationEvidenceLedgerSource = source.validationEvidenceLedger &&
         typeof source.validationEvidenceLedger === "object"
@@ -310,6 +381,9 @@ export function loadGatewayConfig(raw) {
     const agentUserReminderSource = source.agentUserReminder && typeof source.agentUserReminder === "object"
         ? source.agentUserReminder
         : {};
+    const directWorkWarningSource = source.directWorkWarning && typeof source.directWorkWarning === "object"
+        ? source.directWorkWarning
+        : {};
     const unstableBabysitterSource = source.unstableAgentBabysitter &&
         typeof source.unstableAgentBabysitter === "object"
         ? source.unstableAgentBabysitter
@@ -329,7 +403,8 @@ export function loadGatewayConfig(raw) {
     const secretLeakSource = source.secretLeakGuard && typeof source.secretLeakGuard === "object"
         ? source.secretLeakGuard
         : {};
-    const primaryWorktreeSource = source.primaryWorktreeGuard && typeof source.primaryWorktreeGuard === "object"
+    const primaryWorktreeSource = source.primaryWorktreeGuard &&
+        typeof source.primaryWorktreeGuard === "object"
         ? source.primaryWorktreeGuard
         : {};
     const workflowConformanceSource = source.workflowConformanceGuard &&
@@ -536,23 +611,10 @@ export function loadGatewayConfig(raw) {
                 ? sessionRecoverySource.autoResume
                 : DEFAULT_GATEWAY_CONFIG.sessionRecovery.autoResume,
         },
-        sessionRuntimeContextInjector: {
-            enabled: typeof sessionRuntimeContextInjectorSource.enabled === "boolean"
-                ? sessionRuntimeContextInjectorSource.enabled
-                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeContextInjector.enabled,
-        },
-        sessionRuntimeNotifier: {
-            enabled: typeof sessionRuntimeNotifierSource.enabled === "boolean"
-                ? sessionRuntimeNotifierSource.enabled
-                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeNotifier.enabled,
-            durationMs: typeof sessionRuntimeNotifierSource.durationMs === "number" && Number.isFinite(sessionRuntimeNotifierSource.durationMs)
-                ? Math.max(1000, Math.trunc(sessionRuntimeNotifierSource.durationMs))
-                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeNotifier.durationMs,
-        },
-        sessionRuntimeVisibleNote: {
-            enabled: typeof sessionRuntimeVisibleNoteSource.enabled === "boolean"
-                ? sessionRuntimeVisibleNoteSource.enabled
-                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeVisibleNote.enabled,
+        sessionRuntimeSystemContext: {
+            enabled: typeof sessionRuntimeSystemContextSource.enabled === "boolean"
+                ? sessionRuntimeSystemContextSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
         },
         delegateTaskRetry: {
             enabled: typeof delegateTaskRetrySource.enabled === "boolean"
@@ -576,7 +638,8 @@ export function loadGatewayConfig(raw) {
                 ? delegationConcurrencyGuardSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.enabled,
             maxTotalConcurrent: positiveInt(delegationConcurrencyGuardSource.maxTotalConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxTotalConcurrent),
-            maxExpensiveConcurrent: positiveInt(delegationConcurrencyGuardSource.maxExpensiveConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxExpensiveConcurrent),
+            maxExpensiveConcurrent: positiveInt(delegationConcurrencyGuardSource.maxExpensiveConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard
+                .maxExpensiveConcurrent),
             maxDeepConcurrent: positiveInt(delegationConcurrencyGuardSource.maxDeepConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxDeepConcurrent),
             maxCriticalConcurrent: positiveInt(delegationConcurrencyGuardSource.maxCriticalConcurrent, DEFAULT_GATEWAY_CONFIG.delegationConcurrencyGuard.maxCriticalConcurrent),
         },
@@ -624,8 +687,32 @@ export function loadGatewayConfig(raw) {
             stateMaxEntries: positiveInt(adaptiveDelegationPolicySource.stateMaxEntries, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.stateMaxEntries),
             defaultOverrideDelta: nonNegativeInt(adaptiveDelegationPolicySource.defaultOverrideDelta, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultOverrideDelta),
             defaultIntentThreshold: nonNegativeInt(adaptiveDelegationPolicySource.defaultIntentThreshold, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.defaultIntentThreshold),
-            discoverabilityCooldownMs: positiveInt(adaptiveDelegationPolicySource.discoverabilityCooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.discoverabilityCooldownMs),
+            discoverabilityCooldownMs: positiveInt(adaptiveDelegationPolicySource.discoverabilityCooldownMs, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy
+                .discoverabilityCooldownMs),
             agentPolicyOverrides: parseAgentPolicyOverrides(adaptiveDelegationPolicySource.agentPolicyOverrides, DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.agentPolicyOverrides),
+        },
+        llmDecisionRuntime: {
+            enabled: typeof llmDecisionRuntimeSource.enabled === "boolean"
+                ? llmDecisionRuntimeSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enabled,
+            mode: llmDecisionMode(llmDecisionRuntimeSource.mode, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.mode),
+            hookModes: llmDecisionHookModes(llmDecisionRuntimeSource.hookModes),
+            command: typeof llmDecisionRuntimeSource.command === "string" &&
+                llmDecisionRuntimeSource.command.trim().length > 0
+                ? llmDecisionRuntimeSource.command.trim()
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.command,
+            model: typeof llmDecisionRuntimeSource.model === "string" &&
+                llmDecisionRuntimeSource.model.trim().length > 0
+                ? llmDecisionRuntimeSource.model.trim()
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
+            timeoutMs: positiveInt(llmDecisionRuntimeSource.timeoutMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs),
+            maxPromptChars: positiveInt(llmDecisionRuntimeSource.maxPromptChars, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars),
+            maxContextChars: positiveInt(llmDecisionRuntimeSource.maxContextChars, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxContextChars),
+            enableCache: typeof llmDecisionRuntimeSource.enableCache === "boolean"
+                ? llmDecisionRuntimeSource.enableCache
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.enableCache,
+            cacheTtlMs: positiveInt(llmDecisionRuntimeSource.cacheTtlMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.cacheTtlMs),
+            maxCacheEntries: positiveInt(llmDecisionRuntimeSource.maxCacheEntries, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxCacheEntries),
         },
         validationEvidenceLedger: {
             enabled: typeof validationEvidenceLedgerSource.enabled === "boolean"
@@ -843,6 +930,21 @@ export function loadGatewayConfig(raw) {
             enabled: typeof agentUserReminderSource.enabled === "boolean"
                 ? agentUserReminderSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.agentUserReminder.enabled,
+        },
+        directWorkWarning: {
+            enabled: typeof directWorkWarningSource.enabled === "boolean"
+                ? directWorkWarningSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.directWorkWarning.enabled,
+            blockRepeatedEdits: typeof directWorkWarningSource.blockRepeatedEdits === "boolean"
+                ? directWorkWarningSource.blockRepeatedEdits
+                : DEFAULT_GATEWAY_CONFIG.directWorkWarning.blockRepeatedEdits,
+            allowPaths: Array.isArray(directWorkWarningSource.allowPaths)
+                ? directWorkWarningSource.allowPaths
+                    .map((value) => typeof value === "string"
+                    ? value.trim()
+                    : String(value ?? "").trim())
+                    .filter(Boolean)
+                : DEFAULT_GATEWAY_CONFIG.directWorkWarning.allowPaths,
         },
         unstableAgentBabysitter: {
             enabled: typeof unstableBabysitterSource.enabled === "boolean"

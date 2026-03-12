@@ -122,19 +122,8 @@ export interface SessionRecoveryConfig {
   autoResume: boolean;
 }
 
-// Declares runtime session context injector settings.
-export interface SessionRuntimeContextInjectorConfig {
-  enabled: boolean;
-}
-
-// Declares human-facing runtime session notification settings.
-export interface SessionRuntimeNotifierConfig {
-  enabled: boolean;
-  durationMs: number;
-}
-
-// Declares visible runtime session note settings.
-export interface SessionRuntimeVisibleNoteConfig {
+// Declares hidden runtime session system context settings.
+export interface SessionRuntimeSystemContextConfig {
   enabled: boolean;
 }
 
@@ -195,6 +184,20 @@ export interface AdaptiveDelegationPolicyConfig {
   defaultIntentThreshold: number;
   discoverabilityCooldownMs: number;
   agentPolicyOverrides: Record<string, AgentRuntimePolicyOverride>;
+}
+
+export interface LlmDecisionRuntimeConfig {
+  enabled: boolean;
+  mode: "disabled" | "shadow" | "assist" | "enforce";
+  hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
+  command: string;
+  model: string;
+  timeoutMs: number;
+  maxPromptChars: number;
+  maxContextChars: number;
+  enableCache: boolean;
+  cacheTtlMs: number;
+  maxCacheEntries: number;
 }
 
 export interface AgentRuntimePolicyOverride {
@@ -342,6 +345,12 @@ export interface CommentCheckerConfig {
 // Declares specialist-agent reminder settings.
 export interface AgentUserReminderConfig {
   enabled: boolean;
+}
+
+export interface DirectWorkWarningConfig {
+  enabled: boolean;
+  blockRepeatedEdits: boolean;
+  allowPaths: string[];
 }
 
 // Declares unstable agent babysitter settings.
@@ -573,9 +582,7 @@ export interface GatewayConfig {
   notifyEvents: NotifyEventsConfig;
   pressureEscalationGuard: PressureEscalationGuardConfig;
   sessionRecovery: SessionRecoveryConfig;
-  sessionRuntimeContextInjector: SessionRuntimeContextInjectorConfig;
-  sessionRuntimeNotifier: SessionRuntimeNotifierConfig;
-  sessionRuntimeVisibleNote: SessionRuntimeVisibleNoteConfig;
+  sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
   providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
   delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
@@ -583,6 +590,7 @@ export interface GatewayConfig {
   subagentLifecycleSupervisor: SubagentLifecycleSupervisorConfig;
   subagentTelemetryTimeline: SubagentTelemetryTimelineConfig;
   adaptiveDelegationPolicy: AdaptiveDelegationPolicyConfig;
+  llmDecisionRuntime: LlmDecisionRuntimeConfig;
   validationEvidenceLedger: ValidationEvidenceLedgerConfig;
   mistakeLedger: MistakeLedgerConfig;
   parallelOpportunityDetector: ParallelOpportunityDetectorConfig;
@@ -618,6 +626,7 @@ export interface GatewayConfig {
   planHandoffReminder: PlanHandoffReminderConfig;
   commentChecker: CommentCheckerConfig;
   agentUserReminder: AgentUserReminderConfig;
+  directWorkWarning: DirectWorkWarningConfig;
   unstableAgentBabysitter: UnstableAgentBabysitterConfig;
   questionLabelTruncator: QuestionLabelTruncatorConfig;
   semanticOutputSummarizer: SemanticOutputSummarizerConfig;
@@ -673,12 +682,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "subagent-telemetry-timeline",
       "adaptive-delegation-policy",
       "session-recovery",
-      "session-runtime-visible-note",
-      "session-runtime-notifier",
-      "session-runtime-context",
+      "session-runtime-system-context",
       "delegate-task-retry",
       "validation-evidence-ledger",
-      "mistake-ledger",
       "parallel-opportunity-detector",
       "read-budget-optimizer",
       "adaptive-validation-scheduler",
@@ -714,6 +720,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "plan-handoff-reminder",
       "comment-checker",
       "agent-user-reminder",
+      "direct-work-warning",
       "unstable-agent-babysitter",
       "question-label-truncator",
       "dangerous-command-guard",
@@ -723,6 +730,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "workflow-conformance-guard",
       "scope-drift-guard",
       "done-proof-enforcer",
+      "mistake-ledger",
       "dependency-risk-guard",
       "docs-drift-guard",
       "hook-test-parity-guard",
@@ -847,14 +855,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     autoResume: true,
   },
-  sessionRuntimeContextInjector: {
-    enabled: true,
-  },
-  sessionRuntimeNotifier: {
-    enabled: true,
-    durationMs: 6000,
-  },
-  sessionRuntimeVisibleNote: {
+  sessionRuntimeSystemContext: {
     enabled: true,
   },
   delegateTaskRetry: {
@@ -921,6 +922,19 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
         intentThreshold: 2,
       },
     },
+  },
+  llmDecisionRuntime: {
+    enabled: false,
+    mode: "disabled",
+    hookModes: {},
+    command: "opencode",
+    model: "openai/gpt-5.1-codex-mini",
+    timeoutMs: 30000,
+    maxPromptChars: 1200,
+    maxContextChars: 2400,
+    enableCache: true,
+    cacheTtlMs: 300000,
+    maxCacheEntries: 256,
   },
   validationEvidenceLedger: {
     enabled: true,
@@ -1066,6 +1080,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   agentUserReminder: {
     enabled: true,
+  },
+  directWorkWarning: {
+    enabled: true,
+    blockRepeatedEdits: false,
+    allowPaths: ["docs/**/*.md", "**/README*.md", "**/AGENTS.md"],
   },
   unstableAgentBabysitter: {
     enabled: true,

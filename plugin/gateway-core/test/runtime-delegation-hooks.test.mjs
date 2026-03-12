@@ -74,6 +74,180 @@ test("delegation confidence gate overrides low-confidence explicit subagent", as
   assert.match(output.args.prompt, /\[DELEGATION ROUTER(?:\s+[^\]]+)?\]/)
 })
 
+test("agent model resolver applies enforce-mode LLM route decision for explicit low-confidence route", async () => {
+  const hook = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 99,
+    defaultIntentThreshold: 99,
+    agentPolicyOverrides: {},
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "enforce",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+      },
+      decide: async () => ({
+        mode: "enforce",
+        accepted: true,
+        char: "L",
+        raw: "L",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "delegation-route-v1",
+      }),
+    },
+  })
+  const output = {
+    args: {
+      subagent_type: "explore",
+      prompt: "Gather official docs for the upstream API and summarize the library behavior.",
+      description: "Need external references.",
+    },
+  }
+  await hook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-llm-route-1" },
+    output,
+  })
+  assert.equal(output.args.subagent_type, "librarian")
+})
+
+test("agent model resolver uses assist-mode LLM to confirm inferred route without explicit subagent", async () => {
+  const hook = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 99,
+    defaultIntentThreshold: 99,
+    agentPolicyOverrides: {},
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "L",
+        raw: "L",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "delegation-route-v1",
+      }),
+    },
+  })
+  const output = {
+    args: {
+      prompt: "Gather official docs for the upstream API and summarize the library behavior.",
+      description: "Need external references.",
+    },
+  }
+  await hook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-llm-route-2" },
+    output,
+  })
+  assert.equal(output.args.subagent_type, "librarian")
+})
+
+test("agent model resolver preserves explicit-none context for inferred assist decisions", async () => {
+  let capturedInstruction = ""
+  let capturedContext = ""
+  const hook = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 99,
+    defaultIntentThreshold: 99,
+    agentPolicyOverrides: {},
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+      },
+      decide: async (request) => {
+        capturedInstruction = request.instruction
+        capturedContext = request.context
+        return {
+          mode: "assist",
+          accepted: true,
+          char: "L",
+          raw: "L",
+          durationMs: 1,
+          model: "openai/gpt-5.1-codex-mini",
+          templateId: "delegation-route-v1",
+        }
+      },
+    },
+  })
+  const output = {
+    args: {
+      prompt: "Gather official docs for the upstream API and summarize the library behavior.",
+      description: "Need external references.",
+    },
+  }
+  await hook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-llm-route-2b" },
+    output,
+  })
+  assert.equal(output.args.subagent_type, "librarian")
+  assert.match(capturedContext, /explicit_subagent=none/)
+  assert.doesNotMatch(capturedInstruction, /K=keep explicit choice/)
+})
+
+test("agent model resolver shadow or assist mode does not override explicit route", async () => {
+  const hook = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 99,
+    defaultIntentThreshold: 99,
+    agentPolicyOverrides: {},
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+      },
+      decide: async () => ({
+        mode: "assist",
+        accepted: true,
+        char: "L",
+        raw: "L",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: "delegation-route-v1",
+      }),
+    },
+  })
+  const output = {
+    args: {
+      subagent_type: "explore",
+      prompt: "Gather official docs for the upstream API and summarize the library behavior.",
+      description: "Need external references.",
+    },
+  }
+  await hook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-llm-route-3" },
+    output,
+  })
+  assert.equal(output.args.subagent_type, "explore")
+})
+
 test("agent discoverability injector appends catalog hint only after routing rewrite", async () => {
   const resolver = createAgentModelResolverHook({
     directory: REPO_DIRECTORY,
@@ -173,6 +347,138 @@ test("tool surface enforcer v2 blocks denied tool and suggests allowed tool", as
       }),
     /Use allowed tool 'read' instead/i,
   )
+})
+
+test("agent denied tool enforcer blocks LLM-classified mutating request in enforce mode", async () => {
+  const hook = createAgentDeniedToolEnforcerHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "enforce",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+      },
+      decide: async (request) => ({
+        mode: "enforce",
+        accepted: true,
+        char: request.templateId === "mutation-safety-v1" ? "M" : "A",
+        raw: request.templateId === "mutation-safety-v1" ? "M" : "A",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: request.templateId,
+        meaning: request.templateId === "mutation-safety-v1" ? "mutating_requested" : "allowed_or_no_issue",
+      }),
+    },
+  })
+  await assert.rejects(
+    () =>
+      hook.event("tool.execute.before", {
+        input: { tool: "task", sessionID: "session-llm-mutation-1" },
+        output: {
+          args: {
+            subagent_type: "explore",
+            prompt: "Prepare the exact code changes and commit-ready edits for this bug.",
+            description: "Need a read-only scout to decide next steps.",
+          },
+        },
+      }),
+    /LLM mutation classifier marked the request as mutating/i,
+  )
+})
+
+test("agent denied tool enforcer blocks LLM-classified denied tool implication in enforce mode", async () => {
+  const hook = createAgentDeniedToolEnforcerHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "enforce",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+      },
+      decide: async (request) => ({
+        mode: "enforce",
+        accepted: true,
+        char: request.templateId === "denied-tool-intent-v1" ? "D" : "R",
+        raw: request.templateId === "denied-tool-intent-v1" ? "D" : "R",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: request.templateId,
+        meaning: request.templateId === "denied-tool-intent-v1" ? "denied_tool_implied" : "read_only_safe",
+      }),
+    },
+  })
+  await assert.rejects(
+    () =>
+      hook.event("tool.execute.before", {
+        input: { tool: "task", sessionID: "session-llm-tool-1" },
+        output: {
+          args: {
+            subagent_type: "explore",
+            prompt: "Check the repo state by shelling out to inspect git directly.",
+            description: "Need the quickest route.",
+          },
+        },
+      }),
+    /implying denied tooling/i,
+  )
+})
+
+test("agent denied tool enforcer assist mode records LLM decisions without blocking", async () => {
+  const hook = createAgentDeniedToolEnforcerHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: true,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async (request) => ({
+        mode: "assist",
+        accepted: true,
+        char: request.templateId === "mutation-safety-v1" ? "M" : "D",
+        raw: request.templateId === "mutation-safety-v1" ? "M" : "D",
+        durationMs: 1,
+        model: "openai/gpt-5.1-codex-mini",
+        templateId: request.templateId,
+        meaning:
+          request.templateId === "mutation-safety-v1" ? "mutating_requested" : "denied_tool_implied",
+      }),
+    },
+  })
+  const payload = {
+    input: { tool: "task", sessionID: "session-llm-assist-1" },
+    output: {
+      args: {
+        subagent_type: "explore",
+        prompt: "Prepare the exact code changes and check the repo state by shelling out directly.",
+        description: "Need the quickest route.",
+      },
+    },
+  }
+  await hook.event("tool.execute.before", payload)
+  assert.equal(payload.output.args.subagent_type, "explore")
 })
 
 test("hook semantic bridge maps upstream semantics to local runtime", async () => {
@@ -522,6 +828,362 @@ for (const scenario of [
     })
   })
 }
+
+test("runtime delegation hooks reconcile orphaned child session idle events", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-idle-reconcile"
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "[DELEGATION TRACE child-idle-trace] inspect runtime",
+      },
+    },
+  })
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-idle-1",
+        parentID: sessionID,
+        title: "[DELEGATION TRACE child-idle-trace] explore child",
+      },
+    },
+  })
+  await dispatch("session.idle", {
+    properties: {
+      sessionID: "child-session-idle-1",
+    },
+  })
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "follow-up after idle reconciliation",
+      },
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === sessionID && item.traceId === "child-idle-trace")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "completed")
+})
+
+test("runtime delegation hooks reconcile child assistant failure messages", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 1,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-message-failure"
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "[DELEGATION TRACE child-failure-trace] review release risk",
+      },
+    },
+  })
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-failure-1",
+        parentID: sessionID,
+        title: "[DELEGATION TRACE child-failure-trace] reviewer child",
+      },
+    },
+  })
+  await dispatch("message.updated", {
+    properties: {
+      info: {
+        role: "assistant",
+        sessionID: "child-session-failure-1",
+        error: { name: "UnknownError", data: { message: "subagent crashed" } },
+        time: { completed: Date.now() },
+      },
+    },
+  })
+
+  await assert.rejects(
+    () =>
+      dispatch("tool.execute.before", {
+        input: { tool: "task", sessionID },
+        output: {
+          args: {
+            subagent_type: "reviewer",
+            category: "critical",
+            prompt: "[DELEGATION TRACE child-failure-trace] retry same failed child",
+          },
+        },
+      }),
+    /retry budget exhausted/i,
+  )
+  await dispatch("tool.execute.before.error", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "[DELEGATION TRACE child-failure-trace] retry same failed child",
+      },
+    },
+  })
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "different follow-up after failure cleanup",
+      },
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === sessionID && item.traceId === "child-failure-trace")
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "failed")
+})
+
+test("runtime delegation hooks ignore child sessions without delegation trace markers", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-no-trace"
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "[DELEGATION TRACE explicit-parent-trace] inspect runtime",
+      },
+    },
+  })
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-no-trace-1",
+        parentID: sessionID,
+        title: "child session without trace marker",
+      },
+    },
+  })
+  await dispatch("session.idle", {
+    properties: {
+      sessionID: "child-session-no-trace-1",
+    },
+  })
+
+  await assert.rejects(
+    () =>
+      dispatch("tool.execute.before", {
+        input: { tool: "task", sessionID },
+        output: {
+          args: {
+            subagent_type: "reviewer",
+            category: "critical",
+            prompt: "follow-up should still be blocked",
+          },
+        },
+      }),
+    /maxTotalConcurrent/i,
+  )
+})
+
+test("runtime delegation hooks reconcile metadata-linked child completion with camelCase sessionId", async () => {
+  const hooks = [
+    createDelegationConcurrencyGuardHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTotalConcurrent: 1,
+      maxExpensiveConcurrent: 1,
+      maxDeepConcurrent: 1,
+      maxCriticalConcurrent: 1,
+      staleReservationMs: 60000,
+    }),
+    createSubagentLifecycleSupervisorHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+    }),
+    createSubagentTelemetryTimelineHook({
+      directory: REPO_DIRECTORY,
+      enabled: true,
+      maxTimelineEntries: 100,
+      persistState: false,
+      stateFile: ".opencode/test-runtime-state.json",
+      stateMaxEntries: 100,
+    }),
+  ]
+
+  async function dispatch(type, payload) {
+    for (const hook of hooks) {
+      await hook.event(type, payload)
+    }
+  }
+
+  const sessionID = "session-child-metadata-camel"
+  const beforePayload = {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "reviewer",
+        category: "critical",
+        prompt: "review release risk",
+      },
+    },
+  }
+  await dispatch("tool.execute.before", beforePayload)
+  const delegation = beforePayload.output.metadata?.gateway?.delegation
+
+  await dispatch("session.created", {
+    properties: {
+      info: {
+        id: "child-session-metadata-camel-1",
+        parentID: sessionID,
+        title: "child session without trace marker",
+        metadata: {
+          gateway: {
+            delegation,
+          },
+        },
+      },
+    },
+  })
+  await dispatch("message.updated", {
+    properties: {
+      info: {
+        role: "assistant",
+        sessionId: "child-session-metadata-camel-1",
+        time: { completed: Date.now() },
+      },
+    },
+  })
+
+  await dispatch("tool.execute.before", {
+    input: { tool: "task", sessionID },
+    output: {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "follow-up after child completion",
+      },
+    },
+  })
+
+  const record = getRecentDelegationOutcomes(60000)
+    .filter((item) => item.sessionId === sessionID)
+    .at(-1)
+  assert.ok(record)
+  assert.equal(record.status, "completed")
+  assert.equal(record.childRunId, delegation.childRunId)
+})
 
 test("default hook ordering runs concurrency guard before lifecycle and telemetry state hooks", async () => {
   const hooks = resolveHookOrder(

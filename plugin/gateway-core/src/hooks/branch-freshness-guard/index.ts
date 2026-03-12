@@ -16,11 +16,6 @@ interface ToolBeforePayload {
   directory?: string
 }
 
-// Returns true when command triggers PR merge.
-function isPrMerge(command: string): boolean {
-  return /\bgh\s+pr\s+merge\b/i.test(command)
-}
-
 // Resolves commit distance behind base ref, or null when reference is unavailable.
 function commitsBehind(directory: string, baseRef: string): number | null {
   try {
@@ -64,7 +59,7 @@ export function createBranchFreshnessGuardHook(options: {
       }
       const command = String(eventPayload.output?.args?.command ?? "")
       const checkCreate = options.enforceOnPrCreate && isGitHubPrCreateCommand(command)
-      const checkMerge = options.enforceOnPrMerge && (isPrMerge(command) || isGitHubPrMergeCommand(command))
+      const checkMerge = options.enforceOnPrMerge && isGitHubPrMergeCommand(command)
       if (!checkCreate && !checkMerge) {
         return
       }

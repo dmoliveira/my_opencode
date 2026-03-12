@@ -25,7 +25,7 @@ function commandBinary(command) {
 function allowedEnvKeys(command) {
     const binary = commandBinary(command);
     if (binary === "git" || binary === "gh") {
-        return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE", "OPENCODE_SESSION_ID", "MY_OPENCODE_SESSION_ID"]);
+        return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE", "OPENCODE_SESSION_ID"]);
     }
     return new Set();
 }
@@ -37,10 +37,7 @@ function sessionEnvPrefixes(sessionId) {
     if (!normalized) {
         return [];
     }
-    return [
-        `OPENCODE_SESSION_ID=${shellQuoteEnvValue(normalized)}`,
-        `MY_OPENCODE_SESSION_ID=${shellQuoteEnvValue(normalized)}`,
-    ];
+    return [`OPENCODE_SESSION_ID=${shellQuoteEnvValue(normalized)}`];
 }
 function prefixCommand(command, envPrefixes) {
     const allowlist = allowedEnvKeys(command);

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 const TRACKED_TOOLS = new Set(["read", "write", "edit", "multiedit"]);
+const RULES_SYSTEM_MARKER = "[runtime-rules]";
 const RULES_DIRS = [
     [".github", "instructions"],
     [".claude", "rules"],
@@ -198,15 +199,11 @@ function parseRuleFile(path) {
         alwaysApply,
     };
 }
-// Collects rule files from common project directories.
-function collectRuleFiles(directory) {
+function collectRuleFilePaths(directory) {
     const results = [];
     const copilotPath = join(directory, ".github", "copilot-instructions.md");
     if (existsSync(copilotPath)) {
-        const parsed = parseRuleFile(copilotPath);
-        if (parsed) {
-            results.push(parsed);
-        }
+        results.push(copilotPath);
     }
     for (const segments of RULES_DIRS) {
         const root = join(directory, ...segments);
@@ -228,14 +225,41 @@ function collectRuleFiles(directory) {
                 if (!entry.isFile() || !entry.name.endsWith(".md")) {
                     continue;
                 }
-                const parsed = parseRuleFile(child);
-                if (parsed) {
-                    results.push(parsed);
-                }
+                results.push(child);
             }
         }
     }
-    return results;
+    return results.sort();
+}
+function buildRuleCacheSignature(paths) {
+    const hash = createHash("sha1");
+    for (const path of paths) {
+        hash.update(path);
+        try {
+            const stats = statSync(path);
+            hash.update(`:${stats.mtimeMs}:${stats.size}`);
+        }
+        catch {
+            hash.update(":missing");
+        }
+        hash.update("\n");
+    }
+    return hash.digest("hex");
+}
+// Collects rule files from common project directories.
+function collectRuleFiles(directory) {
+    const paths = collectRuleFilePaths(directory);
+    const rules = [];
+    for (const path of paths) {
+        const parsed = parseRuleFile(path);
+        if (parsed) {
+            rules.push(parsed);
+        }
+    }
+    return {
+        signature: buildRuleCacheSignature(paths),
+        rules,
+    };
 }
 // Resolves target file path from tool output metadata/title.
 function resolveTargetPath(output) {
@@ -278,6 +302,15 @@ export function createRulesInjectorHook(options) {
         pendingToolBySession.delete(sessionId);
         injectedStateBySession.delete(sessionId);
     }
+    function loadRules(directory) {
+        const next = collectRuleFiles(directory);
+        const cached = ruleCacheByDirectory.get(directory);
+        if (!cached || cached.signature !== next.signature) {
+            ruleCacheByDirectory.set(directory, next);
+            return next.rules;
+        }
+        return cached.rules;
+    }
     return {
         id: "rules-injector",
         priority: 298,
@@ -302,6 +335,34 @@ export function createRulesInjectorHook(options) {
                 }
                 return;
             }
+            if (type === "experimental.chat.system.transform") {
+                const eventPayload = (payload ?? {});
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                const system = eventPayload.output?.system;
+                if (!Array.isArray(system) || system.some((entry) => typeof entry === "string" && entry.includes(RULES_SYSTEM_MARKER))) {
+                    return;
+                }
+                const cachedRules = loadRules(directory);
+                const sessionId = resolveSessionId(eventPayload);
+                const blocks = [];
+                for (const rule of cachedRules.filter((candidate) => candidate.alwaysApply)) {
+                    blocks.push(`[Rule: ${rule.path}]\n[Match: alwaysApply]\n${rule.body}`);
+                }
+                if (blocks.length === 0) {
+                    return;
+                }
+                system.unshift(`${RULES_SYSTEM_MARKER}\n${blocks.join("\n\n")}`);
+                writeGatewayEventAudit(directory, {
+                    hook: "rules-injector",
+                    stage: "inject",
+                    reason_code: "runtime_rule_system_injected",
+                    session_id: sessionId || undefined,
+                    matched_rule_count: blocks.length,
+                });
+                return;
+            }
             if (type !== "tool.execute.after") {
                 return;
             }
@@ -318,11 +379,7 @@ export function createRulesInjectorHook(options) {
             if (!pendingTool || !TRACKED_TOOLS.has(pendingTool) || typeof eventPayload.output?.output !== "string") {
                 return;
             }
-            let cachedRules = ruleCacheByDirectory.get(directory);
-            if (!cachedRules) {
-                cachedRules = collectRuleFiles(directory);
-                ruleCacheByDirectory.set(directory, cachedRules);
-            }
+            const cachedRules = loadRules(directory);
             if (cachedRules.length === 0) {
                 return;
             }

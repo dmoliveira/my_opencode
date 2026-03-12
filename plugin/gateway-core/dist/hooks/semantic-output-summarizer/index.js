@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { inspectToolAfterOutputText, writeToolAfterOutputText } from "../shared/tool-after-output.js";
 // Returns true when output from tool is eligible for semantic compression.
 function eligibleTool(tool) {
     return tool === "bash" || tool === "read";
@@ -40,10 +41,13 @@ export function createSemanticOutputSummarizerHook(options) {
             }
             const eventPayload = (payload ?? {});
             const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-            if (!eligibleTool(tool) || typeof eventPayload.output?.output !== "string") {
+            if (!eligibleTool(tool)) {
                 return;
             }
-            const raw = eventPayload.output.output;
+            const { text: raw, channel } = inspectToolAfterOutputText(eventPayload.output?.output);
+            if (!raw) {
+                return;
+            }
             if (raw.length < minChars) {
                 return;
             }
@@ -63,7 +67,9 @@ export function createSemanticOutputSummarizerHook(options) {
                 highlights.length > 0 ? "Key diagnostics:" : "No explicit diagnostics detected in repetitive output.",
                 ...highlights.map((line) => `- ${line}`),
             ].join("\n");
-            eventPayload.output.output = summary;
+            if (!writeToolAfterOutputText(eventPayload.output?.output, summary, channel) && eventPayload.output) {
+                eventPayload.output.output = summary;
+            }
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;

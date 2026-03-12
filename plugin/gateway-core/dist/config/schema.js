@@ -28,12 +28,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "subagent-telemetry-timeline",
             "adaptive-delegation-policy",
             "session-recovery",
-            "session-runtime-visible-note",
-            "session-runtime-notifier",
-            "session-runtime-context",
+            "session-runtime-system-context",
             "delegate-task-retry",
             "validation-evidence-ledger",
-            "mistake-ledger",
             "parallel-opportunity-detector",
             "read-budget-optimizer",
             "adaptive-validation-scheduler",
@@ -69,6 +66,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "plan-handoff-reminder",
             "comment-checker",
             "agent-user-reminder",
+            "direct-work-warning",
             "unstable-agent-babysitter",
             "question-label-truncator",
             "dangerous-command-guard",
@@ -78,6 +76,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "workflow-conformance-guard",
             "scope-drift-guard",
             "done-proof-enforcer",
+            "mistake-ledger",
             "dependency-risk-guard",
             "docs-drift-guard",
             "hook-test-parity-guard",
@@ -202,14 +201,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         autoResume: true,
     },
-    sessionRuntimeContextInjector: {
-        enabled: true,
-    },
-    sessionRuntimeNotifier: {
-        enabled: true,
-        durationMs: 6000,
-    },
-    sessionRuntimeVisibleNote: {
+    sessionRuntimeSystemContext: {
         enabled: true,
     },
     delegateTaskRetry: {
@@ -276,6 +268,19 @@ export const DEFAULT_GATEWAY_CONFIG = {
                 intentThreshold: 2,
             },
         },
+    },
+    llmDecisionRuntime: {
+        enabled: false,
+        mode: "disabled",
+        hookModes: {},
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 30000,
+        maxPromptChars: 1200,
+        maxContextChars: 2400,
+        enableCache: true,
+        cacheTtlMs: 300000,
+        maxCacheEntries: 256,
     },
     validationEvidenceLedger: {
         enabled: true,
@@ -421,6 +426,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     agentUserReminder: {
         enabled: true,
+    },
+    directWorkWarning: {
+        enabled: true,
+        blockRepeatedEdits: false,
+        allowPaths: ["docs/**/*.md", "**/README*.md", "**/AGENTS.md"],
     },
     unstableAgentBabysitter: {
         enabled: true,

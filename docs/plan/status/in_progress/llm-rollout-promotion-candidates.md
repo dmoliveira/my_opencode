@@ -1,0 +1,67 @@
+# LLM Rollout Promotion Candidates
+
+Date: 2026-03-11
+Branch: `fix/semantic-inventory-cleanup`
+
+## Initial assist candidates
+
+- `provider-error-classifier`
+  - Why: semantic ambiguity is common, user-facing outcome is recoverable, and deterministic fallback already exists.
+  - Suggested mode: move from `shadow` to `assist` first.
+- `auto-slash-command`
+  - Why: diagnostics intent is recoverable, cached prompts are cheap, and disagreement review is straightforward.
+  - Suggested mode: move from `shadow` to `assist` first.
+
+## Observe longer before promotion
+
+- `delegation-fallback-orchestrator`
+  - Why: fallback mutation is helpful, deterministic fallback already exists, and it still looks like the best next assist candidate once fresh disagreement data confirms stability.
+  - Suggested mode: keep in `shadow` until a non-empty refreshed disagreement report clears promotion.
+- `pr-body-evidence-guard`
+  - Why: semantic section detection is useful but still affects release workflow gates.
+- `done-proof-enforcer`
+  - Why: semantic evidence wording changes completion gating and should keep more shadow evidence first.
+
+## Keep in shadow for now
+
+- `agent-model-resolver`
+  - Why: routing changes alter subagent choice and can ripple into tool surface and cost.
+- `agent-denied-tool-enforcer`
+  - Why: semantic mutation/tool implication decisions can block execution paths and should remain conservative.
+- `validation-evidence-ledger`
+  - Why: semantic validation classification can affect downstream done-proof outcomes and needs more longitudinal data.
+- `todo-continuation-enforcer`
+  - Why: mixed-signal continuation decisions can create autonomous follow-on execution, so shadow evidence should accumulate before any assist promotion.
+- `mistake-ledger`
+  - Why: semantic deferral classification writes operator-facing learning records; implementation and workflow parity are done, but it should remain shadow-first until live disagreement data exists.
+- `task-resume-info`
+  - Why: semantic continuation/verification hints can steer follow-up execution; implementation and workflow parity are done, but it should remain shadow-first until live disagreement data exists beyond synthetic workflow coverage.
+
+## Promotion rule of thumb
+
+- Promote to `assist` only after disagreement reports stay low and stable for that hook.
+- Promote to `enforce` only after assist behavior is proven and deterministic fallback still exists.
+
+## Suggested runtime config snippet
+
+```json
+{
+  "llmDecisionRuntime": {
+    "enabled": true,
+    "mode": "shadow",
+    "hookModes": {
+      "auto-slash-command": "assist",
+      "provider-error-classifier": "assist",
+      "todo-continuation-enforcer": "shadow"
+    }
+  }
+}
+```
+
+Canonical example file:
+
+- `docs/plan/status/in_progress/llm-rollout-config.example.json`
+
+Current rollout path:
+
+- live gateway settings now come from `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`), so these candidates are policy-ready and wired through a valid sidecar config surface.

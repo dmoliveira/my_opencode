@@ -1,6 +1,13 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { DEFAULT_INJECTED_TEXT_MAX_CHARS, truncateInjectedText } from "../shared/injected-text-truncator.js";
+const TRANSFORM_MESSAGE_LOOKBACK_LIMIT = 64;
+function recentMessages(messages, limit = TRANSFORM_MESSAGE_LOOKBACK_LIMIT) {
+    if (!Array.isArray(messages) || messages.length <= limit) {
+        return messages;
+    }
+    return messages.slice(messages.length - limit);
+}
 // Resolves session id from known payload variants.
 function resolveSessionId(payload, fallbackSessionId = "") {
     const record = payload;
@@ -19,8 +26,8 @@ function resolveSessionId(payload, fallbackSessionId = "") {
     const transformPayload = payload;
     const messages = transformPayload.output?.messages;
     if (Array.isArray(messages)) {
-        for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-            const sessionIdCandidates = [messages[idx]?.info?.sessionID, messages[idx]?.info?.sessionId];
+        for (const message of [...recentMessages(messages)].reverse()) {
+            const sessionIdCandidates = [message?.info?.sessionID, message?.info?.sessionId];
             for (const value of sessionIdCandidates) {
                 if (typeof value === "string" && value.trim()) {
                     return value.trim();
@@ -132,10 +139,11 @@ export function createContextInjectorHook(options) {
             if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
                 return;
             }
+            const recent = recentMessages(messages);
             let lastUserIndex = -1;
-            for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
-                if (messages[idx]?.info?.role === "user") {
-                    lastUserIndex = idx;
+            for (let idx = recent.length - 1; idx >= 0; idx -= 1) {
+                if (recent[idx]?.info?.role === "user") {
+                    lastUserIndex = messages.length - recent.length + idx;
                     break;
                 }
             }

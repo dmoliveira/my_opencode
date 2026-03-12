@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { loadAgentMetadata } from "../shared/agent-metadata.js";
+import { loadAgentMetadata, } from "../shared/agent-metadata.js";
 import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function delegationKey(sessionId, traceId, subagentType) {
     if (traceId) {
@@ -8,16 +8,21 @@ function delegationKey(sessionId, traceId, subagentType) {
     return `${sessionId}:agent:${subagentType || "unknown"}`;
 }
 function sessionId(payload) {
-    return String(payload.input?.sessionID ?? payload.input?.sessionId ?? payload.properties?.info?.id ?? "").trim();
+    return String(payload.input?.sessionID ??
+        payload.input?.sessionId ??
+        payload.properties?.info?.id ??
+        "").trim();
 }
 function looksLikeFailure(text) {
     return /(\[error\]|invalid arguments|failed|exception|traceback|unknown\s+agent|unknown\s+category)/i.test(text);
 }
 function buildHint(context) {
-    const trigger = Array.isArray(context.metadata.triggers) && context.metadata.triggers.length > 0
+    const trigger = Array.isArray(context.metadata.triggers) &&
+        context.metadata.triggers.length > 0
         ? context.metadata.triggers[0]
         : "verify delegation intent";
-    const avoid = Array.isArray(context.metadata.avoid_when) && context.metadata.avoid_when.length > 0
+    const avoid = Array.isArray(context.metadata.avoid_when) &&
+        context.metadata.avoid_when.length > 0
         ? context.metadata.avoid_when[0]
         : "avoid mismatched scope";
     return [
@@ -27,6 +32,25 @@ function buildHint(context) {
         `- cost_tier: ${context.metadata.cost_tier ?? "unknown"}`,
         `- next_best_trigger: ${trigger}`,
         `- avoid_when: ${avoid}`,
+    ].join("\n");
+}
+function buildTaskFocusReminder(context) {
+    const trigger = Array.isArray(context.metadata.triggers) &&
+        context.metadata.triggers.length > 0
+        ? context.metadata.triggers[0]
+        : "complete the delegated objective";
+    const avoid = Array.isArray(context.metadata.avoid_when) &&
+        context.metadata.avoid_when.length > 0
+        ? context.metadata.avoid_when[0]
+        : "scope drift or unrelated follow-up work";
+    return [
+        "[agent-context-shaper] delegated task focus",
+        `- subagent: ${context.subagentType}`,
+        `- category: ${context.category}`,
+        "- execute one delegated objective for this task call before returning control",
+        `- prioritize: ${trigger}`,
+        `- avoid: ${avoid}`,
+        "- if you uncover extra work, report it as a follow-up instead of expanding scope in the same delegation",
     ].join("\n");
 }
 export function createAgentContextShaperHook(options) {
@@ -51,7 +75,9 @@ export function createAgentContextShaperHook(options) {
             }
             if (type === "tool.execute.before") {
                 const eventPayload = (payload ?? {});
-                const tool = String(eventPayload.input?.tool ?? "").toLowerCase().trim();
+                const tool = String(eventPayload.input?.tool ?? "")
+                    .toLowerCase()
+                    .trim();
                 if (tool !== "task") {
                     return;
                 }
@@ -59,14 +85,18 @@ export function createAgentContextShaperHook(options) {
                 if (!sid) {
                     return;
                 }
-                const subagentType = String(eventPayload.output?.args?.subagent_type ?? "").toLowerCase().trim();
+                const subagentType = String(eventPayload.output?.args?.subagent_type ?? "")
+                    .toLowerCase()
+                    .trim();
                 if (!subagentType) {
                     return;
                 }
                 const traceId = resolveDelegationTraceId(eventPayload.output?.args ?? {});
                 annotateDelegationMetadata(eventPayload.output ?? {}, eventPayload.output?.args);
                 const metadata = loadAgentMetadata(options.directory).get(subagentType) ?? {};
-                const category = String(eventPayload.output?.args?.category ?? metadata.default_category ?? "balanced");
+                const category = String(eventPayload.output?.args?.category ??
+                    metadata.default_category ??
+                    "balanced");
                 contextByDelegation.set(delegationKey(sid, traceId, subagentType), {
                     sessionId: sid,
                     traceId,
@@ -74,13 +104,37 @@ export function createAgentContextShaperHook(options) {
                     category,
                     metadata,
                 });
+                const prompt = String(eventPayload.output?.args?.prompt ?? "");
+                if (prompt &&
+                    !prompt.includes("[agent-context-shaper] delegated task focus")) {
+                    eventPayload.output = eventPayload.output ?? {};
+                    eventPayload.output.args = eventPayload.output.args ?? {};
+                    eventPayload.output.args.prompt = `${buildTaskFocusReminder({
+                        sessionId: sid,
+                        traceId,
+                        subagentType,
+                        category,
+                        metadata,
+                    })}\n\n${prompt}`;
+                    writeGatewayEventAudit(options.directory, {
+                        hook: "agent-context-shaper",
+                        stage: "before",
+                        reason_code: "delegated_task_focus_injected",
+                        session_id: sid,
+                        trace_id: traceId,
+                        subagent_type: subagentType,
+                        recommended_category: category,
+                    });
+                }
                 return;
             }
             if (type !== "tool.execute.after") {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const tool = String(eventPayload.input?.tool ?? "").toLowerCase().trim();
+            const tool = String(eventPayload.input?.tool ?? "")
+                .toLowerCase()
+                .trim();
             if (tool !== "task" || typeof eventPayload.output?.output !== "string") {
                 return;
             }
@@ -90,15 +144,14 @@ export function createAgentContextShaperHook(options) {
             }
             const outputText = eventPayload.output.output;
             const traceId = extractDelegationTraceId(eventPayload.output?.args, eventPayload.output?.metadata);
-            const subagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) ||
-                extractDelegationSubagentTypeFromOutput(outputText);
+            const subagentType = extractDelegationSubagentType(eventPayload.output?.args, eventPayload.output?.metadata) || extractDelegationSubagentTypeFromOutput(outputText);
             const directKey = delegationKey(sid, traceId, subagentType);
             let matchedKey = directKey;
             let context = contextByDelegation.get(directKey);
             if (!context) {
-                const matches = [...contextByDelegation.entries()].filter(([, candidate]) => candidate.sessionId === sid && candidate.subagentType === subagentType);
+                const matches = [...contextByDelegation.entries()].filter(([, candidate]) => candidate.sessionId === sid &&
+                    candidate.subagentType === subagentType);
                 if (matches.length === 1) {
-                    ;
                     [[matchedKey, context]] = matches;
                 }
             }
@@ -119,7 +172,8 @@ export function createAgentContextShaperHook(options) {
             if (!output.includes("[agent-context-shaper]")) {
                 eventPayload.output.output = `${output}\n\n${hint}`;
             }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+            const directory = typeof eventPayload.directory === "string" &&
+                eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
             writeGatewayEventAudit(directory, {
