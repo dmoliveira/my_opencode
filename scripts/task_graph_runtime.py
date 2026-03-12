@@ -155,6 +155,10 @@ def _normalize_task(raw: dict[str, Any]) -> dict[str, Any]:
         "metadata": raw.get("metadata")
         if isinstance(raw.get("metadata"), dict)
         else {},
+        "completionGates": raw.get("completionGates")
+        if isinstance(raw.get("completionGates"), dict)
+        else {},
+        "requiredArtifacts": _string_list(raw.get("requiredArtifacts")),
         "threadID": str(raw.get("threadID") or "").strip(),
         "created_at": created_at,
         "updated_at": updated_at,

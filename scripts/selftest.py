@@ -10277,6 +10277,83 @@ version: 1
             "autopilot promise mode should complete when completion signal is provided",
         )
 
+        completion_gate_dir = tmp / "autopilot_completion_gates"
+        completion_gate_dir.mkdir(parents=True, exist_ok=True)
+        completion_gate_objective = {
+            "goal": "Require validation before completion",
+            "scope": "scripts/autopilot_runtime.py",
+            "done-criteria": "complete objective",
+            "required-validation": "test",
+            "completion-mode": "promise",
+            "completion-promise": "DONE",
+            "max-budget": "balanced",
+        }
+        completion_gate_init = initialize_run(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            objective=completion_gate_objective,
+            actor="selftest",
+            directory=completion_gate_dir,
+        )
+        completion_gate_blocked = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(completion_gate_init.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            now_ts="2026-02-13T00:00:02Z",
+            directory=completion_gate_dir,
+        )
+        expect(
+            completion_gate_blocked.get("run", {}).get("status") == "running"
+            and completion_gate_blocked.get("run", {}).get("reason_code")
+            == "completion_gates_blocked",
+            "autopilot completion gates should block completion when required validation evidence is missing",
+        )
+        evidence_runtime_dir = completion_gate_dir / ".opencode" / "runtime"
+        evidence_runtime_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_runtime_dir / "validation-evidence.json").write_text(
+            json.dumps(
+                {
+                    "sessions": {},
+                    "worktrees": {
+                        str(completion_gate_dir.resolve()): {
+                            "lint": False,
+                            "test": True,
+                            "typecheck": False,
+                            "build": False,
+                            "security": False,
+                            "updatedAt": "2026-02-13T00:00:03Z",
+                        }
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        completion_gate_complete = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(completion_gate_blocked.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            now_ts="2026-02-13T00:00:03Z",
+            directory=completion_gate_dir,
+        )
+        expect(
+            completion_gate_complete.get("run", {}).get("status") == "completed"
+            and completion_gate_complete.get("run", {})
+            .get("completion_gate_status", {})
+            .get("result")
+            == "PASS",
+            "autopilot completion gates should allow completion once required validation evidence exists",
+        )
+
         autopilot_promise_wallclock_run = dict(autopilot_promise_cycle.get("run", {}))
         autopilot_promise_wallclock_run["started_at"] = "2026-01-01T00:00:00Z"
         autopilot_promise_wallclock_resume = execute_cycle(
@@ -11722,6 +11799,89 @@ version: 1
                 if isinstance(violation, dict)
             ),
             "start-work should surface out_of_order_ordinals violation",
+        )
+
+        completion_gate_plan_dir = tmp / "start_work_completion_gates"
+        completion_gate_plan_dir.mkdir(parents=True, exist_ok=True)
+        completion_gate_plan = completion_gate_plan_dir / "plan.md"
+        completion_gate_plan.write_text(
+            "---\n"
+            "id: gate-plan\n"
+            "title: Gate Plan\n"
+            "owner: orchestrator\n"
+            "created_at: 2026-02-13T00:00:00Z\n"
+            "version: 1\n"
+            "completion_validation: test\n"
+            "---\n\n"
+            "- [ ] 1. finish gated plan\n",
+            encoding="utf-8",
+        )
+        start_work_gate_fail = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                str(completion_gate_plan),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=completion_gate_plan_dir,
+        )
+        expect(
+            start_work_gate_fail.returncode == 1,
+            "start-work should fail when required completion-gate validation evidence is missing",
+        )
+        start_work_gate_fail_report = parse_json_output(start_work_gate_fail.stdout)
+        expect(
+            any(
+                violation.get("code") == "completion_gates_blocked"
+                for violation in start_work_gate_fail_report.get(
+                    "todo_compliance", {}
+                ).get("violations", [])
+                if isinstance(violation, dict)
+            ),
+            "start-work should surface deterministic completion-gate blocked violations",
+        )
+        gate_evidence_dir = completion_gate_plan_dir / ".opencode" / "runtime"
+        gate_evidence_dir.mkdir(parents=True, exist_ok=True)
+        (gate_evidence_dir / "validation-evidence.json").write_text(
+            json.dumps(
+                {
+                    "sessions": {},
+                    "worktrees": {
+                        str(completion_gate_plan_dir.resolve()): {
+                            "lint": False,
+                            "test": True,
+                            "typecheck": False,
+                            "build": False,
+                            "security": False,
+                            "updatedAt": "2026-02-13T00:00:00Z",
+                        }
+                    },
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        start_work_gate_pass = subprocess.run(
+            [
+                sys.executable,
+                str(START_WORK_SCRIPT),
+                str(completion_gate_plan),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=completion_gate_plan_dir,
+        )
+        expect(
+            start_work_gate_pass.returncode == 0,
+            "start-work should pass once required completion-gate validation evidence exists",
         )
 
         runtime_config_path = Path(str(start_work_report.get("config") or ""))
