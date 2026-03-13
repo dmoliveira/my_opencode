@@ -10221,6 +10221,30 @@ exit 0
             "delivery start should expose entrypoint model routing metadata",
         )
 
+        delivery_doctor = subprocess.run(
+            [sys.executable, str(DELIVERY_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            delivery_doctor.returncode == 0,
+            f"delivery doctor failed: {delivery_doctor.stderr}",
+        )
+        delivery_doctor_payload = parse_json_output(delivery_doctor.stdout)
+        expect(
+            delivery_doctor_payload.get("result") == "PASS",
+            "delivery doctor should pass for healthy delivery runtime state",
+        )
+        expect(
+            delivery_doctor_payload.get("latest_run", {}).get("issue_id") == "issue-303"
+            and delivery_doctor_payload.get("latest_run", {}).get("status")
+            == "completed",
+            "delivery doctor should surface the latest successful delivery run summary",
+        )
+
         result = subprocess.run(
             [
                 sys.executable,
@@ -10280,6 +10304,34 @@ exit 0
         expect(
             bool(delivery_handoff_run_id),
             "delivery handoff flow should persist a run id for follow-up status checks",
+        )
+
+        delivery_doctor_handoff = subprocess.run(
+            [sys.executable, str(DELIVERY_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            delivery_doctor_handoff.returncode == 0,
+            f"delivery doctor after handoff failed: {delivery_doctor_handoff.stderr}",
+        )
+        delivery_doctor_handoff_payload = parse_json_output(
+            delivery_doctor_handoff.stdout
+        )
+        expect(
+            delivery_doctor_handoff_payload.get("latest_run", {}).get("status")
+            == "handoff-pending",
+            "delivery doctor should surface handoff-pending as the latest run status",
+        )
+        expect(
+            any(
+                isinstance(item, str) and "waiting on an accept-handoff" in item
+                for item in delivery_doctor_handoff_payload.get("warnings", [])
+            ),
+            "delivery doctor should warn when the latest run is waiting on handoff completion",
         )
 
         result = subprocess.run(

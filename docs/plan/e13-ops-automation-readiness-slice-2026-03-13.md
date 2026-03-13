@@ -53,3 +53,4 @@ Primary source references:
 - `/ship doctor` now surfaces the latest canonical `/delivery` run summary when runtime state exists
 - `/ship create-pr --issue <id>` can inject the matched delivery handoff summary into the generated PR template without adding a new command family
 - `/hotfix doctor` now audits the latest closure for follow-up linkage completeness so umbrella `/doctor` can surface incident follow-up drift through canonical command wiring
+- `/delivery doctor` now surfaces the latest run summary and warns when the issue flow is stalled in `handoff-pending` or failed workflow states

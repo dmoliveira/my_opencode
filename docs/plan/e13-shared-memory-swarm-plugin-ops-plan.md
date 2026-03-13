@@ -95,3 +95,4 @@ Status: doing
 | 2026-03-13T21:10:00Z | E4 ops automation diagnostics slice | doing | Added `/ship doctor` and umbrella `/doctor` coverage so issue, PR, release, and hotfix automation can be audited from canonical commands before deeper workflow automation lands. |
 | 2026-03-13T21:20:00Z | E4 delivery-to-ship handoff summary | doing | Added canonical `/delivery` runtime summary pickup in `/ship doctor` plus `/ship create-pr --issue <id>` template enrichment for matched delivery runs. |
 | 2026-03-13T21:28:00Z | E4 hotfix follow-up audit | doing | Added latest-closure follow-up linkage auditing in `/hotfix doctor` so umbrella `/doctor` can surface incident follow-up drift through canonical command wiring. |
+| 2026-03-13T21:31:00Z | E4 delivery doctor status audit | doing | Added latest-run delivery summaries plus handoff-pending/workflow-failed warnings in `/delivery doctor` so issue-flow drift surfaces through canonical diagnostics. |

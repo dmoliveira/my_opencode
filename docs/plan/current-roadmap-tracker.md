@@ -148,6 +148,7 @@ Delivered:
 - started E4 ops automation readiness diagnostics with `/ship doctor` and umbrella `/doctor` coverage for canonical issue/PR/release/hotfix flows
 - added canonical `/delivery` handoff summaries to `/ship doctor` and `/ship create-pr --issue <id>` template generation
 - added latest-closure follow-up linkage auditing to `/hotfix doctor` so umbrella diagnostics can surface incident follow-up drift
+- added latest-run status summaries and stalled-handoff warnings to `/delivery doctor`
 
 Remaining:
 - broaden write-capable parallelism beyond the tiny `implement` allowlist only when stronger lane-level lease identity and ownership guarantees exist
