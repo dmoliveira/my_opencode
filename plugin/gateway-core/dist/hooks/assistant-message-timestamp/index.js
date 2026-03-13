@@ -9,24 +9,56 @@ export function formatAssistantMessageTimestamp(timestamp) {
     const seconds = String(value.getSeconds()).padStart(2, "0");
     return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
 }
+function prependTimestampToText(text, timestamp) {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed.startsWith(TIMESTAMP_PREFIX_LABEL)) {
+        return text;
+    }
+    return `${timestamp}\n${trimmed}`;
+}
+function prependTimestampToLatestAssistantMessage(messages, timestamp) {
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return;
+    }
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message?.info?.role !== "assistant") {
+            continue;
+        }
+        const parts = Array.isArray(message.parts) ? message.parts : [];
+        const firstTextPart = parts.find((part) => part?.type === "text" && typeof part.text === "string");
+        if (firstTextPart) {
+            firstTextPart.text = prependTimestampToText(firstTextPart.text ?? "", timestamp);
+            return;
+        }
+        parts.unshift({ type: "text", text: timestamp });
+        message.parts = parts;
+        return;
+    }
+}
 export function createAssistantMessageTimestampHook(options) {
     const now = options.now ?? (() => Date.now());
     return {
         id: "assistant-message-timestamp",
         priority: 341,
         async event(type, payload) {
-            if (!options.enabled || type !== "session.idle") {
+            if (!options.enabled) {
+                return;
+            }
+            const timestamp = formatAssistantMessageTimestamp(now());
+            if (type === "experimental.chat.messages.transform") {
+                const eventPayload = (payload ?? {});
+                prependTimestampToLatestAssistantMessage(eventPayload.output?.messages, timestamp);
+                return;
+            }
+            if (type !== "session.idle") {
                 return;
             }
             const eventPayload = (payload ?? {});
             if (typeof eventPayload.output?.output !== "string") {
                 return;
             }
-            const output = eventPayload.output.output.trim();
-            if (!output || output.startsWith(TIMESTAMP_PREFIX_LABEL)) {
-                return;
-            }
-            eventPayload.output.output = `${formatAssistantMessageTimestamp(now())}\n${output}`;
+            eventPayload.output.output = prependTimestampToText(eventPayload.output.output, timestamp);
         },
     };
 }

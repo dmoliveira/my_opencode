@@ -4,6 +4,22 @@ interface SessionIdlePayload {
   output?: { output?: unknown };
 }
 
+interface ChatMessagePart {
+  type?: string;
+  text?: string;
+}
+
+interface ChatTransformMessage {
+  info?: { role?: string };
+  parts?: ChatMessagePart[];
+}
+
+interface ChatMessagesTransformPayload {
+  output?: {
+    messages?: ChatTransformMessage[];
+  };
+}
+
 const TIMESTAMP_PREFIX_LABEL = "[";
 
 export function formatAssistantMessageTimestamp(timestamp: number): string {
@@ -17,6 +33,40 @@ export function formatAssistantMessageTimestamp(timestamp: number): string {
   return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
 }
 
+function prependTimestampToText(text: string, timestamp: string): string {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.startsWith(TIMESTAMP_PREFIX_LABEL)) {
+    return text;
+  }
+  return `${timestamp}\n${trimmed}`;
+}
+
+function prependTimestampToLatestAssistantMessage(
+  messages: ChatTransformMessage[] | undefined,
+  timestamp: string,
+): void {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return;
+  }
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.info?.role !== "assistant") {
+      continue;
+    }
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    const firstTextPart = parts.find(
+      (part) => part?.type === "text" && typeof part.text === "string",
+    );
+    if (firstTextPart) {
+      firstTextPart.text = prependTimestampToText(firstTextPart.text ?? "", timestamp);
+      return;
+    }
+    parts.unshift({ type: "text", text: timestamp });
+    message.parts = parts;
+    return;
+  }
+}
+
 export function createAssistantMessageTimestampHook(options: {
   enabled: boolean;
   now?: () => number;
@@ -26,18 +76,26 @@ export function createAssistantMessageTimestampHook(options: {
     id: "assistant-message-timestamp",
     priority: 341,
     async event(type: string, payload: unknown): Promise<void> {
-      if (!options.enabled || type !== "session.idle") {
+      if (!options.enabled) {
+        return;
+      }
+      const timestamp = formatAssistantMessageTimestamp(now());
+      if (type === "experimental.chat.messages.transform") {
+        const eventPayload = (payload ?? {}) as ChatMessagesTransformPayload;
+        prependTimestampToLatestAssistantMessage(eventPayload.output?.messages, timestamp);
+        return;
+      }
+      if (type !== "session.idle") {
         return;
       }
       const eventPayload = (payload ?? {}) as SessionIdlePayload;
       if (typeof eventPayload.output?.output !== "string") {
         return;
       }
-      const output = eventPayload.output.output.trim();
-      if (!output || output.startsWith(TIMESTAMP_PREFIX_LABEL)) {
-        return;
-      }
-      eventPayload.output.output = `${formatAssistantMessageTimestamp(now())}\n${output}`;
+      eventPayload.output.output = prependTimestampToText(
+        eventPayload.output.output,
+        timestamp,
+      );
     },
   };
 }
