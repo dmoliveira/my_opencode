@@ -437,6 +437,69 @@ export function createTodoContinuationEnforcerHook(options) {
                 state.pendingSource = state.pendingContinuation ? "task_output" : undefined;
                 return;
             }
+            if (type === "message.updated") {
+                const eventPayload = (payload ?? {});
+                const sessionId = resolveSessionId(eventPayload);
+                if (!sessionId) {
+                    return;
+                }
+                const info = eventPayload.properties?.info;
+                if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+                    return;
+                }
+                const completed = Number.isFinite(Number(info?.time?.completed ?? Number.NaN));
+                const failed = info?.error !== undefined && info?.error !== null;
+                if (!completed && !failed) {
+                    return;
+                }
+                const state = getSessionState(sessionState, sessionId);
+                state.lastTraceId = resolveTraceId(eventPayload);
+                if (state.pendingTodoCount <= 0) {
+                    return;
+                }
+                const text = assistantText({
+                    info: { role: "assistant" },
+                    parts: eventPayload.output?.parts ?? eventPayload.properties?.parts,
+                });
+                if (!text) {
+                    return;
+                }
+                const shouldContinue = await resolvePendingContinuationDecision({
+                    text,
+                    continueIntentArmed: state.continueIntentArmed,
+                    source: "assistant_message",
+                    sessionId,
+                    directory: resolveDirectory(eventPayload, options.directory),
+                    traceId: state.lastTraceId,
+                    decisionRuntime: options.decisionRuntime,
+                });
+                if (!shouldContinue) {
+                    state.pendingContinuation = false;
+                    state.pendingSource = undefined;
+                    state.pendingTodoCount = 0;
+                    state.markerProbeAttempted = false;
+                    writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+                        hook: "todo-continuation-enforcer",
+                        stage: "state",
+                        reason_code: "todo_continuation_assistant_message_no_pending",
+                        session_id: sessionId,
+                        trace_id: state.lastTraceId,
+                    });
+                    return;
+                }
+                state.pendingContinuation = true;
+                state.pendingSource = "assistant_message";
+                state.markerProbeAttempted = false;
+                writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+                    hook: "todo-continuation-enforcer",
+                    stage: "state",
+                    reason_code: "todo_continuation_assistant_message_with_open_todos",
+                    session_id: sessionId,
+                    trace_id: state.lastTraceId,
+                    open_todo_count: state.pendingTodoCount,
+                });
+                return;
+            }
             if (type !== "session.idle") {
                 return;
             }
@@ -575,6 +638,7 @@ export function createTodoContinuationEnforcerHook(options) {
                 if (injected) {
                     state.consecutiveFailures = 0;
                     state.pendingContinuation = false;
+                    state.pendingTodoCount = 0;
                     state.pendingSource = undefined;
                     state.continueIntentArmed = false;
                     state.markerProbeAttempted = false;

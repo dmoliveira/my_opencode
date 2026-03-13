@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
 import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js";
+// Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error) {
     const candidate = error && typeof error === "object" && "message" in error
         ? String(error.message ?? "")
@@ -12,8 +13,13 @@ function isRecoverableError(error) {
         message.includes("network") ||
         message.includes("timeout"));
 }
+// Resolves session id from error event payload.
 function resolveSessionId(payload) {
-    const candidates = [payload.properties?.sessionID, payload.properties?.sessionId, payload.properties?.info?.id];
+    const candidates = [
+        payload.properties?.sessionID,
+        payload.properties?.sessionId,
+        payload.properties?.info?.id,
+    ];
     for (const value of candidates) {
         if (typeof value === "string" && value.trim()) {
             return value.trim();
@@ -30,12 +36,11 @@ function looksLikeDelegatedTaskAbort(output) {
     const state = nested?.state && typeof nested.state === "object" ? nested.state : null;
     const metadata = state?.metadata && typeof state.metadata === "object" ? state.metadata : null;
     const status = String(state?.status ?? "").trim().toLowerCase();
-    const error = `${String(state?.error ?? "")}
-${String(nested?.error ?? "")}
-${text}`.toLowerCase();
+    const error = `${String(state?.error ?? "")}\n${String(nested?.error ?? "")}\n${text}`.toLowerCase();
     const childSessionId = String(metadata?.sessionId ?? metadata?.sessionID ?? "").trim();
     return {
-        aborted: status === "error" && error.includes("tool execution aborted"),
+        aborted: status === "error" &&
+            error.includes("tool execution aborted"),
         childSessionId,
     };
 }
@@ -77,6 +82,7 @@ async function injectRecoveryMessage(args) {
     });
     return true;
 }
+// Creates session recovery hook that attempts one auto-resume per active error session.
 export function createSessionRecoveryHook(options) {
     const recoveringSessions = new Set();
     return {
