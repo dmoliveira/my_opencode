@@ -17,6 +17,11 @@ interface GatewayClient {
                         completed?: number;
                     };
                 };
+                parts?: Array<{
+                    type?: string;
+                    text?: string;
+                    synthetic?: boolean;
+                }>;
             }>;
         }>;
         promptAsync(args: {
