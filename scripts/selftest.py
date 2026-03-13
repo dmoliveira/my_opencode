@@ -10334,6 +10334,28 @@ exit 0
             "delivery doctor should warn when the latest run is waiting on handoff completion",
         )
 
+        umbrella_doctor = subprocess.run(
+            [sys.executable, str(DOCTOR_SCRIPT), "run", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        umbrella_doctor_payload = parse_json_output(umbrella_doctor.stdout)
+        expect(
+            isinstance(umbrella_doctor_payload.get("ops_readiness"), dict),
+            "umbrella doctor should expose aggregated ops readiness summary",
+        )
+        expect(
+            umbrella_doctor_payload.get("ops_readiness", {})
+            .get("latest", {})
+            .get("delivery", {})
+            .get("status")
+            == "handoff-pending",
+            "umbrella doctor should include latest delivery drift in ops readiness summary",
+        )
+
         result = subprocess.run(
             [
                 sys.executable,

@@ -97,3 +97,4 @@ Status: doing
 | 2026-03-13T21:28:00Z | E4 hotfix follow-up audit | doing | Added latest-closure follow-up linkage auditing in `/hotfix doctor` so umbrella `/doctor` can surface incident follow-up drift through canonical command wiring. |
 | 2026-03-13T21:31:00Z | E4 delivery doctor status audit | doing | Added latest-run delivery summaries plus handoff-pending/workflow-failed warnings in `/delivery doctor` so issue-flow drift surfaces through canonical diagnostics. |
 | 2026-03-13T21:36:00Z | E4 release narrative enrichment | doing | Added `/release-train draft` context pickup in `/ship doctor` and `/ship create-pr` so release PR templates start from canonical release narrative plus milestone context. |
+| 2026-03-13T21:40:00Z | E4 umbrella ops readiness summary | doing | Added aggregated ops readiness output in umbrella `/doctor` so delivery, ship, release-train, and hotfix drift surfaces in one operator-facing summary. |
