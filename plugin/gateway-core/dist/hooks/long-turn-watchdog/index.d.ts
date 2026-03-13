@@ -3,6 +3,7 @@ export declare function createLongTurnWatchdogHook(options: {
     directory: string;
     enabled: boolean;
     warningThresholdMs: number;
+    toolCallWarningThreshold: number;
     reminderCooldownMs: number;
     maxSessionStateEntries: number;
     prefix: string;

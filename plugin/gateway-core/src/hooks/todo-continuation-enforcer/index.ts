@@ -636,6 +636,29 @@ export function createTodoContinuationEnforcerHook(options: {
         if (!text) {
           return
         }
+        const shouldContinue = await resolvePendingContinuationDecision({
+          text,
+          continueIntentArmed: state.continueIntentArmed,
+          source: "assistant_message",
+          sessionId,
+          directory: resolveDirectory(eventPayload, options.directory),
+          traceId: state.lastTraceId,
+          decisionRuntime: options.decisionRuntime,
+        })
+        if (!shouldContinue) {
+          state.pendingContinuation = false
+          state.pendingSource = undefined
+          state.pendingTodoCount = 0
+          state.markerProbeAttempted = false
+          writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+            hook: "todo-continuation-enforcer",
+            stage: "state",
+            reason_code: "todo_continuation_assistant_message_no_pending",
+            session_id: sessionId,
+            trace_id: state.lastTraceId,
+          })
+          return
+        }
         state.pendingContinuation = true
         state.pendingSource = "assistant_message"
         state.markerProbeAttempted = false
@@ -797,6 +820,7 @@ export function createTodoContinuationEnforcerHook(options: {
         if (injected) {
           state.consecutiveFailures = 0
           state.pendingContinuation = false
+          state.pendingTodoCount = 0
           state.pendingSource = undefined
           state.continueIntentArmed = false
           state.markerProbeAttempted = false

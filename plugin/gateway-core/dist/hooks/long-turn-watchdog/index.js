@@ -120,9 +120,9 @@ export function createLongTurnWatchdogHook(options) {
                     reason_code: "below_threshold",
                     session_id: sessionId,
                     elapsed_ms: elapsedMs,
+                    warning_threshold_ms: options.warningThresholdMs,
                     tool_calls_this_turn: state.toolCallsThisTurn,
                     tool_call_warning_threshold: toolCallThreshold,
-                    warning_threshold_ms: options.warningThresholdMs,
                 });
                 return;
             }
