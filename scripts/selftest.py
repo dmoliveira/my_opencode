@@ -13959,6 +13959,107 @@ jobs:
             "ship create-pr preview should include reviewer policy diagnostics",
         )
 
+        delivery_state_path = (
+            home
+            / ".config"
+            / "opencode"
+            / "my_opencode"
+            / "runtime"
+            / "delivery_runs.json"
+        )
+        delivery_state_path.parent.mkdir(parents=True, exist_ok=True)
+        delivery_state_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "runs": [
+                        {
+                            "run_id": "dlv-test-001",
+                            "issue_id": "issue-900",
+                            "workflow_file": "workflows/ship.json",
+                            "execute": True,
+                            "status": "completed",
+                            "claim": {"owner": "coder"},
+                            "workflow": {"result": "PASS"},
+                            "final_step": "release",
+                            "final": {"result": "PASS"},
+                            "created_at": "2026-03-13T21:00:00Z",
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        ship_doctor_with_delivery = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_doctor_with_delivery.returncode == 0,
+            "ship doctor should pass when delivery handoff state exists",
+        )
+        ship_doctor_with_delivery_payload = parse_json_output(
+            ship_doctor_with_delivery.stdout
+        )
+        expect(
+            ship_doctor_with_delivery_payload.get("latest_delivery", {}).get("issue_id")
+            == "issue-900",
+            "ship doctor should surface the latest delivery handoff summary",
+        )
+
+        ship_create_pr_with_delivery = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "create-pr",
+                "--version",
+                "0.0.1",
+                "--issue",
+                "issue-900",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_create_pr_with_delivery.returncode == 1,
+            "ship create-pr preview should still require confirmation when delivery context is added",
+        )
+        ship_create_pr_with_delivery_payload = parse_json_output(
+            ship_create_pr_with_delivery.stdout
+        )
+        expect(
+            ship_create_pr_with_delivery_payload.get("delivery_summary", {}).get(
+                "run_id"
+            )
+            == "dlv-test-001",
+            "ship create-pr preview should include matched delivery summary",
+        )
+        expect(
+            "## Delivery Context"
+            in str(
+                ship_create_pr_with_delivery_payload.get("pr_template", {}).get(
+                    "body_markdown"
+                )
+            ),
+            "ship create-pr preview should inject delivery context into the PR template",
+        )
+
         ship_create_pr_policy_conflict = subprocess.run(
             [
                 sys.executable,

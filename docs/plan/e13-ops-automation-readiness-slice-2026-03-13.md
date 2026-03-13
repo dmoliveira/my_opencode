@@ -47,3 +47,8 @@ Primary source references:
 1. add higher-touch delivery-to-ship handoff summaries from canonical runtime state
 2. add release PR scaffolding that consumes delivery/workflow evidence directly
 3. add deterministic hotfix-to-followup issue linkage audits in umbrella doctor output
+
+## Follow-up landed in same worktree
+
+- `/ship doctor` now surfaces the latest canonical `/delivery` run summary when runtime state exists
+- `/ship create-pr --issue <id>` can inject the matched delivery handoff summary into the generated PR template without adding a new command family

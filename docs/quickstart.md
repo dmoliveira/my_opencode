@@ -55,6 +55,7 @@ Use this split to stay consistent:
 
 - `/delivery` for normal issue-to-close work
 - `/ship` to preflight PR/release readiness before opening or updating a release PR
+- `/ship create-pr --issue <id>` when you want the PR template to inherit the latest canonical `/delivery` handoff context for that issue
 - `/workflow` when you need direct workflow validation or resume controls
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for plan markdown execution

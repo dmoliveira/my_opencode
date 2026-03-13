@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -27,6 +28,15 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RELEASE_TRAIN_SCRIPT = SCRIPT_DIR / "release_train_command.py"
 
 
+def _delivery_state_path() -> Path:
+    return Path(
+        os.environ.get(
+            "MY_OPENCODE_DELIVERY_STATE_PATH",
+            "~/.config/opencode/my_opencode/runtime/delivery_runs.json",
+        )
+    ).expanduser()
+
+
 def _repo_root() -> Path:
     completed = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -43,7 +53,7 @@ def usage() -> int:
     print(
         "usage: /ship doctor [--repo-root <path>] [--json] | "
         "/ship --version <x.y.z> [--allow-version-jump] [--breaking-change] [--emit-pr-template] [--json] | "
-        "/ship create-pr --version <x.y.z> [--base <ref>] [--head <ref>] "
+        "/ship create-pr --version <x.y.z> [--issue <id>] [--delivery-run-id <id>] [--base <ref>] [--head <ref>] "
         "[--reviewer <login> ...] [--auto-assign-reviewers] "
         "[--allow-reviewer <login> ...] [--deny-reviewer <login> ...] [--confirm] [--json]"
     )
@@ -68,27 +78,107 @@ def _pop_value(args: list[str], flag: str) -> str | None:
     return value
 
 
-def _build_pr_template(version: str) -> dict[str, str]:
+def _load_delivery_runs() -> list[dict[str, Any]]:
+    path = _delivery_state_path()
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    raw_runs = payload.get("runs")
+    if not isinstance(raw_runs, list):
+        return []
+    return [item for item in raw_runs if isinstance(item, dict)]
+
+
+def _delivery_run_matches(
+    run: dict[str, Any], *, issue_id: str | None, run_id: str | None
+) -> bool:
+    if run_id:
+        return str(run.get("run_id") or "") == run_id
+    if issue_id:
+        return str(run.get("issue_id") or "") == issue_id
+    return False
+
+
+def _delivery_summary_lines(summary: dict[str, Any]) -> list[str]:
+    lines = [
+        f"- issue: {summary.get('issue_id')}",
+        f"- delivery run: {summary.get('run_id')}",
+        f"- status: {summary.get('status')}",
+    ]
+    workflow_file = str(summary.get("workflow_file") or "").strip()
+    if workflow_file:
+        lines.append(f"- workflow: `{workflow_file}`")
+    final_step = str(summary.get("final_step") or "").strip()
+    if final_step:
+        lines.append(f"- final step: {final_step}")
+    claim_owner = summary.get("claim_owner")
+    if claim_owner:
+        lines.append(f"- claimed by: {claim_owner}")
+    return lines
+
+
+def _select_delivery_summary(
+    *, issue_id: str | None = None, run_id: str | None = None
+) -> dict[str, Any] | None:
+    for run in _load_delivery_runs():
+        if not _delivery_run_matches(run, issue_id=issue_id, run_id=run_id):
+            continue
+        claim_raw = run.get("claim")
+        claim: dict[str, Any] = claim_raw if isinstance(claim_raw, dict) else {}
+        final_raw = run.get("final")
+        final_payload: dict[str, Any] = final_raw if isinstance(final_raw, dict) else {}
+        summary = {
+            "run_id": str(run.get("run_id") or ""),
+            "issue_id": str(run.get("issue_id") or ""),
+            "status": str(run.get("status") or "unknown"),
+            "workflow_file": str(run.get("workflow_file") or ""),
+            "execute": bool(run.get("execute")),
+            "final_step": str(run.get("final_step") or ""),
+            "created_at": str(run.get("created_at") or ""),
+            "claim_owner": str(claim.get("owner") or claim.get("claimed_by") or "")
+            or None,
+            "handoff_to": str(final_payload.get("to") or "") or None,
+        }
+        summary["summary_lines"] = _delivery_summary_lines(summary)
+        return summary
+    return None
+
+
+def _build_pr_template(
+    version: str, *, delivery_summary: dict[str, Any] | None = None
+) -> dict[str, str]:
+    body_lines = [
+        "## Summary",
+        "- <1-3 bullets on why this release is shipping>",
+        "",
+    ]
+    if delivery_summary is not None:
+        body_lines.extend(
+            ["## Delivery Context", *delivery_summary["summary_lines"], ""]
+        )
+    body_lines.extend(
+        [
+            "## Risk",
+            "- <known risk or 'none'>",
+            "",
+            "## Validation Evidence",
+            "- make validate",
+            "- make selftest",
+            "- make install-test",
+            "- pre-commit run --all-files",
+            "",
+            "## Migration Notes",
+            "- <operator migration notes or 'none'>",
+        ]
+    )
     return {
         "title": f"ship {version}",
-        "body_markdown": "\n".join(
-            [
-                "## Summary",
-                "- <1-3 bullets on why this release is shipping>",
-                "",
-                "## Risk",
-                "- <known risk or 'none'>",
-                "",
-                "## Validation Evidence",
-                "- make validate",
-                "- make selftest",
-                "- make install-test",
-                "- pre-commit run --all-files",
-                "",
-                "## Migration Notes",
-                "- <operator migration notes or 'none'>",
-            ]
-        ),
+        "body_markdown": "\n".join(body_lines),
     }
 
 
@@ -286,6 +376,16 @@ def _prepare_payload(
     return payload, 0 if ready else 1
 
 
+def _latest_delivery_summary() -> dict[str, Any] | None:
+    runs = _load_delivery_runs()
+    if not runs:
+        return None
+    latest_run_id = str(runs[0].get("run_id") or "")
+    if not latest_run_id:
+        return None
+    return _select_delivery_summary(run_id=latest_run_id)
+
+
 def _command_doctor(args: list[str], as_json: bool) -> int:
     try:
         repo_root_arg = _pop_value(args, "--repo-root")
@@ -314,6 +414,7 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
     )
     codeowners_reviewers = _codeowners_reviewers(repo_root)
     codeowners_path = repo_root / "CODEOWNERS"
+    latest_delivery_summary = _latest_delivery_summary()
 
     warnings: list[str] = []
     problems: list[str] = []
@@ -361,6 +462,7 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
             "exists": codeowners_path.exists(),
             "auto_reviewers": codeowners_reviewers,
         },
+        "latest_delivery": latest_delivery_summary,
         "reviewer_policy": policy_diagnostics,
         "warnings": warnings,
         "problems": problems,
@@ -382,6 +484,8 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    issue_id = _pop_value(args, "--issue")
+    delivery_run_id = _pop_value(args, "--delivery-run-id")
     base_ref = _pop_value(args, "--base") or "main"
     head_ref = _pop_value(args, "--head") or "HEAD"
     auto_assign_reviewers = _pop_flag(args, "--auto-assign-reviewers")
@@ -421,22 +525,27 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         breaking=False,
         emit_pr_template=True,
     )
+    delivery_summary = _select_delivery_summary(
+        issue_id=issue_id, run_id=delivery_run_id
+    )
     template = payload.get("pr_template") if isinstance(payload, dict) else None
-    if not isinstance(template, dict):
-        template = _build_pr_template(version)
+    if not isinstance(template, dict) or delivery_summary is not None:
+        template = _build_pr_template(version, delivery_summary=delivery_summary)
 
     if code != 0:
         payload["requested_reviewers"] = explicit_reviewers
         payload["auto_assign_reviewers"] = auto_assign_reviewers
         payload["resolved_reviewers"] = resolved_reviewers
         payload["filtered_out_reviewers"] = filtered_out_reviewers
+        payload["issue_id"] = issue_id
+        payload["delivery_run_id"] = delivery_run_id
+        payload["delivery_summary"] = delivery_summary
         payload["policy"] = {
             "allow_reviewers": allow_reviewers,
             "deny_reviewers": deny_reviewers,
         }
         payload["policy_diagnostics"] = policy_diagnostics
-        if "pr_template" not in payload:
-            payload["pr_template"] = template
+        payload["pr_template"] = template
         if as_json:
             print(json.dumps(payload, indent=2))
         else:
@@ -451,10 +560,13 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
             "version": version,
             "base": base_ref,
             "head": head_ref,
+            "issue_id": issue_id,
+            "delivery_run_id": delivery_run_id,
             "requested_reviewers": explicit_reviewers,
             "auto_assign_reviewers": auto_assign_reviewers,
             "resolved_reviewers": resolved_reviewers,
             "filtered_out_reviewers": filtered_out_reviewers,
+            "delivery_summary": delivery_summary,
             "policy": {
                 "allow_reviewers": allow_reviewers,
                 "deny_reviewers": deny_reviewers,
@@ -510,10 +622,13 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         "title": title,
         "base": base_ref,
         "head": head_ref,
+        "issue_id": issue_id,
+        "delivery_run_id": delivery_run_id,
         "requested_reviewers": explicit_reviewers,
         "auto_assign_reviewers": auto_assign_reviewers,
         "resolved_reviewers": resolved_reviewers,
         "filtered_out_reviewers": filtered_out_reviewers,
+        "delivery_summary": delivery_summary,
         "policy": {
             "allow_reviewers": allow_reviewers,
             "deny_reviewers": deny_reviewers,
