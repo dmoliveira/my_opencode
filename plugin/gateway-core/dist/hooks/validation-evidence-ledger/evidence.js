@@ -96,6 +96,12 @@ function computeMissing(snapshot, markers) {
         if (!normalized) {
             continue;
         }
+        if (normalized === "validation") {
+            if (!(snapshot.lint || snapshot.test || snapshot.typecheck || snapshot.build || snapshot.security)) {
+                missing.push(normalized);
+            }
+            continue;
+        }
         const category = markerCategory(normalized);
         if (!category) {
             missing.push(normalized);
