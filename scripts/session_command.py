@@ -755,6 +755,46 @@ def _child_session_still_terminal(
     )
 
 
+def _child_session_still_stale_incomplete(
+    conn: sqlite3.Connection,
+    *,
+    parent_session_id: str,
+    child_session_id: str,
+    child_message_id: str,
+    expected_child_time_updated: int,
+) -> bool:
+    if (
+        not parent_session_id
+        or not child_session_id
+        or not child_message_id
+        or expected_child_time_updated <= 0
+    ):
+        return False
+    session_row = conn.execute(
+        "SELECT time_updated FROM session WHERE id = ? AND parent_id = ?",
+        (child_session_id, parent_session_id),
+    ).fetchone()
+    if session_row is None or int(session_row["time_updated"] or 0) != int(
+        expected_child_time_updated
+    ):
+        return False
+    message_row = conn.execute(
+        "SELECT data FROM message WHERE id = ? AND session_id = ?",
+        (child_message_id, child_session_id),
+    ).fetchone()
+    if message_row is None:
+        return False
+    message_data = json.loads(message_row["data"] or "{}")
+    if not isinstance(message_data, dict):
+        return False
+    if message_data.get("error") is not None:
+        return False
+    time_payload = message_data.get("time")
+    return not (
+        isinstance(time_payload, dict) and time_payload.get("completed") is not None
+    )
+
+
 def _repair_runtime_stuck_sessions(
     db_path: Path, stale_seconds: int, apply_changes: bool, include_generic: bool
 ) -> dict:
@@ -807,6 +847,40 @@ def _repair_runtime_stuck_sessions(
                     ),
                     tool_name=str(finding.get("parent_last_tool") or "task"),
                     reason_code="stale_parent_reconciled_from_child_completion",
+                )
+                if repaired:
+                    repairs.append(
+                        {
+                            "issue_type": issue_type,
+                            "parent_session_id": session_id,
+                            "child_session_id": finding.get("child_session_id"),
+                            "tool": finding.get("parent_last_tool") or "task",
+                        }
+                    )
+            elif issue_type == "stale_delegated_child_runtime_recovery_missed":
+                session_id = str(finding.get("parent_session_id") or "")
+                if not _child_session_still_stale_incomplete(
+                    conn,
+                    parent_session_id=session_id,
+                    child_session_id=str(finding.get("child_session_id") or ""),
+                    child_message_id=str(finding.get("child_message_id") or ""),
+                    expected_child_time_updated=int(
+                        finding.get("child_time_updated") or 0
+                    ),
+                ):
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                    conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+                    continue
+                repaired = _repair_message_and_tool(
+                    conn,
+                    session_id=session_id,
+                    message_id=str(finding.get("parent_message_id") or ""),
+                    part_id=str(finding.get("parent_part_id") or ""),
+                    expected_session_time_updated=int(
+                        finding.get("parent_time_updated") or 0
+                    ),
+                    tool_name=str(finding.get("parent_last_tool") or "task"),
+                    reason_code="stale_delegated_child_runtime_recovery_missed",
                 )
                 if repaired:
                     repairs.append(
