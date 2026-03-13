@@ -80,7 +80,7 @@ export function loadGatewayConfigSource(
   if (!isRecord(source)) {
     return sidecar;
   }
-  return deepMergeRecords(sidecar, source);
+  return deepMergeRecords(source, sidecar);
 }
 
 function parseAgentPolicyOverrides(
