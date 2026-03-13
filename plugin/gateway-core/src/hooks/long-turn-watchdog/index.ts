@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import {
   inspectToolAfterOutputText,
@@ -18,6 +19,25 @@ interface ToolAfterPayload {
 
 interface SessionDeletedPayload {
   properties?: { sessionID?: string; sessionId?: string; info?: { id?: string } }
+}
+
+interface GatewayClient {
+  session?: {
+    messages?(args: {
+      path: { id: string }
+      query?: { directory?: string }
+    }): Promise<{
+      data?: Array<{
+        info?: { role?: string; error?: unknown; time?: { completed?: number } }
+        parts?: Array<{ type?: string; text?: string; synthetic?: boolean }>
+      }>
+    }>
+    promptAsync(args: {
+      path: { id: string }
+      body: { parts: Array<{ type: string; text: string }> }
+      query?: { directory?: string }
+    }): Promise<void>
+  }
 }
 
 interface TurnState {
@@ -74,6 +94,7 @@ function formatDuration(ms: number): string {
 
 export function createLongTurnWatchdogHook(options: {
   directory: string
+  client?: GatewayClient
   enabled: boolean
   warningThresholdMs: number
   toolCallWarningThreshold: number
@@ -84,6 +105,55 @@ export function createLongTurnWatchdogHook(options: {
 }): GatewayHook {
   const states = new Map<string, TurnState>()
   const now = options.now ?? (() : number => Date.now())
+
+  async function injectVisibleProgressPulse(args: {
+    sessionId: string
+    directory: string
+    elapsedMs: number
+    toolCallsThisTurn: number
+  }): Promise<void> {
+    const client = options.client?.session
+    if (!client) {
+      return
+    }
+    const safety = await inspectHookMessageSafety({
+      session: client,
+      sessionId: args.sessionId,
+      directory: args.directory,
+    })
+    if (!safety.safe && safety.reason !== "assistant_turn_incomplete") {
+      writeGatewayEventAudit(args.directory, {
+        hook: "long-turn-watchdog",
+        stage: "skip",
+        reason_code: `visible_progress_pulse_${safety.reason}`,
+        session_id: args.sessionId,
+      })
+      return
+    }
+    if (!safety.safe && safety.reason === "assistant_turn_incomplete") {
+      writeGatewayEventAudit(args.directory, {
+        hook: "long-turn-watchdog",
+        stage: "state",
+        reason_code: "visible_progress_pulse_forcing_incomplete_parent_recovery",
+        session_id: args.sessionId,
+      })
+    }
+    const injected = await injectHookMessage({
+      session: client,
+      sessionId: args.sessionId,
+      directory: args.directory,
+      content:
+        `[runtime progress pulse]\nStill working in this turn after ${formatDuration(args.elapsedMs)} and ${args.toolCallsThisTurn} tool call${args.toolCallsThisTurn === 1 ? "" : "s"}. I will send the final result once I clear the current step.`,
+    })
+    writeGatewayEventAudit(args.directory, {
+      hook: "long-turn-watchdog",
+      stage: injected ? "inject" : "skip",
+      reason_code: injected ? "visible_progress_pulse_injected" : "visible_progress_pulse_inject_failed",
+      session_id: args.sessionId,
+      elapsed_ms: args.elapsedMs,
+      tool_calls_this_turn: args.toolCallsThisTurn,
+    })
+  }
 
   return {
     id: "long-turn-watchdog",
@@ -213,6 +283,14 @@ export function createLongTurnWatchdogHook(options: {
         if (typeof eventPayload.output === "object" && eventPayload.output) {
           eventPayload.output.output = amended
         }
+      }
+      if (state.toolCallsThisTurn >= toolCallThreshold) {
+        await injectVisibleProgressPulse({
+          sessionId,
+          directory,
+          elapsedMs,
+          toolCallsThisTurn: state.toolCallsThisTurn,
+        })
       }
       state.warnedTurnCounter = state.turnCounter
       state.lastWarnedAtMs = now()

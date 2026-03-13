@@ -287,6 +287,7 @@ function configuredHooks(ctx) {
         })),
         safeHook("long-turn-watchdog", () => createLongTurnWatchdogHook({
             directory,
+            client: ctx.client,
             enabled: cfg.longTurnWatchdog.enabled,
             warningThresholdMs: cfg.longTurnWatchdog.warningThresholdMs,
             toolCallWarningThreshold: cfg.longTurnWatchdog.toolCallWarningThreshold,

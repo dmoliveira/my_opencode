@@ -105,6 +105,7 @@ interface SessionState {
   inFlight: boolean
   markerProbeAttempted: boolean
   continueIntentArmed: boolean
+  continueAckPending: boolean
   lastTraceId?: string
 }
 
@@ -133,6 +134,16 @@ function isContinueIntent(prompt: string): boolean {
     return false
   }
   return CONTINUE_INTENT_PATTERN.test(prompt)
+}
+
+function shouldAcknowledgeContinueIntent(prompt: string): boolean {
+  const normalized = prompt.trim().toLowerCase()
+  if (!normalized || normalized.length > 80 || normalized.includes("\n")) {
+    return false
+  }
+  return /^(yes|yes please|continue|continue please|go ahead|proceed|keep going|carry on|do it now)$/.test(
+    normalized,
+  )
 }
 
 function isStopIntent(prompt: string): boolean {
@@ -495,10 +506,54 @@ function getSessionState(store: Map<string, SessionState>, sessionId: string): S
     inFlight: false,
     markerProbeAttempted: false,
     continueIntentArmed: false,
+    continueAckPending: false,
     lastTraceId: undefined,
   }
   store.set(sessionId, created)
   return created
+}
+
+async function injectContinueAcknowledgement(args: {
+  client: NonNullable<GatewayClient["session"]>
+  sessionId: string
+  directory: string
+}): Promise<boolean> {
+  const safety = await inspectHookMessageSafety({
+    session: args.client,
+    sessionId: args.sessionId,
+    directory: args.directory,
+  })
+  if (!safety.safe && safety.reason !== "assistant_turn_incomplete") {
+    writeGatewayEventAudit(args.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "skip",
+      reason_code: `todo_continuation_continue_ack_${safety.reason}`,
+      session_id: args.sessionId,
+    })
+    return false
+  }
+  if (!safety.safe && safety.reason === "assistant_turn_incomplete") {
+    writeGatewayEventAudit(args.directory, {
+      hook: "todo-continuation-enforcer",
+      stage: "state",
+      reason_code: "todo_continuation_continue_ack_forcing_incomplete_parent_recovery",
+      session_id: args.sessionId,
+    })
+  }
+  const injected = await injectHookMessage({
+    session: args.client,
+    sessionId: args.sessionId,
+    directory: args.directory,
+    content:
+      "[continuing now]\nI am resuming the next pending step now and will report back after the next checkpoint.",
+  })
+  writeGatewayEventAudit(args.directory, {
+    hook: "todo-continuation-enforcer",
+    stage: injected ? "inject" : "skip",
+    reason_code: injected ? "todo_continuation_continue_ack_injected" : "todo_continuation_continue_ack_inject_failed",
+    session_id: args.sessionId,
+  })
+  return injected
 }
 
 export function createTodoContinuationEnforcerHook(options: {
@@ -541,6 +596,7 @@ export function createTodoContinuationEnforcerHook(options: {
         }
         if (isStopIntent(prompt)) {
           state.continueIntentArmed = false
+          state.continueAckPending = false
           state.pendingContinuation = false
           state.pendingSource = undefined
           state.pendingTodoCount = 0
@@ -551,6 +607,9 @@ export function createTodoContinuationEnforcerHook(options: {
         }
         if (isContinueIntent(prompt)) {
           state.continueIntentArmed = true
+          state.continueAckPending = shouldAcknowledgeContinueIntent(prompt)
+        } else {
+          state.continueAckPending = false
         }
         state.markerProbeAttempted = false
         return
@@ -565,13 +624,23 @@ export function createTodoContinuationEnforcerHook(options: {
         }
         const state = getSessionState(sessionState, sessionId)
         state.lastTraceId = resolveTraceId(eventPayload)
+        const directory = resolveDirectory(eventPayload, options.directory)
+        const client = options.client?.session
+        if (state.continueAckPending && client && tool !== "task") {
+          state.continueAckPending = false
+          await injectContinueAcknowledgement({
+            client,
+            sessionId,
+            directory,
+          })
+        }
         if (tool === "todowrite") {
           const pendingTodoCount = parseTodoContinuationCount(eventPayload.output?.output)
           if (pendingTodoCount !== null) {
             state.pendingTodoCount = pendingTodoCount
             state.pendingContinuation = pendingTodoCount > 0
             state.markerProbeAttempted = true
-            writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+            writeGatewayEventAudit(directory, {
               hook: "todo-continuation-enforcer",
               stage: "state",
               reason_code: "todo_continuation_todowrite_state_recorded",
@@ -585,19 +654,20 @@ export function createTodoContinuationEnforcerHook(options: {
         if (tool !== "task" || typeof eventPayload.output?.output !== "string") {
           return
         }
+        state.continueAckPending = false
         state.pendingContinuation = await resolvePendingContinuationDecision({
           text: eventPayload.output.output,
           continueIntentArmed: state.continueIntentArmed,
           source: "task_output",
           sessionId,
-          directory: resolveDirectory(eventPayload, options.directory),
+          directory,
           traceId: state.lastTraceId,
           decisionRuntime: options.decisionRuntime,
         })
         const hasExplicitCompletion = hasCompletionClosureCue(eventPayload.output.output)
         state.markerProbeAttempted = state.pendingContinuation || hasExplicitCompletion
         if (!state.pendingContinuation && !hasExplicitCompletion) {
-          writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
+          writeGatewayEventAudit(directory, {
             hook: "todo-continuation-enforcer",
             stage: "state",
             reason_code: "todo_continuation_task_probe_retained",
@@ -683,6 +753,19 @@ export function createTodoContinuationEnforcerHook(options: {
       if (!sessionId) {
         return
       }
+      const state = getSessionState(sessionState, sessionId)
+      const ackClient = options.client?.session
+      if (state.continueAckPending && ackClient) {
+        state.continueAckPending = false
+        const acknowledged = await injectContinueAcknowledgement({
+          client: ackClient,
+          sessionId,
+          directory,
+        })
+        if (acknowledged) {
+          return
+        }
+      }
       if (options.stopGuard?.isStopped(sessionId)) {
         writeGatewayEventAudit(directory, {
           hook: "todo-continuation-enforcer",
@@ -703,7 +786,6 @@ export function createTodoContinuationEnforcerHook(options: {
         return
       }
 
-      const state = getSessionState(sessionState, sessionId)
       const now = Date.now()
       const cooldownBase = Math.max(1, Math.floor(options.cooldownMs))
       const maxFailures = Math.max(1, Math.floor(options.maxConsecutiveFailures))

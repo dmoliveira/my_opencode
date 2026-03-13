@@ -44,13 +44,52 @@ function looksLikeDelegatedTaskAbort(output) {
         childSessionId,
     };
 }
+function looksLikeSilentDelegatedAbortFromHistory(messages) {
+    for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+        const message = messages[idx];
+        if (message?.info?.role !== "assistant") {
+            continue;
+        }
+        const errored = message.info?.error !== undefined && message.info?.error !== null;
+        const completed = Number.isFinite(Number(message.info?.time?.completed ?? Number.NaN));
+        if (!errored || completed) {
+            return { matched: false, childSessionId: "" };
+        }
+        const parts = Array.isArray(message.parts) ? message.parts : [];
+        const hasVisibleText = parts.some((part) => part?.type === "text" &&
+            typeof part.text === "string" &&
+            part.text.trim() &&
+            !part.synthetic);
+        if (hasVisibleText) {
+            return { matched: false, childSessionId: "" };
+        }
+        for (let partIndex = parts.length - 1; partIndex >= 0; partIndex -= 1) {
+            const part = parts[partIndex];
+            if (part?.type !== "tool" || String(part.tool ?? "").trim().toLowerCase() !== "task") {
+                continue;
+            }
+            const status = String(part.state?.status ?? "").trim().toLowerCase();
+            const error = `${String(part.state?.error ?? "")}
+${String(message.info?.error ?? "")}`.toLowerCase();
+            if ((status === "error" || status === "failed") && error.includes("aborted")) {
+                return {
+                    matched: true,
+                    childSessionId: String(part.state?.metadata?.sessionId ?? part.state?.metadata?.sessionID ?? "").trim(),
+                };
+            }
+        }
+        return { matched: false, childSessionId: "" };
+    }
+    return { matched: false, childSessionId: "" };
+}
 async function injectRecoveryMessage(args) {
     const safety = await inspectHookMessageSafety({
         session: args.session,
         sessionId: args.sessionId,
         directory: args.directory,
     });
-    if (!safety.safe) {
+    if (!safety.safe &&
+        !(args.allowIncompleteAssistantTurn && safety.reason === "assistant_turn_incomplete")) {
         writeGatewayEventAudit(args.directory, {
             hook: args.hook,
             stage: "skip",
@@ -58,6 +97,14 @@ async function injectRecoveryMessage(args) {
             session_id: args.sessionId,
         });
         return false;
+    }
+    if (!safety.safe && safety.reason === "assistant_turn_incomplete") {
+        writeGatewayEventAudit(args.directory, {
+            hook: args.hook,
+            stage: "state",
+            reason_code: `${args.reasonCode}_forcing_incomplete_parent_recovery`,
+            session_id: args.sessionId,
+        });
     }
     const injected = await injectHookMessage({
         session: args.session,
@@ -100,6 +147,56 @@ export function createSessionRecoveryHook(options) {
                 }
                 return;
             }
+            if (type === "session.idle") {
+                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                    ? eventPayload.directory
+                    : options.directory;
+                const sessionId = resolveSessionId(eventPayload);
+                if (!sessionId || recoveringSessions.has(sessionId) || !options.autoResume) {
+                    return;
+                }
+                const client = options.client?.session;
+                if (!client || typeof client.messages !== "function") {
+                    return;
+                }
+                try {
+                    const response = await client.messages({
+                        path: { id: sessionId },
+                        query: { directory },
+                    });
+                    const messages = Array.isArray(response.data) ? response.data : [];
+                    const silentAbort = looksLikeSilentDelegatedAbortFromHistory(messages);
+                    if (!silentAbort.matched) {
+                        return;
+                    }
+                    recoveringSessions.add(sessionId);
+                    try {
+                        await injectRecoveryMessage({
+                            session: client,
+                            sessionId,
+                            directory,
+                            hook: "session-recovery",
+                            reasonCode: "silent_parent_after_delegation_abort_recovery",
+                            allowIncompleteAssistantTurn: true,
+                            content: silentAbort.childSessionId
+                                ? `[stuck delegated abort detected during idle - continuing in parent turn]\nchild_session: ${silentAbort.childSessionId}`
+                                : "[stuck delegated abort detected during idle - continuing in parent turn]",
+                        });
+                    }
+                    finally {
+                        recoveringSessions.delete(sessionId);
+                    }
+                }
+                catch {
+                    writeGatewayEventAudit(directory, {
+                        hook: "session-recovery",
+                        stage: "skip",
+                        reason_code: "silent_parent_after_delegation_abort_recovery_failed",
+                        session_id: sessionId,
+                    });
+                }
+                return;
+            }
             if (type === "tool.execute.after") {
                 const toolPayload = (payload ?? {});
                 const sessionId = String(toolPayload.input?.sessionID ?? toolPayload.input?.sessionId ?? "").trim();
@@ -128,6 +225,7 @@ export function createSessionRecoveryHook(options) {
                         directory,
                         hook: "session-recovery",
                         reasonCode: "delegated_task_abort_recovery",
+                        allowIncompleteAssistantTurn: true,
                         content: delegatedAbort.childSessionId
                             ? `[delegated task aborted - continuing in parent turn]\nchild_session: ${delegatedAbort.childSessionId}`
                             : "[delegated task aborted - continuing in parent turn]",
