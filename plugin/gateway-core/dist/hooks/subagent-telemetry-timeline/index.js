@@ -44,8 +44,6 @@ export function createSubagentTelemetryTimelineHook(options) {
                     reasonCode: "subagent_telemetry_child_idle_reconciled",
                     endedAt: Date.now(),
                     childRunId: link.childRunId || undefined,
-                    traceId: link.traceId || undefined,
-                    subagentType: link.subagentType || undefined,
                 }, options.maxTimelineEntries);
                 if (!record) {
                     return;
@@ -89,8 +87,6 @@ export function createSubagentTelemetryTimelineHook(options) {
                         : "subagent_telemetry_child_message_completed_reconciled",
                     endedAt: Date.now(),
                     childRunId: link.childRunId || undefined,
-                    traceId: link.traceId || undefined,
-                    subagentType: link.subagentType || undefined,
                 }, options.maxTimelineEntries);
                 if (!record) {
                     return;
@@ -124,8 +120,6 @@ export function createSubagentTelemetryTimelineHook(options) {
                             reasonCode: "subagent_telemetry_child_deleted_reconciled",
                             endedAt: Date.now(),
                             childRunId: childLink.childRunId || undefined,
-                            traceId: childLink.traceId || undefined,
-                            subagentType: childLink.subagentType || undefined,
                         }, options.maxTimelineEntries);
                         if (record) {
                             writeGatewayEventAudit(options.directory, {

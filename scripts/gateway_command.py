@@ -11,7 +11,8 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -170,6 +171,110 @@ def gateway_event_audit_path(cwd: Path) -> Path:
     if raw:
         return Path(raw).expanduser()
     return cwd / ".opencode" / "gateway-events.jsonl"
+
+
+def load_gateway_event_audit(path: Path) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    if not path.exists() or not path.is_file():
+        return events
+    try:
+        for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                events.append(payload)
+    except OSError:
+        return []
+    return events
+
+
+def parse_gateway_event_ts(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def command_continuation_report(as_json: bool, *, minutes: int, limit: int) -> int:
+    path = gateway_event_audit_path(Path.cwd())
+    events = load_gateway_event_audit(path)
+    cutoff = datetime.now(UTC) - timedelta(minutes=max(1, minutes))
+
+    continuation_events: list[dict[str, Any]] = []
+    for event in events:
+        if str(event.get("hook") or "") != "todo-continuation-enforcer":
+            continue
+        ts = parse_gateway_event_ts(event.get("ts") or event.get("timestamp"))
+        if ts is not None and ts < cutoff:
+            continue
+        continuation_events.append(event)
+
+    reason_counts = Counter(
+        str(event.get("reason_code") or "unknown") for event in continuation_events
+    )
+    stage_counts = Counter(
+        str(event.get("stage") or "unknown") for event in continuation_events
+    )
+    assistant_message_open_todo_events = [
+        {
+            "ts": event.get("ts") or event.get("timestamp"),
+            "session_id": event.get("session_id"),
+            "trace_id": event.get("trace_id"),
+            "open_todo_count": event.get("open_todo_count"),
+        }
+        for event in continuation_events
+        if str(event.get("reason_code") or "")
+        == "todo_continuation_assistant_message_with_open_todos"
+    ]
+    session_counts = Counter(
+        str(event.get("session_id") or "unknown") for event in continuation_events
+    )
+    recent = continuation_events[-max(1, limit) :]
+    payload = {
+        "result": "PASS",
+        "command": "continuation-report",
+        "path": str(path),
+        "minutes": max(1, minutes),
+        "audit_enabled": gateway_event_audit_enabled(),
+        "event_count": len(continuation_events),
+        "reason_counts": dict(reason_counts),
+        "stage_counts": dict(stage_counts),
+        "assistant_message_open_todo_events": list(
+            reversed(assistant_message_open_todo_events[-max(1, limit) :])
+        ),
+        "top_sessions": [
+            {"session_id": session_id, "count": count}
+            for session_id, count in session_counts.most_common(10)
+        ],
+        "recent_events": [
+            {
+                "ts": event.get("ts") or event.get("timestamp"),
+                "stage": event.get("stage"),
+                "reason_code": event.get("reason_code"),
+                "session_id": event.get("session_id"),
+                "trace_id": event.get("trace_id"),
+                "decision_source": event.get("decision_source"),
+                "llm_decision_char": event.get("llm_decision_char"),
+                "llm_decision_mode": event.get("llm_decision_mode"),
+            }
+            for event in reversed(recent)
+        ],
+        "warnings": []
+        if continuation_events
+        else ["no todo-continuation-enforcer events found in the selected window"],
+    }
+    emit(payload, as_json=as_json)
+    return 0
 
 
 def resolve_gateway_sidecar_path(cwd: Path) -> Path:
@@ -3093,6 +3198,8 @@ def main(argv: list[str]) -> int:
     max_cycles_set = False
     limit = 20
     limit_set = False
+    minutes = 120
+    minutes_set = False
     clear_cache = False
     if "--json" in args:
         args.remove("--json")
@@ -3154,6 +3261,17 @@ def main(argv: list[str]) -> int:
             limit_set = True
         except ValueError:
             return usage()
+    if "--minutes" in args:
+        idx = args.index("--minutes")
+        if idx + 1 >= len(args):
+            return usage()
+        value = args[idx + 1]
+        del args[idx : idx + 2]
+        try:
+            minutes = max(1, int(value))
+            minutes_set = True
+        except ValueError:
+            return usage()
 
     used_flags: set[str] = set()
     if as_json:
@@ -3180,6 +3298,8 @@ def main(argv: list[str]) -> int:
         used_flags.add("--max-cycles")
     if limit_set:
         used_flags.add("--limit")
+    if minutes_set:
+        used_flags.add("--minutes")
 
     def flags_allowed(*allowed: str) -> bool:
         allowed_set = set(allowed)
@@ -3232,6 +3352,12 @@ def main(argv: list[str]) -> int:
                 force_kill=force_kill,
             )
         return usage()
+    if cmd == "continuation":
+        if len(args) != 1 or args[0] != "report":
+            return usage()
+        if not flags_allowed("--json", "--minutes", "--limit"):
+            return usage()
+        return command_continuation_report(as_json, minutes=minutes, limit=limit)
     if cmd == "protection":
         if len(args) != 1:
             return usage()

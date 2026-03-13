@@ -74,6 +74,7 @@ export interface GlobalProcessPressureConfig {
 export interface LongTurnWatchdogConfig {
     enabled: boolean;
     warningThresholdMs: number;
+    toolCallWarningThreshold: number;
     reminderCooldownMs: number;
     maxSessionStateEntries: number;
     prefix: string;
