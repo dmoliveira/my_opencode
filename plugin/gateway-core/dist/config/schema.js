@@ -170,7 +170,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
     longTurnWatchdog: {
         enabled: true,
         warningThresholdMs: 180000,
-        toolCallWarningThreshold: 8,
+        toolCallWarningThreshold: 20,
         reminderCooldownMs: 120000,
         maxSessionStateEntries: 1024,
         prefix: "[Turn Watchdog]:",
