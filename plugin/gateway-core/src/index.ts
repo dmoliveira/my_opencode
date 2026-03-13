@@ -291,6 +291,16 @@ interface ChatSystemTransformOutput {
   system: string[];
 }
 
+interface TextCompleteInput {
+  sessionID?: string;
+  messageID?: string;
+  partID?: string;
+}
+
+interface TextCompleteOutput {
+  text: string;
+}
+
 // Creates ordered hook list using gateway config and default hooks.
 function configuredHooks(ctx: GatewayContext): GatewayHook[] {
   const directory =
@@ -1209,6 +1219,10 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     },
     output: ChatSystemTransformOutput,
   ): Promise<void>;
+  "experimental.text.complete"(
+    input: TextCompleteInput,
+    output: TextCompleteOutput,
+  ): Promise<void>;
 } {
   const hooks = configuredHooks(ctx);
   const noisyDispatchSampleCounters = new Map<string, number>();
@@ -1528,6 +1542,36 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     }
   }
 
+  async function textComplete(
+    input: TextCompleteInput,
+    output: TextCompleteOutput,
+  ): Promise<void> {
+    writeGatewayEventAudit(directory, {
+      hook: "gateway-core",
+      stage: "dispatch",
+      reason_code: "text_complete_dispatch",
+      event_type: "experimental.text.complete",
+      has_session_id:
+        typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+      hook_count: hooks.length,
+    });
+    for (const hook of hooks) {
+      const result = await dispatchGatewayHookEvent({
+        hook,
+        eventType: "experimental.text.complete",
+        payload: {
+          input,
+          output,
+          directory,
+        },
+        directory,
+      });
+      if (!result.ok && (result.critical || result.blocked)) {
+        throw result.error;
+      }
+    }
+  }
+
   return {
     event,
     "tool.execute.before": toolExecuteBefore,
@@ -1537,5 +1581,6 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     "chat.message": chatMessage,
     "experimental.chat.messages.transform": chatMessagesTransform,
     "experimental.chat.system.transform": chatSystemTransform,
+    "experimental.text.complete": textComplete,
   };
 }

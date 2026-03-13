@@ -1046,6 +1046,31 @@ export default function GatewayCorePlugin(ctx) {
             }
         }
     }
+    async function textComplete(input, output) {
+        writeGatewayEventAudit(directory, {
+            hook: "gateway-core",
+            stage: "dispatch",
+            reason_code: "text_complete_dispatch",
+            event_type: "experimental.text.complete",
+            has_session_id: typeof input.sessionID === "string" && input.sessionID.trim().length > 0,
+            hook_count: hooks.length,
+        });
+        for (const hook of hooks) {
+            const result = await dispatchGatewayHookEvent({
+                hook,
+                eventType: "experimental.text.complete",
+                payload: {
+                    input,
+                    output,
+                    directory,
+                },
+                directory,
+            });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
+        }
+    }
     return {
         event,
         "tool.execute.before": toolExecuteBefore,
@@ -1055,5 +1080,6 @@ export default function GatewayCorePlugin(ctx) {
         "chat.message": chatMessage,
         "experimental.chat.messages.transform": chatMessagesTransform,
         "experimental.chat.system.transform": chatSystemTransform,
+        "experimental.text.complete": textComplete,
     };
 }

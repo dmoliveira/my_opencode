@@ -140,6 +140,14 @@ interface ChatMessagesTransformOutput {
 interface ChatSystemTransformOutput {
     system: string[];
 }
+interface TextCompleteInput {
+    sessionID?: string;
+    messageID?: string;
+    partID?: string;
+}
+interface TextCompleteOutput {
+    text: string;
+}
 export default function GatewayCorePlugin(ctx: GatewayContext): {
     event(input: GatewayEventPayload): Promise<void>;
     "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>;
@@ -157,5 +165,6 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
             modelID?: string;
         };
     }, output: ChatSystemTransformOutput): Promise<void>;
+    "experimental.text.complete"(input: TextCompleteInput, output: TextCompleteOutput): Promise<void>;
 };
 export {};
