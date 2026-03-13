@@ -43,7 +43,14 @@ export function isIntentionalHookBlock(error) {
         /(question tool is disabled|task\/todowrite tools are disabled)/i.test(trimmed) ||
         /require(?:s|d)? explicit/i.test(trimmed));
 }
+function shouldSurfaceGatewayHookFailureToStderr() {
+    return (process.env.CI === "true" ||
+        process.env.MY_OPENCODE_GATEWAY_HOOK_FAILURE_STDERR === "1");
+}
 export function surfaceGatewayHookFailure(message) {
+    if (!shouldSurfaceGatewayHookFailureToStderr()) {
+        return;
+    }
     const line = `[gateway-core] ${message}\n`;
     try {
         process.stderr.write(line);
