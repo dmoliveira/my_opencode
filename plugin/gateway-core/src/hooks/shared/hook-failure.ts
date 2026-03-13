@@ -52,7 +52,17 @@ export function isIntentionalHookBlock(error: unknown): boolean {
   );
 }
 
+function shouldSurfaceGatewayHookFailureToStderr(): boolean {
+  return (
+    process.env.CI === "true" ||
+    process.env.MY_OPENCODE_GATEWAY_HOOK_FAILURE_STDERR === "1"
+  );
+}
+
 export function surfaceGatewayHookFailure(message: string): void {
+  if (!shouldSurfaceGatewayHookFailureToStderr()) {
+    return;
+  }
   const line = `[gateway-core] ${message}\n`;
   try {
     process.stderr.write(line);

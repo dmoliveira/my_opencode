@@ -221,7 +221,7 @@ function terminalNotifierPath() {
     else {
         terminalNotifierBin = null;
     }
-    return terminalNotifierBin;
+    return terminalNotifierBin ?? null;
 }
 function iconPrefix(eventName, mode) {
     const emoji = EMOJI_BY_EVENT[eventName];

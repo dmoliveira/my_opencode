@@ -145,9 +145,16 @@ Delivered:
 - added lease-backed writer guarantee diagnostics and surfaced disjoint write parallel candidates
 - enabled a tiny lease-backed write-capable parallel allowlist for disjoint `implement` lanes
 - added lane-level `lease_identity` metadata and enforced it for writer activation
+- started E4 ops automation readiness diagnostics with `/ship doctor` and umbrella `/doctor` coverage for canonical issue/PR/release/hotfix flows
+- added canonical `/delivery` handoff summaries to `/ship doctor` and `/ship create-pr --issue <id>` template generation
+- added latest-closure follow-up linkage auditing to `/hotfix doctor` so umbrella diagnostics can surface incident follow-up drift
+- added latest-run status summaries and stalled-handoff warnings to `/delivery doctor`
+- added `/release-train draft` narrative pickup to `/ship doctor` and `/ship create-pr` template generation
+- added umbrella `/doctor` ops-readiness aggregation across delivery, ship, release-train, and hotfix surfaces
 
 Remaining:
 - broaden write-capable parallelism beyond the tiny `implement` allowlist only when stronger lane-level lease identity and ownership guarantees exist
+- deepen E4 from readiness diagnostics into higher-touch issue/PR/release/hotfix workflow automation without introducing overlapping command surfaces
 
 ## Doing Now
 
@@ -163,6 +170,7 @@ Remaining:
 | AI-native autopilot orchestration design | doing | New design plan in `docs/plan/ai-native-autopilot-orchestration-plan.md` proposes autonomous task claims, same-worktree write leases, hard completion gates, policy injection, and retry routing for lower-touch autopilot execution; first execution slice now lives in `docs/plan/ai-autopilot-completion-gates-execution-plan.md` and is intentionally `/autopilot` + shared task-metadata first, with `/autoflow` convergence documented as follow-up adoption work rather than current-slice behavior. |
 | Gateway E2E parity refinements | doing | Tighten fail-closed behavior for critical hooks, isolate hook execution failures, align continuity wording with canonical commands, and remove hard-coded agent metadata discovery. |
 | E13 lane lease identity | doing | Active implementation tracker lives at `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`; current slice adds lane-level lease identity to writer activation. |
+| E13 ops automation readiness diagnostics | doing | First E4 slice adds `/ship doctor`, umbrella `/doctor` coverage, and refreshed handbook/quickstart guidance so canonical issue/PR/release/hotfix automation can be audited before deeper automation lands. |
 
 ## Done Recently
 

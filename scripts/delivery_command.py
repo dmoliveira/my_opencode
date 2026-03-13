@@ -416,6 +416,7 @@ def cmd_close(argv: list[str]) -> int:
 def cmd_doctor(argv: list[str]) -> int:
     as_json = "--json" in argv
     warnings: list[str] = []
+    problems: list[str] = []
     if not CLAIMS_SCRIPT.exists():
         warnings.append("claims command backend missing")
     if not WORKFLOW_SCRIPT.exists():
@@ -427,16 +428,50 @@ def cmd_doctor(argv: list[str]) -> int:
         if isinstance(raw_runs, list)
         else []
     )
+    latest_run = runs[0] if runs else {}
+    latest_status = (
+        str(latest_run.get("status") or "idle")
+        if isinstance(latest_run, dict)
+        else "idle"
+    )
+    latest_issue = (
+        str(latest_run.get("issue_id") or "") if isinstance(latest_run, dict) else ""
+    )
+    latest_summary = (
+        {
+            "run_id": str(latest_run.get("run_id") or ""),
+            "issue_id": latest_issue or None,
+            "status": latest_status,
+            "workflow_file": str(latest_run.get("workflow_file") or "") or None,
+            "final_step": str(latest_run.get("final_step") or "") or None,
+            "created_at": str(latest_run.get("created_at") or "") or None,
+        }
+        if isinstance(latest_run, dict) and latest_run
+        else None
+    )
+    if latest_status in {"workflow-failed", "workflow-error"}:
+        warnings.append("latest delivery run needs remediation before shipping")
+    if latest_status == "handoff-pending":
+        warnings.append(
+            "latest delivery run is waiting on an accept-handoff or close action"
+        )
+    if not CLAIMS_SCRIPT.exists():
+        problems.append("missing scripts/claims_command.py")
+    if not WORKFLOW_SCRIPT.exists():
+        problems.append("missing scripts/workflow_command.py")
     return emit(
         {
-            "result": "PASS",
+            "result": "PASS" if not problems else "FAIL",
             "command": "doctor",
             "state_path": str(DEFAULT_STATE_PATH),
             "runs": len(runs),
+            "latest_run": latest_summary,
             "warnings": warnings,
+            "problems": problems,
             "quick_fixes": [
                 "/delivery status --json",
                 "/claims status --json",
+                "/workflow doctor --json",
             ],
         },
         as_json,

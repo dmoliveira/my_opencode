@@ -452,6 +452,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "ship",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("ship_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("ship_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "release-train",
         "kind": "doctor-json",
         "optional": True,
@@ -821,12 +833,57 @@ def summarize(items: list[dict]) -> dict:
     for item in items:
         if item.get("skipped"):
             warnings.append(f"{item['name']}: {item.get('skip_reason')}")
-        report = item.get("report")
-        if isinstance(report, dict):
-            for warning in report.get("warnings", []):
+        report_any = item.get("report")
+        report: dict[str, object] = report_any if isinstance(report_any, dict) else {}
+        if report:
+            report_warnings = report.get("warnings")
+            for warning in report_warnings if isinstance(report_warnings, list) else []:
                 warnings.append(f"{item['name']}: {warning}")
-            for problem in report.get("problems", []):
+            report_problems = report.get("problems")
+            for problem in report_problems if isinstance(report_problems, list) else []:
                 problems.append(f"{item['name']}: {problem}")
+
+    ops_names = {"delivery", "ship", "release-train", "hotfix"}
+    ops_checks = [item for item in items if item.get("name") in ops_names]
+    ops_summary: dict[str, object] = {
+        "available": len(ops_checks),
+        "failing": [item["name"] for item in ops_checks if not item.get("ok")],
+        "warnings": [],
+        "latest": {},
+    }
+    for item in ops_checks:
+        report_any = item.get("report")
+        report: dict[str, object] = report_any if isinstance(report_any, dict) else {}
+        report_warnings = report.get("warnings")
+        for warning in report_warnings if isinstance(report_warnings, list) else []:
+            if isinstance(warning, str):
+                cast_warnings = ops_summary["warnings"]
+                if isinstance(cast_warnings, list):
+                    cast_warnings.append(f"{item['name']}: {warning}")
+        latest = ops_summary["latest"]
+        if not isinstance(latest, dict):
+            latest = {}
+            ops_summary["latest"] = latest
+        if item.get("name") == "delivery" and isinstance(
+            report.get("latest_run"), dict
+        ):
+            latest["delivery"] = report.get("latest_run")
+        if item.get("name") == "ship":
+            ship_snapshot = {
+                "latest_delivery": report.get("latest_delivery"),
+                "release_train_ready": report.get("release_train_ready"),
+                "release_context": report.get("release_context"),
+            }
+            latest["ship"] = ship_snapshot
+        if item.get("name") == "hotfix" and isinstance(
+            report.get("latest_followup"), dict
+        ):
+            latest["hotfix"] = report.get("latest_followup")
+        if item.get("name") == "release-train":
+            latest["release_train"] = {
+                "plan_hygiene_pass": report.get("plan_hygiene_pass"),
+                "wave_closure_recommended": report.get("wave_closure_recommended"),
+            }
 
     return {
         "result": "PASS" if not failed else "FAIL",
@@ -836,6 +893,7 @@ def summarize(items: list[dict]) -> dict:
         "warnings": warnings,
         "problem_count": len(problems),
         "problems": problems,
+        "ops_readiness": ops_summary,
     }
 
 

@@ -134,6 +134,55 @@ def command_remind(args: list[str]) -> int:
     return 0
 
 
+def latest_close_details(write_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    state = load_runtime(write_path)
+    timeline = (
+        state.get("timeline", []) if isinstance(state.get("timeline"), list) else []
+    )
+    closed_events = [
+        entry
+        for entry in timeline
+        if isinstance(entry, dict) and entry.get("event") == "closed"
+    ]
+    latest = closed_events[-1] if closed_events else {}
+    details = latest.get("details", {}) if isinstance(latest, dict) else {}
+    if not isinstance(details, dict):
+        details = {}
+    return state, details
+
+
+def followup_status_summary(details: dict[str, Any]) -> dict[str, Any]:
+    deferred = details.get("deferred_validation")
+    if not isinstance(deferred, dict):
+        deferred = {}
+    postmortem_id = str(details.get("postmortem_id") or "")
+    followup_issue = str(details.get("followup_issue") or "")
+    risk_ack = str(details.get("risk_ack") or "")
+    linkage_missing: list[str] = []
+    if not postmortem_id:
+        linkage_missing.append("postmortem_id")
+    if not followup_issue:
+        linkage_missing.append("followup_reference")
+    if not str(deferred.get("owner") or ""):
+        linkage_missing.append("deferred_validation_owner")
+    if not str(deferred.get("due") or ""):
+        linkage_missing.append("deferred_validation_due")
+    if not risk_ack:
+        linkage_missing.append("risk_ack")
+    return {
+        "linkage_status": "complete" if not linkage_missing else "incomplete",
+        "linkage_complete": not linkage_missing,
+        "linkage_missing": linkage_missing,
+        "followup_reference": followup_issue or None,
+        "postmortem_id": postmortem_id or None,
+        "deferred_validation": {
+            "owner": str(deferred.get("owner") or "") or None,
+            "due": str(deferred.get("due") or "") or None,
+        },
+        "risk_ack": risk_ack or None,
+    }
+
+
 def command_doctor(args: list[str]) -> int:
     if any(arg not in ("--json",) for arg in args):
         return usage()
@@ -142,16 +191,27 @@ def command_doctor(args: list[str]) -> int:
     policy_exists = (
         SCRIPT_DIR.parent / "instructions" / "hotfix_mode_policy_contract.md"
     ).exists()
+    write_path = resolve_write_path()
+    state, close_details = latest_close_details(write_path)
+    latest_followup = followup_status_summary(close_details) if close_details else None
+    warnings = [] if policy_exists else ["missing hotfix policy contract"]
+    if latest_followup and not latest_followup.get("linkage_complete"):
+        warnings.append("latest hotfix closure is missing follow-up linkage evidence")
     report = {
         "result": "PASS" if runtime_exists else "FAIL",
         "runtime_exists": runtime_exists,
         "policy_exists": policy_exists,
-        "warnings": [] if policy_exists else ["missing hotfix policy contract"],
+        "warnings": warnings,
         "problems": [] if runtime_exists else ["missing scripts/hotfix_runtime.py"],
+        "active": bool(state.get("active")) if isinstance(state, dict) else False,
+        "incident_id": state.get("incident_id") if isinstance(state, dict) else None,
+        "runtime": str(runtime_path(write_path)),
+        "latest_followup": latest_followup,
         "quick_fixes": [
             "/hotfix start --incident-id INC-1 --scope patch --impact sev2 --json",
             "/hotfix status --json",
             "/hotfix remind --json",
+            "/hotfix postmortem --json",
         ],
     }
     emit(report, as_json)

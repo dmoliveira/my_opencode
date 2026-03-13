@@ -10221,6 +10221,30 @@ exit 0
             "delivery start should expose entrypoint model routing metadata",
         )
 
+        delivery_doctor = subprocess.run(
+            [sys.executable, str(DELIVERY_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            delivery_doctor.returncode == 0,
+            f"delivery doctor failed: {delivery_doctor.stderr}",
+        )
+        delivery_doctor_payload = parse_json_output(delivery_doctor.stdout)
+        expect(
+            delivery_doctor_payload.get("result") == "PASS",
+            "delivery doctor should pass for healthy delivery runtime state",
+        )
+        expect(
+            delivery_doctor_payload.get("latest_run", {}).get("issue_id") == "issue-303"
+            and delivery_doctor_payload.get("latest_run", {}).get("status")
+            == "completed",
+            "delivery doctor should surface the latest successful delivery run summary",
+        )
+
         result = subprocess.run(
             [
                 sys.executable,
@@ -10280,6 +10304,56 @@ exit 0
         expect(
             bool(delivery_handoff_run_id),
             "delivery handoff flow should persist a run id for follow-up status checks",
+        )
+
+        delivery_doctor_handoff = subprocess.run(
+            [sys.executable, str(DELIVERY_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            delivery_doctor_handoff.returncode == 0,
+            f"delivery doctor after handoff failed: {delivery_doctor_handoff.stderr}",
+        )
+        delivery_doctor_handoff_payload = parse_json_output(
+            delivery_doctor_handoff.stdout
+        )
+        expect(
+            delivery_doctor_handoff_payload.get("latest_run", {}).get("status")
+            == "handoff-pending",
+            "delivery doctor should surface handoff-pending as the latest run status",
+        )
+        expect(
+            any(
+                isinstance(item, str) and "waiting on an accept-handoff" in item
+                for item in delivery_doctor_handoff_payload.get("warnings", [])
+            ),
+            "delivery doctor should warn when the latest run is waiting on handoff completion",
+        )
+
+        umbrella_doctor = subprocess.run(
+            [sys.executable, str(DOCTOR_SCRIPT), "run", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        umbrella_doctor_payload = parse_json_output(umbrella_doctor.stdout)
+        expect(
+            isinstance(umbrella_doctor_payload.get("ops_readiness"), dict),
+            "umbrella doctor should expose aggregated ops readiness summary",
+        )
+        expect(
+            umbrella_doctor_payload.get("ops_readiness", {})
+            .get("latest", {})
+            .get("delivery", {})
+            .get("status")
+            == "handoff-pending",
+            "umbrella doctor should include latest delivery drift in ops readiness summary",
         )
 
         result = subprocess.run(
@@ -13959,6 +14033,123 @@ jobs:
             "ship create-pr preview should include reviewer policy diagnostics",
         )
 
+        delivery_state_path = (
+            home
+            / ".config"
+            / "opencode"
+            / "my_opencode"
+            / "runtime"
+            / "delivery_runs.json"
+        )
+        delivery_state_path.parent.mkdir(parents=True, exist_ok=True)
+        delivery_state_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "runs": [
+                        {
+                            "run_id": "dlv-test-001",
+                            "issue_id": "issue-900",
+                            "workflow_file": "workflows/ship.json",
+                            "execute": True,
+                            "status": "completed",
+                            "claim": {"owner": "coder"},
+                            "workflow": {"result": "PASS"},
+                            "final_step": "release",
+                            "final": {"result": "PASS"},
+                            "created_at": "2026-03-13T21:00:00Z",
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        ship_doctor_with_delivery = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_doctor_with_delivery.returncode == 0,
+            "ship doctor should pass when delivery handoff state exists",
+        )
+        ship_doctor_with_delivery_payload = parse_json_output(
+            ship_doctor_with_delivery.stdout
+        )
+        expect(
+            ship_doctor_with_delivery_payload.get("latest_delivery", {}).get("issue_id")
+            == "issue-900",
+            "ship doctor should surface the latest delivery handoff summary",
+        )
+        expect(
+            isinstance(ship_doctor_with_delivery_payload.get("release_context"), dict),
+            "ship doctor should surface release-train draft context when available",
+        )
+
+        ship_create_pr_with_delivery = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "create-pr",
+                "--version",
+                "0.0.1",
+                "--issue",
+                "issue-900",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_create_pr_with_delivery.returncode == 1,
+            "ship create-pr preview should still require confirmation when delivery context is added",
+        )
+        ship_create_pr_with_delivery_payload = parse_json_output(
+            ship_create_pr_with_delivery.stdout
+        )
+        expect(
+            ship_create_pr_with_delivery_payload.get("delivery_summary", {}).get(
+                "run_id"
+            )
+            == "dlv-test-001",
+            "ship create-pr preview should include matched delivery summary",
+        )
+        expect(
+            "## Delivery Context"
+            in str(
+                ship_create_pr_with_delivery_payload.get("pr_template", {}).get(
+                    "body_markdown"
+                )
+            ),
+            "ship create-pr preview should inject delivery context into the PR template",
+        )
+        expect(
+            isinstance(
+                ship_create_pr_with_delivery_payload.get("release_context"), dict
+            )
+            and "## Release Context"
+            in str(
+                ship_create_pr_with_delivery_payload.get("pr_template", {}).get(
+                    "body_markdown"
+                )
+            ),
+            "ship create-pr preview should inject release-train draft context into the PR template",
+        )
+
         ship_create_pr_policy_conflict = subprocess.run(
             [
                 sys.executable,
@@ -13999,6 +14190,65 @@ jobs:
                 ).get("reason_codes", [])
             ),
             "ship create-pr should expose deterministic reviewer policy conflict diagnostics",
+        )
+
+        ship_doctor = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(ship_doctor.returncode == 0, "ship doctor should pass")
+        ship_doctor_payload = parse_json_output(ship_doctor.stdout)
+        expect(
+            ship_doctor_payload.get("result") == "PASS"
+            and ship_doctor_payload.get("command") == "doctor",
+            "ship doctor should report pass status",
+        )
+        expect(
+            isinstance(ship_doctor_payload.get("release_train"), dict)
+            and isinstance(ship_doctor_payload.get("reviewer_policy"), dict),
+            "ship doctor should expose release-train and reviewer-policy diagnostics",
+        )
+
+        ship_doctor_conflict_env = refactor_env.copy()
+        ship_doctor_conflict_env["MY_OPENCODE_SHIP_REVIEWER_ALLOW"] = "alice"
+        ship_doctor_conflict_env["MY_OPENCODE_SHIP_REVIEWER_DENY"] = "alice"
+        ship_doctor_conflict = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=ship_doctor_conflict_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_doctor_conflict.returncode == 0,
+            "ship doctor should stay healthy while surfacing reviewer policy warnings",
+        )
+        ship_doctor_conflict_payload = parse_json_output(ship_doctor_conflict.stdout)
+        expect(
+            ship_doctor_conflict_payload.get("reviewer_policy", {}).get("status")
+            == "warn"
+            and "reviewer_policy_conflict"
+            in set(
+                ship_doctor_conflict_payload.get("reviewer_policy", {}).get(
+                    "reason_codes", []
+                )
+            ),
+            "ship doctor should surface deterministic reviewer policy conflict diagnostics",
         )
 
         release_repo = tmp / "release_repo"
@@ -14795,6 +15045,31 @@ jobs:
         expect(
             hotfix_command_status_payload.get("incident_id") == "INC-123",
             "hotfix command status should proxy runtime incident id",
+        )
+
+        hotfix_command_doctor = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_doctor.returncode == 0,
+            "hotfix command doctor should pass when runtime and policy are present",
+        )
+        hotfix_command_doctor_payload = parse_json_output(hotfix_command_doctor.stdout)
+        expect(
+            hotfix_command_doctor_payload.get("result") == "PASS",
+            "hotfix command doctor should report pass",
+        )
+        expect(
+            hotfix_command_doctor_payload.get("latest_followup", {}).get(
+                "linkage_complete"
+            )
+            is True,
+            "hotfix command doctor should report complete follow-up linkage after close",
         )
 
         hotfix_command_remind = subprocess.run(
