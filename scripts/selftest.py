@@ -2014,8 +2014,8 @@ exit 0
             "session doctor should report FAIL when stuck parent-child mismatch is detected",
         )
         expect(
-            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 3,
-            "session doctor should report parent-child, stale tool, and silent delegated abort findings",
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 4,
+            "session doctor should report parent-child, stale delegated child, stale tool, and silent delegated abort findings",
         )
         expect(
             session_runtime_doctor_payload.get("generic_stale_count") == 2,
@@ -2045,12 +2045,22 @@ exit 0
         expect(
             result.returncode == 1
             and "session repair-stale" in result.stdout
-            and "candidate_count: 2" in result.stdout,
+            and "candidate_count: 3" in result.stdout,
             "session repair-stale plain text should show dry-run details on failure",
         )
         expect(
             "quick_fixes:" in result.stdout,
             "session repair-stale plain text should show quick fixes on failure",
+        )
+        expect(
+            any(
+                item.get("issue_type")
+                == "stale_delegated_child_runtime_recovery_missed"
+                and item.get("parent_session_id") == "active-parent-session"
+                and item.get("child_session_id") == "active-child-session"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should classify stale delegated child sessions that runtime recovery missed",
         )
         expect(
             any(
@@ -2090,8 +2100,8 @@ exit 0
         )
         repair_dry_run_payload = parse_json_output(result.stdout)
         expect(
-            repair_dry_run_payload.get("candidate_count") == 2,
-            "session repair-stale dry-run should report two repair candidates",
+            repair_dry_run_payload.get("candidate_count") == 3,
+            "session repair-stale dry-run should report three repair candidates",
         )
         expect(
             repair_dry_run_payload.get("repaired_count") == 0,
@@ -2142,8 +2152,8 @@ exit 0
         )
         repair_apply_payload = parse_json_output(result.stdout)
         expect(
-            repair_apply_payload.get("repaired_count") == 2,
-            "session repair-stale should repair both stale findings",
+            repair_apply_payload.get("repaired_count") == 3,
+            "session repair-stale should repair all repairable stale findings",
         )
 
         conn = sqlite3.connect(runtime_db_path)
