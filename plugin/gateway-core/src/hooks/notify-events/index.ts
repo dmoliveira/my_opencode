@@ -317,7 +317,7 @@ function terminalNotifierPath(): string | null {
   } else {
     terminalNotifierBin = null;
   }
-  return terminalNotifierBin;
+  return terminalNotifierBin ?? null;
 }
 
 function iconPrefix(eventName: NotifyEvent, mode: NotifyIconMode): string {
