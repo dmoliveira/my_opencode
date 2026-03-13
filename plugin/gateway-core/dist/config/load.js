@@ -61,7 +61,7 @@ export function loadGatewayConfigSource(directory, source) {
     if (!isRecord(source)) {
         return sidecar;
     }
-    return deepMergeRecords(sidecar, source);
+    return deepMergeRecords(source, sidecar);
 }
 function parseAgentPolicyOverrides(value, fallback) {
     if (!value || typeof value !== "object") {

@@ -17,6 +17,14 @@ from pathlib import Path
 from typing import Any
 
 UTC = getattr(datetime, "UTC", timezone.utc)
+DEFAULT_LONG_TURN_WATCHDOG = {
+    "enabled": True,
+    "warningThresholdMs": 180000,
+    "toolCallWarningThreshold": 8,
+    "reminderCooldownMs": 120000,
+    "maxSessionStateEntries": 1024,
+    "prefix": "[Turn Watchdog]:",
+}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -45,7 +53,7 @@ from gateway_plugin_bridge import (  # type: ignore
 # Prints usage for gateway command.
 def usage() -> int:
     print(
-        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
+        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
     )
     return 2
 
@@ -316,7 +324,218 @@ def load_gateway_sidecar_config(
                 sidecar = parsed
     except (OSError, json.JSONDecodeError):
         sidecar = {}
-    return deep_merge_dicts(sidecar, root_config)
+    return deep_merge_dicts(root_config, sidecar)
+
+
+def load_gateway_sidecar_only(cwd: Path) -> tuple[dict[str, Any], Path]:
+    sidecar_path = resolve_gateway_sidecar_path(cwd)
+    sidecar: dict[str, Any] = {}
+    try:
+        if sidecar_path.exists():
+            parsed = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                sidecar = parsed
+    except (OSError, json.JSONDecodeError):
+        sidecar = {}
+    return sidecar, sidecar_path
+
+
+def save_gateway_sidecar_only(path: Path, config: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+def parse_positive_int_flag(raw: str) -> int | None:
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def parse_non_negative_int_flag(raw: str) -> int | None:
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def long_turn_watchdog_section(config: dict[str, Any]) -> dict[str, Any]:
+    gateway_config = load_gateway_sidecar_config(Path.cwd(), config)
+    raw = gateway_config.get("longTurnWatchdog")
+    merged = dict(DEFAULT_LONG_TURN_WATCHDOG)
+    if isinstance(raw, dict):
+        merged.update(raw)
+    return merged
+
+
+def command_watchdog_status(as_json: bool) -> int:
+    root_config, _ = load_config()
+    sidecar_config, sidecar_path = load_gateway_sidecar_only(Path.cwd())
+    merged = long_turn_watchdog_section(root_config)
+    sidecar_section = sidecar_config.get("longTurnWatchdog")
+    sidecar_watchdog = (
+        dict(sidecar_section) if isinstance(sidecar_section, dict) else {}
+    )
+    payload = {
+        "result": "PASS",
+        "config": str(sidecar_path),
+        "watchdog": {
+            "enabled": merged.get("enabled"),
+            "warningThresholdMs": merged.get("warningThresholdMs"),
+            "toolCallWarningThreshold": merged.get("toolCallWarningThreshold"),
+            "reminderCooldownMs": merged.get("reminderCooldownMs"),
+            "maxSessionStateEntries": merged.get("maxSessionStateEntries"),
+            "prefix": merged.get("prefix"),
+        },
+        "sidecar_overrides": sidecar_watchdog,
+    }
+    if as_json:
+        print(json.dumps(payload, indent=2))
+    else:
+        watchdog = payload["watchdog"]
+        print(f"enabled: {watchdog['enabled']}")
+        print(f"warning_threshold_ms: {watchdog['warningThresholdMs']}")
+        print(f"tool_call_threshold: {watchdog['toolCallWarningThreshold']}")
+        print(f"reminder_cooldown_ms: {watchdog['reminderCooldownMs']}")
+        print(f"config: {sidecar_path}")
+        print(f"sidecar_overrides: {json.dumps(sidecar_watchdog)}")
+    return 0
+
+
+def command_watchdog_doctor(as_json: bool) -> int:
+    root_config, _ = load_config()
+    sidecar_config, sidecar_path = load_gateway_sidecar_only(Path.cwd())
+    watchdog = long_turn_watchdog_section(root_config)
+    warnings: list[str] = []
+    problems: list[str] = []
+    quick_fixes: list[str] = []
+
+    enabled = bool(watchdog.get("enabled"))
+    warning_threshold_ms = int(watchdog.get("warningThresholdMs") or 0)
+    tool_call_threshold = int(watchdog.get("toolCallWarningThreshold") or 0)
+    reminder_cooldown_ms = int(watchdog.get("reminderCooldownMs") or 0)
+
+    if not enabled:
+        warnings.append(
+            "runtime progress pulse is disabled; long tool-only turns can look silent to the user"
+        )
+        quick_fixes.append("/gateway watchdog enable")
+    if warning_threshold_ms <= 0:
+        problems.append("warning threshold must be a positive number of milliseconds")
+    elif warning_threshold_ms < 60000:
+        warnings.append(
+            "warning threshold is under 60 seconds; users may see progress pulses too early"
+        )
+    if tool_call_threshold <= 0:
+        problems.append("tool call threshold must be a positive integer")
+    elif tool_call_threshold < 3:
+        warnings.append(
+            "tool call threshold is below 3; frequent tool-heavy turns may pulse too aggressively"
+        )
+    if reminder_cooldown_ms < 0:
+        problems.append("reminder cooldown must be zero or greater")
+    elif reminder_cooldown_ms == 0:
+        warnings.append(
+            "reminder cooldown is disabled; repeated turns can emit pulses without a cooldown gap"
+        )
+
+    if warning_threshold_ms != DEFAULT_LONG_TURN_WATCHDOG["warningThresholdMs"]:
+        quick_fixes.append(
+            f"/gateway watchdog set --warning-threshold-seconds {DEFAULT_LONG_TURN_WATCHDOG['warningThresholdMs'] // 1000}"
+        )
+    if tool_call_threshold != DEFAULT_LONG_TURN_WATCHDOG["toolCallWarningThreshold"]:
+        quick_fixes.append(
+            f"/gateway watchdog set --tool-call-threshold {DEFAULT_LONG_TURN_WATCHDOG['toolCallWarningThreshold']}"
+        )
+
+    sidecar_section = sidecar_config.get("longTurnWatchdog")
+    payload = {
+        "result": "PASS" if not problems else "FAIL",
+        "config": str(sidecar_path),
+        "watchdog": {
+            "enabled": enabled,
+            "warningThresholdMs": warning_threshold_ms,
+            "toolCallWarningThreshold": tool_call_threshold,
+            "reminderCooldownMs": reminder_cooldown_ms,
+        },
+        "defaults": DEFAULT_LONG_TURN_WATCHDOG,
+        "sidecar_overrides": dict(sidecar_section)
+        if isinstance(sidecar_section, dict)
+        else {},
+        "problems": problems,
+        "warnings": warnings,
+        "quick_fixes": quick_fixes,
+    }
+    if as_json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"result: {payload['result']}")
+        print(f"enabled: {enabled}")
+        print(f"warning_threshold_ms: {warning_threshold_ms}")
+        print(f"tool_call_threshold: {tool_call_threshold}")
+        print(f"reminder_cooldown_ms: {reminder_cooldown_ms}")
+        print(f"config: {sidecar_path}")
+        print(f"problems: {len(problems)}")
+        for item in problems:
+            print(f"- problem: {item}")
+        print(f"warnings: {len(warnings)}")
+        for item in warnings:
+            print(f"- warning: {item}")
+        if quick_fixes:
+            print("quick_fixes:")
+            for item in quick_fixes:
+                print(f"- {item}")
+    return 0
+
+
+def command_watchdog_update(
+    as_json: bool,
+    *,
+    enabled: bool | None = None,
+    warning_threshold_ms: int | None = None,
+    tool_call_threshold: int | None = None,
+    reminder_cooldown_ms: int | None = None,
+) -> int:
+    sidecar_config, sidecar_path = load_gateway_sidecar_only(Path.cwd())
+    current_any = sidecar_config.get("longTurnWatchdog")
+    current = dict(current_any) if isinstance(current_any, dict) else {}
+
+    if enabled is not None:
+        current["enabled"] = enabled
+    if warning_threshold_ms is not None:
+        current["warningThresholdMs"] = warning_threshold_ms
+    if tool_call_threshold is not None:
+        current["toolCallWarningThreshold"] = tool_call_threshold
+    if reminder_cooldown_ms is not None:
+        current["reminderCooldownMs"] = reminder_cooldown_ms
+
+    sidecar_config["longTurnWatchdog"] = current
+    save_gateway_sidecar_only(sidecar_path, sidecar_config)
+
+    root_config, _ = load_config()
+    merged = long_turn_watchdog_section(root_config)
+    payload = {
+        "result": "PASS",
+        "config": str(sidecar_path),
+        "watchdog": {
+            "enabled": merged.get("enabled"),
+            "warningThresholdMs": merged.get("warningThresholdMs"),
+            "toolCallWarningThreshold": merged.get("toolCallWarningThreshold"),
+            "reminderCooldownMs": merged.get("reminderCooldownMs"),
+        },
+        "sidecar_overrides": current,
+    }
+    if as_json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"enabled: {payload['watchdog']['enabled']}")
+        print(f"warning_threshold_ms: {payload['watchdog']['warningThresholdMs']}")
+        print(f"tool_call_threshold: {payload['watchdog']['toolCallWarningThreshold']}")
+        print(f"reminder_cooldown_ms: {payload['watchdog']['reminderCooldownMs']}")
+        print(f"config: {sidecar_path}")
+    return 0
 
 
 def gateway_mistake_ledger_path(cwd: Path) -> Path:
@@ -3200,6 +3419,12 @@ def main(argv: list[str]) -> int:
     limit_set = False
     minutes = 120
     minutes_set = False
+    warning_threshold_ms: int | None = None
+    warning_threshold_ms_set = False
+    tool_call_threshold: int | None = None
+    tool_call_threshold_set = False
+    reminder_cooldown_ms: int | None = None
+    reminder_cooldown_ms_set = False
     clear_cache = False
     if "--json" in args:
         args.remove("--json")
@@ -3272,6 +3497,61 @@ def main(argv: list[str]) -> int:
             minutes_set = True
         except ValueError:
             return usage()
+    if "--warning-threshold-ms" in args:
+        idx = args.index("--warning-threshold-ms")
+        if idx + 1 >= len(args):
+            return usage()
+        value = args[idx + 1]
+        del args[idx : idx + 2]
+        parsed = parse_positive_int_flag(value)
+        if parsed is None:
+            return usage()
+        warning_threshold_ms = parsed
+        warning_threshold_ms_set = True
+    if "--warning-threshold-seconds" in args:
+        idx = args.index("--warning-threshold-seconds")
+        if idx + 1 >= len(args):
+            return usage()
+        value = args[idx + 1]
+        del args[idx : idx + 2]
+        parsed = parse_positive_int_flag(value)
+        if parsed is None:
+            return usage()
+        warning_threshold_ms = parsed * 1000
+        warning_threshold_ms_set = True
+    if "--tool-call-threshold" in args:
+        idx = args.index("--tool-call-threshold")
+        if idx + 1 >= len(args):
+            return usage()
+        value = args[idx + 1]
+        del args[idx : idx + 2]
+        parsed = parse_positive_int_flag(value)
+        if parsed is None:
+            return usage()
+        tool_call_threshold = parsed
+        tool_call_threshold_set = True
+    if "--reminder-cooldown-ms" in args:
+        idx = args.index("--reminder-cooldown-ms")
+        if idx + 1 >= len(args):
+            return usage()
+        value = args[idx + 1]
+        del args[idx : idx + 2]
+        parsed = parse_non_negative_int_flag(value)
+        if parsed is None:
+            return usage()
+        reminder_cooldown_ms = parsed
+        reminder_cooldown_ms_set = True
+    if "--reminder-cooldown-seconds" in args:
+        idx = args.index("--reminder-cooldown-seconds")
+        if idx + 1 >= len(args):
+            return usage()
+        value = args[idx + 1]
+        del args[idx : idx + 2]
+        parsed = parse_non_negative_int_flag(value)
+        if parsed is None:
+            return usage()
+        reminder_cooldown_ms = parsed * 1000
+        reminder_cooldown_ms_set = True
 
     used_flags: set[str] = set()
     if as_json:
@@ -3300,6 +3580,12 @@ def main(argv: list[str]) -> int:
         used_flags.add("--limit")
     if minutes_set:
         used_flags.add("--minutes")
+    if warning_threshold_ms_set:
+        used_flags.add("--warning-threshold-ms")
+    if tool_call_threshold_set:
+        used_flags.add("--tool-call-threshold")
+    if reminder_cooldown_ms_set:
+        used_flags.add("--reminder-cooldown-ms")
 
     def flags_allowed(*allowed: str) -> bool:
         allowed_set = set(allowed)
@@ -3358,6 +3644,43 @@ def main(argv: list[str]) -> int:
         if not flags_allowed("--json", "--minutes", "--limit"):
             return usage()
         return command_continuation_report(as_json, minutes=minutes, limit=limit)
+    if cmd == "watchdog":
+        if len(args) != 1:
+            return usage()
+        action = args[0]
+        if action not in {"status", "doctor", "enable", "disable", "set"}:
+            return usage()
+        if action == "status":
+            if not flags_allowed("--json"):
+                return usage()
+            return command_watchdog_status(as_json)
+        if action == "doctor":
+            if not flags_allowed("--json"):
+                return usage()
+            return command_watchdog_doctor(as_json)
+        if action in {"enable", "disable"}:
+            if not flags_allowed("--json"):
+                return usage()
+            return command_watchdog_update(as_json, enabled=(action == "enable"))
+        if not flags_allowed(
+            "--json",
+            "--warning-threshold-ms",
+            "--tool-call-threshold",
+            "--reminder-cooldown-ms",
+        ):
+            return usage()
+        if (
+            warning_threshold_ms is None
+            and tool_call_threshold is None
+            and reminder_cooldown_ms is None
+        ):
+            return usage()
+        return command_watchdog_update(
+            as_json,
+            warning_threshold_ms=warning_threshold_ms,
+            tool_call_threshold=tool_call_threshold,
+            reminder_cooldown_ms=reminder_cooldown_ms,
+        )
     if cmd == "protection":
         if len(args) != 1:
             return usage()

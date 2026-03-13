@@ -25,6 +25,20 @@ interface GatewayClient {
                         completed?: number;
                     };
                 };
+                parts?: Array<{
+                    type?: string;
+                    text?: string;
+                    synthetic?: boolean;
+                    tool?: string;
+                    state?: {
+                        status?: string;
+                        error?: unknown;
+                        metadata?: {
+                            sessionId?: string;
+                            sessionID?: string;
+                        };
+                    };
+                }>;
             }>;
         }>;
         promptAsync(args: {

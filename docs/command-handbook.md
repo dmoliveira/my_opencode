@@ -332,6 +332,10 @@ Use these directly in OpenCode:
 /gateway enable
 /gateway disable
 /gateway doctor
+/gateway watchdog status
+/gateway watchdog doctor
+/gateway watchdog set --warning-threshold-seconds 180 --tool-call-threshold 8
+/gateway watchdog disable
 /gateway continuation report --minutes 120 --limit 10 --json
 /gateway tune memory --json
 /gateway recover memory --apply --resume --compress --force-kill
@@ -344,6 +348,10 @@ Notes:
 - use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
 - `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
+- `/gateway watchdog status` shows the effective long-turn watchdog thresholds and any sidecar overrides.
+- `/gateway watchdog doctor` flags disabled pulse injection, overly aggressive thresholds, and missing cooldown protection with quick fix commands.
+- `/gateway watchdog set --warning-threshold-seconds <n> --tool-call-threshold <n> [--reminder-cooldown-seconds <n>]` writes long-turn watchdog overrides to `gateway-core.config.json` without editing the main OpenCode config.
+- `/gateway watchdog enable` and `/gateway watchdog disable` toggle runtime progress pulse injection from the same sidecar config.
 - `/gateway status --json` now includes `mistake_ledger` so operators can see whether validation deferrals are accumulating in `.opencode/mistake-ledger.jsonl`.
 - `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
 - `/gateway continuation report --json` summarizes recent `todo-continuation-enforcer` audit events so you can see reason codes, stages, and affected sessions quickly.
@@ -462,7 +470,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
 /doctor - Run diagnostics and reason-code registry export
-/gateway - Manage gateway runtime controls (status|enable|disable|doctor|continuation report|tune memory|recover memory|protection)
+/gateway - Manage gateway runtime controls (status|enable|disable|doctor|watchdog|continuation report|tune memory|recover memory|protection)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
 /health - Show repo health score and drift insights
 /hook-learning - Run hook learning loop controls (pre-command|post-command|route|metrics|doctor)
