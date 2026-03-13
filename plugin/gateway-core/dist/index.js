@@ -363,6 +363,7 @@ function configuredHooks(ctx) {
         })),
         safeHook("subagent-lifecycle-supervisor", () => createSubagentLifecycleSupervisorHook({
             directory,
+            client: ctx.client,
             enabled: cfg.subagentLifecycleSupervisor.enabled,
             maxRetriesPerSession: cfg.subagentLifecycleSupervisor.maxRetriesPerSession,
             staleRunningMs: cfg.subagentLifecycleSupervisor.staleRunningMs,

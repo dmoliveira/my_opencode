@@ -591,6 +591,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
     safeHook("subagent-lifecycle-supervisor", () =>
       createSubagentLifecycleSupervisorHook({
         directory,
+        client: ctx.client,
         enabled: cfg.subagentLifecycleSupervisor.enabled,
         maxRetriesPerSession:
           cfg.subagentLifecycleSupervisor.maxRetriesPerSession,

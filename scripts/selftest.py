@@ -1941,8 +1941,8 @@ exit 0
             "session doctor should report FAIL when stuck parent-child mismatch is detected",
         )
         expect(
-            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 2,
-            "session doctor should report parent-child and stale tool findings",
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 3,
+            "session doctor should report parent-child, stale delegated child, and stale tool findings",
         )
         expect(
             session_runtime_doctor_payload.get("generic_stale_count") == 2,
@@ -1978,6 +1978,16 @@ exit 0
         expect(
             "quick_fixes:" in result.stdout,
             "session repair-stale plain text should show quick fixes on failure",
+        )
+        expect(
+            any(
+                item.get("issue_type")
+                == "stale_delegated_child_runtime_recovery_missed"
+                and item.get("parent_session_id") == "active-parent-session"
+                and item.get("child_session_id") == "active-child-session"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should classify stale delegated child sessions that runtime recovery missed",
         )
         expect(
             any(

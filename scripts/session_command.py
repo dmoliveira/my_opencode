@@ -170,6 +170,15 @@ def _emit(payload: dict, json_output: bool) -> int:
                         f"parent_tool={finding.get('parent_last_tool') or 'none'} "
                         f"child_state={finding.get('child_state')}"
                     )
+                elif issue_type == "stale_delegated_child_runtime_recovery_missed":
+                    print(
+                        "- "
+                        f"type={issue_type} parent={finding.get('parent_session_id')} "
+                        f"child={finding.get('child_session_id')} "
+                        f"parent_age={finding.get('parent_stale_seconds')}s "
+                        f"child_age={finding.get('child_stale_seconds')}s "
+                        f"child_last_part={finding.get('child_last_part_type') or 'none'}"
+                    )
                 else:
                     print(
                         "- "
@@ -334,6 +343,70 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
         for row in parent_child_rows:
             item = dict(row)
             item["issue_type"] = "parent_child_mismatch"
+            findings.append(item)
+
+        stale_delegated_child_rows = conn.execute(
+            """
+            WITH parent_last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            ),
+            child_last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            )
+            SELECT
+              p.id AS parent_session_id,
+              pm.id AS parent_message_id,
+              pp.id AS parent_part_id,
+              p.title AS parent_title,
+              c.id AS child_session_id,
+              cm.id AS child_message_id,
+              c.title AS child_title,
+              p.time_updated AS parent_time_updated,
+              c.time_updated AS child_time_updated,
+              CAST((strftime('%s','now') - (p.time_updated / 1000)) AS INT) AS parent_stale_seconds,
+              CAST((strftime('%s','now') - (c.time_updated / 1000)) AS INT) AS child_stale_seconds,
+              COALESCE(json_extract(pp.data,'$.type'),'none') AS parent_last_part_type,
+              COALESCE(json_extract(pp.data,'$.tool'),'') AS parent_last_tool,
+              COALESCE(json_extract(pp.data,'$.state.status'),'') AS parent_last_tool_status,
+              COALESCE(json_extract(cp.data,'$.type'),'none') AS child_last_part_type,
+              COALESCE(json_extract(cp.data,'$.tool'),'') AS child_last_tool,
+              COALESCE(json_extract(cp.data,'$.state.status'),'') AS child_last_tool_status,
+              CASE
+                WHEN json_extract(cm.data,'$.time.completed') IS NOT NULL THEN 'completed'
+                WHEN json_extract(cm.data,'$.error') IS NOT NULL THEN 'failed'
+                ELSE 'active_or_unknown'
+              END AS child_state
+            FROM session p
+            JOIN session c ON c.parent_id = p.id
+            JOIN parent_last_msg plm ON plm.session_id = p.id
+            JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
+            LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = pm.id
+            )
+            JOIN child_last_msg clm ON clm.session_id = c.id
+            JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
+            LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = cm.id
+            )
+            WHERE json_extract(pm.data,'$.role') = 'assistant'
+              AND json_extract(pm.data,'$.time.completed') IS NULL
+              AND p.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND c.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND COALESCE(json_extract(pp.data,'$.type'),'') = 'tool'
+              AND COALESCE(json_extract(pp.data,'$.tool'),'') = 'task'
+              AND COALESCE(json_extract(pp.data,'$.state.status'),'') = 'running'
+              AND json_extract(cm.data,'$.role') = 'assistant'
+              AND json_extract(cm.data,'$.time.completed') IS NULL
+              AND json_extract(cm.data,'$.error') IS NULL
+              AND c.time_updated > p.time_updated
+            ORDER BY p.time_updated DESC
+            LIMIT 20
+            """,
+            (stale_seconds, stale_seconds),
+        ).fetchall()
+        for row in stale_delegated_child_rows:
+            item = dict(row)
+            item["issue_type"] = "stale_delegated_child_runtime_recovery_missed"
             findings.append(item)
 
         stale_tool_rows = conn.execute(
