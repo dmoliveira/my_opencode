@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import {
   clearDelegationChildSessionLink,
@@ -84,6 +85,7 @@ interface MessageUpdatedPayload {
 }
 
 interface LifecycleState {
+  childSessionId?: string
   childRunId?: string
   traceId?: string
   subagentType: string
@@ -92,6 +94,32 @@ interface LifecycleState {
   lastStartedAt: number
   lastUpdatedAt: number
   lastReasonCode?: string
+}
+
+interface GatewayClient {
+  session?: {
+    messages?(args: {
+      path: { id: string }
+      query?: { directory?: string }
+    }): Promise<{
+      data?: Array<{
+        info?: {
+          role?: string
+          error?: unknown
+          time?: { completed?: number }
+        }
+      }>
+    }>
+    promptAsync(args: {
+      path: { id: string }
+      body: {
+        parts: Array<{ type: string; text: string }>
+        agent?: string
+        model?: { providerID: string; modelID: string; variant?: string }
+      }
+      query?: { directory?: string }
+    }): Promise<void>
+  }
 }
 
 function fallbackDelegationKey(sid: string, args: DelegationArgs | undefined): string {
@@ -191,12 +219,69 @@ function isFailureOutput(output: string): boolean {
 
 export function createSubagentLifecycleSupervisorHook(options: {
   directory: string
+  client?: GatewayClient
   enabled: boolean
   maxRetriesPerSession: number
   staleRunningMs: number
   blockOnExhausted: boolean
 }): GatewayHook {
   const byDelegation = new Map<string, LifecycleState>()
+
+  async function injectParentRecoveryMessage(args: {
+    parentSessionId: string
+    directory: string
+    childSessionId: string
+    subagentType?: string
+    reasonCode: string
+  }): Promise<boolean> {
+    const client = options.client?.session
+    if (!client) {
+      writeGatewayEventAudit(args.directory, {
+        hook: "subagent-lifecycle-supervisor",
+        stage: "skip",
+        reason_code: `${args.reasonCode}_session_client_unavailable`,
+        session_id: args.parentSessionId,
+      })
+      return false
+    }
+    const safety = await inspectHookMessageSafety({
+      session: client,
+      sessionId: args.parentSessionId,
+      directory: args.directory,
+    })
+    if (!safety.safe && safety.reason !== "assistant_turn_incomplete") {
+      writeGatewayEventAudit(args.directory, {
+        hook: "subagent-lifecycle-supervisor",
+        stage: "skip",
+        reason_code: `${args.reasonCode}_${safety.reason}`,
+        session_id: args.parentSessionId,
+      })
+      return false
+    }
+    if (!safety.safe && safety.reason === "assistant_turn_incomplete") {
+      writeGatewayEventAudit(args.directory, {
+        hook: "subagent-lifecycle-supervisor",
+        stage: "state",
+        reason_code: `${args.reasonCode}_forcing_incomplete_parent_recovery`,
+        session_id: args.parentSessionId,
+      })
+    }
+    const injected = await injectHookMessage({
+      session: client,
+      sessionId: args.parentSessionId,
+      directory: args.directory,
+      content: args.subagentType
+        ? `[delegated ${args.subagentType} child stalled - continuing in parent turn]\nchild_session: ${args.childSessionId}`
+        : `[delegated child stalled - continuing in parent turn]\nchild_session: ${args.childSessionId}`,
+    })
+    writeGatewayEventAudit(args.directory, {
+      hook: "subagent-lifecycle-supervisor",
+      stage: injected ? "state" : "skip",
+      reason_code: injected ? `${args.reasonCode}_injected` : `${args.reasonCode}_inject_failed`,
+      session_id: args.parentSessionId,
+    })
+    return injected
+  }
 
   function finalizeLinkedLifecycle(args: {
     parentSessionId: string
@@ -363,7 +448,28 @@ export function createSubagentLifecycleSupervisorHook(options: {
         return
       }
       if (type === "session.created" || type === "session.updated") {
-        registerDelegationChildSession((payload ?? {}) as SessionInfoPayload)
+        const link = registerDelegationChildSession((payload ?? {}) as SessionInfoPayload)
+        if (link) {
+          const matches = link.childRunId
+            ? [`${link.parentSessionId}:${link.childRunId}`].filter((key) => byDelegation.has(key))
+            : link.traceId
+              ? matchingSessionTraceLifecycleKeys(byDelegation, link.parentSessionId, link.traceId)
+              : link.subagentType
+                ? matchingSessionLifecycleKeys(byDelegation, link.parentSessionId, link.subagentType)
+                : sessionLifecycleKeys(byDelegation, link.parentSessionId)
+          for (const key of matches) {
+            const state = byDelegation.get(key)
+            if (!state || state.status !== "running") {
+              continue
+            }
+            byDelegation.set(key, {
+              ...state,
+              childSessionId: link.childSessionId,
+              lastUpdatedAt: nowMs(),
+              lastReasonCode: "subagent_lifecycle_child_session_linked",
+            })
+          }
+        }
         return
       }
       if (type === "session.idle") {
@@ -377,15 +483,24 @@ export function createSubagentLifecycleSupervisorHook(options: {
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
             : options.directory
-        finalizeLinkedLifecycle({
+        const staleRecovered = finalizeLinkedLifecycle({
           parentSessionId: link.parentSessionId,
           childRunId: link.childRunId,
           traceId: link.traceId,
           subagentType: link.subagentType,
           directory,
-          failed: false,
-          reasonCode: "subagent_lifecycle_child_idle_reconciled",
+          failed: true,
+          reasonCode: "subagent_lifecycle_child_idle_stale_recovered",
         })
+        if (staleRecovered) {
+          await injectParentRecoveryMessage({
+            parentSessionId: link.parentSessionId,
+            directory,
+            childSessionId,
+            subagentType: link.subagentType,
+            reasonCode: "subagent_lifecycle_child_idle_stale_recovered",
+          })
+        }
         return
       }
       if (type === "message.updated") {
@@ -402,6 +517,25 @@ export function createSubagentLifecycleSupervisorHook(options: {
         const completed = Number.isFinite(Number(info?.time?.completed ?? NaN))
         const failed = info?.error !== undefined && info?.error !== null
         if (!completed && !failed) {
+          const matches = link.childRunId
+            ? [`${link.parentSessionId}:${link.childRunId}`].filter((key) => byDelegation.has(key))
+            : link.traceId
+              ? matchingSessionTraceLifecycleKeys(byDelegation, link.parentSessionId, link.traceId)
+              : link.subagentType
+                ? matchingSessionLifecycleKeys(byDelegation, link.parentSessionId, link.subagentType)
+                : sessionLifecycleKeys(byDelegation, link.parentSessionId)
+          for (const key of matches) {
+            const state = byDelegation.get(key)
+            if (!state || state.status !== "running") {
+              continue
+            }
+            byDelegation.set(key, {
+              ...state,
+              childSessionId,
+              lastUpdatedAt: nowMs(),
+              lastReasonCode: "subagent_lifecycle_child_message_progress",
+            })
+          }
           return
         }
         const directory =
@@ -500,6 +634,7 @@ export function createSubagentLifecycleSupervisorHook(options: {
         }
         const nextFailureCount = existing?.status === "failed" ? existing.failureCount : 0
         byDelegation.set(key, {
+          childSessionId: existing?.childSessionId,
           childRunId: childRunId || undefined,
           traceId: traceId || undefined,
           subagentType,
