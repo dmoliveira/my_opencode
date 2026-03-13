@@ -172,6 +172,24 @@ Use these directly in OpenCode:
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
+## Shared memory inside OpenCode 🧠
+
+Use these directly in OpenCode:
+
+```text
+/memory add --title "Release decision" --content "Use release-train rollups first" --tags release,ops --json
+/memory find "release rollups" --json
+/memory recall --json
+/memory pin <memory-id> --json
+/memory summarize --json
+/memory promote --source all --json
+/memory doctor --json
+```
+
+`/memory` stores durable local shared memory in `~/.config/opencode/my_opencode/runtime/shared_memory.db` by default. `/memory-lifecycle` now operates on that same SQLite-backed shared-memory runtime for stats, export, import, cleanup, compress, and doctor flows.
+
+`/memory promote` ingests high-signal local artifacts into shared memory from digests, session index state, workflow history, claims state, and saved doctor reports without calling external services. It also derives internal `memory-ref:` links between related promoted memories where shared session context is available, so recall and handoff flows can carry deterministic session-linked relationships in the returned payloads.
+
 ## Claims and workflow coordination 🧩
 
 Use these directly in OpenCode:
@@ -198,6 +216,19 @@ Use these directly in OpenCode:
 /workflow run --file workflows/ship.json --json
 /workflow run --file workflows/ship.json --execute --json
 /workflow status --json
+/workflow swarm plan --objective "Ship shared memory" --lanes 3 --claim-ids issue-301 --writer-paths scripts/*.py --json
+/workflow swarm plan --objective "Custom graph" --graph-file workflows/swarm-custom.json --claim-ids issue-301 --json
+/workflow swarm status --json
+/workflow swarm doctor --json
+/workflow swarm handoff --lane-id lane-2 --to agent:review-1 --json
+/workflow swarm accept-handoff --lane-id lane-2 --by agent:review-1 --bg-command "python3 scripts/selftest.py" --json
+/workflow swarm complete-lane --lane-id lane-2 --summary "Review completed" --json
+/workflow swarm fail-lane --lane-id lane-3 --reason "Verification failed" --json
+/workflow swarm reset-lane --lane-id lane-3 --json
+/workflow swarm retry-lane --lane-id lane-3 --json
+/workflow swarm resolve-failure --lane-id lane-3 --json
+/workflow swarm rebalance --lane-id lane-2 --json
+/workflow swarm close --reason "manual close" --json
 /workflow resume --run-id wf-20260224091500 --execute --json
 /workflow stop --reason "manual intervention" --json
 
@@ -222,11 +253,15 @@ Use these directly in OpenCode:
 `/claims claim --role <role>` auto-assigns the least-loaded active agent from `/agent-pool` for that role.
 `/workflow run` now supports dependency-aware step ordering (`depends_on`) and records per-step execution results (status, timestamps, failure reason codes). Use `--execute` to run guarded command steps.
 
+<<<<<<< HEAD
 Background runtime triage split:
 
 - use `/bg doctor --json` for backend execution health, queue depth, stale-running jobs, and failure triage
 - use `/agent-pool doctor --json` and `/agent-pool health --json` for manual capacity registry visibility plus backend health passthrough
 - use `/agent-pool drain --id <agent_id> --json` to mark capacity unavailable, and `/bg cleanup --json` to prune stale/terminal backend jobs
+=======
+`/workflow swarm` is the initial swarm prototype on top of current runtime contracts. It creates inspectable multi-lane plans using `workflow`, `claims`, `agent-pool`, and `reservation` state. Each lane now carries explicit `depends_on` metadata, `path_scopes`, and reservation/access metadata. Read-only lanes are explicitly marked with `reservation_mode: reservation-safe-read`, while write-capable lanes stay `writer-reserved`. You can also author a custom lane graph with `--graph-file`, as long as the graph is acyclic and lane metadata is valid. Write-capable custom lanes may also carry `lease_identity` to pin activation to a specific expected lease owner. `handoff` and `rebalance` mutate lane ownership safely, `accept-handoff` activates a handoff-pending lane and can enqueue controlled background work only for a narrow allowlist (`make validate|selftest|install-test`, `python3 scripts/selftest.py`, `python3 scripts/doctor_command.py`), and `complete-lane`/`fail-lane` add explicit lane outcome transitions with swarm-level progress summaries, follow-up guidance, explicit failure-recovery policy, and deterministic auto-progression of the next planned lane into `handoff-pending` when no other lane is active. Failed lanes can now be `reset-lane` back to `planned`, `retry-lane` into `handoff-pending`, or `resolve-failure` to execute the currently recommended recovery action automatically. Coordination remains conservative; dependency-satisfied read-only lanes can activate in parallel only when reservation-safe read guarantees are present and lane `path_scopes` do not overlap. A tiny write-capable parallel allowlist is now enabled for disjoint `implement` lanes only when lease-backed writer guarantees are present, dependencies are satisfied, writer `path_scopes` do not overlap, and the activating owner matches both the reservation lease owner and any lane-level `lease_identity`. All other write-capable lanes remain serialized. `/reservation set` does not auto-mint lease fields; lease-backed writer guarantees must be supplied explicitly.
+>>>>>>> 551182d (Build local shared-memory and swarm execution foundation)
 
 ## Post-session hook inside OpenCode ✅
 
@@ -413,6 +448,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
+/memory - Manage shared memory content (add|find|recall|pin|summarize|doctor)
 /memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)
 /model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
@@ -433,5 +469,5 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)
-/workflow - Run reusable workflow templates (run|validate|list|status|resume|stop|template|doctor)
+/workflow - Run reusable workflow templates and swarm planning (run|validate|list|status|resume|stop|swarm|template|doctor)
 ```
