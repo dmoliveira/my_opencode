@@ -2178,6 +2178,16 @@ exit 0
                     "SELECT data FROM message WHERE id = ?", ("child-message",)
                 ).fetchone()[0]
             )
+            active_parent_message_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM message WHERE id = ?", ("active-parent-message",)
+                ).fetchone()[0]
+            )
+            active_parent_part_data = json.loads(
+                conn.execute(
+                    "SELECT data FROM part WHERE id = ?", ("active-parent-part",)
+                ).fetchone()[0]
+            )
             question_part_data = json.loads(
                 conn.execute(
                     "SELECT data FROM part WHERE id = ?", ("question-part",)
@@ -2201,6 +2211,18 @@ exit 0
             and parent_part_data.get("state", {}).get("reason")
             == "stale_parent_reconciled_from_child_completion",
             "session repair-stale should mark repaired parent task parts failed with the recovery reason",
+        )
+        expect(
+            active_parent_message_data.get("time", {}).get("completed") is not None
+            and active_parent_message_data.get("error", {}).get("message")
+            == "stale_delegated_child_runtime_recovery_missed",
+            "session repair-stale should mark stale delegated-child parent messages completed with the missed-recovery reason",
+        )
+        expect(
+            active_parent_part_data.get("state", {}).get("status") == "failed"
+            and active_parent_part_data.get("state", {}).get("reason")
+            == "stale_delegated_child_runtime_recovery_missed",
+            "session repair-stale should mark stale delegated-child parent task parts failed with the missed-recovery reason",
         )
         expect(
             question_message_data.get("time", {}).get("completed") is not None
