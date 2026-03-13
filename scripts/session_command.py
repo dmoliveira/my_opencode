@@ -884,17 +884,32 @@ def _repair_silent_parent_after_delegation_abort(
         "text": "[recovered stale delegated abort after child completion]",
         "synthetic": True,
     }
-    conn.execute(
-        "INSERT INTO part (id, session_id, message_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            text_part_id,
-            session_id,
-            message_id,
-            now_ms,
-            now_ms,
-            json.dumps(text_part_data, separators=(",", ":")),
-        ),
-    )
+    part_columns = {
+        str(row["name"]) for row in conn.execute("PRAGMA table_info(part)").fetchall()
+    }
+    if "time_updated" in part_columns:
+        conn.execute(
+            "INSERT INTO part (id, session_id, message_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                text_part_id,
+                session_id,
+                message_id,
+                now_ms,
+                now_ms,
+                json.dumps(text_part_data, separators=(",", ":")),
+            ),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO part (id, session_id, message_id, time_created, data) VALUES (?, ?, ?, ?, ?)",
+            (
+                text_part_id,
+                session_id,
+                message_id,
+                now_ms,
+                json.dumps(text_part_data, separators=(",", ":")),
+            ),
+        )
     session_update = conn.execute(
         "UPDATE session SET time_updated = ? WHERE id = ? AND time_updated = ?",
         (now_ms, session_id, expected_session_time_updated),
