@@ -17169,6 +17169,51 @@ version: 1
             == "autopilot_completion_promise_detected",
             "autopilot promise mode should complete when completion signal is provided",
         )
+        expect(
+            isinstance(autopilot_promise_complete.get("run", {}).get("todos"), list)
+            and autopilot_promise_complete.get("run", {}).get("todos")
+            and autopilot_promise_complete.get("run", {}).get("todos")[0].get("id")
+            == "1"
+            and autopilot_promise_complete.get("run", {}).get("todos")[0].get("state")
+            == "done"
+            and autopilot_promise_complete.get("run", {}).get("todos")[0].get("status")
+            == "done",
+            "autopilot should seed and update todo state from cycle progress",
+        )
+
+        autopilot_promise_continuation_pending = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=dict(autopilot_promise_cycle.get("run", {})),
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            assistant_text=(
+                "Task complete for now. Best next safe slice: wire explicit failure recovery. "
+                "I'm continuing with the next swarm slice now."
+            ),
+            now_ts="2026-02-13T00:00:02Z",
+        )
+        expect(
+            autopilot_promise_continuation_pending.get("run", {}).get("status")
+            == "running"
+            and autopilot_promise_continuation_pending.get("run", {}).get("reason_code")
+            == "autopilot_continuation_pending",
+            "autopilot promise mode should defer completion when assistant text signals immediate continuation",
+        )
+        expect(
+            autopilot_promise_continuation_pending.get("run", {}).get("blockers")
+            == ["continuation_pending"]
+            and autopilot_promise_continuation_pending.get("run", {}).get(
+                "next_actions", []
+            )
+            == [
+                "continue the next actionable slice before finalizing the run",
+                "output <promise>DONE</promise> only after continuation cues are cleared",
+            ],
+            "autopilot promise continuation veto should preserve branch-specific blockers and guidance",
+        )
 
         completion_gate_dir = tmp / "autopilot_completion_gates"
         completion_gate_dir.mkdir(parents=True, exist_ok=True)
@@ -17245,6 +17290,236 @@ version: 1
             .get("result")
             == "PASS",
             "autopilot completion gates should allow completion once required validation evidence exists",
+        )
+
+        completion_task_gate_dir = tmp / "autopilot_completion_task_gates"
+        completion_task_gate_dir.mkdir(parents=True, exist_ok=True)
+        completion_task_gate_objective = {
+            "goal": "Require completed task ids before completion",
+            "scope": "scripts/autopilot_runtime.py",
+            "done_criteria": "finish the only cycle",
+            "completion_mode": "objective",
+            "completion_gates": {"required_task_ids": ["1"]},
+            "max_budget": "balanced",
+        }
+        completion_task_gate_init = initialize_run(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            objective=completion_task_gate_objective,
+            actor="selftest",
+            directory=completion_task_gate_dir,
+        )
+        completion_task_gate_run = dict(completion_task_gate_init.get("run", {}))
+        completion_task_gate_cycles = completion_task_gate_run.get("cycles")
+        if (
+            isinstance(completion_task_gate_cycles, list)
+            and completion_task_gate_cycles
+        ):
+            completion_task_gate_cycles[0]["state"] = "done"
+        completion_task_gate_complete = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=completion_task_gate_run,
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            now_ts="2026-02-13T00:00:03Z",
+            directory=completion_task_gate_dir,
+        )
+        expect(
+            completion_task_gate_complete.get("run", {}).get("status") == "completed"
+            and completion_task_gate_complete.get("run", {})
+            .get("completion_gate_status", {})
+            .get("result")
+            == "PASS",
+            "autopilot should satisfy required_task_ids gates from completed cycle/todo state",
+        )
+
+        completion_manual_task_gate_run = dict(completion_task_gate_init.get("run", {}))
+        completion_manual_task_gate_cycles = completion_manual_task_gate_run.get(
+            "cycles"
+        )
+        if (
+            isinstance(completion_manual_task_gate_cycles, list)
+            and completion_manual_task_gate_cycles
+        ):
+            completion_manual_task_gate_cycles[0]["state"] = "done"
+        completion_manual_task_gate_run["todos"] = [
+            {"id": "manual-done", "state": "done", "priority": "high"}
+        ]
+        completion_manual_task_gate_run["objective"] = {
+            **dict(completion_manual_task_gate_run.get("objective", {})),
+            "completion_gates": {"required_task_ids": ["manual-done"]},
+        }
+        completion_manual_task_gate_complete = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=completion_manual_task_gate_run,
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            now_ts="2026-02-13T00:00:04Z",
+            directory=completion_task_gate_dir,
+        )
+        expect(
+            completion_manual_task_gate_complete.get("run", {}).get("status")
+            == "completed"
+            and completion_manual_task_gate_complete.get("run", {})
+            .get("completion_gate_status", {})
+            .get("result")
+            == "PASS",
+            "autopilot should satisfy required_task_ids gates from todo state-only completions",
+        )
+
+        objective_continuation_dir = tmp / "autopilot_objective_continuation"
+        objective_continuation_dir.mkdir(parents=True, exist_ok=True)
+        objective_continuation_objective = {
+            "goal": "Complete objective only after final slice",
+            "scope": "scripts/autopilot_runtime.py",
+            "done_criteria": "finish the only cycle",
+            "max_budget": "balanced",
+            "completion_mode": "objective",
+        }
+        objective_continuation_init = initialize_run(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            objective=objective_continuation_objective,
+            actor="selftest",
+            directory=objective_continuation_dir,
+        )
+        objective_continuation_run = dict(objective_continuation_init.get("run", {}))
+        objective_continuation_cycles = objective_continuation_run.get("cycles")
+        if (
+            isinstance(objective_continuation_cycles, list)
+            and objective_continuation_cycles
+        ):
+            objective_continuation_cycles[0]["state"] = "done"
+        objective_continuation_blocked = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run=objective_continuation_run,
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            assistant_text=(
+                "Work from this slice is done. Best next safe slice: validate drift checks. "
+                "I'll continue directly with that pass."
+            ),
+            now_ts="2026-02-13T00:00:04Z",
+            directory=objective_continuation_dir,
+        )
+        expect(
+            objective_continuation_blocked.get("run", {}).get("status") == "running"
+            and objective_continuation_blocked.get("run", {}).get("reason_code")
+            == "autopilot_continuation_pending",
+            "autopilot objective mode should defer completion when assistant text signals immediate continuation",
+        )
+        expect(
+            objective_continuation_blocked.get("run", {}).get("blockers")
+            == ["continuation_pending"]
+            and objective_continuation_blocked.get("run", {}).get("next_actions", [])
+            == [
+                "continue the next actionable slice before finalizing the run",
+                "resume autopilot after the assistant no longer signals immediate continuation",
+            ],
+            "autopilot objective continuation veto should preserve branch-specific blockers and guidance",
+        )
+
+        autopilot_todo_blocked = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run={
+                **dict(autopilot_promise_cycle.get("run", {})),
+                "todos": [
+                    {"id": "todo-1", "state": "done"},
+                    {"id": "todo-2", "state": "pending"},
+                ],
+            },
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            now_ts="2026-02-13T00:00:05Z",
+        )
+        expect(
+            autopilot_todo_blocked.get("run", {}).get("status") == "running"
+            and autopilot_todo_blocked.get("run", {}).get("reason_code")
+            == "incomplete_todo_set",
+            "autopilot promise mode should defer completion when required todos remain incomplete",
+        )
+        expect(
+            autopilot_todo_blocked.get("run", {}).get("blockers")
+            == ["incomplete_todo_set"]
+            and any(
+                violation.get("code") == "incomplete_todo_set"
+                for violation in autopilot_todo_blocked.get("run", {}).get(
+                    "todo_violations", []
+                )
+                if isinstance(violation, dict)
+            ),
+            "autopilot todo completion block should surface todo violations deterministically",
+        )
+
+        autopilot_multiple_in_progress_blocked = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run={
+                **dict(autopilot_promise_cycle.get("run", {})),
+                "todos": [
+                    {"id": "todo-1", "state": "in_progress"},
+                    {"id": "todo-2", "state": "in_progress"},
+                ],
+            },
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            now_ts="2026-02-13T00:00:06Z",
+        )
+        expect(
+            autopilot_multiple_in_progress_blocked.get("run", {}).get("status")
+            == "running"
+            and autopilot_multiple_in_progress_blocked.get("run", {}).get("reason_code")
+            == "multiple_in_progress_items",
+            "autopilot promise mode should defer completion when todo set is non-compliant",
+        )
+
+        autopilot_continuation_with_todo_block = execute_cycle(
+            config={"budget_runtime": {"profile": "balanced"}},
+            write_path=config_path,
+            run={
+                **dict(autopilot_promise_cycle.get("run", {})),
+                "todos": [
+                    {
+                        "id": "1",
+                        "content": "goal",
+                        "status": "done",
+                        "priority": "high",
+                    },
+                    {
+                        "id": "todo-2",
+                        "content": "follow-up",
+                        "status": "pending",
+                        "priority": "high",
+                    },
+                ],
+            },
+            tool_call_increment=1,
+            token_increment=50,
+            touched_paths=["scripts/autopilot_runtime.py"],
+            completion_signal=True,
+            assistant_text=(
+                "Task complete for now. Best next safe slice: validate release notes. "
+                "I'll continue directly with that pass."
+            ),
+            now_ts="2026-02-13T00:00:07Z",
+        )
+        expect(
+            autopilot_continuation_with_todo_block.get("run", {}).get("reason_code")
+            == "autopilot_continuation_pending"
+            and autopilot_continuation_with_todo_block.get("run", {}).get("blockers")
+            == ["continuation_pending", "incomplete_todo_set"],
+            "autopilot continuation veto should retain todo blockers for operator visibility",
         )
 
         autopilot_promise_wallclock_run = dict(autopilot_promise_cycle.get("run", {}))

@@ -21,6 +21,11 @@ from execution_budget_runtime import (
     evaluate_budget,
     resolve_budget_policy,
 )
+from todo_enforcement import (
+    remediation_prompts,
+    validate_plan_completion,
+    validate_todo_set,
+)
 
 
 RUNTIME_ENV_VAR = "MY_OPENCODE_AUTOPILOT_RUNTIME_PATH"
@@ -218,6 +223,270 @@ def _in_scope(path: str, patterns: list[str]) -> bool:
     return False
 
 
+def _has_hard_continuation_cue(text: str) -> bool:
+    normalized = text.lower()
+    if "<continue-loop>" in normalized:
+        return True
+    return any(
+        cue in normalized
+        for cue in (
+            "still left to do",
+            "remaining actionable",
+            "remaining epic",
+            "next remaining epic",
+            "remaining tasks",
+            "remaining items",
+            "continue loop",
+            "in-progress right now",
+            "still left to do (next",
+            "need finish",
+        )
+    )
+
+
+def _has_completion_closure_cue(text: str) -> bool:
+    normalized = text.lower()
+    return any(
+        cue in normalized
+        for cue in (
+            "nothing additional",
+            "nothing more to",
+            "nothing left to",
+            "there is nothing additional",
+            "this slice is done",
+            "work from this slice is done",
+            "task is finished",
+            "task complete",
+            "complete for now",
+            "done for now",
+            "already included",
+            "already in the current released state",
+            "already in the released state",
+        )
+    )
+
+
+def _has_actionable_next_slice_cue(text: str) -> bool:
+    normalized = text.lower()
+    return any(
+        cue in normalized
+        for cue in (
+            "next steps",
+            "next safe steps",
+            "natural next",
+            "best next safe slice",
+            "next safe slice",
+            "next slice",
+        )
+    )
+
+
+def _has_direct_continuation_offer_cue(text: str) -> bool:
+    normalized = text.lower()
+    return bool(
+        re.search(r"\bi\s+will\s+continue\b", normalized)
+        or re.search(r"\bi'?ll\s+continue\b", normalized)
+        or re.search(r"\bi\s+am\s+continuing\b", normalized)
+        or re.search(r"\bi'?m\s+continuing\b", normalized)
+        or re.search(r"\bcontinuing\s+with\s+the\s+next\b", normalized)
+        or "continue directly" in normalized
+    )
+
+
+def _assistant_text_requires_continuation(text: str) -> bool:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return False
+    if _has_hard_continuation_cue(normalized):
+        return True
+    return (
+        _has_completion_closure_cue(normalized)
+        and _has_actionable_next_slice_cue(normalized)
+        and _has_direct_continuation_offer_cue(normalized)
+    )
+
+
+def _evaluate_run_todo_controls(run: dict[str, Any]) -> dict[str, Any]:
+    todos_any = run.get("todos")
+    todos = todos_any if isinstance(todos_any, list) else []
+    normalized_todos: list[dict[str, Any]] = []
+    for todo in todos:
+        if not isinstance(todo, dict):
+            continue
+        normalized = dict(todo)
+        if "state" not in normalized and "status" in normalized:
+            normalized["state"] = normalized.get("status")
+        normalized_todos.append(normalized)
+    violations = [
+        *validate_todo_set(normalized_todos),
+        *validate_plan_completion(normalized_todos),
+    ]
+    reason_code = "autopilot_todo_completion_blocked"
+    if violations:
+        primary_code = str(violations[0].get("code") or "").strip()
+        if primary_code:
+            reason_code = primary_code
+    return {
+        "result": "PASS" if not violations else "FAIL",
+        "reason_code": reason_code,
+        "violations": violations,
+        "remediation": remediation_prompts(violations),
+    }
+
+
+def _apply_todo_completion_block(
+    updated: dict[str, Any], *, todo_status: dict[str, Any], promise_tag: str
+) -> None:
+    updated["status"] = "running"
+    updated["reason_code"] = str(
+        todo_status.get("reason_code") or "autopilot_todo_completion_blocked"
+    )
+    violations = list(todo_status.get("violations") or [])
+    updated["todo_violations"] = violations
+    updated["blockers"] = [
+        str(item.get("code") or "todo_violation")
+        for item in violations
+        if isinstance(item, dict)
+    ] or ["autopilot_todo_completion_blocked"]
+    remediation = [
+        str(item).strip()
+        for item in list(todo_status.get("remediation") or [])
+        if str(item).strip()
+    ]
+    updated["next_actions"] = remediation or [
+        "complete or explicitly skip remaining todo items before finalizing the run",
+        f"output {promise_tag} only after todo completion blockers are cleared",
+    ]
+
+
+def _sync_run_todos_from_cycles(run: dict[str, Any]) -> None:
+    cycles_any = run.get("cycles")
+    cycles = cycles_any if isinstance(cycles_any, list) else []
+    if not cycles:
+        return
+    todos_any = run.get("todos")
+    todos = todos_any if isinstance(todos_any, list) else []
+    by_id: dict[str, dict[str, Any]] = {}
+    ordered: list[dict[str, Any]] = []
+    for todo in todos:
+        if not isinstance(todo, dict):
+            continue
+        todo_id = str(todo.get("id") or "").strip()
+        if todo_id:
+            by_id[todo_id] = dict(todo)
+            ordered.append(by_id[todo_id])
+    for cycle in cycles:
+        if not isinstance(cycle, dict):
+            continue
+        todo_id = str(cycle.get("ordinal") or "").strip()
+        if not todo_id:
+            continue
+        status = "done" if str(cycle.get("state") or "pending") == "done" else "pending"
+        existing = by_id.get(todo_id)
+        if existing is None:
+            existing = {
+                "id": todo_id,
+                "content": str(cycle.get("title") or f"cycle {todo_id}").strip(),
+                "state": status,
+                "status": status,
+                "priority": "high",
+            }
+            by_id[todo_id] = existing
+            ordered.append(existing)
+        else:
+            existing.setdefault(
+                "content", str(cycle.get("title") or f"cycle {todo_id}").strip()
+            )
+            existing.setdefault("priority", "high")
+            existing["state"] = status
+            existing["status"] = status
+    run["todos"] = ordered
+
+
+def _completed_task_ids_from_run(run: dict[str, Any]) -> list[str]:
+    completed: list[str] = []
+    seen: set[str] = set()
+    todos_any = run.get("todos")
+    todos = todos_any if isinstance(todos_any, list) else []
+    for todo in todos:
+        if not isinstance(todo, dict):
+            continue
+        state = str(todo.get("status") or todo.get("state") or "").strip().lower()
+        if state not in {"done", "skipped"}:
+            continue
+        todo_id = str(todo.get("id") or "").strip()
+        if todo_id and todo_id not in seen:
+            seen.add(todo_id)
+            completed.append(todo_id)
+    cycles_any = run.get("cycles")
+    cycles = cycles_any if isinstance(cycles_any, list) else []
+    for cycle in cycles:
+        if not isinstance(cycle, dict):
+            continue
+        if str(cycle.get("state") or "pending") != "done":
+            continue
+        for value in (cycle.get("ordinal"), cycle.get("cycle_id")):
+            item = str(value or "").strip()
+            if item and item not in seen:
+                seen.add(item)
+                completed.append(item)
+    return completed
+
+
+def _extend_unique(target: list[str], extras: list[str]) -> list[str]:
+    for item in extras:
+        if item and item not in target:
+            target.append(item)
+    return target
+
+
+def _augment_continuation_pending_details(
+    updated: dict[str, Any], *, directory: Path, completion_text: str, promise_tag: str
+) -> None:
+    todo_status = _evaluate_run_todo_controls(updated)
+    if todo_status.get("result") != "PASS":
+        violations = list(todo_status.get("violations") or [])
+        updated["todo_violations"] = violations
+        _extend_unique(
+            updated["blockers"],
+            [
+                str(item.get("code") or "todo_violation")
+                for item in violations
+                if isinstance(item, dict)
+            ],
+        )
+        remediation = [
+            str(item).strip()
+            for item in list(todo_status.get("remediation") or [])
+            if str(item).strip()
+        ]
+        _extend_unique(updated["next_actions"], remediation)
+    gate_status = _evaluate_run_completion_gates(
+        updated, directory=directory, completion_text=completion_text
+    )
+    if gate_status.get("result") != "PASS":
+        _extend_unique(
+            updated["blockers"],
+            [
+                str(item).strip()
+                for item in list(gate_status.get("blockers") or [])
+                if str(item).strip()
+            ],
+        )
+        _extend_unique(
+            updated["next_actions"],
+            [
+                "run required validation and collect evidence for missing completion gates",
+                "resume autopilot after gate blockers are cleared",
+            ],
+        )
+    if not updated["next_actions"]:
+        updated["next_actions"] = [
+            "continue the next actionable slice before finalizing the run",
+            f"output {promise_tag} only after continuation cues and blockers are cleared",
+        ]
+
+
 def _evaluate_run_completion_gates(
     run: dict[str, Any], *, directory: Path, completion_text: str = ""
 ) -> dict[str, Any]:
@@ -231,7 +500,7 @@ def _evaluate_run_completion_gates(
     result = evaluate_completion_gates(
         gates,
         directory=directory,
-        completed_task_ids=[],
+        completed_task_ids=_completed_task_ids_from_run(run),
         current_owner=str(run.get("actor") or ""),
         completion_text=completion_text,
     )
@@ -293,6 +562,7 @@ def initialize_run(
             "start first execution cycle after guardrail acknowledgment",
         ],
     }
+    _sync_run_todos_from_cycles(run)
     _evaluate_run_completion_gates(run, directory=directory or Path.cwd())
 
     runtime_file = save_runtime(write_path, run)
@@ -358,6 +628,7 @@ def execute_cycle(
     updated = dict(run)
     updated["updated_at"] = now_ts or now_iso()
     eval_directory = directory or Path.cwd()
+    _sync_run_todos_from_cycles(updated)
 
     if not paths:
         cycles_any = updated.get("cycles")
@@ -379,7 +650,65 @@ def execute_cycle(
         objective = objective_any if isinstance(objective_any, dict) else {}
         continuous_mode = bool(objective.get("continuous_mode", False))
 
+        assistant_requires_continuation = _assistant_text_requires_continuation(
+            normalized_assistant
+        )
+
         if pending == 0 and completion_mode == "promise" and completion_signal:
+            if assistant_requires_continuation:
+                updated["status"] = "running"
+                updated["reason_code"] = "autopilot_continuation_pending"
+                updated["blockers"] = ["continuation_pending"]
+                updated["next_actions"] = [
+                    "continue the next actionable slice before finalizing the run",
+                    f"output {promise_tag} only after continuation cues are cleared",
+                ]
+                _augment_continuation_pending_details(
+                    updated,
+                    directory=eval_directory,
+                    completion_text=normalized_assistant,
+                    promise_tag=promise_tag,
+                )
+                updated["progress"] = {
+                    "total_cycles": len(cycles),
+                    "completed_cycles": done,
+                    "pending_cycles": pending,
+                }
+                runtime_file = save_runtime(write_path, updated)
+                snapshot = write_snapshot(
+                    write_path,
+                    {
+                        "status": updated["status"],
+                        "plan": {
+                            "metadata": {"id": updated.get("run_id")},
+                            "path": str(runtime_file),
+                        },
+                        "steps": [
+                            {
+                                "ordinal": cycle.get("ordinal"),
+                                "state": cycle.get("state"),
+                            }
+                            for cycle in cycles
+                            if isinstance(cycle, dict)
+                        ],
+                    },
+                    source="autopilot_cycle_continuation_pending",
+                    command_outcomes=[
+                        {
+                            "kind": "slash_command",
+                            "name": "/autopilot resume",
+                            "result": "PASS",
+                            "reason_code": updated["reason_code"],
+                            "summary": "autopilot deferred completion because assistant text indicates immediate continuation",
+                        }
+                    ],
+                )
+                return {
+                    "result": "PASS",
+                    "run": updated,
+                    "runtime_path": str(runtime_file),
+                    "checkpoint": snapshot,
+                }
             updated["status"] = "completed"
             updated["reason_code"] = "autopilot_completion_promise_detected"
             updated["blockers"] = []
@@ -392,10 +721,18 @@ def execute_cycle(
                 "completed_cycles": done,
                 "pending_cycles": pending,
             }
+            todo_status = _evaluate_run_todo_controls(updated)
+            if todo_status.get("result") != "PASS":
+                _apply_todo_completion_block(
+                    updated, todo_status=todo_status, promise_tag=promise_tag
+                )
             gate_status = _evaluate_run_completion_gates(
                 updated, directory=eval_directory, completion_text=normalized_assistant
             )
-            if gate_status.get("result") != "PASS":
+            if (
+                updated.get("status") == "completed"
+                and gate_status.get("result") != "PASS"
+            ):
                 updated["status"] = "running"
                 updated["reason_code"] = str(
                     gate_status.get("reason_code") or "completion_gates_blocked"
@@ -444,6 +781,60 @@ def execute_cycle(
             and completion_mode == "objective"
             and not continuous_mode
         ):
+            if assistant_requires_continuation:
+                updated["status"] = "running"
+                updated["reason_code"] = "autopilot_continuation_pending"
+                updated["blockers"] = ["continuation_pending"]
+                updated["next_actions"] = [
+                    "continue the next actionable slice before finalizing the run",
+                    "resume autopilot after the assistant no longer signals immediate continuation",
+                ]
+                _augment_continuation_pending_details(
+                    updated,
+                    directory=eval_directory,
+                    completion_text=normalized_assistant,
+                    promise_tag=promise_tag,
+                )
+                updated["progress"] = {
+                    "total_cycles": len(cycles),
+                    "completed_cycles": done,
+                    "pending_cycles": pending,
+                }
+                runtime_file = save_runtime(write_path, updated)
+                snapshot = write_snapshot(
+                    write_path,
+                    {
+                        "status": updated["status"],
+                        "plan": {
+                            "metadata": {"id": updated.get("run_id")},
+                            "path": str(runtime_file),
+                        },
+                        "steps": [
+                            {
+                                "ordinal": cycle.get("ordinal"),
+                                "state": cycle.get("state"),
+                            }
+                            for cycle in cycles
+                            if isinstance(cycle, dict)
+                        ],
+                    },
+                    source="autopilot_cycle_continuation_pending",
+                    command_outcomes=[
+                        {
+                            "kind": "slash_command",
+                            "name": "/autopilot resume",
+                            "result": "PASS",
+                            "reason_code": updated["reason_code"],
+                            "summary": "autopilot deferred completion because assistant text indicates immediate continuation",
+                        }
+                    ],
+                )
+                return {
+                    "result": "PASS",
+                    "run": updated,
+                    "runtime_path": str(runtime_file),
+                    "checkpoint": snapshot,
+                }
             updated["status"] = "completed"
             updated["reason_code"] = "autopilot_objective_completed"
             updated["blockers"] = []
@@ -456,10 +847,18 @@ def execute_cycle(
                 "completed_cycles": done,
                 "pending_cycles": pending,
             }
+            todo_status = _evaluate_run_todo_controls(updated)
+            if todo_status.get("result") != "PASS":
+                _apply_todo_completion_block(
+                    updated, todo_status=todo_status, promise_tag=promise_tag
+                )
             gate_status = _evaluate_run_completion_gates(
                 updated, directory=eval_directory, completion_text=normalized_assistant
             )
-            if gate_status.get("result") != "PASS":
+            if (
+                updated.get("status") == "completed"
+                and gate_status.get("result") != "PASS"
+            ):
                 updated["status"] = "running"
                 updated["reason_code"] = str(
                     gate_status.get("reason_code") or "completion_gates_blocked"
@@ -663,6 +1062,9 @@ def execute_cycle(
         objective_any = updated.get("objective")
         objective = objective_any if isinstance(objective_any, dict) else {}
         continuous_mode = bool(objective.get("continuous_mode", False))
+        assistant_requires_continuation = _assistant_text_requires_continuation(
+            normalized_assistant
+        )
         progressed = False
         for cycle in cycles:
             if not isinstance(cycle, dict):
@@ -712,6 +1114,36 @@ def execute_cycle(
                 updated["status"] = "completed"
                 updated["reason_code"] = "autopilot_objective_completed"
 
+        _sync_run_todos_from_cycles(updated)
+
+        if updated["status"] == "completed" and assistant_requires_continuation:
+            updated["status"] = "running"
+            updated["reason_code"] = "autopilot_continuation_pending"
+            updated["blockers"] = ["continuation_pending"]
+            if completion_mode == "promise":
+                updated["next_actions"] = [
+                    "continue the next actionable slice before finalizing the run",
+                    f"output {promise_tag} only after continuation cues are cleared",
+                ]
+            else:
+                updated["next_actions"] = [
+                    "continue the next actionable slice before finalizing the run",
+                    "resume autopilot after the assistant no longer signals immediate continuation",
+                ]
+            _augment_continuation_pending_details(
+                updated,
+                directory=eval_directory,
+                completion_text=normalized_assistant,
+                promise_tag=promise_tag,
+            )
+
+        if updated["status"] == "completed":
+            todo_status = _evaluate_run_todo_controls(updated)
+            if todo_status.get("result") != "PASS":
+                _apply_todo_completion_block(
+                    updated, todo_status=todo_status, promise_tag=promise_tag
+                )
+
         pending = sum(
             1
             for cycle in cycles
@@ -750,7 +1182,9 @@ def execute_cycle(
             ]
         elif updated["reason_code"] not in {
             "autopilot_waiting_for_completion_promise",
-        }:
+            "autopilot_continuation_pending",
+            "completion_gates_blocked",
+        } and not updated.get("todo_violations"):
             updated["next_actions"] = [
                 "continue next bounded cycle",
                 "pause run if confidence drops or scope uncertainty increases",
