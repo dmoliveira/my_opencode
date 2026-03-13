@@ -210,6 +210,49 @@ test("todo-continuation-enforcer refreshes message probe after a later chat turn
   }
 })
 
+test("todo-continuation-enforcer injects immediate continue acknowledgement on first tool step", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant", time: {} },
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("chat.message", {
+      directory,
+      properties: { sessionID: "session-todo-continue-ack", prompt: "continue" },
+    })
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "bash", sessionID: "session-todo-continue-ack" },
+      output: { output: "done" },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("todo-continuation-enforcer skips when active loop is running", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
   try {

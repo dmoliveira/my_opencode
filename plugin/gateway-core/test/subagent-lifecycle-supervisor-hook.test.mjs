@@ -439,20 +439,13 @@ test("subagent-lifecycle-supervisor auto-recovers idle child sessions in the par
       directory,
       enabled: true,
       maxRetriesPerSession: 3,
-      staleRunningMs: 60000,
+      staleRunningMs: 0,
       blockOnExhausted: true,
       client: {
         session: {
           async messages() {
             return {
-              data: [
-                {
-                  info: {
-                    role: "assistant",
-                    time: { completed: Date.now() },
-                  },
-                },
-              ],
+              data: [],
             }
           },
           async promptAsync(args) {
@@ -508,33 +501,29 @@ test("subagent-lifecycle-supervisor forces idle-child recovery even when parent 
   const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
   try {
     let promptCalls = 0
-    const plugin = GatewayCorePlugin({
+    const hook = createSubagentLifecycleSupervisorHook({
       directory,
-      config: {
-        hooks: {
-          enabled: true,
-          order: ["subagent-lifecycle-supervisor"],
-          disabled: [],
-        },
-        subagentLifecycleSupervisor: {
-          enabled: true,
-          maxRetriesPerSession: 3,
-          staleRunningMs: 60000,
-          blockOnExhausted: true,
-        },
-      },
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 0,
+      blockOnExhausted: true,
       client: {
         session: {
-          async messages() {
-            return {
-              data: [
-                {
-                  info: {
-                    role: "assistant",
-                    time: {},
+          async messages(args) {
+            if (args.path.id === "session-life-idle-parent-2") {
+              return {
+                data: [
+                  {
+                    info: {
+                      role: "assistant",
+                      time: {},
+                    },
                   },
-                },
-              ],
+                ],
+              }
+            }
+            return {
+              data: [],
             }
           },
           async promptAsync() {
@@ -547,39 +536,165 @@ test("subagent-lifecycle-supervisor forces idle-child recovery even when parent 
     const beforeOutput = {
       args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE idle-trace-2] review" },
     }
-    await plugin["tool.execute.before"](
-      { tool: "task", sessionID: "session-life-idle-parent-2" },
-      beforeOutput,
-    )
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-idle-parent-2" },
+      output: beforeOutput,
+      directory,
+    })
 
-    await plugin.event({
-      event: {
-        type: "session.created",
-        properties: {
-          info: {
-            id: "child-idle-2",
-            parentID: "session-life-idle-parent-2",
-            title: "[DELEGATION TRACE idle-trace-2]\n\nIdle child (@reviewer subagent)",
-            metadata: beforeOutput.metadata,
+    await hook.event("session.created", {
+      properties: {
+        info: {
+          id: "child-idle-2",
+          parentID: "session-life-idle-parent-2",
+          title: "[DELEGATION TRACE idle-trace-2]\n\nIdle child (@reviewer subagent)",
+          metadata: beforeOutput.metadata,
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      properties: {
+        sessionID: "child-idle-2",
+      },
+      directory,
+    })
+
+    assert.equal(promptCalls, 1)
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-idle-parent-2" },
+      output: { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE idle-trace-2] retry" } },
+      directory,
+    })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("subagent-lifecycle-supervisor skips idle recovery for fresh active child sessions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    let promptCalls = 0
+    const hook = createSubagentLifecycleSupervisorHook({
+      directory,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant", time: {} },
+                  parts: [{ type: "text", text: "Still analyzing the repository." }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
           },
         },
       },
     })
 
-    await plugin.event({
-      event: {
-        type: "session.idle",
-        properties: {
-          sessionID: "child-idle-2",
+    const beforeOutput = {
+      args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE active-idle-trace] review" },
+    }
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-idle-active-parent" },
+      output: beforeOutput,
+      directory,
+    })
+    await hook.event("session.created", {
+      properties: {
+        info: {
+          id: "child-idle-active-1",
+          parentID: "session-life-idle-active-parent",
+          title: "[DELEGATION TRACE active-idle-trace]\n\nIdle child (@reviewer subagent)",
+          metadata: beforeOutput.metadata,
+        },
+      },
+    })
+    await hook.event("session.idle", {
+      properties: { sessionID: "child-idle-active-1" },
+      directory,
+    })
+
+    assert.equal(promptCalls, 0)
+    await assert.rejects(
+      () =>
+        hook.event("tool.execute.before", {
+          input: { tool: "task", sessionID: "session-life-idle-active-parent" },
+          output: { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE active-idle-trace] retry" } },
+          directory,
+        }),
+      /already running/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("subagent-lifecycle-supervisor reconciles completed idle child without parent recovery", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-subagent-lifecycle-"))
+  try {
+    let promptCalls = 0
+    const hook = createSubagentLifecycleSupervisorHook({
+      directory,
+      enabled: true,
+      maxRetriesPerSession: 3,
+      staleRunningMs: 60000,
+      blockOnExhausted: true,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant", time: { completed: Date.now() } },
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
         },
       },
     })
 
-    assert.equal(promptCalls, 1)
-    await plugin["tool.execute.before"](
-      { tool: "task", sessionID: "session-life-idle-parent-2" },
-      { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE idle-trace-2] retry" } },
-    )
+    const beforeOutput = {
+      args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE completed-idle-trace] review" },
+    }
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-idle-completed-parent" },
+      output: beforeOutput,
+      directory,
+    })
+    await hook.event("session.created", {
+      properties: {
+        info: {
+          id: "child-idle-completed-1",
+          parentID: "session-life-idle-completed-parent",
+          title: "[DELEGATION TRACE completed-idle-trace]\n\nIdle child (@reviewer subagent)",
+          metadata: beforeOutput.metadata,
+        },
+      },
+    })
+    await hook.event("session.idle", {
+      properties: { sessionID: "child-idle-completed-1" },
+      directory,
+    })
+
+    assert.equal(promptCalls, 0)
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: "session-life-idle-completed-parent" },
+      output: { args: { subagent_type: "reviewer", prompt: "[DELEGATION TRACE completed-idle-trace] retry" } },
+      directory,
+    })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

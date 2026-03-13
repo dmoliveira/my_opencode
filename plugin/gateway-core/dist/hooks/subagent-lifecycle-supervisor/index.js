@@ -37,6 +37,48 @@ function effectiveDirectory(payload, fallbackDirectory) {
 function nowMs() {
     return Date.now();
 }
+function latestRunningStateForLink(args) {
+    const matches = args.link.childRunId
+        ? [`${args.link.parentSessionId}:${args.link.childRunId}`].filter((key) => args.byDelegation.has(key))
+        : args.link.traceId
+            ? matchingSessionTraceLifecycleKeys(args.byDelegation, args.link.parentSessionId, args.link.traceId)
+            : args.link.subagentType
+                ? matchingSessionLifecycleKeys(args.byDelegation, args.link.parentSessionId, args.link.subagentType)
+                : sessionLifecycleKeys(args.byDelegation, args.link.parentSessionId);
+    for (const key of matches) {
+        const state = args.byDelegation.get(key);
+        if (state?.status === "running") {
+            return state;
+        }
+    }
+    return undefined;
+}
+function inspectChildMessageState(messages) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message?.info?.role !== "assistant") {
+            continue;
+        }
+        const completed = Number.isFinite(Number(message.info?.time?.completed ?? Number.NaN));
+        const failed = message.info?.error !== undefined && message.info?.error !== null;
+        if (completed) {
+            return "completed";
+        }
+        if (failed) {
+            return "failed";
+        }
+        const hasVisibleText = Array.isArray(message.parts)
+            ? message.parts.some((part) => part?.type === "text" &&
+                typeof part.text === "string" &&
+                part.text.trim() &&
+                !part.synthetic)
+            : false;
+        if (hasVisibleText || Array.isArray(message.parts)) {
+            return "active";
+        }
+    }
+    return "unknown";
+}
 function sessionLifecycleKeys(byDelegation, sid) {
     const matches = [];
     for (const key of byDelegation.keys()) {
@@ -303,6 +345,89 @@ export function createSubagentLifecycleSupervisorHook(options) {
                 const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                     ? eventPayload.directory
                     : options.directory;
+                const runningState = latestRunningStateForLink({ byDelegation, link });
+                if (!runningState) {
+                    return;
+                }
+                const ageMs = Math.max(0, nowMs() - Math.max(runningState.lastUpdatedAt, runningState.lastStartedAt));
+                const childClient = options.client?.session;
+                if (childClient && typeof childClient.messages === "function") {
+                    try {
+                        const response = await childClient.messages({
+                            path: { id: childSessionId },
+                            query: { directory },
+                        });
+                        const childState = inspectChildMessageState(Array.isArray(response.data) ? response.data : []);
+                        if (childState === "completed") {
+                            finalizeLinkedLifecycle({
+                                parentSessionId: link.parentSessionId,
+                                childRunId: link.childRunId,
+                                traceId: link.traceId,
+                                subagentType: link.subagentType,
+                                directory,
+                                failed: false,
+                                reasonCode: "subagent_lifecycle_child_idle_completed_reconciled",
+                            });
+                            return;
+                        }
+                        if (childState === "failed") {
+                            const failed = finalizeLinkedLifecycle({
+                                parentSessionId: link.parentSessionId,
+                                childRunId: link.childRunId,
+                                traceId: link.traceId,
+                                subagentType: link.subagentType,
+                                directory,
+                                failed: true,
+                                reasonCode: "subagent_lifecycle_child_idle_failed_reconciled",
+                            });
+                            if (failed) {
+                                await injectParentRecoveryMessage({
+                                    parentSessionId: link.parentSessionId,
+                                    directory,
+                                    childSessionId,
+                                    subagentType: link.subagentType,
+                                    reasonCode: "subagent_lifecycle_child_idle_failed_reconciled",
+                                });
+                            }
+                            return;
+                        }
+                        if (childState === "active") {
+                            writeGatewayEventAudit(directory, {
+                                hook: "subagent-lifecycle-supervisor",
+                                stage: "skip",
+                                reason_code: "subagent_lifecycle_child_idle_active_skip",
+                                session_id: link.parentSessionId,
+                                child_run_id: runningState.childRunId,
+                                trace_id: runningState.traceId,
+                                subagent_type: runningState.subagentType,
+                            });
+                            return;
+                        }
+                    }
+                    catch {
+                        writeGatewayEventAudit(directory, {
+                            hook: "subagent-lifecycle-supervisor",
+                            stage: "skip",
+                            reason_code: "subagent_lifecycle_child_idle_probe_failed",
+                            session_id: link.parentSessionId,
+                            child_run_id: runningState.childRunId,
+                            trace_id: runningState.traceId,
+                            subagent_type: runningState.subagentType,
+                        });
+                    }
+                }
+                if (ageMs < options.staleRunningMs) {
+                    writeGatewayEventAudit(directory, {
+                        hook: "subagent-lifecycle-supervisor",
+                        stage: "skip",
+                        reason_code: "subagent_lifecycle_child_idle_not_stale",
+                        session_id: link.parentSessionId,
+                        child_run_id: runningState.childRunId,
+                        trace_id: runningState.traceId,
+                        subagent_type: runningState.subagentType,
+                    });
+                    return;
+                }
                 const staleRecovered = finalizeLinkedLifecycle({
                     parentSessionId: link.parentSessionId,
                     childRunId: link.childRunId,

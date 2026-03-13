@@ -171,6 +171,53 @@ test("long-turn-watchdog warns after repeated tool calls even before time thresh
   assert.ok(second.output.includes("Still working"))
 })
 
+test("long-turn-watchdog injects visible progress pulse when tool-only turn stalls", async () => {
+  let currentMs = 0
+  let promptCalls = 0
+  const hook = createLongTurnWatchdogHook({
+    directory: process.cwd(),
+    client: {
+      session: {
+        async messages() {
+          return {
+            data: [
+              {
+                info: { role: "assistant", time: {} },
+              },
+            ],
+          }
+        },
+        async promptAsync() {
+          promptCalls += 1
+        },
+      },
+    },
+    enabled: true,
+    warningThresholdMs: 1000,
+    toolCallWarningThreshold: 1,
+    reminderCooldownMs: 5000,
+    maxSessionStateEntries: 16,
+    prefix: "[Turn Watchdog]:",
+    now() {
+      return currentMs
+    },
+  })
+
+  await hook.event("chat.message", {
+    properties: { sessionID: "turn-watchdog-session-visible-pulse" },
+  })
+
+  currentMs = 1500
+  const output = { output: "tool result" }
+  await hook.event("tool.execute.after", {
+    input: { sessionID: "turn-watchdog-session-visible-pulse" },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(promptCalls, 1)
+})
+
 test("long-turn-watchdog honors tool-call threshold from plugin config", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-long-turn-watchdog-"))
   try {

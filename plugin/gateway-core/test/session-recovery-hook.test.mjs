@@ -349,3 +349,202 @@ test("session-recovery injects parent continuation after delegated task abort", 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("session-recovery forces delegated abort injection even with incomplete parent turn", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: {},
+                  },
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-recovery-task-abort-incomplete" },
+      {
+        output: {
+          output: {
+            state: {
+              status: "error",
+              error: "Tool execution aborted",
+              metadata: { sessionId: "child-session-incomplete" },
+            },
+          },
+        },
+      }
+    )
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery rescues silent delegated abort on idle using message history", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    let lastPromptBody = null
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    error: { message: "The operation was aborted." },
+                    time: {},
+                  },
+                  parts: [
+                    {
+                      type: "tool",
+                      tool: "task",
+                      state: {
+                        status: "error",
+                        error: "Tool execution aborted",
+                        metadata: { sessionId: "child-session-idle-abort" },
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            promptCalls += 1
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-idle-abort",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 1)
+    assert.match(
+      lastPromptBody?.parts?.[0]?.text ?? "",
+      /stuck delegated abort detected during idle - continuing in parent turn/,
+    )
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /child-session-idle-abort/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery ignores idle rescue when aborted parent already has visible text", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    error: { message: "The operation was aborted." },
+                    time: {},
+                  },
+                  parts: [
+                    { type: "text", text: "I hit an abort but already explained it." },
+                    {
+                      type: "tool",
+                      tool: "task",
+                      state: {
+                        status: "error",
+                        error: "Tool execution aborted",
+                        metadata: { sessionId: "child-session-visible-text" },
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-idle-visible-text",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
