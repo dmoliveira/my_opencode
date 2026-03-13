@@ -336,6 +336,79 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             item["issue_type"] = "parent_child_mismatch"
             findings.append(item)
 
+        silent_abort_rows = conn.execute(
+            """
+            WITH parent_last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            ),
+            child_last_msg AS (
+              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+            )
+            SELECT
+              p.id AS parent_session_id,
+              pm.id AS parent_message_id,
+              pp.id AS parent_part_id,
+              p.title AS parent_title,
+              c.id AS child_session_id,
+              cm.id AS child_message_id,
+              c.title AS child_title,
+              p.time_updated AS parent_time_updated,
+              c.time_updated AS child_time_updated,
+              CAST((strftime('%s','now') - (p.time_updated / 1000)) AS INT) AS parent_stale_seconds,
+              CAST((strftime('%s','now') - (c.time_updated / 1000)) AS INT) AS child_stale_seconds,
+              COALESCE(json_extract(pp.data,'$.type'),'none') AS parent_last_part_type,
+              COALESCE(json_extract(pp.data,'$.tool'),'') AS parent_last_tool,
+              COALESCE(json_extract(pp.data,'$.state.status'),'') AS parent_last_tool_status,
+              COALESCE(
+                json_extract(pm.data,'$.error.message'),
+                json_extract(pm.data,'$.error.data.message'),
+                ''
+              ) AS parent_error_message,
+              COALESCE(json_extract(cp.data,'$.type'),'none') AS child_last_part_type,
+              CASE
+                WHEN json_extract(cm.data,'$.time.completed') IS NOT NULL THEN 'completed'
+                WHEN json_extract(cm.data,'$.error') IS NOT NULL THEN 'failed'
+                ELSE 'active_or_unknown'
+              END AS child_state
+            FROM session p
+            JOIN session c ON c.parent_id = p.id
+            JOIN parent_last_msg plm ON plm.session_id = p.id
+            JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
+            LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = pm.id
+            )
+            LEFT JOIN child_last_msg clm ON clm.session_id = c.id
+            LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
+            LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
+              SELECT MAX(time_created) FROM part WHERE message_id = cm.id
+            )
+            WHERE json_extract(pm.data,'$.role') = 'assistant'
+              AND json_extract(pm.data,'$.error') IS NOT NULL
+              AND p.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND c.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
+              AND COALESCE(json_extract(pp.data,'$.type'),'') = 'tool'
+              AND COALESCE(json_extract(pp.data,'$.tool'),'') = 'task'
+              AND COALESCE(json_extract(pp.data,'$.state.status'),'') IN ('error', 'failed')
+              AND NOT EXISTS (
+                SELECT 1
+                FROM part ptext
+                WHERE ptext.message_id = pm.id
+                  AND COALESCE(json_extract(ptext.data,'$.type'),'') = 'text'
+              )
+              AND (
+                json_extract(cm.data,'$.time.completed') IS NOT NULL
+                OR json_extract(cm.data,'$.error') IS NOT NULL
+              )
+            ORDER BY p.time_updated DESC
+            LIMIT 20
+            """,
+            (stale_seconds, stale_seconds),
+        ).fetchall()
+        for row in silent_abort_rows:
+            item = dict(row)
+            item["issue_type"] = "silent_parent_after_delegation_abort"
+            findings.append(item)
+
         stale_tool_rows = conn.execute(
             """
             WITH last_msg AS (

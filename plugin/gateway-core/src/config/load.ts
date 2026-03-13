@@ -886,6 +886,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         longTurnWatchdogSource.warningThresholdMs,
         DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.warningThresholdMs,
       ),
+      toolCallWarningThreshold: positiveInt(
+        longTurnWatchdogSource.toolCallWarningThreshold,
+        DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.toolCallWarningThreshold,
+      ),
       reminderCooldownMs: nonNegativeInt(
         longTurnWatchdogSource.reminderCooldownMs,
         DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.reminderCooldownMs,

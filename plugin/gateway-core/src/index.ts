@@ -479,6 +479,7 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         directory,
         enabled: cfg.longTurnWatchdog.enabled,
         warningThresholdMs: cfg.longTurnWatchdog.warningThresholdMs,
+        toolCallWarningThreshold: cfg.longTurnWatchdog.toolCallWarningThreshold,
         reminderCooldownMs: cfg.longTurnWatchdog.reminderCooldownMs,
         maxSessionStateEntries: cfg.longTurnWatchdog.maxSessionStateEntries,
         prefix: cfg.longTurnWatchdog.prefix,

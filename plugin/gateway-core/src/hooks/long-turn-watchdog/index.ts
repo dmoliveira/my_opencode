@@ -1,5 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import {
+  inspectToolAfterOutputText,
+  writeToolAfterOutputText,
+} from "../shared/tool-after-output.js"
 
 interface ChatPayload {
   properties?: { sessionID?: string; sessionId?: string; info?: { id?: string } }
@@ -19,6 +23,7 @@ interface SessionDeletedPayload {
 interface TurnState {
   turnStartMs: number
   turnCounter: number
+  toolCallsThisTurn: number
   warnedTurnCounter: number
   lastWarnedAtMs: number
   lastSeenAtMs: number
@@ -71,6 +76,7 @@ export function createLongTurnWatchdogHook(options: {
   directory: string
   enabled: boolean
   warningThresholdMs: number
+  toolCallWarningThreshold: number
   reminderCooldownMs: number
   maxSessionStateEntries: number
   prefix: string
@@ -104,6 +110,7 @@ export function createLongTurnWatchdogHook(options: {
         states.set(sessionId, {
           turnStartMs: ts,
           turnCounter: (previous?.turnCounter ?? 0) + 1,
+          toolCallsThisTurn: 0,
           warnedTurnCounter: previous?.warnedTurnCounter ?? 0,
           lastWarnedAtMs: previous?.lastWarnedAtMs ?? 0,
           lastSeenAtMs: ts,
@@ -141,8 +148,10 @@ export function createLongTurnWatchdogHook(options: {
         return
       }
       state.lastSeenAtMs = now()
+      state.toolCallsThisTurn += 1
 
-      if (typeof eventPayload.output?.output !== "string") {
+      const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output)
+      if (!text) {
         writeGatewayEventAudit(directory, {
           hook: "long-turn-watchdog",
           stage: "skip",
@@ -153,7 +162,8 @@ export function createLongTurnWatchdogHook(options: {
       }
 
       const elapsedMs = Math.max(0, now() - state.turnStartMs)
-      if (elapsedMs < options.warningThresholdMs) {
+      const toolCallThreshold = Math.max(1, Math.floor(options.toolCallWarningThreshold))
+      if (elapsedMs < options.warningThresholdMs && state.toolCallsThisTurn < toolCallThreshold) {
         writeGatewayEventAudit(directory, {
           hook: "long-turn-watchdog",
           stage: "skip",
@@ -161,6 +171,8 @@ export function createLongTurnWatchdogHook(options: {
           session_id: sessionId,
           elapsed_ms: elapsedMs,
           warning_threshold_ms: options.warningThresholdMs,
+          tool_calls_this_turn: state.toolCallsThisTurn,
+          tool_call_warning_threshold: toolCallThreshold,
         })
         return
       }
@@ -195,7 +207,13 @@ export function createLongTurnWatchdogHook(options: {
 
       const prefix = options.prefix.trim() || "[Turn Watchdog]:"
       const warning = `${prefix} Long turn detected (${formatDuration(elapsedMs)} since last user message; threshold ${formatDuration(options.warningThresholdMs)}).`
-      eventPayload.output.output = `${eventPayload.output.output}\n\n${warning}`
+      const heartbeat = `${prefix} Still working - collecting results before the final reply.`
+      const amended = `${text}\n\n${warning}\n${heartbeat}`
+      if (!writeToolAfterOutputText(eventPayload.output?.output, amended, channel)) {
+        if (typeof eventPayload.output === "object" && eventPayload.output) {
+          eventPayload.output.output = amended
+        }
+      }
       state.warnedTurnCounter = state.turnCounter
       state.lastWarnedAtMs = now()
 
@@ -205,6 +223,8 @@ export function createLongTurnWatchdogHook(options: {
         reason_code: "long_turn_warning",
         session_id: sessionId,
         elapsed_ms: elapsedMs,
+        tool_calls_this_turn: state.toolCallsThisTurn,
+        tool_call_warning_threshold: toolCallThreshold,
         warning_threshold_ms: options.warningThresholdMs,
         turn_started_at: new Date(state.turnStartMs).toISOString(),
       })

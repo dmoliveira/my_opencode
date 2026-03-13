@@ -285,3 +285,67 @@ test("session-recovery falls back to injection when history probe fails", async 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("session-recovery injects parent continuation after delegated task abort", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    let lastPromptBody = null
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: { completed: Date.now() },
+                  },
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            promptCalls += 1
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.after"](
+      { tool: "task", sessionID: "session-recovery-task-abort" },
+      {
+        output: {
+          output: {
+            state: {
+              status: "error",
+              error: "Tool execution aborted",
+              metadata: { sessionId: "child-session-aborted" },
+            },
+          },
+        },
+      }
+    )
+
+    assert.equal(promptCalls, 1)
+    assert.equal(lastPromptBody?.parts?.[0]?.type, "text")
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /delegated task aborted - continuing in parent turn/)
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /child-session-aborted/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

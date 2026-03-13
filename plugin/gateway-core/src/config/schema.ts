@@ -91,6 +91,7 @@ export interface GlobalProcessPressureConfig {
 export interface LongTurnWatchdogConfig {
   enabled: boolean;
   warningThresholdMs: number;
+  toolCallWarningThreshold: number;
   reminderCooldownMs: number;
   maxSessionStateEntries: number;
   prefix: string;
@@ -823,6 +824,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   longTurnWatchdog: {
     enabled: true,
     warningThresholdMs: 45000,
+    toolCallWarningThreshold: 3,
     reminderCooldownMs: 120000,
     maxSessionStateEntries: 1024,
     prefix: "[Turn Watchdog]:",

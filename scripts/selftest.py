@@ -150,6 +150,7 @@ SAFE_EDIT_SCRIPT = REPO_ROOT / "scripts" / "safe_edit_command.py"
 CHECKPOINT_SCRIPT = REPO_ROOT / "scripts" / "checkpoint_command.py"
 PLAN_SCRIPT = REPO_ROOT / "scripts" / "plan_command.py"
 BUDGET_SCRIPT = REPO_ROOT / "scripts" / "budget_command.py"
+WORKTREE_HELPER_SCRIPT = REPO_ROOT / "scripts" / "worktree_helper_command.py"
 AUTOPILOT_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "autopilot_command.py"
 PR_REVIEW_ANALYZER_SCRIPT = REPO_ROOT / "scripts" / "pr_review_analyzer.py"
 PR_REVIEW_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "pr_review_command.py"
@@ -1679,6 +1680,78 @@ exit 0
                 ),
             )
             conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "aborted-parent-session",
+                    None,
+                    "aborted delegated parent session",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "aborted-child-session",
+                    "aborted-parent-session",
+                    "aborted delegated child session",
+                    str(REPO_ROOT),
+                    stale_child_ms,
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "aborted-parent-message",
+                    "aborted-parent-session",
+                    json.dumps(
+                        {
+                            "role": "assistant",
+                            "time": {"completed": stale_parent_ms},
+                            "error": {
+                                "name": "MessageAbortedError",
+                                "data": {"message": "The operation was aborted."},
+                            },
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "aborted-parent-part",
+                    "aborted-parent-message",
+                    "aborted-parent-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "task",
+                            "state": {"status": "error"},
+                            "error": "Tool execution aborted",
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "aborted-child-message",
+                    "aborted-child-session",
+                    json.dumps(
+                        {
+                            "role": "assistant",
+                            "time": {"completed": stale_child_ms},
+                            "error": {"message": "Tool execution aborted"},
+                        }
+                    ),
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
                 "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
                 (
                     "parent-message",
@@ -1941,8 +2014,8 @@ exit 0
             "session doctor should report FAIL when stuck parent-child mismatch is detected",
         )
         expect(
-            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 2,
-            "session doctor should report parent-child and stale tool findings",
+            len(session_runtime_doctor_payload.get("stuck_findings") or []) == 3,
+            "session doctor should report parent-child, stale tool, and silent delegated abort findings",
         )
         expect(
             session_runtime_doctor_payload.get("generic_stale_count") == 2,
@@ -1986,6 +2059,14 @@ exit 0
                 for item in session_runtime_doctor_payload.get("stuck_findings") or []
             ),
             "session doctor should detect stale running question sessions",
+        )
+        expect(
+            any(
+                item.get("issue_type") == "silent_parent_after_delegation_abort"
+                and item.get("parent_error_message") == "The operation was aborted."
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should detect silent delegated abort parent sessions",
         )
 
         result = subprocess.run(

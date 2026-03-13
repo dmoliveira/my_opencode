@@ -58,3 +58,33 @@ test("delegate-task-retry ignores non-task tool outputs", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("delegate-task-retry appends fallback guidance for aborted delegated tasks", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegate-task-retry-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegate-task-retry"],
+          disabled: [],
+        },
+        delegateTaskRetry: {
+          enabled: true,
+        },
+      },
+    })
+    const output = {
+      output: {
+        output: 'task tool failed: Tool execution aborted',
+      },
+    }
+    await plugin["tool.execute.after"]({ tool: "task", sessionID: "session-task-3" }, output)
+    assert.equal(typeof output.output.output, "string")
+    assert.ok(output.output.output.includes("delegated_task_aborted"))
+    assert.ok(output.output.output.includes("Do not leave the parent session silent"))
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
