@@ -44,6 +44,7 @@ Before you start a task, create a dedicated git worktree branch from the current
 /workflow template init ship --json
 /delivery start --issue issue-900 --role coder --workflow <workflow.json> --execute --json
 /delivery status --json
+/ship doctor --json
 /init-deep --max-depth 2 --json
 /autopilot go --goal "finish current objective" --json
 /autoflow start <plan.md> --json
@@ -53,6 +54,7 @@ Before you start a task, create a dedicated git worktree branch from the current
 Use this split to stay consistent:
 
 - `/delivery` for normal issue-to-close work
+- `/ship` to preflight PR/release readiness before opening or updating a release PR
 - `/workflow` when you need direct workflow validation or resume controls
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for plan markdown execution

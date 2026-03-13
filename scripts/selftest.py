@@ -14001,6 +14001,65 @@ jobs:
             "ship create-pr should expose deterministic reviewer policy conflict diagnostics",
         )
 
+        ship_doctor = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(ship_doctor.returncode == 0, "ship doctor should pass")
+        ship_doctor_payload = parse_json_output(ship_doctor.stdout)
+        expect(
+            ship_doctor_payload.get("result") == "PASS"
+            and ship_doctor_payload.get("command") == "doctor",
+            "ship doctor should report pass status",
+        )
+        expect(
+            isinstance(ship_doctor_payload.get("release_train"), dict)
+            and isinstance(ship_doctor_payload.get("reviewer_policy"), dict),
+            "ship doctor should expose release-train and reviewer-policy diagnostics",
+        )
+
+        ship_doctor_conflict_env = refactor_env.copy()
+        ship_doctor_conflict_env["MY_OPENCODE_SHIP_REVIEWER_ALLOW"] = "alice"
+        ship_doctor_conflict_env["MY_OPENCODE_SHIP_REVIEWER_DENY"] = "alice"
+        ship_doctor_conflict = subprocess.run(
+            [
+                sys.executable,
+                str(SHIP_COMMAND_SCRIPT),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=ship_doctor_conflict_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            ship_doctor_conflict.returncode == 0,
+            "ship doctor should stay healthy while surfacing reviewer policy warnings",
+        )
+        ship_doctor_conflict_payload = parse_json_output(ship_doctor_conflict.stdout)
+        expect(
+            ship_doctor_conflict_payload.get("reviewer_policy", {}).get("status")
+            == "warn"
+            and "reviewer_policy_conflict"
+            in set(
+                ship_doctor_conflict_payload.get("reviewer_policy", {}).get(
+                    "reason_codes", []
+                )
+            ),
+            "ship doctor should surface deterministic reviewer policy conflict diagnostics",
+        )
+
         release_repo = tmp / "release_repo"
         release_repo.mkdir(parents=True, exist_ok=True)
         subprocess.run(

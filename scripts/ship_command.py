@@ -41,7 +41,8 @@ def _repo_root() -> Path:
 
 def usage() -> int:
     print(
-        "usage: /ship --version <x.y.z> [--allow-version-jump] [--breaking-change] [--emit-pr-template] [--json] | "
+        "usage: /ship doctor [--repo-root <path>] [--json] | "
+        "/ship --version <x.y.z> [--allow-version-jump] [--breaking-change] [--emit-pr-template] [--json] | "
         "/ship create-pr --version <x.y.z> [--base <ref>] [--head <ref>] "
         "[--reviewer <login> ...] [--auto-assign-reviewers] "
         "[--allow-reviewer <login> ...] [--deny-reviewer <login> ...] [--confirm] [--json]"
@@ -89,6 +90,79 @@ def _build_pr_template(version: str) -> dict[str, str]:
             ]
         ),
     }
+
+
+def _gh_health() -> dict[str, Any]:
+    completed = subprocess.run(
+        ["gh", "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return {
+            "available": False,
+            "detail": completed.stderr.strip()
+            or completed.stdout.strip()
+            or "gh unavailable",
+        }
+    first_line = (completed.stdout or "").strip().splitlines()
+    return {
+        "available": True,
+        "detail": first_line[0].strip() if first_line else "gh available",
+    }
+
+
+def _current_branch(repo_root: Path) -> str | None:
+    completed = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=repo_root,
+    )
+    if completed.returncode != 0:
+        return None
+    value = completed.stdout.strip()
+    return value or None
+
+
+def _release_train_doctor(repo_root: Path) -> tuple[bool, dict[str, Any]]:
+    if not RELEASE_TRAIN_SCRIPT.exists():
+        return False, {
+            "result": "FAIL",
+            "reason_code": "release_train_backend_missing",
+            "detail": f"missing {RELEASE_TRAIN_SCRIPT}",
+        }
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(RELEASE_TRAIN_SCRIPT),
+            "doctor",
+            "--repo-root",
+            str(repo_root),
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=repo_root,
+    )
+    try:
+        payload = json.loads(completed.stdout) if completed.stdout.strip() else {}
+    except json.JSONDecodeError:
+        payload = {
+            "result": "FAIL",
+            "reason_code": "release_train_doctor_unparseable",
+            "detail": completed.stderr.strip() or completed.stdout.strip(),
+        }
+    if not isinstance(payload, dict):
+        payload = {
+            "result": "FAIL",
+            "reason_code": "release_train_doctor_unparseable",
+            "detail": "release-train doctor returned non-object payload",
+        }
+    return completed.returncode == 0 and payload.get("result") == "PASS", payload
 
 
 def _parse_reviewers(args: list[str]) -> list[str]:
@@ -210,6 +284,96 @@ def _prepare_payload(
     if emit_pr_template:
         payload["pr_template"] = _build_pr_template(version)
     return payload, 0 if ready else 1
+
+
+def _command_doctor(args: list[str], as_json: bool) -> int:
+    try:
+        repo_root_arg = _pop_value(args, "--repo-root")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if args:
+        return usage()
+
+    repo_root = (
+        Path(repo_root_arg).expanduser().resolve()
+        if repo_root_arg
+        else _repo_root().resolve()
+    )
+    gh_health = _gh_health()
+    release_train_ready, release_train_report = _release_train_doctor(repo_root)
+    env_allow = _env_policy_reviewers("MY_OPENCODE_SHIP_REVIEWER_ALLOW")
+    env_deny = _env_policy_reviewers("MY_OPENCODE_SHIP_REVIEWER_DENY")
+    allow_reviewers, deny_reviewers, policy_source = resolve_reviewer_policy(
+        [], [], env_allow, env_deny
+    )
+    policy_diagnostics = diagnose_reviewer_policy(
+        allow_list=allow_reviewers,
+        deny_list=deny_reviewers,
+        source=policy_source,
+    )
+    codeowners_reviewers = _codeowners_reviewers(repo_root)
+    codeowners_path = repo_root / "CODEOWNERS"
+
+    warnings: list[str] = []
+    problems: list[str] = []
+    if not gh_health.get("available"):
+        warnings.append(
+            "gh CLI unavailable; PR creation will stay blocked until GitHub CLI is installed"
+        )
+    if not codeowners_path.exists():
+        warnings.append(
+            "CODEOWNERS not found; --auto-assign-reviewers will resolve to an empty reviewer set"
+        )
+    if policy_diagnostics.get("status") == "warn":
+        warnings.extend(
+            str(item)
+            for item in policy_diagnostics.get("warnings", [])
+            if isinstance(item, str)
+        )
+    if not release_train_ready:
+        problems.append("release-train doctor reported blocking readiness issues")
+
+    quick_fixes = [
+        "/ship --version <x.y.z> --emit-pr-template --json",
+        "/ship create-pr --version <x.y.z> --confirm --json",
+        "/release-train doctor --json",
+    ]
+    if not gh_health.get("available"):
+        quick_fixes.append("install and authenticate GitHub CLI (`gh auth status`)")
+    if policy_diagnostics.get("status") == "warn":
+        quick_fixes.extend(
+            str(item)
+            for item in policy_diagnostics.get("remediation", [])
+            if isinstance(item, str)
+        )
+
+    payload = {
+        "result": "PASS" if not problems else "FAIL",
+        "command": "doctor",
+        "repo_root": str(repo_root),
+        "branch": _current_branch(repo_root),
+        "gh": gh_health,
+        "release_train_ready": release_train_ready,
+        "release_train": release_train_report,
+        "codeowners": {
+            "path": str(codeowners_path),
+            "exists": codeowners_path.exists(),
+            "auto_reviewers": codeowners_reviewers,
+        },
+        "reviewer_policy": policy_diagnostics,
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": quick_fixes,
+    }
+    if as_json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"result: {payload['result']}")
+        print(f"repo_root: {payload['repo_root']}")
+        print(f"release_train_ready: {payload['release_train_ready']}")
+        print(f"gh_available: {payload['gh']['available']}")
+    return 0 if payload["result"] == "PASS" else 1
 
 
 def _command_create_pr(args: list[str], as_json: bool) -> int:
@@ -377,6 +541,9 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
 def main(argv: list[str]) -> int:
     args = list(argv)
     as_json = _pop_flag(args, "--json")
+
+    if args and args[0] == "doctor":
+        return _command_doctor(args[1:], as_json)
 
     if args and args[0] == "create-pr":
         return _command_create_pr(args[1:], as_json)

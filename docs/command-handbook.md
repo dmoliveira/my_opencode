@@ -488,7 +488,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
 /session - Inspect indexed sessions (list|show|search|handoff|doctor)
-/ship - Run release intent preflight with safety gates and policy-aware reviewer routing
+/ship - Run release intent preflight, readiness diagnostics, and policy-aware reviewer routing (doctor|create-pr)
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)

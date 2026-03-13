@@ -27,7 +27,7 @@ Status: doing
 | E1 Local shared memory runtime | P0 | doing | add durable local shared memory with deterministic retrieval | initial slice is schema + command/runtime baseline |
 | E2 Swarm coordination on current runtime | P0 | doing | layer multi-agent coordination on `workflow`, `claims`, `reservation`, and `agent-pool` | prototype lives under `/workflow swarm` first |
 | E3 Plugin platform expansion | P1 | pending | turn `gateway-core` into a safer plugin-pack platform | keep MCP out of scope |
-| E4 Operations automation expansion | P0 | pending | improve issue, PR, release, and hotfix automation | route through existing canonical commands |
+| E4 Operations automation expansion | P0 | doing | improve issue, PR, release, and hotfix automation | route through existing canonical commands; first slice is readiness diagnostics across `/delivery`, `/ship`, `/release-train`, and `/hotfix` |
 
 ## E1 Local shared memory runtime
 
@@ -92,3 +92,4 @@ Status: doing
 | 2026-03-10T17:20:00Z | E2 writer lease diagnostics | doing | Added lease-backed writer guarantee checks and surfaced disjoint write parallel candidates without enabling writer parallel execution. |
 | 2026-03-10T17:35:00Z | E2 tiny writer allowlist | doing | Enabled lease-backed parallel activation for disjoint `implement` lanes while keeping all other writer lanes serialized. |
 | 2026-03-10T17:50:00Z | E2 lane lease identity | doing | Added lane-level `lease_identity` metadata and enforced it for write-capable activation paths. |
+| 2026-03-13T21:10:00Z | E4 ops automation diagnostics slice | doing | Added `/ship doctor` and umbrella `/doctor` coverage so issue, PR, release, and hotfix automation can be audited from canonical commands before deeper workflow automation lands. |
