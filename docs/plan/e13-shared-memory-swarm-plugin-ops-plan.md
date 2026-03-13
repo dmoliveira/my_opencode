@@ -94,3 +94,4 @@ Status: doing
 | 2026-03-10T17:50:00Z | E2 lane lease identity | doing | Added lane-level `lease_identity` metadata and enforced it for write-capable activation paths. |
 | 2026-03-13T21:10:00Z | E4 ops automation diagnostics slice | doing | Added `/ship doctor` and umbrella `/doctor` coverage so issue, PR, release, and hotfix automation can be audited from canonical commands before deeper workflow automation lands. |
 | 2026-03-13T21:20:00Z | E4 delivery-to-ship handoff summary | doing | Added canonical `/delivery` runtime summary pickup in `/ship doctor` plus `/ship create-pr --issue <id>` template enrichment for matched delivery runs. |
+| 2026-03-13T21:28:00Z | E4 hotfix follow-up audit | doing | Added latest-closure follow-up linkage auditing in `/hotfix doctor` so umbrella `/doctor` can surface incident follow-up drift through canonical command wiring. |

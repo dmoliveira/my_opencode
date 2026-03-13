@@ -14957,6 +14957,31 @@ jobs:
             "hotfix command status should proxy runtime incident id",
         )
 
+        hotfix_command_doctor = subprocess.run(
+            [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=hotfix_repo,
+        )
+        expect(
+            hotfix_command_doctor.returncode == 0,
+            "hotfix command doctor should pass when runtime and policy are present",
+        )
+        hotfix_command_doctor_payload = parse_json_output(hotfix_command_doctor.stdout)
+        expect(
+            hotfix_command_doctor_payload.get("result") == "PASS",
+            "hotfix command doctor should report pass",
+        )
+        expect(
+            hotfix_command_doctor_payload.get("latest_followup", {}).get(
+                "linkage_complete"
+            )
+            is True,
+            "hotfix command doctor should report complete follow-up linkage after close",
+        )
+
         hotfix_command_remind = subprocess.run(
             [sys.executable, str(HOTFIX_COMMAND_SCRIPT), "remind", "--json"],
             capture_output=True,
