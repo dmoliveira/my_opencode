@@ -128,6 +128,22 @@ Use these directly in OpenCode:
 
 `/notify inbox` reads the repo-local gateway event audit feed from `.opencode/gateway-events.jsonl` (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` when set). Enable gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to populate inbox entries, but after a wrapped session use `/gateway continuation report` for the fastest `todo-continuation-enforcer` audit check.
 
+For runtime AI-output injection work, treat the gateway event audit as the fastest way to identify the real render path instead of guessing from nearby lifecycle names. The practical mapping from the timestamp fix is:
+- `experimental.chat.messages.transform`: mutate message history or synthetic context before the model call
+- `experimental.chat.system.transform`: mutate the system prompt before the model call
+- `experimental.text.complete`: mutate the final rendered assistant text that `opencode run` prints to the terminal
+- `message.updated` / `message.part.updated` / `message.part.delta`: useful for debugging streaming and message lifecycle state, but not reliable as the final `opencode run` print surface
+- `session.idle`: end-of-turn lifecycle signal; too late for terminal text injection in the reproduced timestamp case
+
+Recommended runtime-injection debug loop:
+- run `python3 scripts/gateway_command.py status --json` and confirm `runtime_mode` is `plugin_gateway`
+- enable audit with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1`
+- smoke test with `opencode run "Tell me one short random fact."`
+- inspect `.opencode/gateway-events.jsonl` for the event type that actually fires on the rendered path you care about
+- if `opencode run` output is the target, start with `experimental.text.complete` before trying lower-level lifecycle events
+
+The terminal timestamp work landed on `experimental.text.complete` in `plugin/gateway-core/src/index.ts` and `plugin/gateway-core/src/hooks/assistant-message-timestamp/index.ts`. Use that pair as the reference example for future runtime output decoration.
+
 ## Session digest inside OpenCode 🧾
 
 Use these directly in OpenCode:
