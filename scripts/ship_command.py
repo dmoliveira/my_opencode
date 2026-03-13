@@ -150,7 +150,10 @@ def _select_delivery_summary(
 
 
 def _build_pr_template(
-    version: str, *, delivery_summary: dict[str, Any] | None = None
+    version: str,
+    *,
+    delivery_summary: dict[str, Any] | None = None,
+    release_context: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     body_lines = [
         "## Summary",
@@ -161,6 +164,26 @@ def _build_pr_template(
         body_lines.extend(
             ["## Delivery Context", *delivery_summary["summary_lines"], ""]
         )
+    if release_context is not None:
+        entries = release_context.get("entries")
+        bullets = [
+            f"- {item}"
+            for item in (entries if isinstance(entries, list) else [])[:5]
+            if isinstance(item, str) and item.strip()
+        ]
+        body_lines.append("## Release Context")
+        body_lines.extend(bullets or ["- <release-train draft context unavailable>"])
+        milestone_context = release_context.get("milestone_context")
+        if isinstance(milestone_context, dict):
+            parity_recent = milestone_context.get("parity_recent")
+            if isinstance(parity_recent, list) and parity_recent:
+                body_lines.extend(["", "### Milestones"])
+                body_lines.extend(
+                    f"- {item}"
+                    for item in parity_recent[:3]
+                    if isinstance(item, str) and item.strip()
+                )
+        body_lines.append("")
     body_lines.extend(
         [
             "## Risk",
@@ -253,6 +276,35 @@ def _release_train_doctor(repo_root: Path) -> tuple[bool, dict[str, Any]]:
             "detail": "release-train doctor returned non-object payload",
         }
     return completed.returncode == 0 and payload.get("result") == "PASS", payload
+
+
+def _release_train_draft(repo_root: Path) -> dict[str, Any] | None:
+    if not RELEASE_TRAIN_SCRIPT.exists():
+        return None
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(RELEASE_TRAIN_SCRIPT),
+            "draft",
+            "--head",
+            "HEAD",
+            "--include-milestones",
+            "--repo-root",
+            str(repo_root),
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=repo_root,
+    )
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return None
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _parse_reviewers(args: list[str]) -> list[str]:
@@ -386,6 +438,30 @@ def _latest_delivery_summary() -> dict[str, Any] | None:
     return _select_delivery_summary(run_id=latest_run_id)
 
 
+def _release_context_summary(repo_root: Path) -> dict[str, Any] | None:
+    draft = _release_train_draft(repo_root)
+    if not isinstance(draft, dict) or draft.get("result") != "PASS":
+        return None
+    entries_any = draft.get("entries")
+    entries: list[str] = (
+        [item for item in entries_any if isinstance(item, str)]
+        if isinstance(entries_any, list)
+        else []
+    )
+    milestone_context = (
+        draft.get("milestone_context")
+        if isinstance(draft.get("milestone_context"), dict)
+        else None
+    )
+    return {
+        "entry_count": len(entries),
+        "entries": entries,
+        "milestone_context": milestone_context,
+        "base_tag": draft.get("base_tag"),
+        "head": draft.get("head"),
+    }
+
+
 def _command_doctor(args: list[str], as_json: bool) -> int:
     try:
         repo_root_arg = _pop_value(args, "--repo-root")
@@ -402,6 +478,7 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
     )
     gh_health = _gh_health()
     release_train_ready, release_train_report = _release_train_doctor(repo_root)
+    release_context = _release_context_summary(repo_root)
     env_allow = _env_policy_reviewers("MY_OPENCODE_SHIP_REVIEWER_ALLOW")
     env_deny = _env_policy_reviewers("MY_OPENCODE_SHIP_REVIEWER_DENY")
     allow_reviewers, deny_reviewers, policy_source = resolve_reviewer_policy(
@@ -457,6 +534,7 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
         "gh": gh_health,
         "release_train_ready": release_train_ready,
         "release_train": release_train_report,
+        "release_context": release_context,
         "codeowners": {
             "path": str(codeowners_path),
             "exists": codeowners_path.exists(),
@@ -528,9 +606,18 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
     delivery_summary = _select_delivery_summary(
         issue_id=issue_id, run_id=delivery_run_id
     )
+    release_context = _release_context_summary(repo_root)
     template = payload.get("pr_template") if isinstance(payload, dict) else None
-    if not isinstance(template, dict) or delivery_summary is not None:
-        template = _build_pr_template(version, delivery_summary=delivery_summary)
+    if (
+        not isinstance(template, dict)
+        or delivery_summary is not None
+        or release_context is not None
+    ):
+        template = _build_pr_template(
+            version,
+            delivery_summary=delivery_summary,
+            release_context=release_context,
+        )
 
     if code != 0:
         payload["requested_reviewers"] = explicit_reviewers
@@ -540,6 +627,7 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         payload["issue_id"] = issue_id
         payload["delivery_run_id"] = delivery_run_id
         payload["delivery_summary"] = delivery_summary
+        payload["release_context"] = release_context
         payload["policy"] = {
             "allow_reviewers": allow_reviewers,
             "deny_reviewers": deny_reviewers,
@@ -567,6 +655,7 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
             "resolved_reviewers": resolved_reviewers,
             "filtered_out_reviewers": filtered_out_reviewers,
             "delivery_summary": delivery_summary,
+            "release_context": release_context,
             "policy": {
                 "allow_reviewers": allow_reviewers,
                 "deny_reviewers": deny_reviewers,
@@ -629,6 +718,7 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         "resolved_reviewers": resolved_reviewers,
         "filtered_out_reviewers": filtered_out_reviewers,
         "delivery_summary": delivery_summary,
+        "release_context": release_context,
         "policy": {
             "allow_reviewers": allow_reviewers,
             "deny_reviewers": deny_reviewers,

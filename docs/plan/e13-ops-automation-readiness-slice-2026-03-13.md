@@ -54,3 +54,4 @@ Primary source references:
 - `/ship create-pr --issue <id>` can inject the matched delivery handoff summary into the generated PR template without adding a new command family
 - `/hotfix doctor` now audits the latest closure for follow-up linkage completeness so umbrella `/doctor` can surface incident follow-up drift through canonical command wiring
 - `/delivery doctor` now surfaces the latest run summary and warns when the issue flow is stalled in `handoff-pending` or failed workflow states
+- `/ship create-pr` now injects `/release-train draft --include-milestones` context into the PR template so release PRs start from the latest canonical release narrative

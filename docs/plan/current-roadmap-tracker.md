@@ -149,6 +149,7 @@ Delivered:
 - added canonical `/delivery` handoff summaries to `/ship doctor` and `/ship create-pr --issue <id>` template generation
 - added latest-closure follow-up linkage auditing to `/hotfix doctor` so umbrella diagnostics can surface incident follow-up drift
 - added latest-run status summaries and stalled-handoff warnings to `/delivery doctor`
+- added `/release-train draft` narrative pickup to `/ship doctor` and `/ship create-pr` template generation
 
 Remaining:
 - broaden write-capable parallelism beyond the tiny `implement` allowlist only when stronger lane-level lease identity and ownership guarantees exist

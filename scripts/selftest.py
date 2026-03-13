@@ -14070,6 +14070,10 @@ jobs:
             == "issue-900",
             "ship doctor should surface the latest delivery handoff summary",
         )
+        expect(
+            isinstance(ship_doctor_with_delivery_payload.get("release_context"), dict),
+            "ship doctor should surface release-train draft context when available",
+        )
 
         ship_create_pr_with_delivery = subprocess.run(
             [
@@ -14110,6 +14114,18 @@ jobs:
                 )
             ),
             "ship create-pr preview should inject delivery context into the PR template",
+        )
+        expect(
+            isinstance(
+                ship_create_pr_with_delivery_payload.get("release_context"), dict
+            )
+            and "## Release Context"
+            in str(
+                ship_create_pr_with_delivery_payload.get("pr_template", {}).get(
+                    "body_markdown"
+                )
+            ),
+            "ship create-pr preview should inject release-train draft context into the PR template",
         )
 
         ship_create_pr_policy_conflict = subprocess.run(

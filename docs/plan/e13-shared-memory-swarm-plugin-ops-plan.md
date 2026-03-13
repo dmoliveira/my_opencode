@@ -96,3 +96,4 @@ Status: doing
 | 2026-03-13T21:20:00Z | E4 delivery-to-ship handoff summary | doing | Added canonical `/delivery` runtime summary pickup in `/ship doctor` plus `/ship create-pr --issue <id>` template enrichment for matched delivery runs. |
 | 2026-03-13T21:28:00Z | E4 hotfix follow-up audit | doing | Added latest-closure follow-up linkage auditing in `/hotfix doctor` so umbrella `/doctor` can surface incident follow-up drift through canonical command wiring. |
 | 2026-03-13T21:31:00Z | E4 delivery doctor status audit | doing | Added latest-run delivery summaries plus handoff-pending/workflow-failed warnings in `/delivery doctor` so issue-flow drift surfaces through canonical diagnostics. |
+| 2026-03-13T21:36:00Z | E4 release narrative enrichment | doing | Added `/release-train draft` context pickup in `/ship doctor` and `/ship create-pr` so release PR templates start from canonical release narrative plus milestone context. |
