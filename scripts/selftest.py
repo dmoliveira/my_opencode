@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import sqlite3
 import socket
 import sqlite3
 import subprocess
@@ -139,6 +140,7 @@ AUDIT_SCRIPT = REPO_ROOT / "scripts" / "audit_command.py"
 GOVERNANCE_SCRIPT = REPO_ROOT / "scripts" / "governance_command.py"
 AGENT_POOL_SCRIPT = REPO_ROOT / "scripts" / "agent_pool_command.py"
 MEMORY_LIFECYCLE_SCRIPT = REPO_ROOT / "scripts" / "memory_lifecycle_command.py"
+MEMORY_SCRIPT = REPO_ROOT / "scripts" / "memory_command.py"
 HOOK_LEARNING_SCRIPT = REPO_ROOT / "scripts" / "hook_learning_command.py"
 RULES_SCRIPT = REPO_ROOT / "scripts" / "rules_command.py"
 RESILIENCE_SCRIPT = REPO_ROOT / "scripts" / "context_resilience_command.py"
@@ -2502,6 +2504,9 @@ exit 0
 
         productivity_env = digest_env.copy()
         productivity_env["HOME"] = str(home)
+        productivity_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "shared-memory.db"
+        )
 
         result = subprocess.run(
             [
@@ -4067,6 +4072,140 @@ exit 0
             wf_resume_missing_payload.get("status") == "failed",
             "workflow missing-step resume setup should fail first",
         )
+        dependency_fail_workflow_path = tmp / "workflow-dependency-fail.json"
+        dependency_fail_workflow_path.write_text(
+            json.dumps(
+                {
+                    "name": "Dependency fail workflow",
+                    "steps": [
+                        {"id": "prep", "action": "fail"},
+                        {"id": "verify", "action": "check", "depends_on": ["prep"]},
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(dependency_fail_workflow_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow dependency-fail run failed unexpectedly: {result.stderr}",
+        )
+        dependency_fail_payload = parse_json_output(result.stdout)
+        dependency_fail_steps = {
+            step.get("id"): step for step in dependency_fail_payload.get("steps", [])
+        }
+        expect(
+            dependency_fail_steps.get("prep", {}).get("status") == "failed"
+            and dependency_fail_steps.get("verify", {}).get("status") == "skipped"
+            and dependency_fail_steps.get("verify", {}).get("reason_code")
+            == "dependency_not_passed",
+            "workflow run should skip dependent steps when a dependency fails",
+        )
+        dependency_resume_path = tmp / "workflow-resume-dependency.json"
+        dependency_resume_path.write_text(
+            json.dumps(
+                {
+                    "name": "Resume dependency workflow",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {
+                            "id": "verify",
+                            "action": "check",
+                            "simulate": "fail-once",
+                            "depends_on": ["prep"],
+                        },
+                        {"id": "cleanup", "action": "cleanup", "when": "on_failure"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "run",
+                "--file",
+                str(dependency_resume_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow dependency resume setup failed: {result.stderr}",
+        )
+        dependency_resume_payload = parse_json_output(result.stdout)
+        expect(
+            dependency_resume_payload.get("status") == "failed"
+            and dependency_resume_payload.get("failed_step_id") == "verify",
+            "workflow dependency resume setup should fail on verify step",
+        )
+        dependency_resume_path.write_text(
+            json.dumps(
+                {
+                    "name": "Resume dependency workflow",
+                    "steps": [
+                        {"id": "prep", "action": "gather-context"},
+                        {"id": "verify", "action": "check", "depends_on": ["prep"]},
+                        {"id": "cleanup", "action": "cleanup", "when": "on_failure"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "resume",
+                "--run-id",
+                str(dependency_resume_payload.get("run_id") or ""),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow dependency resume failed: {result.stderr}",
+        )
+        dependency_resume_retry_payload = parse_json_output(result.stdout)
+        dependency_resume_steps = {
+            step.get("id"): step
+            for step in dependency_resume_retry_payload.get("steps", [])
+        }
+        expect(
+            dependency_resume_retry_payload.get("status") == "completed"
+            and dependency_resume_steps.get("verify", {}).get("status") == "passed",
+            "workflow resume should allow dependent failed steps to retry when prerequisites previously passed",
+        )
         wf_resume_missing_path.write_text(
             json.dumps(
                 {
@@ -4195,6 +4334,5635 @@ exit 0
             and isinstance(workflow_idle_payload.get("latest"), dict)
             and workflow_idle_payload.get("latest", {}).get("status") == "stopped",
             "workflow status should return idle with the stopped run as latest history",
+        )
+
+        swarm_env = productivity_env.copy()
+        swarm_workflow_state_path = tmp / "swarm-workflow-state.json"
+        swarm_claims_path = tmp / "swarm-claims.json"
+        swarm_agent_pool_path = tmp / "swarm-agent-pool.json"
+        swarm_reservation_path = tmp / "swarm-reservation-state.json"
+        swarm_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(swarm_workflow_state_path)
+        swarm_env["MY_OPENCODE_CLAIMS_PATH"] = str(swarm_claims_path)
+        swarm_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(swarm_agent_pool_path)
+        swarm_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(swarm_reservation_path)
+        swarm_claims_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "claims": {
+                        "issue-301": {
+                            "issue_id": "issue-301",
+                            "owner": "agent:discover-1",
+                            "status": "active",
+                            "updated_at": "2026-03-10T12:00:00Z",
+                        }
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        swarm_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 1,
+                        },
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        swarm_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 1,
+                    "ownPaths": ["scripts/*.py"],
+                    "activePaths": ["scripts/*.py"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Ship shared memory",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow swarm plan failed: {result.stderr}")
+        swarm_plan_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_plan_payload.get("status") == "planned"
+            and swarm_plan_payload.get("lane_count") == 3,
+            "workflow swarm plan should create a planned multi-lane swarm record",
+        )
+        expect(
+            swarm_plan_payload.get("lanes", [{}])[1].get("depends_on") == ["lane-1"],
+            "workflow swarm plan should emit explicit lane dependency metadata",
+        )
+        expect(
+            swarm_plan_payload.get("lanes", [{}])[0].get("reservation_mode")
+            == "reservation-safe-read",
+            "workflow swarm plan should mark read-only lanes with reservation-safe-read metadata",
+        )
+        expect(
+            swarm_plan_payload.get("lanes", [{}])[0].get("path_scopes") == ["**/*"],
+            "workflow swarm plan should emit default read-only path scopes",
+        )
+
+        custom_graph_path = tmp / "swarm-custom-graph.json"
+        custom_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "objective": "Custom discover lane",
+                            "depends_on": [],
+                        },
+                        {
+                            "lane_id": "lane-verify",
+                            "lane_type": "verify",
+                            "objective": "Custom verify lane",
+                            "depends_on": ["lane-discover"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        custom_graph_env = productivity_env.copy()
+        custom_graph_workflow_state_path = tmp / "custom-graph-workflow-state.json"
+        custom_graph_claims_path = tmp / "custom-graph-claims.json"
+        custom_graph_agent_pool_path = tmp / "custom-graph-agent-pool.json"
+        custom_graph_reservation_path = tmp / "custom-graph-reservation-state.json"
+        custom_graph_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            custom_graph_workflow_state_path
+        )
+        custom_graph_env["MY_OPENCODE_CLAIMS_PATH"] = str(custom_graph_claims_path)
+        custom_graph_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            custom_graph_agent_pool_path
+        )
+        custom_graph_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            custom_graph_reservation_path
+        )
+        custom_graph_claims_path.write_text(
+            swarm_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        custom_graph_agent_pool_path.write_text(
+            swarm_agent_pool_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        custom_graph_reservation_path.write_text(
+            swarm_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Custom graph swarm",
+                "--graph-file",
+                str(custom_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow custom swarm plan failed: {result.stderr}",
+        )
+        custom_graph_payload = parse_json_output(result.stdout)
+        expect(
+            custom_graph_payload.get("graph_mode") == "custom-v1"
+            and custom_graph_payload.get("lanes", [{}])[1].get("depends_on")
+            == ["lane-discover"],
+            "workflow swarm plan should support authorable custom lane graphs with explicit dependencies",
+        )
+        expect(
+            custom_graph_payload.get("lanes", [{}])[0].get("reservation_mode")
+            == "reservation-safe-read",
+            "workflow custom swarm plan should materialize reservation-safe read metadata",
+        )
+        expect(
+            custom_graph_payload.get("lanes", [{}])[0].get("path_scopes") == ["**/*"],
+            "workflow custom swarm plan should materialize default path scopes when omitted",
+        )
+
+        invalid_graph_path = tmp / "swarm-invalid-graph.json"
+        invalid_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-a",
+                            "lane_type": "discover",
+                            "depends_on": ["lane-b"],
+                        },
+                        {
+                            "lane_id": "lane-b",
+                            "lane_type": "review",
+                            "depends_on": ["lane-a"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Invalid graph swarm",
+                "--graph-file",
+                str(invalid_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_graph_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm plan should reject cyclic custom lane graphs",
+        )
+        expect(
+            any(
+                str(lane.get("owner") or "").startswith("agent:")
+                for lane in swarm_plan_payload.get("lanes", [])
+            ),
+            "workflow swarm plan should assign active agents to lanes when available",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow swarm status failed: {result.stderr}")
+        swarm_status_payload = parse_json_output(result.stdout)
+        expect(
+            str(swarm_status_payload.get("swarm_id") or "").startswith("swarm-plan-")
+            and swarm_status_payload.get("lane_count", 0) >= 2,
+            "workflow swarm status should surface an active swarm plan",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow swarm doctor failed: {result.stderr}")
+        swarm_doctor_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_doctor_payload.get("warning_count") == 0,
+            "workflow swarm doctor should pass cleanly for a seeded healthy swarm plan",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow swarm handoff failed: {result.stderr}"
+        )
+        swarm_handoff_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_handoff_payload.get("lane", {}).get("owner") == "agent:discover-1"
+            and swarm_handoff_payload.get("lane", {}).get("status")
+            == "handoff-pending",
+            "workflow swarm handoff should transfer lane ownership into handoff-pending state",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:missing",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm handoff should reject invalid inactive owners",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm accept-handoff should reject mismatched accepting owners",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(GOVERNANCE_SCRIPT), "profile", "strict", "--json"],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"swarm governance strict profile failed: {result.stderr}",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3 scripts/selftest.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm accept-handoff should enforce governance for background execution",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(GOVERNANCE_SCRIPT),
+                "authorize",
+                "workflow.swarm_accept_handoff_bg",
+                "--ttl-minutes",
+                "30",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"swarm governance authorize failed: {result.stderr}",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(GOVERNANCE_SCRIPT), "profile", "balanced", "--json"],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"swarm governance profile balanced failed: {result.stderr}",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm doctor after handoff failed: {result.stderr}",
+        )
+        swarm_handoff_doctor_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_handoff_doctor_payload.get("warning_count", 0) >= 1,
+            "workflow swarm doctor should warn when a lane is pending handoff",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3 scripts/selftest.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm accept-handoff failed: {result.stderr}",
+        )
+        swarm_accept_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_accept_payload.get("lane", {}).get("status") == "active"
+            and bool(swarm_accept_payload.get("lane", {}).get("bg_job_id")),
+            "workflow swarm accept-handoff should activate the lane and enqueue background work when requested",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Traversal rejection",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"traversal swarm plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"traversal swarm handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3 scripts/../../tmp/evil.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm accept-handoff should reject traversal bg commands",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Allowlist rejection",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"allowlist swarm plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"allowlist swarm handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3 scripts/hooks_command.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm accept-handoff should reject non-allowlisted background scripts",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Make exactness rejection",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"make exactness swarm plan failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"make exactness swarm handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "make validate EXTRA=1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm accept-handoff should reject make commands that do not exactly match the allowlist",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Bare python rejection",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"bare python swarm plan failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"bare python swarm handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm accept-handoff should reject bare python commands",
+        )
+
+        offroot_dir = tmp / "swarm-offroot"
+        offroot_dir.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Off-root acceptance",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"off-root swarm plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"off-root swarm handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3 scripts/selftest.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=offroot_dir,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm off-root accept-handoff failed: {result.stderr}",
+        )
+        offroot_accept_payload = parse_json_output(result.stdout)
+        bg_read_result = subprocess.run(
+            [
+                sys.executable,
+                str(BG_MANAGER_SCRIPT),
+                "read",
+                str(offroot_accept_payload.get("lane", {}).get("bg_job_id") or ""),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            bg_read_result.returncode == 0,
+            f"background read for off-root swarm job failed: {bg_read_result.stderr}",
+        )
+        offroot_bg_payload = parse_json_output(bg_read_result.stdout)
+        expect(
+            offroot_bg_payload.get("job", {}).get("cwd") == str(REPO_ROOT),
+            "workflow swarm accept-handoff should enqueue background work against the swarm plan cwd",
+        )
+
+        lane_outcome_env = productivity_env.copy()
+        lane_outcome_workflow_state_path = tmp / "lane-outcome-workflow-state.json"
+        lane_outcome_claims_path = tmp / "lane-outcome-claims.json"
+        lane_outcome_agent_pool_path = tmp / "lane-outcome-agent-pool.json"
+        lane_outcome_reservation_path = tmp / "lane-outcome-reservation-state.json"
+        lane_outcome_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            lane_outcome_workflow_state_path
+        )
+        lane_outcome_env["MY_OPENCODE_CLAIMS_PATH"] = str(lane_outcome_claims_path)
+        lane_outcome_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            lane_outcome_agent_pool_path
+        )
+        lane_outcome_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            lane_outcome_reservation_path
+        )
+        lane_outcome_claims_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "claims": {
+                        "issue-301": {
+                            "issue_id": "issue-301",
+                            "owner": "agent:discover-1",
+                            "status": "active",
+                            "updated_at": "2026-03-10T12:00:00Z",
+                        }
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        lane_outcome_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        lane_outcome_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 1,
+                    "ownPaths": ["scripts/*.py"],
+                    "activePaths": ["scripts/*.py"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Lane outcome swarm",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"lane outcome swarm plan failed: {result.stderr}"
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm lane-1 handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm lane-1 accept failed: {result.stderr}",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-1",
+                "--summary",
+                "Review completed",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm complete-lane failed: {result.stderr}",
+        )
+        swarm_complete_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_complete_payload.get("lane", {}).get("status") == "completed"
+            and swarm_complete_payload.get("progress", {}).get("completed_count", 0)
+            >= 1,
+            "workflow swarm complete-lane should mark lanes completed and update swarm progress",
+        )
+        expect(
+            swarm_complete_payload.get("followups", [{}])[0].get("type")
+            in {"monitor-active-lane", "accept-next-lane", "swarm-complete"},
+            "workflow swarm complete-lane should emit follow-up orchestration guidance",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-1",
+                "--summary",
+                "Should fail",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm complete-lane should reject non-active lanes",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm handoff should reject terminal lanes",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-2",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm handoff should reject a second active lane path while another lane is active",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-2",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm lane-2 accept failed: {result.stderr}",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "fail-lane",
+                "--lane-id",
+                "lane-2",
+                "--reason",
+                "Verification failed",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm fail-lane failed: {result.stderr}",
+        )
+        swarm_fail_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_fail_payload.get("lane", {}).get("status") == "failed"
+            and swarm_fail_payload.get("status") == "failed",
+            "workflow swarm fail-lane should mark a lane failed and escalate swarm status",
+        )
+        expect(
+            swarm_fail_payload.get("followups", [{}])[0].get("type")
+            == "resolve-failure",
+            "workflow swarm fail-lane should emit failure follow-up guidance",
+        )
+        expect(
+            swarm_fail_payload.get("failure_policy", {}).get("policy")
+            == "halt_downstream_on_failure",
+            "workflow swarm fail-lane should emit explicit failure recovery policy",
+        )
+        expect(
+            "lane-3"
+            in swarm_fail_payload.get("failure_policy", {}).get("blocked_lane_ids", []),
+            "workflow swarm failure policy should block dependent downstream lanes via dependency metadata",
+        )
+        expect(
+            swarm_fail_payload.get("failure_policy", {}).get("recommended_action")
+            == "retry-lane",
+            "workflow swarm fail-lane should recommend retry first for initial failures",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "reset-lane",
+                "--lane-id",
+                "lane-2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow swarm reset-lane failed: {result.stderr}"
+        )
+        swarm_reset_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_reset_payload.get("lane", {}).get("status")
+            in {"planned", "handoff-pending"},
+            "workflow swarm reset-lane should return failed lanes to a recoverable state",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-2",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm lane-2 re-handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-2",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm lane-2 re-accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "fail-lane",
+                "--lane-id",
+                "lane-2",
+                "--reason",
+                "Retry me",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm second fail-lane failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "retry-lane",
+                "--lane-id",
+                "lane-2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow swarm retry-lane failed: {result.stderr}"
+        )
+        swarm_retry_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_retry_payload.get("lane", {}).get("status") == "handoff-pending"
+            and swarm_retry_payload.get("lane", {}).get("retry_count", 0) >= 1,
+            "workflow swarm retry-lane should move failed lanes into retry handoff state",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-2",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm lane-2 retry accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "fail-lane",
+                "--lane-id",
+                "lane-2",
+                "--reason",
+                "Repeated failure",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm repeated fail-lane failed: {result.stderr}",
+        )
+        repeated_fail_payload = parse_json_output(result.stdout)
+        expect(
+            repeated_fail_payload.get("failure_policy", {}).get("recommended_action")
+            == "reset-lane",
+            "workflow swarm repeated failures should recommend reset after retry budget is consumed",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "resolve-failure",
+                "--lane-id",
+                "lane-2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=lane_outcome_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm resolve-failure failed: {result.stderr}",
+        )
+        resolve_failure_payload = parse_json_output(result.stdout)
+        expect(
+            resolve_failure_payload.get("action") == "reset-lane"
+            and resolve_failure_payload.get("lane", {}).get("status")
+            in {"planned", "handoff-pending"},
+            "workflow swarm resolve-failure should execute the recommended recovery action",
+        )
+
+        reassign_env = productivity_env.copy()
+        reassign_workflow_state_path = tmp / "reassign-workflow-state.json"
+        reassign_claims_path = tmp / "reassign-claims.json"
+        reassign_agent_pool_path = tmp / "reassign-agent-pool.json"
+        reassign_reservation_path = tmp / "reassign-reservation-state.json"
+        reassign_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            reassign_workflow_state_path
+        )
+        reassign_env["MY_OPENCODE_CLAIMS_PATH"] = str(reassign_claims_path)
+        reassign_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(reassign_agent_pool_path)
+        reassign_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            reassign_reservation_path
+        )
+        reassign_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        reassign_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        reassign_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "discover-2",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Reassign swarm",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=reassign_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"reassign swarm plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=reassign_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"reassign lane-1 handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=reassign_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"reassign lane-1 accept failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "fail-lane",
+                "--lane-id",
+                "lane-1",
+                "--reason",
+                "owner handoff issue",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=reassign_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"reassign fail-lane failed: {result.stderr}")
+        reassign_fail_payload = parse_json_output(result.stdout)
+        expect(
+            reassign_fail_payload.get("failure_policy", {}).get("recommended_action")
+            == "reassign-lane",
+            "workflow swarm owner-related failures should recommend reassignment",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "reassign-lane",
+                "--lane-id",
+                "lane-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=reassign_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm reassign-lane failed: {result.stderr}",
+        )
+        reassign_payload = parse_json_output(result.stdout)
+        expect(
+            reassign_payload.get("lane", {}).get("owner") == "agent:discover-2",
+            "workflow swarm reassign-lane should move recovery to an alternate active owner",
+        )
+        expect(
+            reassign_payload.get("lane", {}).get("lease_identity") in {None, ""},
+            "workflow swarm reassign-lane should leave read-only lanes without lease identity",
+        )
+
+        no_alt_env = productivity_env.copy()
+        no_alt_workflow_state_path = tmp / "no-alt-workflow-state.json"
+        no_alt_claims_path = tmp / "no-alt-claims.json"
+        no_alt_agent_pool_path = tmp / "no-alt-agent-pool.json"
+        no_alt_reservation_path = tmp / "no-alt-reservation-state.json"
+        no_alt_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(no_alt_workflow_state_path)
+        no_alt_env["MY_OPENCODE_CLAIMS_PATH"] = str(no_alt_claims_path)
+        no_alt_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(no_alt_agent_pool_path)
+        no_alt_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(no_alt_reservation_path)
+        no_alt_claims_path.write_text(
+            reassign_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        no_alt_reservation_path.write_text(
+            reassign_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        no_alt_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "No alternate swarm",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=no_alt_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"no-alt swarm plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=no_alt_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"no-alt lane-1 handoff failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=no_alt_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"no-alt lane-1 accept failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "fail-lane",
+                "--lane-id",
+                "lane-1",
+                "--reason",
+                "owner handoff issue",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=no_alt_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"no-alt fail-lane failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "reassign-lane",
+                "--lane-id",
+                "lane-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=no_alt_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm reassign-lane should fail closed when no same-role alternate owner exists",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "fail-lane",
+                "--lane-id",
+                "lane-3",
+                "--reason",
+                "Second failure",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm fail-lane should reject already terminal lanes",
+        )
+
+        swarm_running_bg_path = tmp / "swarm-running-bg"
+        swarm_running_bg_path.mkdir(parents=True, exist_ok=True)
+        swarm_running_env = swarm_env.copy()
+        swarm_running_env["MY_OPENCODE_BG_DIR"] = str(swarm_running_bg_path)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Running bg guard",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_running_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"running-bg swarm plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_running_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"running-bg swarm handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--bg-command",
+                "python3 scripts/selftest.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_running_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"running-bg accept-handoff failed: {result.stderr}"
+        )
+        running_accept_payload = parse_json_output(result.stdout)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-2",
+                "--summary",
+                "Should block",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_running_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm complete-lane should reject lanes with running background jobs",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-2",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_running_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm handoff should reject lanes with running background jobs",
+        )
+
+        missing_bg_env = swarm_env.copy()
+        missing_bg_env["MY_OPENCODE_BG_DIR"] = str(tmp / "missing-bg-dir")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-2",
+                "--to",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=missing_bg_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm handoff should reject lanes with unknown background job state",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"workflow swarm status after lane outcomes failed: {result.stderr}",
+        )
+        swarm_outcome_status_payload = parse_json_output(result.stdout)
+        expect(
+            isinstance(swarm_outcome_status_payload.get("progress"), dict)
+            or isinstance(swarm_outcome_status_payload.get("latest"), dict),
+            "workflow swarm status should surface swarm-level progression summary from lane outcomes",
+        )
+
+        auto_progress_env = productivity_env.copy()
+        auto_progress_workflow_state_path = tmp / "auto-progress-workflow-state.json"
+        auto_progress_claims_path = tmp / "auto-progress-claims.json"
+        auto_progress_agent_pool_path = tmp / "auto-progress-agent-pool.json"
+        auto_progress_reservation_path = tmp / "auto-progress-reservation-state.json"
+        auto_progress_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            auto_progress_workflow_state_path
+        )
+        auto_progress_env["MY_OPENCODE_CLAIMS_PATH"] = str(auto_progress_claims_path)
+        auto_progress_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            auto_progress_agent_pool_path
+        )
+        auto_progress_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            auto_progress_reservation_path
+        )
+        auto_progress_claims_path.write_text(
+            swarm_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        auto_progress_agent_pool_path.write_text(
+            swarm_agent_pool_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        auto_progress_reservation_path.write_text(
+            swarm_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Auto progress swarm",
+                "--lanes",
+                "3",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=auto_progress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"auto-progress swarm plan failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=auto_progress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"auto-progress lane-1 handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=auto_progress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"auto-progress lane-1 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-1",
+                "--summary",
+                "Auto progressed",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=auto_progress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"auto-progress complete-lane failed: {result.stderr}",
+        )
+        auto_progress_payload = parse_json_output(result.stdout)
+        lane_two = next(
+            (
+                lane
+                for lane in auto_progress_payload.get("lanes", [])
+                if lane.get("lane_id") == "lane-2"
+            ),
+            {},
+        )
+        expect(
+            lane_two.get("status") == "handoff-pending"
+            and auto_progress_payload.get("followups", [{}])[0].get("lane_id")
+            == "lane-2",
+            "workflow swarm should auto-progress the next planned lane into handoff-pending with follow-up guidance",
+        )
+        expect(
+            auto_progress_payload.get("coordination", {}).get("max_active_lanes") == 1,
+            "workflow swarm should surface safe multi-lane coordination policy",
+        )
+
+        parallel_env = productivity_env.copy()
+        parallel_workflow_state_path = tmp / "parallel-workflow-state.json"
+        parallel_claims_path = tmp / "parallel-claims.json"
+        parallel_agent_pool_path = tmp / "parallel-agent-pool.json"
+        parallel_reservation_path = tmp / "parallel-reservation-state.json"
+        parallel_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            parallel_workflow_state_path
+        )
+        parallel_env["MY_OPENCODE_CLAIMS_PATH"] = str(parallel_claims_path)
+        parallel_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(parallel_agent_pool_path)
+        parallel_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            parallel_reservation_path
+        )
+        parallel_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        parallel_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        parallel_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "verify-1",
+                            "role": "verify",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Dependency parallel swarm",
+                "--lanes",
+                "4",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"parallel safe swarm plan failed: {result.stderr}"
+        )
+        dependency_plan_payload = parse_json_output(result.stdout)
+        expect(
+            dependency_plan_payload.get("lanes", [{}, {}, {}, {}])[3].get("depends_on")
+            == ["lane-2"],
+            "workflow swarm should allow verify lanes to depend on implement output directly",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"parallel lane-1 handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"parallel lane-1 accept failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-2",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject parallel activation for implement lanes",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-3",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should block downstream read-only lanes until dependency metadata is satisfied",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"parallel swarm status failed: {result.stderr}")
+        parallel_payload = parse_json_output(result.stdout)
+        expect(
+            parallel_payload.get("coordination", {}).get("max_active_lanes") == 2
+            and isinstance(
+                parallel_payload.get("coordination", {}).get(
+                    "parallel_candidate_lane_ids"
+                ),
+                list,
+            ),
+            "workflow swarm should surface reservation-safe parallel capacity without enabling parallel activation yet",
+        )
+        expect(
+            parallel_payload.get("coordination", {}).get("parallel_candidate_lane_ids")
+            == [],
+            "workflow swarm should not surface dependency-qualified parallel candidates before dependencies complete",
+        )
+        expect(
+            parallel_payload.get("coordination", {}).get("reservation_safe_read")
+            is True,
+            "workflow swarm coordination should report reservation-safe read availability when reservation state is present",
+        )
+
+        dependency_parallel_env = productivity_env.copy()
+        dependency_parallel_workflow_state_path = (
+            tmp / "dependency-parallel-workflow-state.json"
+        )
+        dependency_parallel_claims_path = tmp / "dependency-parallel-claims.json"
+        dependency_parallel_agent_pool_path = (
+            tmp / "dependency-parallel-agent-pool.json"
+        )
+        dependency_parallel_reservation_path = (
+            tmp / "dependency-parallel-reservation-state.json"
+        )
+        dependency_parallel_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            dependency_parallel_workflow_state_path
+        )
+        dependency_parallel_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            dependency_parallel_claims_path
+        )
+        dependency_parallel_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            dependency_parallel_agent_pool_path
+        )
+        dependency_parallel_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            dependency_parallel_reservation_path
+        )
+        dependency_parallel_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        dependency_parallel_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        dependency_parallel_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "verify-1",
+                            "role": "verify",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Dependency parallel swarm",
+                "--lanes",
+                "4",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel swarm plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel initial status failed: {result.stderr}",
+        )
+        dependency_initial_status_payload = parse_json_output(result.stdout)
+        expect(
+            dependency_initial_status_payload.get("coordination", {}).get(
+                "reservation_safe_read"
+            )
+            is True,
+            "workflow swarm status should report reservation-safe reads before parallel activation",
+        )
+        Path(dependency_parallel_env["MY_OPENCODE_RESERVATION_STATE_PATH"]).write_text(
+            json.dumps(
+                {
+                    "reservationActive": False,
+                    "writerCount": 0,
+                    "ownPaths": [],
+                    "activePaths": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel reservation drop status failed: {result.stderr}",
+        )
+        dependency_dropped_status_payload = parse_json_output(result.stdout)
+        expect(
+            dependency_dropped_status_payload.get("coordination", {}).get(
+                "reservation_safe_read"
+            )
+            is False,
+            "workflow swarm status should refresh reservation-safe read state from current reservation data",
+        )
+        Path(dependency_parallel_env["MY_OPENCODE_RESERVATION_STATE_PATH"]).write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-1 handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-1 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-1",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-1 complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-2",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-2 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-2",
+                "--summary",
+                "Implement done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-2 complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-3",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-3 handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-3",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel lane-3 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-4",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should keep generated broad path scopes serialized even when dependencies are satisfied",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel status failed: {result.stderr}",
+        )
+        dependency_parallel_payload = parse_json_output(result.stdout)
+        expect(
+            dependency_parallel_payload.get("coordination", {}).get("max_active_lanes")
+            == 2
+            and dependency_parallel_payload.get("coordination", {}).get("parallel_mode")
+            == "read-only-safe"
+            and dependency_parallel_payload.get("coordination", {}).get(
+                "reservation_safe_read"
+            )
+            is True
+            and dependency_parallel_payload.get("coordination", {}).get(
+                "parallel_candidate_lane_ids"
+            )
+            == ["lane-4"]
+            and set(
+                dependency_parallel_payload.get("coordination", {}).get(
+                    "active_lane_ids", []
+                )
+            )
+            == {"lane-3"},
+            "workflow swarm should surface dependency-satisfied candidates while broad generated scopes still serialize execution",
+        )
+        disjoint_graph_path = tmp / "swarm-disjoint-graph.json"
+        disjoint_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "path_scopes": ["src/**/*.py"],
+                        },
+                        {
+                            "lane_id": "lane-review",
+                            "lane_type": "review",
+                            "depends_on": ["lane-implement"],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-verify",
+                            "lane_type": "verify",
+                            "depends_on": ["lane-implement"],
+                            "path_scopes": ["tests/**/*.py"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        disjoint_env = productivity_env.copy()
+        disjoint_workflow_state_path = tmp / "disjoint-workflow-state.json"
+        disjoint_claims_path = tmp / "disjoint-claims.json"
+        disjoint_agent_pool_path = tmp / "disjoint-agent-pool.json"
+        disjoint_reservation_path = tmp / "disjoint-reservation-state.json"
+        disjoint_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            disjoint_workflow_state_path
+        )
+        disjoint_env["MY_OPENCODE_CLAIMS_PATH"] = str(disjoint_claims_path)
+        disjoint_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(disjoint_agent_pool_path)
+        disjoint_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            disjoint_reservation_path
+        )
+        disjoint_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        disjoint_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        disjoint_agent_pool_path.write_text(
+            dependency_parallel_agent_pool_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Disjoint graph",
+                "--graph-file",
+                str(disjoint_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"disjoint graph plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint discover handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint discover accept failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"disjoint discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint implement accept failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-implement",
+                "--summary",
+                "Implement done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"disjoint implement complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-review",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint review handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-review",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint review accept failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-verify",
+                "--to",
+                "agent:verify-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint verify handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-verify",
+                "--by",
+                "agent:verify-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"disjoint verify accept failed: {result.stderr}"
+        )
+        disjoint_payload = parse_json_output(result.stdout)
+        expect(
+            disjoint_payload.get("coordination", {}).get("parallel_mode")
+            == "read-only-safe"
+            and set(disjoint_payload.get("coordination", {}).get("active_lane_ids", []))
+            == {"lane-review", "lane-verify"},
+            "workflow swarm should allow dependency-satisfied parallel activation when read-only lane path scopes are disjoint",
+        )
+        overlap_graph_path = tmp / "swarm-overlap-graph.json"
+        overlap_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-a",
+                            "lane_type": "review",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-b",
+                            "lane_type": "verify",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        overlap_env = productivity_env.copy()
+        overlap_workflow_state_path = tmp / "overlap-workflow-state.json"
+        overlap_claims_path = tmp / "overlap-claims.json"
+        overlap_agent_pool_path = tmp / "overlap-agent-pool.json"
+        overlap_reservation_path = tmp / "overlap-reservation-state.json"
+        overlap_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            overlap_workflow_state_path
+        )
+        overlap_env["MY_OPENCODE_CLAIMS_PATH"] = str(overlap_claims_path)
+        overlap_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(overlap_agent_pool_path)
+        overlap_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            overlap_reservation_path
+        )
+        overlap_fresh_lease_timestamp = (
+            datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
+        overlap_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        overlap_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/shared/**/*.py"],
+                    "activePaths": ["src/shared/**/*.py"],
+                    "leaseId": "lease-writer-overlap",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": overlap_fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        overlap_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "verify-1",
+                            "role": "verify",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Overlap graph",
+                "--graph-file",
+                str(overlap_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"overlap graph plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-a",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"overlap lane-a handoff failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-a",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"overlap lane-a accept failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-b",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject dependency-satisfied parallel read-only activation when path scopes overlap",
+        )
+
+        semantic_overlap_graph_path = tmp / "swarm-semantic-overlap-graph.json"
+        semantic_overlap_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-a",
+                            "lane_type": "review",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-b",
+                            "lane_type": "verify",
+                            "depends_on": [],
+                            "path_scopes": ["docs/README.md"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        semantic_overlap_env = productivity_env.copy()
+        semantic_overlap_workflow_state_path = (
+            tmp / "semantic-overlap-workflow-state.json"
+        )
+        semantic_overlap_claims_path = tmp / "semantic-overlap-claims.json"
+        semantic_overlap_agent_pool_path = tmp / "semantic-overlap-agent-pool.json"
+        semantic_overlap_reservation_path = (
+            tmp / "semantic-overlap-reservation-state.json"
+        )
+        semantic_overlap_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            semantic_overlap_workflow_state_path
+        )
+        semantic_overlap_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            semantic_overlap_claims_path
+        )
+        semantic_overlap_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            semantic_overlap_agent_pool_path
+        )
+        semantic_overlap_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            semantic_overlap_reservation_path
+        )
+        semantic_overlap_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        semantic_overlap_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        semantic_overlap_agent_pool_path.write_text(
+            overlap_agent_pool_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Semantic overlap graph",
+                "--graph-file",
+                str(semantic_overlap_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=semantic_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"semantic overlap plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-a",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=semantic_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"semantic overlap lane-a handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-a",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=semantic_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"semantic overlap lane-a accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-b",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=semantic_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject semantically overlapping path scopes even when glob strings differ",
+        )
+
+        wildcard_noncoverage_graph_path = tmp / "swarm-wildcard-noncoverage-graph.json"
+        wildcard_noncoverage_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-a",
+                            "lane_type": "implement",
+                            "depends_on": [],
+                            "writer_paths": ["src/app/**/*.py"],
+                            "path_scopes": ["src/app/**/*.py"],
+                        }
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wildcard_noncoverage_env = productivity_env.copy()
+        wildcard_noncoverage_workflow_state_path = (
+            tmp / "wildcard-noncoverage-workflow-state.json"
+        )
+        wildcard_noncoverage_claims_path = tmp / "wildcard-noncoverage-claims.json"
+        wildcard_noncoverage_agent_pool_path = (
+            tmp / "wildcard-noncoverage-agent-pool.json"
+        )
+        wildcard_noncoverage_reservation_path = (
+            tmp / "wildcard-noncoverage-reservation-state.json"
+        )
+        wildcard_noncoverage_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            wildcard_noncoverage_workflow_state_path
+        )
+        wildcard_noncoverage_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            wildcard_noncoverage_claims_path
+        )
+        wildcard_noncoverage_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            wildcard_noncoverage_agent_pool_path
+        )
+        wildcard_noncoverage_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            wildcard_noncoverage_reservation_path
+        )
+        wildcard_fresh_lease_timestamp = (
+            datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
+        wildcard_noncoverage_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        wildcard_noncoverage_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wildcard_noncoverage_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/*/tests/*.py"],
+                    "activePaths": ["src/*/tests/*.py"],
+                    "leaseId": "lease-wildcard-noncoverage",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": wildcard_fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Wildcard noncoverage",
+                "--graph-file",
+                str(wildcard_noncoverage_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=wildcard_noncoverage_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"wildcard noncoverage plan failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=wildcard_noncoverage_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"wildcard noncoverage status failed: {result.stderr}",
+        )
+        wildcard_noncoverage_payload = parse_json_output(result.stdout)
+        expect(
+            wildcard_noncoverage_payload.get("coordination", {}).get(
+                "write_parallel_candidate_lane_ids"
+            )
+            == [],
+            "workflow swarm should not claim wildcard-vs-wildcard reservation coverage unless it can be proven",
+        )
+
+        suffix_disjoint_graph_path = tmp / "swarm-suffix-disjoint-graph.json"
+        suffix_disjoint_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-md",
+                            "lane_type": "review",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-txt",
+                            "lane_type": "verify",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.txt"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        suffix_disjoint_env = productivity_env.copy()
+        suffix_disjoint_workflow_state_path = (
+            tmp / "suffix-disjoint-workflow-state.json"
+        )
+        suffix_disjoint_claims_path = tmp / "suffix-disjoint-claims.json"
+        suffix_disjoint_agent_pool_path = tmp / "suffix-disjoint-agent-pool.json"
+        suffix_disjoint_reservation_path = (
+            tmp / "suffix-disjoint-reservation-state.json"
+        )
+        suffix_disjoint_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            suffix_disjoint_workflow_state_path
+        )
+        suffix_disjoint_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            suffix_disjoint_claims_path
+        )
+        suffix_disjoint_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            suffix_disjoint_agent_pool_path
+        )
+        suffix_disjoint_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            suffix_disjoint_reservation_path
+        )
+        suffix_disjoint_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        suffix_disjoint_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        suffix_disjoint_agent_pool_path.write_text(
+            overlap_agent_pool_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Suffix disjoint graph",
+                "--graph-file",
+                str(suffix_disjoint_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=suffix_disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"suffix disjoint plan failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-md",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=suffix_disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"suffix disjoint lane-md handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-md",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=suffix_disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"suffix disjoint lane-md accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-txt",
+                "--to",
+                "agent:verify-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=suffix_disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"suffix disjoint lane-txt handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-txt",
+                "--by",
+                "agent:verify-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=suffix_disjoint_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"suffix disjoint lane-txt accept failed: {result.stderr}",
+        )
+        suffix_disjoint_payload = parse_json_output(result.stdout)
+        expect(
+            set(
+                suffix_disjoint_payload.get("coordination", {}).get(
+                    "active_lane_ids", []
+                )
+            )
+            == {"lane-md", "lane-txt"},
+            "workflow swarm should allow same-prefix but suffix-disjoint path scopes to run in parallel",
+        )
+
+        writer_candidate_graph_path = tmp / "swarm-writer-candidate-graph.json"
+        writer_candidate_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement-a",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/a/**/*.py"],
+                            "path_scopes": ["src/a/**/*.py"],
+                        },
+                        {
+                            "lane_id": "lane-implement-b",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/b/**/*.py"],
+                            "path_scopes": ["src/b/**/*.py"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        writer_candidate_env = productivity_env.copy()
+        writer_candidate_workflow_state_path = (
+            tmp / "writer-candidate-workflow-state.json"
+        )
+        writer_candidate_claims_path = tmp / "writer-candidate-claims.json"
+        writer_candidate_agent_pool_path = tmp / "writer-candidate-agent-pool.json"
+        writer_candidate_reservation_path = (
+            tmp / "writer-candidate-reservation-state.json"
+        )
+        writer_candidate_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            writer_candidate_workflow_state_path
+        )
+        writer_candidate_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            writer_candidate_claims_path
+        )
+        writer_candidate_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            writer_candidate_agent_pool_path
+        )
+        writer_candidate_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            writer_candidate_reservation_path
+        )
+        writer_candidate_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        writer_candidate_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-2",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        writer_candidate_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 1,
+                    "ownPaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Writer candidate graph",
+                "--graph-file",
+                str(writer_candidate_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate graph plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "human:operator",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "human:operator",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"writer candidate status failed: {result.stderr}"
+        )
+        writer_candidate_payload = parse_json_output(result.stdout)
+        expect(
+            set(
+                writer_candidate_payload.get("coordination", {}).get(
+                    "write_parallel_candidate_lane_ids", []
+                )
+            )
+            == set(),
+            "workflow swarm should not surface writer candidates without explicit reservation lease guarantees",
+        )
+        expect(
+            writer_candidate_payload.get("coordination", {}).get(
+                "reservation_writer_guarantees"
+            )
+            is False,
+            "workflow swarm should report missing writer lease guarantees when lease metadata is absent",
+        )
+        fresh_lease_timestamp = (
+            datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
+        future_lease_timestamp = (
+            (datetime.now(UTC) + timedelta(minutes=120))
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        reservation_cli_state_path = tmp / "reservation-cli-state.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "reservation_command.py"),
+                "--state-file",
+                str(reservation_cli_state_path),
+                "set",
+                "--own-paths",
+                "src/a/**/*.py",
+                "--active-paths",
+                "src/a/**/*.py,src/b/**/*.py",
+                "--writer-count",
+                "2",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"reservation command set without lease failed: {result.stderr}",
+        )
+        reservation_cli_payload = json.loads(
+            reservation_cli_state_path.read_text(encoding="utf-8")
+        )
+        expect(
+            not reservation_cli_payload.get("leaseId")
+            and not reservation_cli_payload.get("leaseOwner")
+            and not reservation_cli_payload.get("leaseUpdatedAt"),
+            "reservation set should not auto-mint lease metadata for multi-writer state",
+        )
+
+        Path(writer_candidate_env["MY_OPENCODE_RESERVATION_STATE_PATH"]).write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "leaseId": "lease-writer-1",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate leased status failed: {result.stderr}",
+        )
+        writer_candidate_leased_payload = parse_json_output(result.stdout)
+        expect(
+            set(
+                writer_candidate_leased_payload.get("coordination", {}).get(
+                    "write_parallel_candidate_lane_ids", []
+                )
+            )
+            == {"lane-implement-a", "lane-implement-b"},
+            "workflow swarm should surface lease-backed disjoint writer candidates when overlap checks pass",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-a",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate lane-a accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-implement-b",
+                "--to",
+                "agent:implement-2",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject write-parallel handoff when the handoff owner does not match the lease owner",
+        )
+        writer_lease_identity_graph_path = (
+            tmp / "swarm-writer-lease-identity-graph.json"
+        )
+        writer_lease_identity_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement-a",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/a/**/*.py"],
+                            "path_scopes": ["src/a/**/*.py"],
+                            "lease_identity": "agent:implement-2",
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        writer_lease_identity_env = productivity_env.copy()
+        writer_lease_identity_workflow_state_path = (
+            tmp / "writer-lease-identity-workflow-state.json"
+        )
+        writer_lease_identity_claims_path = tmp / "writer-lease-identity-claims.json"
+        writer_lease_identity_agent_pool_path = (
+            tmp / "writer-lease-identity-agent-pool.json"
+        )
+        writer_lease_identity_reservation_path = (
+            tmp / "writer-lease-identity-reservation-state.json"
+        )
+        writer_lease_identity_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            writer_lease_identity_workflow_state_path
+        )
+        writer_lease_identity_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            writer_lease_identity_claims_path
+        )
+        writer_lease_identity_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            writer_lease_identity_agent_pool_path
+        )
+        writer_lease_identity_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            writer_lease_identity_reservation_path
+        )
+        writer_lease_identity_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        writer_lease_identity_agent_pool_path.write_text(
+            writer_candidate_agent_pool_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        writer_lease_identity_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "leaseId": "lease-writer-identity",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Writer lease identity graph",
+                "--graph-file",
+                str(writer_lease_identity_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-a",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject writer activation when lane lease identity does not match the accepting owner",
+        )
+        custom_write_lease_identity_graph_path = (
+            tmp / "swarm-custom-write-lease-identity-graph.json"
+        )
+        custom_write_lease_identity_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-review-write",
+                            "lane_type": "review",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["docs/review/**/*.md"],
+                            "path_scopes": ["docs/review/**/*.md"],
+                            "lease_identity": "agent:review-2",
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        custom_write_lease_identity_env = productivity_env.copy()
+        custom_write_lease_identity_workflow_state_path = (
+            tmp / "custom-write-lease-identity-workflow-state.json"
+        )
+        custom_write_lease_identity_claims_path = (
+            tmp / "custom-write-lease-identity-claims.json"
+        )
+        custom_write_lease_identity_agent_pool_path = (
+            tmp / "custom-write-lease-identity-agent-pool.json"
+        )
+        custom_write_lease_identity_reservation_path = (
+            tmp / "custom-write-lease-identity-reservation-state.json"
+        )
+        custom_write_lease_identity_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            custom_write_lease_identity_workflow_state_path
+        )
+        custom_write_lease_identity_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            custom_write_lease_identity_claims_path
+        )
+        custom_write_lease_identity_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            custom_write_lease_identity_agent_pool_path
+        )
+        custom_write_lease_identity_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            custom_write_lease_identity_reservation_path
+        )
+        custom_write_lease_identity_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        custom_write_lease_identity_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "review-2",
+                            "role": "review",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        custom_write_lease_identity_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["docs/review/**/*.md"],
+                    "activePaths": ["docs/review/**/*.md"],
+                    "leaseId": "lease-custom-write-identity",
+                    "leaseOwner": "agent:review-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Custom write lease identity graph",
+                "--graph-file",
+                str(custom_write_lease_identity_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_write_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"custom write lease identity plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_write_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"custom write lease identity discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_write_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"custom write lease identity discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_write_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"custom write lease identity discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-review-write",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=custom_write_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should enforce lane lease identity for custom write-capable non-implement lanes too",
+        )
+        writer_lease_identity_graph_path = (
+            tmp / "swarm-writer-lease-identity-graph.json"
+        )
+        writer_lease_identity_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement-a",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/a/**/*.py"],
+                            "path_scopes": ["src/a/**/*.py"],
+                            "lease_identity": "agent:implement-2",
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        writer_lease_identity_env = productivity_env.copy()
+        writer_lease_identity_workflow_state_path = (
+            tmp / "writer-lease-identity-workflow-state.json"
+        )
+        writer_lease_identity_claims_path = tmp / "writer-lease-identity-claims.json"
+        writer_lease_identity_agent_pool_path = (
+            tmp / "writer-lease-identity-agent-pool.json"
+        )
+        writer_lease_identity_reservation_path = (
+            tmp / "writer-lease-identity-reservation-state.json"
+        )
+        writer_lease_identity_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            writer_lease_identity_workflow_state_path
+        )
+        writer_lease_identity_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            writer_lease_identity_claims_path
+        )
+        writer_lease_identity_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            writer_lease_identity_agent_pool_path
+        )
+        writer_lease_identity_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            writer_lease_identity_reservation_path
+        )
+        writer_lease_identity_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        writer_lease_identity_agent_pool_path.write_text(
+            writer_candidate_agent_pool_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        writer_lease_identity_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "leaseId": "lease-writer-identity",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Writer lease identity graph",
+                "--graph-file",
+                str(writer_lease_identity_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-a",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject writer activation when lane lease identity does not match the accepting owner",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=writer_lease_identity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer lease identity status failed: {result.stderr}",
+        )
+        writer_lease_identity_status = parse_json_output(result.stdout)
+        expect(
+            writer_lease_identity_status.get("coordination", {}).get(
+                "write_parallel_candidate_lane_ids"
+            )
+            == [],
+            "workflow swarm should not surface custom non-implement or lease-identity-mismatched write lanes as parallel candidates",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-implement-b",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate lane-b handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-b",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer candidate lane-b accept failed: {result.stderr}",
+        )
+        writer_parallel_payload = parse_json_output(result.stdout)
+        expect(
+            writer_parallel_payload.get("coordination", {}).get("parallel_mode")
+            == "writer-safe"
+            and set(
+                writer_parallel_payload.get("coordination", {}).get(
+                    "active_lane_ids", []
+                )
+            )
+            == {"lane-implement-a", "lane-implement-b"},
+            "workflow swarm should allow a tiny write-capable parallel allowlist for disjoint implement lanes under lease-backed guarantees",
+        )
+        Path(writer_candidate_env["MY_OPENCODE_RESERVATION_STATE_PATH"]).write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "leaseId": "lease-writer-future",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": future_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=writer_candidate_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer future lease status failed: {result.stderr}",
+        )
+        writer_future_payload = parse_json_output(result.stdout)
+        expect(
+            writer_future_payload.get("coordination", {}).get(
+                "reservation_writer_guarantees"
+            )
+            is False,
+            "workflow swarm should reject future-dated writer leases as stale/invalid guarantees",
+        )
+        reservation_cli_invalid_state_path = tmp / "reservation-cli-invalid-state.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "reservation_command.py"),
+                "--state-file",
+                str(reservation_cli_invalid_state_path),
+                "set",
+                "--own-paths",
+                "src/a/**/*.py",
+                "--active-paths",
+                "src/a/**/*.py,src/b/**/*.py",
+                "--writer-count",
+                "2",
+                "--lease-owner",
+                "writer:test",
+                "--lease-id",
+                "lease-invalid",
+                "--lease-updated-at",
+                "2030-01-01T00:00:00",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "reservation set should reject timezone-naive lease timestamps",
+        )
+
+        writer_overlap_graph_path = tmp / "swarm-writer-overlap-graph.json"
+        writer_overlap_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement-a",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/shared/**/*.py"],
+                            "path_scopes": ["src/shared/**/*.py"],
+                        },
+                        {
+                            "lane_id": "lane-implement-b",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/shared/module.py"],
+                            "path_scopes": ["src/shared/module.py"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        writer_overlap_env = productivity_env.copy()
+        writer_overlap_workflow_state_path = tmp / "writer-overlap-workflow-state.json"
+        writer_overlap_claims_path = tmp / "writer-overlap-claims.json"
+        writer_overlap_agent_pool_path = tmp / "writer-overlap-agent-pool.json"
+        writer_overlap_reservation_path = tmp / "writer-overlap-reservation-state.json"
+        writer_overlap_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            writer_overlap_workflow_state_path
+        )
+        writer_overlap_env["MY_OPENCODE_CLAIMS_PATH"] = str(writer_overlap_claims_path)
+        writer_overlap_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            writer_overlap_agent_pool_path
+        )
+        writer_overlap_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            writer_overlap_reservation_path
+        )
+        writer_overlap_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        writer_overlap_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-2",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        writer_overlap_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/shared/**/*.py"],
+                    "activePaths": ["src/shared/**/*.py"],
+                    "leaseId": "lease-writer-overlap",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": overlap_fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Writer overlap graph",
+                "--graph-file",
+                str(writer_overlap_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"writer overlap graph plan failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "human:operator",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer overlap discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "human:operator",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer overlap discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer overlap discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=writer_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"writer overlap status failed: {result.stderr}")
+        writer_overlap_payload = parse_json_output(result.stdout)
+        expect(
+            set(
+                writer_overlap_payload.get("coordination", {}).get(
+                    "write_parallel_candidate_lane_ids", []
+                )
+            )
+            == {"lane-implement-a"},
+            "workflow swarm should surface only disjoint writer candidates and exclude overlapping writer scopes",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-a",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=writer_overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"writer overlap lane-a accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-implement-b",
+                "--to",
+                "agent:verify-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=overlap_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should keep overlapping implement lanes serialized even under valid writer leases",
+        )
+
+        active_writer_uncovered_graph_path = tmp / "swarm-active-writer-uncovered.json"
+        active_writer_uncovered_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement-a",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/a/**/*.py"],
+                            "path_scopes": ["src/a/**/*.py"],
+                        },
+                        {
+                            "lane_id": "lane-implement-b",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/b/**/*.py"],
+                            "path_scopes": ["src/b/**/*.py"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        active_writer_uncovered_env = productivity_env.copy()
+        active_writer_uncovered_workflow_state_path = (
+            tmp / "active-writer-uncovered-workflow-state.json"
+        )
+        active_writer_uncovered_claims_path = (
+            tmp / "active-writer-uncovered-claims.json"
+        )
+        active_writer_uncovered_agent_pool_path = (
+            tmp / "active-writer-uncovered-agent-pool.json"
+        )
+        active_writer_uncovered_reservation_path = (
+            tmp / "active-writer-uncovered-reservation-state.json"
+        )
+        active_writer_uncovered_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            active_writer_uncovered_workflow_state_path
+        )
+        active_writer_uncovered_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            active_writer_uncovered_claims_path
+        )
+        active_writer_uncovered_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            active_writer_uncovered_agent_pool_path
+        )
+        active_writer_uncovered_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            active_writer_uncovered_reservation_path
+        )
+        active_writer_uncovered_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        active_writer_uncovered_agent_pool_path.write_text(
+            writer_candidate_agent_pool_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        active_writer_uncovered_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "leaseId": "lease-active-writer-uncovered",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Active writer uncovered",
+                "--graph-file",
+                str(active_writer_uncovered_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=active_writer_uncovered_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"active writer uncovered plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=active_writer_uncovered_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"active writer uncovered discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=active_writer_uncovered_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"active writer uncovered discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=active_writer_uncovered_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"active writer uncovered discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-a",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=active_writer_uncovered_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"active writer uncovered lane-a accept failed: {result.stderr}",
+        )
+        Path(
+            active_writer_uncovered_env["MY_OPENCODE_RESERVATION_STATE_PATH"]
+        ).write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py"],
+                    "activePaths": ["src/b/**/*.py"],
+                    "leaseId": "lease-active-writer-uncovered-2",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=active_writer_uncovered_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"active writer uncovered status failed: {result.stderr}",
+        )
+        active_writer_uncovered_payload = parse_json_output(result.stdout)
+        expect(
+            active_writer_uncovered_payload.get("coordination", {}).get(
+                "reservation_covers_active_writers"
+            )
+            is False
+            and active_writer_uncovered_payload.get("coordination", {}).get(
+                "write_parallel_candidate_lane_ids"
+            )
+            == [],
+            "workflow swarm should suppress writer candidates when an already-active writer is no longer covered by the lease",
+        )
+
+        uncovered_target_graph_path = tmp / "swarm-uncovered-target-writer.json"
+        uncovered_target_graph_path.write_text(
+            json.dumps(
+                {
+                    "lanes": [
+                        {
+                            "lane_id": "lane-discover",
+                            "lane_type": "discover",
+                            "depends_on": [],
+                            "path_scopes": ["docs/**/*.md"],
+                        },
+                        {
+                            "lane_id": "lane-implement-a",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/a/**/*.py"],
+                            "path_scopes": ["src/a/**/*.py"],
+                        },
+                        {
+                            "lane_id": "lane-implement-b",
+                            "lane_type": "implement",
+                            "depends_on": ["lane-discover"],
+                            "writer_paths": ["src/c/**/*.py"],
+                            "path_scopes": ["src/c/**/*.py"],
+                        },
+                    ]
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        uncovered_target_env = productivity_env.copy()
+        uncovered_target_workflow_state_path = (
+            tmp / "uncovered-target-workflow-state.json"
+        )
+        uncovered_target_claims_path = tmp / "uncovered-target-claims.json"
+        uncovered_target_agent_pool_path = tmp / "uncovered-target-agent-pool.json"
+        uncovered_target_reservation_path = (
+            tmp / "uncovered-target-reservation-state.json"
+        )
+        uncovered_target_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            uncovered_target_workflow_state_path
+        )
+        uncovered_target_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            uncovered_target_claims_path
+        )
+        uncovered_target_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            uncovered_target_agent_pool_path
+        )
+        uncovered_target_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            uncovered_target_reservation_path
+        )
+        uncovered_target_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        uncovered_target_agent_pool_path.write_text(
+            writer_candidate_agent_pool_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        uncovered_target_reservation_path.write_text(
+            json.dumps(
+                {
+                    "reservationActive": True,
+                    "writerCount": 2,
+                    "ownPaths": ["src/a/**/*.py"],
+                    "activePaths": ["src/a/**/*.py", "src/b/**/*.py"],
+                    "leaseId": "lease-target-gap",
+                    "leaseOwner": "agent:implement-1",
+                    "leaseUpdatedAt": fresh_lease_timestamp,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Uncovered target writer",
+                "--graph-file",
+                str(uncovered_target_graph_path),
+                "--claim-ids",
+                "issue-301",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=uncovered_target_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"uncovered target writer plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-discover",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=uncovered_target_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"uncovered target discover handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-discover",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=uncovered_target_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"uncovered target discover accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-discover",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=uncovered_target_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"uncovered target discover complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-implement-a",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=uncovered_target_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"uncovered target lane-a accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-implement-b",
+                "--to",
+                "agent:implement-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=uncovered_target_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject write-parallel activation when the target writer lane is outside the leased reservation scopes",
+        )
+
+        revoked_parallel_env = productivity_env.copy()
+        revoked_parallel_workflow_state_path = (
+            tmp / "revoked-parallel-workflow-state.json"
+        )
+        revoked_parallel_claims_path = tmp / "revoked-parallel-claims.json"
+        revoked_parallel_agent_pool_path = tmp / "revoked-parallel-agent-pool.json"
+        revoked_parallel_reservation_path = (
+            tmp / "revoked-parallel-reservation-state.json"
+        )
+        revoked_parallel_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(
+            revoked_parallel_workflow_state_path
+        )
+        revoked_parallel_env["MY_OPENCODE_CLAIMS_PATH"] = str(
+            revoked_parallel_claims_path
+        )
+        revoked_parallel_env["MY_OPENCODE_AGENT_POOL_PATH"] = str(
+            revoked_parallel_agent_pool_path
+        )
+        revoked_parallel_env["MY_OPENCODE_RESERVATION_STATE_PATH"] = str(
+            revoked_parallel_reservation_path
+        )
+        revoked_parallel_claims_path.write_text(
+            lane_outcome_claims_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        revoked_parallel_agent_pool_path.write_text(
+            dependency_parallel_agent_pool_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        revoked_parallel_reservation_path.write_text(
+            lane_outcome_reservation_path.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "plan",
+                "--objective",
+                "Revoked reservation parallel swarm",
+                "--lanes",
+                "4",
+                "--claim-ids",
+                "issue-301",
+                "--writer-paths",
+                "scripts/*.py",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation swarm plan failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-1",
+                "--to",
+                "agent:discover-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-1 handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-1",
+                "--by",
+                "agent:discover-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-1 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-1",
+                "--summary",
+                "Discover done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-1 complete failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-2",
+                "--by",
+                "agent:implement-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-2 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "complete-lane",
+                "--lane-id",
+                "lane-2",
+                "--summary",
+                "Implement done",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-2 complete failed: {result.stderr}",
+        )
+        Path(revoked_parallel_env["MY_OPENCODE_RESERVATION_STATE_PATH"]).write_text(
+            json.dumps(
+                {
+                    "reservationActive": False,
+                    "writerCount": 0,
+                    "ownPaths": [],
+                    "activePaths": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-3",
+                "--to",
+                "agent:review-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-3 handoff failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "accept-handoff",
+                "--lane-id",
+                "lane-3",
+                "--by",
+                "agent:review-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"revoked reservation lane-3 accept failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "handoff",
+                "--lane-id",
+                "lane-4",
+                "--to",
+                "agent:verify-1",
+                "--status",
+                "handoff-pending",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=revoked_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode != 0,
+            "workflow swarm should reject parallel activation when reservation-safe read guarantees are revoked between activations",
+        )
+        result = subprocess.run(
+            [sys.executable, str(WORKFLOW_SCRIPT), "swarm", "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=dependency_parallel_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"dependency parallel status failed: {result.stderr}",
+        )
+        dependency_parallel_status_payload = parse_json_output(result.stdout)
+        expect(
+            dependency_parallel_payload.get("coordination", {}).get("active_lane_ids")
+            == dependency_parallel_status_payload.get("coordination", {}).get(
+                "active_lane_ids"
+            ),
+            "workflow swarm status should preserve active parallel lane state",
+        )
+
+        swarm_agent_pool_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "agents": [
+                        {
+                            "agent_id": "discover-1",
+                            "role": "discover",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "implement-1",
+                            "role": "implement",
+                            "status": "active",
+                            "load": 0,
+                        },
+                        {
+                            "agent_id": "review-1",
+                            "role": "review",
+                            "status": "drained",
+                            "load": 0,
+                        },
+                    ],
+                    "events": [],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "rebalance",
+                "--lane-id",
+                "lane-1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"workflow swarm rebalance failed: {result.stderr}"
+        )
+        swarm_rebalance_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_rebalance_payload.get("updated_count") == 0,
+            "workflow swarm rebalance should preserve terminal lane outcomes",
+        )
+
+        bg_status_result = subprocess.run(
+            [
+                sys.executable,
+                str(BG_MANAGER_SCRIPT),
+                "status",
+                str(swarm_accept_payload.get("lane", {}).get("bg_job_id") or ""),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            bg_status_result.returncode == 0,
+            f"background status for swarm job failed: {bg_status_result.stderr}",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKFLOW_SCRIPT),
+                "swarm",
+                "close",
+                "--reason",
+                "selftest close",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=swarm_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"workflow swarm close failed: {result.stderr}")
+        swarm_close_payload = parse_json_output(result.stdout)
+        expect(
+            swarm_close_payload.get("status") == "closed"
+            and swarm_close_payload.get("close_reason") == "selftest close",
+            "workflow swarm close should finalize the active swarm plan",
         )
 
         workflow_state_path.write_text(
@@ -4723,6 +10491,724 @@ exit 0
             f"memory-lifecycle export failed: {result.stderr}",
         )
         expect(memory_export.exists(), "memory-lifecycle export should create file")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Release checklist decision",
+                "--content",
+                "Prefer release-train rollups before manual changelog edits.",
+                "--kind",
+                "decision",
+                "--tags",
+                "release,checklist",
+                "--confidence",
+                "88",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory add failed: {result.stderr}")
+        memory_add_payload = parse_json_output(result.stdout)
+        memory_id = str(memory_add_payload.get("memory", {}).get("id") or "")
+        expect(memory_id.startswith("mem-"), "memory add should create memory id")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "pin",
+                memory_id,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory pin failed: {result.stderr}")
+        memory_pin_payload = parse_json_output(result.stdout)
+        expect(
+            memory_pin_payload.get("memory", {}).get("pinned") is True,
+            "memory pin should mark entry pinned",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_LIFECYCLE_SCRIPT), "stats", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"memory-lifecycle stats failed: {result.stderr}"
+        )
+        memory_stats_payload = parse_json_output(result.stdout)
+        expect(
+            memory_stats_payload.get("entry_count", 0) >= 1,
+            "memory-lifecycle stats should report shared-memory entries",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "export",
+                "--path",
+                str(memory_export),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory-lifecycle re-export failed: {result.stderr}",
+        )
+        exported_memory_payload = load_json_file(memory_export)
+        expect(
+            len(exported_memory_payload.get("entries", [])) >= 1,
+            "memory-lifecycle export should include shared-memory entries",
+        )
+
+        imported_env = productivity_env.copy()
+        imported_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "imported-shared-memory.db"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "import",
+                "--path",
+                str(memory_export),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=imported_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"memory-lifecycle import failed: {result.stderr}"
+        )
+        imported_payload = parse_json_output(result.stdout)
+        expect(
+            imported_payload.get("entry_count", 0) >= 1,
+            "memory-lifecycle import should restore exported shared-memory entries",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "recall", "--pinned-only", "--json"],
+            capture_output=True,
+            text=True,
+            env=imported_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"imported memory recall failed: {result.stderr}"
+        )
+        imported_recall_payload = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("pinned") is True
+                for item in imported_recall_payload.get("memories", [])
+            ),
+            "memory-lifecycle import should preserve pinned source-backed memories",
+        )
+
+        cleanup_env = productivity_env.copy()
+        cleanup_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "cleanup-shared-memory.db"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Cleanup candidate",
+                "--content",
+                "Old memory for lifecycle cleanup.",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"cleanup seed add failed: {result.stderr}")
+        cleanup_add_payload = parse_json_output(result.stdout)
+        cleanup_memory_id = str(cleanup_add_payload.get("memory", {}).get("id") or "")
+        cleanup_db = sqlite3.connect(cleanup_env["MY_OPENCODE_SHARED_MEMORY_PATH"])
+        cleanup_db.execute(
+            "UPDATE memories SET updated_at = ?, created_at = ? WHERE id = ?",
+            ("2000-01-01T00:00:00Z", "2000-01-01T00:00:00Z", cleanup_memory_id),
+        )
+        cleanup_db.commit()
+        cleanup_db.close()
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "cleanup",
+                "--older-days",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"memory-lifecycle cleanup failed: {result.stderr}"
+        )
+        cleanup_payload = parse_json_output(result.stdout)
+        expect(
+            cleanup_payload.get("archive_count", 0) >= 1,
+            "memory-lifecycle cleanup should archive old memories",
+        )
+
+        pinned_cleanup_env = productivity_env.copy()
+        pinned_cleanup_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "pinned-cleanup-shared-memory.db"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Pinned cleanup candidate",
+                "--content",
+                "Pinned memory should survive cleanup.",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=pinned_cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"pinned cleanup seed add failed: {result.stderr}"
+        )
+        pinned_cleanup_payload = parse_json_output(result.stdout)
+        pinned_cleanup_id = str(
+            pinned_cleanup_payload.get("memory", {}).get("id") or ""
+        )
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "pin", pinned_cleanup_id, "--json"],
+            capture_output=True,
+            text=True,
+            env=pinned_cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"pinned cleanup pin failed: {result.stderr}")
+        pinned_cleanup_db = sqlite3.connect(
+            pinned_cleanup_env["MY_OPENCODE_SHARED_MEMORY_PATH"]
+        )
+        pinned_cleanup_db.execute(
+            "UPDATE memories SET updated_at = ?, created_at = ? WHERE id = ?",
+            ("2000-01-01T00:00:00Z", "2000-01-01T00:00:00Z", pinned_cleanup_id),
+        )
+        pinned_cleanup_db.commit()
+        pinned_cleanup_db.close()
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "cleanup",
+                "--older-days",
+                "1",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=pinned_cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"pinned cleanup run failed: {result.stderr}")
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "recall", "--pinned-only", "--json"],
+            capture_output=True,
+            text=True,
+            env=pinned_cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"pinned cleanup recall failed: {result.stderr}")
+        pinned_cleanup_recall = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("id") == pinned_cleanup_id
+                for item in pinned_cleanup_recall.get("memories", [])
+            ),
+            "memory-lifecycle cleanup should not archive pinned memories",
+        )
+
+        compress_env = productivity_env.copy()
+        compress_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "compress-shared-memory.db"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Compress title",
+                "--content",
+                "Duplicate content",
+                "--summary",
+                "Duplicate summary",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"compress seed first add failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Compress title",
+                "--content",
+                "Duplicate content",
+                "--summary",
+                "Duplicate summary",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"compress seed second add failed: {result.stderr}"
+        )
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_LIFECYCLE_SCRIPT), "compress", "--json"],
+            capture_output=True,
+            text=True,
+            env=compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"memory-lifecycle compress failed: {result.stderr}"
+        )
+        compress_payload = parse_json_output(result.stdout)
+        expect(
+            compress_payload.get("removed", 0) >= 1,
+            "memory-lifecycle compress should archive duplicate memories",
+        )
+
+        pinned_compress_env = productivity_env.copy()
+        pinned_compress_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "pinned-compress-shared-memory.db"
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Pinned compress title",
+                "--content",
+                "Pinned duplicate content",
+                "--summary",
+                "Pinned duplicate summary",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=pinned_compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"pinned compress first add failed: {result.stderr}"
+        )
+        pinned_compress_first = parse_json_output(result.stdout)
+        pinned_compress_id = str(
+            pinned_compress_first.get("memory", {}).get("id") or ""
+        )
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "pin", pinned_compress_id, "--json"],
+            capture_output=True,
+            text=True,
+            env=pinned_compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"pinned compress pin failed: {result.stderr}")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "add",
+                "--title",
+                "Pinned compress title",
+                "--content",
+                "Pinned duplicate content",
+                "--summary",
+                "Pinned duplicate summary",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=pinned_compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"pinned compress second add failed: {result.stderr}",
+        )
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_LIFECYCLE_SCRIPT), "compress", "--json"],
+            capture_output=True,
+            text=True,
+            env=pinned_compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"pinned compress run failed: {result.stderr}")
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "recall", "--pinned-only", "--json"],
+            capture_output=True,
+            text=True,
+            env=pinned_compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0, f"pinned compress recall failed: {result.stderr}"
+        )
+        pinned_compress_recall = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("id") == pinned_compress_id
+                for item in pinned_compress_recall.get("memories", [])
+            ),
+            "memory-lifecycle compress should preserve pinned duplicates",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "find",
+                "release checklist",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory find failed: {result.stderr}")
+        memory_find_payload = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("id") == memory_id
+                for item in memory_find_payload.get("memories", [])
+            ),
+            "memory find should return added entry",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "recall", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory recall failed: {result.stderr}")
+        memory_recall_payload = parse_json_output(result.stdout)
+        expect(
+            memory_recall_payload.get("memories", [{}])[0].get("id") == memory_id,
+            "memory recall should prioritize pinned memory",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "summarize", "--json"],
+            capture_output=True,
+            text=True,
+            env=productivity_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory summarize failed: {result.stderr}")
+        memory_summary_payload = parse_json_output(result.stdout)
+        expect(
+            any(
+                "Release checklist decision" in line
+                for line in memory_summary_payload.get("lines", [])
+            ),
+            "memory summarize should include added memory title",
+        )
+
+        promotion_digest_path = tmp / "promotion-digest.json"
+        promotion_digest_path.write_text(
+            json.dumps(
+                {
+                    "timestamp": "2026-03-10T12:30:00Z",
+                    "reason": "manual",
+                    "cwd": str(REPO_ROOT),
+                    "git": {"branch": "feat/test", "status_count": 3},
+                    "plan_execution": {"status": "running", "plan_id": "plan-123"},
+                    "session_index": {"session_id": "ses-test-001"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        promotion_session_index_path = tmp / "promotion-session-index.json"
+        promotion_session_index_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "sessions": [
+                        {
+                            "session_id": "ses-test-001",
+                            "cwd": str(REPO_ROOT),
+                            "started_at": "2026-03-10T12:00:00Z",
+                            "last_event_at": "2026-03-10T12:31:00Z",
+                            "event_count": 4,
+                            "last_reason": "manual",
+                            "plan_ids": ["plan-123"],
+                            "events": [
+                                {"branch": "feat/test", "plan_status": "running"}
+                            ],
+                        }
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        promotion_workflow_path = tmp / "promotion-workflow-state.json"
+        promotion_workflow_path.write_text(
+            json.dumps(
+                {
+                    "active": {},
+                    "history": [
+                        {
+                            "run_id": "wf-run-000001",
+                            "name": "Ship flow",
+                            "path": "workflows/ship.json",
+                            "status": "failed",
+                            "execution_mode": "execute",
+                            "step_count": 3,
+                            "completed_steps": 2,
+                            "failed_step_id": "verify",
+                            "finished_at": "2026-03-10T12:32:00Z",
+                        }
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        promotion_claims_path = tmp / "promotion-claims.json"
+        promotion_claims_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "claims": {
+                        "issue-501": {
+                            "issue_id": "issue-501",
+                            "owner": "agent:orchestrator",
+                            "status": "handoff-pending",
+                            "claimed_at": "2026-03-10T12:10:00Z",
+                            "updated_at": "2026-03-10T12:33:00Z",
+                            "handoff_to": "human:alex",
+                        }
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        promotion_env = productivity_env.copy()
+        promotion_env["MY_OPENCODE_DIGEST_PATH"] = str(promotion_digest_path)
+        promotion_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(
+            promotion_session_index_path
+        )
+        promotion_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(promotion_workflow_path)
+        promotion_env["MY_OPENCODE_CLAIMS_PATH"] = str(promotion_claims_path)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "promote",
+                "--source",
+                "all",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=promotion_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory promote failed: {result.stderr}")
+        memory_promote_payload = parse_json_output(result.stdout)
+        promoted_sources = {
+            item.get("source_type")
+            for item in memory_promote_payload.get("memories", [])
+        }
+        expect(
+            promoted_sources == {"digest", "session", "workflow", "claims"},
+            "memory promote should ingest digest, session, workflow, and claims sources",
+        )
+
+        doctor_report_path = tmp / "promotion-doctor-report.json"
+        doctor_report_path.write_text(
+            json.dumps(
+                {
+                    "result": "FAIL",
+                    "checks": [
+                        {
+                            "name": "workflow",
+                            "kind": "doctor-json",
+                            "exit_code": 1,
+                            "ok": False,
+                            "stdout": "workflow failed",
+                            "stderr": "step crashed",
+                            "report_result": "FAIL",
+                            "report": {"warnings": ["workflow warning"]},
+                        }
+                    ],
+                    "warnings": ["memory: fallback search mode"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        promotion_env["MY_OPENCODE_DOCTOR_REPORT_PATH"] = str(doctor_report_path)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "promote",
+                "--source",
+                "all",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=promotion_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory doctor promote failed: {result.stderr}")
+        doctor_promote_payload = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("source_type") == "doctor"
+                for item in doctor_promote_payload.get("memories", [])
+            ),
+            "memory promote should ingest doctor findings when report is available",
+        )
+        expect(
+            any(
+                any(
+                    str(link).startswith("memory-ref:")
+                    for link in item.get("links", [])
+                )
+                for item in doctor_promote_payload.get("memories", [])
+                if item.get("source_type") in {"digest", "session"}
+            ),
+            "memory promote should attach internal relationship links to related session-linked memories",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "promote",
+                "--source",
+                "all",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=promotion_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory re-promote failed: {result.stderr}")
+
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "find", "wf-run-000001", "--json"],
+            capture_output=True,
+            text=True,
+            env=promotion_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"memory workflow find failed: {result.stderr}")
+        workflow_find_payload = parse_json_output(result.stdout)
+        expect(
+            any(
+                item.get("source_type") == "workflow"
+                for item in workflow_find_payload.get("memories", [])
+            ),
+            "memory find should support punctuation-heavy workflow ids",
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(MEMORY_SCRIPT), "recall", "--limit", "10", "--json"],
+            capture_output=True,
+            text=True,
+            env=promotion_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory recall after promote failed: {result.stderr}",
+        )
+        promoted_recall_payload = parse_json_output(result.stdout)
+        expect(
+            promoted_recall_payload.get("count") == 7,
+            "memory promote should upsert promoted records without duplicates",
+        )
 
         result = subprocess.run(
             [
@@ -13854,6 +20340,12 @@ version: 1
         doctor_env["OPENCODE_TELEMETRY_PATH"] = str(telemetry_path)
         doctor_env["MY_OPENCODE_SESSION_CONFIG_PATH"] = str(session_cfg_path)
         doctor_env["MY_OPENCODE_POLICY_PATH"] = str(policy_path)
+        doctor_env["MY_OPENCODE_SHARED_MEMORY_PATH"] = str(
+            tmp / "doctor-shared-memory.db"
+        )
+        doctor_env["OPENCODE_MODEL_ROUTING_PATH"] = str(
+            tmp / "doctor-model-routing.json"
+        )
 
         result = subprocess.run(
             [sys.executable, str(DOCTOR_SCRIPT), "run", "--json"],
@@ -13871,6 +20363,14 @@ version: 1
         expect(
             report.get("result") in {"PASS", "FAIL"},
             "doctor summary should emit structured PASS/FAIL result",
+        )
+        expect(
+            not Path(doctor_env["OPENCODE_MODEL_ROUTING_PATH"]).exists(),
+            "doctor run --json should not persist model-routing state",
+        )
+        expect(
+            isinstance(report.get("failed_count"), int),
+            "doctor summary should report failed_count as an integer",
         )
         bg_checks = [
             check for check in report.get("checks", []) if check.get("name") == "bg"
@@ -14194,6 +20694,22 @@ version: 1
             "doctor memory-lifecycle check should pass",
         )
 
+        memory_checks = [
+            check for check in report.get("checks", []) if check.get("name") == "memory"
+        ]
+        expect(bool(memory_checks), "doctor summary should include memory check")
+        expect(memory_checks[0].get("ok") is True, "doctor memory check should pass")
+
+        result = subprocess.run(
+            [sys.executable, str(DOCTOR_SCRIPT), "help"],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, "doctor help should exit successfully")
+
         hook_learning_checks = [
             check
             for check in report.get("checks", [])
@@ -14207,12 +20723,6 @@ version: 1
             hook_learning_checks[0].get("ok") is True,
             "doctor hook-learning check should pass",
         )
-
-        todo_checks = [
-            check for check in report.get("checks", []) if check.get("name") == "todo"
-        ]
-        expect(bool(todo_checks), "doctor summary should include todo check")
-        expect(todo_checks[0].get("ok") is True, "doctor todo check should pass")
 
         safe_edit_checks = [
             check

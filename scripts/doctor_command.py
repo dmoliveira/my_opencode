@@ -206,7 +206,7 @@ CHECKS = [
         "command": [
             sys.executable,
             str(script_path("model_routing_command.py")),
-            "status",
+            "doctor",
             "--json",
         ],
     },
@@ -356,6 +356,18 @@ CHECKS = [
         ],
     },
     {
+        "name": "start-work",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("start_work_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("start_work_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
         "name": "daemon",
         "kind": "doctor-json",
         "optional": True,
@@ -399,6 +411,18 @@ CHECKS = [
         "command": [
             sys.executable,
             str(script_path("memory_lifecycle_command.py")),
+            "doctor",
+            "--json",
+        ],
+    },
+    {
+        "name": "memory",
+        "kind": "doctor-json",
+        "optional": True,
+        "required_path": str(script_path("memory_command.py")),
+        "command": [
+            sys.executable,
+            str(script_path("memory_command.py")),
             "doctor",
             "--json",
         ],
@@ -556,6 +580,14 @@ def usage() -> int:
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 2
+
+
+def print_help() -> int:
+    print(
+        "usage: /doctor status | /doctor help | /doctor run [--json] | "
+        "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
+    )
+    return 0
 
 
 def _module_reason_codes(module_name: str) -> dict[str, str]:
@@ -850,7 +882,7 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] == "status":
         return command_run([])
     if argv[0] == "help":
-        return usage()
+        return print_help()
     if argv[0] == "run":
         return command_run(argv[1:])
     if argv[0] == "reason-codes":
