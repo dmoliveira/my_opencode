@@ -1,4 +1,7 @@
 {
+  "autoSlashCommand": {
+    "enabled": false
+  },
   "hooks": {
     "disabled": ["dependency-risk-guard"]
   },
