@@ -574,6 +574,7 @@ export function loadGatewayConfig(raw) {
                 ? longTurnWatchdogSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.enabled,
             warningThresholdMs: positiveInt(longTurnWatchdogSource.warningThresholdMs, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.warningThresholdMs),
+            toolCallWarningThreshold: positiveInt(longTurnWatchdogSource.toolCallWarningThreshold, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.toolCallWarningThreshold),
             reminderCooldownMs: nonNegativeInt(longTurnWatchdogSource.reminderCooldownMs, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.reminderCooldownMs),
             maxSessionStateEntries: positiveInt(longTurnWatchdogSource.maxSessionStateEntries, DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.maxSessionStateEntries),
             prefix: typeof longTurnWatchdogSource.prefix === "string" &&

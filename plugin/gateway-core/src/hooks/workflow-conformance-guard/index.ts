@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process"
-import { resolve } from "node:path"
+import { basename, resolve } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { isAllowedProtectedShellCommand } from "../protected-shell-policy.js"
@@ -54,6 +54,11 @@ const PROTECTED_GIT_MUTATION_PATTERN =
 
 function isProtectedGitMutationCommand(command: string): boolean {
   return PROTECTED_GIT_MUTATION_PATTERN.test(command)
+}
+
+function protectedBranchWorktreeHint(directory: string): string {
+  const base = basename(directory) || "repo"
+  return `For repo maintenance, run \`python3 scripts/worktree_helper_command.py maintenance --directory ${directory}\` or create a throwaway worktree directly, for example: \`git worktree add -b chore/<task> ../${base}-maint HEAD\`.`
 }
 
 // Creates workflow conformance guard for commit operations on protected branches.
@@ -116,7 +121,7 @@ export function createWorkflowConformanceGuardHook(options: {
         session_id: sessionId,
       })
       throw new Error(
-        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations.`
+        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)}`
       )
     },
   }

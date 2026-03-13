@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isAllowedProtectedShellCommand } from "../protected-shell-policy.js";
 import { effectiveToolDirectory } from "../shared/effective-tool-directory.js";
@@ -30,6 +30,10 @@ function isPrimaryWorktree(directory) {
 const PROTECTED_GIT_MUTATION_PATTERN = /(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:[^\s;&|]*\/)?git\s+(commit|merge|rebase|cherry-pick)\b/i;
 function isProtectedGitMutationCommand(command) {
     return PROTECTED_GIT_MUTATION_PATTERN.test(command);
+}
+function protectedBranchWorktreeHint(directory) {
+    const base = basename(directory) || "repo";
+    return `For repo maintenance, run \`python3 scripts/worktree_helper_command.py maintenance --directory ${directory}\` or create a throwaway worktree directly, for example: \`git worktree add -b chore/<task> ../${base}-maint HEAD\`.`;
 }
 // Creates workflow conformance guard for commit operations on protected branches.
 export function createWorkflowConformanceGuardHook(options) {
@@ -85,7 +89,7 @@ export function createWorkflowConformanceGuardHook(options) {
                 reason_code: "bash_on_protected_branch_blocked",
                 session_id: sessionId,
             });
-            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations.`);
+            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)}`);
         },
     };
 }

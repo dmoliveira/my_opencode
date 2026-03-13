@@ -281,7 +281,7 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
         { tool: "bash", sessionID: "session-workflow-bash-mutate" },
         { args: { command: "echo hi > file.txt" } }
       ),
-      /limited to inspection, validation, and exact sync commands/
+      /python3 scripts\/worktree_helper_command\.py maintenance --directory .*git worktree add -b chore\/<task> \.\.\/.*-maint HEAD/
     )
 
     await assert.rejects(
