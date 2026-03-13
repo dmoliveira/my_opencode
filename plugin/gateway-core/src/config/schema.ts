@@ -267,6 +267,10 @@ export interface TasksTodowriteDisablerConfig {
   enabled: boolean;
 }
 
+export interface AssistantMessageTimestampConfig {
+  enabled: boolean;
+}
+
 // Declares resume hint injection settings for task outputs.
 export interface TaskResumeInfoConfig {
   enabled: boolean;
@@ -610,6 +614,7 @@ export interface GatewayConfig {
   agentReservationGuard: AgentReservationGuardConfig;
   subagentQuestionBlocker: SubagentQuestionBlockerConfig;
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
+  assistantMessageTimestamp: AssistantMessageTimestampConfig;
   taskResumeInfo: TaskResumeInfoConfig;
   todoContinuationEnforcer: TodoContinuationEnforcerConfig;
   compactionTodoPreserver: CompactionTodoPreserverConfig;
@@ -704,6 +709,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "agent-reservation-guard",
       "subagent-question-blocker",
       "tasks-todowrite-disabler",
+      "assistant-message-timestamp",
       "task-resume-info",
       "todo-continuation-enforcer",
       "compaction-todo-preserver",
@@ -1024,6 +1030,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   tasksTodowriteDisabler: {
     enabled: false,
+  },
+  assistantMessageTimestamp: {
+    enabled: true,
   },
   taskResumeInfo: {
     enabled: true,

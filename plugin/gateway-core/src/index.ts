@@ -8,6 +8,7 @@ import { createAgentDiscoverabilityInjectorHook } from "./hooks/agent-discoverab
 import { createAgentDeniedToolEnforcerHook } from "./hooks/agent-denied-tool-enforcer/index.js";
 import { createAgentModelResolverHook } from "./hooks/agent-model-resolver/index.js";
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
+import { createAssistantMessageTimestampHook } from "./hooks/assistant-message-timestamp/index.js";
 import { createBranchFreshnessGuardHook } from "./hooks/branch-freshness-guard/index.js";
 import { createCommentCheckerHook } from "./hooks/comment-checker/index.js";
 import { createCompactionContextInjectorHook } from "./hooks/compaction-context-injector/index.js";
@@ -772,6 +773,11 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
       createTasksTodowriteDisablerHook({
         directory,
         enabled: cfg.tasksTodowriteDisabler.enabled,
+      }),
+    ),
+    safeHook("assistant-message-timestamp", () =>
+      createAssistantMessageTimestampHook({
+        enabled: cfg.assistantMessageTimestamp.enabled,
       }),
     ),
     safeHook("task-resume-info", () =>

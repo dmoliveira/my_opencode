@@ -74,6 +74,7 @@ export interface GlobalProcessPressureConfig {
 export interface LongTurnWatchdogConfig {
     enabled: boolean;
     warningThresholdMs: number;
+    toolCallWarningThreshold: number;
     reminderCooldownMs: number;
     maxSessionStateEntries: number;
     prefix: string;
@@ -198,6 +199,9 @@ export interface SubagentQuestionBlockerConfig {
     sessionPatterns: string[];
 }
 export interface TasksTodowriteDisablerConfig {
+    enabled: boolean;
+}
+export interface AssistantMessageTimestampConfig {
     enabled: boolean;
 }
 export interface TaskResumeInfoConfig {
@@ -460,6 +464,7 @@ export interface GatewayConfig {
     agentReservationGuard: AgentReservationGuardConfig;
     subagentQuestionBlocker: SubagentQuestionBlockerConfig;
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
+    assistantMessageTimestamp: AssistantMessageTimestampConfig;
     taskResumeInfo: TaskResumeInfoConfig;
     todoContinuationEnforcer: TodoContinuationEnforcerConfig;
     compactionTodoPreserver: CompactionTodoPreserverConfig;
