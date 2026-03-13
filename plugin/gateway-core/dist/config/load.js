@@ -321,6 +321,10 @@ export function loadGatewayConfig(raw) {
         typeof source.tasksTodowriteDisabler === "object"
         ? source.tasksTodowriteDisabler
         : {};
+    const assistantMessageTimestampSource = source.assistantMessageTimestamp &&
+        typeof source.assistantMessageTimestamp === "object"
+        ? source.assistantMessageTimestamp
+        : {};
     const taskResumeInfoSource = source.taskResumeInfo && typeof source.taskResumeInfo === "object"
         ? source.taskResumeInfo
         : {};
@@ -839,6 +843,11 @@ export function loadGatewayConfig(raw) {
             enabled: typeof tasksTodowriteSource.enabled === "boolean"
                 ? tasksTodowriteSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.tasksTodowriteDisabler.enabled,
+        },
+        assistantMessageTimestamp: {
+            enabled: typeof assistantMessageTimestampSource.enabled === "boolean"
+                ? assistantMessageTimestampSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.assistantMessageTimestamp.enabled,
         },
         taskResumeInfo: {
             enabled: typeof taskResumeInfoSource.enabled === "boolean"

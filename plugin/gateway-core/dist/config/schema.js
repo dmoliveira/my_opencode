@@ -49,6 +49,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "agent-reservation-guard",
             "subagent-question-blocker",
             "tasks-todowrite-disabler",
+            "assistant-message-timestamp",
             "task-resume-info",
             "todo-continuation-enforcer",
             "compaction-todo-preserver",
@@ -369,6 +370,9 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     tasksTodowriteDisabler: {
         enabled: false,
+    },
+    assistantMessageTimestamp: {
+        enabled: true,
     },
     taskResumeInfo: {
         enabled: true,
