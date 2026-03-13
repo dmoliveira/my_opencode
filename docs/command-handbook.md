@@ -334,7 +334,7 @@ Use these directly in OpenCode:
 /gateway doctor
 /gateway watchdog status
 /gateway watchdog doctor
-/gateway watchdog set --warning-threshold-seconds 180 --tool-call-threshold 8
+/gateway watchdog set --warning-threshold-seconds 180 --tool-call-threshold 20
 /gateway watchdog disable
 /gateway continuation report --minutes 120 --limit 10 --json
 /gateway tune memory --json
