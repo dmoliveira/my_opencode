@@ -59,6 +59,7 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
 
     const text = String(output.args.prompt);
     assert.match(text, /\[agent-context-shaper\] delegated task focus/);
+    assert.match(text, /- delegated_at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
     assert.match(text, /execute one delegated objective/i);
     assert.match(text, /prioritize: map implementation locations/);
 
@@ -68,6 +69,10 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
     );
     assert.equal(
       (String(output.args.prompt).match(/delegated task focus/g) ?? []).length,
+      1,
+    );
+    assert.equal(
+      (String(output.args.prompt).match(/- delegated_at:/g) ?? []).length,
       1,
     );
   } finally {
@@ -99,6 +104,10 @@ test("agent-context-shaper still shapes trace-only delegations", async () => {
     assert.match(
       String(output.args.prompt ?? ""),
       /\[agent-context-shaper\] delegated task focus/,
+    );
+    assert.match(
+      String(output.args.prompt ?? ""),
+      /- delegated_at: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
     );
     assert.match(String(output.args.prompt ?? ""), /\[DELEGATION TRACE/);
   } finally {

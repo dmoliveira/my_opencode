@@ -65,6 +65,45 @@ test("agent-model-resolver prepends timestamped headers for delegated task descr
   }
 })
 
+test("agent-model-resolver replaces WORKTREE CONTEXT when a delegation is reshaped", async () => {
+  const firstDirectory = mkdtempSync(join(tmpdir(), "gateway-agent-model-resolver-first-"))
+  const secondDirectory = mkdtempSync(join(tmpdir(), "gateway-agent-model-resolver-second-"))
+  try {
+    for (const directory of [firstDirectory, secondDirectory]) {
+      const specsDir = join(directory, "agent", "specs")
+      mkdirSync(specsDir, { recursive: true })
+      writeFileSync(
+        join(specsDir, "explore.json"),
+        JSON.stringify({ name: "explore", metadata: { default_category: "quick" } }),
+        "utf-8",
+      )
+    }
+
+    const initialPlugin = createPlugin(firstDirectory)
+    const reroutedPlugin = createPlugin(secondDirectory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "Scout repository patterns",
+        prompt: "Inspect code paths",
+      },
+    }
+
+    await initialPlugin["tool.execute.before"]({ tool: "task", sessionID: "session-worktree-reroute" }, output)
+    await reroutedPlugin["tool.execute.before"]({ tool: "task", sessionID: "session-worktree-reroute" }, output)
+
+    const prompt = String(output.args.prompt ?? "")
+    const description = String(output.args.description ?? "")
+    assert.equal((prompt.match(/^\[WORKTREE CONTEXT(?:\s+|\])/gm) ?? []).length, 1)
+    assert.equal((description.match(/^\[WORKTREE CONTEXT(?:\s+|\])/gm) ?? []).length, 1)
+    assert.match(prompt, new RegExp(`cwd=${secondDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
+    assert.doesNotMatch(prompt, new RegExp(`cwd=${firstDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`))
+  } finally {
+    rmSync(firstDirectory, { recursive: true, force: true })
+    rmSync(secondDirectory, { recursive: true, force: true })
+  }
+})
+
 test("agent-model-resolver infers explore delegation and category", async () => {
   const plugin = createPlugin(REPO_DIRECTORY)
   const output = {
