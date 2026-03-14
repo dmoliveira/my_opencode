@@ -338,6 +338,54 @@ test("pr-body-evidence-guard accepts make validate lint evidence from structured
   }
 })
 
+test("pr-body-evidence-guard accepts uvx ruff lint evidence from structured bash output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["validation-evidence-ledger", "pr-body-evidence-guard"],
+          disabled: ["pr-readiness-guard"],
+        },
+        validationEvidenceLedger: {
+          enabled: true,
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["lint"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prBodyEvidenceGuard: {
+          enabled: true,
+          requireSummarySection: true,
+          requireValidationSection: true,
+          requireValidationEvidence: true,
+          allowUninspectableBody: false,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-uvx-ruff" },
+      { args: { command: "uvx ruff check ." } },
+    )
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: "session-pr-body-uvx-ruff" },
+      { output: { stdout: "All checks passed!", stderr: "" } },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-pr-body-uvx-ruff" },
+      { args: { command: 'gh pr create --title "x" --body "## Summary\n- item\n## Validation\n- uvx ruff check ."' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("pr-body-evidence-guard uses LLM fallback for semantic summary and validation sections", async () => {
   const hook = createPrBodyEvidenceGuardHook({
     directory: process.cwd(),
