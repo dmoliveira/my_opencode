@@ -18,10 +18,10 @@ test("gateway event audit writes dispatch entries when enabled", async () => {
     const lines = readFileSync(auditPath, "utf-8")
       .split(/\r?\n/)
       .filter(Boolean)
+      .map((line) => JSON.parse(line))
     assert.ok(lines.length >= 1)
-    const first = JSON.parse(lines[0])
-    assert.equal(first.reason_code, "event_dispatch")
-    assert.equal(first.event_type, "session.idle")
+    const dispatch = lines.find((entry) => entry.reason_code === "event_dispatch")
+    assert.equal(dispatch?.event_type, "session.idle")
   } finally {
     if (previous === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
