@@ -19,8 +19,8 @@ from typing import Any
 UTC = getattr(datetime, "UTC", timezone.utc)
 DEFAULT_LONG_TURN_WATCHDOG = {
     "enabled": True,
-    "warningThresholdMs": 180000,
-    "toolCallWarningThreshold": 8,
+    "warningThresholdMs": 300000,
+    "toolCallWarningThreshold": 50,
     "reminderCooldownMs": 120000,
     "maxSessionStateEntries": 1024,
     "prefix": "[Turn Watchdog]:",
