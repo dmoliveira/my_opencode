@@ -1,14 +1,19 @@
 const SHELL_TOKEN = String.raw `(?:"[^"]*"|'[^']*'|[^\s;&|]+)`;
+const PYTHON_TOKEN = String.raw `python3?`;
 const GIT_SAFE_GLOBAL_FLAGS = String.raw `(?:\s+(?:--no-pager|-C\s+${SHELL_TOKEN}|--git-dir\s+${SHELL_TOKEN}|--work-tree\s+${SHELL_TOKEN}))*`;
 const GIT_SAFE_ARGS = String.raw `(?:\s+[^;&|]+)*`;
 const GIT_REQUIRED_ARGS = String.raw `(?:\s+[^;&|]+)+`;
 const SAFE_ENV_PREFIX = String.raw `(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=${SHELL_TOKEN}\s+)*)`;
 const PROTECTED_BRANCH_REF = String.raw `(?:main|master)`;
+const DOCTOR_SCRIPT_TOKEN = String.raw `(?:"[^"]*doctor_command\.py"|'[^']*doctor_command\.py'|[^\s;&|]*doctor_command\.py)`;
 function protectedPattern(commandPattern) {
     return new RegExp(String.raw `^${SAFE_ENV_PREFIX}${commandPattern}$`, "i");
 }
 function gitProtectedPattern(subcommandPattern, argsPattern = GIT_SAFE_ARGS) {
     return protectedPattern(String.raw `(?:[^\s;&|]*/)?git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}`);
+}
+function pythonProtectedPattern(scriptPattern, argsPattern = "") {
+    return protectedPattern(String.raw `${PYTHON_TOKEN}\s+${scriptPattern}${argsPattern}`);
 }
 const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     protectedPattern("pwd"),
@@ -32,6 +37,7 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     protectedPattern(String.raw `gh\s+pr\s+view(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `gh\s+pr\s+checks(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)`),
+    pythonProtectedPattern(DOCTOR_SCRIPT_TOKEN, String.raw `(?:\s+(?:status|help|run(?:\s+--json)?|reason-codes(?:\s+--json)?))?`),
     protectedPattern(String.raw `npm(?:\s+--prefix\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))`),
     protectedPattern(String.raw `pnpm(?:\s+--dir\s+[^;&|]+)?\s+(?:test|lint|build)`),
     protectedPattern(String.raw `yarn(?:\s+--cwd\s+[^;&|]+)?\s+(?:test|lint|build)`),
