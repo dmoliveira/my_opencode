@@ -524,3 +524,57 @@ test("continuation hook persists ignored completion cycles across hook instances
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("continuation hook skips idle prompt injection when assistant turn is incomplete", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-incomplete-parent",
+        objective: "keep iterating",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 0,
+        startedAt: new Date().toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test-fixture",
+    })
+
+    let promptCalls = 0
+    const hook = createContinuationHook({
+      directory,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant", time: {} },
+                  parts: [{ type: "text", text: "still working" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-incomplete-parent" },
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.iteration, 2)
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

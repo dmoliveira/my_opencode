@@ -6,7 +6,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
 import type { GatewayState } from "../../state/types.js"
 import type { GatewayHook } from "../registry.js"
-import { injectHookMessage } from "../hook-message-injector/index.js"
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { KeywordDetector } from "../keyword-detector/index.js"
 import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
@@ -431,8 +431,23 @@ export function createContinuationHook(options: {
       })
 
       if (client) {
+        const safety = await inspectHookMessageSafety({
+          session: client,
+          sessionId,
+          directory,
+        })
+        if (!safety.safe) {
+          writeGatewayEventAudit(directory, {
+            hook: "continuation",
+            stage: "skip",
+            reason_code: `idle_prompt_${safety.reason}`,
+            session_id: sessionId,
+            iteration: active.iteration,
+          })
+          return
+        }
         const mode = options.keywordDetector?.modeForSession(sessionId) ?? null
-        await injectHookMessage({
+        const injected = await injectHookMessage({
           session: client,
           sessionId,
           content: continuationPrompt(state, mode),
@@ -440,8 +455,8 @@ export function createContinuationHook(options: {
         })
         writeGatewayEventAudit(directory, {
           hook: "continuation",
-          stage: "inject",
-          reason_code: "idle_prompt_injected",
+          stage: injected ? "inject" : "skip",
+          reason_code: injected ? "idle_prompt_injected" : "idle_prompt_inject_failed",
           session_id: sessionId,
           iteration: active.iteration,
         })

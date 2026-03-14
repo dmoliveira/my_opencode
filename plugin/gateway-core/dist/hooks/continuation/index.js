@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js";
-import { injectHookMessage } from "../hook-message-injector/index.js";
+import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
 // Resolves active session id from event payload.
 function resolveSessionId(payload) {
     const direct = payload.properties?.sessionID;
@@ -354,8 +354,23 @@ export function createContinuationHook(options) {
                 iteration: active.iteration,
             });
             if (client) {
+                const safety = await inspectHookMessageSafety({
+                    session: client,
+                    sessionId,
+                    directory,
+                });
+                if (!safety.safe) {
+                    writeGatewayEventAudit(directory, {
+                        hook: "continuation",
+                        stage: "skip",
+                        reason_code: `idle_prompt_${safety.reason}`,
+                        session_id: sessionId,
+                        iteration: active.iteration,
+                    });
+                    return;
+                }
                 const mode = options.keywordDetector?.modeForSession(sessionId) ?? null;
-                await injectHookMessage({
+                const injected = await injectHookMessage({
                     session: client,
                     sessionId,
                     content: continuationPrompt(state, mode),
@@ -363,8 +378,8 @@ export function createContinuationHook(options) {
                 });
                 writeGatewayEventAudit(directory, {
                     hook: "continuation",
-                    stage: "inject",
-                    reason_code: "idle_prompt_injected",
+                    stage: injected ? "inject" : "skip",
+                    reason_code: injected ? "idle_prompt_injected" : "idle_prompt_inject_failed",
                     session_id: sessionId,
                     iteration: active.iteration,
                 });
