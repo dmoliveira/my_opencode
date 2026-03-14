@@ -47,7 +47,7 @@ def default_schema() -> dict[str, Any]:
                 "description": "Higher-reliability analysis for complex engineering work",
                 "model": "openai/gpt-5.4-codex",
                 "temperature": 0.1,
-                "reasoning": "high",
+                "reasoning": "medium",
                 "verbosity": "medium",
             },
             "critical": {

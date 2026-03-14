@@ -5,7 +5,7 @@ import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js
 const MODEL_BY_CATEGORY = {
     quick: { model: "openai/gpt-5.1-codex-mini", reasoning: "low" },
     balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-    deep: { model: "openai/gpt-5.4-codex", reasoning: "high" },
+    deep: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
     critical: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
     visual: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
     writing: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
