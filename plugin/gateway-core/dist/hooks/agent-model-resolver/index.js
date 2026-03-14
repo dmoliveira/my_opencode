@@ -131,6 +131,7 @@ function stripInjectedHeaders(original) {
         "MODEL ROUTING",
         "TOOL SURFACE",
         "SESSION FLOW",
+        "WORKTREE CONTEXT",
         "THINKING EFFORT",
     ]
         .reduce((text, header) => stripHeaderLine(text, header), original)
