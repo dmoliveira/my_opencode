@@ -27,6 +27,7 @@ DEFAULT_LONG_TURN_WATCHDOG = {
 }
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
@@ -106,6 +107,132 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
         print("quick_fixes:")
         for item in fixes[:6]:
             print(f"- {item}")
+
+    smoke_any = report.get("local_plugin_runtime_smoke")
+    smoke = smoke_any if isinstance(smoke_any, dict) else {}
+    smoke_results_any = smoke.get("results")
+    smoke_results = smoke_results_any if isinstance(smoke_results_any, list) else []
+    if smoke_results:
+        print("local_plugin_runtime_smoke:")
+        for item in smoke_results:
+            if not isinstance(item, dict):
+                continue
+            print(
+                "- mode="
+                + str(item.get("mode") or "unknown")
+                + f" audit_exists={item.get('audit_exists')}"
+                + f" bootstrap_seen={item.get('bootstrap_seen')}"
+                + f" plugin_install_failed={item.get('plugin_install_failed')}"
+                + f" plugin_resolve_failed={item.get('plugin_resolve_failed')}"
+            )
+            server_log = str(item.get("server_log") or "").strip()
+            if server_log:
+                print(f"  server_log: {server_log}")
+
+
+def run_local_plugin_runtime_smoke() -> dict[str, Any]:
+    script = SCRIPT_DIR / "gateway_local_plugin_runtime_smoke.py"
+    if not script.exists():
+        return {
+            "result": "SKIP",
+            "reason": "smoke_script_missing",
+            "path": str(script),
+            "results": [],
+        }
+    env = os.environ.copy()
+    env.setdefault("CI", "true")
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    env.setdefault("GIT_EDITOR", "true")
+    env.setdefault("GIT_PAGER", "cat")
+    env.setdefault("PAGER", "cat")
+    env.setdefault("GCM_INTERACTIVE", "never")
+    try:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--mode",
+                "both",
+                "--output",
+                "json",
+                "--run-timeout-seconds",
+                "20",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "result": "FAIL",
+            "reason": "smoke_timeout",
+            "path": str(script),
+            "results": [],
+        }
+    stdout = str(completed.stdout or "")
+    try:
+        payload = json.loads(stdout) if stdout.strip() else {}
+    except json.JSONDecodeError:
+        return {
+            "result": "FAIL",
+            "reason": "smoke_invalid_json",
+            "path": str(script),
+            "exit": completed.returncode,
+            "stdout": stdout[-4000:],
+            "stderr": str(completed.stderr or "")[-4000:],
+            "results": [],
+        }
+    results_any = payload.get("results") if isinstance(payload, dict) else []
+    results = results_any if isinstance(results_any, list) else []
+    if completed.returncode != 0:
+        return {
+            "result": "FAIL",
+            "reason": "smoke_nonzero_exit",
+            "path": str(script),
+            "exit": completed.returncode,
+            "stdout": stdout[-4000:],
+            "stderr": str(completed.stderr or "")[-4000:],
+            "results": results,
+        }
+    if not results:
+        return {
+            "result": "FAIL",
+            "reason": "smoke_empty_results",
+            "path": str(script),
+            "exit": completed.returncode,
+            "stdout": stdout[-4000:],
+            "stderr": str(completed.stderr or "")[-4000:],
+            "results": [],
+        }
+    failures = 0
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        item_result = str(item.get("result") or "").strip().upper()
+        run_exit = int(item.get("run_exit") or 0)
+        audit_exists = bool(item.get("audit_exists"))
+        bootstrap_seen = bool(item.get("bootstrap_seen"))
+        if (
+            item_result != "PASS"
+            or run_exit != 0
+            or not audit_exists
+            or not bootstrap_seen
+            or item.get("plugin_install_failed")
+            or item.get("plugin_resolve_failed")
+        ):
+            failures += 1
+    return {
+        "result": "PASS" if failures == 0 else "FAIL",
+        "reason": "local_plugin_runtime_loader_ok"
+        if failures == 0
+        else "local_plugin_runtime_loader_failed",
+        "path": str(script),
+        "exit": completed.returncode,
+        "results": results,
+    }
 
 
 def print_gateway_recover_human(payload: dict[str, Any]) -> None:
@@ -1798,6 +1925,15 @@ def command_doctor(as_json: bool) -> int:
                 + ", ".join(missing)
             )
 
+    local_plugin_runtime_smoke = run_local_plugin_runtime_smoke()
+    if local_plugin_runtime_smoke.get("result") == "FAIL":
+        problems.append(
+            "local gateway plugin runtime smoke failed; OpenCode could not reliably load the repo-local gateway plugin"
+        )
+        warnings.append(
+            "repo-local patched gateway runtime cannot be validated live until the plugin loader accepts local file/tarball specs"
+        )
+
     report = {
         "result": "PASS" if not problems else "FAIL",
         "status": status,
@@ -1810,9 +1946,11 @@ def command_doctor(as_json: bool) -> int:
             "install bun if file plugins must auto-install",
             "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
             "run /autopilot report to inspect blockers and stale runtime status",
+            "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode both --output json",
         ],
         "remediation_commands": remediation_commands,
         "manual_emergency_steps": manual_emergency_steps,
+        "local_plugin_runtime_smoke": local_plugin_runtime_smoke,
     }
     if as_json:
         emit(report, as_json=True)

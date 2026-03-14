@@ -74,6 +74,9 @@ def _forward_import_graph(script_names: list[str]) -> dict[str, set[str]]:
     names = set(script_names)
     for name in script_names:
         source = (SCRIPTS_DIR / name).read_text(encoding="utf-8", errors="ignore")
+        for match in re.findall(r"([A-Za-z0-9_\-]+\.py)", source):
+            if match in names and match != name:
+                graph[name].add(match)
         try:
             tree = ast.parse(source)
         except SyntaxError:

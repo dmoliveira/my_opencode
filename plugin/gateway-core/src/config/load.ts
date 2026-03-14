@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js";
 
@@ -52,35 +53,70 @@ function resolveGatewayConfigSidecarPath(directory: string): string {
   if (existsSync(localPath)) {
     return localPath;
   }
-  return join(
-    homedir(),
+  const homeDir = String(process.env.HOME ?? "").trim() || homedir();
+  const homePath = join(
+    homeDir,
     ".config",
     "opencode",
     "my_opencode",
     "gateway-core.config.json",
   );
+  if (existsSync(homePath)) {
+    return homePath;
+  }
+  return resolveBundledGatewayConfigPath();
+}
+
+function resolveBundledGatewayConfigPath(): string {
+  const modulePath = fileURLToPath(import.meta.url);
+  const packageRoot = resolve(dirname(modulePath), "..", "..");
+  return join(packageRoot, "config", "default-gateway-core.config.json");
+}
+
+export interface GatewayConfigSourceMeta {
+  sidecarPath: string;
+  sidecarExists: boolean;
+  sidecarLoaded: boolean;
+  sidecarError?: string;
+}
+
+export function loadGatewayConfigSourceWithMeta(
+  directory: string,
+  source: unknown,
+): { source: Record<string, unknown>; meta: GatewayConfigSourceMeta } {
+  const sidecarPath = resolveGatewayConfigSidecarPath(directory);
+  const meta: GatewayConfigSourceMeta = {
+    sidecarPath,
+    sidecarExists: existsSync(sidecarPath),
+    sidecarLoaded: false,
+  };
+  let sidecar: Record<string, unknown> = {};
+  try {
+    if (meta.sidecarExists) {
+      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown;
+      if (isRecord(parsed)) {
+        sidecar = parsed;
+        meta.sidecarLoaded = true;
+      } else {
+        meta.sidecarError = "sidecar_not_object";
+      }
+    }
+  } catch (error) {
+    meta.sidecarError =
+      error instanceof Error ? error.message : String(error ?? "unknown_error");
+    sidecar = {};
+  }
+  if (!isRecord(source)) {
+    return { source: sidecar, meta };
+  }
+  return { source: deepMergeRecords(sidecar, source), meta };
 }
 
 export function loadGatewayConfigSource(
   directory: string,
   source: unknown,
 ): Record<string, unknown> {
-  const sidecarPath = resolveGatewayConfigSidecarPath(directory);
-  let sidecar: Record<string, unknown> = {};
-  try {
-    if (existsSync(sidecarPath)) {
-      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown;
-      if (isRecord(parsed)) {
-        sidecar = parsed;
-      }
-    }
-  } catch {
-    sidecar = {};
-  }
-  if (!isRecord(source)) {
-    return sidecar;
-  }
-  return deepMergeRecords(source, sidecar);
+  return loadGatewayConfigSourceWithMeta(directory, source).source;
 }
 
 function parseAgentPolicyOverrides(

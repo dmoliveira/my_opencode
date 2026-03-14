@@ -1,4 +1,4 @@
-import { loadGatewayConfig, loadGatewayConfigSource } from "./config/load.js";
+import { loadGatewayConfig, loadGatewayConfigSourceWithMeta, } from "./config/load.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
@@ -150,7 +150,8 @@ function configuredHooks(ctx) {
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
         ? ctx.directory
         : process.cwd();
-    const cfg = loadGatewayConfig(loadGatewayConfigSource(directory, ctx.config));
+    const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config);
+    const cfg = loadGatewayConfig(loadedConfig.source);
     if (isLlmDecisionChildProcess()) {
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
@@ -159,6 +160,37 @@ function configuredHooks(ctx) {
             child_mode: "llm_decision",
         });
         return [];
+    }
+    writeGatewayEventAudit(directory, {
+        hook: "gateway-core",
+        stage: "state",
+        reason_code: "gateway_runtime_bootstrap",
+        sidecar_path: loadedConfig.meta.sidecarPath,
+        sidecar_exists: loadedConfig.meta.sidecarExists,
+        sidecar_loaded: loadedConfig.meta.sidecarLoaded,
+        sidecar_error: loadedConfig.meta.sidecarError,
+        session_recovery_enabled: cfg.sessionRecovery.enabled,
+        session_recovery_auto_resume: cfg.sessionRecovery.autoResume,
+        task_resume_info_enabled: cfg.taskResumeInfo.enabled,
+        todo_continuation_enforcer_enabled: cfg.todoContinuationEnforcer.enabled,
+        llm_decision_enabled: cfg.llmDecisionRuntime.enabled,
+        llm_decision_mode: cfg.llmDecisionRuntime.mode,
+        llm_decision_hook_modes: {
+            taskResumeInfo: cfg.llmDecisionRuntime.hookModes[GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.taskResumeInfo] ?? cfg.llmDecisionRuntime.mode,
+            todoContinuationEnforcer: cfg.llmDecisionRuntime.hookModes[GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.todoContinuationEnforcer] ?? cfg.llmDecisionRuntime.mode,
+        },
+    });
+    if (cfg.todoContinuationEnforcer.enabled &&
+        (!cfg.llmDecisionRuntime.enabled || cfg.llmDecisionRuntime.mode === "disabled")) {
+        writeGatewayEventAudit(directory, {
+            hook: "gateway-core",
+            stage: "skip",
+            reason_code: "continuation_llm_runtime_inactive",
+            sidecar_path: loadedConfig.meta.sidecarPath,
+            sidecar_exists: loadedConfig.meta.sidecarExists,
+            sidecar_loaded: loadedConfig.meta.sidecarLoaded,
+            sidecar_error: loadedConfig.meta.sidecarError,
+        });
     }
     const llmDecisionRuntimeForHook = (hookId) => (ctx.createLlmDecisionRuntime ?? createLlmDecisionRuntime)({
         directory,
