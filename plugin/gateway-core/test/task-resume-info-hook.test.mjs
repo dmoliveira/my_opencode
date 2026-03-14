@@ -226,7 +226,7 @@ test("task-resume-info appends queued LLM fallback notice to tool output", async
         enabled: true,
         mode: "assist",
         command: "opencode",
-        model: "github-copilot/gpt-4o",
+        model: "github-copilot/gpt-5-mini",
         timeoutMs: 1000,
         failureCooldownMs: 120000,
         maxPromptChars: 200,

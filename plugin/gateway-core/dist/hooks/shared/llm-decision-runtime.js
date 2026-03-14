@@ -261,7 +261,7 @@ export function createLlmDecisionRuntime(options) {
         mode: options.config.mode,
         hookModes: options.config.hookModes ?? {},
         command: String(options.config.command || "opencode").trim() || "opencode",
-        model: String(options.config.model || "github-copilot/gpt-4o").trim() || "github-copilot/gpt-4o",
+        model: String(options.config.model || "github-copilot/gpt-5-mini").trim() || "github-copilot/gpt-5-mini",
         timeoutMs: safePositiveInt(options.config.timeoutMs, 4000),
         failureCooldownMs: safePositiveInt(options.config.failureCooldownMs, 120000),
         maxPromptChars: safePositiveInt(options.config.maxPromptChars, 1200),

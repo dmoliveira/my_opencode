@@ -276,7 +276,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         mode: "disabled",
         hookModes: {},
         command: "opencode",
-        model: "github-copilot/gpt-4o",
+        model: "github-copilot/gpt-5-mini",
         timeoutMs: 4000,
         failureCooldownMs: 120000,
         maxPromptChars: 1200,

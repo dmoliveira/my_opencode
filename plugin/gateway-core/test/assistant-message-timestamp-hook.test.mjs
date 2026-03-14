@@ -76,7 +76,7 @@ test("assistant-message-timestamp prepends queued LLM fallback notice once on se
       enabled: true,
       mode: "assist",
       command: "opencode",
-      model: "github-copilot/gpt-4o",
+      model: "github-copilot/gpt-5-mini",
       timeoutMs: 1000,
       failureCooldownMs: 120000,
       maxPromptChars: 200,

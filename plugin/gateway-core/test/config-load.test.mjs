@@ -102,7 +102,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.llmDecisionRuntime.enabled, false)
   assert.equal(config.llmDecisionRuntime.mode, "disabled")
   assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
-  assert.equal(config.llmDecisionRuntime.model, "github-copilot/gpt-4o")
+  assert.equal(config.llmDecisionRuntime.model, "github-copilot/gpt-5-mini")
   assert.equal(config.llmDecisionRuntime.timeoutMs, 4000)
   assert.equal(config.llmDecisionRuntime.failureCooldownMs, 120000)
   assert.equal(config.llmDecisionRuntime.enableCache, true)
