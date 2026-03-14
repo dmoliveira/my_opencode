@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import GatewayCorePlugin from "../dist/index.js";
+import { createLlmDecisionRuntime } from "../dist/hooks/shared/llm-decision-runtime.js";
 import { createTaskResumeInfoHook } from "../dist/hooks/task-resume-info/index.js";
 
 function createPlugin(directory, decisionRuntime) {
@@ -212,6 +213,50 @@ test("task-resume-info uses LLM fallback for ambiguous verification guidance", a
     } else {
       process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
     }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("task-resume-info appends queued LLM fallback notice to tool output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-task-resume-info-"));
+  try {
+    const runtime = createLlmDecisionRuntime({
+      directory,
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "github-copilot/gpt-4o",
+        timeoutMs: 1000,
+        failureCooldownMs: 120000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: false,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      runner: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+    await runtime.decide({
+      hookId: "task-resume-info",
+      sessionId: "session-task-notice",
+      templateId: "task-resume-info-v1",
+      instruction: "Should continuation guidance be added?",
+      context: "Ambiguous task output.",
+      allowedChars: ["C", "N"],
+    });
+    const hook = createTaskResumeInfoHook({ enabled: true, decisionRuntime: runtime });
+    const output = { output: "No additional semantic hints were added here." };
+    await hook.event("tool.execute.after", {
+      input: { tool: "task", sessionID: "session-task-notice" },
+      output,
+      directory,
+    });
+    assert.match(String(output.output), /^\[llm-decision-runtime\] LLM helper unavailable;/);
+    assert.match(String(output.output), /No additional semantic hints were added here\./);
+  } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });

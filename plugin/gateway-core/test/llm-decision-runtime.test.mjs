@@ -2,8 +2,10 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  consumeLlmDecisionFallbackNotice,
   buildSingleCharDecisionPrompt,
   createLlmDecisionRuntime,
+  peekLlmDecisionFallbackNotice,
   parseSingleCharDecision,
   resolveLlmDecisionRuntimeConfigForHook,
   shouldAuditDecisionDisagreement,
@@ -480,5 +482,8 @@ test("llm decision runtime fails open with cooldown after provider error", async
   const second = await runtime.decide(request)
   assert.equal(first.skippedReason, "runtime_error")
   assert.equal(second.skippedReason, "runtime_cooldown")
+  assert.match(peekLlmDecisionFallbackNotice(process.cwd(), "session-cooldown"), /LLM helper unavailable/)
+  assert.match(consumeLlmDecisionFallbackNotice(process.cwd(), "session-cooldown"), /continuing without runtime decisions/)
+  assert.equal(peekLlmDecisionFallbackNotice(process.cwd(), "session-cooldown"), "")
   assert.equal(calls, 1)
 })

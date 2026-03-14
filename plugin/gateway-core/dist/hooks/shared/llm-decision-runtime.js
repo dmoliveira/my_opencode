@@ -11,6 +11,63 @@ export function resolveLlmDecisionRuntimeConfigForHook(config, hookId) {
     };
 }
 const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD";
+const llmDecisionFallbackNoticeBySession = new Map();
+function llmDecisionNoticeKey(directory, sessionId) {
+    return `${directory}\u0000${sessionId}`;
+}
+function formatCooldownWindow(cooldownMs) {
+    if (cooldownMs >= 60000) {
+        const minutes = Math.max(1, Math.round(cooldownMs / 60000));
+        return `about ${minutes} minute${minutes === 1 ? "" : "s"}`;
+    }
+    const seconds = Math.max(1, Math.round(cooldownMs / 1000));
+    return `about ${seconds} second${seconds === 1 ? "" : "s"}`;
+}
+export function buildLlmDecisionFallbackNotice(failureCooldownMs) {
+    return [
+        "[llm-decision-runtime] LLM helper unavailable; continuing without runtime decisions.",
+        `Automatic retries are paused for ${formatCooldownWindow(failureCooldownMs)}.`,
+        "Check network/provider/account access if this keeps happening.",
+    ].join(" ");
+}
+export function peekLlmDecisionFallbackNotice(directory, sessionId) {
+    const normalizedDirectory = String(directory ?? "").trim();
+    const normalizedSessionId = String(sessionId ?? "").trim();
+    if (!normalizedDirectory || !normalizedSessionId) {
+        return "";
+    }
+    return llmDecisionFallbackNoticeBySession.get(llmDecisionNoticeKey(normalizedDirectory, normalizedSessionId)) ?? "";
+}
+export function consumeLlmDecisionFallbackNotice(directory, sessionId) {
+    const normalizedDirectory = String(directory ?? "").trim();
+    const normalizedSessionId = String(sessionId ?? "").trim();
+    if (!normalizedDirectory || !normalizedSessionId) {
+        return "";
+    }
+    const key = llmDecisionNoticeKey(normalizedDirectory, normalizedSessionId);
+    const notice = llmDecisionFallbackNoticeBySession.get(key) ?? "";
+    if (notice) {
+        llmDecisionFallbackNoticeBySession.delete(key);
+    }
+    return notice;
+}
+function setLlmDecisionFallbackNotice(directory, sessionId, notice) {
+    const normalizedDirectory = String(directory ?? "").trim();
+    const normalizedSessionId = String(sessionId ?? "").trim();
+    const normalizedNotice = String(notice ?? "").trim();
+    if (!normalizedDirectory || !normalizedSessionId || !normalizedNotice) {
+        return;
+    }
+    llmDecisionFallbackNoticeBySession.set(llmDecisionNoticeKey(normalizedDirectory, normalizedSessionId), normalizedNotice);
+}
+function clearLlmDecisionFallbackNotice(directory, sessionId) {
+    const normalizedDirectory = String(directory ?? "").trim();
+    const normalizedSessionId = String(sessionId ?? "").trim();
+    if (!normalizedDirectory || !normalizedSessionId) {
+        return;
+    }
+    llmDecisionFallbackNoticeBySession.delete(llmDecisionNoticeKey(normalizedDirectory, normalizedSessionId));
+}
 function safePositiveInt(value, fallback) {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
@@ -331,6 +388,7 @@ export function createLlmDecisionRuntime(options) {
                 const meaning = resolveDecisionMeaning(char, request.decisionMeaning);
                 const durationMs = Date.now() - start;
                 cooldownUntil = 0;
+                clearLlmDecisionFallbackNotice(options.directory, request.sessionId);
                 writeGatewayEventAudit(options.directory, {
                     hook: request.hookId,
                     stage: "state",
@@ -371,6 +429,7 @@ export function createLlmDecisionRuntime(options) {
                 const durationMs = Date.now() - start;
                 const message = error instanceof Error ? error.message : String(error);
                 cooldownUntil = Date.now() + config.failureCooldownMs;
+                setLlmDecisionFallbackNotice(options.directory, request.sessionId, buildLlmDecisionFallbackNotice(config.failureCooldownMs));
                 writeGatewayEventAudit(options.directory, {
                     hook: request.hookId,
                     stage: "skip",

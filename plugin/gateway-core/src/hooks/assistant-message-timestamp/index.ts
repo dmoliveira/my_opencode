@@ -1,9 +1,18 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import type { GatewayHook } from "../registry.js";
+import {
+  consumeLlmDecisionFallbackNotice,
+  peekLlmDecisionFallbackNotice,
+} from "../shared/llm-decision-runtime.js";
 
 interface SessionIdlePayload {
   output?: { output?: unknown };
   directory?: string;
+  properties?: {
+    sessionID?: string;
+    sessionId?: string;
+    info?: { id?: string };
+  };
 }
 
 interface ChatMessagePart {
@@ -32,6 +41,8 @@ interface TextCompletePayload {
 
 interface AssistantEventProperties {
   role?: string;
+  sessionID?: string;
+  sessionId?: string;
   text?: string;
   content?: string;
   delta?: string;
@@ -40,7 +51,7 @@ interface AssistantEventProperties {
   messageId?: string;
   partID?: string;
   partId?: string;
-  info?: { role?: string; id?: string };
+  info?: { role?: string; id?: string; sessionID?: string; sessionId?: string };
   part?: (ChatMessagePart & { messageID?: string; messageId?: string; id?: string });
   parts?: ChatMessagePart[];
   messageParts?: ChatMessagePart[];
@@ -82,30 +93,64 @@ function prependTimestampToText(text: string, timestamp: string): string {
   return `${timestamp}\n${trimmed}`;
 }
 
+function prependNoticeToText(text: string, notice: string): string {
+  const trimmed = text.trim();
+  const normalizedNotice = notice.trim();
+  if (!trimmed || !normalizedNotice || trimmed.includes(normalizedNotice)) {
+    return text;
+  }
+  if (trimmed.startsWith(TIMESTAMP_PREFIX_LABEL)) {
+    const newlineIndex = trimmed.indexOf("\n");
+    if (newlineIndex >= 0) {
+      const header = trimmed.slice(0, newlineIndex);
+      const remainder = trimmed.slice(newlineIndex + 1).trimStart();
+      return `${header}\n${normalizedNotice}\n${remainder}`;
+    }
+    return `${trimmed}\n${normalizedNotice}`;
+  }
+  return `${normalizedNotice}\n${trimmed}`;
+}
+
+function decorateAssistantText(
+  text: string,
+  timestamp: string,
+  notice: string,
+): { text: string; changed: boolean; noticeApplied: boolean } {
+  const timestamped = prependTimestampToText(text, timestamp);
+  const next = notice ? prependNoticeToText(timestamped, notice) : timestamped;
+  return {
+    text: next,
+    changed: next !== text,
+    noticeApplied: Boolean(notice && next.includes(notice) && !String(text).includes(notice)),
+  };
+}
+
 function prependTimestampToParts(
   parts: ChatMessagePart[] | undefined,
   timestamp: string,
-): boolean {
+  notice: string,
+): { changed: boolean; noticeApplied: boolean } {
   if (!Array.isArray(parts) || parts.length === 0) {
-    return false;
+    return { changed: false, noticeApplied: false };
   }
   const textPart = parts.find(
     (part) => part?.type === "text" && typeof part.text === "string",
   );
   if (!textPart) {
-    return false;
+    return { changed: false, noticeApplied: false };
   }
-  const next = prependTimestampToText(textPart.text ?? "", timestamp);
-  if (next === textPart.text) {
-    return false;
+  const result = decorateAssistantText(textPart.text ?? "", timestamp, notice);
+  if (!result.changed) {
+    return { changed: false, noticeApplied: false };
   }
-  textPart.text = next;
-  return true;
+  textPart.text = result.text;
+  return { changed: true, noticeApplied: result.noticeApplied };
 }
 
 function prependTimestampToLatestAssistantMessage(
   messages: ChatTransformMessage[] | undefined,
   timestamp: string,
+  notice: string,
 ): boolean {
   if (!Array.isArray(messages) || messages.length === 0) {
     return false;
@@ -116,10 +161,10 @@ function prependTimestampToLatestAssistantMessage(
       continue;
     }
     const parts = Array.isArray(message.parts) ? message.parts : [];
-    if (prependTimestampToParts(parts, timestamp)) {
+    if (prependTimestampToParts(parts, timestamp, notice).changed) {
       return true;
     }
-    parts.unshift({ type: "text", text: timestamp });
+    parts.unshift({ type: "text", text: notice ? `${timestamp}\n${notice}` : timestamp });
     message.parts = parts;
     return true;
   }
@@ -145,40 +190,56 @@ function resolvePartId(properties: AssistantEventProperties | undefined): string
   return String(properties?.partID ?? properties?.partId ?? properties?.part?.id ?? "").trim();
 }
 
+function resolveSessionId(properties: AssistantEventProperties | undefined): string {
+  return String(
+    properties?.info?.sessionID ??
+      properties?.info?.sessionId ??
+      properties?.sessionID ??
+      properties?.sessionId ??
+      "",
+  ).trim();
+}
+
 function prependTimestampToAssistantLifecyclePayload(
   properties: AssistantEventProperties | undefined,
   timestamp: string,
-): boolean {
+  notice: string,
+): { changed: boolean; noticeApplied: boolean } {
   if (!properties || assistantRole(properties) !== "assistant") {
-    return false;
+    return { changed: false, noticeApplied: false };
   }
-  if (prependTimestampToParts(properties.parts, timestamp)) {
-    return true;
+  const topLevelParts = prependTimestampToParts(properties.parts, timestamp, notice);
+  if (topLevelParts.changed) {
+    return topLevelParts;
   }
-  if (prependTimestampToParts(properties.messageParts, timestamp)) {
-    return true;
+  const messageParts = prependTimestampToParts(properties.messageParts, timestamp, notice);
+  if (messageParts.changed) {
+    return messageParts;
   }
   if (
     properties.message &&
     typeof properties.message === "object" &&
-    prependTimestampToParts(properties.message.parts, timestamp)
+    Array.isArray(properties.message.parts)
   ) {
-    return true;
+    const nestedParts = prependTimestampToParts(properties.message.parts, timestamp, notice);
+    if (nestedParts.changed) {
+      return nestedParts;
+    }
   }
   if (properties.part?.type === "text" && typeof properties.part.text === "string") {
-    const next = prependTimestampToText(properties.part.text, timestamp);
-    if (next !== properties.part.text) {
-      properties.part.text = next;
-      return true;
+    const result = decorateAssistantText(properties.part.text, timestamp, notice);
+    if (result.changed) {
+      properties.part.text = result.text;
+      return { changed: true, noticeApplied: result.noticeApplied };
     }
   }
   if (properties.message && typeof properties.message === "object") {
     const messageText = properties.message.text;
     if (typeof messageText === "string") {
-      const next = prependTimestampToText(messageText, timestamp);
-      if (next !== messageText) {
-        properties.message.text = next;
-        return true;
+      const result = decorateAssistantText(messageText, timestamp, notice);
+      if (result.changed) {
+        properties.message.text = result.text;
+        return { changed: true, noticeApplied: result.noticeApplied };
       }
     }
   }
@@ -187,13 +248,13 @@ function prependTimestampToAssistantLifecyclePayload(
     if (typeof value !== "string") {
       continue;
     }
-    const next = prependTimestampToText(value, timestamp);
-    if (next !== value) {
-      properties[key] = next;
-      return true;
+    const result = decorateAssistantText(value, timestamp, notice);
+    if (result.changed) {
+      properties[key] = result.text;
+      return { changed: true, noticeApplied: result.noticeApplied };
     }
   }
-  return false;
+  return { changed: false, noticeApplied: false };
 }
 
 function writeDebugAudit(
@@ -269,7 +330,7 @@ export function createAssistantMessageTimestampHook(options: {
       const timestamp = formatAssistantMessageTimestamp(now());
       if (type === "experimental.chat.messages.transform") {
         const eventPayload = (payload ?? {}) as ChatMessagesTransformPayload;
-        prependTimestampToLatestAssistantMessage(eventPayload.output?.messages, timestamp);
+        prependTimestampToLatestAssistantMessage(eventPayload.output?.messages, timestamp, "");
         return;
       }
       if (type === "experimental.text.complete") {
@@ -283,12 +344,22 @@ export function createAssistantMessageTimestampHook(options: {
         const eventPayload = (payload ?? {}) as AssistantLifecyclePayload;
         const properties = eventPayload.properties;
         let applied = false;
+        const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+          ? eventPayload.directory
+          : "";
+        const sessionId = resolveSessionId(properties);
+        const notice =
+          directory && sessionId ? peekLlmDecisionFallbackNotice(directory, sessionId) : "";
         if (type === "message.updated") {
           const messageId = resolveMessageId(properties);
           if (assistantRole(properties) === "assistant" && messageId) {
             assistantMessageIds.add(messageId);
           }
-          applied = prependTimestampToAssistantLifecyclePayload(properties, timestamp);
+          const result = prependTimestampToAssistantLifecyclePayload(properties, timestamp, notice);
+          applied = result.changed;
+          if (result.noticeApplied) {
+            consumeLlmDecisionFallbackNotice(directory, sessionId);
+          }
         } else if (type === "message.part.updated") {
           const messageId = resolveMessageId(properties);
           const partId = resolvePartId(properties);
@@ -299,12 +370,15 @@ export function createAssistantMessageTimestampHook(options: {
             typeof properties.part.text === "string" &&
             !stampedPartIds.has(partId || messageId)
           ) {
-            const next = prependTimestampToText(properties.part.text, timestamp);
-            if (next !== properties.part.text) {
-              properties.part.text = next;
+            const result = decorateAssistantText(properties.part.text, timestamp, notice);
+            if (result.changed) {
+              properties.part.text = result.text;
               stampedPartIds.add(partId || messageId);
               stampedMessageIds.add(messageId);
               applied = true;
+              if (result.noticeApplied) {
+                consumeLlmDecisionFallbackNotice(directory, sessionId);
+              }
             }
           }
         } else if (type === "message.part.delta") {
@@ -318,12 +392,15 @@ export function createAssistantMessageTimestampHook(options: {
             typeof deltaText === "string" &&
             !stampedPartIds.has(stampKey)
           ) {
-            const next = prependTimestampToText(deltaText, timestamp);
-            if (next !== deltaText && properties) {
-              properties.delta = next;
+            const result = decorateAssistantText(deltaText, timestamp, notice);
+            if (result.changed && properties) {
+              properties.delta = result.text;
               stampedPartIds.add(stampKey);
               stampedMessageIds.add(messageId);
               applied = true;
+              if (result.noticeApplied) {
+                consumeLlmDecisionFallbackNotice(directory, sessionId);
+              }
             }
           }
         }
@@ -337,10 +414,23 @@ export function createAssistantMessageTimestampHook(options: {
       if (typeof eventPayload.output?.output !== "string") {
         return;
       }
-      eventPayload.output.output = prependTimestampToText(
-        eventPayload.output.output,
-        timestamp,
-      );
+      const directory =
+        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+          ? eventPayload.directory
+          : "";
+      const sessionId = String(
+        eventPayload.properties?.sessionID ??
+          eventPayload.properties?.sessionId ??
+          eventPayload.properties?.info?.id ??
+          "",
+      ).trim();
+      const notice =
+        directory && sessionId ? peekLlmDecisionFallbackNotice(directory, sessionId) : "";
+      const result = decorateAssistantText(eventPayload.output.output, timestamp, notice);
+      eventPayload.output.output = result.text;
+      if (result.noticeApplied) {
+        consumeLlmDecisionFallbackNotice(directory, sessionId);
+      }
     },
   };
 }

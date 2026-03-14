@@ -63,6 +63,9 @@ interface RuntimeOptions {
     config: LlmDecisionRuntimeConfig;
     runner?: (args: string[], timeoutMs: number, cwd: string) => Promise<RunnerResult>;
 }
+export declare function buildLlmDecisionFallbackNotice(failureCooldownMs: number): string;
+export declare function peekLlmDecisionFallbackNotice(directory: string, sessionId: string): string;
+export declare function consumeLlmDecisionFallbackNotice(directory: string, sessionId: string): string;
 export declare function truncateDecisionText(text: string, maxChars: number): string;
 export declare function buildCompactDecisionCacheKey(options: {
     prefix: string;

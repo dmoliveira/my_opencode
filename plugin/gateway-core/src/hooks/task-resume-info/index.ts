@@ -3,6 +3,7 @@ import type { GatewayHook } from "../registry.js";
 import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
 import {
   buildCompactDecisionCacheKey,
+  consumeLlmDecisionFallbackNotice,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js";
 
@@ -201,6 +202,10 @@ export function createTaskResumeInfoHook(options: {
       }
       if (resumeTargetInfo.trusted && resumeTarget && !next.includes(VERIFICATION_HEADER)) {
         next += `\n\n${buildVerificationHint(resumeTarget)}`;
+      }
+      const fallbackNotice = sessionId ? consumeLlmDecisionFallbackNotice(directory, sessionId) : ""
+      if (fallbackNotice && !next.includes(fallbackNotice)) {
+        next = `${fallbackNotice}\n\n${next}`
       }
       output.output = next;
     },
