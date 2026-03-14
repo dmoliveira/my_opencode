@@ -148,7 +148,7 @@ test("agent-model-resolver preserves explicit category and injects tool surface"
   await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-oracle" }, output)
 
   assert.equal(output.args.category, "critical")
-  assert.match(output.args.prompt, /reasoning=xhigh/)
+  assert.match(output.args.prompt, /reasoning=medium/)
   assert.match(output.args.prompt, /allowed=/)
   assert.match(output.args.prompt, /denied=/)
 })
