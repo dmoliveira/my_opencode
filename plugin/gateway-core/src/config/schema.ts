@@ -194,6 +194,7 @@ export interface LlmDecisionRuntimeConfig {
   command: string;
   model: string;
   timeoutMs: number;
+  failureCooldownMs: number;
   maxPromptChars: number;
   maxContextChars: number;
   enableCache: boolean;
@@ -936,8 +937,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     mode: "disabled",
     hookModes: {},
     command: "opencode",
-    model: "openai/gpt-5.1-codex-mini",
-    timeoutMs: 30000,
+    model: "github-copilot/gpt-4o",
+    timeoutMs: 4000,
+    failureCooldownMs: 120000,
     maxPromptChars: 1200,
     maxContextChars: 2400,
     enableCache: true,

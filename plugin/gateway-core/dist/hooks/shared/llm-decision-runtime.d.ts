@@ -6,6 +6,7 @@ export interface LlmDecisionRuntimeConfig {
     command: string;
     model: string;
     timeoutMs: number;
+    failureCooldownMs: number;
     maxPromptChars: number;
     maxContextChars: number;
     enableCache: boolean;

@@ -52,8 +52,9 @@ test("resolveLlmDecisionRuntimeConfigForHook applies per-hook mode overrides", (
       mode: "shadow",
       hookModes: { "auto-slash-command": "assist" },
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: true,
@@ -72,8 +73,9 @@ test("llm decision runtime accepts valid JSON text output", async () => {
       enabled: true,
       mode: "assist",
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: true,
@@ -106,8 +108,9 @@ test("llm decision runtime rejects invalid multi-character output", async () => 
       enabled: true,
       mode: "shadow",
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: false,
@@ -142,8 +145,9 @@ test("llm decision runtime skips nested helper child processes", async () => {
         enabled: true,
         mode: "assist",
         command: "opencode",
-        model: "openai/gpt-5.1-codex-mini",
+        model: "github-copilot/gpt-4o",
         timeoutMs: 1000,
+        failureCooldownMs: 10000,
         maxPromptChars: 200,
         maxContextChars: 200,
         enableCache: false,
@@ -183,8 +187,9 @@ test("llm decision runtime rejects refusal-style text output", async () => {
       mode: "assist",
       hookModes: {},
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: false,
@@ -254,8 +259,9 @@ test("llm decision runtime rejects wrapped xml-like output", async () => {
       mode: "assist",
       hookModes: {},
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: false,
@@ -287,8 +293,9 @@ test("llm decision runtime accepts single-char output wrapped in invisible unico
       mode: "assist",
       hookModes: {},
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: false,
@@ -335,8 +342,9 @@ test("llm decision runtime rejects whitespace-padded explanation output", async 
       mode: "assist",
       hookModes: {},
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: false,
@@ -368,8 +376,9 @@ test("llm decision runtime caches accepted decisions", async () => {
       enabled: true,
       mode: "assist",
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: true,
@@ -408,8 +417,9 @@ test("llm decision runtime prunes cache to max entries", async () => {
       enabled: true,
       mode: "assist",
       command: "opencode",
-      model: "openai/gpt-5.1-codex-mini",
+      model: "github-copilot/gpt-4o",
       timeoutMs: 1000,
+      failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,
       enableCache: true,
@@ -434,4 +444,41 @@ test("llm decision runtime prunes cache to max entries", async () => {
   await runtime.decide({ ...base, cacheKey: "second" })
   await runtime.decide({ ...base, cacheKey: "first" })
   assert.equal(calls, 3)
+})
+
+test("llm decision runtime fails open with cooldown after provider error", async () => {
+  let calls = 0
+  const runtime = createLlmDecisionRuntime({
+    directory: process.cwd(),
+    config: {
+      enabled: true,
+      mode: "assist",
+      command: "opencode",
+      model: "github-copilot/gpt-4o",
+      timeoutMs: 1000,
+      failureCooldownMs: 10000,
+      maxPromptChars: 200,
+      maxContextChars: 200,
+      enableCache: false,
+      cacheTtlMs: 10000,
+      maxCacheEntries: 8,
+    },
+    runner: async () => {
+      calls += 1
+      throw new Error("provider unavailable")
+    },
+  })
+  const request = {
+    hookId: "test-hook",
+    sessionId: "session-cooldown",
+    templateId: "continue-v1",
+    instruction: "Continue loop?",
+    context: "Pending tasks remain.",
+    allowedChars: ["Y", "N"],
+  }
+  const first = await runtime.decide(request)
+  const second = await runtime.decide(request)
+  assert.equal(first.skippedReason, "runtime_error")
+  assert.equal(second.skippedReason, "runtime_cooldown")
+  assert.equal(calls, 1)
 })

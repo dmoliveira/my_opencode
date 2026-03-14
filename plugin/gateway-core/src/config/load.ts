@@ -1166,6 +1166,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         llmDecisionRuntimeSource.timeoutMs,
         DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs,
       ),
+      failureCooldownMs: positiveInt(
+        llmDecisionRuntimeSource.failureCooldownMs,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.failureCooldownMs,
+      ),
       maxPromptChars: positiveInt(
         llmDecisionRuntimeSource.maxPromptChars,
         DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars,

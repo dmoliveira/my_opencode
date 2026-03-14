@@ -204,8 +204,9 @@ export function createLlmDecisionRuntime(options) {
         mode: options.config.mode,
         hookModes: options.config.hookModes ?? {},
         command: String(options.config.command || "opencode").trim() || "opencode",
-        model: String(options.config.model || "openai/gpt-5.1-codex-mini").trim() || "openai/gpt-5.1-codex-mini",
-        timeoutMs: safePositiveInt(options.config.timeoutMs, 30000),
+        model: String(options.config.model || "github-copilot/gpt-4o").trim() || "github-copilot/gpt-4o",
+        timeoutMs: safePositiveInt(options.config.timeoutMs, 4000),
+        failureCooldownMs: safePositiveInt(options.config.failureCooldownMs, 120000),
         maxPromptChars: safePositiveInt(options.config.maxPromptChars, 1200),
         maxContextChars: safePositiveInt(options.config.maxContextChars, 2400),
         enableCache: Boolean(options.config.enableCache),
@@ -213,6 +214,7 @@ export function createLlmDecisionRuntime(options) {
         maxCacheEntries: safePositiveInt(options.config.maxCacheEntries, 256),
     };
     const cache = new Map();
+    let cooldownUntil = 0;
     return {
         config,
         async decide(request) {
@@ -258,6 +260,24 @@ export function createLlmDecisionRuntime(options) {
                     ...baseResult,
                     durationMs: Date.now() - start,
                     skippedReason: "invalid_request",
+                };
+            }
+            if (cooldownUntil > Date.now()) {
+                writeGatewayEventAudit(options.directory, {
+                    hook: request.hookId,
+                    stage: "skip",
+                    reason_code: "llm_decision_runtime_cooldown",
+                    session_id: request.sessionId,
+                    trace_id: request.traceId,
+                    template_id: request.templateId,
+                    decision_mode: config.mode,
+                    model: config.model,
+                    duration_ms: String(Date.now() - start),
+                });
+                return {
+                    ...baseResult,
+                    durationMs: Date.now() - start,
+                    skippedReason: "runtime_cooldown",
                 };
             }
             const prompt = buildSingleCharDecisionPrompt({
@@ -310,6 +330,7 @@ export function createLlmDecisionRuntime(options) {
                 const char = parseSingleCharDecision(raw, allowedChars);
                 const meaning = resolveDecisionMeaning(char, request.decisionMeaning);
                 const durationMs = Date.now() - start;
+                cooldownUntil = 0;
                 writeGatewayEventAudit(options.directory, {
                     hook: request.hookId,
                     stage: "state",
@@ -349,6 +370,7 @@ export function createLlmDecisionRuntime(options) {
             catch (error) {
                 const durationMs = Date.now() - start;
                 const message = error instanceof Error ? error.message : String(error);
+                cooldownUntil = Date.now() + config.failureCooldownMs;
                 writeGatewayEventAudit(options.directory, {
                     hook: request.hookId,
                     stage: "skip",
