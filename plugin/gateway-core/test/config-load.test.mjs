@@ -3,9 +3,13 @@ import test from "node:test"
 
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 
-import { loadGatewayConfig, loadGatewayConfigSource } from "../dist/config/load.js"
+import {
+  loadGatewayConfig,
+  loadGatewayConfigSource,
+  loadGatewayConfigSourceWithMeta,
+} from "../dist/config/load.js"
 
 test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   const config = loadGatewayConfig({})
@@ -320,16 +324,147 @@ test("loadGatewayConfigSource merges sidecar config with runtime source", () => 
     )
     const merged = loadGatewayConfigSource(directory, {
       llmDecisionRuntime: {
+        mode: "assist",
         hookModes: { "provider-error-classifier": "assist" },
       },
     })
     const config = loadGatewayConfig(merged)
     assert.equal(config.llmDecisionRuntime.enabled, true)
-    assert.equal(config.llmDecisionRuntime.mode, "shadow")
+    assert.equal(config.llmDecisionRuntime.mode, "assist")
     assert.deepEqual(config.llmDecisionRuntime.hookModes, {
       "auto-slash-command": "assist",
       "provider-error-classifier": "assist",
     })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSourceWithMeta falls back to bundled default when no sidecar exists", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-bundled-"))
+  const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+  const previousHome = process.env.HOME
+  try {
+    delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    process.env.HOME = directory
+    const loaded = loadGatewayConfigSourceWithMeta(directory, {})
+    const config = loadGatewayConfig(loaded.source)
+    assert.match(loaded.meta.sidecarPath, /plugin[\\/]gateway-core[\\/]config[\\/]default-gateway-core\.config\.json$/)
+    assert.equal(loaded.meta.sidecarExists, true)
+    assert.equal(loaded.meta.sidecarLoaded, true)
+    assert.equal(config.llmDecisionRuntime.enabled, true)
+    assert.equal(config.llmDecisionRuntime.mode, "assist")
+    assert.equal(config.llmDecisionRuntime.hookModes["todo-continuation-enforcer"], "assist")
+  } finally {
+    if (previousEnvPath === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = previousEnvPath
+    }
+    if (previousHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = previousHome
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSourceWithMeta uses home sidecar before bundled default", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-home-"))
+  const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+  const previousHome = process.env.HOME
+  try {
+    delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    process.env.HOME = directory
+    const homeSidecar = join(
+      directory,
+      ".config",
+      "opencode",
+      "my_opencode",
+      "gateway-core.config.json",
+    )
+    mkdirSync(dirname(homeSidecar), { recursive: true })
+    writeFileSync(
+      homeSidecar,
+      JSON.stringify({
+        llmDecisionRuntime: {
+          enabled: true,
+          mode: "shadow",
+          hookModes: { "todo-continuation-enforcer": "enforce" },
+        },
+      }),
+      "utf-8",
+    )
+    const loaded = loadGatewayConfigSourceWithMeta(directory, {})
+    const config = loadGatewayConfig(loaded.source)
+    assert.equal(loaded.meta.sidecarPath, homeSidecar)
+    assert.equal(loaded.meta.sidecarExists, true)
+    assert.equal(loaded.meta.sidecarLoaded, true)
+    assert.equal(config.llmDecisionRuntime.mode, "shadow")
+    assert.equal(config.llmDecisionRuntime.hookModes["todo-continuation-enforcer"], "enforce")
+  } finally {
+    if (previousEnvPath === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = previousEnvPath
+    }
+    if (previousHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = previousHome
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSourceWithMeta reports bundled sidecar load success", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-meta-"))
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    const sidecarPath = join(directory, ".opencode", "gateway-core.config.json")
+    writeFileSync(
+      sidecarPath,
+      JSON.stringify({
+        llmDecisionRuntime: {
+          enabled: true,
+          mode: "assist",
+        },
+      }),
+      "utf-8",
+    )
+    const loaded = loadGatewayConfigSourceWithMeta(directory, {})
+    const config = loadGatewayConfig(loaded.source)
+    assert.equal(loaded.meta.sidecarPath, sidecarPath)
+    assert.equal(loaded.meta.sidecarExists, true)
+    assert.equal(loaded.meta.sidecarLoaded, true)
+    assert.equal(loaded.meta.sidecarError, undefined)
+    assert.equal(config.llmDecisionRuntime.enabled, true)
+    assert.equal(config.llmDecisionRuntime.mode, "assist")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSourceWithMeta reports sidecar parse failures", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-meta-error-"))
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    const sidecarPath = join(directory, ".opencode", "gateway-core.config.json")
+    writeFileSync(sidecarPath, "{not-json", "utf-8")
+    const loaded = loadGatewayConfigSourceWithMeta(directory, {
+      llmDecisionRuntime: {
+        enabled: true,
+        mode: "assist",
+      },
+    })
+    const config = loadGatewayConfig(loaded.source)
+    assert.equal(loaded.meta.sidecarPath, sidecarPath)
+    assert.equal(loaded.meta.sidecarExists, true)
+    assert.equal(loaded.meta.sidecarLoaded, false)
+    assert.match(String(loaded.meta.sidecarError), /expected property name|json|position/i)
+    assert.equal(config.llmDecisionRuntime.enabled, true)
+    assert.equal(config.llmDecisionRuntime.mode, "assist")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
