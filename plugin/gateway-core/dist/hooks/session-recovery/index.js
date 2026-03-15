@@ -82,6 +82,35 @@ ${String(message.info?.error ?? "")}`.toLowerCase();
     }
     return { matched: false, childSessionId: "" };
 }
+function looksLikeSilentQuestionStallFromHistory(messages) {
+    const message = messages.at(-1);
+    if (message?.info?.role !== "assistant") {
+        return { matched: false, tool: "" };
+    }
+    const errored = message.info?.error !== undefined && message.info?.error !== null;
+    const completed = Number.isFinite(Number(message.info?.time?.completed ?? Number.NaN));
+    if (errored || completed) {
+        return { matched: false, tool: "" };
+    }
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    const hasVisibleText = parts.some((part) => part?.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim() &&
+        !part.synthetic);
+    if (hasVisibleText) {
+        return { matched: false, tool: "" };
+    }
+    const lastToolPart = [...parts].reverse().find((part) => part?.type === "tool");
+    const tool = String(lastToolPart?.tool ?? "").trim().toLowerCase();
+    if (tool !== "question" && tool !== "askuserquestion") {
+        return { matched: false, tool: "" };
+    }
+    const status = String(lastToolPart?.state?.status ?? "").trim().toLowerCase();
+    if (status !== "running") {
+        return { matched: false, tool: "" };
+    }
+    return { matched: true, tool };
+}
 async function injectRecoveryMessage(args) {
     const safety = await inspectHookMessageSafety({
         session: args.session,
@@ -166,7 +195,28 @@ export function createSessionRecoveryHook(options) {
                     });
                     const messages = Array.isArray(response.data) ? response.data : [];
                     const silentAbort = looksLikeSilentDelegatedAbortFromHistory(messages);
-                    if (!silentAbort.matched) {
+                    if (silentAbort.matched) {
+                        recoveringSessions.add(sessionId);
+                        try {
+                            await injectRecoveryMessage({
+                                session: client,
+                                sessionId,
+                                directory,
+                                hook: "session-recovery",
+                                reasonCode: "silent_parent_after_delegation_abort_recovery",
+                                allowIncompleteAssistantTurn: true,
+                                content: silentAbort.childSessionId
+                                    ? `[stuck delegated abort detected during idle - continuing in parent turn]\nchild_session: ${silentAbort.childSessionId}`
+                                    : "[stuck delegated abort detected during idle - continuing in parent turn]",
+                            });
+                        }
+                        finally {
+                            recoveringSessions.delete(sessionId);
+                        }
+                        return;
+                    }
+                    const silentQuestion = looksLikeSilentQuestionStallFromHistory(messages);
+                    if (!silentQuestion.matched) {
                         return;
                     }
                     recoveringSessions.add(sessionId);
@@ -176,11 +226,9 @@ export function createSessionRecoveryHook(options) {
                             sessionId,
                             directory,
                             hook: "session-recovery",
-                            reasonCode: "silent_parent_after_delegation_abort_recovery",
+                            reasonCode: "stale_question_tool_recovery",
                             allowIncompleteAssistantTurn: true,
-                            content: silentAbort.childSessionId
-                                ? `[stuck delegated abort detected during idle - continuing in parent turn]\nchild_session: ${silentAbort.childSessionId}`
-                                : "[stuck delegated abort detected during idle - continuing in parent turn]",
+                            content: "[stuck question tool detected during idle - interactive prompt did not complete]\nPlease reply with your preference in a normal message and I will continue.",
                         });
                     }
                     finally {
@@ -191,7 +239,7 @@ export function createSessionRecoveryHook(options) {
                     writeGatewayEventAudit(directory, {
                         hook: "session-recovery",
                         stage: "skip",
-                        reason_code: "silent_parent_after_delegation_abort_recovery_failed",
+                        reason_code: "idle_history_recovery_failed",
                         session_id: sessionId,
                     });
                 }

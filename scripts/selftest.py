@@ -2274,6 +2274,131 @@ exit 0
             "session doctor should leave generic stale sessions untouched without --include-generic",
         )
 
+        generic_only_db_path = Path(tmpdir) / "opencode-generic-only.db"
+        conn = sqlite3.connect(generic_only_db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE session (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    title TEXT,
+                    directory TEXT,
+                    time_created INTEGER,
+                    time_updated INTEGER
+                );
+                CREATE TABLE message (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                CREATE TABLE part (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                """
+            )
+            for index in range(2):
+                session_id = f"generic-only-session-{index}"
+                message_id = f"generic-only-message-{index}"
+                stale_time_ms = now_ms - (700_000 + index)
+                conn.execute(
+                    "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id,
+                        None,
+                        f"generic stale only {index}",
+                        str(REPO_ROOT),
+                        stale_time_ms,
+                        stale_time_ms,
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                    (
+                        message_id,
+                        session_id,
+                        json.dumps(
+                            {
+                                "role": "assistant",
+                                "time": {"created": stale_time_ms},
+                            }
+                        ),
+                        stale_time_ms,
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        generic_only_env = dict(runtime_env)
+        generic_only_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(generic_only_db_path)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--generic-stale-problem-threshold",
+                "3",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=generic_only_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            "session doctor should keep small generic stale backlogs as warnings below the threshold",
+        )
+        generic_only_warn_payload = parse_json_output(result.stdout)
+        expect(
+            generic_only_warn_payload.get("result") == "PASS"
+            and generic_only_warn_payload.get("generic_stale_count") == 2
+            and generic_only_warn_payload.get("generic_stale_problem_threshold") == 3,
+            "session doctor should report PASS and expose the generic stale threshold when backlog stays below it",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+                "--generic-stale-problem-threshold",
+                "2",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=generic_only_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "session doctor should fail when the generic stale backlog meets the configured threshold",
+        )
+        generic_only_fail_payload = parse_json_output(result.stdout)
+        expect(
+            generic_only_fail_payload.get("result") == "FAIL"
+            and generic_only_fail_payload.get("generic_stale_count") == 2
+            and any(
+                "exceeds backlog threshold 2" in problem
+                for problem in generic_only_fail_payload.get("problems") or []
+            ),
+            "session doctor should escalate large generic stale backlogs into blocking problems",
+        )
+
         result = subprocess.run(
             [
                 sys.executable,

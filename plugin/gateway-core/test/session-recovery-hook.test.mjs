@@ -548,3 +548,277 @@ test("session-recovery ignores idle rescue when aborted parent already has visib
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("session-recovery rescues stale running question tool on idle using message history", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    let lastPromptBody = null
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: {},
+                  },
+                  parts: [
+                    {
+                      type: "tool",
+                      tool: "question",
+                      state: {
+                        status: "running",
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            promptCalls += 1
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-idle-question-stall",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 1)
+    assert.match(
+      lastPromptBody?.parts?.[0]?.text ?? "",
+      /stuck question tool detected during idle - interactive prompt did not complete/i,
+    )
+    assert.match(
+      lastPromptBody?.parts?.[0]?.text ?? "",
+      /reply with your preference in a normal message/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery ignores stale question rescue when latest message is user reply", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: {},
+                  },
+                  parts: [
+                    {
+                      type: "tool",
+                      tool: "question",
+                      state: {
+                        status: "running",
+                      },
+                    },
+                  ],
+                },
+                {
+                  info: {
+                    role: "user",
+                  },
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-idle-question-user-replied",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery ignores stale question rescue when question is not last tool part", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: {},
+                  },
+                  parts: [
+                    {
+                      type: "tool",
+                      tool: "question",
+                      state: {
+                        status: "running",
+                      },
+                    },
+                    {
+                      type: "tool",
+                      tool: "read",
+                      state: {
+                        status: "completed",
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-idle-question-not-last-tool",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery rescues stale running askuserquestion tool on idle using message history", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: {},
+                  },
+                  parts: [
+                    {
+                      type: "tool",
+                      tool: "askuserquestion",
+                      state: {
+                        status: "running",
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-idle-askuserquestion-stall",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

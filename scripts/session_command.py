@@ -32,11 +32,16 @@ DEFAULT_STALE_SESSION_SECONDS = max(
     int(os.environ.get("MY_OPENCODE_STUCK_SESSION_THRESHOLD_SECONDS", "300") or "300"),
 )
 
+DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD = max(
+    1,
+    int(os.environ.get("MY_OPENCODE_GENERIC_STALE_PROBLEM_THRESHOLD", "25") or "25"),
+)
+
 
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic] [--apply] [--json]"
     )
     return 2
 
@@ -256,7 +261,11 @@ def _load_digest(path: Path) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
+def _scan_runtime_stuck_sessions(
+    db_path: Path,
+    stale_seconds: int,
+    generic_stale_problem_threshold: int = DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
+) -> dict:
     warnings: list[str] = []
     problems: list[str] = []
     findings: list[dict] = []
@@ -267,7 +276,9 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             "warnings": warnings,
             "problems": problems,
             "stuck_findings": findings,
+            "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": 0,
+            "generic_stale_problem_threshold": generic_stale_problem_threshold,
         }
 
     try:
@@ -279,7 +290,9 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             "warnings": warnings,
             "problems": problems,
             "stuck_findings": findings,
+            "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": 0,
+            "generic_stale_problem_threshold": generic_stale_problem_threshold,
         }
 
     try:
@@ -588,6 +601,7 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
         )
     except sqlite3.DatabaseError as exc:
         problems.append(f"failed to query runtime session database: {exc}")
+        generic_stale_findings = []
         generic_stale_count = 0
     finally:
         conn.close()
@@ -597,9 +611,13 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
             f"detected {len(findings)} stuck session health finding(s) older than {stale_seconds}s"
         )
     elif generic_stale_count > 0:
-        warnings.append(
-            f"detected {generic_stale_count} stale incomplete assistant session(s) older than {stale_seconds}s"
-        )
+        generic_stale_message = f"detected {generic_stale_count} stale incomplete assistant session(s) older than {stale_seconds}s"
+        if generic_stale_count >= generic_stale_problem_threshold:
+            problems.append(
+                f"{generic_stale_message}; exceeds backlog threshold {generic_stale_problem_threshold}"
+            )
+        else:
+            warnings.append(generic_stale_message)
 
     return {
         "warnings": warnings,
@@ -607,6 +625,7 @@ def _scan_runtime_stuck_sessions(db_path: Path, stale_seconds: int) -> dict:
         "stuck_findings": findings,
         "generic_stale_findings": generic_stale_findings,
         "generic_stale_count": generic_stale_count,
+        "generic_stale_problem_threshold": generic_stale_problem_threshold,
     }
 
 
@@ -1414,6 +1433,11 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
         stale_seconds = _parse_positive_int_option(
             argv, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
         )
+        generic_stale_problem_threshold = _parse_positive_int_option(
+            argv,
+            "--generic-stale-problem-threshold",
+            DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
+        )
     except ValueError:
         return _usage()
     warnings: list[str] = []
@@ -1421,7 +1445,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     exists = index_path.exists()
     if not exists:
         warnings.append("session index does not exist yet; run /digest run first")
-        runtime = _scan_runtime_stuck_sessions(db_path, stale_seconds)
+        runtime = _scan_runtime_stuck_sessions(
+            db_path, stale_seconds, generic_stale_problem_threshold
+        )
         warnings.extend(runtime["warnings"])
         problems.extend(runtime["problems"])
         return _emit(
@@ -1434,6 +1460,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "warnings": warnings,
                 "problems": problems,
                 "stuck_findings": runtime["stuck_findings"],
+                "generic_stale_count": runtime["generic_stale_count"],
+                "generic_stale_problem_threshold": runtime[
+                    "generic_stale_problem_threshold"
+                ],
                 "stale_seconds": stale_seconds,
             },
             json_output,
@@ -1457,7 +1487,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     rows = _session_rows(index)
     if not rows:
         warnings.append("session index exists but no sessions are recorded yet")
-    runtime = _scan_runtime_stuck_sessions(db_path, stale_seconds)
+    runtime = _scan_runtime_stuck_sessions(
+        db_path, stale_seconds, generic_stale_problem_threshold
+    )
     warnings.extend(runtime["warnings"])
     problems.extend(runtime["problems"])
     return _emit(
@@ -1472,10 +1504,13 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "count": len(rows),
             "stuck_findings": runtime["stuck_findings"],
             "generic_stale_count": runtime["generic_stale_count"],
+            "generic_stale_problem_threshold": runtime[
+                "generic_stale_problem_threshold"
+            ],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
                 "/doctor run",
-                f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --json",
+                f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
                 f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
                 f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
             ]
