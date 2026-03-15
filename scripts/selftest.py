@@ -11430,6 +11430,8 @@ exit 0
             "hook-learning route should map risk review tasks to reviewer",
         )
 
+        digest_path.write_text(json.dumps(digest, indent=2) + "\n", encoding="utf-8")
+
         result = subprocess.run(
             [sys.executable, str(DIGEST_SCRIPT), "show", "--path", str(digest_path)],
             capture_output=True,
