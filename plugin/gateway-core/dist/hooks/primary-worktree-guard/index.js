@@ -22,7 +22,7 @@ function isPrimaryWorktree(directory) {
 function stripQuotes(token) {
     return token.replace(/^['"]|['"]$/g, "");
 }
-const GIT_PREFIX = String.raw `(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:[^\s;&|]*/)?git\s+`;
+const GIT_PREFIX = String.raw `(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`;
 function matchBranchTarget(command, pattern) {
     const match = command.match(pattern);
     return match?.[1] ? stripQuotes(match[1]) : null;

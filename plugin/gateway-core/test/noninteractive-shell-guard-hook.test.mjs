@@ -90,6 +90,100 @@ test("noninteractive-shell-guard prefixes git commands with non-interactive env"
   }
 })
 
+test("noninteractive-shell-guard prefixes wrapped rtk git commands with non-interactive env", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    const output = { args: { command: "rtk git status" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-rtk-git" }, output)
+    assert.equal(
+      output.args.command,
+      "CI=true GIT_TERMINAL_PROMPT=0 OPENCODE_SESSION_ID='session-rtk-git' rtk git status",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard prefixes env-wrapped rtk git commands with non-interactive env", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    const output = { args: { command: "env FOO=bar rtk git status" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-env-rtk-git" }, output)
+    assert.equal(
+      output.args.command,
+      "CI=true GIT_TERMINAL_PROMPT=0 OPENCODE_SESSION_ID='session-env-rtk-git' env FOO=bar rtk git status",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard ignores quoted git commit text in another command", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: false,
+          envPrefixes: [],
+          prefixCommands: [],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-sqlite-query" },
+      { args: { command: 'sqlite3 runtime.db "select \"git commit\";"' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 
 test("noninteractive-shell-guard prefixes bash commands with runtime session env", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))

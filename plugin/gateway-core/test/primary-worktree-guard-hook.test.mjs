@@ -92,9 +92,22 @@ test("primary-worktree-guard blocks switching the primary worktree onto task bra
       /Branch switching to 'feature\/baz' is blocked/
     )
 
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-primary-branch-hop-rtk" },
+        { args: { command: "rtk git switch feature/qux" } }
+      ),
+      /Branch switching to 'feature\/qux' is blocked/
+    )
+
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-branch-allowed" },
       { args: { command: "git switch main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-branch-allowed-rtk" },
+      { args: { command: "rtk git switch main" } }
     )
 
     await assert.rejects(

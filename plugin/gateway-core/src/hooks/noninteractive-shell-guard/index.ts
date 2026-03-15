@@ -13,8 +13,13 @@ interface ToolBeforePayload {
   directory?: string
 }
 
+interface ParsedCommand {
+  binary: string
+  args: string[]
+}
+
 function shouldPrefixCommand(command: string, prefixes: string[]): boolean {
-  const binary = commandBinary(command)
+  const binary = parseCommand(command).binary
   if (!binary) {
     return false
   }
@@ -30,18 +35,42 @@ function hasEnvAssignment(command: string, key: string): boolean {
 }
 
 function commandBinary(command: string): string {
+  return parseCommand(command).binary
+}
+
+function parseCommand(command: string): ParsedCommand {
   const tokens = command.trim().split(/\s+/).filter(Boolean)
-  for (const token of tokens) {
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
-      continue
-    }
-    return token.toLowerCase()
+  let index = 0
+  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index] ?? "")) {
+    index += 1
   }
-  return ""
+  if ((tokens[index] ?? "").toLowerCase() === "env") {
+    index += 1
+    while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index] ?? "")) {
+      index += 1
+    }
+  }
+  const filtered = tokens.slice(index)
+  if (filtered.length === 0) {
+    return { binary: "", args: [] }
+  }
+  const [first, second, ...rest] = filtered
+  const normalizedFirst = first?.toLowerCase() ?? ""
+  if (normalizedFirst.endsWith("/rtk") || normalizedFirst === "rtk") {
+    const wrappedBinary = second?.toLowerCase() ?? ""
+    return {
+      binary: wrappedBinary,
+      args: second ? [second, ...rest] : [],
+    }
+  }
+  return {
+    binary: normalizedFirst,
+    args: [first, second, ...rest].filter((item): item is string => Boolean(item)),
+  }
 }
 
 function allowedEnvKeys(command: string): Set<string> {
-  const binary = commandBinary(command)
+  const binary = parseCommand(command).binary
   if (binary === "git" || binary === "gh") {
     return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE", "OPENCODE_SESSION_ID"])
   }
@@ -97,6 +126,8 @@ function violation(command: string, blockedPatterns: RegExp[]): string | null {
     }
   }
   const lower = value.toLowerCase()
+  const parsed = parseCommand(value)
+  const argsLower = parsed.args.map((item) => item.toLowerCase())
   if (/\bnpm\s+install\b/.test(lower) && !/--yes\b/.test(lower)) {
     return "Use `npm install --yes` in non-interactive sessions."
   }
@@ -109,10 +140,20 @@ function violation(command: string, blockedPatterns: RegExp[]): string | null {
   if (/\bapt(-get)?\s+install\b/.test(lower) && !/\s-y\b/.test(lower)) {
     return "Use apt install commands with `-y` in non-interactive sessions."
   }
+  if (parsed.binary === "python" || parsed.binary === "python3" || parsed.binary === "node") {
+    if (parsed.args.length <= 1) {
+      return "REPL command detected. Use script mode (`python -c`, `node -e`, or file execution)."
+    }
+  }
   if (/^\s*(python3?|node)\s*$/.test(lower)) {
     return "REPL command detected. Use script mode (`python -c`, `node -e`, or file execution)."
   }
-  if (/\bgit\s+commit\b/.test(lower) && !/\s-m\s+/.test(lower)) {
+  if (parsed.binary === "git" && argsLower[1] === "commit") {
+    if (!argsLower.some((item, index) => item === "-m" || item.startsWith("-m") || (argsLower[index - 1] === "-m" && item.length > 0))) {
+      return "Use non-interactive git commit format: `git commit -m \"message\"`."
+    }
+  }
+  if (/\bgit\s+commit\b/.test(lower) && !/\s-m\s+/.test(lower) && parsed.binary === "git") {
     return "Use non-interactive git commit format: `git commit -m \"message\"`."
   }
   return null
