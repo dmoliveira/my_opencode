@@ -42,7 +42,7 @@ function stripQuotes(token: string): string {
   return token.replace(/^['"]|['"]$/g, "")
 }
 
-const GIT_PREFIX = String.raw`(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:[^\s;&|]*/)?git\s+`
+const GIT_PREFIX = String.raw`(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`
 
 function matchBranchTarget(command: string, pattern: RegExp): string | null {
   const match = command.match(pattern)

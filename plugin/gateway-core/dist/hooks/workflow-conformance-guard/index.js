@@ -27,7 +27,7 @@ function isPrimaryWorktree(directory) {
         return false;
     }
 }
-const PROTECTED_GIT_MUTATION_PATTERN = /(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:[^\s;&|]*\/)?git\s+(commit|merge|rebase|cherry-pick)\b/i;
+const PROTECTED_GIT_MUTATION_PATTERN = /(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*\/)?rtk\s+)?(?:[^\s;&|]*\/)?git\s+(commit|merge|rebase|cherry-pick)\b/i;
 function isProtectedGitMutationCommand(command) {
     return PROTECTED_GIT_MUTATION_PATTERN.test(command);
 }

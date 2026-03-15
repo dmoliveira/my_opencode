@@ -93,6 +93,11 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-rtk-safe" },
+      { args: { command: "rtk git status --short --branch" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-no-pager-log-safe" },
       { args: { command: "git --no-pager log --oneline --decorate --graph -20" } }
     )
@@ -194,6 +199,34 @@ test("workflow-conformance-guard still blocks env-prefixed git mutation commands
         { args: { command: "env GIT_TRACE=1 git commit -m \"msg\"" } }
       ),
       /protected branch/
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("workflow-conformance-guard blocks wrapped rtk git commit on protected branch", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["workflow-conformance-guard"], disabled: [] },
+        workflowConformanceGuard: {
+          enabled: true,
+          protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-workflow-rtk-commit" },
+        { args: { command: 'rtk git commit -m "msg"' } },
+      ),
+      /protected branch/,
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

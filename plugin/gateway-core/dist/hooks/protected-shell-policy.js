@@ -3,12 +3,13 @@ const GIT_SAFE_GLOBAL_FLAGS = String.raw `(?:\s+(?:--no-pager|-C\s+${SHELL_TOKEN
 const GIT_SAFE_ARGS = String.raw `(?:\s+[^;&|]+)*`;
 const GIT_REQUIRED_ARGS = String.raw `(?:\s+[^;&|]+)+`;
 const SAFE_ENV_PREFIX = String.raw `(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=${SHELL_TOKEN}\s+)*)`;
+const OPTIONAL_RTK_WRAPPER = String.raw `(?:(?:[^\s;&|]*/)?rtk\s+)?`;
 const PROTECTED_BRANCH_REF = String.raw `(?:main|master)`;
 function protectedPattern(commandPattern) {
     return new RegExp(String.raw `^${SAFE_ENV_PREFIX}${commandPattern}$`, "i");
 }
 function gitProtectedPattern(subcommandPattern, argsPattern = GIT_SAFE_ARGS) {
-    return protectedPattern(String.raw `(?:[^\s;&|]*/)?git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}`);
+    return protectedPattern(String.raw `${OPTIONAL_RTK_WRAPPER}(?:[^\s;&|]*/)?git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}`);
 }
 const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     protectedPattern("pwd"),
@@ -29,8 +30,8 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     gitProtectedPattern(String.raw `stash\s+show`),
     gitProtectedPattern(String.raw `restore\s+--source\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
     gitProtectedPattern(String.raw `checkout\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
-    protectedPattern(String.raw `gh\s+pr\s+view(?:\s+[^;&|]+)*`),
-    protectedPattern(String.raw `gh\s+pr\s+checks(?:\s+[^;&|]+)*`),
+    protectedPattern(String.raw `${OPTIONAL_RTK_WRAPPER}gh\s+pr\s+view(?:\s+[^;&|]+)*`),
+    protectedPattern(String.raw `${OPTIONAL_RTK_WRAPPER}gh\s+pr\s+checks(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)`),
     protectedPattern(String.raw `npm(?:\s+--prefix\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))`),
     protectedPattern(String.raw `pnpm(?:\s+--dir\s+[^;&|]+)?\s+(?:test|lint|build)`),
