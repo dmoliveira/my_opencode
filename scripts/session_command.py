@@ -107,6 +107,82 @@ def _session_rows(index: dict) -> list[dict]:
     return rows
 
 
+def _stale_cause_details(finding: dict) -> tuple[str, str]:
+    issue_type = str(finding.get("issue_type") or "")
+    if issue_type == "parent_child_mismatch":
+        return (
+            "child_completed_parent_tool_still_running",
+            "delegated child finished, but the parent task tool still appears to be running",
+        )
+    if issue_type == "silent_parent_after_delegation_abort":
+        return (
+            "delegated_abort_not_reconciled_to_parent_text",
+            "delegated child finished with parent abort/error state, but no parent text completion/recovery was recorded",
+        )
+    if issue_type == "stale_delegated_child_runtime_recovery_missed":
+        return (
+            "delegated_child_still_active_without_parent_recovery",
+            "delegated child is still stale and incomplete while the parent task tool remains running",
+        )
+    if issue_type == "stale_running_tool":
+        last_tool = str(finding.get("last_tool") or "")
+        if last_tool == "question":
+            return (
+                "question_lifecycle_not_closed",
+                "question tool is still marked running after the session went stale, suggesting the reply/cleanup path did not close it",
+            )
+        if last_tool == "apply_patch":
+            return (
+                "apply_patch_lifecycle_not_closed",
+                "apply_patch tool is still marked running after the session went stale, suggesting the completion/error path did not close it",
+            )
+        return (
+            "running_tool_not_closed",
+            "a running tool remained open after the session went stale",
+        )
+    if issue_type == "generic_stale_incomplete_assistant":
+        last_part_type = str(finding.get("last_part_type") or "none")
+        if last_part_type == "step-start":
+            return (
+                "assistant_step_started_without_terminal_message",
+                "assistant started a step but never recorded a terminal completion or error for the message",
+            )
+        if last_part_type == "text":
+            return (
+                "assistant_text_emitted_without_terminal_message",
+                "assistant emitted text but never recorded a terminal completion or error for the message",
+            )
+        if last_part_type == "tool":
+            return (
+                "assistant_tool_state_left_incomplete",
+                "assistant last recorded a tool-related part, but the message never reached a terminal completion or error",
+            )
+        if last_part_type == "none":
+            return (
+                "assistant_message_missing_parts_or_terminal_state",
+                "assistant message has no terminal completion/error and no final part was recorded",
+            )
+        return (
+            "assistant_incomplete_without_terminal_state",
+            "assistant message never reached a terminal completion or error state",
+        )
+    return (
+        "unknown_stale_cause",
+        "session appears stale, but no specialized stale-cause summary is available",
+    )
+
+
+def _annotate_stale_findings(findings: list[dict]) -> list[dict]:
+    annotated: list[dict] = []
+    for finding in findings:
+        item = dict(finding)
+        cause_code, cause_summary = _stale_cause_details(item)
+        item["stale_cause_code"] = cause_code
+        item["stale_cause_summary"] = cause_summary
+        annotated.append(item)
+    return annotated
+
+
 def _emit(payload: dict, json_output: bool) -> int:
     if json_output:
         print(json.dumps(payload, indent=2))
@@ -167,6 +243,7 @@ def _emit(payload: dict, json_output: bool) -> int:
             print("stuck_findings:")
             for finding in findings[:10]:
                 issue_type = str(finding.get("issue_type") or "stuck")
+                cause_summary = str(finding.get("stale_cause_summary") or "unknown")
                 if issue_type == "parent_child_mismatch":
                     print(
                         "- "
@@ -174,7 +251,8 @@ def _emit(payload: dict, json_output: bool) -> int:
                         f"child={finding.get('child_session_id')} "
                         f"age={finding.get('parent_stale_seconds')}s "
                         f"parent_tool={finding.get('parent_last_tool') or 'none'} "
-                        f"child_state={finding.get('child_state')}"
+                        f"child_state={finding.get('child_state')} "
+                        f"cause={cause_summary}"
                     )
                 elif issue_type == "stale_delegated_child_runtime_recovery_missed":
                     print(
@@ -183,7 +261,8 @@ def _emit(payload: dict, json_output: bool) -> int:
                         f"child={finding.get('child_session_id')} "
                         f"parent_age={finding.get('parent_stale_seconds')}s "
                         f"child_age={finding.get('child_stale_seconds')}s "
-                        f"child_last_part={finding.get('child_last_part_type') or 'none'}"
+                        f"child_last_part={finding.get('child_last_part_type') or 'none'} "
+                        f"cause={cause_summary}"
                     )
                 else:
                     print(
@@ -191,8 +270,21 @@ def _emit(payload: dict, json_output: bool) -> int:
                         f"type={issue_type} session={finding.get('session_id')} "
                         f"age={finding.get('stale_seconds')}s "
                         f"tool={finding.get('last_tool') or 'none'} "
-                        f"status={finding.get('last_tool_status') or 'unknown'}"
+                        f"status={finding.get('last_tool_status') or 'unknown'} "
+                        f"cause={cause_summary}"
                     )
+        generic_findings = payload.get("generic_stale_findings") or []
+        if generic_findings:
+            print("generic_stale_findings:")
+            for finding in generic_findings[:10]:
+                print(
+                    "- "
+                    f"type={finding.get('issue_type') or 'generic_stale'} "
+                    f"session={finding.get('session_id')} "
+                    f"age={finding.get('stale_seconds')}s "
+                    f"last_part={finding.get('last_part_type') or 'none'} "
+                    f"cause={finding.get('stale_cause_summary') or 'unknown'}"
+                )
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
     if payload.get("command") == "repair-stale":
@@ -605,6 +697,9 @@ def _scan_runtime_stuck_sessions(
         generic_stale_count = 0
     finally:
         conn.close()
+
+    findings = _annotate_stale_findings(findings)
+    generic_stale_findings = _annotate_stale_findings(generic_stale_findings)
 
     if findings:
         problems.append(
@@ -1460,11 +1555,14 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "warnings": warnings,
                 "problems": problems,
                 "stuck_findings": runtime["stuck_findings"],
+                "generic_stale_findings": runtime["generic_stale_findings"],
                 "generic_stale_count": runtime["generic_stale_count"],
                 "generic_stale_problem_threshold": runtime[
                     "generic_stale_problem_threshold"
                 ],
+                "count": 0,
                 "stale_seconds": stale_seconds,
+                "quick_fixes": [],
             },
             json_output,
         )
@@ -1481,6 +1579,13 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "exists": True,
                 "warnings": warnings,
                 "problems": problems,
+                "count": 0,
+                "stuck_findings": [],
+                "generic_stale_findings": [],
+                "generic_stale_count": 0,
+                "generic_stale_problem_threshold": generic_stale_problem_threshold,
+                "stale_seconds": stale_seconds,
+                "quick_fixes": [],
             },
             json_output,
         )
@@ -1503,6 +1608,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "problems": problems,
             "count": len(rows),
             "stuck_findings": runtime["stuck_findings"],
+            "generic_stale_findings": runtime["generic_stale_findings"],
             "generic_stale_count": runtime["generic_stale_count"],
             "generic_stale_problem_threshold": runtime[
                 "generic_stale_problem_threshold"

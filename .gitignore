@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .beads/
 plugin/gateway-core/node_modules/
+plugin/gateway-core/*.tgz
 plugin/gateway-core@latest
 runtime/
 bg/

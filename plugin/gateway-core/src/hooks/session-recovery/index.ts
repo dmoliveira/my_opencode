@@ -71,6 +71,61 @@ interface ToolAfterPayload {
   }
 }
 
+interface ToolBeforePayload {
+  directory?: string
+  input?: {
+    tool?: string
+    sessionID?: string
+    sessionId?: string
+  }
+}
+
+interface MessageUpdatedPayload {
+  directory?: string
+  properties?: {
+    info?: {
+      role?: string
+      sessionID?: string
+      sessionId?: string
+      error?: unknown
+      time?: { completed?: number }
+    }
+  }
+}
+
+interface PendingQuestionState {
+  tool: string
+  startedAt: number
+  lastUpdatedAt: number
+}
+
+const STALE_QUESTION_PREVENTION_MS = 60_000
+
+function nowMs(): number {
+  return Date.now()
+}
+
+function resolveToolSessionId(payload: {
+  input?: { sessionID?: string; sessionId?: string }
+}): string {
+  return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim()
+}
+
+function resolveMessageSessionId(payload: MessageUpdatedPayload): string {
+  return String(
+    payload.properties?.info?.sessionID ?? payload.properties?.info?.sessionId ?? "",
+  ).trim()
+}
+
+function normalizeToolName(raw: unknown): string {
+  return String(raw ?? "").trim().toLowerCase()
+}
+
+function isQuestionTool(raw: unknown): boolean {
+  const tool = normalizeToolName(raw)
+  return tool === "question" || tool === "askuserquestion"
+}
+
 // Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error: unknown): boolean {
   const candidate =
@@ -287,6 +342,7 @@ export function createSessionRecoveryHook(options: {
   autoResume: boolean
 }): GatewayHook {
   const recoveringSessions = new Set<string>()
+  const pendingQuestions = new Map<string, PendingQuestionState>()
   return {
     id: "session-recovery",
     priority: 280,
@@ -299,7 +355,61 @@ export function createSessionRecoveryHook(options: {
         const sessionId = resolveSessionId(eventPayload)
         if (sessionId) {
           recoveringSessions.delete(sessionId)
+          pendingQuestions.delete(sessionId)
         }
+        return
+      }
+      if (type === "message.updated") {
+        const messagePayload = (payload ?? {}) as MessageUpdatedPayload
+        const sessionId = resolveMessageSessionId(messagePayload)
+        if (!sessionId) {
+          return
+        }
+        const info = messagePayload.properties?.info
+        const role = String(info?.role ?? "").trim().toLowerCase()
+        if (role === "user") {
+          pendingQuestions.delete(sessionId)
+          return
+        }
+        if (role !== "assistant") {
+          return
+        }
+        const completed = Number.isFinite(Number(info?.time?.completed ?? Number.NaN))
+        const errored = info?.error !== undefined && info?.error !== null
+        if (completed || errored) {
+          pendingQuestions.delete(sessionId)
+          return
+        }
+        const existing = pendingQuestions.get(sessionId)
+        if (!existing) {
+          return
+        }
+        pendingQuestions.set(sessionId, {
+          ...existing,
+          lastUpdatedAt: nowMs(),
+        })
+        return
+      }
+      if (type === "tool.execute.before") {
+        const toolPayload = (payload ?? {}) as ToolBeforePayload
+        const sessionId = resolveToolSessionId(toolPayload)
+        if (!sessionId || !isQuestionTool(toolPayload.input?.tool)) {
+          return
+        }
+        pendingQuestions.set(sessionId, {
+          tool: normalizeToolName(toolPayload.input?.tool),
+          startedAt: nowMs(),
+          lastUpdatedAt: nowMs(),
+        })
+        return
+      }
+      if (type === "tool.execute.before.error") {
+        const toolPayload = (payload ?? {}) as ToolBeforePayload
+        const sessionId = resolveToolSessionId(toolPayload)
+        if (!sessionId || !isQuestionTool(toolPayload.input?.tool)) {
+          return
+        }
+        pendingQuestions.delete(sessionId)
         return
       }
       if (type === "session.idle") {
@@ -314,6 +424,19 @@ export function createSessionRecoveryHook(options: {
         const client = options.client?.session
         if (!client || typeof client.messages !== "function") {
           return
+        }
+        const pendingQuestion = pendingQuestions.get(sessionId)
+        if (pendingQuestion) {
+          const ageMs = Math.max(0, nowMs() - Math.max(pendingQuestion.startedAt, pendingQuestion.lastUpdatedAt))
+          if (ageMs < STALE_QUESTION_PREVENTION_MS) {
+            writeGatewayEventAudit(directory, {
+              hook: "session-recovery",
+              stage: "skip",
+              reason_code: "stale_question_tool_prevention_not_stale",
+              session_id: sessionId,
+            })
+            return
+          }
         }
         try {
           const response = await client.messages({
@@ -359,6 +482,7 @@ export function createSessionRecoveryHook(options: {
             })
           } finally {
             recoveringSessions.delete(sessionId)
+            pendingQuestions.delete(sessionId)
           }
         } catch {
           writeGatewayEventAudit(directory, {
@@ -373,6 +497,10 @@ export function createSessionRecoveryHook(options: {
       if (type === "tool.execute.after") {
         const toolPayload = (payload ?? {}) as ToolAfterPayload
         const sessionId = String(toolPayload.input?.sessionID ?? toolPayload.input?.sessionId ?? "").trim()
+        if (sessionId && isQuestionTool(toolPayload.input?.tool)) {
+          pendingQuestions.delete(sessionId)
+          return
+        }
         const directory =
           typeof toolPayload.directory === "string" && toolPayload.directory.trim()
             ? toolPayload.directory

@@ -822,3 +822,128 @@ test("session-recovery rescues stale running askuserquestion tool on idle using 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("session-recovery does not proactively recover fresh question lifecycle on idle", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    let messageCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            return { data: [] }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      {
+        tool: "question",
+        sessionID: "session-recovery-fresh-question",
+      },
+      { args: {} },
+    )
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-fresh-question",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 0)
+    assert.equal(messageCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery clears proactive question tracking after user reply", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    let messageCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            messageCalls += 1
+            return { data: [] }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      {
+        tool: "question",
+        sessionID: "session-recovery-question-user-replied",
+      },
+      { args: {} },
+    )
+
+    await plugin.event({
+      event: {
+        type: "message.updated",
+        directory,
+        properties: {
+          info: {
+            role: "user",
+            sessionID: "session-recovery-question-user-replied",
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-question-user-replied",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 0)
+    assert.equal(messageCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

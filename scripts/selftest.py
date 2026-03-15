@@ -2067,6 +2067,7 @@ exit 0
             any(
                 item.get("issue_type") == "stale_running_tool"
                 and item.get("last_tool") == "question"
+                and item.get("stale_cause_code") == "question_lifecycle_not_closed"
                 for item in session_runtime_doctor_payload.get("stuck_findings") or []
             ),
             "session doctor should detect stale running question sessions",
@@ -2078,6 +2079,33 @@ exit 0
                 for item in session_runtime_doctor_payload.get("stuck_findings") or []
             ),
             "session doctor should detect silent delegated abort parent sessions",
+        )
+        expect(
+            any(
+                item.get("issue_type") == "parent_child_mismatch"
+                and item.get("stale_cause_code")
+                == "child_completed_parent_tool_still_running"
+                for item in session_runtime_doctor_payload.get("stuck_findings") or []
+            ),
+            "session doctor should annotate stuck findings with a forensic stale cause code",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "doctor",
+                "--stale-seconds",
+                "300",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1 and "cause=" in result.stdout,
+            "session doctor plain text should render forensic stale cause summaries",
         )
 
         result = subprocess.run(
@@ -2363,8 +2391,27 @@ exit 0
         expect(
             generic_only_warn_payload.get("result") == "PASS"
             and generic_only_warn_payload.get("generic_stale_count") == 2
-            and generic_only_warn_payload.get("generic_stale_problem_threshold") == 3,
+            and generic_only_warn_payload.get("generic_stale_problem_threshold") == 3
+            and len(generic_only_warn_payload.get("generic_stale_findings") or []) == 2,
             "session doctor should report PASS and expose the generic stale threshold when backlog stays below it",
+        )
+        expect(
+            {
+                item.get("session_id")
+                for item in generic_only_warn_payload.get("generic_stale_findings")
+                or []
+            }
+            == {"generic-only-session-0", "generic-only-session-1"},
+            "session doctor should expose generic stale finding details for warning-only backlog cases",
+        )
+        expect(
+            all(
+                item.get("stale_cause_code")
+                == "assistant_message_missing_parts_or_terminal_state"
+                for item in generic_only_warn_payload.get("generic_stale_findings")
+                or []
+            ),
+            "session doctor should annotate generic stale findings with derived stale cause codes",
         )
 
         result = subprocess.run(
@@ -2392,11 +2439,21 @@ exit 0
         expect(
             generic_only_fail_payload.get("result") == "FAIL"
             and generic_only_fail_payload.get("generic_stale_count") == 2
+            and len(generic_only_fail_payload.get("generic_stale_findings") or []) == 2
             and any(
                 "exceeds backlog threshold 2" in problem
                 for problem in generic_only_fail_payload.get("problems") or []
             ),
             "session doctor should escalate large generic stale backlogs into blocking problems",
+        )
+        expect(
+            {
+                item.get("session_id")
+                for item in generic_only_fail_payload.get("generic_stale_findings")
+                or []
+            }
+            == {"generic-only-session-0", "generic-only-session-1"},
+            "session doctor should expose generic stale finding details for blocking backlog cases",
         )
 
         result = subprocess.run(
