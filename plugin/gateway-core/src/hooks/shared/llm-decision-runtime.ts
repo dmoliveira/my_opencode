@@ -12,6 +12,7 @@ export interface LlmDecisionRuntimeConfig {
   model: string
   timeoutMs: number
   failureCooldownMs: number
+  maxConcurrentDecisions: number
   maxPromptChars: number
   maxContextChars: number
   enableCache: boolean
@@ -381,6 +382,7 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
       String(options.config.model || "github-copilot/gpt-5-mini").trim() || "github-copilot/gpt-5-mini",
     timeoutMs: safePositiveInt(options.config.timeoutMs, 10000),
     failureCooldownMs: safePositiveInt(options.config.failureCooldownMs, 120000),
+    maxConcurrentDecisions: safePositiveInt(options.config.maxConcurrentDecisions, 1),
     maxPromptChars: safePositiveInt(options.config.maxPromptChars, 1200),
     maxContextChars: safePositiveInt(options.config.maxContextChars, 2400),
     enableCache: Boolean(options.config.enableCache),
@@ -389,6 +391,7 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
   }
   const cache = new Map<string, CachedDecision>()
   let cooldownUntil = 0
+  let activeDecisions = 0
 
   return {
     config,
@@ -456,6 +459,24 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
           skippedReason: "runtime_cooldown",
         }
       }
+      if (activeDecisions >= config.maxConcurrentDecisions) {
+        writeGatewayEventAudit(options.directory, {
+          hook: request.hookId,
+          stage: "skip",
+          reason_code: "llm_decision_max_concurrency",
+          session_id: request.sessionId,
+          trace_id: request.traceId,
+          template_id: request.templateId,
+          decision_mode: config.mode,
+          model: config.model,
+          duration_ms: String(Date.now() - start),
+        })
+        return {
+          ...baseResult,
+          durationMs: Date.now() - start,
+          skippedReason: "max_concurrency_reached",
+        }
+      }
 
       const prompt = buildSingleCharDecisionPrompt({
         instruction: truncateDecisionText(request.instruction, config.maxPromptChars),
@@ -504,6 +525,7 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
       })
 
       try {
+        activeDecisions++
         const runArgs = [config.command, "run", "--model", config.model, "--format", "json", prompt]
         const response = await runner(runArgs, config.timeoutMs, options.directory)
         const raw = extractTextFromJsonLines(response.stdout)
@@ -573,6 +595,8 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
           error: message,
           skippedReason: "runtime_error",
         }
+      } finally {
+        activeDecisions--
       }
     },
   }

@@ -16,6 +16,8 @@
     "command": "opencode",
     "model": "openai/gpt-5.1-codex-mini",
     "timeoutMs": 30000,
+    "failureCooldownMs": 120000,
+    "maxConcurrentDecisions": 1,
     "maxPromptChars": 1200,
     "maxContextChars": 2400,
     "enableCache": true,

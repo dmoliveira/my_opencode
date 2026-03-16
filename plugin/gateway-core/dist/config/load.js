@@ -737,6 +737,7 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
             timeoutMs: positiveInt(llmDecisionRuntimeSource.timeoutMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs),
             failureCooldownMs: positiveInt(llmDecisionRuntimeSource.failureCooldownMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.failureCooldownMs),
+            maxConcurrentDecisions: positiveInt(llmDecisionRuntimeSource.maxConcurrentDecisions, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxConcurrentDecisions),
             maxPromptChars: positiveInt(llmDecisionRuntimeSource.maxPromptChars, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars),
             maxContextChars: positiveInt(llmDecisionRuntimeSource.maxContextChars, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxContextChars),
             enableCache: typeof llmDecisionRuntimeSource.enableCache === "boolean"
