@@ -71,8 +71,27 @@ function buildHint(classification, reason) {
         "- Continue with minimal prompt scope until provider stabilizes",
     ].join("\n");
 }
+function buildConcurrencySkipHint() {
+    return [
+        "[provider ERROR CLASSIFIER]",
+        "LLM classification skipped — subprocess already in progress.",
+        "- A decision subprocess is already running; this event was dropped.",
+        "- The active classification will complete shortly.",
+        "- Pattern-based error detection continues normally.",
+    ].join("\n");
+}
+function buildCooldownSkipHint() {
+    return [
+        "[provider ERROR CLASSIFIER]",
+        "LLM classification paused — runtime cooldown active.",
+        "- The decision runtime is cooling down after a recent subprocess failure.",
+        "- Provider errors will not be LLM-classified until the cooldown expires.",
+        "- Pattern-based classification continues normally.",
+    ].join("\n");
+}
 export function createProviderErrorClassifierHook(options) {
     const lastClassificationBySession = new Map();
+    const lastRuntimeSkipNoticeBySession = new Map();
     return {
         id: "provider-error-classifier",
         priority: 361,
@@ -84,6 +103,7 @@ export function createProviderErrorClassifierHook(options) {
                 const sessionId = resolveSessionId((payload ?? {}));
                 if (sessionId) {
                     lastClassificationBySession.delete(sessionId);
+                    lastRuntimeSkipNoticeBySession.delete(sessionId);
                 }
                 return;
             }
@@ -117,6 +137,27 @@ export function createProviderErrorClassifierHook(options) {
                     },
                     cacheKey: `provider-error:${text.trim().toLowerCase()}`,
                 });
+                if (decision.skippedReason === "max_concurrency_reached" || decision.skippedReason === "runtime_cooldown") {
+                    if (session && sessionId) {
+                        const now = Date.now();
+                        const cooldownMs = Math.max(1, Math.floor(options.cooldownMs));
+                        const lastNoticeAt = lastRuntimeSkipNoticeBySession.get(sessionId) ?? 0;
+                        if (now - lastNoticeAt >= cooldownMs) {
+                            const hint = decision.skippedReason === "max_concurrency_reached"
+                                ? buildConcurrencySkipHint()
+                                : buildCooldownSkipHint();
+                            const directory = resolveDirectory(eventPayload, options.directory);
+                            await injectHookMessage({ session, sessionId, content: hint, directory });
+                            writeGatewayEventAudit(directory, {
+                                hook: "provider-error-classifier",
+                                stage: "state",
+                                reason_code: `llm_decision_${decision.skippedReason}`,
+                                session_id: sessionId,
+                            });
+                            lastRuntimeSkipNoticeBySession.set(sessionId, now);
+                        }
+                    }
+                }
                 if (decision.accepted) {
                     const classification = CLASSIFICATION_BY_CHAR[decision.char];
                     if (classification) {
