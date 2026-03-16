@@ -53,7 +53,8 @@ function resolveDirectory(payload: EventPayload, fallback: string): string {
 
 function extractErrorText(payload: EventPayload): string {
   return [payload.error, payload.message, payload.properties?.error]
-    .map((value) => (typeof value === "string" ? value : JSON.stringify(value ?? "")))
+    .map((value) => (typeof value === "string" ? value.trim() : value != null ? JSON.stringify(value) : ""))
+    .filter(Boolean)
     .join("\n")
 }
 
@@ -134,6 +135,9 @@ export function createProviderErrorClassifierHook(options: {
       }
       const eventPayload = (payload ?? {}) as EventPayload
       const text = extractErrorText(eventPayload)
+      if (!text) {
+        return
+      }
       if (isContextOverflowNonRetryable(text)) {
         return
       }

@@ -1170,6 +1170,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         llmDecisionRuntimeSource.failureCooldownMs,
         DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.failureCooldownMs,
       ),
+      maxConcurrentDecisions: positiveInt(
+        llmDecisionRuntimeSource.maxConcurrentDecisions,
+        DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxConcurrentDecisions,
+      ),
       maxPromptChars: positiveInt(
         llmDecisionRuntimeSource.maxPromptChars,
         DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxPromptChars,

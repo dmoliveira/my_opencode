@@ -99,3 +99,41 @@ test("provider-error-classifier uses LLM fallback for ambiguous provider wording
   assert.match(String(prompts[0].body.parts[0].text), /overload/i)
   assert.match(String(prompts[0].body.parts[0].text), /llm:provider_overloaded/i)
 })
+
+test("provider-error-classifier skips events with no error content (prevents runaway spawning)", async () => {
+  let decideCalls = 0
+  const prompts = []
+  const hook = createProviderErrorClassifierHook({
+    directory: process.cwd(),
+    enabled: true,
+    cooldownMs: 1,
+    client: { session: { async promptAsync(args) { prompts.push(args) } } },
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: false,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+      decide: async () => {
+        decideCalls++
+        return { mode: "assist", accepted: false, char: "", raw: "", durationMs: 1, model: "openai/gpt-5.1-codex-mini", templateId: "provider-error-classifier-v1" }
+      },
+    },
+  })
+
+  // All error fields absent — previously generated '""\n""\n""' noise, triggering LLM
+  await hook.event("session.error", { properties: { sessionID: "s6" } })
+  await hook.event("message.updated", { properties: { sessionID: "s6" } })
+  // Empty string error field
+  await hook.event("session.error", { properties: { sessionID: "s6", error: "" } })
+
+  assert.equal(decideCalls, 0, "LLM decision runtime must not be invoked for empty error payloads")
+  assert.equal(prompts.length, 0)
+})

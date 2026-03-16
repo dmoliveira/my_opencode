@@ -485,3 +485,55 @@ test("llm decision runtime fails open with cooldown after provider error", async
   assert.equal(peekLlmDecisionFallbackNotice(process.cwd(), "session-cooldown"), "")
   assert.equal(calls, 1)
 })
+
+test("llm decision runtime enforces max concurrency limit (prevents runaway subprocess spawning)", async () => {
+  let runnerCalls = 0
+  let resolveFirst
+  const firstRunnerDone = new Promise((resolve) => { resolveFirst = resolve })
+  const runtime = createLlmDecisionRuntime({
+    directory: process.cwd(),
+    config: {
+      enabled: true,
+      mode: "assist",
+      hookModes: {},
+      command: "opencode",
+      model: "github-copilot/gpt-5-mini",
+      timeoutMs: 5000,
+      failureCooldownMs: 10000,
+      maxConcurrentDecisions: 1,
+      maxPromptChars: 200,
+      maxContextChars: 200,
+      enableCache: false,
+      cacheTtlMs: 10000,
+      maxCacheEntries: 8,
+    },
+    runner: async () => {
+      runnerCalls++
+      await firstRunnerDone
+      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+    },
+  })
+  const request = {
+    hookId: "test-hook",
+    sessionId: "session-concurrency",
+    templateId: "continue-v1",
+    instruction: "Continue loop?",
+    context: "Pending tasks remain.",
+    allowedChars: ["Y", "N"],
+  }
+
+  // Start both calls; the first runs synchronously up to `await runner()`,
+  // setting activeDecisions=1 before the second call's concurrency check.
+  const firstPromise = runtime.decide(request)
+  const secondPromise = runtime.decide(request)
+  // Unblock the runner so the first call can complete
+  resolveFirst()
+  const [first, second] = await Promise.all([firstPromise, secondPromise])
+
+  // Exactly one subprocess should have been spawned
+  assert.equal(runnerCalls, 1, "Only one subprocess should be spawned when maxConcurrentDecisions=1")
+  const accepted = [first, second].find((r) => r.skippedReason !== "max_concurrency_reached")
+  const rejected = [first, second].find((r) => r.skippedReason === "max_concurrency_reached")
+  assert.ok(accepted, "One call should proceed")
+  assert.ok(rejected, "Concurrent call should be rejected with max_concurrency_reached")
+})

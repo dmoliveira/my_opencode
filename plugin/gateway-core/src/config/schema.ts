@@ -195,6 +195,7 @@ export interface LlmDecisionRuntimeConfig {
   model: string;
   timeoutMs: number;
   failureCooldownMs: number;
+  maxConcurrentDecisions: number;
   maxPromptChars: number;
   maxContextChars: number;
   enableCache: boolean;
@@ -940,6 +941,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     model: "github-copilot/gpt-5-mini",
     timeoutMs: 10000,
     failureCooldownMs: 120000,
+    maxConcurrentDecisions: 1,
     maxPromptChars: 1200,
     maxContextChars: 2400,
     enableCache: true,
