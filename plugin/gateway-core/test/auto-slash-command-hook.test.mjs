@@ -223,6 +223,33 @@ test("auto-slash-command does not rewrite high-risk install prompts", async () =
   }
 })
 
+test("auto-slash-command skips meta discussion about doctor routing", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: { mode: "assist" },
+      async decide() {
+        throw new Error("should not be called")
+      },
+    },
+  })
+
+  const output = {
+    parts: [{ type: "text", text: "can you review why the instruction command in the last session activated /doctor" }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-meta-skip",
+      prompt: "can you review why the instruction command in the last session activated /doctor",
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(output.parts[0].text, "can you review why the instruction command in the last session activated /doctor")
+})
+
 test("auto-slash-command does not fallback-map excluded explicit slash", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-auto-slash-"))
   try {
@@ -555,17 +582,17 @@ test("auto-slash-command shadow mode records but does not rewrite ambiguous prom
     },
   })
   const output = {
-    parts: [{ type: "text", text: "can you inspect the environment health and tell me what's wrong" }],
+    parts: [{ type: "text", text: "can you inspect this issue and help me understand the environment state" }],
   }
   await hook.event("chat.message", {
     properties: {
       sessionID: "session-auto-slash-shadow-1",
-      prompt: "can you inspect the environment health and tell me what's wrong",
+      prompt: "can you inspect this issue and help me understand the environment state",
     },
     output,
     directory: process.cwd(),
   })
-  assert.equal(output.parts[0].text, "can you inspect the environment health and tell me what's wrong")
+  assert.equal(output.parts[0].text, "can you inspect this issue and help me understand the environment state")
 })
 
 test("auto-slash-command sanitizes chat-role contamination before AI classification", async () => {

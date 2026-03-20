@@ -3,6 +3,7 @@ import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -487,7 +488,18 @@ export function createAgentModelResolverHook(options: {
           ),
           allowedChars: alphabet,
           decisionMeaning: buildRoutingDecisionMeaning(aiInferred.name, originalExplicitSubagent),
-          cacheKey: `route:${originalExplicitSubagent || "none"}:${aiInferred.name}:${combinedText}`,
+          cacheKey: buildCompactDecisionCacheKey({
+            prefix: "route",
+            parts: [originalExplicitSubagent || "none", aiInferred.name],
+            text: buildRoutingContext(
+              String(args.prompt ?? ""),
+              String(args.description ?? ""),
+              originalExplicitSubagent,
+              aiInferred.name,
+              aiInferred.score,
+              explicitScore,
+            ),
+          }),
         })
         if (decision.accepted) {
           const resolvedChar = decision.char.toUpperCase()

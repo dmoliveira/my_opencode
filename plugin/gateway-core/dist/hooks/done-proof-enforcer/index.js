@@ -1,4 +1,5 @@
 import { markerCategory, validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
+import { buildCompactDecisionCacheKey } from "../shared/llm-decision-runtime.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
 import { listToolAfterOutputTexts, readCombinedToolAfterOutputText, writeToolAfterOutputChannelText, } from "../shared/tool-after-output.js";
@@ -50,7 +51,10 @@ export function createDoneProofEnforcerHook(options) {
                                 context: buildMarkerContext(text),
                                 allowedChars: ["Y", "N"],
                                 decisionMeaning: { Y: `${marker}_present`, N: `${marker}_missing` },
-                                cacheKey: `done-proof:${marker}:${text.trim().toLowerCase()}`,
+                                cacheKey: buildCompactDecisionCacheKey({
+                                    prefix: `done-proof:${marker}`,
+                                    text: buildMarkerContext(text),
+                                }),
                             });
                             if (decision.accepted) {
                                 writeDecisionComparisonAudit({

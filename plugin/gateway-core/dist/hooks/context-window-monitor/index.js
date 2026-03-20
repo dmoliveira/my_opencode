@@ -141,12 +141,6 @@ export function createContextWindowMonitorHook(options) {
                 });
                 const actualUsage = totalInputTokens / actualLimit;
                 if (actualUsage < options.warningThreshold) {
-                    writeGatewayEventAudit(directory, {
-                        hook: "context-window-monitor",
-                        stage: "skip",
-                        reason_code: "below_warning_threshold",
-                        session_id: sessionId,
-                    });
                     return;
                 }
                 const hasPriorReminder = nextState.lastWarnedAtToolCall > 0;
@@ -154,21 +148,9 @@ export function createContextWindowMonitorHook(options) {
                     const cooldownElapsed = nextState.toolCalls - nextState.lastWarnedAtToolCall >= options.reminderCooldownToolCalls;
                     const tokenDeltaEnough = totalInputTokens - nextState.lastWarnedTokens >= options.minTokenDeltaForReminder;
                     if (!cooldownElapsed) {
-                        writeGatewayEventAudit(directory, {
-                            hook: "context-window-monitor",
-                            stage: "skip",
-                            reason_code: "reminder_cooldown_not_elapsed",
-                            session_id: sessionId,
-                        });
                         return;
                     }
                     if (!tokenDeltaEnough) {
-                        writeGatewayEventAudit(directory, {
-                            hook: "context-window-monitor",
-                            stage: "skip",
-                            reason_code: "reminder_token_delta_too_small",
-                            session_id: sessionId,
-                        });
                         return;
                     }
                 }

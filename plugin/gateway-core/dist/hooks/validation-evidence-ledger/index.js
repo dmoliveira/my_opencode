@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
 const VALIDATION_INVOCATION_ID_KEY = "validationEvidenceInvocationId";
@@ -254,7 +254,10 @@ export function createValidationEvidenceLedgerHook(options) {
                         S: "security",
                         N: "not_validation",
                     },
-                    cacheKey: `validation-command:${command.trim().toLowerCase()}`,
+                    cacheKey: buildCompactDecisionCacheKey({
+                        prefix: "validation-command",
+                        text: buildValidationContext(command),
+                    }),
                 });
                 if (decision.accepted) {
                     const category = VALIDATION_CATEGORY_BY_CHAR[decision.char];
@@ -269,29 +272,20 @@ export function createValidationEvidenceLedgerHook(options) {
                             deterministicValue: "none",
                             aiValue: category,
                         });
+                        const shadowDeferred = options.decisionRuntime.config.mode === "shadow";
                         writeGatewayEventAudit(options.directory, {
                             hook: "validation-evidence-ledger",
                             stage: "state",
-                            reason_code: "llm_validation_command_decision_recorded",
+                            reason_code: shadowDeferred
+                                ? "llm_validation_command_shadow_deferred"
+                                : "llm_validation_command_decision_recorded",
                             session_id: sid,
                             llm_decision_char: decision.char,
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
                             evidence: category,
                         });
-                        if (options.decisionRuntime.config.mode === "shadow") {
-                            writeGatewayEventAudit(options.directory, {
-                                hook: "validation-evidence-ledger",
-                                stage: "state",
-                                reason_code: "llm_validation_command_shadow_deferred",
-                                session_id: sid,
-                                llm_decision_char: decision.char,
-                                llm_decision_meaning: decision.meaning,
-                                llm_decision_mode: options.decisionRuntime.config.mode,
-                                evidence: category,
-                            });
-                        }
-                        else {
+                        if (!shadowDeferred) {
                             categories = [category];
                         }
                     }

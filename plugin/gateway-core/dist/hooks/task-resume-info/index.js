@@ -84,27 +84,18 @@ async function resolveSemanticHints(options) {
         deterministicValue: "none",
         aiValue: decision.char,
     });
+    const shadowDeferred = options.decisionRuntime.config.mode === "shadow" && (addContinuation || addVerification);
     writeGatewayEventAudit(options.directory, {
         hook: "task-resume-info",
         stage: "state",
-        reason_code: "llm_task_resume_decision_recorded",
+        reason_code: shadowDeferred ? "llm_task_resume_shadow_deferred" : "llm_task_resume_decision_recorded",
         session_id: options.sessionId,
         llm_decision_char: decision.char,
         llm_decision_meaning: decision.meaning,
         llm_decision_mode: options.decisionRuntime.config.mode,
         resume_target: options.resumeTarget || undefined,
     });
-    if (options.decisionRuntime.config.mode === "shadow" && (addContinuation || addVerification)) {
-        writeGatewayEventAudit(options.directory, {
-            hook: "task-resume-info",
-            stage: "state",
-            reason_code: "llm_task_resume_shadow_deferred",
-            session_id: options.sessionId,
-            llm_decision_char: decision.char,
-            llm_decision_meaning: decision.meaning,
-            llm_decision_mode: options.decisionRuntime.config.mode,
-            resume_target: options.resumeTarget || undefined,
-        });
+    if (shadowDeferred) {
         return { addContinuation: false, addVerification: false };
     }
     return { addContinuation, addVerification };

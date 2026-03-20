@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { annotateDelegationMetadata, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 const FAILURE_REASON_BY_CHAR = {
     U: "delegation_unknown_agent",
@@ -171,7 +171,11 @@ export function createDelegationFallbackOrchestratorHook(options) {
                         R: "delegation_runtime_error",
                         N: "no_match",
                     },
-                    cacheKey: `delegation-failure:${subagentType}:${category}:${String(eventPayload.output.output ?? "").trim().toLowerCase()}`,
+                    cacheKey: buildCompactDecisionCacheKey({
+                        prefix: "delegation-failure",
+                        parts: [subagentType || "none", category || "none"],
+                        text: buildFailureContext(String(eventPayload.output.output ?? ""), String(args?.prompt ?? ""), String(args?.description ?? "")),
+                    }),
                 });
                 if (decision.accepted) {
                     const aiReason = FAILURE_REASON_BY_CHAR[decision.char] ?? null;

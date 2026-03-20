@@ -3,6 +3,7 @@ import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -228,7 +229,11 @@ export function createAgentDeniedToolEnforcerHook(options: {
             R: "read_only_safe",
             N: "unclear",
           },
-          cacheKey: `mutation:${subagentType}:${combinedText}`,
+          cacheKey: buildCompactDecisionCacheKey({
+            prefix: "mutation",
+            parts: [subagentType || "none"],
+            text: compactDecisionText(promptText, descriptionText),
+          }),
         })
         if (mutationDecision.accepted && mutationDecision.char === "M") {
           writeDecisionComparisonAudit({
@@ -282,7 +287,11 @@ export function createAgentDeniedToolEnforcerHook(options: {
               A: "allowed_or_no_issue",
               N: "unclear",
             },
-            cacheKey: `tool:${subagentType}:${denied.join(",")}:${combinedText}`,
+            cacheKey: buildCompactDecisionCacheKey({
+              prefix: "tool",
+              parts: [subagentType || "none", denied.join(",") || "none"],
+              text: compactDecisionText(promptText, descriptionText),
+            }),
           })
           if (toolDecision.accepted && toolDecision.char === "D") {
             const suggestion = suggestAllowedTool(String(denied[0]), allowed)

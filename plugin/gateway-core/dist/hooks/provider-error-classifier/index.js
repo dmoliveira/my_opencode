@@ -1,7 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage } from "../hook-message-injector/index.js";
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js";
-import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const CLASSIFICATION_BY_CHAR = {
     F: "free_usage_exhausted",
     R: "rate_limited",
@@ -135,7 +135,10 @@ export function createProviderErrorClassifierHook(options) {
                         O: "provider_overloaded",
                         N: "not_classified",
                     },
-                    cacheKey: `provider-error:${text.trim().toLowerCase()}`,
+                    cacheKey: buildCompactDecisionCacheKey({
+                        prefix: "provider-error",
+                        text: buildAiContext(text),
+                    }),
                 });
                 if (decision.skippedReason === "max_concurrency_reached" || decision.skippedReason === "runtime_cooldown") {
                     if (session && sessionId) {
@@ -171,27 +174,19 @@ export function createProviderErrorClassifierHook(options) {
                             deterministicValue: "none",
                             aiValue: classification,
                         });
+                        const shadowDeferred = options.decisionRuntime.config.mode === "shadow";
                         writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
                             hook: "provider-error-classifier",
                             stage: "state",
-                            reason_code: "llm_provider_error_decision_recorded",
+                            reason_code: shadowDeferred
+                                ? "llm_provider_error_shadow_deferred"
+                                : "llm_provider_error_decision_recorded",
                             session_id: sessionId,
                             llm_decision_char: decision.char,
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
                         });
-                        if (options.decisionRuntime.config.mode === "shadow") {
-                            writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
-                                hook: "provider-error-classifier",
-                                stage: "state",
-                                reason_code: "llm_provider_error_shadow_deferred",
-                                session_id: sessionId,
-                                llm_decision_char: decision.char,
-                                llm_decision_meaning: decision.meaning,
-                                llm_decision_mode: options.decisionRuntime.config.mode,
-                            });
-                        }
-                        else {
+                        if (!shadowDeferred) {
                             outcome = {
                                 classification,
                                 reason: `llm:${decision.meaning || decision.char}`,

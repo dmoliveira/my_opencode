@@ -831,9 +831,9 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   longTurnWatchdog: {
     enabled: true,
-    warningThresholdMs: 300000,
-    toolCallWarningThreshold: 50,
-    reminderCooldownMs: 120000,
+    warningThresholdMs: 60000,
+    toolCallWarningThreshold: 12,
+    reminderCooldownMs: 60000,
     maxSessionStateEntries: 1024,
     prefix: "[Turn Watchdog]:",
   },

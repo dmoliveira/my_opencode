@@ -15,7 +15,7 @@ function commitAll(directory, message) {
   })
 }
 
-test("workflow-conformance-guard blocks git commit on protected branch", async () => {
+test("workflow-conformance-guard reroutes git commit on protected branch", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -31,13 +31,13 @@ test("workflow-conformance-guard blocks git commit on protected branch", async (
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow" },
-        { args: { command: "git commit -m \"msg\"" } },
-      ),
-      /protected branch/,
+    const payload = { args: { command: "git commit -m \"msg\"" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow" },
+      payload,
     )
+    assert.match(payload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(payload.args.command, /--command "git commit -m \\\"msg\\\"" --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -177,7 +177,7 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
   }
 })
 
-test("workflow-conformance-guard still blocks env-prefixed git mutation commands", async () => {
+test("workflow-conformance-guard reroutes env-prefixed git mutation commands", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -193,19 +193,18 @@ test("workflow-conformance-guard still blocks env-prefixed git mutation commands
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-env" },
-        { args: { command: "env GIT_TRACE=1 git commit -m \"msg\"" } }
-      ),
-      /protected branch/
+    const payload = { args: { command: "env GIT_TRACE=1 git commit -m \"msg\"" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-env" },
+      payload
     )
+    assert.match(payload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-test("workflow-conformance-guard blocks wrapped rtk git commit on protected branch", async () => {
+test("workflow-conformance-guard reroutes wrapped rtk git commit on protected branch", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -221,13 +220,13 @@ test("workflow-conformance-guard blocks wrapped rtk git commit on protected bran
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-rtk-commit" },
-        { args: { command: 'rtk git commit -m "msg"' } },
-      ),
-      /protected branch/,
+    const payload = { args: { command: 'rtk git commit -m "msg"' } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-rtk-commit" },
+      payload,
     )
+    assert.match(payload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(payload.args.command, /--command "rtk git commit -m \\\"msg\\\"" --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -293,7 +292,7 @@ test("workflow-conformance-guard allows apply_patch targeting a linked worktree 
   }
 })
 
-test("workflow-conformance-guard blocks mutating bash commands on protected branches", async () => {
+test("workflow-conformance-guard reroutes mutating bash commands on protected branches", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -309,53 +308,48 @@ test("workflow-conformance-guard blocks mutating bash commands on protected bran
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-bash-mutate" },
-        { args: { command: "echo hi > file.txt" } }
-      ),
-      /python3 scripts\/worktree_helper_command\.py maintenance --directory .*git worktree add -b chore\/<task> \.\.\/.*-maint HEAD/
+    const mutatePayload = { args: { command: "echo hi > file.txt" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-bash-mutate" },
+      mutatePayload
     )
+    assert.match(mutatePayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(mutatePayload.args.command, /--command "echo hi > file\.txt" --json/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-gh-api" },
-        { args: { command: "gh api -X POST repos/foo/bar/issues" } }
-      ),
-      /limited to inspection, validation, and exact sync commands/
+    const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-api" },
+      ghPayload
     )
+    assert.match(ghPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-chain" },
-        { args: { command: "git status --short --branch && echo hi > file.txt" } }
-      ),
-      /limited to inspection, validation, and exact sync commands/
+    const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-chain" },
+      chainPayload
     )
+    assert.match(chainPayload.args.command, /--command "git status --short --branch && echo hi > file\.txt" --json/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-refspec-pull" },
-        { args: { command: "git pull --rebase origin feature/x" } }
-      ),
-      /limited to inspection, validation, and exact sync commands/
+    const pullPayload = { args: { command: "git pull --rebase origin feature/x" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-refspec-pull" },
+      pullPayload
     )
+    assert.match(pullPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-fetch-refspec" },
-        { args: { command: "git fetch origin +feature/x:main" } }
-      ),
-      /limited to inspection, validation, and exact sync commands/
+    const fetchPayload = { args: { command: "git fetch origin +feature/x:main" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-fetch-refspec" },
+      fetchPayload
     )
+    assert.match(fetchPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-workflow-redirection" },
-        { args: { command: "git status --short --branch > file.txt" } }
-      ),
-      /limited to inspection, validation, and exact sync commands/
+    const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-redirection" },
+      redirectPayload
     )
+    assert.match(redirectPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
 import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 function buildSectionInstruction(section) {
@@ -70,7 +70,10 @@ export function createPrBodyEvidenceGuardHook(options) {
                         context: buildSectionContext(body),
                         allowedChars: ["Y", "N"],
                         decisionMeaning: { Y: "summary_present", N: "summary_missing" },
-                        cacheKey: `pr-body-summary:${body.trim().toLowerCase()}`,
+                        cacheKey: buildCompactDecisionCacheKey({
+                            prefix: "pr-body-summary",
+                            text: buildSectionContext(body),
+                        }),
                     });
                     if (decision.accepted) {
                         writeDecisionComparisonAudit({
@@ -117,7 +120,10 @@ export function createPrBodyEvidenceGuardHook(options) {
                         context: buildSectionContext(body),
                         allowedChars: ["Y", "N"],
                         decisionMeaning: { Y: "validation_present", N: "validation_missing" },
-                        cacheKey: `pr-body-validation:${body.trim().toLowerCase()}`,
+                        cacheKey: buildCompactDecisionCacheKey({
+                            prefix: "pr-body-validation",
+                            text: buildSectionContext(body),
+                        }),
                     });
                     if (decision.accepted) {
                         writeDecisionComparisonAudit({

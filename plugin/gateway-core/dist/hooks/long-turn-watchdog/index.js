@@ -1,5 +1,4 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
 import { inspectToolAfterOutputText, writeToolAfterOutputText, } from "../shared/tool-after-output.js";
 function resolveSessionId(payload) {
     const candidates = [
@@ -41,47 +40,11 @@ function formatDuration(ms) {
 export function createLongTurnWatchdogHook(options) {
     const states = new Map();
     const now = options.now ?? (() => Date.now());
-    async function injectVisibleProgressPulse(args) {
-        const client = options.client?.session;
-        if (!client) {
-            return;
-        }
-        const safety = await inspectHookMessageSafety({
-            session: client,
-            sessionId: args.sessionId,
-            directory: args.directory,
-        });
-        if (!safety.safe && safety.reason !== "assistant_turn_incomplete") {
-            writeGatewayEventAudit(args.directory, {
-                hook: "long-turn-watchdog",
-                stage: "skip",
-                reason_code: `visible_progress_pulse_${safety.reason}`,
-                session_id: args.sessionId,
-            });
-            return;
-        }
-        if (!safety.safe && safety.reason === "assistant_turn_incomplete") {
-            writeGatewayEventAudit(args.directory, {
-                hook: "long-turn-watchdog",
-                stage: "state",
-                reason_code: "visible_progress_pulse_forcing_incomplete_parent_recovery",
-                session_id: args.sessionId,
-            });
-        }
-        const injected = await injectHookMessage({
-            session: client,
-            sessionId: args.sessionId,
-            directory: args.directory,
-            content: `[runtime progress pulse]\nStill working in this turn after ${formatDuration(args.elapsedMs)} and ${args.toolCallsThisTurn} tool call${args.toolCallsThisTurn === 1 ? "" : "s"}. I will send the final result once I clear the current step.`,
-        });
-        writeGatewayEventAudit(args.directory, {
-            hook: "long-turn-watchdog",
-            stage: injected ? "inject" : "skip",
-            reason_code: injected ? "visible_progress_pulse_injected" : "visible_progress_pulse_inject_failed",
-            session_id: args.sessionId,
-            elapsed_ms: args.elapsedMs,
-            tool_calls_this_turn: args.toolCallsThisTurn,
-        });
+    function visibleProgressPulseText(args) {
+        return [
+            "[runtime progress pulse]",
+            `Still working in this turn after ${formatDuration(args.elapsedMs)} and ${args.toolCallsThisTurn} tool call${args.toolCallsThisTurn === 1 ? "" : "s"}. I will send the final result once I clear the current step.`,
+        ].join("\n");
     }
     return {
         id: "long-turn-watchdog",
@@ -146,70 +109,37 @@ export function createLongTurnWatchdogHook(options) {
             state.toolCallsThisTurn += 1;
             const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output);
             if (!text) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "output_not_text",
-                    session_id: sessionId,
-                });
                 return;
             }
             const elapsedMs = Math.max(0, now() - state.turnStartMs);
             const toolCallThreshold = Math.max(1, Math.floor(options.toolCallWarningThreshold));
             if (elapsedMs < options.warningThresholdMs && state.toolCallsThisTurn < toolCallThreshold) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "below_threshold",
-                    session_id: sessionId,
-                    elapsed_ms: elapsedMs,
-                    warning_threshold_ms: options.warningThresholdMs,
-                    tool_calls_this_turn: state.toolCallsThisTurn,
-                    tool_call_warning_threshold: toolCallThreshold,
-                });
                 return;
             }
             const sameTurnWarned = state.warnedTurnCounter === state.turnCounter;
             if (sameTurnWarned) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "already_warned_for_turn",
-                    session_id: sessionId,
-                    elapsed_ms: elapsedMs,
-                    turn_counter: state.turnCounter,
-                });
                 return;
             }
             if (options.reminderCooldownMs > 0 &&
                 state.lastWarnedAtMs > 0 &&
                 now() - state.lastWarnedAtMs < options.reminderCooldownMs) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "cooldown_active",
-                    session_id: sessionId,
-                    elapsed_ms: elapsedMs,
-                    reminder_cooldown_ms: options.reminderCooldownMs,
-                });
                 return;
             }
             const prefix = options.prefix.trim() || "[Turn Watchdog]:";
             const warning = `${prefix} Long turn detected (${formatDuration(elapsedMs)} since last user message; threshold ${formatDuration(options.warningThresholdMs)}).`;
             const heartbeat = `${prefix} Still working - collecting results before the final reply.`;
-            const amended = `${text}\n\n${warning}\n${heartbeat}`;
+            const shouldAppendPulse = state.toolCallsThisTurn >= toolCallThreshold;
+            const pulse = visibleProgressPulseText({
+                elapsedMs,
+                toolCallsThisTurn: state.toolCallsThisTurn,
+            });
+            const amended = shouldAppendPulse
+                ? `${text}\n\n${warning}\n${heartbeat}\n\n${pulse}`
+                : `${text}\n\n${warning}\n${heartbeat}`;
             if (!writeToolAfterOutputText(eventPayload.output?.output, amended, channel)) {
                 if (typeof eventPayload.output === "object" && eventPayload.output) {
                     eventPayload.output.output = amended;
                 }
-            }
-            if (state.toolCallsThisTurn >= toolCallThreshold) {
-                await injectVisibleProgressPulse({
-                    sessionId,
-                    directory,
-                    elapsedMs,
-                    toolCallsThisTurn: state.toolCallsThisTurn,
-                });
             }
             state.warnedTurnCounter = state.turnCounter;
             state.lastWarnedAtMs = now();
@@ -220,6 +150,7 @@ export function createLongTurnWatchdogHook(options) {
                 session_id: sessionId,
                 elapsed_ms: elapsedMs,
                 tool_calls_this_turn: state.toolCallsThisTurn,
+                visible_progress_pulse: shouldAppendPulse,
                 tool_call_warning_threshold: toolCallThreshold,
                 warning_threshold_ms: options.warningThresholdMs,
                 turn_started_at: new Date(state.turnStartMs).toISOString(),

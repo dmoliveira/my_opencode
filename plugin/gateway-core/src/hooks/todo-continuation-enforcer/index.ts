@@ -2,8 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState } from "../../state/storage.js"
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
+import { buildCompactDecisionCacheKey, type LlmDecisionRuntime, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
 import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
 interface GatewayClient {
@@ -107,10 +106,6 @@ interface SessionState {
   continueIntentArmed: boolean
   continueAckPending: boolean
   lastTraceId?: string
-}
-
-function compactDecisionCacheKey(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240)
 }
 
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>"
@@ -369,7 +364,11 @@ async function resolvePendingContinuationDecision(options: {
         S: "no_pending",
         U: "unclear",
       },
-      cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${compactDecisionCacheKey(options.text)}`,
+      cacheKey: buildCompactDecisionCacheKey({
+        prefix: "todo-continuation",
+        parts: [options.source, options.continueIntentArmed ? "armed" : "unarmed"],
+        text: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
+      }),
     })
   } catch (error) {
     writeGatewayEventAudit(options.directory, {
@@ -409,10 +408,13 @@ async function resolvePendingContinuationDecision(options: {
     deterministicValue: "false",
     aiValue: decision.char === "C" ? "true" : decision.char === "U" ? "unclear" : "false",
   })
+  const shadowDeferred = options.decisionRuntime.config.mode === "shadow" && decision.char === "C"
   writeGatewayEventAudit(options.directory, {
     hook: "todo-continuation-enforcer",
     stage: "state",
-    reason_code: "llm_todo_continuation_decision_recorded",
+    reason_code: shadowDeferred
+      ? "llm_todo_continuation_shadow_deferred"
+      : "llm_todo_continuation_decision_recorded",
     session_id: options.sessionId,
     trace_id: options.traceId,
     llm_decision_char: decision.char,
@@ -420,18 +422,7 @@ async function resolvePendingContinuationDecision(options: {
     llm_decision_mode: options.decisionRuntime.config.mode,
     decision_source: options.source,
   })
-  if (options.decisionRuntime.config.mode === "shadow" && decision.char === "C") {
-    writeGatewayEventAudit(options.directory, {
-      hook: "todo-continuation-enforcer",
-      stage: "state",
-      reason_code: "llm_todo_continuation_shadow_deferred",
-      session_id: options.sessionId,
-      trace_id: options.traceId,
-      llm_decision_char: decision.char,
-      llm_decision_meaning: decision.meaning,
-      llm_decision_mode: options.decisionRuntime.config.mode,
-      decision_source: options.source,
-    })
+  if (shadowDeferred) {
     return false
   }
   return decision.char === "C"
@@ -767,22 +758,10 @@ export function createTodoContinuationEnforcerHook(options: {
         }
       }
       if (options.stopGuard?.isStopped(sessionId)) {
-        writeGatewayEventAudit(directory, {
-          hook: "todo-continuation-enforcer",
-          stage: "skip",
-          reason_code: "todo_continuation_stop_guard",
-          session_id: sessionId,
-        })
         return
       }
       const gatewayState = loadGatewayState(directory)
       if (gatewayState?.activeLoop?.active === true && gatewayState.activeLoop.sessionId === sessionId) {
-        writeGatewayEventAudit(directory, {
-          hook: "todo-continuation-enforcer",
-          stage: "skip",
-          reason_code: "todo_continuation_active_loop",
-          session_id: sessionId,
-        })
         return
       }
 
@@ -861,12 +840,6 @@ export function createTodoContinuationEnforcerHook(options: {
       }
       state.pendingContinuation = pending
       if (!pending || !client) {
-        writeGatewayEventAudit(directory, {
-          hook: "todo-continuation-enforcer",
-          stage: "skip",
-          reason_code: "todo_continuation_no_pending",
-          session_id: sessionId,
-        })
         return
       }
 

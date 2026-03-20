@@ -123,12 +123,6 @@ export function createProviderTokenLimitRecoveryHook(options) {
                     directory,
                 });
                 if (!safety.safe) {
-                    writeGatewayEventAudit(directory, {
-                        hook: "provider-token-limit-recovery",
-                        stage: "skip",
-                        reason_code: `token_limit_recovery_${safety.reason}`,
-                        session_id: sessionId,
-                    });
                     return;
                 }
                 const injected = await injectHookMessage({

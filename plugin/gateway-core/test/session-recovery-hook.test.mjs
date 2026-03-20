@@ -690,7 +690,7 @@ test("session-recovery ignores stale question rescue when latest message is user
   }
 })
 
-test("session-recovery ignores stale question rescue when question is not last tool part", async () => {
+test("session-recovery ignores incomplete-tail recovery when question is not last tool part", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
   try {
     let promptCalls = 0
@@ -943,6 +943,66 @@ test("session-recovery clears proactive question tracking after user reply", asy
 
     assert.equal(promptCalls, 0)
     assert.equal(messageCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery injects fallback when idle session ends with incomplete non-text assistant tail", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  let lastPromptBody = null
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "user", time: { completed: Date.now() } },
+                  parts: [{ type: "text", text: "please continue" }],
+                },
+                {
+                  info: { role: "assistant", time: {} },
+                  parts: [
+                    { type: "tool", tool: "read", state: { status: "completed" } },
+                    { type: "reasoning", text: "checking" },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-incomplete-tail",
+        },
+      },
+    })
+
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /incomplete assistant turn detected during idle/)
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /last_tool: read/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

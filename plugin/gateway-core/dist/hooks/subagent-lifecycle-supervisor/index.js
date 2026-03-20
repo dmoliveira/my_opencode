@@ -417,15 +417,6 @@ export function createSubagentLifecycleSupervisorHook(options) {
                     }
                 }
                 if (ageMs < options.staleRunningMs) {
-                    writeGatewayEventAudit(directory, {
-                        hook: "subagent-lifecycle-supervisor",
-                        stage: "skip",
-                        reason_code: "subagent_lifecycle_child_idle_not_stale",
-                        session_id: link.parentSessionId,
-                        child_run_id: runningState.childRunId,
-                        trace_id: runningState.traceId,
-                        subagent_type: runningState.subagentType,
-                    });
                     return;
                 }
                 const staleRecovered = finalizeLinkedLifecycle({
