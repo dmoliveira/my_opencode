@@ -109,12 +109,6 @@ export function createLongTurnWatchdogHook(options) {
             state.toolCallsThisTurn += 1;
             const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output);
             if (!text) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "output_not_text",
-                    session_id: sessionId,
-                });
                 return;
             }
             const elapsedMs = Math.max(0, now() - state.turnStartMs);

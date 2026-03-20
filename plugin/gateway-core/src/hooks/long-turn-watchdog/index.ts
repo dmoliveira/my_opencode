@@ -163,12 +163,6 @@ export function createLongTurnWatchdogHook(options: {
 
       const { text, channel } = inspectToolAfterOutputText(eventPayload.output?.output)
       if (!text) {
-        writeGatewayEventAudit(directory, {
-          hook: "long-turn-watchdog",
-          stage: "skip",
-          reason_code: "output_not_text",
-          session_id: sessionId,
-        })
         return
       }
 

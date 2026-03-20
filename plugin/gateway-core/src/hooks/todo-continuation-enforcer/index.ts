@@ -758,22 +758,10 @@ export function createTodoContinuationEnforcerHook(options: {
         }
       }
       if (options.stopGuard?.isStopped(sessionId)) {
-        writeGatewayEventAudit(directory, {
-          hook: "todo-continuation-enforcer",
-          stage: "skip",
-          reason_code: "todo_continuation_stop_guard",
-          session_id: sessionId,
-        })
         return
       }
       const gatewayState = loadGatewayState(directory)
       if (gatewayState?.activeLoop?.active === true && gatewayState.activeLoop.sessionId === sessionId) {
-        writeGatewayEventAudit(directory, {
-          hook: "todo-continuation-enforcer",
-          stage: "skip",
-          reason_code: "todo_continuation_active_loop",
-          session_id: sessionId,
-        })
         return
       }
 
@@ -852,12 +840,6 @@ export function createTodoContinuationEnforcerHook(options: {
       }
       state.pendingContinuation = pending
       if (!pending || !client) {
-        writeGatewayEventAudit(directory, {
-          hook: "todo-continuation-enforcer",
-          stage: "skip",
-          reason_code: "todo_continuation_no_pending",
-          session_id: sessionId,
-        })
         return
       }
 
