@@ -290,11 +290,6 @@ export function createContinuationHook(options: {
           : options.directory
       const sessionId = resolveSessionId(eventPayload)
       if (!sessionId) {
-        writeGatewayEventAudit(directory, {
-          hook: "continuation",
-          stage: "skip",
-          reason_code: "missing_session_id",
-        })
         return
       }
 
@@ -314,29 +309,12 @@ export function createContinuationHook(options: {
         }
       }
       if (!state || !active || active.active !== true) {
-        writeGatewayEventAudit(directory, {
-          hook: "continuation",
-          stage: "skip",
-          reason_code: "no_active_loop",
-        })
         return
       }
       if (options.stopGuard?.isStopped(sessionId)) {
-        writeGatewayEventAudit(directory, {
-          hook: "continuation",
-          stage: "skip",
-          reason_code: "stop_guard_active",
-          session_id: sessionId,
-        })
         return
       }
       if (!sessionId || sessionId !== active.sessionId) {
-        writeGatewayEventAudit(directory, {
-          hook: "continuation",
-          stage: "skip",
-          reason_code: "session_mismatch",
-          has_session_id: sessionId.length > 0,
-        })
         return
       }
 
@@ -372,13 +350,6 @@ export function createContinuationHook(options: {
             }
             state.lastUpdatedAt = nowIso()
             saveGatewayState(directory, state)
-            writeGatewayEventAudit(directory, {
-              hook: "continuation",
-              stage: "skip",
-              reason_code: REASON_CODES.LOOP_COMPLETION_IGNORED_INCOMPLETE_RUNTIME,
-              session_id: sessionId,
-              ignored_completion_cycles: ignoredCycles,
-            })
           } else {
             active.active = false
             state.lastUpdatedAt = nowIso()
@@ -437,13 +408,6 @@ export function createContinuationHook(options: {
           directory,
         })
         if (!safety.safe) {
-          writeGatewayEventAudit(directory, {
-            hook: "continuation",
-            stage: "skip",
-            reason_code: `idle_prompt_${safety.reason}`,
-            session_id: sessionId,
-            iteration: active.iteration,
-          })
           return
         }
         const mode = options.keywordDetector?.modeForSession(sessionId) ?? null
