@@ -173,25 +173,8 @@ test("long-turn-watchdog warns after repeated tool calls even before time thresh
 
 test("long-turn-watchdog injects visible progress pulse when tool-only turn stalls", async () => {
   let currentMs = 0
-  let promptCalls = 0
   const hook = createLongTurnWatchdogHook({
     directory: process.cwd(),
-    client: {
-      session: {
-        async messages() {
-          return {
-            data: [
-              {
-                info: { role: "assistant", time: {} },
-              },
-            ],
-          }
-        },
-        async promptAsync() {
-          promptCalls += 1
-        },
-      },
-    },
     enabled: true,
     warningThresholdMs: 1000,
     toolCallWarningThreshold: 1,
@@ -215,7 +198,8 @@ test("long-turn-watchdog injects visible progress pulse when tool-only turn stal
     directory: process.cwd(),
   })
 
-  assert.equal(promptCalls, 1)
+  assert.match(output.output, /\[runtime progress pulse\]/)
+  assert.match(output.output, /Still working in this turn after 1\.5s and 1 tool call/)
 })
 
 test("long-turn-watchdog honors tool-call threshold from plugin config", async () => {

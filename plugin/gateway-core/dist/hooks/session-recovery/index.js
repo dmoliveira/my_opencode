@@ -128,6 +128,34 @@ function looksLikeSilentQuestionStallFromHistory(messages) {
     }
     return { matched: true, tool };
 }
+function looksLikeIncompleteAssistantTailFromHistory(messages) {
+    const message = messages.at(-1);
+    if (message?.info?.role !== "assistant") {
+        return { matched: false, tool: "" };
+    }
+    const errored = message.info?.error !== undefined && message.info?.error !== null;
+    const completed = Number.isFinite(Number(message.info?.time?.completed ?? Number.NaN));
+    if (errored || completed) {
+        return { matched: false, tool: "" };
+    }
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    if (parts.some((part) => {
+        const toolName = String(part?.tool ?? "").trim().toLowerCase();
+        return toolName === "question" || toolName === "askuserquestion";
+    })) {
+        return { matched: false, tool: "" };
+    }
+    const lastToolPart = [...parts].reverse().find((part) => part?.type === "tool");
+    const tool = String(lastToolPart?.tool ?? "").trim().toLowerCase();
+    if (!tool || tool === "question" || tool === "askuserquestion") {
+        return { matched: false, tool: "" };
+    }
+    const hasVisibleText = parts.some((part) => part?.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim() &&
+        !part.synthetic);
+    return { matched: !hasVisibleText, tool };
+}
 async function injectRecoveryMessage(args) {
     const safety = await inspectHookMessageSafety({
         session: args.session,
@@ -302,6 +330,25 @@ export function createSessionRecoveryHook(options) {
                     }
                     const silentQuestion = looksLikeSilentQuestionStallFromHistory(messages);
                     if (!silentQuestion.matched) {
+                        const incompleteTail = looksLikeIncompleteAssistantTailFromHistory(messages);
+                        if (!incompleteTail.matched) {
+                            return;
+                        }
+                        recoveringSessions.add(sessionId);
+                        try {
+                            await injectRecoveryMessage({
+                                session: client,
+                                sessionId,
+                                directory,
+                                hook: "session-recovery",
+                                reasonCode: "incomplete_assistant_tail_recovery",
+                                allowIncompleteAssistantTurn: true,
+                                content: `[incomplete assistant turn detected during idle - continuing now]\nlast_tool: ${incompleteTail.tool}`,
+                            });
+                        }
+                        finally {
+                            recoveringSessions.delete(sessionId);
+                        }
                         return;
                     }
                     recoveringSessions.add(sessionId);

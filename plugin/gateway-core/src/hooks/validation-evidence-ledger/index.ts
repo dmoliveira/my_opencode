@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -323,7 +324,10 @@ export function createValidationEvidenceLedgerHook(options: {
             S: "security",
             N: "not_validation",
           },
-          cacheKey: `validation-command:${command.trim().toLowerCase()}`,
+          cacheKey: buildCompactDecisionCacheKey({
+            prefix: "validation-command",
+            text: buildValidationContext(command),
+          }),
         })
         if (decision.accepted) {
           const category = VALIDATION_CATEGORY_BY_CHAR[decision.char]

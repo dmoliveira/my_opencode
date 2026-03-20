@@ -256,7 +256,7 @@ test("primary-worktree-guard allows apply_patch targeting a linked worktree from
   }
 })
 
-test("primary-worktree-guard blocks mutating bash commands in the primary worktree", async () => {
+test("primary-worktree-guard reroutes mutating bash commands in the primary worktree", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-primary-worktree-"))
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -276,29 +276,26 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-primary-bash-mutate" },
-        { args: { command: "echo hi > file.txt" } }
-      ),
-      /limited to inspection, validation, and exact default-branch sync commands/
+    const mutatePayload = { args: { command: "echo hi > file.txt" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-bash-mutate" },
+      mutatePayload
     )
+    assert.match(mutatePayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-primary-gh-api" },
-        { args: { command: "gh api -X POST repos/foo/bar/issues" } }
-      ),
-      /limited to inspection, validation, and exact default-branch sync commands/
+    const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-gh-api" },
+      ghPayload
     )
+    assert.match(ghPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-primary-chain" },
-        { args: { command: "git status --short --branch && echo hi > file.txt" } }
-      ),
-      /limited to inspection, validation, and exact default-branch sync commands/
+    const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-chain" },
+      chainPayload
     )
+    assert.match(chainPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
     await assert.rejects(
       plugin["tool.execute.before"](
@@ -308,13 +305,12 @@ test("primary-worktree-guard blocks mutating bash commands in the primary worktr
       /Branch switching to 'main' is blocked/
     )
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-primary-redirection" },
-        { args: { command: "git status --short --branch > file.txt" } }
-      ),
-      /limited to inspection, validation, and exact default-branch sync commands/
+    const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-redirection" },
+      redirectPayload
     )
+    assert.match(redirectPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-bash-safe" },

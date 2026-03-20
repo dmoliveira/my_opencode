@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
 const VALIDATION_INVOCATION_ID_KEY = "validationEvidenceInvocationId";
@@ -254,7 +254,10 @@ export function createValidationEvidenceLedgerHook(options) {
                         S: "security",
                         N: "not_validation",
                     },
-                    cacheKey: `validation-command:${command.trim().toLowerCase()}`,
+                    cacheKey: buildCompactDecisionCacheKey({
+                        prefix: "validation-command",
+                        text: buildValidationContext(command),
+                    }),
                 });
                 if (decision.accepted) {
                     const category = VALIDATION_CATEGORY_BY_CHAR[decision.char];

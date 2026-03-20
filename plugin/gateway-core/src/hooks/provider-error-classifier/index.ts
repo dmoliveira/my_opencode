@@ -3,6 +3,7 @@ import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -180,7 +181,10 @@ export function createProviderErrorClassifierHook(options: {
             O: "provider_overloaded",
             N: "not_classified",
           },
-          cacheKey: `provider-error:${text.trim().toLowerCase()}`,
+          cacheKey: buildCompactDecisionCacheKey({
+            prefix: "provider-error",
+            text: buildAiContext(text),
+          }),
         })
         if (decision.skippedReason === "max_concurrency_reached" || decision.skippedReason === "runtime_cooldown") {
           if (session && sessionId) {

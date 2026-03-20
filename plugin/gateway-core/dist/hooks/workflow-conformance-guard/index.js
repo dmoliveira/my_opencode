@@ -35,6 +35,25 @@ function protectedBranchWorktreeHint(directory) {
     const base = basename(directory) || "repo";
     return `For repo maintenance, run \`python3 scripts/worktree_helper_command.py maintenance --directory ${directory}\` or create a throwaway worktree directly, for example: \`git worktree add -b chore/<task> ../${base}-maint HEAD\`.`;
 }
+function shellQuote(value) {
+    return JSON.stringify(value);
+}
+function rerouteToMaintenanceHelper(payload, directory, sessionId, reasonCode) {
+    const args = payload.output?.args;
+    const originalCommand = typeof args?.command === "string" ? args.command.trim() : "";
+    if (!args || !originalCommand) {
+        return false;
+    }
+    args.command = `python3 scripts/worktree_helper_command.py maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+    writeGatewayEventAudit(directory, {
+        hook: "workflow-conformance-guard",
+        stage: "state",
+        reason_code: reasonCode,
+        session_id: sessionId,
+        blocked_command: originalCommand,
+    });
+    return true;
+}
 // Creates workflow conformance guard for commit operations on protected branches.
 export function createWorkflowConformanceGuardHook(options) {
     const protectedSet = new Set(options.protectedBranches.map((item) => item.trim()).filter(Boolean));
@@ -71,24 +90,18 @@ export function createWorkflowConformanceGuardHook(options) {
             const command = String(eventPayload.output?.args?.command ?? "").trim();
             if (isProtectedGitMutationCommand(command)) {
                 const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "");
-                writeGatewayEventAudit(directory, {
-                    hook: "workflow-conformance-guard",
-                    stage: "skip",
-                    reason_code: "commit_on_protected_branch_blocked",
-                    session_id: sessionId,
-                });
-                throw new Error(`Git commits are blocked on protected branch '${branch}'. Use a worktree feature branch.`);
+                if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "commit_on_protected_branch_rerouted")) {
+                    return;
+                }
+                throw new Error(`Git commits are blocked on protected branch '${branch}'. Use a worktree feature branch. ${protectedBranchWorktreeHint(directory)}`);
             }
             if (isAllowedProtectedShellCommand(command)) {
                 return;
             }
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "");
-            writeGatewayEventAudit(directory, {
-                hook: "workflow-conformance-guard",
-                stage: "skip",
-                reason_code: "bash_on_protected_branch_blocked",
-                session_id: sessionId,
-            });
+            if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_on_protected_branch_rerouted")) {
+                return;
+            }
             throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)}`);
         },
     };

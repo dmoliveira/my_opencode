@@ -42,6 +42,10 @@ function stripQuotes(token: string): string {
   return token.replace(/^['"]|['"]$/g, "")
 }
 
+function shellQuote(value: string): string {
+  return JSON.stringify(value)
+}
+
 const GIT_PREFIX = String.raw`(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`
 
 function matchBranchTarget(command: string, pattern: RegExp): string | null {
@@ -94,6 +98,22 @@ export function createPrimaryWorktreeGuardHook(options: {
   blockBranchSwitches: boolean
 }): GatewayHook {
   const allowedBranches = new Set(options.allowedBranches.map((item) => item.trim()).filter(Boolean))
+  function rerouteToMaintenanceHelper(payload: ToolBeforePayload, directory: string, sessionId: string, reasonCode: string): boolean {
+    const args = payload.output?.args
+    const originalCommand = typeof args?.command === "string" ? args.command.trim() : ""
+    if (!args || !originalCommand) {
+      return false
+    }
+    args.command = `python3 scripts/worktree_helper_command.py maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
+    writeGatewayEventAudit(directory, {
+      hook: "primary-worktree-guard",
+      stage: "state",
+      reason_code: reasonCode,
+      session_id: sessionId,
+      blocked_command: originalCommand,
+    })
+    return true
+  }
   return {
     id: "primary-worktree-guard",
     priority: 689,
@@ -142,12 +162,9 @@ export function createPrimaryWorktreeGuardHook(options: {
       if (isAllowedProtectedShellCommand(command)) {
         return
       }
-      writeGatewayEventAudit(directory, {
-        hook: "primary-worktree-guard",
-        stage: "skip",
-        reason_code: "bash_in_primary_worktree_blocked",
-        session_id: sessionId,
-      })
+      if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_in_primary_worktree_rerouted")) {
+        return
+      }
       throw new Error(
         "Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (`git fetch`, `git fetch --prune`, and `git pull --rebase`). Create or use a dedicated git worktree branch for task mutations."
       )

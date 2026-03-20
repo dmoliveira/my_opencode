@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -11,6 +12,11 @@ const SLASH_COMMAND_PATTERN = /^\/([a-zA-Z][\w-]*)\s*(.*)/
 const EXCLUDED_COMMANDS = new Set(["ulw-loop"])
 const INLINE_SLASH_TOKEN_PATTERN = /(^|\s)\/([a-zA-Z][\w-]*)\b/g
 const HIGH_RISK_SKIP_PATTERN = /\b(install|npm\s+install|brew\s+install|setup|configure|deploy|production)\b/i
+const DETERMINISTIC_DOCTOR_PATTERN = /\b(doctor|diagnos(?:e|is|tic|tics))\b/i
+const DIAGNOSTIC_CUE_PATTERN = /\b(doctor|diagnos(?:e|is|tic|tics)|health(?:\s+check)?|debug|investigat(?:e|ion)|inspect)\b/i
+const ACTION_VERB_PATTERN = /\b(run|open|use|launch|start|check|perform|do|inspect|investigate|debug|review|analy[sz]e|look\s+into|tell\s+me|show\s+me|help\s+me\s+understand)\b/i
+const META_DISCUSSION_SKIP_PATTERN = /\b(last session|previous session|instruction command|prompt wording|prompt text|slash doctor|auto[-\s]?slash|why did|why does|routed to|route to|activated \/doctor|triggered \/doctor|command behavior)\b/i
+const INVESTIGATION_CONTEXT_PATTERN = /\b(issue|environment|state|problem|wrong|error|failure|symptom|health)\b/i
 const AI_AUTO_SLASH_CHAR_TO_COMMAND: Record<string, string> = {
   D: "/doctor",
 }
@@ -212,14 +218,21 @@ function detectSlash(prompt: string): SlashDetection {
   }
 
   const text = cleaned.toLowerCase()
-  if (text.includes("doctor") || text.includes("diagnose") || text.includes("health check")) {
+  if (!META_DISCUSSION_SKIP_PATTERN.test(text) && DETERMINISTIC_DOCTOR_PATTERN.test(text) && ACTION_VERB_PATTERN.test(text)) {
     return { slash: "/doctor", excludedExplicit: false }
   }
   return { slash: null, excludedExplicit: false }
 }
 
 function shouldSkipAiAutoSlash(prompt: string): boolean {
-  return HIGH_RISK_SKIP_PATTERN.test(prompt)
+  const hasInvestigativeIntent = ACTION_VERB_PATTERN.test(prompt)
+  const hasEligibleContext = DIAGNOSTIC_CUE_PATTERN.test(prompt) || INVESTIGATION_CONTEXT_PATTERN.test(prompt)
+  return (
+    HIGH_RISK_SKIP_PATTERN.test(prompt) ||
+    META_DISCUSSION_SKIP_PATTERN.test(prompt) ||
+    !hasInvestigativeIntent ||
+    !hasEligibleContext
+  )
 }
 
 function shouldSkipAutoSlash(prompt: string): boolean {
@@ -227,7 +240,7 @@ function shouldSkipAutoSlash(prompt: string): boolean {
 }
 
 function buildAiSlashInstruction(): string {
-  return "Classify only the sanitized user request text for diagnostics intent. D=diagnostics_or_health_check, N=not_diagnostics."
+  return "Classify only the sanitized user request text for explicit diagnostics intent. Return D only when the user is clearly asking to run or perform diagnostics or health checks now. Return N for meta discussion about prompts, routing, commands, past sessions, or instruction wording."
 }
 
 function buildAiSlashContext(prompt: string): string {
@@ -284,7 +297,10 @@ export function createAutoSlashCommandHook(options: {
                 D: "route_doctor",
                 N: "no_slash",
               },
-              cacheKey: `auto-slash:${prompt.trim().toLowerCase()}`,
+              cacheKey: buildCompactDecisionCacheKey({
+                prefix: "auto-slash",
+                text: normalizePromptForAi(prompt),
+              }),
             })
           } catch (error) {
             writeGatewayEventAudit(directory, {
