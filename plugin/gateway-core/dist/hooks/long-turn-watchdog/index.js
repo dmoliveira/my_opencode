@@ -120,41 +120,15 @@ export function createLongTurnWatchdogHook(options) {
             const elapsedMs = Math.max(0, now() - state.turnStartMs);
             const toolCallThreshold = Math.max(1, Math.floor(options.toolCallWarningThreshold));
             if (elapsedMs < options.warningThresholdMs && state.toolCallsThisTurn < toolCallThreshold) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "below_threshold",
-                    session_id: sessionId,
-                    elapsed_ms: elapsedMs,
-                    warning_threshold_ms: options.warningThresholdMs,
-                    tool_calls_this_turn: state.toolCallsThisTurn,
-                    tool_call_warning_threshold: toolCallThreshold,
-                });
                 return;
             }
             const sameTurnWarned = state.warnedTurnCounter === state.turnCounter;
             if (sameTurnWarned) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "already_warned_for_turn",
-                    session_id: sessionId,
-                    elapsed_ms: elapsedMs,
-                    turn_counter: state.turnCounter,
-                });
                 return;
             }
             if (options.reminderCooldownMs > 0 &&
                 state.lastWarnedAtMs > 0 &&
                 now() - state.lastWarnedAtMs < options.reminderCooldownMs) {
-                writeGatewayEventAudit(directory, {
-                    hook: "long-turn-watchdog",
-                    stage: "skip",
-                    reason_code: "cooldown_active",
-                    session_id: sessionId,
-                    elapsed_ms: elapsedMs,
-                    reminder_cooldown_ms: options.reminderCooldownMs,
-                });
                 return;
             }
             const prefix = options.prefix.trim() || "[Turn Watchdog]:";

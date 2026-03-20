@@ -292,12 +292,6 @@ export function createSessionRecoveryHook(options) {
                 if (pendingQuestion) {
                     const ageMs = Math.max(0, nowMs() - Math.max(pendingQuestion.startedAt, pendingQuestion.lastUpdatedAt));
                     if (ageMs < STALE_QUESTION_PREVENTION_MS) {
-                        writeGatewayEventAudit(directory, {
-                            hook: "session-recovery",
-                            stage: "skip",
-                            reason_code: "stale_question_tool_prevention_not_stale",
-                            session_id: sessionId,
-                        });
                         return;
                     }
                 }
