@@ -261,10 +261,13 @@ async function resolvePendingContinuationDecision(options) {
         deterministicValue: "false",
         aiValue: decision.char === "C" ? "true" : decision.char === "U" ? "unclear" : "false",
     });
+    const shadowDeferred = options.decisionRuntime.config.mode === "shadow" && decision.char === "C";
     writeGatewayEventAudit(options.directory, {
         hook: "todo-continuation-enforcer",
         stage: "state",
-        reason_code: "llm_todo_continuation_decision_recorded",
+        reason_code: shadowDeferred
+            ? "llm_todo_continuation_shadow_deferred"
+            : "llm_todo_continuation_decision_recorded",
         session_id: options.sessionId,
         trace_id: options.traceId,
         llm_decision_char: decision.char,
@@ -272,18 +275,7 @@ async function resolvePendingContinuationDecision(options) {
         llm_decision_mode: options.decisionRuntime.config.mode,
         decision_source: options.source,
     });
-    if (options.decisionRuntime.config.mode === "shadow" && decision.char === "C") {
-        writeGatewayEventAudit(options.directory, {
-            hook: "todo-continuation-enforcer",
-            stage: "state",
-            reason_code: "llm_todo_continuation_shadow_deferred",
-            session_id: options.sessionId,
-            trace_id: options.traceId,
-            llm_decision_char: decision.char,
-            llm_decision_meaning: decision.meaning,
-            llm_decision_mode: options.decisionRuntime.config.mode,
-            decision_source: options.source,
-        });
+    if (shadowDeferred) {
         return false;
     }
     return decision.char === "C";

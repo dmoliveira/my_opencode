@@ -174,27 +174,19 @@ export function createProviderErrorClassifierHook(options) {
                             deterministicValue: "none",
                             aiValue: classification,
                         });
+                        const shadowDeferred = options.decisionRuntime.config.mode === "shadow";
                         writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
                             hook: "provider-error-classifier",
                             stage: "state",
-                            reason_code: "llm_provider_error_decision_recorded",
+                            reason_code: shadowDeferred
+                                ? "llm_provider_error_shadow_deferred"
+                                : "llm_provider_error_decision_recorded",
                             session_id: sessionId,
                             llm_decision_char: decision.char,
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
                         });
-                        if (options.decisionRuntime.config.mode === "shadow") {
-                            writeGatewayEventAudit(resolveDirectory(eventPayload, options.directory), {
-                                hook: "provider-error-classifier",
-                                stage: "state",
-                                reason_code: "llm_provider_error_shadow_deferred",
-                                session_id: sessionId,
-                                llm_decision_char: decision.char,
-                                llm_decision_meaning: decision.meaning,
-                                llm_decision_mode: options.decisionRuntime.config.mode,
-                            });
-                        }
-                        else {
+                        if (!shadowDeferred) {
                             outcome = {
                                 classification,
                                 reason: `llm:${decision.meaning || decision.char}`,

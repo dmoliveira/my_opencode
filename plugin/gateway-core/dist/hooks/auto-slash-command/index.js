@@ -249,27 +249,20 @@ export function createAutoSlashCommandHook(options) {
                             deterministicValue: "none",
                             aiValue: aiSlash ?? "none",
                         });
+                        const shadowDeferred = options.decisionRuntime.config.mode === "shadow" && aiSlash;
                         writeGatewayEventAudit(directory, {
                             hook: "auto-slash-command",
                             stage: "state",
-                            reason_code: "llm_auto_slash_decision_recorded",
+                            reason_code: shadowDeferred
+                                ? "llm_auto_slash_shadow_deferred"
+                                : "llm_auto_slash_decision_recorded",
                             session_id: sessionId,
                             llm_decision_char: decision.char,
                             llm_decision_meaning: decision.meaning,
                             llm_decision_mode: options.decisionRuntime.config.mode,
                             slash_command: aiSlash ?? undefined,
                         });
-                        if (options.decisionRuntime.config.mode === "shadow" && aiSlash) {
-                            writeGatewayEventAudit(directory, {
-                                hook: "auto-slash-command",
-                                stage: "state",
-                                reason_code: "llm_auto_slash_shadow_deferred",
-                                session_id: sessionId,
-                                llm_decision_char: decision.char,
-                                llm_decision_meaning: decision.meaning,
-                                llm_decision_mode: options.decisionRuntime.config.mode,
-                                slash_command: aiSlash,
-                            });
+                        if (shadowDeferred) {
                         }
                         else {
                             slash = aiSlash;
