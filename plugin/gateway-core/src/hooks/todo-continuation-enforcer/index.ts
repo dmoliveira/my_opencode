@@ -2,8 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { loadGatewayState } from "../../state/storage.js"
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js"
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
+import { buildCompactDecisionCacheKey, type LlmDecisionRuntime, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js"
 import type { StopContinuationGuard } from "../stop-continuation-guard/index.js"
 
 interface GatewayClient {
@@ -107,10 +106,6 @@ interface SessionState {
   continueIntentArmed: boolean
   continueAckPending: boolean
   lastTraceId?: string
-}
-
-function compactDecisionCacheKey(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240)
 }
 
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>"
@@ -369,7 +364,11 @@ async function resolvePendingContinuationDecision(options: {
         S: "no_pending",
         U: "unclear",
       },
-      cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${compactDecisionCacheKey(options.text)}`,
+      cacheKey: buildCompactDecisionCacheKey({
+        prefix: "todo-continuation",
+        parts: [options.source, options.continueIntentArmed ? "armed" : "unarmed"],
+        text: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
+      }),
     })
   } catch (error) {
     writeGatewayEventAudit(options.directory, {

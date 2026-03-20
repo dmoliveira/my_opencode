@@ -1,5 +1,5 @@
 import type { GatewayHook } from "../registry.js";
-import type { LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
+import { type LlmDecisionRuntime } from "../shared/llm-decision-runtime.js";
 import type { StopContinuationGuard } from "../stop-continuation-guard/index.js";
 interface GatewayClient {
     session?: {

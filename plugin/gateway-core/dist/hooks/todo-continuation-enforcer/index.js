@@ -1,10 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadGatewayState } from "../../state/storage.js";
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
-import { writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
-function compactDecisionCacheKey(text) {
-    return text.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 240);
-}
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit } from "../shared/llm-decision-runtime.js";
 const CONTINUE_LOOP_MARKER = "<CONTINUE-LOOP>";
 const TODO_CONTINUATION_PROMPT = [
     "[SYSTEM DIRECTIVE: TODO CONTINUATION]",
@@ -219,7 +216,11 @@ async function resolvePendingContinuationDecision(options) {
                 S: "no_pending",
                 U: "unclear",
             },
-            cacheKey: `todo-continuation:${options.source}:${options.continueIntentArmed ? "armed" : "unarmed"}:${compactDecisionCacheKey(options.text)}`,
+            cacheKey: buildCompactDecisionCacheKey({
+                prefix: "todo-continuation",
+                parts: [options.source, options.continueIntentArmed ? "armed" : "unarmed"],
+                text: buildContinuationContext(options.text, options.continueIntentArmed, options.source),
+            }),
         });
     }
     catch (error) {
