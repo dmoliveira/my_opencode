@@ -116,21 +116,9 @@ export function createPreemptiveCompactionHook(options) {
                     const cooldownElapsed = nextState.toolCalls - nextState.lastCompactedAtToolCall >= options.compactionCooldownToolCalls;
                     const tokenDeltaEnough = totalInputTokens - nextState.lastCompactedTokens >= options.minTokenDeltaForCompaction;
                     if (!cooldownElapsed) {
-                        writeGatewayEventAudit(directory, {
-                            hook: "preemptive-compaction",
-                            stage: "skip",
-                            reason_code: "compaction_cooldown_not_elapsed",
-                            session_id: sessionId,
-                        });
                         return;
                     }
                     if (!tokenDeltaEnough) {
-                        writeGatewayEventAudit(directory, {
-                            hook: "preemptive-compaction",
-                            stage: "skip",
-                            reason_code: "compaction_token_delta_too_small",
-                            session_id: sessionId,
-                        });
                         return;
                     }
                 }
