@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -109,7 +110,10 @@ export function createPrBodyEvidenceGuardHook(options: {
             context: buildSectionContext(body),
             allowedChars: ["Y", "N"],
             decisionMeaning: { Y: "summary_present", N: "summary_missing" },
-            cacheKey: `pr-body-summary:${body.trim().toLowerCase()}`,
+            cacheKey: buildCompactDecisionCacheKey({
+              prefix: "pr-body-summary",
+              text: buildSectionContext(body),
+            }),
           })
           if (decision.accepted) {
             writeDecisionComparisonAudit({
@@ -155,7 +159,10 @@ export function createPrBodyEvidenceGuardHook(options: {
             context: buildSectionContext(body),
             allowedChars: ["Y", "N"],
             decisionMeaning: { Y: "validation_present", N: "validation_missing" },
-            cacheKey: `pr-body-validation:${body.trim().toLowerCase()}`,
+            cacheKey: buildCompactDecisionCacheKey({
+              prefix: "pr-body-validation",
+              text: buildSectionContext(body),
+            }),
           })
           if (decision.accepted) {
             writeDecisionComparisonAudit({

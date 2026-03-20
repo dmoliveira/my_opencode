@@ -1,7 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js";
-import { writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
+import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const MODEL_BY_CATEGORY = {
     quick: { model: "openai/gpt-5.1-codex-mini", reasoning: "low" },
     balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
@@ -387,7 +387,11 @@ export function createAgentModelResolverHook(options) {
                     context: buildRoutingContext(String(args.prompt ?? ""), String(args.description ?? ""), originalExplicitSubagent, aiInferred.name, aiInferred.score, explicitScore),
                     allowedChars: alphabet,
                     decisionMeaning: buildRoutingDecisionMeaning(aiInferred.name, originalExplicitSubagent),
-                    cacheKey: `route:${originalExplicitSubagent || "none"}:${aiInferred.name}:${combinedText}`,
+                    cacheKey: buildCompactDecisionCacheKey({
+                        prefix: "route",
+                        parts: [originalExplicitSubagent || "none", aiInferred.name],
+                        text: buildRoutingContext(String(args.prompt ?? ""), String(args.description ?? ""), originalExplicitSubagent, aiInferred.name, aiInferred.score, explicitScore),
+                    }),
                 });
                 if (decision.accepted) {
                     const resolvedChar = decision.char.toUpperCase();

@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
+  buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
@@ -238,7 +239,15 @@ export function createDelegationFallbackOrchestratorHook(options: {
               R: "delegation_runtime_error",
               N: "no_match",
             },
-            cacheKey: `delegation-failure:${subagentType}:${category}:${String(eventPayload.output.output ?? "").trim().toLowerCase()}`,
+            cacheKey: buildCompactDecisionCacheKey({
+              prefix: "delegation-failure",
+              parts: [subagentType || "none", category || "none"],
+              text: buildFailureContext(
+                String(eventPayload.output.output ?? ""),
+                String(args?.prompt ?? ""),
+                String(args?.description ?? ""),
+              ),
+            }),
           })
           if (decision.accepted) {
             const aiReason = FAILURE_REASON_BY_CHAR[decision.char] ?? null
