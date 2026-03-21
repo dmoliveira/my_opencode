@@ -14,6 +14,7 @@ tools:
   task: false
   todowrite: false
   todoread: false
+hidden: true
 routing:
   cost_tier: cheap
   default_category: balanced

@@ -39,6 +39,7 @@
       "task",
       "todowrite",
       "todoread"
-    ]
+    ],
+    "hidden": true
   }
 }

@@ -54,6 +54,11 @@ def _validate_metadata(name: str, metadata: Any) -> dict[str, Any]:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{name}: metadata.{key} must be a non-empty string")
         result[key] = value.strip()
+    hidden = metadata.get("hidden")
+    if hidden is not None:
+        if not isinstance(hidden, bool):
+            raise ValueError(f"{name}: metadata.hidden must be boolean")
+        result["hidden"] = hidden
     for key in ("triggers", "avoid_when", "denied_tools"):
         value = metadata.get(key)
         if value is None:
@@ -138,6 +143,8 @@ def _render_agent(spec: dict[str, Any], profile: str) -> tuple[str, str]:
     for tool_name, enabled in tools.items():
         header_lines.append(f"  {tool_name}: {'true' if enabled else 'false'}")
     if metadata:
+        if isinstance(metadata.get("hidden"), bool):
+            header_lines.append(f"hidden: {'true' if metadata['hidden'] else 'false'}")
         header_lines.append("routing:")
         for key in ("cost_tier", "default_category", "fallback_policy"):
             value = metadata.get(key)

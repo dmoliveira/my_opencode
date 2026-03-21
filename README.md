@@ -78,7 +78,7 @@ If this project helps your workflow, please consider supporting ongoing maintena
 
 ## Agent roles (Tab menu)
 
-This setup keeps `build` as the default agent for quick direct work, while adding `orchestrator` and focused specialists for manual selection via `Tab`:
+This setup keeps `build` as the default agent for quick direct work, exposes only `build`, `plan`, and `orchestrator` in the `Tab` switcher, and keeps focused specialists available as hidden secondary subagents:
 
 - `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
 - `explore` (subagent): read-only internal codebase scout.
@@ -94,7 +94,9 @@ This setup keeps `build` as the default agent for quick direct work, while addin
 Default selection note:
 
 - `build` remains the configured `default_agent` in `opencode.json` for speed.
+- `plan` remains the built-in planning primary in OpenCode.
 - choose `orchestrator` when you want end-to-end multi-step execution with delegation and completion gates.
+- specialist subagents stay hidden from `Tab` and are meant for delegation or explicit `@agent` invocation.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.
 Agent source-of-truth specs live in `agent/specs/*.json` and generate markdown via `scripts/build_agents.py`.

@@ -77,20 +77,42 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
         "Use `reviewer` for final quality/safety pass",
         "Anti-loop guard",
     ],
-    "explore.md": ["mode: subagent", "bash: false", "write: false", "edit: false"],
-    "librarian.md": [
+    "explore.md": [
         "mode: subagent",
+        "hidden: true",
         "bash: false",
         "write: false",
         "edit: false",
     ],
-    "oracle.md": ["mode: subagent", "write: false", "edit: false"],
-    "verifier.md": ["mode: subagent", "write: false", "edit: false"],
-    "reviewer.md": ["mode: subagent", "write: false", "edit: false"],
-    "release-scribe.md": ["mode: subagent", "write: false", "edit: false"],
-    "strategic-planner.md": ["mode: subagent", "write: false", "edit: false"],
-    "ambiguity-analyst.md": ["mode: subagent", "write: false", "edit: false"],
-    "plan-critic.md": ["mode: subagent", "write: false", "edit: false"],
+    "librarian.md": [
+        "mode: subagent",
+        "hidden: true",
+        "bash: false",
+        "write: false",
+        "edit: false",
+    ],
+    "oracle.md": ["mode: subagent", "hidden: true", "write: false", "edit: false"],
+    "verifier.md": ["mode: subagent", "hidden: true", "write: false", "edit: false"],
+    "reviewer.md": ["mode: subagent", "hidden: true", "write: false", "edit: false"],
+    "release-scribe.md": [
+        "mode: subagent",
+        "hidden: true",
+        "write: false",
+        "edit: false",
+    ],
+    "strategic-planner.md": [
+        "mode: subagent",
+        "hidden: true",
+        "write: false",
+        "edit: false",
+    ],
+    "ambiguity-analyst.md": [
+        "mode: subagent",
+        "hidden: true",
+        "write: false",
+        "edit: false",
+    ],
+    "plan-critic.md": ["mode: subagent", "hidden: true", "write: false", "edit: false"],
 }
 
 REQUIRED_ORCHESTRATION_MARKERS: list[str] = [
