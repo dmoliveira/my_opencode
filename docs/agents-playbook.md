@@ -45,8 +45,10 @@ Think of it as:
 In OpenCode prompt:
 
 1. Press `Tab`
-2. Pick agent (`build`, `orchestrator`, etc.)
+2. Pick agent (`build`, `plan`, or `orchestrator`)
 3. Run your prompt normally
+
+Our custom specialist subagents are intentionally marked hidden, so they stay out of the `Tab` switcher and are used through delegation or explicit `@agent` mention instead.
 
 You can verify available agents with:
 

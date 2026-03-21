@@ -1,6 +1,25 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "build",
+  "agent": {
+    "executor": {
+      "hidden": true
+    },
+    "planner": {
+      "hidden": true
+    },
+    "supervisor": {
+      "hidden": true
+    },
+    "oracle": {
+      "mode": "subagent",
+      "hidden": true
+    },
+    "reviewer": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  },
   "autoupdate": true,
   "share": "manual",
   "permission": {

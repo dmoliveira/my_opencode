@@ -14,6 +14,7 @@ tools:
   task: false
   todowrite: false
   todoread: false
+hidden: true
 routing:
   cost_tier: free
   default_category: quick
