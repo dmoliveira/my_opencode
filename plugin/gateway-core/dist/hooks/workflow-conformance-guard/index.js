@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
@@ -39,9 +40,23 @@ function protectedBranchWorktreeHint(directory) {
 function shellQuote(value) {
     return JSON.stringify(value);
 }
-const MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
+const DEFAULT_MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
+function maintenanceHelperPath() {
+    const override = process.env.OPENCODE_MAINTENANCE_HELPER_PATH?.trim();
+    return override || DEFAULT_MAINTENANCE_HELPER;
+}
 function maintenanceHelperCommand(directory, originalCommand) {
-    return `python3 ${shellQuote(MAINTENANCE_HELPER)} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+    return `python3 ${shellQuote(maintenanceHelperPath())} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+}
+function maintenanceHelperError(directory, originalCommand) {
+    const helperPath = maintenanceHelperPath();
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    return new Error(`Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`);
+}
+function rerouteGuidance(directory, originalCommand) {
+    const helperPath = maintenanceHelperPath();
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    return `The command was blocked on a protected branch and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`;
 }
 function rerouteToMaintenanceHelper(payload, directory, sessionId, reasonCode) {
     const args = payload.output?.args;
@@ -49,13 +64,34 @@ function rerouteToMaintenanceHelper(payload, directory, sessionId, reasonCode) {
     if (!args || !originalCommand) {
         return false;
     }
-    args.command = maintenanceHelperCommand(directory, originalCommand);
+    const helperPath = maintenanceHelperPath();
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    if (!existsSync(helperPath)) {
+        writeGatewayEventAudit(directory, {
+            hook: "workflow-conformance-guard",
+            stage: "skip",
+            reason_code: "maintenance_helper_missing",
+            session_id: sessionId,
+            blocked_command: originalCommand,
+            original_command: originalCommand,
+            helper_path: helperPath,
+            helper_exists: false,
+            repo_root: directory,
+        });
+        throw maintenanceHelperError(directory, originalCommand);
+    }
+    args.command = rewrittenCommand;
     writeGatewayEventAudit(directory, {
         hook: "workflow-conformance-guard",
         stage: "state",
         reason_code: reasonCode,
         session_id: sessionId,
         blocked_command: originalCommand,
+        original_command: originalCommand,
+        rewritten_command: rewrittenCommand,
+        helper_path: helperPath,
+        helper_exists: true,
+        repo_root: directory,
     });
     return true;
 }
@@ -107,7 +143,7 @@ export function createWorkflowConformanceGuardHook(options) {
             if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_on_protected_branch_rerouted")) {
                 return;
             }
-            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)}`);
+            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)} ${rerouteGuidance(directory, command)}`);
         },
     };
 }

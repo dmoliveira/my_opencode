@@ -396,3 +396,42 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("primary-worktree-guard explains reroute failures when helper path is missing", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-primary-worktree-"))
+  const originalHelper = process.env.OPENCODE_MAINTENANCE_HELPER_PATH
+  process.env.OPENCODE_MAINTENANCE_HELPER_PATH = join(directory, "missing-helper.py")
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    writeFileSync(join(directory, "file.txt"), "v1\n", "utf-8")
+    commitAll(directory, "init")
+
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["primary-worktree-guard"], disabled: [] },
+        primaryWorktreeGuard: {
+          enabled: true,
+          allowedBranches: ["main", "master"],
+          blockEdits: true,
+          blockBranchSwitches: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-primary-helper-missing" },
+        { args: { command: "echo hi > file.txt" } }
+      ),
+      /Intended reroute:/,
+    )
+  } finally {
+    if (originalHelper === undefined) {
+      delete process.env.OPENCODE_MAINTENANCE_HELPER_PATH
+    } else {
+      process.env.OPENCODE_MAINTENANCE_HELPER_PATH = originalHelper
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
