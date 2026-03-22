@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { hasDisallowedShellSyntax, isAllowedProtectedShellCommand } from "../protected-shell-policy.js"
@@ -44,6 +45,12 @@ function stripQuotes(token: string): string {
 
 function shellQuote(value: string): string {
   return JSON.stringify(value)
+}
+
+const MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url))
+
+function maintenanceHelperCommand(directory: string, originalCommand: string): string {
+  return `python3 ${shellQuote(MAINTENANCE_HELPER)} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
 }
 
 const GIT_PREFIX = String.raw`(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`
@@ -104,7 +111,7 @@ export function createPrimaryWorktreeGuardHook(options: {
     if (!args || !originalCommand) {
       return false
     }
-    args.command = `python3 scripts/worktree_helper_command.py maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
+    args.command = maintenanceHelperCommand(directory, originalCommand)
     writeGatewayEventAudit(directory, {
       hook: "primary-worktree-guard",
       stage: "state",

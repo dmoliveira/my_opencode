@@ -36,7 +36,7 @@ test("workflow-conformance-guard reroutes git commit on protected branch", async
       { tool: "bash", sessionID: "session-workflow" },
       payload,
     )
-    assert.match(payload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(payload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
     assert.match(payload.args.command, /--command "git commit -m \\\"msg\\\"" --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -198,7 +198,7 @@ test("workflow-conformance-guard reroutes env-prefixed git mutation commands", a
       { tool: "bash", sessionID: "session-workflow-env" },
       payload
     )
-    assert.match(payload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(payload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -225,7 +225,7 @@ test("workflow-conformance-guard reroutes wrapped rtk git commit on protected br
       { tool: "bash", sessionID: "session-workflow-rtk-commit" },
       payload,
     )
-    assert.match(payload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(payload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
     assert.match(payload.args.command, /--command "rtk git commit -m \\\"msg\\\"" --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -313,7 +313,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-bash-mutate" },
       mutatePayload
     )
-    assert.match(mutatePayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(mutatePayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
     assert.match(mutatePayload.args.command, /--command "echo hi > file\.txt" --json/)
 
     const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
@@ -321,7 +321,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-gh-api" },
       ghPayload
     )
-    assert.match(ghPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(ghPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
 
     const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
     await plugin["tool.execute.before"](
@@ -335,21 +335,21 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-refspec-pull" },
       pullPayload
     )
-    assert.match(pullPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(pullPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
 
     const fetchPayload = { args: { command: "git fetch origin +feature/x:main" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-refspec" },
       fetchPayload
     )
-    assert.match(fetchPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(fetchPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
 
     const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-redirection" },
       redirectPayload
     )
-    assert.match(redirectPayload.args.command, /python3 scripts\/worktree_helper_command\.py maintenance --directory/)
+    assert.match(redirectPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
