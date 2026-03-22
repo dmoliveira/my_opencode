@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { hasDisallowedShellSyntax, isAllowedProtectedShellCommand } from "../protected-shell-policy.js";
 import { effectiveToolDirectory } from "../shared/effective-tool-directory.js";
@@ -24,6 +25,10 @@ function stripQuotes(token) {
 }
 function shellQuote(value) {
     return JSON.stringify(value);
+}
+const MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
+function maintenanceHelperCommand(directory, originalCommand) {
+    return `python3 ${shellQuote(MAINTENANCE_HELPER)} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
 }
 const GIT_PREFIX = String.raw `(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`;
 function matchBranchTarget(command, pattern) {
@@ -60,7 +65,7 @@ export function createPrimaryWorktreeGuardHook(options) {
         if (!args || !originalCommand) {
             return false;
         }
-        args.command = `python3 scripts/worktree_helper_command.py maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+        args.command = maintenanceHelperCommand(directory, originalCommand);
         writeGatewayEventAudit(directory, {
             hook: "primary-worktree-guard",
             stage: "state",

@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { isAllowedProtectedShellCommand } from "../protected-shell-policy.js";
 import { effectiveToolDirectory } from "../shared/effective-tool-directory.js";
@@ -38,13 +39,17 @@ function protectedBranchWorktreeHint(directory) {
 function shellQuote(value) {
     return JSON.stringify(value);
 }
+const MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
+function maintenanceHelperCommand(directory, originalCommand) {
+    return `python3 ${shellQuote(MAINTENANCE_HELPER)} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+}
 function rerouteToMaintenanceHelper(payload, directory, sessionId, reasonCode) {
     const args = payload.output?.args;
     const originalCommand = typeof args?.command === "string" ? args.command.trim() : "";
     if (!args || !originalCommand) {
         return false;
     }
-    args.command = `python3 scripts/worktree_helper_command.py maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+    args.command = maintenanceHelperCommand(directory, originalCommand);
     writeGatewayEventAudit(directory, {
         hook: "workflow-conformance-guard",
         stage: "state",
