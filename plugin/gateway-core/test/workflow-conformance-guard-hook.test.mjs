@@ -355,6 +355,41 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
   }
 })
 
+test("workflow-conformance-guard explains reroute failures when helper path is missing", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  const originalHelper = process.env.OPENCODE_MAINTENANCE_HELPER_PATH
+  process.env.OPENCODE_MAINTENANCE_HELPER_PATH = join(directory, "missing-helper.py")
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["workflow-conformance-guard"], disabled: [] },
+        workflowConformanceGuard: {
+          enabled: true,
+          protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-workflow-helper-missing" },
+        { args: { command: 'git commit -m "msg"' } },
+      ),
+      /maintenance helper does not exist/,
+    )
+  } finally {
+    if (originalHelper === undefined) {
+      delete process.env.OPENCODE_MAINTENANCE_HELPER_PATH
+    } else {
+      process.env.OPENCODE_MAINTENANCE_HELPER_PATH = originalHelper
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("workflow-conformance-guard allows linked worktree edits even when the linked branch is main", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   const linked = `${directory}-linked`

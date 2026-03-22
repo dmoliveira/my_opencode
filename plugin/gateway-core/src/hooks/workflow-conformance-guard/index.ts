@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process"
+import { existsSync } from "node:fs"
 import { basename, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -66,10 +67,22 @@ function shellQuote(value: string): string {
   return JSON.stringify(value)
 }
 
-const MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url))
+const DEFAULT_MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url))
+
+function maintenanceHelperPath(): string {
+  const override = process.env.OPENCODE_MAINTENANCE_HELPER_PATH?.trim()
+  return override || DEFAULT_MAINTENANCE_HELPER
+}
 
 function maintenanceHelperCommand(directory: string, originalCommand: string): string {
-  return `python3 ${shellQuote(MAINTENANCE_HELPER)} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
+  return `python3 ${shellQuote(maintenanceHelperPath())} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
+}
+
+function maintenanceHelperError(directory: string, originalCommand: string): Error {
+  const helperPath = maintenanceHelperPath()
+  return new Error(
+    `Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}.`
+  )
 }
 
 function rerouteToMaintenanceHelper(payload: ToolBeforePayload, directory: string, sessionId: string, reasonCode: string): boolean {
@@ -78,13 +91,34 @@ function rerouteToMaintenanceHelper(payload: ToolBeforePayload, directory: strin
   if (!args || !originalCommand) {
     return false
   }
-  args.command = maintenanceHelperCommand(directory, originalCommand)
+  const helperPath = maintenanceHelperPath()
+  const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
+  if (!existsSync(helperPath)) {
+    writeGatewayEventAudit(directory, {
+      hook: "workflow-conformance-guard",
+      stage: "skip",
+      reason_code: "maintenance_helper_missing",
+      session_id: sessionId,
+      blocked_command: originalCommand,
+      original_command: originalCommand,
+      helper_path: helperPath,
+      helper_exists: false,
+      repo_root: directory,
+    })
+    throw maintenanceHelperError(directory, originalCommand)
+  }
+  args.command = rewrittenCommand
   writeGatewayEventAudit(directory, {
     hook: "workflow-conformance-guard",
     stage: "state",
     reason_code: reasonCode,
     session_id: sessionId,
     blocked_command: originalCommand,
+    original_command: originalCommand,
+    rewritten_command: rewrittenCommand,
+    helper_path: helperPath,
+    helper_exists: true,
+    repo_root: directory,
   })
   return true
 }
