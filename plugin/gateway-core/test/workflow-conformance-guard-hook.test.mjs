@@ -378,7 +378,7 @@ test("workflow-conformance-guard explains reroute failures when helper path is m
         { tool: "bash", sessionID: "session-workflow-helper-missing" },
         { args: { command: 'git commit -m "msg"' } },
       ),
-      /maintenance helper does not exist/,
+      /Intended reroute:/,
     )
   } finally {
     if (originalHelper === undefined) {

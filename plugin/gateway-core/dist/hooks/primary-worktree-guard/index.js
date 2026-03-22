@@ -37,7 +37,13 @@ function maintenanceHelperCommand(directory, originalCommand) {
 }
 function maintenanceHelperError(directory, originalCommand) {
     const helperPath = maintenanceHelperPath();
-    return new Error(`Protected primary-worktree command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}.`);
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    return new Error(`Protected primary-worktree command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`);
+}
+function rerouteGuidance(directory, originalCommand) {
+    const helperPath = maintenanceHelperPath();
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    return `The command was blocked in the primary worktree and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`;
 }
 const GIT_PREFIX = String.raw `(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`;
 function matchBranchTarget(command, pattern) {
@@ -152,7 +158,8 @@ export function createPrimaryWorktreeGuardHook(options) {
             if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_in_primary_worktree_rerouted")) {
                 return;
             }
-            throw new Error("Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (`git fetch`, `git fetch --prune`, and `git pull --rebase`). Create or use a dedicated git worktree branch for task mutations.");
+            throw new Error(`Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (
+\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Create or use a dedicated git worktree branch for task mutations. ${rerouteGuidance(directory, command)}`.replace(/\n/g, ""));
         },
     };
 }

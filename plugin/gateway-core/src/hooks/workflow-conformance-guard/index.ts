@@ -80,9 +80,16 @@ function maintenanceHelperCommand(directory: string, originalCommand: string): s
 
 function maintenanceHelperError(directory: string, originalCommand: string): Error {
   const helperPath = maintenanceHelperPath()
+  const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
   return new Error(
-    `Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}.`
+    `Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`
   )
+}
+
+function rerouteGuidance(directory: string, originalCommand: string): string {
+  const helperPath = maintenanceHelperPath()
+  const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
+  return `The command was blocked on a protected branch and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`
 }
 
 function rerouteToMaintenanceHelper(payload: ToolBeforePayload, directory: string, sessionId: string, reasonCode: string): boolean {
@@ -177,7 +184,7 @@ export function createWorkflowConformanceGuardHook(options: {
         return
       }
       throw new Error(
-        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)}`
+        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)} ${rerouteGuidance(directory, command)}`
       )
     },
   }

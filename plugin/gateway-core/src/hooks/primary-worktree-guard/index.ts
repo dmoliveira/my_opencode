@@ -61,9 +61,16 @@ function maintenanceHelperCommand(directory: string, originalCommand: string): s
 
 function maintenanceHelperError(directory: string, originalCommand: string): Error {
   const helperPath = maintenanceHelperPath()
+  const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
   return new Error(
-    `Protected primary-worktree command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}.`
+    `Protected primary-worktree command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`
   )
+}
+
+function rerouteGuidance(directory: string, originalCommand: string): string {
+  const helperPath = maintenanceHelperPath()
+  const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
+  return `The command was blocked in the primary worktree and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`
 }
 
 const GIT_PREFIX = String.raw`(?:^|&&|\|\||;)\s*(?:env\s+(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)?(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git\s+`
@@ -207,7 +214,7 @@ export function createPrimaryWorktreeGuardHook(options: {
         return
       }
       throw new Error(
-        "Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (`git fetch`, `git fetch --prune`, and `git pull --rebase`). Create or use a dedicated git worktree branch for task mutations."
+        `Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Create or use a dedicated git worktree branch for task mutations. ${rerouteGuidance(directory, command)}`
       )
     },
   }

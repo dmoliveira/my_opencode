@@ -50,7 +50,13 @@ function maintenanceHelperCommand(directory, originalCommand) {
 }
 function maintenanceHelperError(directory, originalCommand) {
     const helperPath = maintenanceHelperPath();
-    return new Error(`Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}.`);
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    return new Error(`Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`);
+}
+function rerouteGuidance(directory, originalCommand) {
+    const helperPath = maintenanceHelperPath();
+    const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
+    return `The command was blocked on a protected branch and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`;
 }
 function rerouteToMaintenanceHelper(payload, directory, sessionId, reasonCode) {
     const args = payload.output?.args;
@@ -137,7 +143,7 @@ export function createWorkflowConformanceGuardHook(options) {
             if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_on_protected_branch_rerouted")) {
                 return;
             }
-            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)}`);
+            throw new Error(`Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)} ${rerouteGuidance(directory, command)}`);
         },
     };
 }

@@ -424,7 +424,7 @@ test("primary-worktree-guard explains reroute failures when helper path is missi
         { tool: "bash", sessionID: "session-primary-helper-missing" },
         { args: { command: "echo hi > file.txt" } }
       ),
-      /maintenance helper does not exist/,
+      /Intended reroute:/,
     )
   } finally {
     if (originalHelper === undefined) {
