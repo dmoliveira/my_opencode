@@ -15,7 +15,8 @@ const HIGH_RISK_SKIP_PATTERN = /\b(install|npm\s+install|brew\s+install|setup|co
 const DETERMINISTIC_DOCTOR_PATTERN = /\b(doctor|diagnos(?:e|is|tic|tics))\b/i
 const DIAGNOSTIC_CUE_PATTERN = /\b(doctor|diagnos(?:e|is|tic|tics)|health(?:\s+check)?|debug|investigat(?:e|ion)|inspect)\b/i
 const ACTION_VERB_PATTERN = /\b(run|open|use|launch|start|check|perform|do|inspect|investigate|debug|review|analy[sz]e|look\s+into|tell\s+me|show\s+me|help\s+me\s+understand)\b/i
-const META_DISCUSSION_SKIP_PATTERN = /\b(last session|previous session|instruction command|prompt wording|prompt text|slash doctor|auto[-\s]?slash|why did|why does|routed to|route to|activated \/doctor|triggered \/doctor|command behavior)\b/i
+const META_DISCUSSION_SKIP_PATTERN = /\b(last session|previous session|instruction command|prompt wording|prompt text|slash doctor|auto[-\s]?slash|why did|why does|routed to|route to|activated \/doctor|triggered \/doctor|command behavior|rewrite(?:s|d|ing)?|replac(?:e|es|ed|ing|ement)|convert(?:s|ed|ing)?|map(?:s|ped|ping)?|swap(?:s|ped|ping)?|chang(?:e|es|ed|ing))\b/i
+const REWRITE_CONTROL_PATTERN = /\b(disabl(?:e|ed|ing)|stop|prevent|remove|turn\s+off|keep)\b[\s\S]{0,80}\b(rewrite(?:s|d|ing)?|replac(?:e|es|ed|ing|ement)|convert(?:s|ed|ing)?|map(?:s|ped|ping)?|swap(?:s|ped|ping)?|chang(?:e|es|ed|ing))\b|\b(rewrite(?:s|d|ing)?|replac(?:e|es|ed|ing|ement)|convert(?:s|ed|ing)?|map(?:s|ped|ping)?|swap(?:s|ped|ping)?|chang(?:e|es|ed|ing))\b[\s\S]{0,80}\b(disabl(?:e|ed|ing)|stop|prevent|remove|turn\s+off|keep)\b/i
 const INVESTIGATION_CONTEXT_PATTERN = /\b(issue|environment|state|problem|wrong|error|failure|symptom|health)\b/i
 const AI_AUTO_SLASH_CHAR_TO_COMMAND: Record<string, string> = {
   D: "/doctor",
@@ -230,6 +231,7 @@ function shouldSkipAiAutoSlash(prompt: string): boolean {
   return (
     HIGH_RISK_SKIP_PATTERN.test(prompt) ||
     META_DISCUSSION_SKIP_PATTERN.test(prompt) ||
+    REWRITE_CONTROL_PATTERN.test(prompt) ||
     !hasInvestigativeIntent ||
     !hasEligibleContext
   )
