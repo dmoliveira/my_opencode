@@ -1,0 +1,10 @@
+{
+  "autoSlashCommand": {
+    "enabled": false
+  },
+  "llmDecisionRuntime": {
+    "hookModes": {
+      "auto-slash-command": "disabled"
+    }
+  }
+}
