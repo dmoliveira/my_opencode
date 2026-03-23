@@ -250,6 +250,62 @@ test("auto-slash-command skips meta discussion about doctor routing", async () =
   assert.equal(output.parts[0].text, "can you review why the instruction command in the last session activated /doctor")
 })
 
+test("auto-slash-command skips rewrite-control requests about /doctor replacement", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: { mode: "assist" },
+      async decide() {
+        throw new Error("should not be called")
+      },
+    },
+  })
+
+  const text = "can you disable the replace of my text with /doctor, it's annoying"
+  const output = {
+    parts: [{ type: "text", text }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-rewrite-control",
+      prompt: text,
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(output.parts[0].text, text)
+})
+
+test("auto-slash-command skips rewrite-control requests about changing prompts into /doctor", async () => {
+  const hook = createAutoSlashCommandHook({
+    directory: process.cwd(),
+    enabled: true,
+    decisionRuntime: {
+      config: { mode: "assist" },
+      async decide() {
+        throw new Error("should not be called")
+      },
+    },
+  })
+
+  const text = "please stop changing my prompt into /doctor"
+  const output = {
+    parts: [{ type: "text", text }],
+  }
+  await hook.event("chat.message", {
+    properties: {
+      sessionID: "session-auto-slash-change-control",
+      prompt: text,
+    },
+    output,
+    directory: process.cwd(),
+  })
+
+  assert.equal(output.parts[0].text, text)
+})
+
 test("auto-slash-command does not fallback-map excluded explicit slash", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-auto-slash-"))
   try {
