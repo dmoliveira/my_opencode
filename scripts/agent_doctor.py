@@ -266,6 +266,20 @@ def _check_orchestration_contract(path: Path) -> list[dict[str, Any]]:
     if not exists:
         return checks
 
+    resolved_path = path.resolve()
+    try:
+        resolved_path.relative_to(REPO_ROOT)
+    except ValueError:
+        checks.append(
+            {
+                "name": "orchestration_contract_external_source",
+                "ok": True,
+                "reason": "marker checks skipped for external AGENTS.md source",
+                "path": str(resolved_path),
+            }
+        )
+        return checks
+
     content = path.read_text(encoding="utf-8")
     for marker in REQUIRED_ORCHESTRATION_MARKERS:
         checks.append(

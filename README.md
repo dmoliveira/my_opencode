@@ -34,6 +34,16 @@ If this project helps your workflow, please consider supporting ongoing maintena
 
 - https://buy.stripe.com/8x200i8bSgVe3Vl3g8bfO00
 
+## Local dev install
+
+For a live local checkout that OpenCode reads directly, use the bootstrap script:
+
+```bash
+./scripts/setup_local_dev_symlinks.sh
+```
+
+This keeps `~/.config/opencode/my_opencode` pointed at your working repo, keeps `~/.config/opencode/opencode.json` pointed at this repo's `opencode.json`, symlinks repo agents into `~/.config/opencode/agent/`, refreshes `AGENTS.md` from the sibling `../agents_md/AGENTS.md`, and creates the `plugin/gateway-core@latest` symlink used by the local file-plugin workaround.
+
 ## Why this setup rocks 🎯
 
 - **One source of truth** for global OpenCode config.
