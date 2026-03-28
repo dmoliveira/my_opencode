@@ -31,10 +31,19 @@ if [[ ! -f "$AGENTS_SOURCE_PATH" ]]; then
 fi
 
 mkdir -p "$OPENCODE_CONFIG_DIR"
+mkdir -p "$OPENCODE_CONFIG_DIR/agent"
 
 ln -sfn "$MY_OPENCODE_REPO" "$OPENCODE_CONFIG_DIR/my_opencode"
 ln -sfn "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json" "$OPENCODE_CONFIG_DIR/opencode.json"
 ln -sfn "$AGENTS_LINK_TARGET" "$MY_OPENCODE_REPO/AGENTS.md"
+
+if [[ -d "$MY_OPENCODE_REPO/agent" ]]; then
+	for agent_file in "$MY_OPENCODE_REPO"/agent/*.md; do
+		if [[ -e "$agent_file" ]]; then
+			ln -sfn "$agent_file" "$OPENCODE_CONFIG_DIR/agent/$(basename "$agent_file")"
+		fi
+	done
+fi
 
 if [[ -d "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" ]]; then
 	ln -sfn \
@@ -45,6 +54,7 @@ fi
 printf 'Linked repo: %s -> %s\n' "$OPENCODE_CONFIG_DIR/my_opencode" "$MY_OPENCODE_REPO"
 printf 'Linked config: %s -> %s\n' "$OPENCODE_CONFIG_DIR/opencode.json" "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"
 printf 'Linked AGENTS: %s -> %s\n' "$MY_OPENCODE_REPO/AGENTS.md" "$AGENTS_LINK_TARGET"
+printf 'Linked agents dir: %s\n' "$OPENCODE_CONFIG_DIR/agent"
 
 if [[ -L "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest" ]]; then
 	printf 'Linked plugin alias: %s\n' "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest"
