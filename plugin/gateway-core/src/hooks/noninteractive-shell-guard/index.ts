@@ -18,8 +18,60 @@ interface ParsedCommand {
   args: string[]
 }
 
+function baseCommandName(binary: string): string {
+  const normalized = binary.trim().toLowerCase()
+  if (!normalized) {
+    return ""
+  }
+  const parts = normalized.split("/")
+  return parts[parts.length - 1] ?? normalized
+}
+
+function tokenizeShellWords(command: string): string[] {
+  const tokens: string[] = []
+  let current = ""
+  let quote: '"' | "'" | null = null
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index] ?? ""
+    if (quote) {
+      if (char === quote) {
+        quote = null
+      } else if (char === "\\" && quote === '"' && index + 1 < command.length) {
+        current += command[index + 1] ?? ""
+        index += 1
+      } else {
+        current += char
+      }
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current)
+        current = ""
+      }
+      continue
+    }
+    if (char === "\\" && index + 1 < command.length) {
+      current += command[index + 1] ?? ""
+      index += 1
+      continue
+    }
+    current += char
+  }
+
+  if (current) {
+    tokens.push(current)
+  }
+  return tokens
+}
+
 function shouldPrefixCommand(command: string, prefixes: string[]): boolean {
-  const binary = parseCommand(command).binary
+  const binary = baseCommandName(parseCommand(command).binary)
   if (!binary) {
     return false
   }
@@ -35,11 +87,11 @@ function hasEnvAssignment(command: string, key: string): boolean {
 }
 
 function commandBinary(command: string): string {
-  return parseCommand(command).binary
+  return baseCommandName(parseCommand(command).binary)
 }
 
 function parseCommand(command: string): ParsedCommand {
-  const tokens = command.trim().split(/\s+/).filter(Boolean)
+  const tokens = tokenizeShellWords(command.trim())
   let index = 0
   while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index] ?? "")) {
     index += 1
@@ -70,7 +122,7 @@ function parseCommand(command: string): ParsedCommand {
 }
 
 function allowedEnvKeys(command: string): Set<string> {
-  const binary = parseCommand(command).binary
+  const binary = commandBinary(command)
   if (binary === "git" || binary === "gh") {
     return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE", "OPENCODE_SESSION_ID"])
   }
@@ -127,20 +179,21 @@ function violation(command: string, blockedPatterns: RegExp[]): string | null {
   }
   const lower = value.toLowerCase()
   const parsed = parseCommand(value)
+  const binary = baseCommandName(parsed.binary)
   const argsLower = parsed.args.map((item) => item.toLowerCase())
-  if (/\bnpm\s+install\b/.test(lower) && !/--yes\b/.test(lower)) {
+  if (binary === "npm" && /\bnpm\s+install\b/.test(lower) && !/--yes\b/.test(lower)) {
     return "Use `npm install --yes` in non-interactive sessions."
   }
-  if (/\byarn\s+install\b/.test(lower) && !/--non-interactive\b/.test(lower)) {
+  if (binary === "yarn" && /\byarn\s+install\b/.test(lower) && !/--non-interactive\b/.test(lower)) {
     return "Use `yarn install --non-interactive` in non-interactive sessions."
   }
-  if (/\bpnpm\s+install\b/.test(lower) && !/--reporter\s*=\s*silent\b/.test(lower)) {
+  if (binary === "pnpm" && /\bpnpm\s+install\b/.test(lower) && !/--reporter\s*=\s*silent\b/.test(lower)) {
     return "Use `pnpm install --reporter=silent` in non-interactive sessions."
   }
-  if (/\bapt(-get)?\s+install\b/.test(lower) && !/\s-y\b/.test(lower)) {
+  if ((binary === "apt" || binary === "apt-get") && /\bapt(-get)?\s+install\b/.test(lower) && !/\s-y\b/.test(lower)) {
     return "Use apt install commands with `-y` in non-interactive sessions."
   }
-  if (parsed.binary === "python" || parsed.binary === "python3" || parsed.binary === "node") {
+  if (binary === "python" || binary === "python3" || binary === "node") {
     if (parsed.args.length <= 1) {
       return "REPL command detected. Use script mode (`python -c`, `node -e`, or file execution)."
     }
@@ -148,13 +201,10 @@ function violation(command: string, blockedPatterns: RegExp[]): string | null {
   if (/^\s*(python3?|node)\s*$/.test(lower)) {
     return "REPL command detected. Use script mode (`python -c`, `node -e`, or file execution)."
   }
-  if (parsed.binary === "git" && argsLower[1] === "commit") {
-    if (!argsLower.some((item, index) => item === "-m" || item.startsWith("-m") || (argsLower[index - 1] === "-m" && item.length > 0))) {
+  if (binary === "git" && argsLower[1] === "commit") {
+    if (!argsLower.some((item, index) => item === "-m" || item.startsWith("-m") || argsLower[index - 1] === "-m")) {
       return "Use non-interactive git commit format: `git commit -m \"message\"`."
     }
-  }
-  if (/\bgit\s+commit\b/.test(lower) && !/\s-m\s+/.test(lower) && parsed.binary === "git") {
-    return "Use non-interactive git commit format: `git commit -m \"message\"`."
   }
   return null
 }

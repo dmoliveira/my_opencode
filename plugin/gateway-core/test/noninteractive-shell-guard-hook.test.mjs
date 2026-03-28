@@ -179,6 +179,90 @@ test("noninteractive-shell-guard ignores quoted git commit text in another comma
       { tool: "bash", sessionID: "session-sqlite-query" },
       { args: { command: 'sqlite3 runtime.db "select \"git commit\";"' } },
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-sqlite-like-query" },
+      {
+        args: {
+          command:
+            'sqlite3 runtime.db "select * from part where lower(command) like \'%git commit%\' order by time_created desc;"',
+        },
+      },
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-sqlite-npm-text" },
+      {
+        args: {
+          command:
+            'sqlite3 runtime.db "select * from part where lower(output) like \'%npm install%\' order by time_created desc;"',
+        },
+      },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard prefixes absolute-path git commands with non-interactive env", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    const output = { args: { command: "/usr/bin/git status --short --branch" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-abs-git" }, output)
+    assert.equal(
+      output.args.command,
+      "CI=true GIT_TERMINAL_PROMPT=0 OPENCODE_SESSION_ID='session-abs-git' /usr/bin/git status --short --branch",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard prefixes absolute-path gh commands with runtime session env", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    const output = { args: { command: "/usr/bin/gh pr view --json number" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-abs-gh" }, output)
+    assert.equal(
+      output.args.command,
+      "CI=true GIT_TERMINAL_PROMPT=0 OPENCODE_SESSION_ID='session-abs-gh' /usr/bin/gh pr view --json number",
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

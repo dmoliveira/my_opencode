@@ -126,6 +126,55 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-readonly-safe" },
+      { args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".tables"' } }
+    )
+
+    const sqliteSchemaPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".schema session"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-dot-schema-safe" },
+      sqliteSchemaPayload
+    )
+    assert.equal(
+      sqliteSchemaPayload.args.command,
+      'sqlite3 -readonly "/tmp/runtime.db" ".schema session"',
+    )
+
+    const sqlitePragmaPayload = {
+      args: {
+        command:
+          'CI=true OPENCODE_SESSION_ID=demo sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"',
+      },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-schema-safe" },
+      sqlitePragmaPayload
+    )
+    assert.equal(
+      sqlitePragmaPayload.args.command,
+      'CI=true OPENCODE_SESSION_ID=demo sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"',
+    )
+
+    const sqliteSelectPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-select-safe" },
+      sqliteSelectPayload
+    )
+    assert.equal(
+      sqliteSelectPayload.args.command,
+      'sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"',
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-abs-safe" },
+      { args: { command: "/usr/bin/gh pr view --json number" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-safe" },
       { args: { command: "git fetch" } }
     )
@@ -350,6 +399,75 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       redirectPayload
     )
     assert.match(redirectPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqliteShellPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" -cmd ".shell touch /tmp/pwn" ".tables"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-shell" },
+      sqliteShellPayload
+    )
+    assert.match(sqliteShellPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqliteOutputPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".output /tmp/dump.txt"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-output" },
+      sqliteOutputPayload
+    )
+    assert.match(sqliteOutputPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqlitePragmaMutatePayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-pragma-mutate" },
+      sqlitePragmaMutatePayload
+    )
+    assert.match(sqlitePragmaMutatePayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqliteWithInsertPayload = {
+      args: {
+        command:
+          'sqlite3 -readonly "/tmp/runtime.db" "WITH recent AS (SELECT 1) INSERT INTO audit_log SELECT * FROM recent;"',
+      },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-with-insert" },
+      sqliteWithInsertPayload
+    )
+    assert.match(sqliteWithInsertPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqliteSelectBypassPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT 1; DELETE FROM audit_log;"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-select-bypass" },
+      sqliteSelectBypassPayload
+    )
+    assert.match(sqliteSelectBypassPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqlitePragmaBypassPayload = {
+      args: {
+        command:
+          'sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session); INSERT INTO audit_log VALUES (1);"',
+      },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-pragma-bypass" },
+      sqlitePragmaBypassPayload
+    )
+    assert.match(sqlitePragmaBypassPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+
+    const sqliteEnvBypassPayload = {
+      args: { command: 'BASH_ENV=/tmp/evil.sh sqlite3 -readonly "/tmp/runtime.db" ".tables"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-env-bypass" },
+      sqliteEnvBypassPayload
+    )
+    assert.match(sqliteEnvBypassPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

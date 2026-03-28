@@ -2,9 +2,12 @@ const SHELL_TOKEN = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|]+)`
 const GIT_SAFE_GLOBAL_FLAGS = String.raw`(?:\s+(?:--no-pager|-C\s+${SHELL_TOKEN}|--git-dir\s+${SHELL_TOKEN}|--work-tree\s+${SHELL_TOKEN}))*`
 const GIT_SAFE_ARGS = String.raw`(?:\s+[^;&|]+)*`
 const GIT_REQUIRED_ARGS = String.raw`(?:\s+[^;&|]+)+`
-const SAFE_ENV_PREFIX = String.raw`(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=${SHELL_TOKEN}\s+)*)`
+const SAFE_ENV_KEY = String.raw`(?:CI|GIT_TERMINAL_PROMPT|GIT_EDITOR|GIT_PAGER|PAGER|GCM_INTERACTIVE|OPENCODE_SESSION_ID)`
+const SAFE_ENV_PREFIX = String.raw`(?:(?:env\s+)?(?:${SAFE_ENV_KEY}=${SHELL_TOKEN}\s+)*)`
 const OPTIONAL_RTK_WRAPPER = String.raw`(?:(?:[^\s;&|]*/)?rtk\s+)?`
 const PROTECTED_BRANCH_REF = String.raw`(?:main|master)`
+const SQLITE_SAFE_FLAG = String.raw`(?:-readonly|-header|-column|-csv|-json|-line|-list)`
+const GH_PROTECTED_BINARY = String.raw`${OPTIONAL_RTK_WRAPPER}(?:[^\s;&|]*/)?gh`
 
 function protectedPattern(commandPattern: string): RegExp {
   return new RegExp(String.raw`^${SAFE_ENV_PREFIX}${commandPattern}$`, "i")
@@ -13,6 +16,12 @@ function protectedPattern(commandPattern: string): RegExp {
 function gitProtectedPattern(subcommandPattern: string, argsPattern = GIT_SAFE_ARGS): RegExp {
   return protectedPattern(
     String.raw`${OPTIONAL_RTK_WRAPPER}(?:[^\s;&|]*/)?git${GIT_SAFE_GLOBAL_FLAGS}\s+${subcommandPattern}${argsPattern}`,
+  )
+}
+
+function sqliteProtectedPattern(): RegExp {
+  return protectedPattern(
+    String.raw`(?:[^\s;&|]*/)?sqlite3(?=[^;&|]*\s-readonly\b)(?:\s+${SQLITE_SAFE_FLAG})*\s+${SHELL_TOKEN}\s+(?:(?:"\.(?:tables|schema(?:\s+[^"]+)?)")|(?:'\.(?:tables|schema(?:\s+[^']+)?)')|(?:"PRAGMA\s+table_info\s*\([^";=]+\)\s*;?")|(?:'PRAGMA\s+table_info\s*\([^';=]+\)\s*;?')|(?:"SELECT\b[^";]*;?")|(?:'SELECT\b[^';]*;?'))`,
   )
 }
 
@@ -35,8 +44,9 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
   gitProtectedPattern(String.raw`stash\s+show`),
   gitProtectedPattern(String.raw`restore\s+--source\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
   gitProtectedPattern(String.raw`checkout\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
-  protectedPattern(String.raw`${OPTIONAL_RTK_WRAPPER}gh\s+pr\s+view(?:\s+[^;&|]+)*`),
-  protectedPattern(String.raw`${OPTIONAL_RTK_WRAPPER}gh\s+pr\s+checks(?:\s+[^;&|]+)*`),
+  protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+view(?:\s+[^;&|]+)*`),
+  protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+checks(?:\s+[^;&|]+)*`),
+  sqliteProtectedPattern(),
   protectedPattern(String.raw`make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)`),
   protectedPattern(String.raw`npm(?:\s+--prefix\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))`),
   protectedPattern(String.raw`pnpm(?:\s+--dir\s+[^;&|]+)?\s+(?:test|lint|build)`),
@@ -55,19 +65,110 @@ export function normalizeShellCommand(command: string): string {
   return command.replace(/\s+/g, " ").trim()
 }
 
+function forEachUnquotedCharacter(command: string, visitor: (char: string, index: number, value: string) => boolean | void): boolean {
+  let quote: '"' | "'" | null = null
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index] ?? ""
+    if (quote) {
+      if (char === quote) {
+        quote = null
+      } else if (char === "\\" && quote === '"' && index + 1 < command.length) {
+        index += 1
+      }
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (visitor(char, index, command) === true) {
+      return true
+    }
+  }
+  return false
+}
+
 export function hasDisallowedShellSyntax(command: string): boolean {
-  return /&&|\|\||;|\n|\||[<>`]|\$\(|\(|\)/.test(command)
+  return forEachUnquotedCharacter(command, (char, index, value) => {
+    if (char === "&" && value[index + 1] === "&") {
+      return true
+    }
+    if (char === "|" && value[index + 1] === "|") {
+      return true
+    }
+    if (char === ";" || char === "\n" || char === "|" || char === "<" || char === ">" || char === "`" || char === "(" || char === ")") {
+      return true
+    }
+    if (char === "$" && value[index + 1] === "(") {
+      return true
+    }
+    return false
+  })
 }
 
 function hasHardDisallowedShellSyntax(command: string): boolean {
-  return /\|\||\||\n|[<>`]|\$\(|\(|\)/.test(command)
+  return forEachUnquotedCharacter(command, (char, index, value) => {
+    if (char === "|" && value[index + 1] === "|") {
+      return true
+    }
+    if (char === "|" || char === "\n" || char === "<" || char === ">" || char === "`" || char === "(" || char === ")") {
+      return true
+    }
+    if (char === "$" && value[index + 1] === "(") {
+      return true
+    }
+    return false
+  })
 }
 
 function splitChainedCommands(command: string): string[] {
-  return command
-    .split(/&&|;/)
-    .map((segment) => normalizeShellCommand(segment))
-    .filter((segment) => segment.length > 0)
+  const segments: string[] = []
+  let current = ""
+  let quote: '"' | "'" | null = null
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index] ?? ""
+    if (quote) {
+      current += char
+      if (char === quote) {
+        quote = null
+      } else if (char === "\\" && quote === '"' && index + 1 < command.length) {
+        current += command[index + 1] ?? ""
+        index += 1
+      }
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      current += char
+      continue
+    }
+    if (char === ";") {
+      const normalized = normalizeShellCommand(current)
+      if (normalized) {
+        segments.push(normalized)
+      }
+      current = ""
+      continue
+    }
+    if (char === "&" && command[index + 1] === "&") {
+      const normalized = normalizeShellCommand(current)
+      if (normalized) {
+        segments.push(normalized)
+      }
+      current = ""
+      index += 1
+      continue
+    }
+    current += char
+  }
+
+  const normalized = normalizeShellCommand(current)
+  if (normalized) {
+    segments.push(normalized)
+  }
+  return segments
 }
 
 export function isAllowedProtectedShellCommand(command: string): boolean {
