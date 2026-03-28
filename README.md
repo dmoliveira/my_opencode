@@ -152,7 +152,7 @@ Recommended command split:
 
 Before implementation work, create a dedicated git worktree branch for the task. Do not edit task files from the main project folder, and do not `git checkout` or `git switch` that folder onto a task branch.
 
-Protected branches (`main`, `master`) are also edit-blocked by default even in linked worktrees, and bash usage there is limited to inspection, validation, and exact sync commands: `git fetch`, `git fetch --prune`, and `git pull --rebase`.
+Protected branches (`main`, `master`) in the primary project folder are edit-blocked by default, and bash usage there is limited to inspection, validation, exact sync commands, and narrow read-only SQLite inspection such as `sqlite3 -readonly ... .tables`: `git fetch`, `git fetch --prune`, and `git pull --rebase`.
 
 Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, `docs/operator-playbook.md` for canonical operator flows, and `docs/parallel-wt-playbook.md` for the worktree-first execution checklist.
 

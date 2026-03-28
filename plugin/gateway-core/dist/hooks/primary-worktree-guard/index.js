@@ -158,8 +158,7 @@ export function createPrimaryWorktreeGuardHook(options) {
             if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_in_primary_worktree_rerouted")) {
                 return;
             }
-            throw new Error(`Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (
-\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Create or use a dedicated git worktree branch for task mutations. ${rerouteGuidance(directory, command)}`.replace(/\n/g, ""));
+            throw new Error(`Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Create or use a dedicated git worktree branch for task mutations. ${rerouteGuidance(directory, command)}`);
         },
     };
 }

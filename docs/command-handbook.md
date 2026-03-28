@@ -191,6 +191,8 @@ Use these directly in OpenCode:
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
+If you inspect the runtime SQLite store directly, see `docs/runtime-db-schema.md` for the current table layout, JSON paths, and safe query patterns.
+
 ## Shared memory inside OpenCode 🧠
 
 Use these directly in OpenCode:
