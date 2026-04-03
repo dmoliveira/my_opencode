@@ -6,6 +6,8 @@
 2. Open OpenCode and run a basic health check.
 3. Confirm plugin and gateway status.
 
+Startup instructions are loaded from `~/.config/opencode/my_opencode/AGENTS.md` and `~/.config/opencode/my_opencode/instructions/shell_strategy.md`. If you use `./scripts/setup_local_dev_symlinks.sh`, the repo `AGENTS.md` points at `~/Codes/Projects/agents_md/AGENTS.md`, which keeps your main operating contract centralized for all new sessions.
+
 ## Canonical first-run commands
 
 Managed MCPs start disabled by default; opt into a focused profile only when you need extra context.

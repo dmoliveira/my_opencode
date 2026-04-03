@@ -286,6 +286,7 @@
     "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
   ],
   "instructions": [
+    "{env:HOME}/.config/opencode/my_opencode/AGENTS.md",
     "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
   ]
 }
