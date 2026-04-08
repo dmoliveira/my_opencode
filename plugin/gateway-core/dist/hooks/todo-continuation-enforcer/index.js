@@ -299,6 +299,8 @@ function resolveSessionId(payload) {
         payload.properties?.sessionID,
         payload.properties?.sessionId,
         payload.properties?.info?.id,
+        payload.properties?.info?.sessionID,
+        payload.properties?.info?.sessionId,
         payload.input?.sessionID,
         payload.input?.sessionId,
     ];
@@ -425,6 +427,25 @@ export function createTodoContinuationEnforcerHook(options) {
                 else {
                     state.continueAckPending = false;
                 }
+                state.markerProbeAttempted = false;
+                return;
+            }
+            if (type === "message.updated") {
+                const eventPayload = (payload ?? {});
+                const sessionId = resolveSessionId(eventPayload);
+                if (!sessionId) {
+                    return;
+                }
+                const info = eventPayload.properties?.info;
+                if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+                    return;
+                }
+                const completed = Number.isFinite(Number(info?.time?.completed ?? NaN));
+                const failed = info?.error !== undefined && info?.error !== null;
+                if (!completed && !failed) {
+                    return;
+                }
+                const state = getSessionState(sessionState, sessionId);
                 state.markerProbeAttempted = false;
                 return;
             }
