@@ -69,17 +69,24 @@ function shellQuote(value: string): string {
 
 const DEFAULT_MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url))
 
-function maintenanceHelperPath(): string {
+function maintenanceHelperPath(directory: string): string {
   const override = process.env.OPENCODE_MAINTENANCE_HELPER_PATH?.trim()
-  return override || DEFAULT_MAINTENANCE_HELPER
+  if (override) {
+    return override
+  }
+  const repoHelper = resolve(directory, "scripts", "worktree_helper_command.py")
+  if (existsSync(repoHelper)) {
+    return repoHelper
+  }
+  return DEFAULT_MAINTENANCE_HELPER
 }
 
 function maintenanceHelperCommand(directory: string, originalCommand: string): string {
-  return `python3 ${shellQuote(maintenanceHelperPath())} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
+  return `python3 ${shellQuote(maintenanceHelperPath(directory))} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
 }
 
 function maintenanceHelperError(directory: string, originalCommand: string): Error {
-  const helperPath = maintenanceHelperPath()
+  const helperPath = maintenanceHelperPath(directory)
   const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
   return new Error(
     `Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`
@@ -87,7 +94,7 @@ function maintenanceHelperError(directory: string, originalCommand: string): Err
 }
 
 function rerouteGuidance(directory: string, originalCommand: string): string {
-  const helperPath = maintenanceHelperPath()
+  const helperPath = maintenanceHelperPath(directory)
   const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
   return `The command was blocked on a protected branch and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`
 }
@@ -98,7 +105,7 @@ function rerouteToMaintenanceHelper(payload: ToolBeforePayload, directory: strin
   if (!args || !originalCommand) {
     return false
   }
-  const helperPath = maintenanceHelperPath()
+  const helperPath = maintenanceHelperPath(directory)
   const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
   if (!existsSync(helperPath)) {
     writeGatewayEventAudit(directory, {

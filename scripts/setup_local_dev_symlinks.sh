@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DEFAULT_AGENTS_LINK_TARGET="../agents_md/AGENTS.md"
-DEFAULT_AGENTS_SOURCE="$(cd "$REPO_ROOT/.." && pwd)/agents_md/AGENTS.md"
+DEFAULT_AGENTS_LINK_TARGET="../agents.md/AGENTS.md"
+DEFAULT_AGENTS_SOURCE="$(cd "$REPO_ROOT/.." && pwd)/agents.md/AGENTS.md"
 
 MY_OPENCODE_REPO="${MY_OPENCODE_REPO:-$REPO_ROOT}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"

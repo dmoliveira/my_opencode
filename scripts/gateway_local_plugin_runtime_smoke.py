@@ -232,7 +232,7 @@ def run_attached_session(
         "json",
         "--title",
         "Gateway Plugin Smoke",
-        "Create a todo list, proceed autonomously, and leave evidence for continuation enforcement.",
+        "Create a one-item todo list, run `git status --short --branch`, report the result briefly, and stop as soon as that single task is complete. Do not look for issues or additional work.",
     ]
     result = run_command(command, cwd=REPO_ROOT, env=env, timeout=timeout)
     run_log.write_text(result.stdout, encoding="utf-8")

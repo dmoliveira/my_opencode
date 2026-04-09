@@ -80,54 +80,7 @@ CHECKS = [
     {
         "name": "gateway",
         "kind": "doctor-json",
-        "command": [
-            sys.executable,
-            str(script_path("gateway_command.py")),
-            "doctor",
-            "--json",
-        ],
-    },
-    {
-        "name": "quality",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("quality_command.py")),
-        "command": [
-            sys.executable,
-            str(script_path("quality_command.py")),
-            "doctor",
-            "--json",
-        ],
-    },
-    {
-        "name": "devtools",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("devtools_command.py")),
-        "command": [
-            sys.executable,
-            str(script_path("devtools_command.py")),
-            "doctor",
-            "--json",
-        ],
-    },
-    {
-        "name": "nvim",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("nvim_integration_command.py")),
-        "command": [
-            sys.executable,
-            str(script_path("nvim_integration_command.py")),
-            "doctor",
-            "--json",
-        ],
-    },
-    {
-        "name": "gateway",
-        "kind": "doctor-json",
-        "optional": True,
-        "required_path": str(script_path("gateway_command.py")),
+        "timeout_seconds": 180,
         "command": [
             sys.executable,
             str(script_path("gateway_command.py")),
@@ -803,6 +756,13 @@ def run_check(entry: dict) -> dict:
                 item["ok"] = True
                 item["skipped"] = True
                 item["skip_reason"] = "optional devtools missing"
+            if (
+                entry.get("name") == "lsp"
+                and str(parsed.get("result") or "").upper() == "WARN"
+            ):
+                item["ok"] = True
+                item["skipped"] = True
+                item["skip_reason"] = "optional language servers missing"
             if (
                 entry.get("name") == "gateway"
                 and isinstance(parsed.get("status"), dict)

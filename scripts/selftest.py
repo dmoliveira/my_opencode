@@ -19806,6 +19806,43 @@ version: 1
             "checkpoint doctor should report PASS when snapshots are readable",
         )
 
+        runtime_before_missing_checkpoint = load_plan_runtime(recover_config_path)
+        save_plan_runtime(
+            recover_config_path,
+            {
+                "plan": {
+                    "path": str(recover_plan_path),
+                    "metadata": {"id": "selftest-missing-checkpoint"},
+                },
+                "status": "failed",
+                "resume": {"enabled": True, "attempt_count": 0, "max_attempts": 3},
+                "steps": [],
+            },
+        )
+        resume_status_missing_checkpoint = subprocess.run(
+            [sys.executable, str(RESUME_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            resume_status_missing_checkpoint.returncode == 0,
+            "resume status should pass when runtime exists but no checkpoint is available yet",
+        )
+        resume_status_missing_checkpoint_report = parse_json_output(
+            resume_status_missing_checkpoint.stdout
+        )
+        expect(
+            resume_status_missing_checkpoint_report.get("result") == "PASS"
+            and resume_status_missing_checkpoint_report.get("reason_code")
+            == "resume_missing_checkpoint",
+            "resume status should downgrade missing-checkpoint empty state to PASS diagnostics",
+        )
+        if isinstance(runtime_before_missing_checkpoint, dict):
+            save_plan_runtime(recover_config_path, runtime_before_missing_checkpoint)
+
         direct_write = write_snapshot(
             recover_config_path,
             {
