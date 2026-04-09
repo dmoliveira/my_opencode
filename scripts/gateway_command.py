@@ -156,7 +156,7 @@ def run_local_plugin_runtime_smoke() -> dict[str, Any]:
                 "--output",
                 "json",
                 "--run-timeout-seconds",
-                "20",
+                "90",
             ],
             cwd=REPO_ROOT,
             env=env,

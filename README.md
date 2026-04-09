@@ -42,9 +42,9 @@ For a live local checkout that OpenCode reads directly, use the bootstrap script
 ./scripts/setup_local_dev_symlinks.sh
 ```
 
-This keeps `~/.config/opencode/my_opencode` pointed at your working repo, keeps `~/.config/opencode/opencode.json` pointed at this repo's `opencode.json`, symlinks repo agents into `~/.config/opencode/agent/`, refreshes `AGENTS.md` from the sibling `../agents_md/AGENTS.md`, and creates the `plugin/gateway-core@latest` symlink used by the local file-plugin workaround.
+This keeps `~/.config/opencode/my_opencode` pointed at your working repo, keeps `~/.config/opencode/opencode.json` pointed at this repo's `opencode.json`, symlinks repo agents into `~/.config/opencode/agent/`, refreshes `AGENTS.md` from the sibling `../agents.md/AGENTS.md`, and creates the `plugin/gateway-core@latest` symlink used by the local file-plugin workaround.
 
-New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a global startup instruction. In the local-dev symlink setup, that file resolves to `~/Codes/Projects/agents_md/AGENTS.md`, so edits to the central file propagate automatically to any newly started session, even when launched from an unrelated folder.
+New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a global startup instruction. In the local-dev symlink setup, that file resolves to the sibling checkout at `../agents.md/AGENTS.md`, so edits to the central file propagate automatically to any newly started session, even when launched from an unrelated folder.
 
 ## Why this setup rocks 🎯
 

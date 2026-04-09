@@ -121,8 +121,15 @@ def command_status(args: list[str]) -> int:
     reason_code = str(
         eligibility.get("reason_code") or "resume_missing_runtime_artifacts"
     )
+    warnings: list[str] = []
+    if reason_code == "resume_missing_checkpoint":
+        warnings.append(
+            "no checkpoint found yet; create one by running /autopilot or /autopilot go first"
+        )
     report = {
-        "result": "PASS" if eligibility.get("eligible") else "FAIL",
+        "result": "PASS"
+        if eligibility.get("eligible") or reason_code == "resume_missing_checkpoint"
+        else "FAIL",
         "enabled": bool((runtime.get("resume") or {}).get("enabled", True))
         if isinstance(runtime.get("resume"), dict)
         else True,
@@ -148,6 +155,7 @@ def command_status(args: list[str]) -> int:
             ),
             cooldown_remaining=int(eligibility.get("cooldown_remaining", 0) or 0),
         ),
+        "warnings": warnings,
         "config": str(write_path),
     }
     if json_output:

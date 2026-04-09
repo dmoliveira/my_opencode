@@ -41,20 +41,27 @@ function shellQuote(value) {
     return JSON.stringify(value);
 }
 const DEFAULT_MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
-function maintenanceHelperPath() {
+function maintenanceHelperPath(directory) {
     const override = process.env.OPENCODE_MAINTENANCE_HELPER_PATH?.trim();
-    return override || DEFAULT_MAINTENANCE_HELPER;
+    if (override) {
+        return override;
+    }
+    const repoHelper = resolve(directory, "scripts", "worktree_helper_command.py");
+    if (existsSync(repoHelper)) {
+        return repoHelper;
+    }
+    return DEFAULT_MAINTENANCE_HELPER;
 }
 function maintenanceHelperCommand(directory, originalCommand) {
-    return `python3 ${shellQuote(maintenanceHelperPath())} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
+    return `python3 ${shellQuote(maintenanceHelperPath(directory))} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`;
 }
 function maintenanceHelperError(directory, originalCommand) {
-    const helperPath = maintenanceHelperPath();
+    const helperPath = maintenanceHelperPath(directory);
     const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
     return new Error(`Protected-branch command reroute failed because the maintenance helper does not exist at '${helperPath}'. Original command: ${originalCommand}. Target repo: ${directory}. Intended reroute: ${rewrittenCommand}.`);
 }
 function rerouteGuidance(directory, originalCommand) {
-    const helperPath = maintenanceHelperPath();
+    const helperPath = maintenanceHelperPath(directory);
     const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
     return `The command was blocked on a protected branch and would be rerouted through '${helperPath}'. Original command: ${originalCommand}. Rerouted command: ${rewrittenCommand}.`;
 }
@@ -64,7 +71,7 @@ function rerouteToMaintenanceHelper(payload, directory, sessionId, reasonCode) {
     if (!args || !originalCommand) {
         return false;
     }
-    const helperPath = maintenanceHelperPath();
+    const helperPath = maintenanceHelperPath(directory);
     const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand);
     if (!existsSync(helperPath)) {
         writeGatewayEventAudit(directory, {
