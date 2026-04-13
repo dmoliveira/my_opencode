@@ -25,7 +25,7 @@ function stripQuotes(token) {
     return token.replace(/^['"]|['"]$/g, "");
 }
 function shellQuote(value) {
-    return JSON.stringify(value);
+    return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 const DEFAULT_MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
 function maintenanceHelperPath(directory) {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def slugify(value: str) -> str:
 
 
 def shell_quote(value: str) -> str:
-    return json.dumps(value)
+    return shlex.quote(value)
 
 
 def command_maintenance(args: list[str]) -> int:

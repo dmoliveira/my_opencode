@@ -36,8 +36,8 @@ test("workflow-conformance-guard reroutes git commit on protected branch", async
       { tool: "bash", sessionID: "session-workflow" },
       payload,
     )
-    assert.match(payload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
-    assert.match(payload.args.command, /--command "git commit -m \\\"msg\\\"" --json/)
+    assert.match(payload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.match(payload.args.command, /--command 'git commit -m "msg"' --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -195,6 +195,26 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-worktree-remove-safe" },
+      { args: { command: 'git worktree remove "/tmp/gateway-linked"' } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-branch-delete-safe" },
+      { args: { command: "git branch -d feature/test" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-cleanup-chain-safe" },
+      {
+        args: {
+          command:
+            'git worktree remove "/tmp/gateway-linked" && git branch -d feature/test',
+        },
+      }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-stash-push-safe" },
       { args: { command: 'git stash push -m "temp" -- docs/plan/docs-automation-summary.md' } }
     )
@@ -247,7 +267,7 @@ test("workflow-conformance-guard reroutes env-prefixed git mutation commands", a
       { tool: "bash", sessionID: "session-workflow-env" },
       payload
     )
-    assert.match(payload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(payload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -274,8 +294,8 @@ test("workflow-conformance-guard reroutes wrapped rtk git commit on protected br
       { tool: "bash", sessionID: "session-workflow-rtk-commit" },
       payload,
     )
-    assert.match(payload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
-    assert.match(payload.args.command, /--command "rtk git commit -m \\\"msg\\\"" --json/)
+    assert.match(payload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.match(payload.args.command, /--command 'rtk git commit -m "msg"' --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -362,43 +382,61 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-bash-mutate" },
       mutatePayload
     )
-    assert.match(mutatePayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
-    assert.match(mutatePayload.args.command, /--command "echo hi > file\.txt" --json/)
+    assert.match(mutatePayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.match(mutatePayload.args.command, /--command 'echo hi > file\.txt' --json/)
 
     const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-gh-api" },
       ghPayload
     )
-    assert.match(ghPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(ghPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-chain" },
       chainPayload
     )
-    assert.match(chainPayload.args.command, /--command "git status --short --branch && echo hi > file\.txt" --json/)
+    assert.match(chainPayload.args.command, /--command 'git status --short --branch && echo hi > file\.txt' --json/)
 
     const pullPayload = { args: { command: "git pull --rebase origin feature/x" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-refspec-pull" },
       pullPayload
     )
-    assert.match(pullPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(pullPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const fetchPayload = { args: { command: "git fetch origin +feature/x:main" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-refspec" },
       fetchPayload
     )
-    assert.match(fetchPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(fetchPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-redirection" },
       redirectPayload
     )
-    assert.match(redirectPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(redirectPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+
+    const commandSubstitutionPayload = {
+      args: { command: 'git status --short --branch "$(touch /tmp/pwn)"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-command-substitution" },
+      commandSubstitutionPayload
+    )
+    assert.match(commandSubstitutionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.match(commandSubstitutionPayload.args.command, /--command 'git status --short --branch "\$\(touch \/tmp\/pwn\)"' --json/)
+
+    const envExpansionPayload = { args: { command: 'CI="$(id)" git fetch' } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-env-expansion" },
+      envExpansionPayload
+    )
+    assert.match(envExpansionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.match(envExpansionPayload.args.command, /--command 'CI="\$\(id\)" git fetch' --json/)
 
     const sqliteShellPayload = {
       args: { command: 'sqlite3 -readonly "/tmp/runtime.db" -cmd ".shell touch /tmp/pwn" ".tables"' },
@@ -407,7 +445,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-shell" },
       sqliteShellPayload
     )
-    assert.match(sqliteShellPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqliteShellPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqliteOutputPayload = {
       args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".output /tmp/dump.txt"' },
@@ -416,7 +454,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-output" },
       sqliteOutputPayload
     )
-    assert.match(sqliteOutputPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqliteOutputPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqlitePragmaMutatePayload = {
       args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"' },
@@ -425,7 +463,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-pragma-mutate" },
       sqlitePragmaMutatePayload
     )
-    assert.match(sqlitePragmaMutatePayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqlitePragmaMutatePayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqliteWithInsertPayload = {
       args: {
@@ -437,7 +475,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-with-insert" },
       sqliteWithInsertPayload
     )
-    assert.match(sqliteWithInsertPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqliteWithInsertPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqliteSelectBypassPayload = {
       args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT 1; DELETE FROM audit_log;"' },
@@ -446,7 +484,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-select-bypass" },
       sqliteSelectBypassPayload
     )
-    assert.match(sqliteSelectBypassPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqliteSelectBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqlitePragmaBypassPayload = {
       args: {
@@ -458,7 +496,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-pragma-bypass" },
       sqlitePragmaBypassPayload
     )
-    assert.match(sqlitePragmaBypassPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqlitePragmaBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqliteEnvBypassPayload = {
       args: { command: 'BASH_ENV=/tmp/evil.sh sqlite3 -readonly "/tmp/runtime.db" ".tables"' },
@@ -467,7 +505,7 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       { tool: "bash", sessionID: "session-workflow-sqlite-env-bypass" },
       sqliteEnvBypassPayload
     )
-    assert.match(sqliteEnvBypassPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(sqliteEnvBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

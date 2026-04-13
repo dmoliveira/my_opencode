@@ -281,21 +281,21 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       { tool: "bash", sessionID: "session-primary-bash-mutate" },
       mutatePayload
     )
-    assert.match(mutatePayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(mutatePayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-gh-api" },
       ghPayload
     )
-    assert.match(ghPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(ghPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-chain" },
       chainPayload
     )
-    assert.match(chainPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(chainPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     await assert.rejects(
       plugin["tool.execute.before"](
@@ -310,7 +310,17 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       { tool: "bash", sessionID: "session-primary-redirection" },
       redirectPayload
     )
-    assert.match(redirectPayload.args.command, /python3 ".*scripts\/worktree_helper_command\.py" maintenance --directory/)
+    assert.match(redirectPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+
+    const commandSubstitutionPayload = {
+      args: { command: 'git status --short --branch "$(touch /tmp/pwn)"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-command-substitution" },
+      commandSubstitutionPayload
+    )
+    assert.match(commandSubstitutionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.match(commandSubstitutionPayload.args.command, /--command 'git status --short --branch "\$\(touch \/tmp\/pwn\)"' --json/)
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-bash-safe" },
@@ -361,6 +371,26 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
         args: {
           command:
             'git worktree add -b feature/test "/tmp/gateway-linked" origin/main',
+        },
+      }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-worktree-remove-safe" },
+      { args: { command: 'git worktree remove "/tmp/gateway-linked"' } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-branch-delete-safe" },
+      { args: { command: "git branch -d feature/test" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-cleanup-chain-safe" },
+      {
+        args: {
+          command:
+            'git worktree remove "/tmp/gateway-linked" && git branch -d feature/test',
         },
       }
     )
