@@ -32,9 +32,11 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
   gitProtectedPattern("diff"),
   gitProtectedPattern("log"),
   gitProtectedPattern(String.raw`branch\s+--show-current`, ""),
+  gitProtectedPattern(String.raw`branch\s+(?:-d|--delete)`, GIT_REQUIRED_ARGS),
   gitProtectedPattern("rev-parse", GIT_REQUIRED_ARGS),
   gitProtectedPattern(String.raw`worktree\s+list`),
   gitProtectedPattern(String.raw`worktree\s+add`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`worktree\s+remove`, GIT_REQUIRED_ARGS),
   gitProtectedPattern("fetch", ""),
   gitProtectedPattern(String.raw`fetch\s+--prune`, ""),
   gitProtectedPattern(String.raw`pull\s+--rebase`, ""),
@@ -122,6 +124,10 @@ function hasHardDisallowedShellSyntax(command: string): boolean {
   })
 }
 
+function hasShellExpansionSyntax(command: string): boolean {
+  return /`|\$\(|\$\{|\$[A-Za-z_]/.test(command)
+}
+
 function splitChainedCommands(command: string): string[] {
   const segments: string[] = []
   let current = ""
@@ -172,7 +178,7 @@ function splitChainedCommands(command: string): string[] {
 }
 
 export function isAllowedProtectedShellCommand(command: string): boolean {
-  if (hasHardDisallowedShellSyntax(command)) {
+  if (hasHardDisallowedShellSyntax(command) || hasShellExpansionSyntax(command)) {
     return false
   }
   const normalized = normalizeShellCommand(command)

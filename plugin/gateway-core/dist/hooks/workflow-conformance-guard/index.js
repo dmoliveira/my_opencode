@@ -38,7 +38,7 @@ function protectedBranchWorktreeHint(directory) {
     return `For repo maintenance, run \`python3 scripts/worktree_helper_command.py maintenance --directory ${directory}\` or create a throwaway worktree directly, for example: \`git worktree add -b chore/<task> ../${base}-maint HEAD\`.`;
 }
 function shellQuote(value) {
-    return JSON.stringify(value);
+    return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 const DEFAULT_MAINTENANCE_HELPER = fileURLToPath(new URL("../../../../../scripts/worktree_helper_command.py", import.meta.url));
 function maintenanceHelperPath(directory) {

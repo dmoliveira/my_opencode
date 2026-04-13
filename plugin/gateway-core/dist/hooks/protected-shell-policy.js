@@ -24,9 +24,11 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     gitProtectedPattern("diff"),
     gitProtectedPattern("log"),
     gitProtectedPattern(String.raw `branch\s+--show-current`, ""),
+    gitProtectedPattern(String.raw `branch\s+(?:-d|--delete)`, GIT_REQUIRED_ARGS),
     gitProtectedPattern("rev-parse", GIT_REQUIRED_ARGS),
     gitProtectedPattern(String.raw `worktree\s+list`),
     gitProtectedPattern(String.raw `worktree\s+add`, GIT_REQUIRED_ARGS),
+    gitProtectedPattern(String.raw `worktree\s+remove`, GIT_REQUIRED_ARGS),
     gitProtectedPattern("fetch", ""),
     gitProtectedPattern(String.raw `fetch\s+--prune`, ""),
     gitProtectedPattern(String.raw `pull\s+--rebase`, ""),
@@ -109,6 +111,9 @@ function hasHardDisallowedShellSyntax(command) {
         return false;
     });
 }
+function hasShellExpansionSyntax(command) {
+    return /`|\$\(|\$\{|\$[A-Za-z_]/.test(command);
+}
 function splitChainedCommands(command) {
     const segments = [];
     let current = "";
@@ -157,7 +162,7 @@ function splitChainedCommands(command) {
     return segments;
 }
 export function isAllowedProtectedShellCommand(command) {
-    if (hasHardDisallowedShellSyntax(command)) {
+    if (hasHardDisallowedShellSyntax(command) || hasShellExpansionSyntax(command)) {
         return false;
     }
     const normalized = normalizeShellCommand(command);
