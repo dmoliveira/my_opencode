@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,6 +24,20 @@ def slugify(value: str) -> str:
 
 def shell_quote(value: str) -> str:
     return json.dumps(value)
+
+
+def has_head_commit(directory: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=directory,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
 
 
 def command_maintenance(args: list[str]) -> int:
@@ -61,7 +76,16 @@ def command_maintenance(args: list[str]) -> int:
     blocked_slug = slugify(blocked_command or "maintenance")
     suggested_branch = branch or f"chore/{blocked_slug[:40]}"
     suggested_worktree = (directory.parent / f"{repo_name}-maint").resolve()
-    create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
+    if has_head_commit(directory):
+        create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
+        followup_command = (
+            f"git -C {shell_quote(str(suggested_worktree))} status --short --branch"
+        )
+    else:
+        create_command = f'git -C {shell_quote(str(directory))} add . && git -C {shell_quote(str(directory))} commit -m "Initial commit"'
+        followup_command = (
+            f"git -C {shell_quote(str(directory))} status --short --branch"
+        )
     report = {
         "result": "PASS",
         "directory": str(directory),
@@ -70,7 +94,7 @@ def command_maintenance(args: list[str]) -> int:
         "blocked_command": blocked_command,
         "commands": [
             create_command,
-            f"git -C {shell_quote(str(suggested_worktree))} status --short --branch",
+            followup_command,
         ],
     }
     if json_output:
