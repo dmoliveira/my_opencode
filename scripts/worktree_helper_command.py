@@ -11,7 +11,7 @@ from pathlib import Path
 
 def usage() -> int:
     print(
-        "usage: /worktree-helper maintenance [--directory <path>] [--branch <name>] [--command <text>] [--json]"
+        "usage: /worktree-helper maintenance [--directory <path>] [--branch <name>] [--command <text>] [--execute] [--json]"
     )
     return 2
 
@@ -45,11 +45,16 @@ def command_maintenance(args: list[str]) -> int:
     branch: str | None = None
     blocked_command: str | None = None
     json_output = False
+    execute = False
     index = 0
     while index < len(args):
         token = args[index]
         if token == "--json":
             json_output = True
+            index += 1
+            continue
+        if token == "--execute":
+            execute = True
             index += 1
             continue
         if token == "--directory":
@@ -71,6 +76,48 @@ def command_maintenance(args: list[str]) -> int:
             index += 2
             continue
         return usage()
+
+    if execute:
+        if not blocked_command:
+            return usage()
+        try:
+            result = subprocess.run(
+                blocked_command,
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                shell=True,
+                check=False,
+            )
+        except OSError as exc:
+            report = {
+                "result": "ERROR",
+                "directory": str(directory),
+                "command": blocked_command,
+                "error": str(exc),
+            }
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(str(exc), file=sys.stderr)
+            return 1
+
+        report = {
+            "result": "EXECUTED",
+            "directory": str(directory),
+            "command": blocked_command,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        }
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            if result.stdout:
+                print(result.stdout, end="")
+            if result.stderr:
+                print(result.stderr, end="", file=sys.stderr)
+        return result.returncode
 
     repo_name = directory.name or "repo"
     blocked_slug = slugify(blocked_command or "maintenance")
