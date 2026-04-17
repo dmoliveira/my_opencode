@@ -315,10 +315,167 @@
     }
   },
   "plugin": [
-    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+    "@mohak34/opencode-notifier@latest"
   ],
   "instructions": [
     "{env:HOME}/.config/opencode/my_opencode/AGENTS.md",
     "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
-  ]
+  ],
+  "auto_slash_detector": {
+    "enabled": true,
+    "preview_first": true,
+    "min_confidence": 0.75,
+    "ambiguity_delta": 0.15,
+    "enabled_commands": [
+      "devtools",
+      "doctor",
+      "nvim",
+      "ox-review",
+      "ox-ship",
+      "ox-ux",
+      "stack"
+    ],
+    "last_detection": {
+      "timestamp": "2026-04-17T23:33:44.311391+00:00",
+      "prompt": "review this code and improve end to end",
+      "result": "MATCH",
+      "reason": "matched",
+      "selected": {
+        "command": "ox-review",
+        "args": [
+          "review"
+        ],
+        "slash_command": "/ox-review",
+        "score": 1.0,
+        "matched_keywords": [
+          "code",
+          "improve",
+          "review"
+        ],
+        "phrase_hits": 2,
+        "script": "ox_command.py"
+      }
+    }
+  },
+  "hooks": {
+    "enabled": true,
+    "disabled": []
+  },
+  "browser": {
+    "provider": "playwright",
+    "providers": {
+      "playwright": {
+        "enabled": true,
+        "command": "npx",
+        "args": [
+          "@playwright/mcp@latest"
+        ],
+        "doctor": {
+          "required_binaries": [
+            "node",
+            "npx"
+          ],
+          "install_hint": "npm i -D @playwright/mcp"
+        }
+      },
+      "agent-browser": {
+        "enabled": false,
+        "command": "agent-browser",
+        "args": [],
+        "doctor": {
+          "required_binaries": [
+            "__missing_browser_binary__"
+          ],
+          "install_hint": "install agent-browser CLI and authenticate"
+        }
+      }
+    }
+  },
+  "budget_runtime": {
+    "profile": "balanced",
+    "overrides": {},
+    "updated_at": "2026-04-17T23:33:41Z",
+    "updated_by": "budget profile",
+    "override_reason": null
+  },
+  "keyword_modes": {
+    "enabled": true,
+    "disabled_keywords": [],
+    "active_modes": [
+      "deep-analyze",
+      "parallel-research"
+    ],
+    "effective_flags": {
+      "analysis_depth": "high",
+      "response_style": "detailed",
+      "verification_level": "strong",
+      "reasoning_trace": "required",
+      "parallel_research": "enabled",
+      "exploration_mode": "parallel"
+    },
+    "last_prompt": "parallel-research deep-analyze check call graph"
+  },
+  "notify": {
+    "enabled": true,
+    "sound": {
+      "enabled": false
+    },
+    "visual": {
+      "enabled": true
+    },
+    "events": {
+      "complete": false,
+      "error": true,
+      "permission": true,
+      "question": true
+    },
+    "channels": {
+      "complete": {
+        "sound": false,
+        "visual": false
+      },
+      "error": {
+        "sound": false,
+        "visual": true
+      },
+      "permission": {
+        "sound": false,
+        "visual": true
+      },
+      "question": {
+        "sound": false,
+        "visual": true
+      }
+    }
+  },
+  "telemetry": {
+    "enabled": false,
+    "endpoint": "http://localhost:3000/opencode/events",
+    "timeout_ms": 1500,
+    "events": {
+      "complete": false,
+      "error": false,
+      "permission": false,
+      "question": false
+    }
+  },
+  "post_session": {
+    "enabled": false,
+    "command": "make validate",
+    "timeout_ms": 120000,
+    "run_on": [
+      "manual"
+    ]
+  },
+  "policy": {
+    "current": "strict",
+    "description": "Only high-signal prompts with visual emphasis.",
+    "updated_at": "2026-04-17T23:33:44.132299+00:00",
+    "notify_config": "/Users/diego/Codes/Projects/my_opencode-ox/.opencode/my_opencode.json"
+  },
+  "stack_profile": {
+    "current": "focus",
+    "description": "Minimal interruptions for deep work.",
+    "updated_at": "2026-04-17T23:33:44.169986+00:00"
+  }
 }

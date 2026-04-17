@@ -7,4 +7,5 @@ plugin/gateway-core/*.tgz
 plugin/gateway-core@latest
 runtime/
 bg/
-.opencode/
+.opencode/*
+!.opencode/my_opencode.json

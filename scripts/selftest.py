@@ -126,6 +126,7 @@ MODEL_ROUTING_SCRIPT = REPO_ROOT / "scripts" / "model_routing_command.py"
 ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
+OX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "ox_command.py"
 INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
 SLASH_WRAPPER_SCRIPT = REPO_ROOT / "scripts" / "slash_command_wrapper.py"
 CONTINUATION_STOP_SCRIPT = REPO_ROOT / "scripts" / "continuation_stop_command.py"
@@ -20378,12 +20379,29 @@ version: 1
                 "expected": "nvim",
             },
             {"prompt": "install devtools and setup hooks", "expected": "devtools"},
+            {
+                "prompt": "(playwright) analyze the website and polish the UX",
+                "expected": "ox-ux",
+            },
+            {
+                "prompt": "review this code and improve end to end",
+                "expected": "ox-review",
+            },
+            {"prompt": "is this branch ready to ship?", "expected": "ox-ship"},
             {"prompt": "write release notes", "expected": None},
         ]
         auto_slash_precision = evaluate_precision(
             auto_slash_dataset,
             enabled=True,
-            enabled_commands={"doctor", "stack", "nvim", "devtools"},
+            enabled_commands={
+                "doctor",
+                "stack",
+                "nvim",
+                "devtools",
+                "ox-ux",
+                "ox-review",
+                "ox-ship",
+            },
             min_confidence=0.75,
             ambiguity_delta=0.15,
         )
@@ -20526,6 +20544,153 @@ version: 1
         expect(
             auto_slash_doctor_report.get("result") == "PASS",
             "auto-slash doctor should report PASS",
+        )
+
+        auto_slash_ox_preview = subprocess.run(
+            [
+                sys.executable,
+                str(AUTO_SLASH_SCRIPT),
+                "preview",
+                "--prompt",
+                "(playwright) analyze the website and polish the UX",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            auto_slash_ox_preview.returncode == 0,
+            "auto-slash ox preview should succeed",
+        )
+        auto_slash_ox_preview_report = parse_json_output(auto_slash_ox_preview.stdout)
+        expect(
+            (auto_slash_ox_preview_report.get("selected") or {}).get("command")
+            == "ox-ux",
+            "auto-slash preview should map playwright prefix to ox-ux",
+        )
+        expect(
+            (auto_slash_ox_preview_report.get("selected") or {}).get("slash_command")
+            == "/ox-ux --focus hierarchy,copy,states",
+            "auto-slash preview should render the ox-ux slash command",
+        )
+
+        auto_slash_ox_review = subprocess.run(
+            [
+                sys.executable,
+                str(AUTO_SLASH_SCRIPT),
+                "preview",
+                "--prompt",
+                "review this code and improve end to end",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            auto_slash_ox_review.returncode == 0,
+            "auto-slash ox review preview should succeed",
+        )
+        auto_slash_ox_review_report = parse_json_output(auto_slash_ox_review.stdout)
+        expect(
+            (auto_slash_ox_review_report.get("selected") or {}).get("command")
+            == "ox-review",
+            "auto-slash preview should map review-improve prompt to ox-review",
+        )
+
+        ox_doctor = subprocess.run(
+            [sys.executable, str(OX_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(ox_doctor.returncode == 0, "ox doctor should succeed")
+        ox_doctor_report = parse_json_output(ox_doctor.stdout)
+        expect(
+            ox_doctor_report.get("result") == "PASS",
+            "ox doctor should report PASS",
+        )
+        expect(
+            "ox-ux" in ox_doctor_report.get("commands", []),
+            "ox doctor should list the ox command family",
+        )
+
+        ox_ux = subprocess.run(
+            [
+                sys.executable,
+                str(OX_COMMAND_SCRIPT),
+                "ux",
+                "--repo",
+                "top-uni",
+                "--scope",
+                "home, filters, spotlight pages",
+                "--focus",
+                "hierarchy,copy,states",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(ox_ux.returncode == 0, "ox ux should succeed")
+        ox_ux_report = parse_json_output(ox_ux.stdout)
+        expect(
+            ox_ux_report.get("slash_command") == "/ox-ux",
+            "ox ux should report the ox-ux slash command",
+        )
+        expect(
+            (ox_ux_report.get("context") or {}).get("target")
+            == "https://dmoliveira.github.io/top-uni/",
+            "ox ux should default top-uni to the public site target",
+        )
+        expect(
+            "playwright" in ox_ux_report.get("recommended_mcp_profiles", []),
+            "ox ux should recommend Playwright profile",
+        )
+        expect(
+            "Top Uni" in str(ox_ux_report.get("prompt_block") or ""),
+            "ox ux prompt block should include linked Top Uni context",
+        )
+
+        ox_review = subprocess.run(
+            [
+                sys.executable,
+                str(OX_COMMAND_SCRIPT),
+                "review",
+                "--scope",
+                "scripts",
+                "--goal",
+                "review this branch end to end and improve it",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(ox_review.returncode == 0, "ox review should succeed")
+        ox_review_report = parse_json_output(ox_review.stdout)
+        expect(
+            ox_review_report.get("slash_command") == "/ox-review",
+            "ox review should report the ox-review slash command",
+        )
+        expect(
+            ox_review_report.get("recommended_agent") == "orchestrator",
+            "ox review should recommend orchestrator",
+        )
+        expect(
+            (ox_review_report.get("context") or {}).get("scope") == "scripts",
+            "ox review should preserve the requested scope",
         )
 
         frontmatter, body = parse_frontmatter(
