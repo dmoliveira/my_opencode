@@ -27,6 +27,21 @@ COMMANDS = {
         "default_args": ["status"],
         "script": "devtools_command.py",
     },
+    "ox-ux": {
+        "description": "Expand browser-first UX audit and polish workflow.",
+        "default_args": ["ux"],
+        "script": "ox_command.py",
+    },
+    "ox-review": {
+        "description": "Expand end-to-end review and improvement workflow.",
+        "default_args": ["review"],
+        "script": "ox_command.py",
+    },
+    "ox-ship": {
+        "description": "Expand ship-readiness workflow.",
+        "default_args": ["ship"],
+        "script": "ox_command.py",
+    },
 }
 
 
@@ -100,6 +115,67 @@ INTENT_RULES = {
             "install tooling",
             "setup hooks",
             "devtools doctor",
+        },
+    },
+    "ox-ux": {
+        "keywords": {
+            "playwright",
+            "ux",
+            "ui",
+            "website",
+            "site",
+            "polish",
+            "friction",
+            "design",
+        },
+        "phrases": {
+            "analyze the application using playwright",
+            "analyse the application using playwright",
+            "analyze the website using playwright",
+            "analyze the website and polish the ux",
+            "analyse the website and polish the ux",
+            "review the ui and ux",
+            "improve the ui and ux",
+            "audit the website",
+            "polish the interface",
+            "what is not nice in terms of ui",
+        },
+    },
+    "ox-review": {
+        "keywords": {
+            "review",
+            "improve",
+            "cleanup",
+            "refine",
+            "harden",
+            "code",
+            "e2e",
+        },
+        "phrases": {
+            "review this code and improve",
+            "review this code end to end",
+            "improve end to end",
+            "review and improve",
+            "make this code better",
+        },
+    },
+    "ox-ship": {
+        "keywords": {
+            "ship",
+            "pr",
+            "release",
+            "ready",
+            "merge",
+            "validate",
+            "shipping",
+        },
+        "phrases": {
+            "prepare this branch for pr",
+            "is this ready to ship",
+            "is this branch ready to ship",
+            "validate this branch",
+            "draft pr summary",
+            "ship readiness",
         },
     },
 }
@@ -189,12 +265,28 @@ def _resolve_args(command: str, tokens: set[str], prompt_lower: str) -> list[str
             return ["install", *targets]
         return ["status"]
 
+    if command == "ox-ux":
+        args = ["ux"]
+        if "playwright" in tokens:
+            args.extend(["--focus", "hierarchy,copy,states"])
+        return args
+
+    if command == "ox-review":
+        return ["review"]
+
+    if command == "ox-ship":
+        return ["ship"]
+
     return COMMANDS[command]["default_args"]
 
 
 def _render_slash_command(command: str, args: list[str]) -> str:
     if command == "doctor":
         visible_args = [arg for arg in args if arg != "run"]
+        return f"/{command} {' '.join(visible_args)}".strip()
+    if command.startswith("ox-"):
+        mode = command.split("-", 1)[1]
+        visible_args = [arg for arg in args if arg != mode]
         return f"/{command} {' '.join(visible_args)}".strip()
     return f"/{command} {' '.join(args)}".strip()
 

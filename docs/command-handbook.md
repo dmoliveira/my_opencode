@@ -437,6 +437,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `/autopilot` -> open-ended autonomous execution surface
 - `/autoflow` -> public deterministic plan-file execution surface
 - `/autopilot` and `/autoflow` share the same task-graph mental model; prefer `/autopilot` for open-ended objectives and `/autoflow` for plan-file-driven work
+- `/ox-*` provides a stable custom prompt-pack namespace for reusable automation expansions such as UX audits, review/improve loops, ship readiness, task bootstrap, and session wrap-up
 
 - compatibility aliases are listed below; keep operator guidance canonical-first
 
@@ -445,6 +446,43 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `/do` -> shorthand alias for `/autopilot`
 - `/plan` -> compatibility/internal contract-checking wrapper; prefer `/autoflow` for new usage
 - `/start-work` -> legacy alias path that redirects to `/autoflow`; keep `/autoflow` in new guidance
+
+## OX prompt-pack namespace
+
+Use `ox` when you want a short custom prefix that expands into a repeatable execution contract instead of rewriting the same request each time.
+
+```text
+/ox
+/ox doctor
+/ox ecosystem
+/ox-ux --repo top-uni
+/ox-review "review this branch end to end and improve it"
+/ox-ship --goal "prepare this branch for PR"
+/ox-start --scope "new task bootstrap"
+/ox-wrap
+/ox-debug --target "failing mobile nav"
+/ox-refactor --scope scripts/ox_command.py
+```
+
+Detailed contracts and ecosystem notes: `docs/ox-command-pack.md`
+
+Natural-language routing examples:
+
+```text
+/auto-slash preview --prompt "(playwright) analyze the website and polish the UX" --json
+/auto-slash preview --prompt "review this code and improve end to end" --json
+/auto-slash preview --prompt "is this branch ready to ship?" --json
+```
+
+Continuation/iteration controls stay canonical under the existing loop surface:
+
+```text
+/autopilot go --goal "continue active objective" --max-cycles 10 --json
+/autopilot resume --json
+/resume now --interruption-class tool_failure --json
+/resume smart --json
+/continuation-stop --reason "manual checkpoint" --json
+```
 
 ## Complete slash-command index
 
@@ -486,6 +524,14 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
+/ox - Namespace catalog, diagnostics, and ecosystem links for the `/ox-*` prompt-pack family
+/ox-debug - Expand a debug-and-fix execution contract with reproduction and regression focus
+/ox-refactor - Expand a safe refactor execution contract with bounded scope and validation cues
+/ox-review - Expand an end-to-end code review and improvement execution contract
+/ox-ship - Expand a ship-readiness validation and PR-prep execution contract
+/ox-start - Expand a task-bootstrap execution contract with worktree and scope cues
+/ox-ux - Expand a browser-first UX audit and polish execution contract
+/ox-wrap - Expand a session wrap-up and handoff execution contract
 /plan - Compatibility/internal wrapper for plan execution flows (run|status|doctor); prefer /autoflow
 /plugin - Manage plugin usage (status|doctor|setup-keys|profile|enable|disable)
 /post-session - Manage post-session hook config (status|enable|disable|set)

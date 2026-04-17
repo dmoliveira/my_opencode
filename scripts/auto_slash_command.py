@@ -30,7 +30,7 @@ AUDIT_DEFAULT = Path(
 
 def usage() -> int:
     print(
-        "usage: /auto-slash status [--json] | /auto-slash detect --prompt <text> [--json] | /auto-slash preview --prompt <text> [--json] | /auto-slash execute --prompt <text> [--force] [--json] | /auto-slash enable | /auto-slash disable | /auto-slash enable-command <doctor|stack|nvim|devtools> | /auto-slash disable-command <doctor|stack|nvim|devtools> | /auto-slash keyword <status|detect|apply|enable|disable|disable-keyword|enable-keyword|doctor> ... | /auto-slash doctor [--json] | /auto-slash audit [--limit <n>] [--json]"
+        "usage: /auto-slash status [--json] | /auto-slash detect --prompt <text> [--json] | /auto-slash preview --prompt <text> [--json] | /auto-slash execute --prompt <text> [--force] [--json] | /auto-slash enable | /auto-slash disable | /auto-slash enable-command <doctor|stack|nvim|devtools|ox-ux|ox-review|ox-ship> | /auto-slash disable-command <doctor|stack|nvim|devtools|ox-ux|ox-review|ox-ship> | /auto-slash keyword <status|detect|apply|enable|disable|disable-keyword|enable-keyword|doctor> ... | /auto-slash doctor [--json] | /auto-slash audit [--limit <n>] [--json]"
     )
     return 2
 

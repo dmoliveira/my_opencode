@@ -17,6 +17,8 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 /plugin status
 /mcp status
 /notify status
+/ox
+/ox-ux --repo top-uni
 /autoflow status --json
 /digest run --reason manual
 /gateway status
@@ -62,10 +64,42 @@ Use this split to stay consistent:
 - `/workflow` when you need direct workflow validation or resume controls
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for plan markdown execution
+- `/ox-*` when you want a reusable prompt expansion such as UX audit, review/improve, ship, start, wrap, debug, or safe refactor
+
+## OX prompt-pack shortcuts
+
+Use the `ox` namespace when you want stable reusable prompt meaning with a short prefix:
+
+```text
+/ox
+/ox doctor
+/ox ecosystem
+/ox-ux --repo top-uni
+/ox-review "review this code end to end and improve it"
+/ox-ship --goal "prepare this branch for PR"
+```
+
+Reference guide: `docs/ox-command-pack.md`
+
+Natural-language shortcut path:
+
+```text
+/auto-slash preview --prompt "(playwright) analyze the website and polish the UX" --json
+/auto-slash preview --prompt "review this code and improve end to end" --json
+```
+
+Continuation loop controls:
+
+```text
+/autopilot go --goal "continue active objective" --max-cycles 10 --json
+/resume smart --json
+/continuation-stop --reason "manual checkpoint" --json
+```
 
 ## References
 
 - Full command catalog: `docs/command-handbook.md`
+- OX prompt-pack contracts: `docs/ox-command-pack.md`
 - Operator runbook: `docs/operator-playbook.md`
 - Worktree-first execution: `docs/parallel-wt-playbook.md`
 - Deeper architecture notes: `docs/readme-deep-notes.md`

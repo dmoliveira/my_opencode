@@ -78,6 +78,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
+- 🧩 Built-in `/ox` + `/ox-*` prompt-pack commands for reusable automation expansions such as UX audits, review/improve loops, ship readiness, and wrap-up handoffs.
 - 🗺️ Built-in `/autoflow` command for deterministic plan execution (status/report/resume/doctor).
 - 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
 - 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
@@ -148,6 +149,9 @@ Quickstart commands:
 /plugin status
 /mcp status
 /notify status
+/ox
+/ox-ux --repo top-uni
+/ox-review "review this branch end to end and improve it"
 /delivery status --json
 /autopilot go --goal "finish current objective" --json
 /autoflow status --json
@@ -161,6 +165,7 @@ Recommended command split:
 - `/workflow` for lower-level workflow validation and resume control
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for explicit plan-file execution
+- `/ox-*` for stable reusable prompt expansions that you want to keep refining over time
 
 Before implementation work, create a dedicated git worktree branch for the task. Do not edit task files from the main project folder, and do not `git checkout` or `git switch` that folder onto a task branch.
 
@@ -186,6 +191,7 @@ Profiles:
 - `scripts/notify_command.py` - backend script for `/notify`
 - `scripts/session_digest.py` - backend script for `/digest`
 - `scripts/session_command.py` - backend script for `/session`
+- `scripts/ox_command.py` - backend script for `/ox` and the `/ox-*` prompt-pack namespace
 - `scripts/autoflow_command.py` - backend script for `/autoflow`
 - `scripts/init_deep_command.py` - backend script for `/init-deep`
 - `scripts/continuation_stop_command.py` - backend script for `/continuation-stop`
@@ -226,6 +232,17 @@ Profiles:
 - `lefthook.yml` - fast git hook runner config
 - `.envrc.example` - direnv template for local environment variables
 - `.github/workflows/ci.yml` - CI checks and installer smoke test
+
+## Linked ecosystem references 🔗
+
+Current public ecosystem references wired into the `ox` command pack:
+
+- `my_opencode` runtime: https://github.com/dmoliveira/my_opencode
+- `agents.md` playbook: https://github.com/dmoliveira/agents.md
+- `Top Uni` browser-first example target: https://dmoliveira.github.io/top-uni/
+- `my-cv-public`: https://dmoliveira.github.io/my-cv-public/cv/human/
+
+For the new `ox` namespace command pack, see `docs/ox-command-pack.md`.
 
 ## Maintenance commands 🛠️
 

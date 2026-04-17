@@ -257,6 +257,38 @@
       "description": "Manage notification controls and inbox feed (status|doctor|inbox|profile|enable|disable|channel|policy)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before notify --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "ox": {
+      "description": "OpenCode prompt-pack namespace for reusable automation expansions (list|doctor|ecosystem)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-ux": {
+      "description": "Expand a browser-first UX audit and polish execution contract",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before ux --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-review": {
+      "description": "Expand an end-to-end code review and improvement execution contract",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before review --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-ship": {
+      "description": "Expand a ship-readiness validation and PR-prep execution contract",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before ship --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-start": {
+      "description": "Expand a task-bootstrap execution contract with worktree and scope cues",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before start --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-wrap": {
+      "description": "Expand a session wrap-up and handoff execution contract",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before wrap --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-debug": {
+      "description": "Expand a debug-and-fix execution contract with reproduction and regression focus",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before debug --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "ox-refactor": {
+      "description": "Expand a safe refactor execution contract with bounded scope and validation cues",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before refactor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
     "session": {
       "description": "Inspect current/indexed sessions (current|list|show|search|handoff|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before session --raw-args \"$ARGUMENTS\"`\nShow only the command output."
@@ -288,5 +320,44 @@
   "instructions": [
     "{env:HOME}/.config/opencode/my_opencode/AGENTS.md",
     "{env:HOME}/.config/opencode/my_opencode/instructions/shell_strategy.md"
-  ]
+  ],
+  "auto_slash_detector": {
+    "enabled": true,
+    "preview_first": true,
+    "min_confidence": 0.75,
+    "ambiguity_delta": 0.15,
+    "enabled_commands": [
+      "devtools",
+      "doctor",
+      "nvim",
+      "ox-review",
+      "ox-ship",
+      "ox-ux",
+      "stack"
+    ],
+    "last_detection": {
+      "timestamp": "2026-04-17T22:52:20.597272+00:00",
+      "prompt": "(playwright) analyze the website and polish the UX",
+      "result": "MATCH",
+      "reason": "matched",
+      "selected": {
+        "command": "ox-ux",
+        "args": [
+          "ux",
+          "--focus",
+          "hierarchy,copy,states"
+        ],
+        "slash_command": "/ox-ux --focus hierarchy,copy,states",
+        "score": 1.0,
+        "matched_keywords": [
+          "playwright",
+          "polish",
+          "ux",
+          "website"
+        ],
+        "phrase_hits": 1,
+        "script": "ox_command.py"
+      }
+    }
+  }
 }

@@ -10,7 +10,7 @@ Generated artifact that tracks docs-automation publication coverage.
 - reason_groups: none
 - recommended_next_step: none
 
-- generated_at_utc: 2026-03-13T10:42:30Z
+- generated_at_utc: 2026-04-17T22:49:56Z
 - indexed_release_count: 22
 - latest_indexed_release: v0.4.21
 - publication_target_coverage: 3/3
