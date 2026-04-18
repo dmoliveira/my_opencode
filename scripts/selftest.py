@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import atexit
 import json
 import os
 import shutil
@@ -118,6 +119,30 @@ DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
 INSTALL_WIZARD_SCRIPT = REPO_ROOT / "scripts" / "install_wizard.py"
+SELFTEST_RESTORE_PATHS = [
+    REPO_ROOT / ".opencode" / "my_opencode.json",
+    REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md",
+]
+
+
+def register_selftest_repo_restore(paths: list[Path]) -> None:
+    snapshot: dict[Path, str | None] = {}
+    for path in paths:
+        snapshot[path] = path.read_text(encoding="utf-8") if path.exists() else None
+
+    def restore() -> None:
+        for path, original in snapshot.items():
+            if original is None:
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            path.write_text(original, encoding="utf-8")
+
+    atexit.register(restore)
+
+
 NVIM_INTEGRATION_SCRIPT = REPO_ROOT / "scripts" / "nvim_integration_command.py"
 BG_MANAGER_SCRIPT = REPO_ROOT / "scripts" / "background_task_manager.py"
 REFACTOR_LITE_SCRIPT = REPO_ROOT / "scripts" / "refactor_lite_command.py"
@@ -293,6 +318,7 @@ class LocalTcpProbeServer:
 
 
 def main() -> int:
+    register_selftest_repo_restore(SELFTEST_RESTORE_PATHS)
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         home = tmp / "home"
