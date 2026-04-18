@@ -41,8 +41,13 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
         "summary": "Use Playwright/browser tooling to inspect the full experience, capture UI/UX friction, and improve the product with visible polish.",
         "agent": "orchestrator",
         "mcp_profiles": ["playwright", "web"],
-        "startup": ["/browser status", "/mcp profile playwright"],
+        "startup": [
+            "/browser ensure --json",
+            "/mcp profile playwright",
+            "/browser doctor --json",
+        ],
         "workflow": [
+            "Run browser preflight first so Playwright/provider friction is surfaced as exact remediation instead of vague 'not installed' failures.",
             "Inspect the target application section by section with browser automation or screenshots before editing.",
             "Record concrete UX/UI problems with evidence, then prioritize the highest-friction issues first.",
             "Implement polish that improves clarity, hierarchy, spacing, copy, responsiveness, states, and overall trust.",

@@ -69,10 +69,20 @@ Examples:
 
 ```text
 /ox-ux
+/browser ensure --json
 /ox-ux --repo top-uni
 /ox-ux --target https://dmoliveira.github.io/top-uni/ --scope "home, filters, spotlight pages"
 /ox-ux --target https://dmoliveira.github.io/top-uni/ --focus hierarchy,copy,states --goal "polish the browsing flow"
 ```
+
+Recommended first step for browser-first work:
+
+```text
+/browser ensure --json
+/mcp profile playwright
+```
+
+This removes the common first-run friction where the agent only says Playwright/browser tooling is unavailable. `ensure` normalizes the selected provider back to `playwright`, reports exact missing binaries, and points to the next remediation command instead of leaving the workflow stuck.
 
 ### `/ox-review`
 
