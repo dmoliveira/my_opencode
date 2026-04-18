@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## v0.4.22 - 2026-04-18
+
+### Fixes
+- Restored `scripts/selftest.py` side-effect safety so release readiness checks no longer leave `.opencode/my_opencode.json` or `docs/plan/docs-automation-summary.md` dirty during release validation.
+- Hardened conversation recovery to resume stalled idle turns, allow safe protected-branch coordination flows, and permit reviewed dependency retries without repeated false-positive guard blocks.
+
 ### Adds
 - Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
 - Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
@@ -101,6 +107,10 @@ All notable changes to this project are documented in this file.
 - Added objective scope guardrails in `scripts/autopilot_runtime.py` with deterministic `scope_violation_detected` hard-stop handling for out-of-scope cycle targets.
 - Added `/autopilot resume --touched-paths <csv>` support in `scripts/autopilot_command.py` to validate cycle targets against declared objective scope.
 - Expanded learn verification coverage for low-confidence review rejection, high-risk two-approval publish gating, and install-smoke enforcement of knowledge publish guardrails (Epic 27 Task 27.4).
+
+### Fixes
+- Restored `scripts/selftest.py` side-effect safety so release readiness checks no longer leave `.opencode/my_opencode.json` or `docs/plan/docs-automation-summary.md` dirty.
+- Hardened conversation recovery to resume stalled idle turns, allow safe protected-branch coordination flows, and permit reviewed dependency retries without repeated false-positive guard blocks.
 
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.

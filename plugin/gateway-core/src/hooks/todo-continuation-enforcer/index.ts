@@ -123,6 +123,8 @@ const STOP_INTENT_PATTERN = /\b(stop|pause|hold|that'?s all|no thanks|done for n
 const NEGATED_CONTINUE_INTENT_PATTERN =
   /\b(do not|don't|dont|not)\s+(continue|proceed|go ahead|keep going|carry on)\b/i
 const NEGATED_STOP_INTENT_PATTERN = /\b(do not|don't|dont|not)\s+stop\b/i
+const MANUAL_RESCUE_PATTERN =
+  /\b(stuck|hanging|hung|freeze|frozen|looks like you got stuck|look like you got stuck|got stuck)\b/i
 
 function isContinueIntent(prompt: string): boolean {
   if (NEGATED_CONTINUE_INTENT_PATTERN.test(prompt)) {
@@ -146,6 +148,10 @@ function isStopIntent(prompt: string): boolean {
     return false
   }
   return STOP_INTENT_PATTERN.test(prompt)
+}
+
+function isManualRescuePrompt(prompt: string): boolean {
+  return MANUAL_RESCUE_PATTERN.test(prompt)
 }
 
 function assistantText(message: {
@@ -585,6 +591,7 @@ export function createTodoContinuationEnforcerHook(options: {
         if (!prompt) {
           return
         }
+        const directory = resolveDirectory(eventPayload, options.directory)
         if (isStopIntent(prompt)) {
           state.continueIntentArmed = false
           state.continueAckPending = false
@@ -596,9 +603,18 @@ export function createTodoContinuationEnforcerHook(options: {
           state.markerProbeAttempted = false
           return
         }
+        const manualRescue = isManualRescuePrompt(prompt)
         if (isContinueIntent(prompt)) {
           state.continueIntentArmed = true
-          state.continueAckPending = shouldAcknowledgeContinueIntent(prompt)
+          state.continueAckPending = manualRescue || shouldAcknowledgeContinueIntent(prompt)
+          if (manualRescue) {
+            writeGatewayEventAudit(directory, {
+              hook: "todo-continuation-enforcer",
+              stage: "state",
+              reason_code: "todo_continuation_manual_rescue_armed",
+              session_id: sessionId,
+            })
+          }
         } else {
           state.continueAckPending = false
         }

@@ -57,3 +57,26 @@ test("dependency-risk-guard blocks dependency-changing shell commands", async ()
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("dependency-risk-guard allows reviewed dependency command override", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-dependency-risk-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["dependency-risk-guard"], disabled: [] },
+        dependencyRiskGuard: {
+          enabled: true,
+          lockfilePatterns: ["package-lock.json"],
+          commandPatterns: ["\\bnpm\\s+install\\b"],
+        },
+      },
+    })
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-deps-cmd-override" },
+      { args: { command: "MY_OPENCODE_DEPENDENCY_REVIEWED=1 npm install --yes" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

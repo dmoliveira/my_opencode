@@ -189,6 +189,68 @@ test("session-recovery handles prompt injection failure without throwing", async
   }
 })
 
+test("session-recovery resumes stalled progress promise on idle", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    let lastPromptBody = null
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    time: { completed: Date.now() },
+                  },
+                  parts: [
+                    {
+                      type: "text",
+                      text: "[2026-04-18 08:10] I’m checking the new deploy trigger now so I can summarize the shipped state accurately.",
+                    },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            promptCalls += 1
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        properties: {
+          sessionID: "session-recovery-progress-idle",
+        },
+      },
+    })
+
+    assert.equal(promptCalls, 1)
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /stalled progress promise detected during idle/i)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("session-recovery skips injection while assistant turn is incomplete", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
   try {

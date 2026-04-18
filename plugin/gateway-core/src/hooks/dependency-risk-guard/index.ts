@@ -7,6 +7,29 @@ interface ToolBeforePayload {
   directory?: string
 }
 
+const DEPENDENCY_REVIEW_OVERRIDE_ENV_KEYS = [
+  "MY_OPENCODE_DEPENDENCY_REVIEWED",
+  "MY_OPENCODE_DEPENDENCY_ALLOW",
+]
+
+function hasTruthyEnvValue(value: string | undefined): boolean {
+  const normalized = String(value ?? "").trim().toLowerCase()
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on"
+}
+
+function hasInlineOverride(command: string): boolean {
+  return DEPENDENCY_REVIEW_OVERRIDE_ENV_KEYS.some((key) =>
+    new RegExp(`(^|\\s)${key}=(1|true|yes|on)(?=\\s|$)`, "i").test(command),
+  )
+}
+
+function dependencyReviewApproved(command: string): boolean {
+  if (hasInlineOverride(command)) {
+    return true
+  }
+  return DEPENDENCY_REVIEW_OVERRIDE_ENV_KEYS.some((key) => hasTruthyEnvValue(process.env[key]))
+}
+
 // Resolves file path from write/edit tool args.
 function targetPath(payload: ToolBeforePayload): string {
   const args = payload.output?.args
@@ -48,6 +71,20 @@ export function createDependencyRiskGuardHook(options: {
         if (!commandHit) {
           return
         }
+        if (dependencyReviewApproved(command)) {
+          const directory =
+            typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+              ? eventPayload.directory
+              : options.directory
+          const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
+          writeGatewayEventAudit(directory, {
+            hook: "dependency-risk-guard",
+            stage: "state",
+            reason_code: "lockfile_edit_override_allowed",
+            session_id: sessionId,
+          })
+          return
+        }
       } else {
         if (tool !== "write" && tool !== "edit") {
           return
@@ -58,6 +95,20 @@ export function createDependencyRiskGuardHook(options: {
         }
         const hit = patterns.some((pattern) => filePath.endsWith(pattern))
         if (!hit) {
+          return
+        }
+        if (dependencyReviewApproved("")) {
+          const directory =
+            typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+              ? eventPayload.directory
+              : options.directory
+          const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
+          writeGatewayEventAudit(directory, {
+            hook: "dependency-risk-guard",
+            stage: "state",
+            reason_code: "lockfile_edit_override_allowed",
+            session_id: sessionId,
+          })
           return
         }
       }
@@ -73,7 +124,7 @@ export function createDependencyRiskGuardHook(options: {
         session_id: sessionId,
       })
       throw new Error(
-        "Lockfile/dependency edits require explicit security validation. Run dependency checks manually and retry with clear justification.",
+        "Lockfile/dependency edits require explicit security validation. Run dependency checks manually and retry with `MY_OPENCODE_DEPENDENCY_REVIEWED=1` once review is complete.",
       )
     },
   }

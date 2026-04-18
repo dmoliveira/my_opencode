@@ -826,7 +826,8 @@ Hook behavior:
 Governance controls:
 - global toggle in config: `hooks.enabled`
 - per-hook opt-out list: `hooks.disabled`
-- telemetry-safe audit log: `~/.config/opencode/hooks/actions.jsonl`
+- repo-local gateway event audit log: `.opencode/gateway-events.jsonl` (override with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`)
+- enable local gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1`
 - audit log records only metadata (hook id, category, triggered, exit status), not raw command output
 
 ## Category routing schema baseline

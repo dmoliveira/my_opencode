@@ -1,4 +1,21 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+const DEPENDENCY_REVIEW_OVERRIDE_ENV_KEYS = [
+    "MY_OPENCODE_DEPENDENCY_REVIEWED",
+    "MY_OPENCODE_DEPENDENCY_ALLOW",
+];
+function hasTruthyEnvValue(value) {
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+function hasInlineOverride(command) {
+    return DEPENDENCY_REVIEW_OVERRIDE_ENV_KEYS.some((key) => new RegExp(`(^|\\s)${key}=(1|true|yes|on)(?=\\s|$)`, "i").test(command));
+}
+function dependencyReviewApproved(command) {
+    if (hasInlineOverride(command)) {
+        return true;
+    }
+    return DEPENDENCY_REVIEW_OVERRIDE_ENV_KEYS.some((key) => hasTruthyEnvValue(process.env[key]));
+}
 // Resolves file path from write/edit tool args.
 function targetPath(payload) {
     const args = payload.output?.args;
@@ -35,6 +52,19 @@ export function createDependencyRiskGuardHook(options) {
                 if (!commandHit) {
                     return;
                 }
+                if (dependencyReviewApproved(command)) {
+                    const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                        ? eventPayload.directory
+                        : options.directory;
+                    const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "");
+                    writeGatewayEventAudit(directory, {
+                        hook: "dependency-risk-guard",
+                        stage: "state",
+                        reason_code: "lockfile_edit_override_allowed",
+                        session_id: sessionId,
+                    });
+                    return;
+                }
             }
             else {
                 if (tool !== "write" && tool !== "edit") {
@@ -48,6 +78,19 @@ export function createDependencyRiskGuardHook(options) {
                 if (!hit) {
                     return;
                 }
+                if (dependencyReviewApproved("")) {
+                    const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
+                        ? eventPayload.directory
+                        : options.directory;
+                    const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "");
+                    writeGatewayEventAudit(directory, {
+                        hook: "dependency-risk-guard",
+                        stage: "state",
+                        reason_code: "lockfile_edit_override_allowed",
+                        session_id: sessionId,
+                    });
+                    return;
+                }
             }
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
@@ -59,7 +102,7 @@ export function createDependencyRiskGuardHook(options) {
                 reason_code: "lockfile_edit_guarded",
                 session_id: sessionId,
             });
-            throw new Error("Lockfile/dependency edits require explicit security validation. Run dependency checks manually and retry with clear justification.");
+            throw new Error("Lockfile/dependency edits require explicit security validation. Run dependency checks manually and retry with `MY_OPENCODE_DEPENDENCY_REVIEWED=1` once review is complete.");
         },
     };
 }

@@ -9,6 +9,12 @@ const PROTECTED_BRANCH_REF = String.raw`(?:main|master)`
 const SQLITE_SAFE_FLAG = String.raw`(?:-readonly|-header|-column|-csv|-json|-line|-list)`
 const GH_PROTECTED_BINARY = String.raw`${OPTIONAL_RTK_WRAPPER}(?:[^\s;&|]*/)?gh`
 
+function maintenanceHelperProtectedPattern(): RegExp {
+  return protectedPattern(
+    String.raw`python3?\s+${SHELL_TOKEN}\s+maintenance\s+--directory\s+${SHELL_TOKEN}\s+--command\s+${SHELL_TOKEN}\s+--json`,
+  )
+}
+
 function protectedPattern(commandPattern: string): RegExp {
   return new RegExp(String.raw`^${SAFE_ENV_PREFIX}${commandPattern}$`, "i")
 }
@@ -31,6 +37,7 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
   gitProtectedPattern("status"),
   gitProtectedPattern("diff"),
   gitProtectedPattern("log"),
+  gitProtectedPattern(String.raw`remote\s+-v`, ""),
   gitProtectedPattern(String.raw`branch\s+--show-current`, ""),
   gitProtectedPattern(String.raw`branch\s+(?:-d|--delete)`, GIT_REQUIRED_ARGS),
   gitProtectedPattern("rev-parse", GIT_REQUIRED_ARGS),
@@ -48,6 +55,8 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
   gitProtectedPattern(String.raw`checkout\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
   protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+view(?:\s+[^;&|]+)*`),
   protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+checks(?:\s+[^;&|]+)*`),
+  protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+(?:create|comment|edit)(?:\s+[^;&|]+)*`),
+  maintenanceHelperProtectedPattern(),
   sqliteProtectedPattern(),
   protectedPattern(String.raw`make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)`),
   protectedPattern(String.raw`npm(?:\s+--prefix\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))`),
