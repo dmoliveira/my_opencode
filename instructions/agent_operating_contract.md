@@ -96,6 +96,15 @@ No done claim unless all are true:
 
 ---
 
+## Status timestamp policy 🕒
+
+- When emitting inline status timestamps in assistant text (for example `[YYYY-MM-DD HH:MM]` prefixes), use the machine clock from the host environment rather than model-inferred time.
+- Preferred source: run a local clock command such as `date "+%Y-%m-%d %H:%M:%S %Z"` immediately before printing timestamped status output.
+- If a machine-clock lookup is not possible, omit the timestamp instead of inventing one.
+- This policy applies to progress updates, blocker reports, and completion summaries that include human-readable timestamps.
+
+---
+
 ## Blocker contract 🧩
 
 When blocked, output must include:
