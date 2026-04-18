@@ -37,6 +37,15 @@ Use these directly in OpenCode:
 /mcp disable all
 ```
 
+For browser-first work, start with:
+
+```text
+/browser ensure --json
+/mcp profile playwright
+```
+
+`/browser ensure --json` normalizes the selected browser provider back to `playwright` and returns exact missing dependency guidance when first-run browser friction would otherwise look like “Playwright is not installed”.
+
 Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
 
 Default posture: all managed MCPs start disabled until you enable a targeted profile or individual server.

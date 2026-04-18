@@ -899,6 +899,7 @@ Integration points:
 Use:
 ```text
 /browser status
+/browser ensure --json
 /browser profile playwright
 /browser profile agent-browser
 /browser doctor --json
@@ -910,6 +911,7 @@ Provider trade-offs:
 
 Recommended defaults:
 - start with `playwright`
+- run `/browser ensure --json` before browser-first tasks so provider drift and missing deps become explicit remediation instead of a vague unavailable-tool reply
 - switch to `agent-browser` only when you need those capabilities
 - run `/browser doctor --json` after changes to confirm dependency readiness
 

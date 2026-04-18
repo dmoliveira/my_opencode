@@ -17163,6 +17163,99 @@ jobs:
             "browser doctor should report ready selected provider after reset",
         )
 
+        browser_profile_agent_again = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "profile", "agent-browser"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            browser_profile_agent_again.returncode == 0,
+            "browser profile should switch to agent-browser before ensure",
+        )
+
+        browser_ensure = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "ensure", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(browser_ensure.returncode == 0, "browser ensure should succeed")
+        browser_ensure_report = parse_json_output(browser_ensure.stdout)
+        expect(
+            browser_ensure_report.get("provider") == "playwright",
+            "browser ensure should normalize back to playwright",
+        )
+        expect(
+            browser_ensure_report.get("provider_changed") is True,
+            "browser ensure should report provider change when it repaired state",
+        )
+        ensure_quick_fixes = browser_ensure_report.get("quick_fixes", [])
+        expect(
+            "run /mcp profile playwright" in ensure_quick_fixes,
+            "browser ensure should recommend the playwright MCP profile",
+        )
+
+        browser_cfg_after_ensure = load_json_file(browser_config_path)
+        browser_cfg_after_ensure.setdefault("browser", {}).setdefault(
+            "providers", {}
+        ).setdefault("playwright", {}).setdefault("doctor", {})["required_binaries"] = [
+            "__missing_browser_binary__"
+        ]
+        browser_config_path.write_text(
+            json.dumps(browser_cfg_after_ensure, indent=2) + "\n", encoding="utf-8"
+        )
+
+        browser_ensure_warn = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "ensure", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            browser_ensure_warn.returncode == 0,
+            "browser ensure should still succeed when dependencies are missing",
+        )
+        browser_ensure_warn_report = parse_json_output(browser_ensure_warn.stdout)
+        expect(
+            browser_ensure_warn_report.get("result") == "WARN",
+            "browser ensure should warn when Playwright prerequisites are missing",
+        )
+        ensure_warnings_text = "\n".join(browser_ensure_warn_report.get("warnings", []))
+        expect(
+            "__missing_browser_binary__" in ensure_warnings_text,
+            "browser ensure should report exact missing browser dependencies",
+        )
+
+        browser_profile_reset = subprocess.run(
+            [sys.executable, str(BROWSER_SCRIPT), "profile", "playwright"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            browser_profile_reset.returncode == 0,
+            "browser profile should switch back to playwright after ensure tests",
+        )
+        browser_cfg_final = load_json_file(browser_config_path)
+        browser_cfg_final.setdefault("browser", {}).setdefault(
+            "providers", {}
+        ).setdefault("playwright", {}).setdefault("doctor", {})["required_binaries"] = [
+            "node",
+            "npx",
+        ]
+        browser_config_path.write_text(
+            json.dumps(browser_cfg_final, indent=2) + "\n", encoding="utf-8"
+        )
+
         plan_path = tmp / "plan_execution_selftest.md"
         plan_path.write_text(
             """---
@@ -20646,6 +20739,10 @@ version: 1
         expect(
             ox_ux_report.get("slash_command") == "/ox-ux",
             "ox ux should report the ox-ux slash command",
+        )
+        expect(
+            "/browser ensure --json" in ox_ux_report.get("recommended_setup", []),
+            "ox ux should recommend browser ensure preflight",
         )
         expect(
             (ox_ux_report.get("context") or {}).get("target")

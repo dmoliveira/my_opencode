@@ -16,6 +16,7 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 /doctor run
 /plugin status
 /mcp status
+/browser ensure --json
 /notify status
 /ox
 /ox-ux --repo top-uni
@@ -74,6 +75,7 @@ Use the `ox` namespace when you want stable reusable prompt meaning with a short
 /ox
 /ox doctor
 /ox ecosystem
+/browser ensure --json
 /ox-ux --repo top-uni
 /ox-review "review this code end to end and improve it"
 /ox-ship --goal "prepare this branch for PR"

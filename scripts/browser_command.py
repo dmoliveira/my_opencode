@@ -45,7 +45,7 @@ PROVIDERS = {
 
 def usage() -> int:
     print(
-        "usage: /browser status [--json] | /browser profile <playwright|agent-browser> | /browser doctor [--json] | /browser help"
+        "usage: /browser status [--json] | /browser profile <playwright|agent-browser> | /browser doctor [--json] | /browser ensure [--json] | /browser help"
     )
     return 2
 
@@ -218,6 +218,101 @@ def command_profile(argv: list[str]) -> int:
     return 0
 
 
+def _set_provider(state: dict[str, Any], provider: str) -> bool:
+    providers_cfg = state.get("providers")
+    if not isinstance(providers_cfg, dict):
+        providers_cfg = {}
+        state["providers"] = providers_cfg
+
+    changed = selected_provider(state) != provider
+    for name in PROVIDERS:
+        current = providers_cfg.get(name)
+        if not isinstance(current, dict):
+            current = json.loads(json.dumps(PROVIDERS[name]))
+        desired_enabled = name == provider
+        if bool(current.get("enabled", False)) != desired_enabled:
+            changed = True
+        current["enabled"] = desired_enabled
+        providers_cfg[name] = current
+    state["provider"] = provider
+    return changed
+
+
+def command_ensure(argv: list[str]) -> int:
+    if any(arg not in ("--json",) for arg in argv):
+        return usage()
+    json_output = "--json" in argv
+
+    config, state, write_path = load_state()
+    original_provider = selected_provider(state)
+    provider_changed = _set_provider(state, DEFAULT_PROVIDER)
+    if provider_changed:
+        save_state(config, state, write_path)
+
+    payload = build_status_payload(state, write_path)
+    selected = payload["providers"].get(DEFAULT_PROVIDER, {})
+    warnings: list[str] = []
+    problems: list[str] = []
+    quick_fixes: list[str] = []
+
+    if original_provider != DEFAULT_PROVIDER:
+        warnings.append(
+            f"browser provider changed from '{original_provider or '(unset)'}' to '{DEFAULT_PROVIDER}'"
+        )
+
+    missing = (
+        list(selected.get("missing_binaries", [])) if isinstance(selected, dict) else []
+    )
+    if missing:
+        warnings.append(
+            f"selected provider '{DEFAULT_PROVIDER}' missing binaries: {', '.join(str(item) for item in missing)}"
+        )
+        install_hint = (
+            str(selected.get("install_hint") or "")
+            if isinstance(selected, dict)
+            else ""
+        )
+        if install_hint:
+            quick_fixes.append(install_hint)
+        quick_fixes.append("run /mcp profile playwright")
+        quick_fixes.append("run /browser doctor --json")
+    else:
+        quick_fixes.append("run /mcp profile playwright")
+        quick_fixes.append("proceed with /ox-ux or other browser-first workflow")
+
+    report = {
+        "result": "PASS" if not missing else "WARN",
+        **payload,
+        "ensured_provider": DEFAULT_PROVIDER,
+        "provider_changed": provider_changed,
+        "previous_provider": original_provider,
+        "warnings": warnings,
+        "problems": problems,
+        "quick_fixes": quick_fixes,
+    }
+
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0
+
+    print("browser ensure")
+    print("--------------")
+    print(f"previous_provider: {original_provider or '(unset)'}")
+    print(f"provider: {report['provider']}")
+    print(f"provider_changed: {'yes' if provider_changed else 'no'}")
+    print(f"selected_ready: {'yes' if report['selected_ready'] else 'no'}")
+    if warnings:
+        print("warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
+    if quick_fixes:
+        print("quick_fixes:")
+        for item in quick_fixes:
+            print(f"- {item}")
+    print(f"result: {report['result']}")
+    return 0
+
+
 def command_doctor(argv: list[str]) -> int:
     if any(arg not in ("--json",) for arg in argv):
         return usage()
@@ -289,6 +384,8 @@ def main(argv: list[str]) -> int:
         return command_profile(argv[1:])
     if argv[0] == "doctor":
         return command_doctor(argv[1:])
+    if argv[0] == "ensure":
+        return command_ensure(argv[1:])
     if argv[0] == "help":
         return usage()
     return usage()
