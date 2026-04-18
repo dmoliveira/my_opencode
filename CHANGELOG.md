@@ -4,12 +4,6 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
-## v0.4.22 - 2026-04-18
-
-### Fixes
-- Restored `scripts/selftest.py` side-effect safety so release readiness checks no longer leave `.opencode/my_opencode.json` or `docs/plan/docs-automation-summary.md` dirty during release validation.
-- Hardened conversation recovery to resume stalled idle turns, allow safe protected-branch coordination flows, and permit reviewed dependency retries without repeated false-positive guard blocks.
-
 ### Adds
 - Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
 - Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
@@ -214,6 +208,12 @@ All notable changes to this project are documented in this file.
 - Added `health_score_collector.py` backend for health signal collection, weighted score computation, drift suppression-state tracking, and runtime snapshot history persistence; marked Epic 26 Task 26.2 complete in the roadmap.
 - Added `/health` command integration with status/trend/drift reporting, JSON export outputs, doctor/install smoke wiring, and score-bucket remediation guidance; marked Epic 26 Task 26.3 complete in the roadmap.
 - Expanded health verification coverage for deterministic score stability, precise policy-drift attribution, and install-smoke drift refresh checks; marked Epic 26 Task 26.4 and exit criteria complete in the roadmap.
+
+## v0.4.22 - 2026-04-18
+
+### Fixes
+- Restored `scripts/selftest.py` side-effect safety so release readiness checks no longer leave `.opencode/my_opencode.json` or `docs/plan/docs-automation-summary.md` dirty during release validation.
+- Hardened conversation recovery to resume stalled idle turns, allow safe protected-branch coordination flows, and permit reviewed dependency retries without repeated false-positive guard blocks.
 
 ## v0.2.0 - 2026-02-12
 
