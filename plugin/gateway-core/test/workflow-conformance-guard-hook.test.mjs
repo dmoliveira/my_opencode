@@ -174,6 +174,42 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { args: { command: "/usr/bin/gh pr view --json number" } }
     )
 
+    const remotePayload = { args: { command: "git remote -v" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-remote-safe" },
+      remotePayload
+    )
+    assert.equal(remotePayload.args.command, "git remote -v")
+
+    const prCreatePayload = { args: { command: "gh pr create --title test --body body" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-pr-create-safe" },
+      prCreatePayload
+    )
+    assert.equal(prCreatePayload.args.command, "gh pr create --title test --body body")
+
+    const prCommentPayload = { args: { command: "gh pr comment 12 --body ok" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-pr-comment-safe" },
+      prCommentPayload
+    )
+    assert.equal(prCommentPayload.args.command, "gh pr comment 12 --body ok")
+
+    const helperPayload = {
+      args: {
+        command:
+          'python3 "/tmp/worktree_helper_command.py" maintenance --directory "/tmp/repo" --command "git remote -v" --json',
+      },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-maint-helper-safe" },
+      helperPayload
+    )
+    assert.equal(
+      helperPayload.args.command,
+      'python3 "/tmp/worktree_helper_command.py" maintenance --directory "/tmp/repo" --command "git remote -v" --json',
+    )
+
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-safe" },
       { args: { command: "git fetch" } }

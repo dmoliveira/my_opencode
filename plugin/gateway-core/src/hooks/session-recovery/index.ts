@@ -319,6 +319,67 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
   return { matched: !hasVisibleText, tool }
 }
 
+function looksLikeStalledProgressPromiseFromHistory(messages: Array<{
+  info?: { role?: string; error?: unknown; time?: { completed?: number } }
+  parts?: Array<{
+    type?: string
+    text?: string
+    synthetic?: boolean
+    tool?: string
+    state?: { status?: string }
+  }>
+}>): { matched: boolean; cue: string } {
+  const message = messages.at(-1)
+  if (message?.info?.role !== "assistant") {
+    return { matched: false, cue: "" }
+  }
+  const errored = message.info?.error !== undefined && message.info?.error !== null
+  const completed = Number.isFinite(Number(message.info?.time?.completed ?? Number.NaN))
+  if (errored || !completed) {
+    return { matched: false, cue: "" }
+  }
+  const parts = Array.isArray(message.parts) ? message.parts : []
+  if (
+    parts.some((part) => {
+      const toolName = String(part?.tool ?? "").trim().toLowerCase()
+      return toolName === "question" || toolName === "askuserquestion"
+    })
+  ) {
+    return { matched: false, cue: "" }
+  }
+  const text = parts
+    .filter((part) => part?.type === "text" && typeof part.text === "string" && !part.synthetic)
+    .map((part) => part.text?.trim() ?? "")
+    .filter(Boolean)
+    .join("\n")
+  if (!text) {
+    return { matched: false, cue: "" }
+  }
+  const normalized = text.toLowerCase()
+  if (
+    normalized.includes("blocker:") ||
+    normalized.includes("evidence:") ||
+    normalized.includes("done.") ||
+    normalized.includes("all pending tasks are complete")
+  ) {
+    return { matched: false, cue: "" }
+  }
+  const cues: Array<{ cue: string; pattern: RegExp }> = [
+    { cue: "continuing", pattern: /\bi(?:['’]m| am)\s+continuing\b/ },
+    { cue: "checking", pattern: /\bi(?:['’]m| am)\s+checking\b/ },
+    { cue: "using", pattern: /\bi(?:['’]m| am)\s+using\b/ },
+    { cue: "running", pattern: /\bi(?:['’]m| am)\s+running\b/ },
+    { cue: "validating", pattern: /\bi(?:['’]m| am)\s+validating\b/ },
+    { cue: "reviewing", pattern: /\bi(?:['’]m| am)\s+reviewing\b/ },
+    { cue: "committing", pattern: /\bi(?:['’]m| am)\s+committing\b/ },
+    { cue: "patching", pattern: /\bi(?:['’]m| am)\s+patching\b/ },
+    { cue: "applying", pattern: /\bi(?:['’]m| am)\s+applying\b/ },
+    { cue: "creating", pattern: /\bi(?:['’]m| am)\s+creating\b/ },
+  ]
+  const matchedCue = cues.find((entry) => entry.pattern.test(normalized))
+  return matchedCue ? { matched: true, cue: matchedCue.cue } : { matched: false, cue: "" }
+}
+
 async function injectRecoveryMessage(args: {
   session: NonNullable<GatewayClient["session"]>
   sessionId: string
@@ -503,6 +564,24 @@ export function createSessionRecoveryHook(options: {
           }
           const silentQuestion = looksLikeSilentQuestionStallFromHistory(messages)
           if (!silentQuestion.matched) {
+            const stalledProgressPromise = looksLikeStalledProgressPromiseFromHistory(messages)
+            if (stalledProgressPromise.matched) {
+              recoveringSessions.add(sessionId)
+              try {
+                await injectRecoveryMessage({
+                  session: client,
+                  sessionId,
+                  directory,
+                  hook: "session-recovery",
+                  reasonCode: "stalled_progress_promise_recovery",
+                  content:
+                    `[stalled progress promise detected during idle - continuing now]\ncue: ${stalledProgressPromise.cue}`,
+                })
+              } finally {
+                recoveringSessions.delete(sessionId)
+              }
+              return
+            }
             const incompleteTail = looksLikeIncompleteAssistantTailFromHistory(messages)
             if (!incompleteTail.matched) {
               return
