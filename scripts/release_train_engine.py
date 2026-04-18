@@ -109,12 +109,34 @@ def changelog_contains_version(repo_root: Path, version: str) -> bool:
     return f"## v{version}" in text
 
 
-def looks_breaking_change(repo_root: Path) -> bool:
+def _extract_changelog_section(text: str, heading: str) -> str | None:
+    marker = f"## {heading}"
+    start = text.find(marker)
+    if start == -1:
+        return None
+    remainder = text[start:]
+    next_heading = remainder.find("\n## ", len(marker))
+    return remainder if next_heading == -1 else remainder[:next_heading]
+
+
+def looks_breaking_change(repo_root: Path, version: str | None = None) -> bool:
     changelog = repo_root / CHANGELOG_PATH
     if not changelog.exists():
         return False
-    text = changelog.read_text(encoding="utf-8").lower()
-    return "breaking" in text
+    text = changelog.read_text(encoding="utf-8")
+    sections: list[str] = []
+    if version:
+        version_section = _extract_changelog_section(text, f"v{version}")
+        if version_section:
+            sections.append(version_section)
+    if not sections:
+        unreleased_section = _extract_changelog_section(text, "Unreleased")
+        if unreleased_section:
+            sections.append(unreleased_section)
+    if not sections:
+        sections.append(text)
+    normalized = "\n".join(sections).lower()
+    return "breaking" in normalized
 
 
 def evaluate_prepare(
@@ -196,7 +218,7 @@ def evaluate_prepare(
                 "add --allow-version-jump for intentional multi-patch jumps"
             )
 
-    if parsed_target and parsed_tag and looks_breaking_change(repo_root):
+    if parsed_target and parsed_tag and looks_breaking_change(repo_root, version):
         if parsed_target.major == parsed_tag.major:
             reason_codes.append("version_mismatch_breaking_change")
             remediation.append("breaking changes require a major version bump")

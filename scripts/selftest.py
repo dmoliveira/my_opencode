@@ -14548,6 +14548,49 @@ jobs:
         )
 
         (release_repo / "CHANGELOG.md").write_text(
+            "## Unreleased\n\n- docs mention breaking-change policy\n\n## v1.0.0\n\n- baseline release\n\n## v1.0.1\n\n- patch follow-up\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            ["git", "add", "CHANGELOG.md"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "rewrite release fixture"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=release_repo,
+        )
+
+        release_engine_historical_breaking = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_TRAIN_ENGINE_SCRIPT),
+                "prepare",
+                "--repo-root",
+                str(release_repo),
+                "--version",
+                "1.0.1",
+                "--allowed-branch-re",
+                ".*",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            release_engine_historical_breaking.returncode == 0,
+            "release-train prepare should ignore unrelated historical breaking text when target release section is non-breaking",
+        )
+
+        (release_repo / "CHANGELOG.md").write_text(
             "## v1.0.0\n\n- baseline release\n\n## v1.0.1\n\n- patch follow-up\n",
             encoding="utf-8",
         )
