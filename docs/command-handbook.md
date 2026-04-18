@@ -153,6 +153,8 @@ Recommended runtime-injection debug loop:
 
 The terminal timestamp work landed on `experimental.text.complete` in `plugin/gateway-core/src/index.ts` and `plugin/gateway-core/src/hooks/assistant-message-timestamp/index.ts`. Use that pair as the reference example for future runtime output decoration.
 
+For human-written assistant progress lines in this repo's operating model, prefer host-clock timestamps over inferred timestamps. If you prefix a status line with a time, fetch it from the machine first (for example `date "+%Y-%m-%d %H:%M:%S %Z"`). If that lookup is unavailable, omit the timestamp rather than guessing.
+
 ## Session digest inside OpenCode 🧾
 
 Use these directly in OpenCode:
