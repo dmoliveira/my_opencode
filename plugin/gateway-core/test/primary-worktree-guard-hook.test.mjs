@@ -122,6 +122,31 @@ test("primary-worktree-guard blocks switching the primary worktree onto task bra
       { tool: "bash", sessionID: "session-primary-checkout-path" },
       { args: { command: "git checkout main -- file.txt" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-remote-safe" },
+      { args: { command: "git remote -v" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-branch-list-safe" },
+      { args: { command: "git branch -a" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-detach-safe" },
+      { args: { command: "git switch --detach origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-checkout-detach-safe" },
+      { args: { command: "git checkout --detach origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-show-safe" },
+      { args: { command: "git show HEAD --stat" } }
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
