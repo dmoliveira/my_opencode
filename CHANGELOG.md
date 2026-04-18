@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## v0.4.22 - 2026-04-18
+
+### Fixes
+- Restored `scripts/selftest.py` side-effect safety so release readiness checks no longer leave `.opencode/my_opencode.json` or `docs/plan/docs-automation-summary.md` dirty during release validation.
+- Hardened conversation recovery to resume stalled idle turns, allow safe protected-branch coordination flows, and permit reviewed dependency retries without repeated false-positive guard blocks.
+
 ### Adds
 - Added `pressure-escalation-guard` to block non-essential subagent task escalations under high continuation pressure, with blocker/critical override patterns.
 - Added gateway event audit rotation controls (`MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES`, `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS`) to preserve longer histories safely.
