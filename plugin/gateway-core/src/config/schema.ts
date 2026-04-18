@@ -844,7 +844,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   pressureEscalationGuard: {
     enabled: true,
-    maxContinueBeforeBlock: 5,
+    maxContinueBeforeBlock: 20,
     blockedSubagentTypes: [
       "reviewer",
       "verifier",
