@@ -108,8 +108,57 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-remote-safe" },
+      { args: { command: "git remote -v" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-branch-list-safe" },
+      { args: { command: "git branch --list" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-branch-a-safe" },
+      { args: { command: "git branch -a" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-worktree-list-safe" },
       { args: { command: `git -C "${directory}" worktree list` } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-worktree-list-porcelain-safe" },
+      { args: { command: `git -C "${directory}" worktree list --porcelain` } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-show-safe" },
+      { args: { command: "git show HEAD --stat" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-merge-base-safe" },
+      { args: { command: "git merge-base HEAD origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-rev-list-safe" },
+      { args: { command: "git rev-list --left-right --count HEAD...origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-for-each-ref-safe" },
+      { args: { command: "git for-each-ref --format=%(refname:short) refs/heads" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-symbolic-ref-safe" },
+      { args: { command: "git symbolic-ref --short HEAD" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-ls-files-safe" },
+      { args: { command: "git ls-files" } }
     )
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-worktree-list-abs-safe" },
@@ -202,6 +251,16 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-branch-delete-safe" },
       { args: { command: "git branch -d feature/test" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-detach-switch-safe" },
+      { args: { command: "git switch --detach origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-detach-checkout-safe" },
+      { args: { command: "git checkout --detach origin/main" } }
     )
 
     await plugin["tool.execute.before"](

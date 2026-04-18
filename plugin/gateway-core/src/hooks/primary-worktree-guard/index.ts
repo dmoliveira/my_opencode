@@ -100,6 +100,14 @@ function branchSwitchInfo(command: string): BranchSwitchInfo | null {
   if (new RegExp(`${GIT_PREFIX}checkout\\s+(?:"[^"]+"|'[^']+'|[^\\s;&|]+)\\s+--\\s+`, "i").test(command)) {
     return null
   }
+  if (
+    hasPattern(
+      command,
+      new RegExp(`${GIT_PREFIX}(?:switch|checkout)\\s+--detach\\s+(?:origin/)?(?:main|master)\\b`, "i"),
+    )
+  ) {
+    return null
+  }
   const destructiveTarget =
     matchBranchTarget(
       command,

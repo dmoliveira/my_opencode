@@ -25,21 +25,39 @@ function sqliteProtectedPattern(): RegExp {
   )
 }
 
-const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
-  protectedPattern("pwd"),
-  protectedPattern(String.raw`ls(?:\s+[^;&|]+)*`),
+const READ_ONLY_GIT_PATTERNS: RegExp[] = [
   gitProtectedPattern("status"),
   gitProtectedPattern("diff"),
   gitProtectedPattern("log"),
+  gitProtectedPattern(String.raw`remote\s+-v`, ""),
   gitProtectedPattern(String.raw`branch\s+--show-current`, ""),
-  gitProtectedPattern(String.raw`branch\s+(?:-d|--delete)`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`branch\s+(?:--list|-a)`, GIT_SAFE_ARGS),
   gitProtectedPattern("rev-parse", GIT_REQUIRED_ARGS),
-  gitProtectedPattern(String.raw`worktree\s+list`),
-  gitProtectedPattern(String.raw`worktree\s+add`, GIT_REQUIRED_ARGS),
-  gitProtectedPattern(String.raw`worktree\s+remove`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern("rev-list", GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`merge-base`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`show`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`ls-files`, GIT_SAFE_ARGS),
+  gitProtectedPattern(String.raw`for-each-ref`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`symbolic-ref`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`worktree\s+list`, GIT_SAFE_ARGS),
   gitProtectedPattern("fetch", ""),
   gitProtectedPattern(String.raw`fetch\s+--prune`, ""),
   gitProtectedPattern(String.raw`pull\s+--rebase`, ""),
+]
+
+const SAFE_GIT_CLEANUP_PATTERNS: RegExp[] = [
+  gitProtectedPattern(String.raw`branch\s+(?:-d|--delete)`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`worktree\s+add`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`worktree\s+remove`, GIT_REQUIRED_ARGS),
+  gitProtectedPattern(String.raw`switch\s+--detach\s+(?:origin/)?${PROTECTED_BRANCH_REF}`, ""),
+  gitProtectedPattern(String.raw`checkout\s+--detach\s+(?:origin/)?${PROTECTED_BRANCH_REF}`, ""),
+]
+
+const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
+  protectedPattern("pwd"),
+  protectedPattern(String.raw`ls(?:\s+[^;&|]+)*`),
+  ...READ_ONLY_GIT_PATTERNS,
+  ...SAFE_GIT_CLEANUP_PATTERNS,
   gitProtectedPattern(String.raw`stash\s+push`, GIT_REQUIRED_ARGS),
   gitProtectedPattern(String.raw`stash\s+pop`, ""),
   gitProtectedPattern(String.raw`stash\s+list`),
@@ -175,6 +193,14 @@ function splitChainedCommands(command: string): string[] {
     segments.push(normalized)
   }
   return segments
+}
+
+export function isReadOnlyGitCommand(command: string): boolean {
+  return READ_ONLY_GIT_PATTERNS.some((pattern) => pattern.test(normalizeShellCommand(command)))
+}
+
+export function isSafeGitCleanupCommand(command: string): boolean {
+  return SAFE_GIT_CLEANUP_PATTERNS.some((pattern) => pattern.test(normalizeShellCommand(command)))
 }
 
 export function isAllowedProtectedShellCommand(command: string): boolean {

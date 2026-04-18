@@ -64,6 +64,9 @@ function branchSwitchInfo(command) {
     if (new RegExp(`${GIT_PREFIX}checkout\\s+(?:"[^"]+"|'[^']+'|[^\\s;&|]+)\\s+--\\s+`, "i").test(command)) {
         return null;
     }
+    if (hasPattern(command, new RegExp(`${GIT_PREFIX}(?:switch|checkout)\\s+--detach\\s+(?:origin/)?(?:main|master)\\b`, "i"))) {
+        return null;
+    }
     const destructiveTarget = matchBranchTarget(command, new RegExp(`${GIT_PREFIX}switch\\s+(?:-c|-C|--orphan)\\s+("[^"]+"|'[^']+'|[^\\s;&|]+)`, "i")) ??
         matchBranchTarget(command, new RegExp(`${GIT_PREFIX}checkout\\s+(?:-b|-B|--orphan)\\s+("[^"]+"|'[^']+'|[^\\s;&|]+)`, "i"));
     if (destructiveTarget) {
