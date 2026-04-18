@@ -102,6 +102,10 @@ All notable changes to this project are documented in this file.
 - Added `/autopilot resume --touched-paths <csv>` support in `scripts/autopilot_command.py` to validate cycle targets against declared objective scope.
 - Expanded learn verification coverage for low-confidence review rejection, high-risk two-approval publish gating, and install-smoke enforcement of knowledge publish guardrails (Epic 27 Task 27.4).
 
+### Fixes
+- Restored `scripts/selftest.py` side-effect safety so release readiness checks no longer leave `.opencode/my_opencode.json` or `docs/plan/docs-automation-summary.md` dirty.
+- Hardened conversation recovery to resume stalled idle turns, allow safe protected-branch coordination flows, and permit reviewed dependency retries without repeated false-positive guard blocks.
+
 ### Changes
 - Documented extension evaluation outcomes and when each tool is the better fit.
 - Expanded install smoke and self-tests to cover non-interactive wizard execution paths.
