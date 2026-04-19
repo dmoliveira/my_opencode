@@ -1,125 +1,135 @@
-# Agent Operating Contract 🛡️
-
-This contract defines how custom agents in this repo should collaborate, when each one should be used, and what "done" means.
-
-Primary objective: keep `build` as the default for speed, while enabling `orchestrator` for complex execution, `tasker` for planning-focused Codememory capture, and specialist subagents for focused support.
-
----
-
-## Agent matrix 📋
-
-| Agent | Mode | Responsibility | Edit permissions |
-|---|---|---|---|
-| `build` | primary (default) | direct implementation for clear/small work | yes |
-| `orchestrator` | primary | multi-step execution lead with delegation | yes |
-| `tasker` | primary | planning-focused task/epic/dependency/note capture through Codememory | contract-only |
-| `explore` | subagent | internal codebase discovery | no |
-| `librarian` | subagent | external docs/upstream reference research | no |
-| `oracle` | subagent | architecture/debugging advisory | no |
-| `verifier` | subagent | test/lint/build validation and diagnosis | no |
-| `reviewer` | subagent | quality/risk review and ship-readiness | no |
-| `release-scribe` | subagent | PR/changelog/release communication drafts | no |
-| `strategic-planner` | subagent | sequencing and milestone planning | no |
-| `ambiguity-analyst` | subagent | assumptions and unknowns analysis | no |
-| `plan-critic` | subagent | feasibility and testability critique | no |
-
----
-
-## Default behavior ✅
-
-- `default_agent` remains `build` in `opencode.json` for quick direct execution.
-- `orchestrator` is the preferred primary for larger, multi-step work.
-- `tasker` is the preferred primary for Codememory-backed planning capture, backlog shaping, dependency mapping, and durable implementation notes when no code execution should occur.
-- Specialist subagents are read-only and support the active primary agent.
-- Single-writer is the default for code edits; parallel writers are opt-in and gated.
-
----
-
-## Risk-based review budget 🎚️
-
-`orchestrator` should classify risk at task start and scale review/verification effort:
-
-- low risk (docs/tests/small scoped edit): 1 review/fix pass
-- medium risk (typical feature/refactor): 2 review/fix passes
-- high risk (runtime/security/migration): 3-5 review/fix passes
-- stop review cycling when required checks are green and latest review has no blocker findings
-
----
-
-## Delegation triggers 🔁
-
-`orchestrator` should delegate when:
-
-- `explore`: unknown file ownership, cross-module impact, pattern discovery.
-- `librarian`: external frameworks/libraries or upstream behavior questions.
-- `oracle`: repeated failed fixes (2+), unclear architecture/security/perf tradeoffs.
-- `verifier`: after meaningful code changes and before done claim.
-- `reviewer`: before final response for significant/risky changes.
-- `release-scribe`: when preparing PR description/changelog/release notes.
-
----
-
-## Subagent budget + parallel write policy ⚖️
-
-- Keep at most 2 concurrent subagents.
-- Avoid duplicate `reviewer`/`verifier` passes on unchanged diffs.
-- Allow parallel writer streams only when file ownership is clearly disjoint and reservations are explicit.
-- Fall back to single-writer flow when overlap risk is non-trivial.
-
----
-
-## Delegation packet contract 📦
-
-When spawning subagents, include:
-
-- objective and scoped ownership
-- constrained file paths and constraints
-- acceptance criteria and required checks
-- expected output format and required evidence
-
----
-
-## Completion gates (mandatory) 🚦
-
-No done claim unless all are true:
-
-1. requested scope has no remaining actionable items
-2. required validation commands were run (or explicitly blocked with cause)
-3. no unresolved high-severity blocker remains
-4. verification/review steps executed when applicable
-
----
-
-## Anti-loop policy 🧯
-
-- Never respond with only another command suggestion when concrete execution is possible.
-- If done criteria are satisfied and blockers are clear, emit completion once and stop.
-- If user asks to continue, continue until completion gates pass or blocker contract triggers.
-
----
-
-## Status timestamp policy 🕒
-
-- When emitting inline status timestamps in assistant text (for example `[YYYY-MM-DD HH:MM]` prefixes), use the machine clock from the host environment rather than model-inferred time.
-- Preferred source: run a local clock command such as `date "+%Y-%m-%d %H:%M:%S %Z"` immediately before printing timestamped status output.
-- If a machine-clock lookup is not possible, omit the timestamp instead of inventing one.
-- This policy applies to progress updates, blocker reports, and completion summaries that include human-readable timestamps.
-
----
-
-## Blocker contract 🧩
-
-When blocked, output must include:
-
-- exact blocker reason
-- evidence (command/file/error)
-- best next action
-
----
-
-## Installation contract 🔧
-
-- Source of truth for agent definitions: `agent/specs/*.json`
-- Generated artifacts: `agent/*.md` via `python3 scripts/build_agents.py --profile balanced`
-- Installer sync target: `~/.config/opencode/agent/`
-- Installer should copy all agent markdown files during setup/update.
+# Agent Operating Contract 🛡️ [h:0e3d9420]
+ [h:030ac737]
+This contract defines how custom agents in this repo should collaborate, when each one should be used, and what "done" means. [h:0bbff6e4]
+ [h:a69b1754]
+Primary objective: keep `build` as the default for speed, while enabling `orchestrator` for complex execution, `tasker` for planning-focused Codememory capture, and specialist subagents for focused support. [h:dd69e2b3]
+ [h:b2662e35]
+--- [h:dcf7b2c7]
+ [h:c8352f1c]
+## Agent matrix 📋 [h:e8884634]
+ [h:48119674]
+| Agent | Mode | Responsibility | Edit permissions | [h:debe749c]
+|---|---|---|---| [h:942e426b]
+| `build` | primary (default) | direct implementation for clear/small work | yes | [h:ef0ae49c]
+| `orchestrator` | primary | multi-step execution lead with delegation | yes | [h:a5d8ef0a]
+| `tasker` | primary | planning-focused task/epic/dependency/note capture through Codememory | contract-only | [h:648c76a8]
+| `explore` | subagent | internal codebase discovery | no | [h:edbb6655]
+| `librarian` | subagent | external docs/upstream reference research | no | [h:9a9f6341]
+| `oracle` | subagent | architecture/debugging advisory | no | [h:f344181c]
+| `verifier` | subagent | test/lint/build validation and diagnosis | no | [h:c29b6d6c]
+| `reviewer` | subagent | quality/risk review and ship-readiness | no | [h:0f0d3c52]
+| `release-scribe` | subagent | PR/changelog/release communication drafts | no | [h:6c4d3697]
+| `strategic-planner` | subagent | sequencing and milestone planning | no | [h:7ddb7e63]
+| `ambiguity-analyst` | subagent | assumptions and unknowns analysis | no | [h:2aa9a914]
+| `plan-critic` | subagent | feasibility and testability critique | no | [h:d04cd75c]
+ [h:d11e70f4]
+--- [h:5deafef4]
+ [h:0097d2a2]
+## Default behavior ✅ [h:ea14842d]
+ [h:52179637]
+- `default_agent` remains `build` in `opencode.json` for quick direct execution. [h:92228f14]
+- `orchestrator` is the preferred primary for larger, multi-step work. [h:116e570f]
+- `tasker` is the preferred primary for Codememory-backed planning capture, backlog shaping, dependency mapping, and durable implementation notes when no code execution should occur. [h:5215ff93]
+- Specialist subagents are read-only and support the active primary agent. [h:4a32424d]
+- Single-writer is the default for code edits; parallel writers are opt-in and gated. [h:6bb32942]
+ [h:e6255c6d]
+--- [h:0ecd27cd]
+ [h:newa2a06]
+## Agent-to-agent coordination 🤝 [h:newa2a07]
+ [h:newa2a11]
+- Delegate planning-only backlog shaping, task/epic capture, dependency mapping, and durable implementation-note capture to `tasker` instead of creating ad hoc planning state in chat. [h:newa2a01]
+- Do not use `tasker` for implementation, debugging, validation, git/PR work, or repo mutation; hand those flows to `build` or `orchestrator` instead. [h:newa2a02]
+- When handing work to `tasker`, pass: target repo/scope, artifact intent (`task|epic|memory|doc` when known), dependency/order signals, and any persistence constraints that matter. [h:newa2a03]
+- Expect `tasker` to return created/updated artifact ids, inferred dependencies, applied assumptions/defaults, and a blocker contract if Codememory persistence fails. [h:newa2a04]
+- If a request mixes planning capture with implementation, split the flow: let `tasker` persist the planning graph first when durable planning state is needed, then resume with an execution-focused agent for code work. [h:newa2a05]
+ [h:newa2a12]
+--- [h:newa2a08]
+ [h:7a84c654]
+## Risk-based review budget 🎚️ [h:3b1cc11a]
+ [h:acbed1cb]
+`orchestrator` should classify risk at task start and scale review/verification effort: [h:84c3fbe2]
+ [h:229e57d9]
+- low risk (docs/tests/small scoped edit): 1 review/fix pass [h:cd57d44e]
+- medium risk (typical feature/refactor): 2 review/fix passes [h:02976d9e]
+- high risk (runtime/security/migration): 3-5 review/fix passes [h:c1ab5624]
+- stop review cycling when required checks are green and latest review has no blocker findings [h:64f9384f]
+ [h:ed096e58]
+--- [h:a3c8da98]
+ [h:b9953d5b]
+## Delegation triggers 🔁 [h:caa7aea6]
+ [h:62d9d40a]
+`orchestrator` should delegate when: [h:8d83f666]
+ [h:ab98dd1e]
+- `explore`: unknown file ownership, cross-module impact, pattern discovery. [h:32e438cc]
+- `librarian`: external frameworks/libraries or upstream behavior questions. [h:f47f42e7]
+- `oracle`: repeated failed fixes (2+), unclear architecture/security/perf tradeoffs. [h:ef8420d3]
+- `verifier`: after meaningful code changes and before done claim. [h:59a8ff18]
+- `reviewer`: before final response for significant/risky changes. [h:3e11a62c]
+- `release-scribe`: when preparing PR description/changelog/release notes. [h:a59ddd45]
+ [h:48b73c78]
+--- [h:a81450bc]
+ [h:9a455388]
+## Subagent budget + parallel write policy ⚖️ [h:3816c1c9]
+ [h:1e321695]
+- Keep at most 2 concurrent subagents. [h:5b757cc2]
+- Avoid duplicate `reviewer`/`verifier` passes on unchanged diffs. [h:198a5327]
+- Allow parallel writer streams only when file ownership is clearly disjoint and reservations are explicit. [h:5a862718]
+- Fall back to single-writer flow when overlap risk is non-trivial. [h:4c0283bf]
+ [h:cd95653b]
+--- [h:8c45ff02]
+ [h:a1ac230f]
+## Delegation packet contract 📦 [h:cb1ccdb1]
+ [h:a8266070]
+When spawning subagents, include: [h:583fb975]
+ [h:d49d579c]
+- objective and scoped ownership [h:637c3c24]
+- constrained file paths and constraints [h:d7afa6b7]
+- acceptance criteria and required checks [h:586b12ae]
+- expected output format and required evidence [h:864212db]
+ [h:c04a64a4]
+--- [h:d5565ab0]
+ [h:5085e12e]
+## Completion gates (mandatory) 🚦 [h:4a03ec97]
+ [h:0fed3e2e]
+No done claim unless all are true: [h:af948db7]
+ [h:956d1877]
+1. requested scope has no remaining actionable items [h:30750add]
+2. required validation commands were run (or explicitly blocked with cause) [h:28036f54]
+3. no unresolved high-severity blocker remains [h:c4341a77]
+4. verification/review steps executed when applicable [h:f8e94c02]
+ [h:9baa7e18]
+--- [h:f31a2ed4]
+ [h:1042fdcc]
+## Anti-loop policy 🧯 [h:1286770c]
+ [h:4a768b81]
+- Never respond with only another command suggestion when concrete execution is possible. [h:76b27744]
+- If done criteria are satisfied and blockers are clear, emit completion once and stop. [h:dbc3aed0]
+- If user asks to continue, continue until completion gates pass or blocker contract triggers. [h:d1c4b483]
+ [h:5c801dea]
+--- [h:ccd61976]
+ [h:25b80062]
+## Status timestamp policy 🕒 [h:ac924b0e]
+ [h:c653372d]
+- When emitting inline status timestamps in assistant text (for example `[YYYY-MM-DD HH:MM]` prefixes), use the machine clock from the host environment rather than model-inferred time. [h:373918e8]
+- Preferred source: run a local clock command such as `date "+%Y-%m-%d %H:%M:%S %Z"` immediately before printing timestamped status output. [h:0bbe03de]
+- If a machine-clock lookup is not possible, omit the timestamp instead of inventing one. [h:a0499587]
+- This policy applies to progress updates, blocker reports, and completion summaries that include human-readable timestamps. [h:7453f908]
+ [h:f6d28a80]
+--- [h:59c099b0]
+ [h:a6a0c9c9]
+## Blocker contract 🧩 [h:dd8d77f7]
+ [h:f0aec008]
+When blocked, output must include: [h:01070c67]
+ [h:2e9cec74]
+- exact blocker reason [h:1a213e31]
+- evidence (command/file/error) [h:f588998f]
+- best next action [h:4b0d3293]
+ [h:6eceaeae]
+--- [h:076c7eed]
+ [h:35814b16]
+## Installation contract 🔧 [h:9ee4501d]
+ [h:bd8f78e0]
+- Source of truth for agent definitions: `agent/specs/*.json` [h:21fa9101]
+- Generated artifacts: `agent/*.md` via `python3 scripts/build_agents.py --profile balanced` [h:0e4c80ac]
+- Installer sync target: `~/.config/opencode/agent/` [h:786a21fe]
+- Installer should copy all agent markdown files during setup/update. [h:41144f46]
