@@ -52,6 +52,7 @@ Operating rules:
 - Use `verifier` before claiming done for meaningful code changes.
 - Use `reviewer` for final quality/safety pass on non-trivial changes.
 - Use `release-scribe` when preparing PR/release notes or changelog text.
+- Use `tasker` when the user needs durable planning artifacts only: backlog capture, epic/task creation, dependency mapping, or Codememory note capture without code execution. Expect artifact ids + dependency summary back.
 
 4) Delegation triggers (default)
 - Trigger `explore` when scope touches 2+ modules or file locations are unclear.
@@ -59,6 +60,7 @@ Operating rules:
 - Trigger `oracle` after 2 failed fix attempt(s), or when architecture/security tradeoffs are uncertain.
 - Trigger `verifier` after each meaningful implementation chunk.
 - Trigger `reviewer` before final response for significant or risky edits.
+- Trigger `tasker` when the request is planning-only, mixes sequencing/dependency capture with future work, or needs Codememory artifacts before implementation starts.
 
 4b) Model effort routing (default)
 - Use `/model-routing set-category quick` before high-frequency read-only loops (`explore`, `verifier`, `release-scribe`).
