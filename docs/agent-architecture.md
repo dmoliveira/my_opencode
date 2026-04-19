@@ -8,7 +8,7 @@ This document is the single reference for agent structure, role boundaries, and 
 | --- | --- | --- | --- | --- | --- |
 | `build` | primary | yes | cheap | `balanced` | direct implementation for clear, scoped work |
 | `orchestrator` | primary | yes | expensive | `balanced` | end-to-end multi-step execution |
-| `tasker` | primary | no | cheap | `writing` | Codememory-backed planning capture without implementation |
+| `tasker` | primary | contract-only | cheap | `writing` | Codememory-backed planning capture without implementation |
 | `explore` | subagent | no | free | `quick` | internal codebase discovery |
 | `librarian` | subagent | no | cheap | `balanced` | external docs/upstream lookup |
 | `oracle` | subagent | no | expensive | `critical` | architecture/risk advisory |
@@ -23,7 +23,7 @@ Metadata source of truth: `agent/specs/*.json`.
 
 ## Modes
 
-- `primary`: user-facing lead agent; capabilities depend on its tool surface, so some primaries execute code while others stay planning-only.
+- `primary`: user-facing lead agent; capabilities depend on its tool surface, so some primaries execute code while others stay planning-focused by contract.
 - `subagent`: read-only specialist used for focused discovery/research/review/verification.
 
 ## Execution Workflow

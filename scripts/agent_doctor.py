@@ -26,7 +26,7 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
     "docs/agent-architecture.md": [
         "## Inventory",
         "## Execution Workflow",
-        "| `tasker` | primary | no | cheap | `writing` | Codememory-backed planning capture without implementation |",
+        "| `tasker` | primary | contract-only | cheap | `writing` | Codememory-backed planning capture without implementation |",
         "Select lead agent (`tasker` for planning capture, `orchestrator` for complex execution).",
     ],
     "docs/agent-tool-restrictions.md": [
@@ -84,10 +84,12 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
     ],
     "tasker.md": [
         "mode: primary",
+        "bash: true",
         "write: false",
         "edit: false",
         "Current backend adapter: Codememory via `oc`.",
         "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
+        "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
     ],
     "explore.md": [
         "mode: subagent",

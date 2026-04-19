@@ -12,7 +12,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 |---|---|---|---|---|
 | `build` | primary (default) | Direct implementation | Yes | Small/clear tasks, quick fixes |
 | `orchestrator` | primary | Lead complex multi-step delivery + delegate specialists | Yes | Medium/large tasks, end-to-end execution |
-| `tasker` | primary | Planning-only Codememory artifact capture | No | Backlog shaping, dependencies, durable notes |
+| `tasker` | primary | Planning-focused Codememory artifact capture | Contract-only | Backlog shaping, dependencies, durable notes |
 | `explore` | subagent | Internal codebase discovery and pattern finding | No | "Where is X?" / multi-module discovery |
 | `librarian` | subagent | External docs and OSS evidence lookup | No | Framework/library behavior, upstream examples |
 | `oracle` | subagent | High-signal architecture/debug review | No | Hard tradeoffs, repeated failed attempts |
@@ -26,7 +26,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 
 - `build` remains the default for speed and familiarity.
 - `orchestrator` is the execution lead for bigger flows.
-- `tasker` is the planning-only primary for Codememory-backed task, epic, dependency, and note capture.
+- `tasker` is the planning-focused primary for Codememory-backed task, epic, dependency, and note capture.
 - Specialist subagents are intentionally read-only to reduce accidental drift.
 - Completion should only happen after implementation + validation + review gates pass.
 - Model allocation defaults and fallbacks are documented in `docs/model-allocation-policy.md`.

@@ -347,10 +347,12 @@ exit 0
             "tasker.md": {
                 "must": [
                     "mode: primary",
+                    "bash: true",
                     "write: false",
                     "edit: false",
                     "Current backend adapter: Codememory via `oc`.",
                     "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
+                    "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
                 ]
             },
             "explore.md": {
