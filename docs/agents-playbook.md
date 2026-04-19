@@ -12,6 +12,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 |---|---|---|---|---|
 | `build` | primary (default) | Direct implementation | Yes | Small/clear tasks, quick fixes |
 | `orchestrator` | primary | Lead complex multi-step delivery + delegate specialists | Yes | Medium/large tasks, end-to-end execution |
+| `tasker` | primary | Planning-focused Codememory artifact capture | Contract-only | Backlog shaping, dependencies, durable notes |
 | `explore` | subagent | Internal codebase discovery and pattern finding | No | "Where is X?" / multi-module discovery |
 | `librarian` | subagent | External docs and OSS evidence lookup | No | Framework/library behavior, upstream examples |
 | `oracle` | subagent | High-signal architecture/debug review | No | Hard tradeoffs, repeated failed attempts |
@@ -25,6 +26,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 
 - `build` remains the default for speed and familiarity.
 - `orchestrator` is the execution lead for bigger flows.
+- `tasker` is the planning-focused primary for Codememory-backed task, epic, dependency, and note capture.
 - Specialist subagents are intentionally read-only to reduce accidental drift.
 - Completion should only happen after implementation + validation + review gates pass.
 - Model allocation defaults and fallbacks are documented in `docs/model-allocation-policy.md`.
@@ -36,6 +38,8 @@ Architecture and safety contracts:
 
 Think of it as:
 
+`tasker` -> captures planning graph in Codememory
+
 `orchestrator` -> delegates research/review tasks -> executes changes -> validates -> reports
 
 ---
@@ -45,7 +49,7 @@ Think of it as:
 In OpenCode prompt:
 
 1. Press `Tab`
-2. Pick agent (`build`, `plan`, or `orchestrator`)
+2. Pick agent (`build`, `plan`, `orchestrator`, or `tasker`)
 3. Run your prompt normally
 
 Our custom specialist subagents are intentionally marked hidden, so they stay out of the `Tab` switcher and are used through delegation or explicit `@agent` mention instead.
@@ -70,6 +74,7 @@ Runtime discoverability commands:
 ```text
 /agent-catalog list
 /agent-catalog explain orchestrator
+/agent-catalog explain tasker
 /agent-catalog doctor --json
 ```
 
@@ -111,6 +116,24 @@ Expected flow:
 - implements changes
 - uses `verifier` for checks
 - uses `reviewer` before final done claim
+
+---
+
+### 2b) Planning-only backlog capture (switch to `tasker`)
+
+Use when you want to turn user intent into Codememory tasks, epics, dependencies, and durable notes without editing code.
+
+Example prompt:
+
+```text
+Create an epic for workspace presets, add follow-on tasks for migration and docs, mark docs as depending on the migration task, and keep this as planning-only work.
+```
+
+Expected flow:
+- `tasker` reads just enough repo context to name artifacts well
+- checks Codememory for related items first
+- writes tasks/epics/memories/links through `oc`
+- returns created ids plus the inferred dependency graph
 
 ---
 
@@ -179,6 +202,8 @@ Expected output:
 
 ## When to use `build` vs `orchestrator` ⚖️
 
+If the request is planning-only, use `tasker` instead of either execution-focused primary.
+
 Use `build` when:
 - scope is clear
 - <= 2 files touched
@@ -189,6 +214,12 @@ Use `orchestrator` when:
 - unknown code ownership/locations
 - non-trivial validation/review needed
 - you want "continue iterating until done"
+
+Use `tasker` when:
+- you want tasks/epics/notes created without code execution
+- you are mapping dependencies or sequencing first
+- you want durable Codememory capture for later execution
+- mutating the repo would be the wrong next step
 
 ---
 
@@ -266,6 +297,7 @@ Use this when planning work needs a real reserved path boundary before implement
 - Source-of-truth specs live in `agent/specs/*.json` and generate `agent/*.md` via `scripts/build_agents.py`.
 - Installer copies them to `~/.config/opencode/agent/`.
 - `build` remains default via `opencode.json` (`default_agent: build`).
+- `tasker` is an additional visible primary for planning-only Codememory capture.
 
 Generation commands:
 

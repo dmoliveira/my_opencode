@@ -2,7 +2,7 @@
 
 This contract defines how custom agents in this repo should collaborate, when each one should be used, and what "done" means.
 
-Primary objective: keep `build` as the default for speed, while enabling `orchestrator` and specialist subagents for high-confidence complex delivery.
+Primary objective: keep `build` as the default for speed, while enabling `orchestrator` for complex execution, `tasker` for planning-focused Codememory capture, and specialist subagents for focused support.
 
 ---
 
@@ -12,6 +12,7 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 |---|---|---|---|
 | `build` | primary (default) | direct implementation for clear/small work | yes |
 | `orchestrator` | primary | multi-step execution lead with delegation | yes |
+| `tasker` | primary | planning-focused task/epic/dependency/note capture through Codememory | contract-only |
 | `explore` | subagent | internal codebase discovery | no |
 | `librarian` | subagent | external docs/upstream reference research | no |
 | `oracle` | subagent | architecture/debugging advisory | no |
@@ -28,6 +29,7 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 
 - `default_agent` remains `build` in `opencode.json` for quick direct execution.
 - `orchestrator` is the preferred primary for larger, multi-step work.
+- `tasker` is the preferred primary for Codememory-backed planning capture, backlog shaping, dependency mapping, and durable implementation notes when no code execution should occur.
 - Specialist subagents are read-only and support the active primary agent.
 - Single-writer is the default for code edits; parallel writers are opt-in and gated.
 

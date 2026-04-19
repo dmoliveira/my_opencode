@@ -307,6 +307,7 @@ def main() -> int:
 if [ \"$1\" = \"agent\" ] && [ \"$2\" = \"list\" ]; then
   cat <<'EOF'
 orchestrator (primary)
+tasker (primary)
 explore (subagent)
 librarian (subagent)
 oracle (subagent)
@@ -341,6 +342,17 @@ exit 0
                     "Use `verifier` before claiming done",
                     "Use `reviewer` for final quality/safety pass",
                     "Anti-loop guard",
+                ]
+            },
+            "tasker.md": {
+                "must": [
+                    "mode: primary",
+                    "bash: true",
+                    "write: false",
+                    "edit: false",
+                    "Current backend adapter: Codememory via `oc`.",
+                    "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
+                    "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
                 ]
             },
             "explore.md": {
@@ -415,6 +427,62 @@ exit 0
             wrapper_result.returncode == 0
             and '"result": "PASS"' in wrapper_result.stdout,
             f"slash wrapper should safely forward shlex-split args: {wrapper_result.stderr}",
+        )
+        agent_catalog_list = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "agent_catalog_command.py"),
+                "list",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            agent_catalog_list.returncode == 0
+            and '"tasker"' in agent_catalog_list.stdout,
+            f"agent-catalog list should include tasker: {agent_catalog_list.stderr}",
+        )
+        agent_catalog_explain = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "agent_catalog_command.py"),
+                "explain",
+                "tasker",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            agent_catalog_explain.returncode == 0
+            and '"name": "tasker"' in agent_catalog_explain.stdout
+            and '"mode": "primary"' in agent_catalog_explain.stdout,
+            f"agent-catalog explain tasker should expose Tasker metadata: {agent_catalog_explain.stderr}",
+        )
+        agent_catalog_doctor = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "agent_catalog_command.py"),
+                "doctor",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            agent_catalog_doctor.returncode == 0
+            and '"result": "PASS"' in agent_catalog_doctor.stdout,
+            f"agent-catalog doctor should pass: {agent_catalog_doctor.stderr}",
         )
         literal_result = subprocess.run(
             [
