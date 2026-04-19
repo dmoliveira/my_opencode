@@ -136,6 +136,7 @@ Expected flow:
 - checks Codememory for related items first
 - writes tasks/epics/memories/links through `oc`
 - returns created ids plus the inferred dependency graph
+- `python3 scripts/selftest.py` validates the `tasker` contract metadata plus the isolated Codememory artifact/link flow this planning path relies on
 
 ---
 
