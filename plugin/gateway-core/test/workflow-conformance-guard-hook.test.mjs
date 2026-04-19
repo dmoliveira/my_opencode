@@ -274,12 +274,12 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-oc-done-safe" },
-      { args: { command: "oc done task_171 --outcome done" } }
+      { args: { command: "oc done task_171 --note \"completed\"" } }
     )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-oc-end-session-safe" },
-      { args: { command: "oc end-session session_62 --outcome done" } }
+      { args: { command: "oc end-session --outcome done session_62 --achievements \"cleanup complete\"" } }
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

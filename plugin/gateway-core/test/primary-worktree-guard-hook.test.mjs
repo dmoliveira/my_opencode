@@ -455,12 +455,12 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-oc-done-safe" },
-      { args: { command: "oc done task_171 --outcome done" } }
+      { args: { command: "oc done task_171 --note \"completed\"" } }
     )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-oc-end-session-safe" },
-      { args: { command: "oc end-session session_62 --outcome done" } }
+      { args: { command: "oc end-session --outcome done session_62 --achievements \"cleanup complete\"" } }
     )
 
     const blockedPullPayload = { args: { command: "git pull --rebase origin feature/x" } }
