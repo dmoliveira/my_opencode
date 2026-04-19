@@ -111,6 +111,7 @@ Default selection note:
 - `build` remains the configured `default_agent` in `opencode.json` for speed.
 - `plan` remains the built-in planning primary in OpenCode.
 - choose `tasker` when you want planning-only capture into Codememory without executing code or mutating repo files.
+- repo selftest now validates `tasker` contract metadata plus an isolated Codememory planning sandbox for the artifact/link flow `tasker` relies on.
 - choose `orchestrator` when you want end-to-end multi-step execution with delegation and completion gates.
 - choose `experience-designer` through delegation or explicit `@experience-designer` when you want a browser-first UX audit, responsive/accessibility review, or high-signal UI polish guidance.
 - specialist subagents stay hidden from `Tab` and are meant for delegation or explicit `@agent` invocation.
