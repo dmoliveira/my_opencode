@@ -221,7 +221,7 @@ export function createPrimaryWorktreeGuardHook(options: {
         return
       }
       throw new Error(
-        `Bash commands in the primary project folder are limited to inspection, validation, and exact default-branch sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Create or use a dedicated git worktree branch for task mutations. ${rerouteGuidance(directory, command)}`
+        `Bash commands in the primary project folder are limited to inspection, validation, and safe operational commands such as \`git fetch\`, \`git fetch --prune\`, \`git pull --rebase\`, \`git pull --rebase --autostash\`, \`git pull --rebase origin main\`, \`git merge --no-edit <branch>\`, \`git merge --ff-only <branch>\`, \`git worktree add|remove\`, \`git branch -d\`, \`git stash push|list|show\`, and \`oc current|next|queue|resume|done|end-session\`. Preserve local edits with targeted \`git stash push ...\` or \`git pull --rebase --autostash\` before syncing. Create or use a dedicated git worktree branch for task mutations. ${rerouteGuidance(directory, command)}`
       )
     },
   }

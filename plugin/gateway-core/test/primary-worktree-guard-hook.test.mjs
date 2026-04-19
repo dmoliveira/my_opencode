@@ -366,6 +366,26 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-pull-autostash-safe" },
+      { args: { command: "git pull --rebase --autostash" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-pull-origin-main-safe" },
+      { args: { command: "git pull --rebase origin main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-merge-no-edit-safe" },
+      { args: { command: "git merge --no-edit feature/test" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-merge-ff-only-safe" },
+      { args: { command: "git merge --ff-only origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-worktree-add-safe" },
       {
         args: {
@@ -401,18 +421,13 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
     )
 
     await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-stash-pop-safe" },
-      { args: { command: "git stash pop" } }
-    )
-
-    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-stash-list-safe" },
       { args: { command: "git stash list" } }
     )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-safe-chain" },
-      { args: { command: "git stash pop && git status --short --branch" } }
+      { args: { command: "git stash list && git status --short --branch" } }
     )
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-restore-safe" },
@@ -422,6 +437,45 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       { tool: "bash", sessionID: "session-primary-checkout-restore-safe" },
       { args: { command: "git checkout main -- docs/plan/docs-automation-summary.md" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-current-safe" },
+      { args: { command: "oc current" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-queue-safe" },
+      { args: { command: "oc queue" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-resume-safe" },
+      { args: { command: "oc resume --task task_171" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-done-safe" },
+      { args: { command: "oc done task_171 --outcome done" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-end-session-safe" },
+      { args: { command: "oc end-session session_62 --outcome done" } }
+    )
+
+    const blockedPullPayload = { args: { command: "git pull --rebase origin feature/x" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-pull-feature-rerouted" },
+      blockedPullPayload
+    )
+    assert.match(blockedPullPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+
+    const blockedStashPopPayload = { args: { command: "git stash pop" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-stash-pop-rerouted" },
+      blockedStashPopPayload
+    )
+    assert.match(blockedStashPopPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
