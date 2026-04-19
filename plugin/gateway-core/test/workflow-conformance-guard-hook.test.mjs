@@ -185,6 +185,26 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-pull-autostash-safe" },
+      { args: { command: "git pull --rebase --autostash" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-pull-origin-main-safe" },
+      { args: { command: "git pull --rebase origin main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-merge-no-edit-safe" },
+      { args: { command: "git merge --no-edit feature/test" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-merge-ff-only-safe" },
+      { args: { command: "git merge --ff-only origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-worktree-add-safe" },
       {
         args: {
@@ -220,18 +240,13 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     )
 
     await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-stash-pop-safe" },
-      { args: { command: "git stash pop" } }
-    )
-
-    await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-stash-list-safe" },
       { args: { command: "git stash list" } }
     )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-safe-chain" },
-      { args: { command: "git stash pop && git status --short --branch" } }
+      { args: { command: "git stash list && git status --short --branch" } }
     )
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-restore-safe" },
@@ -240,6 +255,31 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-checkout-restore-safe" },
       { args: { command: "git checkout main -- docs/plan/docs-automation-summary.md" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-current-safe" },
+      { args: { command: "oc current" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-next-safe" },
+      { args: { command: "oc next" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-resume-safe" },
+      { args: { command: "oc resume --task task_171" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-done-safe" },
+      { args: { command: "oc done task_171 --outcome done" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-end-session-safe" },
+      { args: { command: "oc end-session session_62 --outcome done" } }
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -412,6 +452,13 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       fetchPayload
     )
     assert.match(fetchPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+
+    const stashPopPayload = { args: { command: "git stash pop" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-stash-pop-rerouted" },
+      stashPopPayload
+    )
+    assert.match(stashPopPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
     await plugin["tool.execute.before"](
