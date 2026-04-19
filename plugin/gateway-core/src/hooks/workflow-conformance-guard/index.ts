@@ -176,6 +176,9 @@ export function createWorkflowConformanceGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "").trim()
+      if (isAllowedProtectedShellCommand(command)) {
+        return
+      }
       if (isProtectedGitMutationCommand(command)) {
         const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
         if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "commit_on_protected_branch_rerouted")) {
@@ -183,15 +186,12 @@ export function createWorkflowConformanceGuardHook(options: {
         }
         throw new Error(`Git commits are blocked on protected branch '${branch}'. Use a worktree feature branch. ${protectedBranchWorktreeHint(directory)}`)
       }
-      if (isAllowedProtectedShellCommand(command)) {
-        return
-      }
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
       if (rerouteToMaintenanceHelper(eventPayload, directory, sessionId, "bash_on_protected_branch_rerouted")) {
         return
       }
       throw new Error(
-        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and exact sync commands (\`git fetch\`, \`git fetch --prune\`, and \`git pull --rebase\`). Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)} ${rerouteGuidance(directory, command)}`
+        `Bash commands on protected branch '${branch}' are limited to inspection, validation, and safe operational commands such as \`git fetch\`, \`git fetch --prune\`, \`git pull --rebase\`, \`git pull --rebase --autostash\`, \`git pull --rebase origin main\`, \`git merge --no-edit <branch>\`, \`git merge --ff-only <branch>\`, \`git worktree add|remove\`, \`git branch -d\`, \`git stash push|list|show\`, and \`oc current|next|queue|resume|done|end-session\`. Preserve local edits with targeted \`git stash push ...\` or \`git pull --rebase --autostash\` before syncing. Use a worktree feature branch for task mutations. ${protectedBranchWorktreeHint(directory)} ${rerouteGuidance(directory, command)}`
       )
     },
   }
