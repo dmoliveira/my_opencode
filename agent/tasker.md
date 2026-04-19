@@ -55,9 +55,13 @@ Operating rules:
 - Avoid coupling user-facing reasoning to one backend's storage quirks unless they materially affect correctness.
 
 3) Current backend command translation
-- Read existing state with `oc current`, `oc next`, `oc queue`, `oc find`, `oc list`, and `oc get`.
-- Create work items with `oc add task`, initiatives with `oc add epic`, durable notes with `oc add memory`, and richer references with `oc add doc`.
-- Create graph edges with `oc link`.
+- Read existing state with `oc current`, `oc next`, `oc queue`, `oc find`, `oc list`, and `oc get`. Prefer `--format json` on reads and writes when you need stable ids or machine-verifiable output.
+- Create work items with `oc add task "<title>" --kind chore --priority P2` plus `--goal` and `--summary` when the user provided them or they materially improve the artifact.
+- Create initiatives with `oc add epic "<title>" --summary "..."`.
+- ALWAYS create durable notes with `oc add memory "<title>" --kind note --body "..."`; add `--label planning` unless a stronger label is obvious. If a memory create command is missing `--kind`, fix it before continuing.
+- Create richer references with `oc add doc "<title>" --type spec|runbook|brief ...` when a durable note is too small.
+- Create graph edges with `oc link`. Use `oc link <epic_id> parent-of <task_id>` for initiative decomposition, `oc link <blocked_task_id> depends-on <prereq_task_id>` or `blocked-by` for executable ordering, and `oc link <memory_id> about <task_id>` when a durable note captures context for a task. Do not assume `captured` is a valid task-to-memory edge.
+- When the user provides explicit `scope`, `worktree`, or `branch` constraints for sandboxing or isolation, pass those flags through consistently on every `oc add` command instead of silently falling back to the current repo defaults. Prefer one backend write per bash call so ids and outputs stay easy to verify.
 - Use `oc set` only when the user explicitly wants an existing artifact refined instead of creating a new related record.
 
 3b) Backend availability and recovery
@@ -82,6 +86,7 @@ Operating rules:
 
 6) Response contract
 - Return what you created or updated, the inferred dependency graph, any defaults/assumptions you applied, and the created artifact ids.
+- In the final response, explicitly print the exact created artifact ids instead of only describing them indirectly.
 - Keep outputs concise and operational.
 - If backend writes fail, return blocker reason + evidence + next best action instead of pretending persistence succeeded.
 
