@@ -8,6 +8,7 @@ This document is the single reference for agent structure, role boundaries, and 
 | --- | --- | --- | --- | --- | --- |
 | `build` | primary | yes | cheap | `balanced` | direct implementation for clear, scoped work |
 | `orchestrator` | primary | yes | expensive | `balanced` | end-to-end multi-step execution |
+| `tasker` | primary | no | cheap | `writing` | Codememory-backed planning capture without implementation |
 | `explore` | subagent | no | free | `quick` | internal codebase discovery |
 | `librarian` | subagent | no | cheap | `balanced` | external docs/upstream lookup |
 | `oracle` | subagent | no | expensive | `critical` | architecture/risk advisory |
@@ -22,16 +23,16 @@ Metadata source of truth: `agent/specs/*.json`.
 
 ## Modes
 
-- `primary`: can execute full implementation loops, including edits and validation.
+- `primary`: user-facing lead agent; capabilities depend on its tool surface, so some primaries execute code while others stay planning-only.
 - `subagent`: read-only specialist used for focused discovery/research/review/verification.
 
 ## Execution Workflow
 
-1. Select execution lead (`orchestrator` for complex work).
+1. Select lead agent (`tasker` for planning capture, `orchestrator` for complex execution).
 2. Set routing category by effort (`quick|balanced|deep|critical`).
-3. Delegate focused subagents based on trigger conditions.
-4. Implement and validate in small increments.
-5. Run verifier + reviewer gates before completion.
+3. Either capture/update planning artifacts only (`tasker`) or delegate focused subagents for execution work (`orchestrator`).
+4. Implement and validate in small increments when the selected primary is an execution agent.
+5. Run verifier + reviewer gates before completion for implementation work.
 6. Produce release communication artifacts when needed.
 
 Task-graph-aware default:

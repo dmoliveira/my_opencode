@@ -91,9 +91,10 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 
 ## Agent roles (Tab menu)
 
-This setup keeps `build` as the default agent for quick direct work, exposes only `build`, `plan`, and `orchestrator` in the `Tab` switcher, and keeps focused specialists available as hidden secondary subagents:
+This setup keeps `build` as the default agent for quick direct work, exposes `build`, `plan`, `orchestrator`, and `tasker` in the `Tab` switcher, and keeps focused specialists available as hidden secondary subagents:
 
 - `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
+- `tasker` (primary): planning-only Codememory artifact writer for epics, tasks, dependencies, and durable notes.
 - `explore` (subagent): read-only internal codebase scout.
 - `librarian` (subagent): read-only external docs and OSS evidence researcher.
 - `oracle` (subagent): read-only architecture/debug advisor for hard tradeoffs.
@@ -108,6 +109,7 @@ Default selection note:
 
 - `build` remains the configured `default_agent` in `opencode.json` for speed.
 - `plan` remains the built-in planning primary in OpenCode.
+- choose `tasker` when you want planning-only capture into Codememory without executing code or mutating repo files.
 - choose `orchestrator` when you want end-to-end multi-step execution with delegation and completion gates.
 - specialist subagents stay hidden from `Tab` and are meant for delegation or explicit `@agent` invocation.
 

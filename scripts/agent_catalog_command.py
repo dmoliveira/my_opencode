@@ -179,6 +179,7 @@ def command_doctor(args: list[str]) -> int:
     )
     required = [
         "orchestrator",
+        "tasker",
         "explore",
         "librarian",
         "oracle",

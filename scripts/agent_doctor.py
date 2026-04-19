@@ -26,6 +26,8 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
     "docs/agent-architecture.md": [
         "## Inventory",
         "## Execution Workflow",
+        "| `tasker` | primary | no | cheap | `writing` | Codememory-backed planning capture without implementation |",
+        "Select lead agent (`tasker` for planning capture, `orchestrator` for complex execution).",
     ],
     "docs/agent-tool-restrictions.md": [
         "## Contract",
@@ -36,6 +38,7 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
         "Planner + reservation example:",
     ],
     "README.md": [
+        "tasker",
         "strategic-planner",
         "ambiguity-analyst",
         "plan-critic",
@@ -44,6 +47,7 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
     "instructions/agent_operating_contract.md": [
         "`default_agent` remains `build`",
         "`orchestrator` is the preferred primary for larger, multi-step work.",
+        "`tasker` is the preferred primary for Codememory-backed planning capture",
     ],
 }
 
@@ -59,6 +63,7 @@ ALLOWED_DEFAULT_CATEGORIES = {
 
 REQUIRED_AGENTS: dict[str, dict[str, str]] = {
     "orchestrator": {"mode": "primary"},
+    "tasker": {"mode": "primary"},
     "explore": {"mode": "subagent"},
     "librarian": {"mode": "subagent"},
     "oracle": {"mode": "subagent"},
@@ -76,6 +81,13 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
         "Use `verifier` before claiming done",
         "Use `reviewer` for final quality/safety pass",
         "Anti-loop guard",
+    ],
+    "tasker.md": [
+        "mode: primary",
+        "write: false",
+        "edit: false",
+        "Current backend adapter: Codememory via `oc`.",
+        "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
     ],
     "explore.md": [
         "mode: subagent",
