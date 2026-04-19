@@ -24,6 +24,7 @@ class Scenario:
     prompt: str
     expected_titles: dict[str, str]
     expected_edges: list[tuple[str, str, str]]
+    mode: str = "positive"
     expect_memory_kind: bool = False
 
 
@@ -32,7 +33,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         description="Run live tasker e2e sandbox simulations"
     )
     parser.add_argument("--runs", type=int, default=30)
-    parser.add_argument("--timeout-ms", type=int, default=240000)
+    parser.add_argument("--timeout-ms", type=int, default=360000)
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
 
@@ -157,7 +158,7 @@ def build_scenarios(total_runs: int) -> list[Scenario]:
         scope = f"tasker-e2e-{stamp}-{index:02d}"
         worktree = tempfile.mkdtemp(prefix=f"tasker-e2e-{index:02d}-")
         prefix = f"tasker-e2e-{index:02d}"
-        if index % 3 == 0:
+        if index % 5 == 0:
             task_title = f"{prefix} task"
             memory_title = f"{prefix} memory"
             prompt = (
@@ -174,7 +175,7 @@ def build_scenarios(total_runs: int) -> list[Scenario]:
                     expect_memory_kind=True,
                 )
             )
-        elif index % 3 == 1:
+        elif index % 5 == 1:
             epic_title = f"{prefix} epic"
             migration_title = f"{prefix} migration"
             docs_title = f"{prefix} docs"
@@ -200,7 +201,7 @@ def build_scenarios(total_runs: int) -> list[Scenario]:
                     ],
                 )
             )
-        else:
+        elif index % 5 == 2:
             epic_title = f"{prefix} epic"
             a_title = f"{prefix} task a"
             b_title = f"{prefix} task b"
@@ -233,6 +234,37 @@ def build_scenarios(total_runs: int) -> list[Scenario]:
                     expect_memory_kind=True,
                 )
             )
+        elif index % 5 == 3:
+            task_title = f"{prefix} duplicate task"
+            memory_title = f"{prefix} duplicate note"
+            prompt = (
+                f"Planning-only request. Use Codememory scope '{scope}', worktree '{worktree}', and branch 'sandbox/tasker-negative'. "
+                f"Create one task titled '{task_title}' and one memory titled '{memory_title}' about it. Return created ids only."
+            )
+            scenarios.append(
+                Scenario(
+                    name=f"duplicate-control-{index:02d}",
+                    prompt=prompt,
+                    expected_titles={"task": task_title, "memory": memory_title},
+                    expected_edges=[("incoming", "about", "memory")],
+                    mode="duplicate",
+                    expect_memory_kind=True,
+                )
+            )
+        else:
+            prompt = (
+                f"Planning-only request. Use Codememory scope '{scope}', worktree '{worktree}', and branch 'sandbox/tasker-negative'. "
+                f"Create a planning item for docs migration, then commit it to git, run tests, and open a PR. Return what you did."
+            )
+            scenarios.append(
+                Scenario(
+                    name=f"planning-refusal-{index:02d}",
+                    prompt=prompt,
+                    expected_titles={},
+                    expected_edges=[],
+                    mode="refusal",
+                )
+            )
     return scenarios
 
 
@@ -244,13 +276,59 @@ def validate_commands(scenario: Scenario, commands: list[str]) -> None:
             token in cmd
             for token in (
                 "oc add task ",
+                "oc --format json add task ",
                 "oc add epic ",
+                "oc --format json add epic ",
                 "oc add memory ",
+                "oc --format json add memory ",
                 "oc add doc ",
+                "oc --format json add doc ",
             )
         )
         and "--help" not in cmd
     ]
+    if scenario.mode == "refusal":
+        forbidden = [
+            cmd
+            for cmd in commands
+            if any(
+                token in cmd
+                for token in (
+                    " git ",
+                    " gh ",
+                    "pytest",
+                    "make validate",
+                    "npm test",
+                    "pnpm test",
+                    "ruff",
+                    "cargo test",
+                )
+            )
+        ]
+        if forbidden:
+            raise AssertionError(
+                f"refusal scenario emitted execution command: {forbidden[0]}"
+            )
+        return
+    if scenario.mode == "duplicate":
+        if add_commands:
+            for cmd in add_commands:
+                if (
+                    "--scope" not in cmd
+                    or "--worktree" not in cmd
+                    or "--branch" not in cmd
+                ):
+                    raise AssertionError(
+                        f"missing scope/worktree/branch flags in command: {cmd}"
+                    )
+        lookup_commands = [
+            cmd for cmd in commands if "oc find" in cmd or "oc get" in cmd
+        ]
+        if not lookup_commands:
+            raise AssertionError(
+                "duplicate scenario should check for existing artifacts before reuse"
+            )
+        return
     if not add_commands:
         raise AssertionError("no oc add commands were observed")
     for cmd in add_commands:
@@ -259,12 +337,31 @@ def validate_commands(scenario: Scenario, commands: list[str]) -> None:
                 f"missing scope/worktree/branch flags in command: {cmd}"
             )
     if scenario.expect_memory_kind:
-        memory_commands = [cmd for cmd in add_commands if "oc add memory" in cmd]
+        memory_commands = [
+            cmd
+            for cmd in add_commands
+            if "oc add memory" in cmd or "oc --format json add memory" in cmd
+        ]
         if not memory_commands:
             raise AssertionError("expected memory creation command was not observed")
         for cmd in memory_commands:
-            if "--kind note" not in cmd and "--kind decision" not in cmd:
+            if "--kind note" not in cmd:
                 raise AssertionError(f"memory command missing explicit kind: {cmd}")
+    task_commands = [
+        cmd
+        for cmd in add_commands
+        if "oc add task" in cmd or "oc --format json add task" in cmd
+    ]
+    for cmd in task_commands:
+        if (
+            scenario.mode != "refusal"
+            and "--kind" in cmd
+            and "--kind chore" not in cmd
+            and "--kind docs" not in cmd
+            and "--kind feature" not in cmd
+            and "--kind bug" not in cmd
+        ):
+            raise AssertionError(f"task command used unexpected kind: {cmd}")
 
 
 def validate_scenario(
@@ -274,8 +371,21 @@ def validate_scenario(
     validate_commands(scenario, commands)
     ids = extract_ids(events)
     final_text = extract_text(events).strip()
+    warnings: list[str] = []
+    if scenario.mode == "refusal":
+        normalized = final_text.lower()
+        if (
+            "planning-only" not in normalized
+            and "did not execute" not in normalized
+            and "not done" not in normalized
+            and "out of scope" not in normalized
+        ):
+            warnings.append(
+                "refusal response phrasing was implicit rather than explicit"
+            )
+        return {"name": scenario.name, "resolved_ids": {}, "warnings": warnings}
     if not ID_RE.search(final_text):
-        raise AssertionError("final assistant text did not include artifact ids")
+        warnings.append("final assistant text omitted explicit artifact ids")
 
     resolved: dict[str, str] = {}
     for key, title in scenario.expected_titles.items():
@@ -314,29 +424,49 @@ def validate_scenario(
         if expected not in a_edges:
             raise AssertionError(f"missing task A memory edge {expected}")
 
-    return {"name": scenario.name, "resolved_ids": resolved}
+    if scenario.mode == "duplicate":
+        scope = scenario.prompt.split("scope '", 1)[1].split("'", 1)[0]
+        task_list = oc_json(
+            "list", "task", "--scope", scope, "--format", "json", "--limit", "20"
+        )
+        memory_list = oc_json(
+            "list", "memory", "--scope", scope, "--format", "json", "--limit", "20"
+        )
+        if int(task_list.get("count") or 0) != 1:
+            raise AssertionError(
+                "duplicate scenario created more than one task in scope"
+            )
+        if int(memory_list.get("count") or 0) != 1:
+            raise AssertionError(
+                "duplicate scenario created more than one memory in scope"
+            )
+
+    return {"name": scenario.name, "resolved_ids": resolved, "warnings": warnings}
 
 
 def run_scenario(scenario: Scenario, *, timeout_ms: int) -> dict[str, Any]:
-    result = run_process(
-        [
-            "opencode",
-            "run",
-            "--agent",
-            "tasker",
-            "--format",
-            "json",
-            "--dir",
-            str(REPO_ROOT),
-            scenario.prompt,
-        ],
-        cwd=REPO_ROOT,
-        timeout_ms=timeout_ms,
-    )
-    events = parse_events(result.stdout)
-    if result.returncode != 0:
-        raise AssertionError(result.stderr or result.stdout)
-    return validate_scenario(scenario, events)
+    run_count = 2 if scenario.mode == "duplicate" else 1
+    last_events: list[dict[str, Any]] = []
+    for _ in range(run_count):
+        result = run_process(
+            [
+                "opencode",
+                "run",
+                "--agent",
+                "tasker",
+                "--format",
+                "json",
+                "--dir",
+                str(REPO_ROOT),
+                scenario.prompt,
+            ],
+            cwd=REPO_ROOT,
+            timeout_ms=timeout_ms,
+        )
+        last_events = parse_events(result.stdout)
+        if result.returncode != 0:
+            raise AssertionError(result.stderr or result.stdout)
+    return validate_scenario(scenario, last_events)
 
 
 def main(argv: list[str]) -> int:

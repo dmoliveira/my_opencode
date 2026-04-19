@@ -112,6 +112,7 @@ Default selection note:
 - `plan` remains the built-in planning primary in OpenCode.
 - choose `tasker` when you want planning-only capture into Codememory without executing code or mutating repo files.
 - for live sandbox verification of the real `tasker` runtime path, run `python3 scripts/tasker_e2e_sandbox.py --runs 30 --json`.
+- the live sandbox now covers happy-path planning, duplicate-control reuse, and planning-only execution-boundary scenarios in one runner.
 - repo selftest now validates `tasker` contract metadata plus an isolated Codememory planning sandbox for the artifact/link flow `tasker` relies on.
 - choose `orchestrator` when you want end-to-end multi-step execution with delegation and completion gates.
 - choose `experience-designer` through delegation or explicit `@experience-designer` when you want a browser-first UX audit, responsive/accessibility review, or high-signal UI polish guidance.
