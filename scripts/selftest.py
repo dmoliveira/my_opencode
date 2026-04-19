@@ -189,6 +189,7 @@ HEALTH_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "health_command.py"
 LEARN_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "learn_command.py"
 AGENT_DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "agent_doctor.py"
 BUILD_AGENTS_SCRIPT = REPO_ROOT / "scripts" / "build_agents.py"
+TASKER_E2E_SANDBOX_SCRIPT = REPO_ROOT / "scripts" / "tasker_e2e_sandbox.py"
 BASE_CONFIG = REPO_ROOT / "opencode.json"
 AGENT_DIR = REPO_ROOT / "agent"
 

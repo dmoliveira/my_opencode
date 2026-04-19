@@ -137,6 +137,7 @@ Expected flow:
 - writes tasks/epics/memories/links through `oc`
 - returns created ids plus the inferred dependency graph
 - `python3 scripts/selftest.py` validates the `tasker` contract metadata plus the isolated Codememory artifact/link flow this planning path relies on
+- `python3 scripts/tasker_e2e_sandbox.py --runs 30 --json` drives live `opencode run --agent tasker` simulations against sandboxed Codememory scopes when you want runtime-level confidence beyond selftest
 
 ---
 
