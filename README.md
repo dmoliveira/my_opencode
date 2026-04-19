@@ -74,7 +74,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 - 🧩 Built-in `/stack` bundles for coordinated multi-command profiles.
 - 🌐 Built-in `/browser` command for provider switching and dependency diagnostics.
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
-- 🧠 Custom agents for Tab selection: `orchestrator` (primary), plus `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, `release-scribe`, `strategic-planner`, `ambiguity-analyst`, and `plan-critic`.
+- 🧠 Custom runtime agents: `orchestrator` (Tab-visible primary), plus hidden specialists such as `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, `release-scribe`, `experience-designer`, `strategic-planner`, `ambiguity-analyst`, and `plan-critic`.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
@@ -101,6 +101,7 @@ This setup keeps `build` as the default agent for quick direct work, exposes `bu
 - `verifier` (subagent): read-only validation runner for test/lint/build checks.
 - `reviewer` (subagent): read-only quality/risk review pass before final delivery.
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
+- `experience-designer` (subagent): read-only browser-first UX/UI specialist for interaction polish, accessibility, and minimalist experience refinement.
 - `strategic-planner` (subagent): read-only sequencing and milestone planning specialist.
 - `ambiguity-analyst` (subagent): read-only assumptions and unknowns surfacer for unclear scope.
 - `plan-critic` (subagent): read-only feasibility and gate-coverage critic for concrete plans.
@@ -111,6 +112,7 @@ Default selection note:
 - `plan` remains the built-in planning primary in OpenCode.
 - choose `tasker` when you want planning-only capture into Codememory without executing code or mutating repo files.
 - choose `orchestrator` when you want end-to-end multi-step execution with delegation and completion gates.
+- choose `experience-designer` through delegation or explicit `@experience-designer` when you want a browser-first UX audit, responsive/accessibility review, or high-signal UI polish guidance.
 - specialist subagents stay hidden from `Tab` and are meant for delegation or explicit `@agent` invocation.
 
 Agent files live in `agent/*.md` and install globally to `~/.config/opencode/agent/`.

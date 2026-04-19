@@ -15,6 +15,7 @@ Fast daily reference for choosing the right agent in OpenCode.
 | sequence a complex delivery plan | `strategic-planner` | read-only milestone and dependency planning |
 | surface hidden assumptions and unknowns | `ambiguity-analyst` | read-only ambiguity and risk discovery |
 | decide architecture/debug strategy | `oracle` | read-only high-signal advisor |
+| refine interaction quality, layout, or usability | `experience-designer` | read-only browser-first UX/UI specialist |
 | validate tests/lint/build results | `verifier` | read-only execution diagnostics |
 | final quality/risk review | `reviewer` | read-only ship/no-ship focus |
 | critique a concrete plan for gaps | `plan-critic` | read-only feasibility and testability review |
@@ -44,10 +45,11 @@ For medium/large tasks:
 2. Fan out read-only mapping with `explore`
 3. Add `strategic-planner` or `ambiguity-analyst` when sequence/scope is still unclear
 4. Fan back in to one writer with `orchestrator`
-5. Run `verifier`
-6. Run `reviewer`
-7. Use `plan-critic` when the plan itself needs stress-testing
-8. Use `release-scribe` for PR/release text
+5. Add `experience-designer` when browser-first UX polish, accessibility, or responsive review is needed
+6. Run `verifier`
+7. Run `reviewer`
+8. Use `plan-critic` when the plan itself needs stress-testing
+9. Use `release-scribe` for PR/release text
 
 Escalate to `oracle` after repeated failures or hard tradeoffs.
 
@@ -75,6 +77,12 @@ Find all files related to autopilot lifecycle transitions and summarize current 
 
 ```text
 Find official docs and upstream examples for OpenCode custom agents and summarize best practice.
+```
+
+`experience-designer`:
+
+```text
+Audit this flow in-browser, capture the highest-value UX/accessibility issues, and recommend the smallest changes that make it feel clearer and calmer.
 ```
 
 `verifier`:

@@ -21,10 +21,10 @@ Canonical operational flows for day-to-day delivery with the current command sur
 ## Fan-Out Then Fan-In
 
 - Start with read-only fan-out when discovery, sequencing, or ambiguity is the main unknown.
-- Use `explore` for codebase mapping, `strategic-planner` for sequencing, and `ambiguity-analyst` when acceptance criteria or assumptions are still fuzzy.
+- Use `explore` for codebase mapping, `strategic-planner` for sequencing, `ambiguity-analyst` when acceptance criteria or assumptions are still fuzzy, and `experience-designer` for browser-first UX/UI audits or polish passes.
 - Fan back in to one writer for implementation by default.
 - Only open parallel writer lanes when reservations are explicit and the target paths are disjoint.
-- Finish with `verifier`, then `reviewer`; add `plan-critic` when plan feasibility or missing gates is the main risk.
+- Finish with `verifier`, then `reviewer`; add `experience-designer` before those gates when product experience quality needs a dedicated pass, and add `plan-critic` when plan feasibility or missing gates is the main risk.
 
 Canonical command mental model:
 

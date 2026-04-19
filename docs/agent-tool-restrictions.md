@@ -21,6 +21,7 @@ This document defines explicit deny-list expectations for agent safety boundarie
 | `verifier` | `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `reviewer` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `release-scribe` | `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
+| `experience-designer` | `write`, `edit`, `task`, `todowrite`, `todoread` |
 | `strategic-planner` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `ambiguity-analyst` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `plan-critic` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |

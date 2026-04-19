@@ -15,6 +15,7 @@ This document is the single reference for agent structure, role boundaries, and 
 | `verifier` | subagent | no | cheap | `quick` | test/lint/build diagnostics |
 | `reviewer` | subagent | no | expensive | `critical` | final quality/risk review |
 | `release-scribe` | subagent | no | cheap | `quick` | PR/changelog/release drafting |
+| `experience-designer` | subagent | no | cheap | `visual` | browser-first UX/UI audit and polish guidance |
 | `strategic-planner` | subagent | no | cheap | `deep` | sequencing and milestone planning |
 | `ambiguity-analyst` | subagent | no | cheap | `deep` | assumptions/unknowns analysis |
 | `plan-critic` | subagent | no | expensive | `critical` | feasibility and testability critique |
@@ -29,7 +30,7 @@ Metadata source of truth: `agent/specs/*.json`.
 ## Execution Workflow
 
 1. Select lead agent (`tasker` for planning capture, `orchestrator` for complex execution).
-2. Set routing category by effort (`quick|balanced|deep|critical`).
+2. Set routing category by effort (`quick|balanced|deep|critical|visual|writing`).
 3. Either capture/update planning artifacts only (`tasker`) or delegate focused subagents for execution work (`orchestrator`).
 4. Implement and validate in small increments when the selected primary is an execution agent.
 5. Run verifier + reviewer gates before completion for implementation work.
@@ -49,6 +50,7 @@ Task-graph-aware default:
 - Check execution/failure triage: `verifier`
 - Final correctness/safety pass: `reviewer`
 - Release text and summaries: `release-scribe`
+- Browser-first UX/UI review and polish guidance: `experience-designer`
 - Planning and sequence design: `strategic-planner`
 - Assumption and ambiguity surfacing: `ambiguity-analyst`
 - Plan risk and missing gates: `plan-critic`

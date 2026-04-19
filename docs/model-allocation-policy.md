@@ -14,6 +14,8 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | --- | --- | --- | --- | --- |
 | fast | `quick` | `openai/gpt-5.1-codex-mini` | `low` | high-frequency discovery/verification loops |
 | standard | `balanced` | `openai/gpt-5.3-codex` | `medium` | normal implementation and planning |
+| standard | `visual` | `openai/gpt-5.3-codex` | `medium` | browser-first UX/UI audits and design-heavy refinement |
+| standard | `writing` | `openai/gpt-5.3-codex` | `medium` | planning capture and writing-heavy artifact work |
 | complex | `deep` | `openai/gpt-5.4-codex` | `medium` | multi-module architecture/debug work |
 | critical | `critical` | `openai/gpt-5.4-codex` | `medium` | final risk review, release/security sign-off |
 
@@ -22,9 +24,11 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | Agent | Default Band | Category |
 | --- | --- | --- |
 | `orchestrator` | standard | `balanced` |
+| `tasker` | standard | `writing` |
 | `explore` | fast | `quick` |
 | `verifier` | fast | `quick` |
 | `release-scribe` | fast | `quick` |
+| `experience-designer` | standard | `visual` |
 | `librarian` | standard | `balanced` |
 | `strategic-planner` | complex | `deep` |
 | `ambiguity-analyst` | complex | `deep` |
@@ -61,6 +65,8 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 ```text
 /model-routing set-category quick
 /model-routing set-category balanced
+/model-routing set-category visual
+/model-routing set-category writing
 /model-routing set-category deep
 /model-routing set-category critical
 /model-routing resolve --json
