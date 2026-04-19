@@ -19,6 +19,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 | `verifier` | subagent | Run/interpret tests, lint, build | No | After meaningful code changes |
 | `reviewer` | subagent | Risk/correctness/maintainability review | No | Before declaring done |
 | `release-scribe` | subagent | PR/changelog/release notes drafting | No | Final communication and release prep |
+| `experience-designer` | subagent | Browser-first UX/UI audit and polish guidance | No | UX refinement, responsive review, accessibility polish |
 
 ---
 
@@ -28,6 +29,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 - `orchestrator` is the execution lead for bigger flows.
 - `tasker` is the planning-focused primary for Codememory-backed task, epic, dependency, and note capture.
 - Specialist subagents are intentionally read-only to reduce accidental drift.
+- `experience-designer` covers browser-first UX quality, while `reviewer` stays the final code/risk gate.
 - Completion should only happen after implementation + validation + review gates pass.
 - Model allocation defaults and fallbacks are documented in `docs/model-allocation-policy.md`.
 

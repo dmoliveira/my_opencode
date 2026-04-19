@@ -19,6 +19,7 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 | `verifier` | subagent | test/lint/build validation and diagnosis | no |
 | `reviewer` | subagent | quality/risk review and ship-readiness | no |
 | `release-scribe` | subagent | PR/changelog/release communication drafts | no |
+| `experience-designer` | subagent | browser-first UX/UI review and polish guidance | no |
 | `strategic-planner` | subagent | sequencing and milestone planning | no |
 | `ambiguity-analyst` | subagent | assumptions and unknowns analysis | no |
 | `plan-critic` | subagent | feasibility and testability critique | no |
@@ -53,6 +54,7 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 - `explore`: unknown file ownership, cross-module impact, pattern discovery.
 - `librarian`: external frameworks/libraries or upstream behavior questions.
 - `oracle`: repeated failed fixes (2+), unclear architecture/security/perf tradeoffs.
+- `experience-designer`: UI/UX polish, browser-first flow audits, accessibility/responsive quality passes.
 - `verifier`: after meaningful code changes and before done claim.
 - `reviewer`: before final response for significant/risky changes.
 - `release-scribe`: when preparing PR description/changelog/release notes.

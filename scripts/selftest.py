@@ -314,6 +314,7 @@ oracle (subagent)
 verifier (subagent)
 reviewer (subagent)
 release-scribe (subagent)
+experience-designer (subagent)
 strategic-planner (subagent)
 ambiguity-analyst (subagent)
 plan-critic (subagent)
@@ -367,6 +368,16 @@ exit 0
             "release-scribe.md": {
                 "must": ["mode: subagent", "write: false", "edit: false"]
             },
+            "experience-designer.md": {
+                "must": [
+                    "mode: subagent",
+                    "bash: true",
+                    "webfetch: true",
+                    "write: false",
+                    "edit: false",
+                    "browser-first",
+                ]
+            },
         }
         for filename, rules in required_agents.items():
             path = AGENT_DIR / filename
@@ -377,6 +388,57 @@ exit 0
                     marker in content,
                     f"agent file {filename} should include marker: {marker}",
                 )
+
+        experience_designer_spec = AGENT_DIR / "specs" / "experience-designer.json"
+        expect(
+            experience_designer_spec.exists(),
+            "experience-designer source spec should exist",
+        )
+        experience_designer_payload = load_json_file(experience_designer_spec)
+        expect(
+            experience_designer_payload.get("mode") == "subagent",
+            "experience-designer spec should stay a subagent",
+        )
+        experience_tools = experience_designer_payload.get("tools") or {}
+        expect(
+            experience_tools.get("bash") is True,
+            "experience-designer spec should allow bash for browser validation",
+        )
+        expect(
+            experience_tools.get("webfetch") is True,
+            "experience-designer spec should allow webfetch for external UX evidence",
+        )
+        expect(
+            experience_tools.get("write") is False
+            and experience_tools.get("edit") is False,
+            "experience-designer spec should remain read-only",
+        )
+        experience_metadata = experience_designer_payload.get("metadata") or {}
+        expect(
+            experience_metadata.get("default_category") == "visual",
+            "experience-designer spec should default to the visual routing category",
+        )
+        expect(
+            experience_metadata.get("hidden") is True,
+            "experience-designer spec should remain hidden from Tab",
+        )
+        denied_tools = set(experience_metadata.get("denied_tools") or [])
+        expect(
+            {"write", "edit", "task", "todowrite", "todoread"}.issubset(denied_tools),
+            "experience-designer spec should deny mutating task/write tools",
+        )
+
+        model_allocation_doc = (
+            REPO_ROOT / "docs" / "model-allocation-policy.md"
+        ).read_text(encoding="utf-8")
+        expect(
+            "| `tasker` | standard | `writing` |" in model_allocation_doc,
+            "model allocation policy should document tasker routing",
+        )
+        expect(
+            "| `experience-designer` | standard | `visual` |" in model_allocation_doc,
+            "model allocation policy should document experience-designer routing",
+        )
 
         base_config_payload = load_json_file(cfg)
         expect(
