@@ -606,215 +606,222 @@ exit 0
             and '"result": "PASS"' in agent_catalog_doctor.stdout,
             f"agent-catalog doctor should pass: {agent_catalog_doctor.stderr}",
         )
-        sandbox_scope = f"selftest-tasker-sandbox-{sha256(str(tmp).encode('utf-8')).hexdigest()[:12]}"
-        sandbox_worktree = tmp / "tasker-sandbox-worktree"
-        sandbox_worktree.mkdir(parents=True, exist_ok=True)
-        tasker_epic = run_oc_json(
-            REPO_ROOT,
-            "add",
-            "epic",
-            "selftest tasker sandbox epic",
-            "--scope",
-            sandbox_scope,
-            "--worktree",
-            str(sandbox_worktree),
-            "--branch",
-            "sandbox/tasker",
-            "--summary",
-            "selftest sandbox for planning-only tasker artifact capture",
-            "--format",
-            "json",
-        )
-        tasker_plan_task = run_oc_json(
-            REPO_ROOT,
-            "add",
-            "task",
-            "selftest tasker planning task",
-            "--scope",
-            sandbox_scope,
-            "--worktree",
-            str(sandbox_worktree),
-            "--branch",
-            "sandbox/tasker",
-            "--kind",
-            "chore",
-            "--priority",
-            "P2",
-            "--goal",
-            "verify planning-only task capture through Codememory",
-            "--summary",
-            "selftest tasker planning sandbox task",
-            "--format",
-            "json",
-        )
-        tasker_docs_task = run_oc_json(
-            REPO_ROOT,
-            "add",
-            "task",
-            "selftest tasker docs task",
-            "--scope",
-            sandbox_scope,
-            "--worktree",
-            str(sandbox_worktree),
-            "--branch",
-            "sandbox/tasker",
-            "--kind",
-            "chore",
-            "--priority",
-            "P2",
-            "--goal",
-            "verify planning-only dependency capture through Codememory",
-            "--summary",
-            "selftest tasker dependency sandbox task",
-            "--format",
-            "json",
-        )
-        tasker_memory = run_oc_json(
-            REPO_ROOT,
-            "add",
-            "memory",
-            "selftest tasker note",
-            "--scope",
-            sandbox_scope,
-            "--worktree",
-            str(sandbox_worktree),
-            "--kind",
-            "note",
-            "--label",
-            "planning",
-            "--body",
-            "selftest planning note captured through the tasker sandbox",
-            "--format",
-            "json",
-        )
-        parent_link_one = run_oc_json(
-            REPO_ROOT,
-            "link",
-            str(tasker_epic["id"]),
-            "parent-of",
-            str(tasker_plan_task["id"]),
-            "--format",
-            "json",
-        )
-        parent_link_two = run_oc_json(
-            REPO_ROOT,
-            "link",
-            str(tasker_epic["id"]),
-            "parent-of",
-            str(tasker_docs_task["id"]),
-            "--format",
-            "json",
-        )
-        dependency_link = run_oc_json(
-            REPO_ROOT,
-            "link",
-            str(tasker_docs_task["id"]),
-            "depends-on",
-            str(tasker_plan_task["id"]),
-            "--format",
-            "json",
-        )
-        memory_link = run_oc_json(
-            REPO_ROOT,
-            "link",
-            str(tasker_memory["id"]),
-            "about",
-            str(tasker_plan_task["id"]),
-            "--format",
-            "json",
-        )
-        tasker_epic_links = run_oc_json(
-            REPO_ROOT,
-            "get",
-            str(tasker_epic["id"]),
-            "--view",
-            "links",
-            "--format",
-            "json",
-        )
-        tasker_docs_links = run_oc_json(
-            REPO_ROOT,
-            "get",
-            str(tasker_docs_task["id"]),
-            "--view",
-            "links",
-            "--format",
-            "json",
-        )
-        tasker_plan_links = run_oc_json(
-            REPO_ROOT,
-            "get",
-            str(tasker_plan_task["id"]),
-            "--view",
-            "links",
-            "--format",
-            "json",
-        )
-        tasker_memory_full = run_oc_json(
-            REPO_ROOT,
-            "get",
-            str(tasker_memory["id"]),
-            "--view",
-            "full",
-            "--format",
-            "json",
-        )
-        expect(
-            tasker_epic.get("scope_key") == sandbox_scope,
-            "tasker sandbox epic should use its isolated Codememory scope",
-        )
-        expect(
-            tasker_plan_task.get("scope_key") == sandbox_scope
-            and tasker_docs_task.get("scope_key") == sandbox_scope,
-            "tasker sandbox tasks should use the isolated Codememory scope",
-        )
-        expect(
-            tasker_memory_full.get("scope_key") == sandbox_scope,
-            "tasker sandbox memory should use the isolated Codememory scope",
-        )
-        expect(
-            parent_link_one.get("edge_type") == "parent-of"
-            and parent_link_two.get("edge_type") == "parent-of"
-            and dependency_link.get("edge_type") == "depends-on"
-            and memory_link.get("edge_type") == "about",
-            "tasker sandbox should create the expected Codememory link types",
-        )
-        epic_edges = {
-            (link.get("direction"), link.get("edge_type"), link.get("target_id"))
-            for link in tasker_epic_links.get("links", [])
-        }
-        expect(
-            ("outgoing", "parent-of", str(tasker_plan_task["id"])) in epic_edges
-            and ("outgoing", "parent-of", str(tasker_docs_task["id"])) in epic_edges,
-            "tasker sandbox epic should link to both planned tasks",
-        )
-        docs_edges = {
-            (link.get("direction"), link.get("edge_type"), link.get("target_id"))
-            for link in tasker_docs_links.get("links", [])
-        }
-        expect(
-            ("incoming", "parent-of", str(tasker_epic["id"])) in docs_edges
-            and ("outgoing", "depends-on", str(tasker_plan_task["id"])) in docs_edges,
-            "tasker sandbox docs task should preserve its parent and dependency edges",
-        )
-        planning_edges = {
-            (link.get("direction"), link.get("edge_type"), link.get("target_id"))
-            for link in tasker_plan_links.get("links", [])
-        }
-        expect(
-            ("incoming", "parent-of", str(tasker_epic["id"])) in planning_edges
-            and ("incoming", "depends-on", str(tasker_docs_task["id"]))
-            in planning_edges
-            and ("incoming", "about", str(tasker_memory["id"])) in planning_edges,
-            "tasker sandbox planning task should keep parent, dependency, and durable-note edges",
-        )
-        expect(
-            tasker_memory_full.get("kind") == "note"
-            and tasker_memory_full.get("body")
-            == "selftest planning note captured through the tasker sandbox"
-            and "planning" in (tasker_memory_full.get("labels") or []),
-            "tasker sandbox memory should preserve note body and planning label",
-        )
+        if shutil.which("oc") is None:
+            print(
+                "selftest: skipping tasker Codememory sandbox because 'oc' is unavailable"
+            )
+        else:
+            sandbox_scope = f"selftest-tasker-sandbox-{sha256(str(tmp).encode('utf-8')).hexdigest()[:12]}"
+            sandbox_worktree = tmp / "tasker-sandbox-worktree"
+            sandbox_worktree.mkdir(parents=True, exist_ok=True)
+            tasker_epic = run_oc_json(
+                REPO_ROOT,
+                "add",
+                "epic",
+                "selftest tasker sandbox epic",
+                "--scope",
+                sandbox_scope,
+                "--worktree",
+                str(sandbox_worktree),
+                "--branch",
+                "sandbox/tasker",
+                "--summary",
+                "selftest sandbox for planning-only tasker artifact capture",
+                "--format",
+                "json",
+            )
+            tasker_plan_task = run_oc_json(
+                REPO_ROOT,
+                "add",
+                "task",
+                "selftest tasker planning task",
+                "--scope",
+                sandbox_scope,
+                "--worktree",
+                str(sandbox_worktree),
+                "--branch",
+                "sandbox/tasker",
+                "--kind",
+                "chore",
+                "--priority",
+                "P2",
+                "--goal",
+                "verify planning-only task capture through Codememory",
+                "--summary",
+                "selftest tasker planning sandbox task",
+                "--format",
+                "json",
+            )
+            tasker_docs_task = run_oc_json(
+                REPO_ROOT,
+                "add",
+                "task",
+                "selftest tasker docs task",
+                "--scope",
+                sandbox_scope,
+                "--worktree",
+                str(sandbox_worktree),
+                "--branch",
+                "sandbox/tasker",
+                "--kind",
+                "chore",
+                "--priority",
+                "P2",
+                "--goal",
+                "verify planning-only dependency capture through Codememory",
+                "--summary",
+                "selftest tasker dependency sandbox task",
+                "--format",
+                "json",
+            )
+            tasker_memory = run_oc_json(
+                REPO_ROOT,
+                "add",
+                "memory",
+                "selftest tasker note",
+                "--scope",
+                sandbox_scope,
+                "--worktree",
+                str(sandbox_worktree),
+                "--kind",
+                "note",
+                "--label",
+                "planning",
+                "--body",
+                "selftest planning note captured through the tasker sandbox",
+                "--format",
+                "json",
+            )
+            parent_link_one = run_oc_json(
+                REPO_ROOT,
+                "link",
+                str(tasker_epic["id"]),
+                "parent-of",
+                str(tasker_plan_task["id"]),
+                "--format",
+                "json",
+            )
+            parent_link_two = run_oc_json(
+                REPO_ROOT,
+                "link",
+                str(tasker_epic["id"]),
+                "parent-of",
+                str(tasker_docs_task["id"]),
+                "--format",
+                "json",
+            )
+            dependency_link = run_oc_json(
+                REPO_ROOT,
+                "link",
+                str(tasker_docs_task["id"]),
+                "depends-on",
+                str(tasker_plan_task["id"]),
+                "--format",
+                "json",
+            )
+            memory_link = run_oc_json(
+                REPO_ROOT,
+                "link",
+                str(tasker_memory["id"]),
+                "about",
+                str(tasker_plan_task["id"]),
+                "--format",
+                "json",
+            )
+            tasker_epic_links = run_oc_json(
+                REPO_ROOT,
+                "get",
+                str(tasker_epic["id"]),
+                "--view",
+                "links",
+                "--format",
+                "json",
+            )
+            tasker_docs_links = run_oc_json(
+                REPO_ROOT,
+                "get",
+                str(tasker_docs_task["id"]),
+                "--view",
+                "links",
+                "--format",
+                "json",
+            )
+            tasker_plan_links = run_oc_json(
+                REPO_ROOT,
+                "get",
+                str(tasker_plan_task["id"]),
+                "--view",
+                "links",
+                "--format",
+                "json",
+            )
+            tasker_memory_full = run_oc_json(
+                REPO_ROOT,
+                "get",
+                str(tasker_memory["id"]),
+                "--view",
+                "full",
+                "--format",
+                "json",
+            )
+            expect(
+                tasker_epic.get("scope_key") == sandbox_scope,
+                "tasker sandbox epic should use its isolated Codememory scope",
+            )
+            expect(
+                tasker_plan_task.get("scope_key") == sandbox_scope
+                and tasker_docs_task.get("scope_key") == sandbox_scope,
+                "tasker sandbox tasks should use the isolated Codememory scope",
+            )
+            expect(
+                tasker_memory_full.get("scope_key") == sandbox_scope,
+                "tasker sandbox memory should use its isolated Codememory scope",
+            )
+            expect(
+                parent_link_one.get("edge_type") == "parent-of"
+                and parent_link_two.get("edge_type") == "parent-of"
+                and dependency_link.get("edge_type") == "depends-on"
+                and memory_link.get("edge_type") == "about",
+                "tasker sandbox should create the expected Codememory link types",
+            )
+            epic_edges = {
+                (link.get("direction"), link.get("edge_type"), link.get("target_id"))
+                for link in tasker_epic_links.get("links", [])
+            }
+            expect(
+                ("outgoing", "parent-of", str(tasker_plan_task["id"])) in epic_edges
+                and ("outgoing", "parent-of", str(tasker_docs_task["id"]))
+                in epic_edges,
+                "tasker sandbox epic should link to both planned tasks",
+            )
+            docs_edges = {
+                (link.get("direction"), link.get("edge_type"), link.get("target_id"))
+                for link in tasker_docs_links.get("links", [])
+            }
+            expect(
+                ("incoming", "parent-of", str(tasker_epic["id"])) in docs_edges
+                and ("outgoing", "depends-on", str(tasker_plan_task["id"]))
+                in docs_edges,
+                "tasker sandbox docs task should preserve its parent and dependency edges",
+            )
+            planning_edges = {
+                (link.get("direction"), link.get("edge_type"), link.get("target_id"))
+                for link in tasker_plan_links.get("links", [])
+            }
+            expect(
+                ("incoming", "parent-of", str(tasker_epic["id"])) in planning_edges
+                and ("incoming", "depends-on", str(tasker_docs_task["id"]))
+                in planning_edges
+                and ("incoming", "about", str(tasker_memory["id"])) in planning_edges,
+                "tasker sandbox planning task should keep parent, dependency, and durable-note edges",
+            )
+            expect(
+                tasker_memory_full.get("kind") == "note"
+                and tasker_memory_full.get("body")
+                == "selftest planning note captured through the tasker sandbox"
+                and "planning" in (tasker_memory_full.get("labels") or []),
+                "tasker sandbox memory should preserve note body and planning label",
+            )
         literal_result = subprocess.run(
             [
                 sys.executable,
