@@ -462,6 +462,30 @@ exit 0
             str(base_config_payload.get("default_agent") or "") == "build",
             "default_agent should remain build",
         )
+        base_agent_map_any = base_config_payload.get("agent", {})
+        base_agent_map = (
+            base_agent_map_any if isinstance(base_agent_map_any, dict) else {}
+        )
+        orchestrator_entry = (
+            base_agent_map.get("orchestrator", {})
+            if isinstance(base_agent_map.get("orchestrator", {}), dict)
+            else {}
+        )
+        tasker_entry = (
+            base_agent_map.get("tasker", {})
+            if isinstance(base_agent_map.get("tasker", {}), dict)
+            else {}
+        )
+        expect(
+            orchestrator_entry.get("mode") == "primary"
+            and orchestrator_entry.get("hidden") is not True,
+            "base config should register orchestrator as a visible primary agent",
+        )
+        expect(
+            tasker_entry.get("mode") == "primary"
+            and tasker_entry.get("hidden") is not True,
+            "base config should register tasker as a visible primary agent",
+        )
         plugin_entries_any = base_config_payload.get("plugin", [])
         plugin_entries = (
             plugin_entries_any if isinstance(plugin_entries_any, list) else []

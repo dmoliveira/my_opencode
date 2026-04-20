@@ -11,6 +11,12 @@
     "supervisor": {
       "hidden": true
     },
+    "orchestrator": {
+      "mode": "primary"
+    },
+    "tasker": {
+      "mode": "primary"
+    },
     "oracle": {
       "mode": "subagent",
       "hidden": true
