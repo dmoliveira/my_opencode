@@ -26,6 +26,13 @@ const ROUTING_PATTERNS = [
         ],
     },
     {
+        subagentType: "tasker",
+        patterns: [
+            /\btasker|planning[-\s]only|planning only|backlog|dependency|dependencies\b/i,
+            /\bcodememory|\boc\b|epic|durable note|durable memory|capture plan|plan capture\b/i,
+        ],
+    },
+    {
         subagentType: "verifier",
         patterns: [
             /\b(run|execute)\s+(tests?|lint|build)\b/i,
@@ -71,6 +78,7 @@ const ROUTING_PATTERNS = [
 ];
 const SUBAGENT_ICON_BY_TYPE = {
     explore: { nerd: "󰍉", fallback: "[scan]" },
+    tasker: { nerd: "󰚡", fallback: "[plan]" },
     librarian: { nerd: "󰂺", fallback: "[docs]" },
     verifier: { nerd: "󰄬", fallback: "[check]" },
     reviewer: { nerd: "󰦨", fallback: "[review]" },
@@ -83,6 +91,7 @@ const SUBAGENT_ICON_BY_TYPE = {
 };
 const ROUTING_CHAR_BY_AGENT = {
     explore: "E",
+    tasker: "D",
     librarian: "L",
     verifier: "V",
     reviewer: "R",

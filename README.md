@@ -94,7 +94,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 This setup keeps `build` as the default agent for quick direct work, exposes `build`, `plan`, `orchestrator`, and `tasker` in the `Tab` switcher, and keeps focused specialists available as hidden secondary subagents:
 
 - `orchestrator` (primary): execution lead for complex tasks, with explicit delegation and completion gates.
-- `tasker` (primary): planning-focused Codememory artifact writer for epics, tasks, dependencies, and durable notes.
+- `tasker` (primary): planning-focused Codememory artifact writer for epics, tasks, dependencies, and durable notes; also usable through delegated planning-only routing when the request is not asking for code execution.
 - `explore` (subagent): read-only internal codebase scout.
 - `librarian` (subagent): read-only external docs and OSS evidence researcher.
 - `oracle` (subagent): read-only architecture/debug advisor for hard tradeoffs.
@@ -110,7 +110,7 @@ Default selection note:
 
 - `build` remains the configured `default_agent` in `opencode.json` for speed.
 - `plan` remains the built-in planning primary in OpenCode.
-- choose `tasker` when you want planning-only capture into Codememory without executing code or mutating repo files.
+- choose `tasker` when you want planning-only capture into Codememory without executing code or mutating repo files, whether by selecting it directly or by delegating planning-only work to it.
 - for live sandbox verification of the real `tasker` runtime path, run `python3 scripts/tasker_e2e_sandbox.py --runs 30 --json`.
 - the live sandbox now covers happy-path planning, duplicate-control reuse, and planning-only execution-boundary scenarios in one runner.
 - repo selftest now validates `tasker` contract metadata plus an isolated Codememory planning sandbox for the artifact/link flow `tasker` relies on.

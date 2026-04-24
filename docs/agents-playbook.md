@@ -84,6 +84,7 @@ Runtime discoverability commands:
 When these hints appear automatically in execution flow:
 - delegation router injects `/agent-catalog explain <subagent>` when it infers or applies routing metadata
 - fallback orchestrator injects `/agent-catalog list` + explain hint when it rewrites a failed delegation path
+- planning-only prompts that ask to capture backlog items, Codememory tasks, dependencies, epics, or durable notes can now route to `tasker` through the same delegation surface as the other specialists
 
 ---
 
@@ -137,6 +138,7 @@ Expected flow:
 - checks Codememory for related items first
 - writes tasks/epics/memories/links through `oc`
 - returns created ids plus the inferred dependency graph
+- `tasker` can be selected directly or delegated to when the prompt clearly asks for planning-only capture instead of implementation
 - `python3 scripts/selftest.py` validates the `tasker` contract metadata plus the isolated Codememory artifact/link flow this planning path relies on
 - `python3 scripts/tasker_e2e_sandbox.py --runs 30 --json` drives live `opencode run --agent tasker` simulations against sandboxed Codememory scopes when you want runtime-level confidence beyond selftest
 - that live harness now mixes happy-path planning, duplicate-control, and planning-only execution-boundary scenarios so regressions surface under broader runtime pressure

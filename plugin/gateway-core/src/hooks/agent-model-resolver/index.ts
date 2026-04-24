@@ -51,6 +51,13 @@ const ROUTING_PATTERNS: Array<{ subagentType: string; patterns: RegExp[] }> = [
     ],
   },
   {
+    subagentType: "tasker",
+    patterns: [
+      /\btasker|planning[-\s]only|planning only|backlog|dependency|dependencies\b/i,
+      /\bcodememory|\boc\b|epic|durable note|durable memory|capture plan|plan capture\b/i,
+    ],
+  },
+  {
     subagentType: "verifier",
     patterns: [
       /\b(run|execute)\s+(tests?|lint|build)\b/i,
@@ -97,6 +104,7 @@ const ROUTING_PATTERNS: Array<{ subagentType: string; patterns: RegExp[] }> = [
 
 const SUBAGENT_ICON_BY_TYPE: Record<string, { nerd: string; fallback: string }> = {
   explore: { nerd: "󰍉", fallback: "[scan]" },
+  tasker: { nerd: "󰚡", fallback: "[plan]" },
   librarian: { nerd: "󰂺", fallback: "[docs]" },
   verifier: { nerd: "󰄬", fallback: "[check]" },
   reviewer: { nerd: "󰦨", fallback: "[review]" },
@@ -110,6 +118,7 @@ const SUBAGENT_ICON_BY_TYPE: Record<string, { nerd: string; fallback: string }> 
 
 const ROUTING_CHAR_BY_AGENT: Record<string, string> = {
   explore: "E",
+  tasker: "D",
   librarian: "L",
   verifier: "V",
   reviewer: "R",

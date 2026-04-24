@@ -277,6 +277,35 @@ test("agent discoverability injector appends catalog hint only after routing rew
   assert.match(output.args.prompt, /\/agent-catalog explain explore/)
 })
 
+test("delegation router can infer tasker for planning-only Codememory capture", async () => {
+  const resolver = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 1,
+    defaultIntentThreshold: 1,
+    agentPolicyOverrides: {},
+  })
+  const discoverability = createAgentDiscoverabilityInjectorHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    cooldownMs: 60000,
+  })
+  const output = {
+    args: {
+      prompt: "Create Codememory tasks and dependencies for this backlog item, keep it planning-only.",
+      description: "Use oc to capture an epic and durable note without editing code.",
+    },
+  }
+  const payload = {
+    input: { tool: "task", sessionID: "session-discoverability-tasker" },
+    output,
+  }
+  await resolver.event("tool.execute.before", payload)
+  await discoverability.event("tool.execute.before", payload)
+  assert.equal(output.args.subagent_type, "tasker")
+  assert.match(output.args.prompt, /\/agent-catalog explain tasker/)
+})
+
 test("delegation outcome learner adapts risky category after repeated failures", async () => {
   const timelineHook = createSubagentTelemetryTimelineHook({
     directory: REPO_DIRECTORY,

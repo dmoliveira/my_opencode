@@ -35,7 +35,7 @@ function isProtectedGitMutationCommand(command) {
 }
 function protectedBranchWorktreeHint(directory) {
     const base = basename(directory) || "repo";
-    return `For repo maintenance, run \`python3 scripts/worktree_helper_command.py maintenance --directory ${directory}\` or create a throwaway worktree directly, for example: \`git worktree add -b chore/<task> ../${base}-maint HEAD\`.`;
+    return `For repo maintenance, run \`python3 scripts/worktree_helper_command.py maintenance --directory ${directory}\` or create a throwaway worktree directly. Prefer a \`wt-*\` path by default, for example: \`git worktree add -b chore/<task> ../${base}-wt-maintenance HEAD\`. This is guidance, not enforcement.`;
 }
 function shellQuote(value) {
     return `'${value.replace(/'/g, `'"'"'`)}'`;
