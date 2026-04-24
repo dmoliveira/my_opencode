@@ -32,6 +32,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 - `experience-designer` covers browser-first UX quality, while `reviewer` stays the final code/risk gate.
 - Completion should only happen after implementation + validation + review gates pass.
 - Model allocation defaults and fallbacks are documented in `docs/model-allocation-policy.md`.
+- Browser automation should be treated as a narrow bridge for UI-owned blockers such as OAuth consent, install or re-auth prompts, scope upgrades, and final visual verification; return to shell/API tooling as soon as the blocker is cleared.
 
 Architecture and safety contracts:
 

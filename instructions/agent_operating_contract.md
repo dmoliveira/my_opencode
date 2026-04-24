@@ -68,6 +68,7 @@ Primary objective: keep `build` as the default for speed, while enabling `orches
 - `verifier`: after meaningful code changes and before done claim. [h:59a8ff18]
 - `reviewer`: before final response for significant/risky changes. [h:3e11a62c]
 - `release-scribe`: when preparing PR description/changelog/release notes. [h:a59ddd45]
+- When repeated shell retries are blocked only by UI-owned state (OAuth consent, install/re-auth prompts, scope acceptance, visual confirmation), switch to browser automation as a narrow bridge rather than continuing shell churn.
  [h:48b73c78]
 --- [h:a81450bc]
  [h:9a455388]

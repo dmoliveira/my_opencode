@@ -13,7 +13,13 @@ Epic 13 Task 13.1 defines the provider profile contract for browser automation.
 - `playwright`: default stable provider for most users
 - `agent-browser`: optional provider for users who need agent-browser specific workflows
 
+Provider selection guidance:
+- prefer `playwright` as the default stable automation path for most users and CI-like local flows
+- enable `agent-browser` when you specifically need agent-browser-native workflows, integrations, or a browser-first operator experience not covered by the default provider
+
 Provider ids are lowercase and validated strictly. Unknown provider ids must fail with actionable guidance.
+
+Install guidance should stay minimal in local policy docs and point users to upstream setup when provider-specific details change quickly.
 
 ## Profile shape
 
@@ -79,3 +85,4 @@ When legacy browser-related keys are found:
 - Task 13.2 should implement command backend and provider doctor checks from this schema
 - Task 13.3 should add wizard integration and user-facing docs for provider trade-offs
 - Task 13.4 should verify switching, persistence, and install smoke behavior
+- Browser-owned blockers should prefer shell-first execution with provider-backed browser automation only for the narrow UI step, then return to shell verification immediately.
