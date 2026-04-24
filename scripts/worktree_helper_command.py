@@ -33,8 +33,8 @@ _ALLOWED_OC_DIRECT_PATTERN = re.compile(
     rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:"
     rf"(?:current|next|queue)"
     rf"|(?:resume)(?:\s+.+)"
-    rf"|(?:done)(?:\s+.+)"
-    rf"|(?:end-session)(?:\s+.+)"
+    rf"|(?:done)(?:\s+.+)?"
+    rf"|(?:end-session)(?:\s+.+)?"
     rf")\s*$"
 )
 
@@ -130,15 +130,19 @@ def command_maintenance(args: list[str]) -> int:
         repo_name = directory.name or "repo"
         blocked_slug = slugify(blocked_command or "maintenance")
         suggested_branch = branch or f"chore/{blocked_slug[:40]}"
-        suggested_worktree = (directory.parent / f"{repo_name}-maint").resolve()
+        suggested_worktree = (directory.parent / f"{repo_name}-wt-maintenance").resolve()
         create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
-        report = {
-            "result": "PASS",
+        report = { 
+            "result": "FAIL",
             "mode": "maintenance_worktree",
             "directory": str(directory),
             "suggested_worktree": str(suggested_worktree),
             "suggested_branch": suggested_branch,
             "blocked_command": blocked_command,
+            "note": (
+                "Guidance only: the blocked command was not executed. "
+                "Create or use the suggested worktree and rerun the intended command there."
+            ),
             "commands": [
                 create_command,
                 f"git -C {shell_quote(str(suggested_worktree))} status --short --branch",
@@ -146,7 +150,7 @@ def command_maintenance(args: list[str]) -> int:
         }
     if json_output:
         print(json.dumps(report, indent=2))
-        return 0
+        return 0 if report.get("mode") == "direct_run" else 3
 
     print(f"directory: {report['directory']}")
     if report.get("mode") == "direct_run":
@@ -154,12 +158,13 @@ def command_maintenance(args: list[str]) -> int:
     else:
         print(f"suggested_worktree: {report['suggested_worktree']}")
         print(f"suggested_branch: {report['suggested_branch']}")
+        print(f"note: {report['note']}")
     if blocked_command:
         print(f"blocked_command: {blocked_command}")
     print("commands:")
     for command in report["commands"]:
         print(f"- {command}")
-    return 0
+    return 0 if report.get("mode") == "direct_run" else 3
 
 
 def main(argv: list[str]) -> int:
