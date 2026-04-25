@@ -109,6 +109,7 @@ Use these directly in OpenCode:
 /ox-design --goal "explore a calmer onboarding direction"
 /ox-design --focus wireframes,icons,palette
 /image status
+/image access --json
 /image doctor --json
 /image setup-keys
 /image prompt --kind wireframe --subject "mobile onboarding" --goal "reduce clutter" --json
@@ -118,6 +119,8 @@ Use these directly in OpenCode:
 Use `/ox-design` for concepting, artifact planning, and image-ready prompt generation.
 
 Use `/image` for explicit OpenAI-backed generation into `artifacts/design/`.
+
+Important: `/image` uses OpenAI API access via `OPENAI_API_KEY`; ChatGPT plan access alone does not automatically enable it inside this runtime.
 
 Use `/ox-ux` or `/browser` when the real implemented UI needs browser-first validation.
 

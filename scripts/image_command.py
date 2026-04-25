@@ -56,7 +56,8 @@ def build_status_payload() -> dict[str, Any]:
         "default_quality": DEFAULT_QUALITY,
         "api_key_configured": bool(api_key),
         "api_url": OPENAI_IMAGES_URL,
-        "supported_subcommands": ["status", "doctor", "setup-keys", "prompt", "generate"],
+        "access_model": "api-key-backed-openai-images",
+        "supported_subcommands": ["status", "doctor", "setup-keys", "access", "prompt", "generate"],
     }
 
 
@@ -138,6 +139,25 @@ def setup_keys() -> int:
     print("export OPENAI_IMAGE_MODEL='gpt-image-1'  # optional override")
     print("then run: /image doctor --json")
     return 0
+
+
+def access_payload() -> dict[str, Any]:
+    return {
+        "result": "PASS",
+        "access_model": "api-key-backed-openai-images",
+        "supports_chatgpt_plan_entitlement": False,
+        "summary": (
+            "/image uses OpenAI image API access through OPENAI_API_KEY. "
+            "ChatGPT plan access in OpenCode does not automatically unlock this command."
+        ),
+        "required_env": ["OPENAI_API_KEY"],
+        "optional_env": ["OPENAI_IMAGE_MODEL", "OPENAI_IMAGE_SIZE", "OPENAI_IMAGE_QUALITY"],
+        "notes": [
+            "OpenCode chat/model access and OpenAI image API access are separate concerns.",
+            "Use /image doctor --json to verify API-backed image access for this runtime.",
+            "Use /ox-design when you want design guidance without calling the image API.",
+        ],
+    }
 
 
 def call_openai_image_api(*, prompt: str, model: str, size: str, quality: str) -> tuple[bytes, dict[str, Any]]:
@@ -245,6 +265,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser('setup-keys')
 
+    access_parser = subparsers.add_parser('access')
+    access_parser.add_argument('--json', action='store_true')
+
     def add_generation_args(subparser: argparse.ArgumentParser) -> None:
         subparser.add_argument('--kind', default='concept')
         subparser.add_argument('--subject', default='')
@@ -276,6 +299,8 @@ def main(argv: list[str]) -> int:
         return emit(doctor_payload(), as_json=bool(args.json))
     if args.subcommand == 'setup-keys':
         return setup_keys()
+    if args.subcommand == 'access':
+        return emit(access_payload(), as_json=bool(args.json))
     if args.subcommand == 'prompt':
         return command_prompt(args)
     if args.subcommand == 'generate':
