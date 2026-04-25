@@ -21265,6 +21265,24 @@ version: 1
             "image access should describe the API-backed access model",
         )
 
+        image_setup = subprocess.run(
+            [sys.executable, str(IMAGE_COMMAND_SCRIPT), "setup-keys"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(image_setup.returncode == 0, "image setup-keys should succeed")
+        expect(
+            "sk add -k OPENAI_API_KEY --stdin --force" in image_setup.stdout,
+            "image setup-keys should recommend sk-backed secret storage",
+        )
+        expect(
+            "export OPENAI_API_KEY=\"$(sk get -k OPENAI_API_KEY)\"" in image_setup.stdout,
+            "image setup-keys should show the safe runtime export pattern",
+        )
+
         image_prompt = subprocess.run(
             [
                 sys.executable,

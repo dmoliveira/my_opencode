@@ -13,6 +13,7 @@ from typing import Any
 from urllib import error, request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SK_REPO = Path("~/Codes/Projects/sk").expanduser()
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 DEFAULT_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 DEFAULT_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "high")
@@ -76,7 +77,8 @@ def doctor_payload() -> dict[str, Any]:
         "problems": problems,
         "warnings": warnings,
         "quick_fixes": [
-            "export OPENAI_API_KEY='sk-...'",
+            "preferred: printf '%s' \"$OPENAI_API_KEY\" | sk add -k OPENAI_API_KEY --stdin --force",
+            "runtime load: export OPENAI_API_KEY=\"$(sk get -k OPENAI_API_KEY)\"",
             "optional: export OPENAI_IMAGE_MODEL='gpt-image-1'",
             "run /image generate --dry-run first to confirm output path",
         ],
@@ -135,7 +137,17 @@ def write_sidecar(image_path: Path, payload: dict[str, Any]) -> None:
 def setup_keys() -> int:
     print("setup keys")
     print("----------")
-    print("export OPENAI_API_KEY='sk_your_key_here'")
+    print("preferred safe storage: macOS Keychain via your local sk flow")
+    if SK_REPO.exists():
+        print(f"sk repo: {SK_REPO}")
+    print("store once:")
+    print("printf '%s' \"$OPENAI_API_KEY\" | sk add -k OPENAI_API_KEY --stdin --force")
+    print("load only for the current shell/session:")
+    print("export OPENAI_API_KEY=\"$(sk get -k OPENAI_API_KEY)\"")
+    print("clear when done:")
+    print("unset OPENAI_API_KEY")
+    print("fallback if sk is unavailable:")
+    print("use another local secret manager or a one-session env injection approach that avoids shell history and committed files")
     print("export OPENAI_IMAGE_MODEL='gpt-image-1'  # optional override")
     print("then run: /image doctor --json")
     return 0
@@ -154,6 +166,7 @@ def access_payload() -> dict[str, Any]:
         "optional_env": ["OPENAI_IMAGE_MODEL", "OPENAI_IMAGE_SIZE", "OPENAI_IMAGE_QUALITY"],
         "notes": [
             "OpenCode chat/model access and OpenAI image API access are separate concerns.",
+            "Preferred secret storage for this setup is your local sk/Keychain flow, then export OPENAI_API_KEY only into the current shell when needed.",
             "Use /image doctor --json to verify API-backed image access for this runtime.",
             "Use /ox-design when you want design guidance without calling the image API.",
         ],

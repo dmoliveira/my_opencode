@@ -80,6 +80,17 @@ Required env:
 
 - `OPENAI_API_KEY`
 
+Preferred safe storage:
+
+- Store the secret once with your local `sk` Keychain flow.
+- Load it only into the current shell/session when you want to use `/image`.
+
+```text
+printf '%s' "$OPENAI_API_KEY" | sk add -k OPENAI_API_KEY --stdin --force
+export OPENAI_API_KEY="$(sk get -k OPENAI_API_KEY)"
+unset OPENAI_API_KEY
+```
+
 Optional env overrides:
 
 - `OPENAI_IMAGE_MODEL`
