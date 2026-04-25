@@ -14,6 +14,7 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 
 ```text
 /doctor run
+/devtools status
 /plugin status
 /mcp status
 /browser ensure --json
@@ -25,6 +26,7 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 /gateway status
 /bg doctor --json
 /agent-pool doctor --json
+/tmux doctor --json
 ```
 
 Optional next step when you want lightweight repo or docs context:
