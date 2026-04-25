@@ -183,6 +183,30 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { tool: "bash", sessionID: "session-workflow-fetch-prune-safe" },
       { args: { command: "git fetch --prune" } }
     )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-fetch-all-prune-quiet-safe" },
+      { args: { command: "git fetch --all --prune --quiet" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-remote-verbose-safe" },
+      { args: { command: "git remote -v" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-remote-get-url-safe" },
+      { args: { command: "git remote get-url origin" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-remote-add-safe" },
+      { args: { command: "git remote add origin https://github.com/foo/bar.git" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-remote-set-url-safe" },
+      { args: { command: "git remote set-url origin git@github.com:foo/bar.git" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-push-main-safe" },
+      { args: { command: "git push -u origin main" } }
+    )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-pull-autostash-safe" },
@@ -266,6 +290,18 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { tool: "bash", sessionID: "session-workflow-oc-next-safe" },
       { args: { command: "oc next" } }
     )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-next-scoped-safe" },
+      { args: { command: "oc next --scope dmoliveira/my_opencode --limit 5" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-queue-scoped-safe" },
+      { args: { command: "oc queue --scope dmoliveira/my_opencode --limit 10" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-current-json-safe" },
+      { args: { command: "oc current --format json" } }
+    )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-oc-resume-safe" },
@@ -280,6 +316,34 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-oc-end-session-safe" },
       { args: { command: "oc end-session --outcome done session_62 --achievements \"cleanup complete\"" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-branch-contains-safe" },
+      { args: { command: "git branch -r --contains origin/main" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-auth-status-safe" },
+      { args: { command: "gh auth status" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-repo-view-safe" },
+      { args: { command: "gh repo view --json nameWithOwner" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-repo-create-safe" },
+      { args: { command: "gh repo create foo/bar --private --source . --remote origin --push" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-repo-edit-safe" },
+      { args: { command: "gh repo edit --visibility private" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-gh-api-user-safe" },
+      { args: { command: "gh api user" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-date-safe" },
+      { args: { command: 'date +"%Y-%m-%d %H:%M"' } }
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -544,6 +608,15 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       sqlitePragmaBypassPayload
     )
     assert.match(sqlitePragmaBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+
+    const sqliteLoadExtensionPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT load_extension(\"/tmp/pwn\");"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-load-extension" },
+      sqliteLoadExtensionPayload
+    )
+    assert.match(sqliteLoadExtensionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
 
     const sqliteEnvBypassPayload = {
       args: { command: 'BASH_ENV=/tmp/evil.sh sqlite3 -readonly "/tmp/runtime.db" ".tables"' },

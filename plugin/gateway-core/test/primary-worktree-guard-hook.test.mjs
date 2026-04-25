@@ -364,6 +364,26 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       { tool: "bash", sessionID: "session-primary-fetch-safe" },
       { args: { command: "git fetch --prune" } }
     )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-fetch-all-prune-quiet-safe" },
+      { args: { command: "git fetch --all --prune --quiet" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-remote-verbose-safe" },
+      { args: { command: "git remote -v" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-remote-get-url-safe" },
+      { args: { command: "git remote get-url origin" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-remote-add-safe" },
+      { args: { command: "git remote add origin https://github.com/foo/bar.git" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-remote-set-url-safe" },
+      { args: { command: "git remote set-url origin git@github.com:foo/bar.git" } }
+    )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-pull-autostash-safe" },
@@ -447,6 +467,18 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       { tool: "bash", sessionID: "session-primary-oc-queue-safe" },
       { args: { command: "oc queue" } }
     )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-next-scoped-safe" },
+      { args: { command: "oc next --scope dmoliveira/my_opencode --limit 5" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-queue-scoped-safe" },
+      { args: { command: "oc queue --scope dmoliveira/my_opencode --limit 10" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-oc-current-json-safe" },
+      { args: { command: "oc current --format json" } }
+    )
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-oc-resume-safe" },
@@ -461,6 +493,38 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-oc-end-session-safe" },
       { args: { command: "oc end-session --outcome done session_62 --achievements \"cleanup complete\"" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-branch-contains-safe" },
+      { args: { command: "git branch -r --contains origin/main" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-gh-auth-status-safe" },
+      { args: { command: "gh auth status" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-gh-repo-view-safe" },
+      { args: { command: "gh repo view --json nameWithOwner" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-gh-repo-create-safe" },
+      { args: { command: "gh repo create foo/bar --private --source . --remote origin --push" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-gh-repo-edit-safe" },
+      { args: { command: "gh repo edit --visibility private" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-gh-api-user-safe" },
+      { args: { command: "gh api user" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-push-main-safe" },
+      { args: { command: "git push -u origin main" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-date-safe" },
+      { args: { command: 'date +"%Y-%m-%d %H:%M"' } }
     )
 
     const blockedPullPayload = { args: { command: "git pull --rebase origin feature/x" } }
