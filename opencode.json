@@ -271,6 +271,10 @@
       "description": "Expand a browser-first UX audit and polish execution contract",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before ux --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "ox-design": {
+      "description": "Expand a design concept, asset-planning, and image-ready execution contract",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before design --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
     "ox-review": {
       "description": "Expand an end-to-end code review and improvement execution contract",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before review --raw-args \"$ARGUMENTS\"`\nShow only the command output."
@@ -294,6 +298,10 @@
     "ox-refactor": {
       "description": "Expand a safe refactor execution contract with bounded scope and validation cues",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before refactor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "image": {
+      "description": "Manage OpenAI-backed design artifact generation (status|doctor|setup-keys|prompt|generate)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/image_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "session": {
       "description": "Inspect current/indexed sessions (current|list|show|search|handoff|doctor)",

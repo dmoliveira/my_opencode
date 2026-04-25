@@ -32,6 +32,11 @@ COMMANDS = {
         "default_args": ["ux"],
         "script": "ox_command.py",
     },
+    "ox-design": {
+        "description": "Expand design concept, visual direction, and asset-planning workflow.",
+        "default_args": ["design"],
+        "script": "ox_command.py",
+    },
     "ox-review": {
         "description": "Expand end-to-end review and improvement workflow.",
         "default_args": ["review"],
@@ -139,6 +144,35 @@ INTENT_RULES = {
             "audit the website",
             "polish the interface",
             "what is not nice in terms of ui",
+        },
+    },
+    "ox-design": {
+        "keywords": {
+            "design",
+            "wireframe",
+            "wireframes",
+            "icon",
+            "icons",
+            "palette",
+            "palettes",
+            "mockup",
+            "mockups",
+            "hero",
+            "visual",
+            "art",
+            "concept",
+        },
+        "phrases": {
+            "generate a design direction",
+            "create a design direction",
+            "make a wireframe",
+            "create icon concepts",
+            "define a color palette",
+            "turn this screenshot into redesign options",
+            "help me design this app",
+            "help me design this game",
+            "design this interface",
+            "create a ui concept",
         },
     },
     "ox-review": {
@@ -269,6 +303,17 @@ def _resolve_args(command: str, tokens: set[str], prompt_lower: str) -> list[str
         args = ["ux"]
         if "playwright" in tokens:
             args.extend(["--focus", "hierarchy,copy,states"])
+        return args
+
+    if command == "ox-design":
+        args = ["design"]
+        focus: list[str] = []
+        for item in ["wireframes", "icons", "palette", "mockups", "hero"]:
+            singular = item[:-1] if item.endswith("s") else item
+            if item in tokens or singular in tokens:
+                focus.append(item)
+        if focus:
+            args.extend(["--focus", ",".join(focus)])
         return args
 
     if command == "ox-review":

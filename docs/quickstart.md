@@ -20,6 +20,8 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 /notify status
 /ox
 /ox-ux --repo top-uni
+/ox-design --goal "explore a design direction for this app"
+/image doctor --json
 /autoflow status --json
 /digest run --reason manual
 /gateway status
@@ -77,6 +79,8 @@ Use the `ox` namespace when you want stable reusable prompt meaning with a short
 /ox ecosystem
 /browser ensure --json
 /ox-ux --repo top-uni
+/ox-design --focus wireframes,icons,palette
+/image prompt --kind wireframe --subject "settings page" --goal "simpler hierarchy" --json
 /ox-review "review this code end to end and improve it"
 /ox-ship --goal "prepare this branch for PR"
 ```

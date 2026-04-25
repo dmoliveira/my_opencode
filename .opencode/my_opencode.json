@@ -271,6 +271,10 @@
       "description": "Expand a browser-first UX audit and polish execution contract",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before ux --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "ox-design": {
+      "description": "Expand a design concept, asset-planning, and image-ready execution contract",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before design --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
     "ox-review": {
       "description": "Expand an end-to-end code review and improvement execution contract",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before review --raw-args \"$ARGUMENTS\"`\nShow only the command output."
@@ -294,6 +298,10 @@
     "ox-refactor": {
       "description": "Expand a safe refactor execution contract with bounded scope and validation cues",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before refactor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "image": {
+      "description": "Manage OpenAI-backed design artifact generation (status|doctor|setup-keys|prompt|generate)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/image_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "session": {
       "description": "Inspect current/indexed sessions (current|list|show|search|handoff|doctor)",
@@ -336,13 +344,14 @@
       "devtools",
       "doctor",
       "nvim",
+      "ox-design",
       "ox-review",
       "ox-ship",
       "ox-ux",
       "stack"
     ],
     "last_detection": {
-      "timestamp": "2026-04-17T23:33:44.311391+00:00",
+      "timestamp": "2026-04-25T10:18:01.231811+00:00",
       "prompt": "review this code and improve end to end",
       "result": "MATCH",
       "reason": "matched",
@@ -396,13 +405,6 @@
         }
       }
     }
-  },
-  "budget_runtime": {
-    "profile": "balanced",
-    "overrides": {},
-    "updated_at": "2026-04-17T23:33:41Z",
-    "updated_by": "budget profile",
-    "override_reason": null
   },
   "keyword_modes": {
     "enabled": true,
@@ -476,12 +478,19 @@
   "policy": {
     "current": "strict",
     "description": "Only high-signal prompts with visual emphasis.",
-    "updated_at": "2026-04-17T23:33:44.132299+00:00",
-    "notify_config": "/Users/diego/Codes/Projects/my_opencode-ox/.opencode/my_opencode.json"
+    "updated_at": "2026-04-25T10:18:01.050317+00:00",
+    "notify_config": "/Users/diego/Codes/Projects/my_opencode-wt-ox-design/.opencode/my_opencode.json"
   },
   "stack_profile": {
     "current": "focus",
     "description": "Minimal interruptions for deep work.",
-    "updated_at": "2026-04-17T23:33:44.169986+00:00"
+    "updated_at": "2026-04-25T10:18:01.089023+00:00"
+  },
+  "budget_runtime": {
+    "profile": "balanced",
+    "overrides": {},
+    "updated_at": "2026-04-25T10:17:58Z",
+    "updated_by": "budget profile",
+    "override_reason": null
   }
 }

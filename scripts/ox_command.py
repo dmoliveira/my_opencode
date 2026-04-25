@@ -66,6 +66,36 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
             "target": "https://dmoliveira.github.io/top-uni/",
         },
     },
+    "design": {
+        "slash": "/ox-design",
+        "title": "Design concept and asset planning",
+        "summary": "Shape UX/UI directions, repo-native design artifacts, and image-generation-ready prompts before or alongside implementation.",
+        "agent": "orchestrator",
+        "mcp_profiles": ["playwright", "web"],
+        "startup": [
+            "/browser ensure --json",
+            "/mcp profile playwright",
+            "/image doctor --json",
+        ],
+        "workflow": [
+            "Inspect the current product, screenshots, or brief first so the design work stays grounded in a real flow or concrete concept target.",
+            "Produce a small set of strong visual directions covering hierarchy, layout, iconography, palette, and typography instead of broad speculative branching.",
+            "Translate the chosen direction into reusable prompt/spec output that can drive `/image prompt` or `/image generate` later.",
+            "Store or reference design artifacts under `artifacts/design/` so they are repo-native, reviewable, and committable when relevant.",
+            "Explicitly separate concept generation from browser validation of the implemented UI so synthetic design work does not get mistaken for product truth.",
+        ],
+        "acceptance": [
+            "The output includes concrete design directions or findings tied to the requested flow, screen, or component family.",
+            "At least one prompt/spec is ready for later image generation or human handoff without another planning pass.",
+            "Artifact paths or naming guidance under `artifacts/design/` are explicit when visuals are in scope.",
+        ],
+        "defaults": {
+            "goal": "Explore or refine a strong UX/UI direction, then prepare prompt-ready design artifacts that can be saved under artifacts/design/.",
+            "scope": "one focused product flow, screen, or component family",
+            "focus": ["wireframes", "icons", "palette", "layout", "visual hierarchy"],
+            "repo": "my_opencode",
+        },
+    },
     "review": {
         "slash": "/ox-review",
         "title": "End-to-end code review and improvement",
@@ -224,6 +254,7 @@ def usage() -> int:
     print(
         "usage: /ox [list|doctor|ecosystem] [--json] | "
         "/ox-ux [--target <url>] [--scope <text>] [--focus <csv>] [--sections <csv>] [--repo <name>] [--goal <text>] [--notes <text>] [--json] | "
+        "/ox-design [--target <url|path>] [--scope <text>] [--focus <csv>] [--sections <csv>] [--repo <name>] [--goal <text>] [--notes <text>] [--json] | "
         "/ox-review [--scope <text>] [--focus <csv>] [--repo <name>] [--goal <text>] [--notes <text>] [--json] | "
         "/ox-ship [--scope <text>] [--base <ref>] [--head <ref>] [--goal <text>] [--notes <text>] [--json] | "
         "/ox-start [--issue <id>] [--scope <text>] [--repo <name>] [--goal <text>] [--notes <text>] [--json] | "
