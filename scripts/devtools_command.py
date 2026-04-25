@@ -7,11 +7,16 @@ import sys
 
 
 TOOLS = {
+    "ast-grep": {"bin": "sg", "brew": "ast-grep"},
     "direnv": {"bin": "direnv", "brew": "direnv"},
     "gh-dash": {"bin": "gh", "gh_extension": "dlvhdr/gh-dash"},
+    "ripgrep": {"bin": "rg", "brew": "ripgrep"},
     "ripgrep-all": {"bin": "rga", "brew": "ripgrep-all"},
+    "tree-sitter-cli": {"bin": "tree-sitter", "brew": "tree-sitter-cli"},
     "pre-commit": {"bin": "pre-commit", "brew": "pre-commit"},
     "lefthook": {"bin": "lefthook", "brew": "lefthook"},
+    "tmux": {"bin": "tmux", "brew": "tmux"},
+    "watchexec": {"bin": "watchexec", "brew": "watchexec"},
 }
 
 
@@ -19,7 +24,12 @@ def usage() -> int:
     print(
         "usage: /devtools status | /devtools help | /devtools doctor [--json] | /devtools install [all|<tool> ...] | /devtools hooks-install"
     )
-    print("tools: direnv, gh-dash, ripgrep-all, pre-commit, lefthook")
+    print(
+        "tools: ast-grep, direnv, gh-dash, ripgrep, ripgrep-all, tree-sitter-cli, pre-commit, lefthook, tmux, watchexec"
+    )
+    print(
+        "notes: browser-use and Context7 stay optional manual installs because they need SDK/API-key or CLI-specific setup outside Homebrew defaults"
+    )
     return 2
 
 
@@ -80,6 +90,8 @@ def print_doctor(json_output: bool) -> int:
             "run /devtools install all",
             "run /devtools hooks-install",
             'enable direnv hook in your shell: eval "$(direnv hook zsh)"',
+            "for browser-use, install browser-use-sdk manually and export BROWSER_USE_API_KEY before use",
+            "for Context7, prefer a local CLI install only when you need it and keep remote MCP disabled by default",
         ]
         if missing
         else [],

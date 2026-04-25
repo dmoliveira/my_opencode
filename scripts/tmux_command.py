@@ -32,13 +32,14 @@ DEFAULT_STATE = {
     "layout": "split-3",
     "max_panes": 3,
     "require_safe_panes": True,
+    "session_prefix": "ai-oc",
 }
 ALLOWED_LAYOUTS = {"split-2", "split-3", "grid-4"}
 
 
 def usage() -> int:
     print(
-        "usage: /tmux status [--json] | /tmux config <enabled|layout|max-panes|safe-panes> <value> | /tmux doctor [--json] | /tmux help"
+        "usage: /tmux status [--json] | /tmux config <enabled|layout|max-panes|safe-panes|session-prefix> <value> | /tmux doctor [--json] | /tmux help"
     )
     return 2
 
@@ -60,6 +61,10 @@ def normalize_state(raw: Any) -> dict[str, Any]:
     state["require_safe_panes"] = bool(
         raw.get("require_safe_panes", state["require_safe_panes"])
     )
+    session_prefix = str(raw.get("session_prefix") or state["session_prefix"]).strip()
+    normalized_prefix = "-".join(part for part in session_prefix.replace("_", "-").split() if part)
+    if normalized_prefix:
+        state["session_prefix"] = normalized_prefix
     return state
 
 
@@ -117,6 +122,8 @@ def status_payload(state: dict[str, Any], write_path: Path) -> dict[str, Any]:
         "layout": state.get("layout"),
         "max_panes": state.get("max_panes"),
         "require_safe_panes": bool(state.get("require_safe_panes")),
+        "session_prefix": state.get("session_prefix"),
+        "recommended_session_name": f"{state.get('session_prefix')}-<task>",
         "tmux_available": tmux_available,
         "runtime_mode": runtime_mode,
         "reason_code": reason,
@@ -140,6 +147,8 @@ def command_status(argv: list[str]) -> int:
         print(f"tmux_available: {payload['tmux_available']}")
         print(f"layout: {payload['layout']}")
         print(f"max_panes: {payload['max_panes']}")
+        print(f"session_prefix: {payload['session_prefix']}")
+        print(f"recommended_session_name: {payload['recommended_session_name']}")
         print(f"pane_cache_entries: {payload['pane_session_cache']['pane_count']}")
         print(f"config: {payload['config']}")
     return 0
@@ -172,6 +181,11 @@ def command_config(argv: list[str]) -> int:
         if value not in {"true", "false"}:
             return usage()
         state["require_safe_panes"] = value == "true"
+    elif key == "session-prefix":
+        normalized = "-".join(part for part in value.replace("_", "-").split() if part)
+        if not normalized:
+            return usage()
+        state["session_prefix"] = normalized
     else:
         return usage()
 
@@ -194,6 +208,12 @@ def command_doctor(argv: list[str]) -> int:
         warnings.append(
             "max_panes is high; consider 2-4 panes for stable visual orchestration"
         )
+    prefix = str(payload.get("session_prefix") or "")
+    lowered_prefix = prefix.lower()
+    if not prefix:
+        warnings.append("session_prefix is empty; use a stable ai/opencode-style prefix for tmux sessions")
+    elif not any(token in lowered_prefix for token in ("ai", "oc", "opencode")):
+        warnings.append("session_prefix should identify AI/OpenCode ownership to make cleanup and recovery safer")
     result = "PASS" if not warnings else "WARN"
     report = {
         "result": result,
