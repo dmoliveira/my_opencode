@@ -47,14 +47,53 @@ test("worktree helper tells operators to run allowed oc end-session directly", (
   assert.deepEqual(report.commands, ['oc end-session --outcome done session_64 --achievements "cleanup complete"'])
 })
 
-test("worktree helper treats bare oc closeout verbs as direct-run safe guidance", () => {
+test("worktree helper does not classify bare oc closeout verbs as direct-run safe", () => {
   const doneReport = runHelper("oc done")
   const sessionReport = runHelper("oc end-session")
 
-  assert.equal(doneReport.mode, "direct_run")
-  assert.equal(doneReport.result, "PASS")
-  assert.equal(sessionReport.mode, "direct_run")
-  assert.equal(sessionReport.result, "PASS")
+  assert.equal(doneReport.mode, "maintenance_worktree")
+  assert.equal(doneReport.result, "FAIL")
+  assert.equal(sessionReport.mode, "maintenance_worktree")
+  assert.equal(sessionReport.result, "FAIL")
+})
+
+test("worktree helper treats scoped oc status commands as direct-run safe guidance", () => {
+  const report = runHelper("oc next --scope dmoliveira/my_opencode --limit 5")
+
+  assert.equal(report.result, "PASS")
+  assert.equal(report.mode, "direct_run")
+  assert.deepEqual(report.commands, ["oc next --scope dmoliveira/my_opencode --limit 5"])
+})
+
+test("worktree helper treats protected-main bootstrap commands as direct-run safe guidance", () => {
+  const fetchReport = runHelper("git fetch --all --prune --quiet")
+  const pullReport = runHelper("git pull --rebase --autostash")
+  const remoteGetUrlReport = runHelper("git remote get-url origin")
+  const stashListReport = runHelper("git stash list")
+  const ghReport = runHelper("gh auth status")
+  const ghPrViewReport = runHelper("gh pr view --json number")
+  const ghRepoEditReport = runHelper("gh repo edit --visibility private")
+  const dateReport = runHelper('date +"%Y-%m-%d %H:%M"')
+  const envBypassReport = runHelper("BASH_ENV=/tmp/evil.sh gh auth status")
+
+  assert.equal(fetchReport.result, "PASS")
+  assert.equal(fetchReport.mode, "direct_run")
+  assert.equal(pullReport.result, "PASS")
+  assert.equal(pullReport.mode, "direct_run")
+  assert.equal(remoteGetUrlReport.result, "PASS")
+  assert.equal(remoteGetUrlReport.mode, "direct_run")
+  assert.equal(stashListReport.result, "PASS")
+  assert.equal(stashListReport.mode, "direct_run")
+  assert.equal(ghReport.result, "PASS")
+  assert.equal(ghReport.mode, "direct_run")
+  assert.equal(ghPrViewReport.result, "PASS")
+  assert.equal(ghPrViewReport.mode, "direct_run")
+  assert.equal(ghRepoEditReport.result, "PASS")
+  assert.equal(ghRepoEditReport.mode, "direct_run")
+  assert.equal(dateReport.result, "PASS")
+  assert.equal(dateReport.mode, "direct_run")
+  assert.equal(envBypassReport.result, "FAIL")
+  assert.equal(envBypassReport.mode, "maintenance_worktree")
 })
 
 test("worktree helper still suggests a maintenance worktree for blocked commands", () => {

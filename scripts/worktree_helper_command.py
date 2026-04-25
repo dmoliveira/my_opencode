@@ -27,25 +27,42 @@ def shell_quote(value: str) -> str:
 
 
 _SHELL_TOKEN = r'(?:"[^"]*"|\'[^\']*\'|\S+)'
-_SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*={_SHELL_TOKEN}\s+)*)"
+_SAFE_ENV_KEY = r"(?:CI|GIT_TERMINAL_PROMPT|GIT_EDITOR|GIT_PAGER|PAGER|GCM_INTERACTIVE|OPENCODE_SESSION_ID)"
+_SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:{_SAFE_ENV_KEY}={_SHELL_TOKEN}\s+)*)"
 _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
-_ALLOWED_OC_DIRECT_PATTERN = re.compile(
-    rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:"
-    rf"(?:current|next|queue)"
-    rf"|(?:resume)(?:\s+.+)"
-    rf"|(?:done)(?:\s+.+)?"
-    rf"|(?:end-session)(?:\s+.+)?"
-    rf")\s*$"
-)
+_GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
+_GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
+_ALLOWED_DIRECT_PATTERNS = [
+    re.compile(rf"^{_SAFE_ENV_PREFIX}date(?:\s+.+)?\s*$"),
+    re.compile(
+        rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:"
+        rf"(?:current|next|queue)(?:\s+.+)?"
+        rf"|(?:resume)(?:\s+.+)"
+        rf"|(?:done)(?:\s+.+)"
+        rf"|(?:end-session)(?:\s+.+)"
+        rf")\s*$"
+    ),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN}|add\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}|set-url\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN})\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+push(?:\s+(?:-u|--set-upstream))?\s+origin\s+(?:main|master)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+worktree\s+(?:add|remove)(?:\s+.+)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+branch\s+(?:-d|--delete)(?:\s+.+)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+stash\s+(?:push(?:\s+.+)|list|show)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+auth\s+status(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
+]
 
 
-def is_direct_allowed_oc_command(command: str | None) -> bool:
+def is_direct_allowed_protected_main_command(command: str | None) -> bool:
     if not command:
         return False
     normalized = command.strip()
     if has_disallowed_shell_syntax(normalized):
         return False
-    return bool(_ALLOWED_OC_DIRECT_PATTERN.match(normalized))
+    return any(pattern.match(normalized) for pattern in _ALLOWED_DIRECT_PATTERNS)
 
 
 def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object]:
@@ -55,7 +72,7 @@ def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object
         "directory": str(directory),
         "blocked_command": blocked_command,
         "note": (
-            "This Codememory command is already allowed directly on protected main. "
+            "This command is already allowed directly on protected main. "
             "Do not wrap it with the maintenance helper; run it directly instead."
         ),
         "commands": [blocked_command],
@@ -124,7 +141,7 @@ def command_maintenance(args: list[str]) -> int:
             continue
         return usage()
 
-    if is_direct_allowed_oc_command(blocked_command):
+    if is_direct_allowed_protected_main_command(blocked_command):
         report = direct_run_report(directory, blocked_command)
     else:
         repo_name = directory.name or "repo"
