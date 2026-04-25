@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import json
 import os
 import shutil
@@ -21264,6 +21265,105 @@ version: 1
             image_access_report.get("access_model") == "api-key-backed-openai-images",
             "image access should describe the API-backed access model",
         )
+
+        with tempfile.TemporaryDirectory() as codex_tmpdir:
+            codex_tmp = Path(codex_tmpdir)
+            codex_home = codex_tmp / ".codex"
+            generated_dir = codex_home / "generated_images" / "thread-test"
+            generated_dir.mkdir(parents=True, exist_ok=True)
+            (generated_dir / "ig_test.png").write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lv6c3QAAAABJRU5ErkJggg=="))
+            codex_bin_dir = codex_tmp / "bin"
+            codex_bin_dir.mkdir(parents=True, exist_ok=True)
+            codex_script = codex_bin_dir / "codex"
+            codex_script.write_text(
+                """#!/bin/sh
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then
+  printf 'Logged in using ChatGPT\n'
+  exit 0
+fi
+if [ "$1" = "features" ] && [ "$2" = "list" ]; then
+  printf 'image_generation stable true\n'
+  exit 0
+fi
+if [ "$1" = "exec" ]; then
+  printf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\n'
+  printf '{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"/fake/generated_image.png\"}}\n'
+  exit 0
+fi
+printf 'unsupported codex command\n' >&2
+exit 1
+""",
+                encoding="utf-8",
+            )
+            codex_script.chmod(0o755)
+            codex_env = refactor_env.copy()
+            codex_env["CODEX_HOME"] = str(codex_home)
+            codex_env["PATH"] = f"{codex_bin_dir}:{codex_env.get('PATH','')}"
+
+            image_status = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "status", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_status.returncode == 0, "image status should succeed with fake codex")
+            image_status_report = parse_json_output(image_status.stdout)
+            expect(
+                ((image_status_report.get("codex") or {}).get("image_generation_feature_enabled") is True),
+                "image status should report codex image generation when fake codex enables it",
+            )
+
+            image_codex_access = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "access", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_codex_access.returncode == 0, "image access should succeed with fake codex")
+            image_codex_access_report = parse_json_output(image_codex_access.stdout)
+            codex_provider = (image_codex_access_report.get("experimental_providers") or {}).get("codex-experimental") or {}
+            expect(
+                codex_provider.get("login_status_ok") is True,
+                "image access should report codex login as available when fake codex is signed in",
+            )
+
+            codex_output = codex_tmp / "artifacts" / "design" / "mockups" / "blue-square.png"
+            image_codex_generate = subprocess.run(
+                [
+                    sys.executable,
+                    str(IMAGE_COMMAND_SCRIPT),
+                    "generate",
+                    "--provider",
+                    "codex-experimental",
+                    "--kind",
+                    "mockup",
+                    "--subject",
+                    "blue square",
+                    "--output",
+                    str(codex_output),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=codex_tmp,
+            )
+            expect(image_codex_generate.returncode == 0, "codex experimental image generate should succeed")
+            image_codex_generate_report = parse_json_output(image_codex_generate.stdout)
+            expect(codex_output.exists(), "codex experimental image generate should materialize the resolved artifact")
+            expect(
+                image_codex_generate_report.get("provider") == "codex-experimental",
+                "codex experimental image generate should report the provider used",
+            )
+            expect(
+                str(image_codex_generate_report.get("resolved_generated_image") or "").endswith("ig_test.png"),
+                "codex experimental image generate should report the resolved Codex cache image",
+            )
 
         image_setup = subprocess.run(
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "setup-keys"],

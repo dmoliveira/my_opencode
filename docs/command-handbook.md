@@ -114,13 +114,14 @@ Use these directly in OpenCode:
 /image setup-keys
 /image prompt --kind wireframe --subject "mobile onboarding" --goal "reduce clutter" --json
 /image generate --kind icon --subject "settings gear" --style "minimal, rounded, monochrome" --json
+/image generate --provider codex-experimental --kind mockup --subject "mobile onboarding" --goal "cleaner hierarchy" --json
 ```
 
 Use `/ox-design` for concepting, artifact planning, and image-ready prompt generation.
 
-Use `/image` for explicit OpenAI-backed generation into `artifacts/design/`.
+Use `/image` for explicit image generation into `artifacts/design/`.
 
-Important: `/image` uses OpenAI API access via `OPENAI_API_KEY`; ChatGPT plan access alone does not automatically enable it inside this runtime.
+Important: `/image` defaults to the OpenAI API path via `OPENAI_API_KEY`; ChatGPT plan access alone does not automatically enable that default path. A separate opt-in `codex-experimental` provider can use your local signed-in Codex session when available.
 
 Preferred safe key storage for this setup: use your local `sk` Keychain flow, then export `OPENAI_API_KEY` only into the current shell right before `/image` usage.
 
