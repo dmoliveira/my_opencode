@@ -6,6 +6,9 @@ import base64
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +17,9 @@ from urllib import error, request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SK_REPO = Path("~/Codes/Projects/sk").expanduser()
+CODEX_HOME = Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
+CODEX_GENERATED_IMAGES_DIR = CODEX_HOME / "generated_images"
+DEFAULT_PROVIDER = "openai_api"
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 DEFAULT_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 DEFAULT_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "high")
@@ -45,19 +51,80 @@ def artifact_root() -> Path:
     return DEFAULT_ARTIFACT_ROOT
 
 
+def codex_path() -> str | None:
+    return shutil.which("codex")
+
+
+def codex_login_status() -> tuple[bool, str]:
+    path = codex_path()
+    if not path:
+        return False, "codex binary not found"
+    try:
+        result = subprocess.run(
+            [path, "login", "status"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+            env=os.environ.copy(),
+        )
+    except Exception as exc:  # pragma: no cover
+        return False, f"codex login status failed: {exc}"
+    output = (result.stdout or result.stderr or "").strip()
+    if result.returncode == 0 and output:
+        return True, output
+    return False, output or f"codex login status exited {result.returncode}"
+
+
+def codex_image_feature_enabled() -> tuple[bool, str]:
+    path = codex_path()
+    if not path:
+        return False, "codex binary not found"
+    try:
+        result = subprocess.run(
+            [path, "features", "list"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+            env=os.environ.copy(),
+        )
+    except Exception as exc:  # pragma: no cover
+        return False, f"codex features list failed: {exc}"
+    text = (result.stdout or "")
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0] == "image_generation":
+            enabled = parts[-1].lower() == "true"
+            return enabled, line.strip()
+    return False, "image_generation feature line not found"
+
+
 def build_status_payload() -> dict[str, Any]:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    codex_logged_in, codex_login_detail = codex_login_status()
+    codex_image_enabled, codex_feature_detail = codex_image_feature_enabled()
     root = artifact_root()
     return {
         "result": "PASS",
         "artifact_root": str(root),
         "artifact_root_exists": root.exists(),
+        "default_provider": DEFAULT_PROVIDER,
         "default_model": DEFAULT_MODEL,
         "default_size": DEFAULT_SIZE,
         "default_quality": DEFAULT_QUALITY,
         "api_key_configured": bool(api_key),
         "api_url": OPENAI_IMAGES_URL,
         "access_model": "api-key-backed-openai-images",
+        "supported_providers": ["openai_api", "codex-experimental"],
+        "codex": {
+            "installed": bool(codex_path()),
+            "login_status_ok": codex_logged_in,
+            "login_status": codex_login_detail,
+            "image_generation_feature_enabled": codex_image_enabled,
+            "feature_status": codex_feature_detail,
+            "generated_images_dir": str(CODEX_GENERATED_IMAGES_DIR),
+        },
         "supported_subcommands": ["status", "doctor", "setup-keys", "access", "prompt", "generate"],
     }
 
@@ -72,6 +139,13 @@ def doctor_payload() -> dict[str, Any]:
         problems.append("default model is empty")
     if not payload["artifact_root_exists"]:
         warnings.append("artifact root will be created on first generate run")
+    codex_info = payload.get("codex", {})
+    if not codex_info.get("installed"):
+        warnings.append("codex binary not found; codex-experimental provider is unavailable")
+    elif not codex_info.get("login_status_ok"):
+        warnings.append("codex is installed but not logged in with ChatGPT")
+    elif not codex_info.get("image_generation_feature_enabled"):
+        warnings.append("codex is logged in but image_generation feature is not enabled")
     payload.update({
         "result": "FAIL" if problems else "PASS",
         "problems": problems,
@@ -79,6 +153,7 @@ def doctor_payload() -> dict[str, Any]:
         "quick_fixes": [
             "preferred: printf '%s' \"$OPENAI_API_KEY\" | sk add -k OPENAI_API_KEY --stdin --force",
             "runtime load: export OPENAI_API_KEY=\"$(sk get -k OPENAI_API_KEY)\"",
+            "codex experimental check: codex login status && codex features list",
             "optional: export OPENAI_IMAGE_MODEL='gpt-image-1'",
             "run /image generate --dry-run first to confirm output path",
         ],
@@ -149,26 +224,45 @@ def setup_keys() -> int:
     print("fallback if sk is unavailable:")
     print("use another local secret manager or a one-session env injection approach that avoids shell history and committed files")
     print("export OPENAI_IMAGE_MODEL='gpt-image-1'  # optional override")
+    print("codex experimental provider uses your signed-in Codex session instead of OPENAI_API_KEY")
     print("then run: /image doctor --json")
     return 0
 
 
 def access_payload() -> dict[str, Any]:
+    codex_logged_in, codex_login_detail = codex_login_status()
+    codex_image_enabled, codex_feature_detail = codex_image_feature_enabled()
     return {
         "result": "PASS",
         "access_model": "api-key-backed-openai-images",
         "supports_chatgpt_plan_entitlement": False,
+        "experimental_providers": {
+            "codex-experimental": {
+                "installed": bool(codex_path()),
+                "login_status_ok": codex_logged_in,
+                "login_status": codex_login_detail,
+                "image_generation_feature_enabled": codex_image_enabled,
+                "feature_status": codex_feature_detail,
+                "generated_images_dir": str(CODEX_GENERATED_IMAGES_DIR),
+                "notes": [
+                    "Codex experimental provider uses a signed-in local Codex CLI session.",
+                    "It currently resolves real artifacts from ~/.codex/generated_images/<thread-id>/ after codex exec completes.",
+                    "Treat this provider as experimental until Codex exposes a stronger public artifact contract.",
+                ],
+            }
+        },
         "summary": (
-            "/image uses OpenAI image API access through OPENAI_API_KEY. "
-            "ChatGPT plan access in OpenCode does not automatically unlock this command."
+            "/image defaults to OpenAI image API access through OPENAI_API_KEY. "
+            "ChatGPT plan access in OpenCode does not automatically unlock that default path. "
+            "A separate opt-in codex-experimental provider can use your local signed-in Codex session when available."
         ),
         "required_env": ["OPENAI_API_KEY"],
-        "optional_env": ["OPENAI_IMAGE_MODEL", "OPENAI_IMAGE_SIZE", "OPENAI_IMAGE_QUALITY"],
+        "optional_env": ["OPENAI_IMAGE_MODEL", "OPENAI_IMAGE_SIZE", "OPENAI_IMAGE_QUALITY", "OPENAI_IMAGE_PROVIDER"],
         "notes": [
             "OpenCode chat/model access and OpenAI image API access are separate concerns.",
-            "Preferred secret storage for this setup is your local sk/Keychain flow, then export OPENAI_API_KEY only into the current shell when needed.",
-            "Use /image doctor --json to verify API-backed image access for this runtime.",
-            "Use /ox-design when you want design guidance without calling the image API.",
+            "Preferred secret storage for the API-backed path is your local sk/Keychain flow.",
+            "Use /image doctor --json to verify both API-backed and codex experimental access for this runtime.",
+            "Use /ox-design when you want design guidance without calling an image provider.",
         ],
     }
 
@@ -212,11 +306,93 @@ def call_openai_image_api(*, prompt: str, model: str, size: str, quality: str) -
     return base64.b64decode(b64_json), parsed
 
 
+def parse_codex_jsonl(text: str) -> dict[str, Any]:
+    thread_id = None
+    reported_path = None
+    events = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line.startswith('{'):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        events.append(event)
+        if event.get('type') == 'thread.started':
+            thread_id = event.get('thread_id')
+        item = event.get('item') or {}
+        if item.get('type') == 'agent_message' and isinstance(item.get('text'), str):
+            reported_path = item.get('text').strip()
+    return {'thread_id': thread_id, 'reported_path': reported_path, 'events': events}
+
+
+def resolve_codex_generated_image(thread_id: str) -> Path:
+    if not thread_id:
+        raise RuntimeError('Codex did not return a thread id')
+    thread_dir = CODEX_GENERATED_IMAGES_DIR / thread_id
+    if not thread_dir.exists():
+        raise RuntimeError(f'Codex generated image cache not found for thread {thread_id}: {thread_dir}')
+    images = sorted(thread_dir.glob('*.png'), key=lambda p: p.stat().st_mtime)
+    if not images:
+        raise RuntimeError(f'No generated PNG found under {thread_dir}')
+    return images[-1]
+
+
+def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
+    path = codex_path()
+    if not path:
+        raise RuntimeError('codex binary not found')
+    logged_in, login_detail = codex_login_status()
+    if not logged_in:
+        raise RuntimeError(f'codex login is unavailable: {login_detail}')
+    feature_enabled, feature_detail = codex_image_feature_enabled()
+    if not feature_enabled:
+        raise RuntimeError(f'codex image generation feature is unavailable: {feature_detail}')
+    command = [
+        path,
+        'exec',
+        '--json',
+        '--sandbox',
+        'workspace-write',
+        '--skip-git-repo-check',
+        '--ephemeral',
+        '--disable',
+        'shell_tool',
+        prompt,
+    ]
+    with tempfile.TemporaryDirectory(prefix="codex-image-provider-") as tempdir:
+        temp_path = Path(tempdir)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=600,
+            cwd=temp_path,
+            env=os.environ.copy(),
+        )
+    if result.returncode != 0:
+        detail = (result.stdout + "\n" + result.stderr).strip()
+        raise RuntimeError(f'codex exec failed with exit {result.returncode}: {detail}')
+    parsed = parse_codex_jsonl(result.stdout)
+    artifact = resolve_codex_generated_image(str(parsed.get('thread_id') or ''))
+    return artifact, {
+        'thread_id': parsed.get('thread_id'),
+        'reported_path': parsed.get('reported_path'),
+        'resolved_generated_image': str(artifact),
+        'codex_exec_workspace': 'isolated-tempdir',
+        'codex_login_status': login_detail,
+        'codex_feature_status': feature_detail,
+    }
+
+
 def command_prompt(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
     output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output)
     payload = {
         'result': 'PASS',
+        'provider': args.provider,
         'kind': args.kind,
         'prompt': prompt,
         'suggested_output': str(output_path),
@@ -231,14 +407,15 @@ def command_prompt(args: argparse.Namespace) -> int:
 def command_generate(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
     output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output)
+    provider = args.provider or DEFAULT_PROVIDER
     metadata = {
+        'provider': provider,
         'kind': args.kind,
         'prompt': prompt,
         'model': args.model or DEFAULT_MODEL,
         'size': args.size or DEFAULT_SIZE,
         'quality': args.quality or DEFAULT_QUALITY,
         'generated_at': utc_now(),
-        'api_url': OPENAI_IMAGES_URL,
         'artifact_path': str(output_path),
         'runtime_session_id': os.environ.get('OPENCODE_SESSION_ID', '').strip() or None,
         'subject': args.subject or None,
@@ -246,21 +423,33 @@ def command_generate(args: argparse.Namespace) -> int:
         'style': args.style or None,
         'notes': args.notes or None,
     }
+    if provider == 'openai_api':
+        metadata['api_url'] = OPENAI_IMAGES_URL
+    elif provider == 'codex-experimental':
+        metadata['experimental'] = True
+        metadata['codex_generated_images_dir'] = str(CODEX_GENERATED_IMAGES_DIR)
+    else:
+        raise RuntimeError(f'Unsupported provider: {provider}')
     if args.dry_run:
         payload = {'result': 'PASS', 'dry_run': True, **metadata}
         return emit(payload, as_json=args.json)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    image_bytes, response_payload = call_openai_image_api(
-        prompt=prompt,
-        model=metadata['model'],
-        size=metadata['size'],
-        quality=metadata['quality'],
-    )
-    output_path.write_bytes(image_bytes)
-    metadata['openai_response_summary'] = {
-        'created': response_payload.get('created'),
-        'data_count': len(response_payload.get('data') or []),
-    }
+    if provider == 'openai_api':
+        image_bytes, response_payload = call_openai_image_api(
+            prompt=prompt,
+            model=metadata['model'],
+            size=metadata['size'],
+            quality=metadata['quality'],
+        )
+        output_path.write_bytes(image_bytes)
+        metadata['openai_response_summary'] = {
+            'created': response_payload.get('created'),
+            'data_count': len(response_payload.get('data') or []),
+        }
+    else:
+        source_path, codex_metadata = call_codex_experimental(prompt=prompt)
+        shutil.copy2(source_path, output_path)
+        metadata.update(codex_metadata)
     write_sidecar(output_path, metadata)
     payload = {'result': 'PASS', 'output': str(output_path), 'metadata': str(output_path.with_suffix('.json')), **metadata}
     return emit(payload, as_json=args.json)
@@ -282,6 +471,7 @@ def build_parser() -> argparse.ArgumentParser:
     access_parser.add_argument('--json', action='store_true')
 
     def add_generation_args(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument('--provider', default=DEFAULT_PROVIDER)
         subparser.add_argument('--kind', default='concept')
         subparser.add_argument('--subject', default='')
         subparser.add_argument('--goal', default='')

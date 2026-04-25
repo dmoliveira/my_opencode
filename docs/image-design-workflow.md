@@ -1,6 +1,6 @@
 # Image and design workflow
 
-Use this workflow when you want structured UX/design help, repo-native visual artifacts, or OpenAI-backed image generation that feeds real delivery work.
+Use this workflow when you want structured UX/design help, repo-native visual artifacts, or image generation that feeds real delivery work through either the stable OpenAI API path or the experimental Codex path.
 
 ## Command split
 
@@ -52,6 +52,7 @@ That keeps visual work reviewable in Git, easy to reference in PRs, and consiste
 ```text
 /image generate --kind icon --subject "settings gear" --style "minimal, rounded, monochrome" --json
 /image generate --kind mockup --subject "game inventory screen" --goal "cleaner hierarchy and calmer HUD" --json
+/image generate --provider codex-experimental --kind mockup --subject "mobile onboarding" --goal "cleaner hierarchy" --json
 ```
 
 ### 4) Browser validation after concepting
@@ -72,8 +73,9 @@ That keeps visual work reviewable in Git, easy to reference in PRs, and consiste
 
 Access note:
 
-- `/image` is API-backed and expects `OPENAI_API_KEY`.
-- ChatGPT plan access in OpenCode does not automatically unlock `/image`.
+- `/image` defaults to the API-backed `openai_api` provider and expects `OPENAI_API_KEY` for that path.
+- ChatGPT plan access in OpenCode does not automatically unlock the default API-backed path.
+- A separate opt-in `codex-experimental` provider can use your signed-in local Codex session when available.
 - Use `/image access --json` when you want the runtime to explain that distinction explicitly.
 
 Required env:
