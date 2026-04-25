@@ -21246,6 +21246,25 @@ version: 1
             "image doctor should report the missing API key",
         )
 
+        image_access = subprocess.run(
+            [sys.executable, str(IMAGE_COMMAND_SCRIPT), "access", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(image_access.returncode == 0, "image access should succeed")
+        image_access_report = parse_json_output(image_access.stdout)
+        expect(
+            image_access_report.get("supports_chatgpt_plan_entitlement") is False,
+            "image access should explain that chatgpt plan access does not automatically unlock image generation",
+        )
+        expect(
+            image_access_report.get("access_model") == "api-key-backed-openai-images",
+            "image access should describe the API-backed access model",
+        )
+
         image_prompt = subprocess.run(
             [
                 sys.executable,

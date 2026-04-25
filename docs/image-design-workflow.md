@@ -65,9 +65,16 @@ That keeps visual work reviewable in Git, easy to reference in PRs, and consiste
 ## OpenAI setup
 
 ```text
+/image access --json
 /image doctor --json
 /image setup-keys
 ```
+
+Access note:
+
+- `/image` is API-backed and expects `OPENAI_API_KEY`.
+- ChatGPT plan access in OpenCode does not automatically unlock `/image`.
+- Use `/image access --json` when you want the runtime to explain that distinction explicitly.
 
 Required env:
 
