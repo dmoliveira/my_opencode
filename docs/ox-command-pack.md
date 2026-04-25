@@ -18,6 +18,7 @@ Use it when you want a stable short prefix, a predictable expansion format, and 
 /ox doctor
 /ox ecosystem
 /ox-ux
+/ox-design
 /ox-review
 /ox-ship
 /ox-start
@@ -83,6 +84,35 @@ Recommended first step for browser-first work:
 ```
 
 This removes the common first-run friction where the agent only says Playwright/browser tooling is unavailable. `ensure` normalizes the selected provider back to `playwright`, reports exact missing binaries, and points to the next remediation command instead of leaving the workflow stuck.
+
+### `/ox-design`
+
+Design concept, asset-planning, and image-ready workflow.
+
+Best for:
+
+- app or game UI concept directions
+- wireframe and mockup planning
+- icon or palette exploration
+- turning screenshots or briefs into prompt-ready asset specs
+
+Examples:
+
+```text
+/ox-design --scope "dashboard + settings" --goal "explore a calmer visual direction"
+/ox-design --focus wireframes,icons,palette
+/ox-design --target artifacts/design/source/onboarding-reference.png --goal "turn this into three stronger redesign directions"
+```
+
+Recommended first step for design work with later image generation:
+
+```text
+/browser ensure --json
+/mcp profile playwright
+/image doctor --json
+```
+
+Use `/ox-design` for concept work and `/ox-ux` for browser-first validation of the real implemented UI.
 
 ### `/ox-review`
 
@@ -181,6 +211,7 @@ Examples:
 Expected mappings:
 
 - `(playwright)` or strong UI/UX polish prompts -> `/ox-ux`
+- design/wireframe/icon/palette prompts -> `/ox-design`
 - review/improve end-to-end prompts -> `/ox-review`
 - ship-readiness / PR-prep prompts -> `/ox-ship`
 

@@ -78,7 +78,8 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
 - 🧰 Built-in `/devtools` command to manage external productivity tooling.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
-- 🧩 Built-in `/ox` + `/ox-*` prompt-pack commands for reusable automation expansions such as UX audits, review/improve loops, ship readiness, and wrap-up handoffs.
+- 🧩 Built-in `/ox` + `/ox-*` prompt-pack commands for reusable automation expansions such as UX audits, design concepting, review/improve loops, ship readiness, and wrap-up handoffs.
+- 🎨 Built-in `/image` command for repo-native design artifact prompts and OpenAI-backed generation under `artifacts/design/`.
 - 🗺️ Built-in `/autoflow` command for deterministic plan execution (status/report/resume/doctor).
 - 🧾 Built-in `/session handoff` for concise continuation summaries with next actions.
 - 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
@@ -101,7 +102,7 @@ This setup keeps `build` as the default agent for quick direct work, exposes `bu
 - `verifier` (subagent): read-only validation runner for test/lint/build checks.
 - `reviewer` (subagent): read-only quality/risk review pass before final delivery.
 - `release-scribe` (subagent): read-only PR/changelog/release-notes writer from git evidence.
-- `experience-designer` (subagent): read-only browser-first UX/UI specialist for interaction polish, accessibility, and minimalist experience refinement.
+- `experience-designer` (subagent): read-only browser-first UX/UI specialist for interaction polish, accessibility, minimalist experience refinement, and prompt-ready visual direction.
 - `strategic-planner` (subagent): read-only sequencing and milestone planning specialist.
 - `ambiguity-analyst` (subagent): read-only assumptions and unknowns surfacer for unclear scope.
 - `plan-critic` (subagent): read-only feasibility and gate-coverage critic for concrete plans.
@@ -158,6 +159,8 @@ Quickstart commands:
 /notify status
 /ox
 /ox-ux --repo top-uni
+/ox-design --goal "explore calmer onboarding directions"
+/image doctor --json
 /ox-review "review this branch end to end and improve it"
 /delivery status --json
 /autopilot go --goal "finish current objective" --json

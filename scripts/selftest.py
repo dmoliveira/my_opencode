@@ -127,6 +127,7 @@ ROUTING_SCRIPT = REPO_ROOT / "scripts" / "routing_command.py"
 KEYWORD_MODE_SCRIPT = REPO_ROOT / "scripts" / "keyword_mode_command.py"
 AUTO_SLASH_SCRIPT = REPO_ROOT / "scripts" / "auto_slash_command.py"
 OX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "ox_command.py"
+IMAGE_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "image_command.py"
 INIT_DEEP_SCRIPT = REPO_ROOT / "scripts" / "init_deep_command.py"
 SLASH_WRAPPER_SCRIPT = REPO_ROOT / "scripts" / "slash_command_wrapper.py"
 CONTINUATION_STOP_SCRIPT = REPO_ROOT / "scripts" / "continuation_stop_command.py"
@@ -20901,6 +20902,10 @@ version: 1
                 "expected": "ox-ux",
             },
             {
+                "prompt": "create icon concepts and a color palette for this app",
+                "expected": "ox-design",
+            },
+            {
                 "prompt": "review this code and improve end to end",
                 "expected": "ox-review",
             },
@@ -20916,6 +20921,7 @@ version: 1
                 "nvim",
                 "devtools",
                 "ox-ux",
+                "ox-design",
                 "ox-review",
                 "ox-ship",
             },
@@ -21138,6 +21144,10 @@ version: 1
             "ox-ux" in ox_doctor_report.get("commands", []),
             "ox doctor should list the ox command family",
         )
+        expect(
+            "ox-design" in ox_doctor_report.get("commands", []),
+            "ox doctor should list the ox-design command",
+        )
 
         ox_ux = subprocess.run(
             [
@@ -21212,6 +21222,58 @@ version: 1
         expect(
             (ox_review_report.get("context") or {}).get("scope") == "scripts",
             "ox review should preserve the requested scope",
+        )
+
+        image_doctor = subprocess.run(
+            [sys.executable, str(IMAGE_COMMAND_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            image_doctor.returncode == 1,
+            "image doctor should fail without OPENAI_API_KEY in selftest env",
+        )
+        image_doctor_report = parse_json_output(image_doctor.stdout)
+        expect(
+            image_doctor_report.get("result") == "FAIL",
+            "image doctor should report FAIL when key is missing",
+        )
+        expect(
+            "OPENAI_API_KEY is not set" in image_doctor_report.get("problems", []),
+            "image doctor should report the missing API key",
+        )
+
+        image_prompt = subprocess.run(
+            [
+                sys.executable,
+                str(IMAGE_COMMAND_SCRIPT),
+                "prompt",
+                "--kind",
+                "wireframe",
+                "--subject",
+                "mobile onboarding",
+                "--goal",
+                "reduce clutter",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(image_prompt.returncode == 0, "image prompt should succeed")
+        image_prompt_report = parse_json_output(image_prompt.stdout)
+        expect(
+            "mobile onboarding" in str(image_prompt_report.get("prompt") or ""),
+            "image prompt should include the requested subject",
+        )
+        expect(
+            str(image_prompt_report.get("suggested_output") or "").endswith("artifacts/design/wireframes/mobile-onboarding.png"),
+            "image prompt should suggest a repo-native artifact path",
         )
 
         frontmatter, body = parse_frontmatter(

@@ -101,6 +101,26 @@ Profiles:
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 
+## Design and image workflows 🎨
+
+Use these directly in OpenCode:
+
+```text
+/ox-design --goal "explore a calmer onboarding direction"
+/ox-design --focus wireframes,icons,palette
+/image status
+/image doctor --json
+/image setup-keys
+/image prompt --kind wireframe --subject "mobile onboarding" --goal "reduce clutter" --json
+/image generate --kind icon --subject "settings gear" --style "minimal, rounded, monochrome" --json
+```
+
+Use `/ox-design` for concepting, artifact planning, and image-ready prompt generation.
+
+Use `/image` for explicit OpenAI-backed generation into `artifacts/design/`.
+
+Use `/ox-ux` or `/browser` when the real implemented UI needs browser-first validation.
+
 
 ## Notification control inside OpenCode 🔔
 
