@@ -122,6 +122,8 @@ Use `/image` for explicit OpenAI-backed generation into `artifacts/design/`.
 
 Important: `/image` uses OpenAI API access via `OPENAI_API_KEY`; ChatGPT plan access alone does not automatically enable it inside this runtime.
 
+Preferred safe key storage for this setup: use your local `sk` Keychain flow, then export `OPENAI_API_KEY` only into the current shell right before `/image` usage.
+
 Use `/ox-ux` or `/browser` when the real implemented UI needs browser-first validation.
 
 
