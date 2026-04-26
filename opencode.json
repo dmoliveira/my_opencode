@@ -300,7 +300,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before refactor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "image": {
-      "description": "Manage image generation and provider preferences (status|doctor|setup-keys|access|preference|prompt|generate)",
+      "description": "Manage image generation plus provider/output preferences (status|doctor|setup-keys|access|preference|location|prompt|generate)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/image_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "session": {
