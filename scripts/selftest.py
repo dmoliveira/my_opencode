@@ -21241,7 +21241,7 @@ version: 1
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "doctor", "--json"],
             capture_output=True,
             text=True,
-            env=refactor_env,
+            env=image_env,
             check=False,
             cwd=REPO_ROOT,
         )
@@ -21263,7 +21263,7 @@ version: 1
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "access", "--json"],
             capture_output=True,
             text=True,
-            env=refactor_env,
+            env=image_env,
             check=False,
             cwd=REPO_ROOT,
         )
@@ -21510,12 +21510,12 @@ exit 1
                 "image generate should use the repo-local codex provider preference when no explicit provider is passed",
             )
             expect(
-                image_pref_generate_report.get("output_location") == "cwd-artifacts",
-                "image generate should use the configured output location preference when no explicit output is passed",
+                image_pref_generate_report.get("output_location") == "explicit-output",
+                "image generate should mark explicit output as bypassing output-location preference resolution",
             )
             expect(
                 "artifacts/design/mockups/blue-square-implicit.png" in str(image_pref_generate_report.get("artifact_path") or ""),
-                "image generate should place default outputs under cwd artifacts when cwd-artifacts is configured",
+                "image generate should still honor the explicit output path under conflicting location preferences",
             )
 
             image_pref_clear = subprocess.run(

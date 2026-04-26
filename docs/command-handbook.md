@@ -129,6 +129,8 @@ Important: `/image` defaults to the OpenAI API path via `OPENAI_API_KEY`; ChatGP
 
 If you prefer Codex locally, use `/image preference set codex-experimental`. Precedence is: explicit `--provider` > `OPENAI_IMAGE_PROVIDER_PREFERENCE` env > repo-local preference file > hardcoded default.
 
+Output precedence is: explicit `--output` > explicit `--output-location` > `OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE` env > repo-local location preference file > hardcoded default.
+
 If you prefer images under the folder where the AI is running, use `/image location set cwd-artifacts`. If you prefer Desktop, use `/image location set desktop`.
 
 Preferred safe key storage for this setup: use your local `sk` Keychain flow, then export `OPENAI_API_KEY` only into the current shell right before `/image` usage.
