@@ -65,3 +65,58 @@ test("cleanupOrphanGatewayLoop keeps fresh loop active", () => {
     assert.equal(loadGatewayState(directory)?.activeLoop?.active, true)
   })
 })
+
+test("saveGatewayState round-trips concise mode state", () => {
+  withTempDir((directory) => {
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "full",
+        source: "test",
+        sessionId: "ses-test-1",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.conciseMode?.mode, "full")
+    assert.equal(state?.conciseMode?.source, "test")
+    assert.equal(state?.conciseMode?.sessionId, "ses-test-1")
+  })
+})
+
+test("saveGatewayState preserves concise mode when caller omits it", () => {
+  withTempDir((directory) => {
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "lite",
+        source: "test",
+        sessionId: "ses-test-2",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "s-3",
+        objective: "continue",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 5,
+        startedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.conciseMode?.mode, "lite")
+    assert.equal(state?.activeLoop?.sessionId, "s-3")
+  })
+})

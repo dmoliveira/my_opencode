@@ -101,6 +101,30 @@ Profiles:
 
 For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
 
+## Concise / caveman mode
+
+Use these directly in OpenCode:
+
+```text
+/gateway concise status
+/gateway concise doctor
+/gateway concise set lite
+/gateway concise set full
+/gateway concise review
+/gateway concise commit
+/gateway concise default lite
+/gateway concise off
+/gateway concise compress
+```
+
+Supported modes: `off`, `lite`, `full`, `ultra`, `review`, `commit`.
+
+- `review` keeps one-line, blocker-first review guidance active for the current runtime session.
+- `commit` keeps terse, why-focused commit-message guidance active for the current runtime session.
+- `compress` is a one-shot alias to the memory lifecycle compression flow.
+- The effective mode is visible through `/gateway concise status` and `/gateway status`.
+- `/gateway concise default <mode>` changes the repo-level sidecar default for future sessions in the current repo.
+
 ## Design and image workflows 🎨
 
 Use these directly in OpenCode:

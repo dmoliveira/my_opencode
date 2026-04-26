@@ -100,6 +100,10 @@ export interface SessionRecoveryConfig {
 export interface SessionRuntimeSystemContextConfig {
     enabled: boolean;
 }
+export interface ConciseModeConfig {
+    enabled: boolean;
+    defaultMode: "off" | "lite" | "full" | "ultra";
+}
 export interface DelegateTaskRetryConfig {
     enabled: boolean;
 }
@@ -440,6 +444,7 @@ export interface GatewayConfig {
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
     sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
+    conciseMode: ConciseModeConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
     delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;

@@ -50,6 +50,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.notifyEvents.enabled, true)
   assert.equal(config.notifyEvents.cooldownMs, 1200)
   assert.equal(config.notifyEvents.style, "brief")
+  assert.equal(config.conciseMode.enabled, false)
+  assert.equal(config.conciseMode.defaultMode, "off")
   assert.equal(config.thinkMode.enabled, true)
   assert.equal(config.thinkingBlockValidator.enabled, true)
   assert.equal(config.directoryAgentsInjector.maxChars, 4000)
@@ -120,6 +122,24 @@ test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
     },
   })
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
+})
+
+test("loadGatewayConfig accepts concise mode sidecar override", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gateway-config-concise-"))
+  try {
+    mkdirSync(join(dir, ".opencode"), { recursive: true })
+    writeFileSync(
+      join(dir, ".opencode", "gateway-core.config.json"),
+      JSON.stringify({ conciseMode: { enabled: true, defaultMode: "lite" } }),
+      "utf-8",
+    )
+    const { source } = loadGatewayConfigSourceWithMeta(dir, {})
+    const config = loadGatewayConfig(source)
+    assert.equal(config.conciseMode.enabled, true)
+    assert.equal(config.conciseMode.defaultMode, "lite")
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test("loadGatewayConfig normalizes invalid context monitor cooldown values", () => {

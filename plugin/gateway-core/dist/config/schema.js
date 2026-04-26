@@ -206,6 +206,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
     sessionRuntimeSystemContext: {
         enabled: true,
     },
+    conciseMode: {
+        enabled: false,
+        defaultMode: "off",
+    },
     delegateTaskRetry: {
         enabled: true,
     },
