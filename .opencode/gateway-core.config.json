@@ -1,4 +1,8 @@
 {
+  "conciseMode": {
+    "enabled": true,
+    "defaultMode": "lite"
+  },
   "autoSlashCommand": {
     "enabled": false
   },

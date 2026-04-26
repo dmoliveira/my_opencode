@@ -32,6 +32,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
+from concise_mode_runtime import effective_concise_mode, find_skill_path  # type: ignore
 from gateway_reason_codes import (  # type: ignore
     BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE,
     GATEWAY_PLUGIN_DISABLED,
@@ -77,6 +78,13 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
     print(f"runtime_mode: {status.get('runtime_mode')}")
     print(f"runtime_reason_code: {status.get('runtime_reason_code')}")
     print(f"plugin_enabled: {'yes' if status.get('enabled') else 'no'}")
+    concise_mode = status.get("concise_mode") if isinstance(status, dict) else {}
+    if isinstance(concise_mode, dict):
+        print(
+            "concise_mode: "
+            + str(concise_mode.get("effective_mode") or "off")
+            + f" (source={concise_mode.get('effective_source') or 'default'})"
+        )
     print(
         "process_pressure: "
         + f"opencode={int(process.get('opencode_process_count') or 0)} "
@@ -1639,6 +1647,7 @@ def status_payload(
         bun_available=bun_available,
         hooks=hooks,
     )
+    concise_mode = effective_concise_mode(cwd)
     filtered_loop_state, loop_state_reason = mode_loop_state(
         runtime_mode["mode"], loop_state
     )
@@ -1658,6 +1667,10 @@ def status_payload(
         "runtime_mode": runtime_mode["mode"],
         "runtime_reason_code": runtime_mode["reason_code"],
         "missing_hook_capabilities": runtime_mode["missing_hook_capabilities"],
+        "concise_mode": {
+            **concise_mode,
+            "skill_path": find_skill_path(cwd),
+        },
         "loop_state_path": str(gateway_loop_state_path(cwd)),
         "loop_state": filtered_loop_state,
         "loop_state_reason_code": loop_state_reason,
