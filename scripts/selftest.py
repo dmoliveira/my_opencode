@@ -21225,6 +21225,13 @@ version: 1
             "ox review should preserve the requested scope",
         )
 
+        image_pref_path = REPO_ROOT / ".tmp-selftest-image-provider.txt"
+        if image_pref_path.exists():
+            image_pref_path.unlink()
+        image_env = refactor_env.copy()
+        image_env["OPENAI_IMAGE_PROVIDER_CONFIG_PATH"] = str(image_pref_path)
+        image_env["OPENAI_IMAGE_PROVIDER_PREFERENCE"] = ""
+
         image_doctor = subprocess.run(
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "doctor", "--json"],
             capture_output=True,
@@ -21265,6 +21272,10 @@ version: 1
             image_access_report.get("access_model") == "api-key-backed-openai-images",
             "image access should describe the API-backed access model",
         )
+        expect(
+            image_access_report.get("effective_provider") == "openai_api",
+            "image access should report the stable default provider when no preference is set",
+        )
 
         with tempfile.TemporaryDirectory() as codex_tmpdir:
             codex_tmp = Path(codex_tmpdir)
@@ -21296,7 +21307,7 @@ exit 1
                 encoding="utf-8",
             )
             codex_script.chmod(0o755)
-            codex_env = refactor_env.copy()
+            codex_env = image_env.copy()
             codex_env["CODEX_HOME"] = str(codex_home)
             codex_env["PATH"] = f"{codex_bin_dir}:{codex_env.get('PATH','')}"
 
@@ -21329,6 +21340,40 @@ exit 1
             expect(
                 codex_provider.get("login_status_ok") is True,
                 "image access should report codex login as available when fake codex is signed in",
+            )
+
+            image_pref_show = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "preference", "show", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_pref_show.returncode == 0, "image preference show should succeed")
+            image_pref_show_report = parse_json_output(image_pref_show.stdout)
+            expect(
+                image_pref_show_report.get("effective_provider") == "openai_api",
+                "image preference show should default to openai_api when no preference is configured",
+            )
+
+            image_pref_set = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "preference", "set", "codex-experimental", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_pref_set.returncode == 0, "image preference set should succeed")
+            image_pref_set_report = parse_json_output(image_pref_set.stdout)
+            expect(
+                image_pref_set_report.get("effective_provider") == "codex-experimental",
+                "image preference set should make codex-experimental the effective provider",
+            )
+            expect(
+                image_pref_set_report.get("effective_provider_source", "").startswith("file:"),
+                "image preference set should report a file-based effective provider source",
             )
 
             codex_output = codex_tmp / "artifacts" / "design" / "mockups" / "blue-square.png"
@@ -21364,6 +21409,43 @@ exit 1
                 str(image_codex_generate_report.get("resolved_generated_image") or "").endswith("ig_test.png"),
                 "codex experimental image generate should report the resolved Codex cache image",
             )
+
+            image_pref_generate = subprocess.run(
+                [
+                    sys.executable,
+                    str(IMAGE_COMMAND_SCRIPT),
+                    "generate",
+                    "--kind",
+                    "mockup",
+                    "--subject",
+                    "blue square implicit provider",
+                    "--output",
+                    str(codex_tmp / "artifacts" / "design" / "mockups" / "blue-square-implicit.png"),
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=codex_tmp,
+            )
+            expect(image_pref_generate.returncode == 0, "image generate should honor repo-local provider preference")
+            image_pref_generate_report = parse_json_output(image_pref_generate.stdout)
+            expect(
+                image_pref_generate_report.get("provider") == "codex-experimental",
+                "image generate should use the repo-local codex provider preference when no explicit provider is passed",
+            )
+
+            image_pref_clear = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "preference", "clear", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_pref_clear.returncode == 0, "image preference clear should succeed")
+            expect(not image_pref_path.exists(), "image preference clear should remove the configured preference file")
 
         image_setup = subprocess.run(
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "setup-keys"],

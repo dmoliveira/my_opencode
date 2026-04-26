@@ -300,7 +300,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/ox_command.py\" --fixed-before refactor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "image": {
-      "description": "Manage OpenAI-backed design artifact generation (status|doctor|setup-keys|prompt|generate)",
+      "description": "Manage image generation and provider preferences (status|doctor|setup-keys|access|preference|prompt|generate)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/image_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "session": {

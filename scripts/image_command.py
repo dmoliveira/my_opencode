@@ -20,6 +20,9 @@ SK_REPO = Path("~/Codes/Projects/sk").expanduser()
 CODEX_HOME = Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
 CODEX_GENERATED_IMAGES_DIR = CODEX_HOME / "generated_images"
 DEFAULT_PROVIDER = "openai_api"
+SUPPORTED_PROVIDERS = ["openai_api", "codex-experimental"]
+PROVIDER_PREFERENCE_ENV = "OPENAI_IMAGE_PROVIDER_PREFERENCE"
+PROVIDER_PREFERENCE_PATH_ENV = "OPENAI_IMAGE_PROVIDER_CONFIG_PATH"
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 DEFAULT_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 DEFAULT_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "high")
@@ -49,6 +52,79 @@ def slugify(value: str) -> str:
 
 def artifact_root() -> Path:
     return DEFAULT_ARTIFACT_ROOT
+
+
+def provider_preference_path() -> Path:
+    override = os.environ.get(PROVIDER_PREFERENCE_PATH_ENV, "").strip()
+    if override:
+        path = Path(override)
+        return path if path.is_absolute() else REPO_ROOT / path
+    return REPO_ROOT / ".opencode" / "image-provider.txt"
+
+
+def validate_provider(provider: str) -> str:
+    normalized = provider.strip()
+    if normalized not in SUPPORTED_PROVIDERS:
+        raise RuntimeError(
+            f"Unsupported provider: {normalized}. Supported providers: {', '.join(SUPPORTED_PROVIDERS)}"
+        )
+    return normalized
+
+
+def resolve_provider(explicit_provider: str | None) -> tuple[str, str]:
+    if explicit_provider:
+        return validate_provider(explicit_provider), "arg"
+    env_value = os.environ.get(PROVIDER_PREFERENCE_ENV, "").strip()
+    if env_value:
+        return validate_provider(env_value), f"env:{PROVIDER_PREFERENCE_ENV}"
+    pref_path = provider_preference_path()
+    if pref_path.exists():
+        value = pref_path.read_text(encoding="utf-8").strip()
+        if value:
+            return validate_provider(value), f"file:{pref_path}"
+    return DEFAULT_PROVIDER, "default"
+
+
+def preference_payload() -> dict[str, Any]:
+    effective_provider, source = resolve_provider(None)
+    pref_path = provider_preference_path()
+    configured_value = pref_path.read_text(encoding="utf-8").strip() if pref_path.exists() else None
+    return {
+        "result": "PASS",
+        "default_provider": DEFAULT_PROVIDER,
+        "supported_providers": SUPPORTED_PROVIDERS,
+        "effective_provider": effective_provider,
+        "effective_provider_source": source,
+        "preference_file": str(pref_path),
+        "preference_file_exists": pref_path.exists(),
+        "preference_file_value": configured_value,
+        "preference_env": PROVIDER_PREFERENCE_ENV,
+        "preference_env_value": os.environ.get(PROVIDER_PREFERENCE_ENV, "").strip() or None,
+        "notes": [
+            "Precedence: --provider arg > OPENAI_IMAGE_PROVIDER_PREFERENCE env > repo-local preference file > hardcoded default.",
+            "The hardcoded stable default remains openai_api.",
+            "Use codex-experimental only when you explicitly want the experimental subscription-backed path.",
+        ],
+    }
+
+
+def set_preference(provider: str) -> dict[str, Any]:
+    normalized = validate_provider(provider)
+    path = provider_preference_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(normalized + "\n", encoding="utf-8")
+    payload = preference_payload()
+    payload.update({"updated": True})
+    return payload
+
+
+def clear_preference() -> dict[str, Any]:
+    path = provider_preference_path()
+    if path.exists():
+        path.unlink()
+    payload = preference_payload()
+    payload.update({"cleared": True})
+    return payload
 
 
 def codex_path() -> str | None:
@@ -105,6 +181,7 @@ def build_status_payload() -> dict[str, Any]:
     codex_logged_in, codex_login_detail = codex_login_status()
     codex_image_enabled, codex_feature_detail = codex_image_feature_enabled()
     root = artifact_root()
+    effective_provider, effective_source = resolve_provider(None)
     return {
         "result": "PASS",
         "artifact_root": str(root),
@@ -116,7 +193,10 @@ def build_status_payload() -> dict[str, Any]:
         "api_key_configured": bool(api_key),
         "api_url": OPENAI_IMAGES_URL,
         "access_model": "api-key-backed-openai-images",
-        "supported_providers": ["openai_api", "codex-experimental"],
+        "supported_providers": SUPPORTED_PROVIDERS,
+        "effective_provider": effective_provider,
+        "effective_provider_source": effective_source,
+        "preference_file": str(provider_preference_path()),
         "codex": {
             "installed": bool(codex_path()),
             "login_status_ok": codex_logged_in,
@@ -125,7 +205,7 @@ def build_status_payload() -> dict[str, Any]:
             "feature_status": codex_feature_detail,
             "generated_images_dir": str(CODEX_GENERATED_IMAGES_DIR),
         },
-        "supported_subcommands": ["status", "doctor", "setup-keys", "access", "prompt", "generate"],
+        "supported_subcommands": ["status", "doctor", "setup-keys", "access", "preference", "prompt", "generate"],
     }
 
 
@@ -133,8 +213,11 @@ def doctor_payload() -> dict[str, Any]:
     payload = build_status_payload()
     problems: list[str] = []
     warnings: list[str] = []
-    if not payload["api_key_configured"]:
+    effective_provider = str(payload.get("effective_provider") or DEFAULT_PROVIDER)
+    if effective_provider == "openai_api" and not payload["api_key_configured"]:
         problems.append("OPENAI_API_KEY is not set")
+    elif effective_provider == "codex-experimental" and not payload["api_key_configured"]:
+        warnings.append("OPENAI_API_KEY is not set; openai_api provider is unavailable unless you export the key")
     if not str(payload["default_model"]).strip():
         problems.append("default model is empty")
     if not payload["artifact_root_exists"]:
@@ -232,10 +315,14 @@ def setup_keys() -> int:
 def access_payload() -> dict[str, Any]:
     codex_logged_in, codex_login_detail = codex_login_status()
     codex_image_enabled, codex_feature_detail = codex_image_feature_enabled()
+    effective_provider, effective_source = resolve_provider(None)
     return {
         "result": "PASS",
         "access_model": "api-key-backed-openai-images",
         "supports_chatgpt_plan_entitlement": False,
+        "default_provider": DEFAULT_PROVIDER,
+        "effective_provider": effective_provider,
+        "effective_provider_source": effective_source,
         "experimental_providers": {
             "codex-experimental": {
                 "installed": bool(codex_path()),
@@ -257,11 +344,18 @@ def access_payload() -> dict[str, Any]:
             "A separate opt-in codex-experimental provider can use your local signed-in Codex session when available."
         ),
         "required_env": ["OPENAI_API_KEY"],
-        "optional_env": ["OPENAI_IMAGE_MODEL", "OPENAI_IMAGE_SIZE", "OPENAI_IMAGE_QUALITY", "OPENAI_IMAGE_PROVIDER"],
+        "optional_env": [
+            "OPENAI_IMAGE_MODEL",
+            "OPENAI_IMAGE_SIZE",
+            "OPENAI_IMAGE_QUALITY",
+            PROVIDER_PREFERENCE_ENV,
+            PROVIDER_PREFERENCE_PATH_ENV,
+        ],
         "notes": [
             "OpenCode chat/model access and OpenAI image API access are separate concerns.",
             "Preferred secret storage for the API-backed path is your local sk/Keychain flow.",
             "Use /image doctor --json to verify both API-backed and codex experimental access for this runtime.",
+            "Use /image preference show|set|clear to manage a repo-local provider preference without changing the hardcoded stable default.",
             "Use /ox-design when you want design guidance without calling an image provider.",
         ],
     }
@@ -390,9 +484,11 @@ def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
 def command_prompt(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
     output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output)
+    provider, provider_source = resolve_provider(args.provider)
     payload = {
         'result': 'PASS',
-        'provider': args.provider,
+        'provider': provider,
+        'provider_source': provider_source,
         'kind': args.kind,
         'prompt': prompt,
         'suggested_output': str(output_path),
@@ -407,9 +503,10 @@ def command_prompt(args: argparse.Namespace) -> int:
 def command_generate(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
     output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output)
-    provider = args.provider or DEFAULT_PROVIDER
+    provider, provider_source = resolve_provider(args.provider)
     metadata = {
         'provider': provider,
+        'provider_source': provider_source,
         'kind': args.kind,
         'prompt': prompt,
         'model': args.model or DEFAULT_MODEL,
@@ -470,8 +567,13 @@ def build_parser() -> argparse.ArgumentParser:
     access_parser = subparsers.add_parser('access')
     access_parser.add_argument('--json', action='store_true')
 
+    preference_parser = subparsers.add_parser('preference')
+    preference_parser.add_argument('action', nargs='?', default='show', choices=['show', 'set', 'clear'])
+    preference_parser.add_argument('provider', nargs='?')
+    preference_parser.add_argument('--json', action='store_true')
+
     def add_generation_args(subparser: argparse.ArgumentParser) -> None:
-        subparser.add_argument('--provider', default=DEFAULT_PROVIDER)
+        subparser.add_argument('--provider', default='')
         subparser.add_argument('--kind', default='concept')
         subparser.add_argument('--subject', default='')
         subparser.add_argument('--goal', default='')
@@ -504,6 +606,15 @@ def main(argv: list[str]) -> int:
         return setup_keys()
     if args.subcommand == 'access':
         return emit(access_payload(), as_json=bool(args.json))
+    if args.subcommand == 'preference':
+        if args.action == 'show':
+            return emit(preference_payload(), as_json=bool(args.json))
+        if args.action == 'set':
+            if not args.provider:
+                raise RuntimeError('provider is required for /image preference set')
+            return emit(set_preference(args.provider), as_json=bool(args.json))
+        if args.action == 'clear':
+            return emit(clear_preference(), as_json=bool(args.json))
     if args.subcommand == 'prompt':
         return command_prompt(args)
     if args.subcommand == 'generate':
