@@ -430,6 +430,8 @@ function configuredHooks(ctx) {
         safeHook("session-runtime-system-context", () => createSessionRuntimeSystemContextHook({
             directory,
             enabled: cfg.sessionRuntimeSystemContext.enabled,
+            conciseModeEnabled: cfg.conciseMode.enabled,
+            conciseDefaultMode: cfg.conciseMode.defaultMode,
         })),
         safeHook("delegate-task-retry", () => createDelegateTaskRetryHook({
             enabled: cfg.delegateTaskRetry.enabled,

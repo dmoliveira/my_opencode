@@ -366,6 +366,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     typeof source.sessionRuntimeSystemContext === "object"
       ? (source.sessionRuntimeSystemContext as Record<string, unknown>)
       : {};
+  const conciseModeSource =
+    source.conciseMode && typeof source.conciseMode === "object"
+      ? (source.conciseMode as Record<string, unknown>)
+      : {};
   const delegateTaskRetrySource =
     source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
       ? (source.delegateTaskRetry as Record<string, unknown>)
@@ -993,6 +997,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof sessionRuntimeSystemContextSource.enabled === "boolean"
           ? sessionRuntimeSystemContextSource.enabled
           : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
+    },
+    conciseMode: {
+      enabled:
+        typeof conciseModeSource.enabled === "boolean"
+          ? conciseModeSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.conciseMode.enabled,
+      defaultMode:
+        conciseModeSource.defaultMode === "lite" ||
+        conciseModeSource.defaultMode === "full" ||
+        conciseModeSource.defaultMode === "ultra"
+          ? conciseModeSource.defaultMode
+          : DEFAULT_GATEWAY_CONFIG.conciseMode.defaultMode,
     },
     delegateTaskRetry: {
       enabled:

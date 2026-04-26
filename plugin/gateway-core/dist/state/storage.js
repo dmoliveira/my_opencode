@@ -1,5 +1,27 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+const VALID_CONCISE_MODES = new Set(["off", "lite", "full", "ultra", "review", "commit"]);
+function parseConciseModeState(value) {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+    const record = value;
+    const mode = String(record.mode ?? "").trim().toLowerCase();
+    const sessionId = String(record.sessionId ?? "").trim();
+    if (!VALID_CONCISE_MODES.has(mode)) {
+        return null;
+    }
+    if (!sessionId) {
+        return null;
+    }
+    return {
+        mode: mode,
+        source: String(record.source ?? "state"),
+        sessionId,
+        activatedAt: String(record.activatedAt ?? new Date().toISOString()),
+        updatedAt: String(record.updatedAt ?? new Date().toISOString()),
+    };
+}
 // Declares default gateway state file path.
 export const DEFAULT_STATE_PATH = ".opencode/gateway-core.state.json";
 // Resolves absolute gateway state path for the project directory.
@@ -20,6 +42,7 @@ export function loadGatewayState(directory, relativePath) {
         const parsed = raw;
         return {
             activeLoop: parsed.activeLoop ?? null,
+            conciseMode: parseConciseModeState(parsed.conciseMode),
             lastUpdatedAt: String(parsed.lastUpdatedAt ?? new Date().toISOString()),
             source: typeof parsed.source === "string" ? parsed.source : undefined,
         };
@@ -31,8 +54,15 @@ export function loadGatewayState(directory, relativePath) {
 // Saves gateway runtime state to disk.
 export function saveGatewayState(directory, state, relativePath) {
     const path = resolveGatewayStatePath(directory, relativePath);
+    const existing = loadGatewayState(directory, relativePath);
+    const payload = {
+        activeLoop: state.activeLoop,
+        conciseMode: state.conciseMode === undefined ? existing?.conciseMode ?? null : state.conciseMode,
+        lastUpdatedAt: state.lastUpdatedAt,
+        source: state.source,
+    };
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
+    writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
 }
 // Returns current UTC timestamp string in ISO-8601 format.
 export function nowIso() {

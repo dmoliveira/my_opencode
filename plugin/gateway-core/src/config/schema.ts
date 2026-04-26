@@ -128,6 +128,11 @@ export interface SessionRuntimeSystemContextConfig {
   enabled: boolean;
 }
 
+export interface ConciseModeConfig {
+  enabled: boolean;
+  defaultMode: "off" | "lite" | "full" | "ultra";
+}
+
 // Declares retry guidance settings for failed delegated task calls.
 export interface DelegateTaskRetryConfig {
   enabled: boolean;
@@ -590,6 +595,7 @@ export interface GatewayConfig {
   pressureEscalationGuard: PressureEscalationGuardConfig;
   sessionRecovery: SessionRecoveryConfig;
   sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
+  conciseMode: ConciseModeConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
   providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
   delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
@@ -867,6 +873,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   sessionRuntimeSystemContext: {
     enabled: true,
+  },
+  conciseMode: {
+    enabled: false,
+    defaultMode: "off",
   },
   delegateTaskRetry: {
     enabled: true,
