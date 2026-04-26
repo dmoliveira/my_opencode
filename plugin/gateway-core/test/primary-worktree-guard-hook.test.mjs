@@ -368,6 +368,26 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       { tool: "bash", sessionID: "session-primary-fetch-all-prune-quiet-safe" },
       { args: { command: "git fetch --all --prune --quiet" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-npm-install-safe" },
+      { args: { command: "npm install --yes" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-npm-ci-safe" },
+      { args: { command: "npm ci --yes --no-audit --no-fund" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-npm-init-safe" },
+      { args: { command: "npm init -y" } }
+    )
+
+    const npmPrefixPayload = { args: { command: "npm install --yes --prefix /tmp/other-project" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-npm-prefix-blocked" },
+      npmPrefixPayload
+    )
+    assert.match(npmPrefixPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-primary-remote-verbose-safe" },
       { args: { command: "git remote -v" } }
