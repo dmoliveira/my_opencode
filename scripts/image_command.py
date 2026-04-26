@@ -421,7 +421,12 @@ def parse_codex_jsonl(text: str) -> dict[str, Any]:
     return {'thread_id': thread_id, 'reported_path': reported_path, 'events': events}
 
 
-def resolve_codex_generated_image(thread_id: str) -> Path:
+def resolve_codex_generated_image(
+    thread_id: str,
+    *,
+    reported_path: str | None = None,
+    earliest_mtime: float | None = None,
+) -> tuple[Path, str]:
     if not thread_id:
         raise RuntimeError('Codex did not return a thread id')
     thread_dir = CODEX_GENERATED_IMAGES_DIR / thread_id
@@ -430,7 +435,25 @@ def resolve_codex_generated_image(thread_id: str) -> Path:
     images = sorted(thread_dir.glob('*.png'), key=lambda p: p.stat().st_mtime)
     if not images:
         raise RuntimeError(f'No generated PNG found under {thread_dir}')
-    return images[-1]
+    fresh_images = images
+    if earliest_mtime is not None:
+        filtered = [img for img in images if img.stat().st_mtime >= earliest_mtime]
+        if filtered:
+            fresh_images = filtered
+
+    reported_name = Path(reported_path).name if reported_path else ''
+    if reported_name:
+        for candidate in reversed(fresh_images):
+            if candidate.name == reported_name:
+                return candidate, 'reported-path-basename'
+
+    if len(fresh_images) == 1:
+        return fresh_images[0], 'single-fresh-image'
+
+    if fresh_images is not images:
+        return fresh_images[-1], 'newest-fresh-image'
+
+    return images[-1], 'newest-thread-image'
 
 
 def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
@@ -455,6 +478,7 @@ def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
         'shell_tool',
         prompt,
     ]
+    started_at = datetime.now(timezone.utc).timestamp()
     with tempfile.TemporaryDirectory(prefix="codex-image-provider-") as tempdir:
         temp_path = Path(tempdir)
         result = subprocess.run(
@@ -470,11 +494,16 @@ def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
         detail = (result.stdout + "\n" + result.stderr).strip()
         raise RuntimeError(f'codex exec failed with exit {result.returncode}: {detail}')
     parsed = parse_codex_jsonl(result.stdout)
-    artifact = resolve_codex_generated_image(str(parsed.get('thread_id') or ''))
+    artifact, selection_reason = resolve_codex_generated_image(
+        str(parsed.get('thread_id') or ''),
+        reported_path=str(parsed.get('reported_path') or '') or None,
+        earliest_mtime=started_at,
+    )
     return artifact, {
         'thread_id': parsed.get('thread_id'),
         'reported_path': parsed.get('reported_path'),
         'resolved_generated_image': str(artifact),
+        'resolved_generated_image_selection': selection_reason,
         'codex_exec_workspace': 'isolated-tempdir',
         'codex_login_status': login_detail,
         'codex_feature_status': feature_detail,

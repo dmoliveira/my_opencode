@@ -21409,6 +21409,10 @@ exit 1
                 str(image_codex_generate_report.get("resolved_generated_image") or "").endswith("ig_test.png"),
                 "codex experimental image generate should report the resolved Codex cache image",
             )
+            expect(
+                image_codex_generate_report.get("resolved_generated_image_selection") == "single-fresh-image",
+                "codex experimental image generate should report how the artifact was selected",
+            )
 
             image_pref_generate = subprocess.run(
                 [
