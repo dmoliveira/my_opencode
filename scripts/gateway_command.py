@@ -32,7 +32,15 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
-from concise_mode_runtime import effective_concise_mode, find_skill_path  # type: ignore
+from concise_mode_runtime import (  # type: ignore
+    VALID_CONCISE_MODES,
+    current_session_id,
+    effective_concise_mode,
+    find_skill_path,
+    normalize_mode,
+    set_active_mode,
+    set_default_mode,
+)
 from gateway_reason_codes import (  # type: ignore
     BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE,
     GATEWAY_PLUGIN_DISABLED,
@@ -55,7 +63,7 @@ from gateway_plugin_bridge import (  # type: ignore
 # Prints usage for gateway command.
 def usage() -> int:
     print(
-        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
+        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json] | /gateway concise <status|doctor|set|off|default|review|commit|compress> [mode] [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
     )
     return 2
 
@@ -3292,6 +3300,57 @@ def command_recover_memory_watch(
     return 0 if report["result"] == "PASS" else 1
 
 
+def command_concise(as_json: bool, args: list[str]) -> int:
+    cwd = Path.cwd()
+    if not args:
+        return usage()
+    action = args[0].strip().lower()
+    session_id = current_session_id()
+    if action == "status" and len(args) == 1:
+        return emit({"result": "PASS", **effective_concise_mode(cwd), "skill_path": find_skill_path(cwd)}, as_json=as_json) or 0
+    if action == "doctor" and len(args) == 1:
+        problems: list[str] = []
+        quick_fixes: list[str] = []
+        skill_path = find_skill_path(cwd)
+        status = effective_concise_mode(cwd)
+        if skill_path is None:
+            problems.append("shared concise-mode skill not found; runtime will use fallback rules")
+            quick_fixes.append("ensure sibling agents_md checkout is available or merge the concise-mode contract repo first")
+        payload = {"result": "PASS" if not problems else "WARN", "status": status, "skill_path": skill_path, "problems": problems, "quick_fixes": quick_fixes}
+        emit(payload, as_json=as_json)
+        return 0 if payload["result"] == "PASS" else 1
+    if action == "compress" and len(args) == 1:
+        command = [sys.executable, str(SCRIPT_DIR / "memory_lifecycle_command.py"), "compress"]
+        if as_json:
+            command.append("--json")
+        completed = subprocess.run(command, check=False)
+        return int(completed.returncode)
+    if action in {"off", "review", "commit", "lite", "full", "ultra"} and len(args) == 1:
+        if not session_id:
+            return emit({"result": "FAIL", "reason": "missing_session_id", "hint": "run this command from an active OpenCode session"}, as_json=as_json) or 1
+        mode = action
+        payload = {"result": "PASS", "action": "set", **set_active_mode(cwd, mode, source="gateway_concise_command", session_id=session_id)}
+        emit(payload, as_json=as_json)
+        return 0
+    if action == "set" and len(args) == 2:
+        mode = normalize_mode(args[1])
+        if mode != args[1].strip().lower() or mode not in VALID_CONCISE_MODES:
+            return emit({"result": "FAIL", "reason": "invalid_mode", "valid_modes": list(VALID_CONCISE_MODES)}, as_json=as_json) or 1
+        if not session_id:
+            return emit({"result": "FAIL", "reason": "missing_session_id", "hint": "run this command from an active OpenCode session"}, as_json=as_json) or 1
+        payload = {"result": "PASS", "action": "set", **set_active_mode(cwd, mode, source="gateway_concise_command", session_id=session_id)}
+        emit(payload, as_json=as_json)
+        return 0
+    if action == "default" and len(args) == 2:
+        mode = normalize_mode(args[1])
+        if mode not in {"off", "lite", "full", "ultra"}:
+            return emit({"result": "FAIL", "reason": "invalid_default_mode", "valid_modes": ["off", "lite", "full", "ultra"]}, as_json=as_json) or 1
+        payload = {"result": "PASS", "action": "default", **set_default_mode(cwd, mode, enabled=mode != "off")}
+        emit(payload, as_json=as_json)
+        return 0
+    return usage()
+
+
 def command_protection(
     as_json: bool,
     action: str,
@@ -3832,6 +3891,10 @@ def main(argv: list[str]) -> int:
             tool_call_threshold=tool_call_threshold,
             reminder_cooldown_ms=reminder_cooldown_ms,
         )
+    if cmd == "concise":
+        if not flags_allowed("--json"):
+            return usage()
+        return command_concise(as_json, args)
     if cmd == "protection":
         if len(args) != 1:
             return usage()

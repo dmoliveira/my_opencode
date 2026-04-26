@@ -19,7 +19,7 @@ Managed MCPs start disabled by default; opt into a focused profile only when you
 /mcp status
 /browser ensure --json
 /notify status
-/caveman status
+/gateway concise status --json
 /ox
 /ox-ux --repo top-uni
 /ox-design --goal "explore a design direction for this app"
@@ -46,7 +46,7 @@ For automation-friendly help output, prefer command-specific help from this repo
 
 Gateway runtime behavior is primarily tuned through the sidecar config at `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`). Use that file for normal hook/runtime tuning; if the same gateway keys are also set in root config, the root values still override the sidecar today.
 
-That same sidecar file also carries the operator-facing default concise-mode setting (`conciseMode.enabled` + `conciseMode.defaultMode`) consumed by `/caveman` and the gateway system-context hook.
+That same sidecar file also carries the operator-facing default concise-mode setting (`conciseMode.enabled` + `conciseMode.defaultMode`) consumed by `/gateway concise ...` and the gateway system-context hook.
 
 ## Common productivity flows
 
