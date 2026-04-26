@@ -110,6 +110,8 @@ Use these directly in OpenCode:
 /ox-design --focus wireframes,icons,palette
 /image status
 /image access --json
+/image preference show --json
+/image preference set codex-experimental
 /image doctor --json
 /image setup-keys
 /image prompt --kind wireframe --subject "mobile onboarding" --goal "reduce clutter" --json
@@ -122,6 +124,8 @@ Use `/ox-design` for concepting, artifact planning, and image-ready prompt gener
 Use `/image` for explicit image generation into `artifacts/design/`.
 
 Important: `/image` defaults to the OpenAI API path via `OPENAI_API_KEY`; ChatGPT plan access alone does not automatically enable that default path. A separate opt-in `codex-experimental` provider can use your local signed-in Codex session when available.
+
+If you prefer Codex locally, use `/image preference set codex-experimental`. Precedence is: explicit `--provider` > `OPENAI_IMAGE_PROVIDER_PREFERENCE` env > repo-local preference file > hardcoded default.
 
 Preferred safe key storage for this setup: use your local `sk` Keychain flow, then export `OPENAI_API_KEY` only into the current shell right before `/image` usage.
 

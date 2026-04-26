@@ -67,6 +67,7 @@ That keeps visual work reviewable in Git, easy to reference in PRs, and consiste
 
 ```text
 /image access --json
+/image preference show --json
 /image doctor --json
 /image setup-keys
 ```
@@ -76,6 +77,7 @@ Access note:
 - `/image` defaults to the API-backed `openai_api` provider and expects `OPENAI_API_KEY` for that path.
 - ChatGPT plan access in OpenCode does not automatically unlock the default API-backed path.
 - A separate opt-in `codex-experimental` provider can use your signed-in local Codex session when available.
+- If you want Codex as your usual local preference, use `/image preference set codex-experimental`; the hardcoded stable default remains `openai_api` when no preference is configured.
 - Use `/image access --json` when you want the runtime to explain that distinction explicitly.
 
 Required env:
