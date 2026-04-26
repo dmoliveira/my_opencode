@@ -119,6 +119,7 @@ def output_location_payload() -> dict[str, Any]:
         "preference_env_value": os.environ.get(OUTPUT_LOCATION_PREFERENCE_ENV, "").strip() or None,
         "notes": [
             "Precedence: --output-location arg > OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE env > repo-local preference file > hardcoded default.",
+            "Explicit --output bypasses output-location preference resolution entirely.",
             "repo-artifacts stores under this repo's artifacts/design.",
             "cwd-artifacts stores under the current working directory's artifacts/design.",
             "desktop stores under ~/Desktop/artifacts/design.",
@@ -608,7 +609,10 @@ def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
 
 def command_prompt(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
-    output_location, output_location_source = resolve_output_location(args.output_location)
+    if args.output:
+        output_location, output_location_source = "explicit-output", "explicit-output"
+    else:
+        output_location, output_location_source = resolve_output_location(args.output_location)
     output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output, output_location=output_location)
     provider, provider_source = resolve_provider(args.provider)
     payload = {
@@ -630,7 +634,10 @@ def command_prompt(args: argparse.Namespace) -> int:
 
 def command_generate(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
-    output_location, output_location_source = resolve_output_location(args.output_location)
+    if args.output:
+        output_location, output_location_source = "explicit-output", "explicit-output"
+    else:
+        output_location, output_location_source = resolve_output_location(args.output_location)
     output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output, output_location=output_location)
     provider, provider_source = resolve_provider(args.provider)
     metadata = {
