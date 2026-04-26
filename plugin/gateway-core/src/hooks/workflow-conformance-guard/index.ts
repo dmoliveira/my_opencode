@@ -85,6 +85,10 @@ function maintenanceHelperCommand(directory: string, originalCommand: string): s
   return `python3 ${shellQuote(maintenanceHelperPath(directory))} maintenance --directory ${shellQuote(directory)} --command ${shellQuote(originalCommand)} --json`
 }
 
+function isMaintenanceHelperInvocation(command: string): boolean {
+  return /(?:^|&&|\|\||;)\s*(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*python3\s+['"]?[^'";&|]*worktree_helper_command\.py['"]?\s+maintenance\b/i.test(command)
+}
+
 function maintenanceHelperError(directory: string, originalCommand: string): Error {
   const helperPath = maintenanceHelperPath(directory)
   const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
@@ -176,6 +180,9 @@ export function createWorkflowConformanceGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "").trim()
+      if (isMaintenanceHelperInvocation(command)) {
+        return
+      }
       if (isAllowedProtectedShellCommand(command)) {
         return
       }

@@ -53,6 +53,9 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+init\s+-y\s*$"),
 ]
 
 
@@ -149,7 +152,7 @@ def command_maintenance(args: list[str]) -> int:
         suggested_branch = branch or f"chore/{blocked_slug[:40]}"
         suggested_worktree = (directory.parent / f"{repo_name}-wt-maintenance").resolve()
         create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
-        report = { 
+        report = {
             "result": "FAIL",
             "mode": "maintenance_worktree",
             "directory": str(directory),

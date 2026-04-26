@@ -345,6 +345,26 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       { tool: "bash", sessionID: "session-workflow-date-safe" },
       { args: { command: 'date +"%Y-%m-%d %H:%M"' } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-npm-install-safe" },
+      { args: { command: "npm install --yes" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-npm-ci-safe" },
+      { args: { command: "npm ci --yes --no-audit --no-fund" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-npm-init-safe" },
+      { args: { command: "npm init -y" } }
+    )
+
+    const npmPrefixPayload = { args: { command: "npm install --yes --prefix /tmp/other-project" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-npm-prefix-blocked" },
+      npmPrefixPayload
+    )
+    assert.match(npmPrefixPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -626,6 +646,42 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
       sqliteEnvBypassPayload
     )
     assert.match(sqliteEnvBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("combined protected-main guards do not double-wrap maintenance helper reroutes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["primary-worktree-guard", "workflow-conformance-guard"], disabled: [] },
+        primaryWorktreeGuard: {
+          enabled: true,
+          allowedBranches: ["main", "master"],
+          blockEdits: true,
+          blockBranchSwitches: true,
+        },
+        workflowConformanceGuard: {
+          enabled: true,
+          protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
+        },
+      },
+    })
+
+    const payload = { args: { command: 'git commit -m "msg"' } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-combined-reroute-dedupe" },
+      payload,
+    )
+
+    assert.match(payload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.equal((payload.args.command.match(/worktree_helper_command\.py/g) ?? []).length, 1)
+    assert.match(payload.args.command, /--command 'git commit -m "msg"' --json/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

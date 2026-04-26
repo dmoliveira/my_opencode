@@ -70,6 +70,9 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
   const pullReport = runHelper("git pull --rebase --autostash")
   const remoteGetUrlReport = runHelper("git remote get-url origin")
   const stashListReport = runHelper("git stash list")
+  const npmInstallReport = runHelper("npm install --yes")
+  const npmCiReport = runHelper("npm ci --yes --no-audit --no-fund")
+  const npmInitReport = runHelper("npm init -y")
   const ghReport = runHelper("gh auth status")
   const ghPrViewReport = runHelper("gh pr view --json number")
   const ghRepoEditReport = runHelper("gh repo edit --visibility private")
@@ -84,6 +87,12 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
   assert.equal(remoteGetUrlReport.mode, "direct_run")
   assert.equal(stashListReport.result, "PASS")
   assert.equal(stashListReport.mode, "direct_run")
+  assert.equal(npmInstallReport.result, "PASS")
+  assert.equal(npmInstallReport.mode, "direct_run")
+  assert.equal(npmCiReport.result, "PASS")
+  assert.equal(npmCiReport.mode, "direct_run")
+  assert.equal(npmInitReport.result, "PASS")
+  assert.equal(npmInitReport.mode, "direct_run")
   assert.equal(ghReport.result, "PASS")
   assert.equal(ghReport.mode, "direct_run")
   assert.equal(ghPrViewReport.result, "PASS")
@@ -94,6 +103,14 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
   assert.equal(dateReport.mode, "direct_run")
   assert.equal(envBypassReport.result, "FAIL")
   assert.equal(envBypassReport.mode, "maintenance_worktree")
+})
+
+test("worktree helper keeps path-switching npm bootstrap commands blocked", () => {
+  const report = runHelper("npm install --yes --prefix /tmp/other-project")
+
+  assert.equal(report.result, "FAIL")
+  assert.equal(report.mode, "maintenance_worktree")
+  assert.equal(report.blocked_command, "npm install --yes --prefix /tmp/other-project")
 })
 
 test("worktree helper still suggests a maintenance worktree for blocked commands", () => {
