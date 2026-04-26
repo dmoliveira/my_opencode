@@ -272,12 +272,15 @@ def build_status_payload() -> dict[str, Any]:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     codex_logged_in, codex_login_detail = codex_login_status()
     codex_image_enabled, codex_feature_detail = codex_image_feature_enabled()
-    root = artifact_root()
     effective_provider, effective_source = resolve_provider(None)
+    effective_output_location, effective_output_location_source = resolve_output_location(None)
+    resolved_output_root = output_root_for_location(effective_output_location)
     return {
         "result": "PASS",
-        "artifact_root": str(root),
-        "artifact_root_exists": root.exists(),
+        "artifact_root": str(DEFAULT_ARTIFACT_ROOT),
+        "artifact_root_exists": DEFAULT_ARTIFACT_ROOT.exists(),
+        "resolved_output_root": str(resolved_output_root),
+        "resolved_output_root_exists": resolved_output_root.exists(),
         "default_provider": DEFAULT_PROVIDER,
         "default_output_location": DEFAULT_OUTPUT_LOCATION,
         "default_model": DEFAULT_MODEL,
@@ -290,8 +293,8 @@ def build_status_payload() -> dict[str, Any]:
         "effective_provider": effective_provider,
         "effective_provider_source": effective_source,
         "preference_file": str(provider_preference_path()),
-        "effective_output_location": resolve_output_location(None)[0],
-        "effective_output_location_source": resolve_output_location(None)[1],
+        "effective_output_location": effective_output_location,
+        "effective_output_location_source": effective_output_location_source,
         "output_location_preference_file": str(output_location_preference_path()),
         "codex": {
             "installed": bool(codex_path()),
@@ -316,8 +319,8 @@ def doctor_payload() -> dict[str, Any]:
         warnings.append("OPENAI_API_KEY is not set; openai_api provider is unavailable unless you export the key")
     if not str(payload["default_model"]).strip():
         problems.append("default model is empty")
-    if not payload["artifact_root_exists"]:
-        warnings.append("artifact root will be created on first generate run")
+    if not payload["resolved_output_root_exists"]:
+        warnings.append("resolved output root will be created on first generate run")
     codex_info = payload.get("codex", {})
     if not codex_info.get("installed"):
         warnings.append("codex binary not found; codex-experimental provider is unavailable")
@@ -413,6 +416,9 @@ def access_payload() -> dict[str, Any]:
     codex_logged_in, codex_login_detail = codex_login_status()
     codex_image_enabled, codex_feature_detail = codex_image_feature_enabled()
     effective_provider, effective_source = resolve_provider(None)
+    required_env_for_effective_provider: list[str] = []
+    if effective_provider == "openai_api":
+        required_env_for_effective_provider = ["OPENAI_API_KEY"]
     return {
         "result": "PASS",
         "access_model": "api-key-backed-openai-images",
@@ -440,7 +446,8 @@ def access_payload() -> dict[str, Any]:
             "ChatGPT plan access in OpenCode does not automatically unlock that default path. "
             "A separate opt-in codex-experimental provider can use your local signed-in Codex session when available."
         ),
-        "required_env": ["OPENAI_API_KEY"],
+        "required_env_for_effective_provider": required_env_for_effective_provider,
+        "required_env_for_openai_api": ["OPENAI_API_KEY"],
         "optional_env": [
             "OPENAI_IMAGE_MODEL",
             "OPENAI_IMAGE_SIZE",
