@@ -21344,6 +21344,14 @@ exit 1
                 ((image_status_report.get("codex") or {}).get("image_generation_feature_enabled") is True),
                 "image status should report codex image generation when fake codex enables it",
             )
+            expect(
+                str(image_status_report.get("resolved_output_root") or "").endswith("artifacts/design"),
+                "image status should report the resolved output root for the effective output location",
+            )
+            expect(
+                image_status_report.get("resolved_output_root_exists") in {True, False},
+                "image status should report whether the resolved output root exists",
+            )
 
             image_codex_access = subprocess.run(
                 [sys.executable, str(IMAGE_COMMAND_SCRIPT), "access", "--json"],
@@ -21393,6 +21401,24 @@ exit 1
             expect(
                 image_pref_set_report.get("effective_provider_source", "").startswith("file:"),
                 "image preference set should report a file-based effective provider source",
+            )
+            image_codex_access_after_pref = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "access", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_codex_access_after_pref.returncode == 0, "image access after codex preference should succeed")
+            image_codex_access_after_pref_report = parse_json_output(image_codex_access_after_pref.stdout)
+            expect(
+                image_codex_access_after_pref_report.get("required_env_for_effective_provider") == [],
+                "image access should not require OPENAI_API_KEY when codex-experimental is the effective provider",
+            )
+            expect(
+                image_codex_access_after_pref_report.get("required_env_for_openai_api") == ["OPENAI_API_KEY"],
+                "image access should still report the API key requirement for the openai_api path",
             )
 
             image_location_set = subprocess.run(
