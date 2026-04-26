@@ -68,6 +68,7 @@ That keeps visual work reviewable in Git, easy to reference in PRs, and consiste
 ```text
 /image access --json
 /image preference show --json
+/image location show --json
 /image doctor --json
 /image setup-keys
 ```
@@ -78,6 +79,7 @@ Access note:
 - ChatGPT plan access in OpenCode does not automatically unlock the default API-backed path.
 - A separate opt-in `codex-experimental` provider can use your signed-in local Codex session when available.
 - If you want Codex as your usual local preference, use `/image preference set codex-experimental`; the hardcoded stable default remains `openai_api` when no preference is configured.
+- If you want images to land under the current working directory or Desktop by default, use `/image location set cwd-artifacts` or `/image location set desktop`.
 - Use `/image access --json` when you want the runtime to explain that distinction explicitly.
 
 Required env:

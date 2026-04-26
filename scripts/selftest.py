@@ -21228,9 +21228,14 @@ version: 1
         image_pref_path = REPO_ROOT / ".tmp-selftest-image-provider.txt"
         if image_pref_path.exists():
             image_pref_path.unlink()
+        image_location_pref_path = REPO_ROOT / ".tmp-selftest-image-output-location.txt"
+        if image_location_pref_path.exists():
+            image_location_pref_path.unlink()
         image_env = refactor_env.copy()
         image_env["OPENAI_IMAGE_PROVIDER_CONFIG_PATH"] = str(image_pref_path)
         image_env["OPENAI_IMAGE_PROVIDER_PREFERENCE"] = ""
+        image_env["OPENAI_IMAGE_OUTPUT_LOCATION_CONFIG_PATH"] = str(image_location_pref_path)
+        image_env["OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE"] = ""
 
         image_doctor = subprocess.run(
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "doctor", "--json"],
@@ -21275,6 +21280,20 @@ version: 1
         expect(
             image_access_report.get("effective_provider") == "openai_api",
             "image access should report the stable default provider when no preference is set",
+        )
+        image_location_show = subprocess.run(
+            [sys.executable, str(IMAGE_COMMAND_SCRIPT), "location", "show", "--json"],
+            capture_output=True,
+            text=True,
+            env=image_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(image_location_show.returncode == 0, "image location show should succeed")
+        image_location_show_report = parse_json_output(image_location_show.stdout)
+        expect(
+            image_location_show_report.get("effective_output_location") == "repo-artifacts",
+            "image location show should default to repo-artifacts when no location preference is configured",
         )
 
         with tempfile.TemporaryDirectory() as codex_tmpdir:
@@ -21376,6 +21395,57 @@ exit 1
                 "image preference set should report a file-based effective provider source",
             )
 
+            image_location_set = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "location", "set", "cwd-artifacts", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_location_set.returncode == 0, "image location set should succeed")
+            image_location_set_report = parse_json_output(image_location_set.stdout)
+            expect(
+                image_location_set_report.get("effective_output_location") == "cwd-artifacts",
+                "image location set should make cwd-artifacts the effective location",
+            )
+
+            codex_env["OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE"] = "desktop"
+            image_location_arg_prompt = subprocess.run(
+                [
+                    sys.executable,
+                    str(IMAGE_COMMAND_SCRIPT),
+                    "prompt",
+                    "--output-location",
+                    "cwd-artifacts",
+                    "--kind",
+                    "mockup",
+                    "--subject",
+                    "output-location-arg-wins",
+                    "--json",
+                ],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=codex_tmp,
+            )
+            expect(image_location_arg_prompt.returncode == 0, "image prompt with explicit output location should succeed")
+            image_location_arg_prompt_report = parse_json_output(image_location_arg_prompt.stdout)
+            expect(
+                image_location_arg_prompt_report.get("output_location") == "cwd-artifacts",
+                "explicit output location should win over env preference in metadata",
+            )
+            expect(
+                image_location_arg_prompt_report.get("output_location_source") == "arg",
+                "explicit output location should report arg as the winning source",
+            )
+            expect(
+                str(image_location_arg_prompt_report.get("suggested_output") or "").endswith("artifacts/design/mockups/output-location-arg-wins.png"),
+                "explicit output location should control the generated default path",
+            )
+            codex_env["OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE"] = ""
+
             codex_output = codex_tmp / "artifacts" / "design" / "mockups" / "blue-square.png"
             image_codex_generate = subprocess.run(
                 [
@@ -21439,6 +21509,14 @@ exit 1
                 image_pref_generate_report.get("provider") == "codex-experimental",
                 "image generate should use the repo-local codex provider preference when no explicit provider is passed",
             )
+            expect(
+                image_pref_generate_report.get("output_location") == "cwd-artifacts",
+                "image generate should use the configured output location preference when no explicit output is passed",
+            )
+            expect(
+                "artifacts/design/mockups/blue-square-implicit.png" in str(image_pref_generate_report.get("artifact_path") or ""),
+                "image generate should place default outputs under cwd artifacts when cwd-artifacts is configured",
+            )
 
             image_pref_clear = subprocess.run(
                 [sys.executable, str(IMAGE_COMMAND_SCRIPT), "preference", "clear", "--json"],
@@ -21450,6 +21528,17 @@ exit 1
             )
             expect(image_pref_clear.returncode == 0, "image preference clear should succeed")
             expect(not image_pref_path.exists(), "image preference clear should remove the configured preference file")
+
+            image_location_clear = subprocess.run(
+                [sys.executable, str(IMAGE_COMMAND_SCRIPT), "location", "clear", "--json"],
+                capture_output=True,
+                text=True,
+                env=codex_env,
+                check=False,
+                cwd=REPO_ROOT,
+            )
+            expect(image_location_clear.returncode == 0, "image location clear should succeed")
+            expect(not image_location_pref_path.exists(), "image location clear should remove the configured location preference file")
 
         image_setup = subprocess.run(
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "setup-keys"],

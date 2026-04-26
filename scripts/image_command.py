@@ -23,6 +23,10 @@ DEFAULT_PROVIDER = "openai_api"
 SUPPORTED_PROVIDERS = ["openai_api", "codex-experimental"]
 PROVIDER_PREFERENCE_ENV = "OPENAI_IMAGE_PROVIDER_PREFERENCE"
 PROVIDER_PREFERENCE_PATH_ENV = "OPENAI_IMAGE_PROVIDER_CONFIG_PATH"
+DEFAULT_OUTPUT_LOCATION = "repo-artifacts"
+SUPPORTED_OUTPUT_LOCATIONS = ["repo-artifacts", "cwd-artifacts", "desktop"]
+OUTPUT_LOCATION_PREFERENCE_ENV = "OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE"
+OUTPUT_LOCATION_PREFERENCE_PATH_ENV = "OPENAI_IMAGE_OUTPUT_LOCATION_CONFIG_PATH"
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 DEFAULT_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 DEFAULT_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "high")
@@ -52,6 +56,93 @@ def slugify(value: str) -> str:
 
 def artifact_root() -> Path:
     return DEFAULT_ARTIFACT_ROOT
+
+
+def output_location_preference_path() -> Path:
+    override = os.environ.get(OUTPUT_LOCATION_PREFERENCE_PATH_ENV, "").strip()
+    if override:
+        path = Path(override)
+        return path if path.is_absolute() else REPO_ROOT / path
+    return REPO_ROOT / ".opencode" / "image-output-location.txt"
+
+
+def validate_output_location(location: str) -> str:
+    normalized = location.strip()
+    if normalized not in SUPPORTED_OUTPUT_LOCATIONS:
+        raise RuntimeError(
+            f"Unsupported output location: {normalized}. Supported locations: {', '.join(SUPPORTED_OUTPUT_LOCATIONS)}"
+        )
+    return normalized
+
+
+def resolve_output_location(explicit_location: str | None) -> tuple[str, str]:
+    if explicit_location:
+        return validate_output_location(explicit_location), "arg"
+    env_value = os.environ.get(OUTPUT_LOCATION_PREFERENCE_ENV, "").strip()
+    if env_value:
+        return validate_output_location(env_value), f"env:{OUTPUT_LOCATION_PREFERENCE_ENV}"
+    pref_path = output_location_preference_path()
+    if pref_path.exists():
+        value = pref_path.read_text(encoding="utf-8").strip()
+        if value:
+            return validate_output_location(value), f"file:{pref_path}"
+    return DEFAULT_OUTPUT_LOCATION, "default"
+
+
+def output_root_for_location(location: str, *, cwd: Path | None = None) -> Path:
+    normalized = validate_output_location(location)
+    base_cwd = cwd or Path.cwd()
+    if normalized == "repo-artifacts":
+        return DEFAULT_ARTIFACT_ROOT
+    if normalized == "cwd-artifacts":
+        return base_cwd / "artifacts" / "design"
+    if normalized == "desktop":
+        return Path("~/Desktop").expanduser() / "artifacts" / "design"
+    raise RuntimeError(f"Unhandled output location: {normalized}")
+
+
+def output_location_payload() -> dict[str, Any]:
+    effective_location, source = resolve_output_location(None)
+    pref_path = output_location_preference_path()
+    configured_value = pref_path.read_text(encoding="utf-8").strip() if pref_path.exists() else None
+    return {
+        "result": "PASS",
+        "default_output_location": DEFAULT_OUTPUT_LOCATION,
+        "supported_output_locations": SUPPORTED_OUTPUT_LOCATIONS,
+        "effective_output_location": effective_location,
+        "effective_output_location_source": source,
+        "resolved_output_root": str(output_root_for_location(effective_location)),
+        "preference_file": str(pref_path),
+        "preference_file_exists": pref_path.exists(),
+        "preference_file_value": configured_value,
+        "preference_env": OUTPUT_LOCATION_PREFERENCE_ENV,
+        "preference_env_value": os.environ.get(OUTPUT_LOCATION_PREFERENCE_ENV, "").strip() or None,
+        "notes": [
+            "Precedence: --output-location arg > OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE env > repo-local preference file > hardcoded default.",
+            "repo-artifacts stores under this repo's artifacts/design.",
+            "cwd-artifacts stores under the current working directory's artifacts/design.",
+            "desktop stores under ~/Desktop/artifacts/design.",
+        ],
+    }
+
+
+def set_output_location(location: str) -> dict[str, Any]:
+    normalized = validate_output_location(location)
+    path = output_location_preference_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(normalized + "\n", encoding="utf-8")
+    payload = output_location_payload()
+    payload.update({"updated": True})
+    return payload
+
+
+def clear_output_location() -> dict[str, Any]:
+    path = output_location_preference_path()
+    if path.exists():
+        path.unlink()
+    payload = output_location_payload()
+    payload.update({"cleared": True})
+    return payload
 
 
 def provider_preference_path() -> Path:
@@ -187,6 +278,7 @@ def build_status_payload() -> dict[str, Any]:
         "artifact_root": str(root),
         "artifact_root_exists": root.exists(),
         "default_provider": DEFAULT_PROVIDER,
+        "default_output_location": DEFAULT_OUTPUT_LOCATION,
         "default_model": DEFAULT_MODEL,
         "default_size": DEFAULT_SIZE,
         "default_quality": DEFAULT_QUALITY,
@@ -197,6 +289,9 @@ def build_status_payload() -> dict[str, Any]:
         "effective_provider": effective_provider,
         "effective_provider_source": effective_source,
         "preference_file": str(provider_preference_path()),
+        "effective_output_location": resolve_output_location(None)[0],
+        "effective_output_location_source": resolve_output_location(None)[1],
+        "output_location_preference_file": str(output_location_preference_path()),
         "codex": {
             "installed": bool(codex_path()),
             "login_status_ok": codex_logged_in,
@@ -205,7 +300,7 @@ def build_status_payload() -> dict[str, Any]:
             "feature_status": codex_feature_detail,
             "generated_images_dir": str(CODEX_GENERATED_IMAGES_DIR),
         },
-        "supported_subcommands": ["status", "doctor", "setup-keys", "access", "preference", "prompt", "generate"],
+        "supported_subcommands": ["status", "doctor", "setup-keys", "access", "preference", "location", "prompt", "generate"],
     }
 
 
@@ -280,13 +375,14 @@ def build_prompt(kind: str, subject: str, goal: str, style: str, notes: str) -> 
     return " ".join(part.strip() for part in parts if part.strip())
 
 
-def resolve_output_path(kind: str, subject: str, output: str | None) -> Path:
+def resolve_output_path(kind: str, subject: str, output: str | None, *, output_location: str | None = None) -> Path:
     if output:
         path = Path(output)
         return path if path.is_absolute() else REPO_ROOT / path
+    location = validate_output_location(output_location or resolve_output_location(None)[0])
     subdir = KIND_TO_DIR.get(kind, "exports")
     stem = slugify(subject or kind)
-    return artifact_root() / subdir / f"{stem}.png"
+    return output_root_for_location(location) / subdir / f"{stem}.png"
 
 
 def write_sidecar(image_path: Path, payload: dict[str, Any]) -> None:
@@ -512,12 +608,15 @@ def call_codex_experimental(*, prompt: str) -> tuple[Path, dict[str, Any]]:
 
 def command_prompt(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
-    output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output)
+    output_location, output_location_source = resolve_output_location(args.output_location)
+    output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output, output_location=output_location)
     provider, provider_source = resolve_provider(args.provider)
     payload = {
         'result': 'PASS',
         'provider': provider,
         'provider_source': provider_source,
+        'output_location': output_location,
+        'output_location_source': output_location_source,
         'kind': args.kind,
         'prompt': prompt,
         'suggested_output': str(output_path),
@@ -531,11 +630,14 @@ def command_prompt(args: argparse.Namespace) -> int:
 
 def command_generate(args: argparse.Namespace) -> int:
     prompt = args.prompt or build_prompt(args.kind, args.subject, args.goal, args.style, args.notes)
-    output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output)
+    output_location, output_location_source = resolve_output_location(args.output_location)
+    output_path = resolve_output_path(args.kind, args.subject or args.goal or args.kind, args.output, output_location=output_location)
     provider, provider_source = resolve_provider(args.provider)
     metadata = {
         'provider': provider,
         'provider_source': provider_source,
+        'output_location': output_location,
+        'output_location_source': output_location_source,
         'kind': args.kind,
         'prompt': prompt,
         'model': args.model or DEFAULT_MODEL,
@@ -601,8 +703,14 @@ def build_parser() -> argparse.ArgumentParser:
     preference_parser.add_argument('provider', nargs='?')
     preference_parser.add_argument('--json', action='store_true')
 
+    location_parser = subparsers.add_parser('location')
+    location_parser.add_argument('action', nargs='?', default='show', choices=['show', 'set', 'clear'])
+    location_parser.add_argument('location', nargs='?')
+    location_parser.add_argument('--json', action='store_true')
+
     def add_generation_args(subparser: argparse.ArgumentParser) -> None:
         subparser.add_argument('--provider', default='')
+        subparser.add_argument('--output-location', default='')
         subparser.add_argument('--kind', default='concept')
         subparser.add_argument('--subject', default='')
         subparser.add_argument('--goal', default='')
@@ -644,6 +752,15 @@ def main(argv: list[str]) -> int:
             return emit(set_preference(args.provider), as_json=bool(args.json))
         if args.action == 'clear':
             return emit(clear_preference(), as_json=bool(args.json))
+    if args.subcommand == 'location':
+        if args.action == 'show':
+            return emit(output_location_payload(), as_json=bool(args.json))
+        if args.action == 'set':
+            if not args.location:
+                raise RuntimeError('location is required for /image location set')
+            return emit(set_output_location(args.location), as_json=bool(args.json))
+        if args.action == 'clear':
+            return emit(clear_output_location(), as_json=bool(args.json))
     if args.subcommand == 'prompt':
         return command_prompt(args)
     if args.subcommand == 'generate':
