@@ -19,7 +19,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 | `verifier` | subagent | Run/interpret tests, lint, build | No | After meaningful code changes |
 | `reviewer` | subagent | Risk/correctness/maintainability review | No | Before declaring done |
 | `release-scribe` | subagent | PR/changelog/release notes drafting | No | Final communication and release prep |
-| `experience-designer` | subagent | Browser-first UX/UI audit and polish guidance | No | UX refinement, responsive review, accessibility polish |
+| `experience-designer` | subagent | Browser-first UX/UI audit, design artifact planning, and image-workflow guidance | No | UX refinement, responsive review, accessibility polish, prompt-ready image/design handoff |
 
 ---
 
@@ -29,7 +29,7 @@ Goal: keep execution fast, safe, and low-friction while preserving the current d
 - `orchestrator` is the execution lead for bigger flows.
 - `tasker` is the planning-focused primary for Codememory-backed task, epic, dependency, and note capture.
 - Specialist subagents are intentionally read-only to reduce accidental drift.
-- `experience-designer` covers browser-first UX quality, while `reviewer` stays the final code/risk gate.
+- `experience-designer` covers browser-first UX quality, prompt-ready visual direction, artifact planning, and image-workflow handoff, while `reviewer` stays the final code/risk gate.
 - Completion should only happen after implementation + validation + review gates pass.
 - Model allocation defaults and fallbacks are documented in `docs/model-allocation-policy.md`.
 - Browser automation should be treated as a narrow bridge for UI-owned blockers such as OAuth consent, install or re-auth prompts, scope upgrades, and final visual verification; return to shell/API tooling as soon as the blocker is cleared.
@@ -80,6 +80,23 @@ Runtime discoverability commands:
 /agent-catalog explain tasker
 /agent-catalog doctor --json
 ```
+
+Image/design runtime commands worth knowing:
+
+```text
+/ox-design
+/image access --json
+/image preference show --json
+/image location show --json
+```
+
+For this runtime, agents should:
+
+- run `/image access --json` before assuming image generation is available
+- treat `codex-experimental` as available only when the local Codex session is signed in and image generation is enabled
+- use `/image preference show --json` to understand the effective provider
+- use `/image location show --json` to understand where artifacts will land
+- expect repo-local preferences to make Codex and `cwd-artifacts` the effective local path even though the hardcoded stable defaults remain `openai_api` and `repo-artifacts`
 
 When these hints appear automatically in execution flow:
 - delegation router injects `/agent-catalog explain <subagent>` when it infers or applies routing metadata
