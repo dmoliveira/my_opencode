@@ -93,6 +93,12 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
             + str(concise_mode.get("effective_mode") or "off")
             + f" (source={concise_mode.get('effective_source') or 'default'})"
         )
+        stored_active = concise_mode.get("stored_active_state")
+        if isinstance(stored_active, dict) and concise_mode.get("session_match") is False:
+            print(
+                "concise_mode_warning: stored mode belongs to another session "
+                + f"({stored_active.get('sessionId') or 'unknown'}); current session uses default/off"
+            )
     print(
         "process_pressure: "
         + f"opencode={int(process.get('opencode_process_count') or 0)} "
@@ -3313,9 +3319,12 @@ def command_concise(as_json: bool, args: list[str]) -> int:
         quick_fixes: list[str] = []
         skill_path = find_skill_path(cwd)
         status = effective_concise_mode(cwd)
+        stored_active = status.get("stored_active_state")
         if skill_path is None:
             problems.append("shared concise-mode skill not found; runtime will use fallback rules")
             quick_fixes.append("ensure sibling agents_md checkout is available or merge the concise-mode contract repo first")
+        if isinstance(stored_active, dict) and status.get("session_match") is False:
+            quick_fixes.append("run /gateway concise off in the owning session or /gateway concise set <mode> in the current session")
         payload = {"result": "PASS" if not problems else "WARN", "status": status, "skill_path": skill_path, "problems": problems, "quick_fixes": quick_fixes}
         emit(payload, as_json=as_json)
         return 0 if payload["result"] == "PASS" else 1

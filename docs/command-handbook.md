@@ -125,6 +125,14 @@ Supported modes: `off`, `lite`, `full`, `ultra`, `review`, `commit`.
 - The effective mode is visible through `/gateway concise status` and `/gateway status`.
 - `/gateway concise default <mode>` changes the repo-level sidecar default for future sessions in the current repo.
 
+Quick taxonomy:
+
+| Category | Values | Scope |
+|---|---|---|
+| repo default | `off`, `lite`, `full`, `ultra` | future sessions in current repo |
+| active session mode | `lite`, `full`, `ultra`, `review`, `commit` | current runtime session |
+| one-shot alias | `compress` | single command run |
+
 ## Design and image workflows 🎨
 
 Use these directly in OpenCode:
