@@ -110,12 +110,13 @@ def concise_active_state(cwd: Path) -> dict[str, Any] | None:
 
 def effective_concise_mode(cwd: Path) -> dict[str, Any]:
     config, sidecar_path = load_sidecar_config(cwd)
-    active = concise_active_state(cwd)
+    stored_active = concise_active_state(cwd)
     session_id = current_session_id()
     default_mode = concise_default_mode(config)
-    if active and active["sessionId"] == session_id:
-        effective = active["mode"]
-        source = active["source"] or "state"
+    session_match = bool(stored_active and stored_active["sessionId"] == session_id)
+    if session_match and stored_active:
+        effective = stored_active["mode"]
+        source = stored_active["source"] or "state"
     else:
         effective = default_mode
         source = "sidecar_default" if default_mode != DEFAULT_CONCISE_MODE else "default"
@@ -129,7 +130,9 @@ def effective_concise_mode(cwd: Path) -> dict[str, Any]:
         "sidecar_exists": sidecar_path.exists(),
         "state_path": str(resolve_state_path(cwd)),
         "state_exists": resolve_state_path(cwd).exists(),
-        "active_state": active,
+        "active_state": stored_active if session_match else None,
+        "stored_active_state": stored_active,
+        "session_match": session_match,
         "valid_modes": list(VALID_CONCISE_MODES),
     }
 

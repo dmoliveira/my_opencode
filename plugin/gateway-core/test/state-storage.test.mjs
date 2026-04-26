@@ -120,3 +120,21 @@ test("saveGatewayState preserves concise mode when caller omits it", () => {
     assert.equal(state?.activeLoop?.sessionId, "s-3")
   })
 })
+
+test("loadGatewayState drops legacy concise mode entries without session id", () => {
+  withTempDir((directory) => {
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "full",
+        source: "legacy",
+        sessionId: "",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+    const state = loadGatewayState(directory)
+    assert.equal(state?.conciseMode, null)
+  })
+})
