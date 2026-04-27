@@ -182,6 +182,12 @@ INTENT_RULES = {
             "cleanup",
             "refine",
             "harden",
+            "polish",
+            "catch",
+            "inconsistencies",
+            "inconsistency",
+            "latest",
+            "last",
             "code",
             "e2e",
         },
@@ -191,6 +197,15 @@ INTENT_RULES = {
             "improve end to end",
             "review and improve",
             "make this code better",
+            "review the last work and polish it",
+            "review the latest work and improve it",
+            "review the latest work and polish it",
+            "review the latest work polish it and fix inconsistencies",
+            "review the latest work polish it and catch inconsistencies",
+            "refine the solution you just produced",
+            "do a second pass on the last implementation",
+            "inspect the latest work for inconsistencies and improve it",
+            "polish the latest implementation",
         },
     },
     "ox-ship": {
@@ -223,8 +238,14 @@ def tokenize_prompt(prompt: str) -> list[str]:
     return [token.lower() for token in re.findall(r"[A-Za-z][A-Za-z0-9-]*", cleaned)]
 
 
+def normalize_prompt_text(prompt: str) -> str:
+    return " ".join(tokenize_prompt(prompt))
+
+
 def _phrase_hits(prompt_lower: str, phrases: set[str]) -> int:
-    return sum(1 for phrase in phrases if phrase in prompt_lower)
+    normalized_prompt = normalize_prompt_text(prompt_lower)
+    normalized_phrases = {normalize_prompt_text(phrase) for phrase in phrases}
+    return sum(1 for phrase in normalized_phrases if phrase and phrase in normalized_prompt)
 
 
 def _score_candidate(
