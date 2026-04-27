@@ -163,6 +163,7 @@ Quickstart commands:
 /ox-design --goal "explore calmer onboarding directions"
 /image doctor --json
 /ox-review "review this branch end to end and improve it"
+/ox-review "review the latest work, polish it, and fix inconsistencies"
 /delivery status --json
 /autopilot go --goal "finish current objective" --json
 /autoflow status --json

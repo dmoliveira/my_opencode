@@ -20910,6 +20910,14 @@ version: 1
                 "prompt": "review this code and improve end to end",
                 "expected": "ox-review",
             },
+            {
+                "prompt": "review the latest work, polish it, and fix inconsistencies",
+                "expected": "ox-review",
+            },
+            {
+                "prompt": "review the latest work, polish it, and catch inconsistencies",
+                "expected": "ox-review",
+            },
             {"prompt": "is this branch ready to ship?", "expected": "ox-ship"},
             {"prompt": "write release notes", "expected": None},
         ]
@@ -21107,7 +21115,7 @@ version: 1
                 str(AUTO_SLASH_SCRIPT),
                 "preview",
                 "--prompt",
-                "review this code and improve end to end",
+                "review the latest work, polish it, and fix inconsistencies",
                 "--json",
             ],
             capture_output=True,
@@ -21124,7 +21132,12 @@ version: 1
         expect(
             (auto_slash_ox_review_report.get("selected") or {}).get("command")
             == "ox-review",
-            "auto-slash preview should map review-improve prompt to ox-review",
+            "auto-slash preview should map refinement-polish prompt to ox-review",
+        )
+        expect(
+            (auto_slash_ox_review_report.get("selected") or {}).get("slash_command")
+            == "/ox-review",
+            "auto-slash preview should render the ox-review slash command",
         )
 
         ox_doctor = subprocess.run(
@@ -21219,6 +21232,10 @@ version: 1
         expect(
             ox_review_report.get("recommended_agent") == "orchestrator",
             "ox review should recommend orchestrator",
+        )
+        expect(
+            "consistency" in ((ox_review_report.get("context") or {}).get("focus") or []),
+            "ox review should include consistency in the default focus",
         )
         expect(
             (ox_review_report.get("context") or {}).get("scope") == "scripts",

@@ -121,6 +121,7 @@ End-to-end code review and improvement workflow.
 Best for:
 
 - "review this feature and improve it"
+- "review the latest work, polish it, and catch inconsistencies"
 - pre-PR hardening
 - feature cleanup after implementation
 
@@ -130,6 +131,7 @@ Examples:
 /ox-review
 /ox-review --scope scripts --goal "review command ergonomics and simplify the rough edges"
 /ox-review "review this code end to end and make it cleaner"
+/ox-review "review the latest work, polish it, and fix inconsistencies"
 ```
 
 ### `/ox-ship`
@@ -213,6 +215,7 @@ Expected mappings:
 - `(playwright)` or strong UI/UX polish prompts -> `/ox-ux`
 - design/wireframe/icon/palette prompts -> `/ox-design`
 - review/improve end-to-end prompts -> `/ox-review`
+- second-pass refine/polish/latest-work prompts -> `/ox-review`
 - ship-readiness / PR-prep prompts -> `/ox-ship`
 
 This keeps the shorthand deterministic while preserving the stable `/ox-*` command family as the canonical surface.

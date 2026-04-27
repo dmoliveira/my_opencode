@@ -87,6 +87,7 @@ Use the `ox` namespace when you want stable reusable prompt meaning with a short
 /ox-design --focus wireframes,icons,palette
 /image prompt --kind wireframe --subject "settings page" --goal "simpler hierarchy" --json
 /ox-review "review this code end to end and improve it"
+/ox-review "review the latest work, polish it, and fix inconsistencies"
 /ox-ship --goal "prepare this branch for PR"
 ```
 
@@ -97,6 +98,7 @@ Natural-language shortcut path:
 ```text
 /auto-slash preview --prompt "(playwright) analyze the website and polish the UX" --json
 /auto-slash preview --prompt "review this code and improve end to end" --json
+/auto-slash preview --prompt "review the latest work, polish it, and fix inconsistencies" --json
 ```
 
 Continuation loop controls:

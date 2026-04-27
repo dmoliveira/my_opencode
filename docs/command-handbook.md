@@ -536,6 +536,7 @@ Use `ox` when you want a short custom prefix that expands into a repeatable exec
 /ox ecosystem
 /ox-ux --repo top-uni
 /ox-review "review this branch end to end and improve it"
+/ox-review "review the latest work, polish it, and fix inconsistencies"
 /ox-ship --goal "prepare this branch for PR"
 /ox-start --scope "new task bootstrap"
 /ox-wrap
