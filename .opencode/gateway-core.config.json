@@ -10,13 +10,9 @@
     "disabled": ["dependency-risk-guard"]
   },
   "llmDecisionRuntime": {
-    "enabled": true,
-    "mode": "shadow",
-    "hookModes": {
-      "auto-slash-command": "assist",
-      "provider-error-classifier": "assist",
-      "todo-continuation-enforcer": "assist"
-    },
+    "enabled": false,
+    "mode": "disabled",
+    "hookModes": {},
     "command": "opencode",
     "model": "openai/gpt-5.1-codex-mini",
     "timeoutMs": 30000,
