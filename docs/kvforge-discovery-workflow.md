@@ -1,6 +1,6 @@
 # KVForge discovery workflow
 
-`my_opencode` can discover a live KVForge server from `~/.kvforge/server.json` and wire the gateway LLM decision runtime automatically.
+`my_opencode` can discover a live KVForge server from `~/.kvforge/server.json` and `~/.kvforge/servers/*.json`, then wire the gateway LLM decision runtime automatically.
 
 ## Flow
 
@@ -11,6 +11,13 @@
 /kvforge status
 /kvforge models
 /kvforge connect
+```
+
+When more than one KVForge server record exists, select one explicitly:
+
+```text
+/kvforge connect --name kvforge-gpt-5-4-mini
+/kvforge connect --model openai/gpt-5.4-mini
 ```
 
 `/kvforge connect` updates `.opencode/gateway-core.config.json` with:
@@ -24,5 +31,5 @@
 
 ## Notes
 
-- The KVForge server should expose a `served_model_name` alias that OpenCode recognizes, for example `gpt-5.4-mini`.
-- `/kvforge connect --name my-local-llm` lets you store a friendlier local connection label in config metadata.
+- KVForge should expose a `served_model_name` alias that OpenCode recognizes, for example `gpt-5.4-mini`.
+- The default no-flag `/kvforge connect` path uses the current live server when only one is running.
