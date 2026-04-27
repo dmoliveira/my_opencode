@@ -26,11 +26,14 @@ SECTION = "auto_slash_detector"
 AUDIT_DEFAULT = Path(
     "~/.config/opencode/my_opencode/runtime/auto_slash_audit.jsonl"
 ).expanduser()
+DEFAULT_MIN_CONFIDENCE = 0.75
+DEFAULT_AMBIGUITY_DELTA = 0.15
+DOCTOR_PRECISION_TARGET = 0.95
 
 
 def usage() -> int:
     print(
-        "usage: /auto-slash status [--json] | /auto-slash detect --prompt <text> [--json] | /auto-slash preview --prompt <text> [--json] | /auto-slash execute --prompt <text> [--force] [--json] | /auto-slash enable | /auto-slash disable | /auto-slash enable-command <doctor|stack|nvim|devtools|ox-ux|ox-review|ox-ship> | /auto-slash disable-command <doctor|stack|nvim|devtools|ox-ux|ox-review|ox-ship> | /auto-slash keyword <status|detect|apply|enable|disable|disable-keyword|enable-keyword|doctor> ... | /auto-slash doctor [--json] | /auto-slash audit [--limit <n>] [--json]"
+        "usage: /auto-slash status [--json] | /auto-slash detect --prompt <text> [--json] | /auto-slash preview --prompt <text> [--json] | /auto-slash execute --prompt <text> [--force] [--json] | /auto-slash enable | /auto-slash disable | /auto-slash enable-command <doctor|stack|nvim|devtools|ox-ux|ox-design|ox-review|ox-ship> | /auto-slash disable-command <doctor|stack|nvim|devtools|ox-ux|ox-design|ox-review|ox-ship> | /auto-slash keyword <status|detect|apply|enable|disable|disable-keyword|enable-keyword|doctor> ... | /auto-slash doctor [--json] | /auto-slash audit [--limit <n>] [--json]"
     )
     return 2
 
@@ -39,8 +42,8 @@ def default_state() -> dict[str, Any]:
     return {
         "enabled": True,
         "preview_first": True,
-        "min_confidence": 0.75,
-        "ambiguity_delta": 0.15,
+        "min_confidence": DEFAULT_MIN_CONFIDENCE,
+        "ambiguity_delta": DEFAULT_AMBIGUITY_DELTA,
         "enabled_commands": sorted(COMMANDS.keys()),
         "last_detection": None,
     }
@@ -58,14 +61,16 @@ def parse_value(argv: list[str], flag: str) -> str | None:
 def normalize_enabled_commands(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return sorted(COMMANDS.keys())
-    enabled = sorted(
-        {
-            str(item).strip().lower()
-            for item in raw
-            if str(item).strip().lower() in COMMANDS
-        }
-    )
-    return enabled if enabled else sorted(COMMANDS.keys())
+    enabled = {
+        str(item).strip().lower()
+        for item in raw
+        if str(item).strip().lower() in COMMANDS
+    }
+    legacy_ox_enabled = {"ox-review", "ox-ship", "ox-ux"}
+    if enabled and "ox-design" not in enabled and legacy_ox_enabled.issubset(enabled):
+        enabled.add("ox-design")
+    normalized = sorted(enabled)
+    return normalized if normalized else sorted(COMMANDS.keys())
 
 
 def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
@@ -94,8 +99,8 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
     config[SECTION] = {
         "enabled": bool(state.get("enabled", True)),
         "preview_first": bool(state.get("preview_first", True)),
-        "min_confidence": float(state.get("min_confidence", 0.75)),
-        "ambiguity_delta": float(state.get("ambiguity_delta", 0.15)),
+        "min_confidence": float(state.get("min_confidence", DEFAULT_MIN_CONFIDENCE)),
+        "ambiguity_delta": float(state.get("ambiguity_delta", DEFAULT_AMBIGUITY_DELTA)),
         "enabled_commands": normalize_enabled_commands(state.get("enabled_commands")),
         "last_detection": state.get("last_detection"),
     }
@@ -164,8 +169,8 @@ def command_status(argv: list[str]) -> int:
     payload = {
         "enabled": bool(state.get("enabled", True)),
         "preview_first": bool(state.get("preview_first", True)),
-        "min_confidence": state.get("min_confidence", 0.95),
-        "ambiguity_delta": state.get("ambiguity_delta", 0.15),
+        "min_confidence": state.get("min_confidence", DEFAULT_MIN_CONFIDENCE),
+        "ambiguity_delta": state.get("ambiguity_delta", DEFAULT_AMBIGUITY_DELTA),
         "enabled_commands": normalize_enabled_commands(state.get("enabled_commands")),
         "available_commands": sorted(COMMANDS.keys()),
         "last_detection": state.get("last_detection"),
@@ -356,22 +361,25 @@ def command_doctor(argv: list[str]) -> int:
         {"prompt": "switch to focus mode", "expected": "stack"},
         {"prompt": "install nvim integration minimal link init", "expected": "nvim"},
         {"prompt": "install devtools and setup hooks", "expected": "devtools"},
+        {"prompt": "help me design this app", "expected": "ox-design"},
+        {"prompt": "review the latest work and improve it", "expected": "ox-review"},
+        {"prompt": "prepare this branch for shipping and PR readiness", "expected": "ox-ship"},
         {"prompt": "write release notes for me", "expected": None},
     ]
     precision_report = evaluate_precision(
         representative_set,
         enabled=bool(state.get("enabled", True)),
         enabled_commands=set(enabled_commands),
-        min_confidence=float(state.get("min_confidence", 0.95)),
-        ambiguity_delta=float(state.get("ambiguity_delta", 0.15)),
+        min_confidence=float(state.get("min_confidence", DEFAULT_MIN_CONFIDENCE)),
+        ambiguity_delta=float(state.get("ambiguity_delta", DEFAULT_AMBIGUITY_DELTA)),
     )
 
     problems: list[str] = []
     warnings: list[str] = []
     if missing_scripts:
         problems.append(f"missing backend scripts for: {', '.join(missing_scripts)}")
-    if precision_report["precision"] < 0.95:
-        problems.append("representative precision below 0.95 target")
+    if precision_report["precision"] < DOCTOR_PRECISION_TARGET:
+        problems.append(f"representative precision below {DOCTOR_PRECISION_TARGET:.2f} target")
     if precision_report["unsafe_predictions"] > 0:
         problems.append("unsafe predictions detected on no-command prompts")
     if not state.get("enabled", True):

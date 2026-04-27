@@ -30,7 +30,6 @@ OUTPUT_LOCATION_PREFERENCE_PATH_ENV = "OPENAI_IMAGE_OUTPUT_LOCATION_CONFIG_PATH"
 DEFAULT_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1")
 DEFAULT_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 DEFAULT_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "high")
-DEFAULT_ARTIFACT_ROOT = REPO_ROOT / "artifacts" / "design"
 OPENAI_IMAGES_URL = os.environ.get("OPENAI_IMAGES_API_URL", "https://api.openai.com/v1/images/generations")
 KIND_TO_DIR = {
     "wireframe": "wireframes",
@@ -45,6 +44,26 @@ KIND_TO_DIR = {
 }
 
 
+def active_repo_root(*, cwd: Path | None = None) -> Path:
+    base = (cwd or Path.cwd()).resolve()
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=base,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=5,
+        )
+        if completed.returncode == 0:
+            resolved = (completed.stdout or "").strip()
+            if resolved:
+                return Path(resolved).resolve()
+    except Exception:
+        pass
+    return base
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -55,15 +74,15 @@ def slugify(value: str) -> str:
 
 
 def artifact_root() -> Path:
-    return DEFAULT_ARTIFACT_ROOT
+    return active_repo_root() / "artifacts" / "design"
 
 
 def output_location_preference_path() -> Path:
     override = os.environ.get(OUTPUT_LOCATION_PREFERENCE_PATH_ENV, "").strip()
     if override:
         path = Path(override)
-        return path if path.is_absolute() else REPO_ROOT / path
-    return REPO_ROOT / ".opencode" / "image-output-location.txt"
+        return path if path.is_absolute() else active_repo_root() / path
+    return active_repo_root() / ".opencode" / "image-output-location.txt"
 
 
 def validate_output_location(location: str) -> str:
@@ -93,7 +112,7 @@ def output_root_for_location(location: str, *, cwd: Path | None = None) -> Path:
     normalized = validate_output_location(location)
     base_cwd = cwd or Path.cwd()
     if normalized == "repo-artifacts":
-        return DEFAULT_ARTIFACT_ROOT
+        return active_repo_root(cwd=base_cwd) / "artifacts" / "design"
     if normalized == "cwd-artifacts":
         return base_cwd / "artifacts" / "design"
     if normalized == "desktop":
@@ -150,8 +169,8 @@ def provider_preference_path() -> Path:
     override = os.environ.get(PROVIDER_PREFERENCE_PATH_ENV, "").strip()
     if override:
         path = Path(override)
-        return path if path.is_absolute() else REPO_ROOT / path
-    return REPO_ROOT / ".opencode" / "image-provider.txt"
+        return path if path.is_absolute() else active_repo_root() / path
+    return active_repo_root() / ".opencode" / "image-provider.txt"
 
 
 def validate_provider(provider: str) -> str:
@@ -277,8 +296,8 @@ def build_status_payload() -> dict[str, Any]:
     resolved_output_root = output_root_for_location(effective_output_location)
     return {
         "result": "PASS",
-        "artifact_root": str(DEFAULT_ARTIFACT_ROOT),
-        "artifact_root_exists": DEFAULT_ARTIFACT_ROOT.exists(),
+        "artifact_root": str(artifact_root()),
+        "artifact_root_exists": artifact_root().exists(),
         "resolved_output_root": str(resolved_output_root),
         "resolved_output_root_exists": resolved_output_root.exists(),
         "default_provider": DEFAULT_PROVIDER,
@@ -382,7 +401,7 @@ def build_prompt(kind: str, subject: str, goal: str, style: str, notes: str) -> 
 def resolve_output_path(kind: str, subject: str, output: str | None, *, output_location: str | None = None) -> Path:
     if output:
         path = Path(output)
-        return path if path.is_absolute() else REPO_ROOT / path
+        return path if path.is_absolute() else active_repo_root() / path
     location = validate_output_location(output_location or resolve_output_location(None)[0])
     subdir = KIND_TO_DIR.get(kind, "exports")
     stem = slugify(subject or kind)

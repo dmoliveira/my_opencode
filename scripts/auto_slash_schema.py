@@ -220,10 +220,13 @@ INTENT_RULES = {
         },
         "phrases": {
             "prepare this branch for pr",
+            "prepare this branch for shipping and pr readiness",
+            "prepare this branch for pr readiness",
             "is this ready to ship",
             "is this branch ready to ship",
             "validate this branch",
             "draft pr summary",
+            "pr readiness",
             "ship readiness",
         },
     },
@@ -258,8 +261,10 @@ def _score_candidate(
     if keywords:
         keyword_score = min(1.0, len(matched_keywords) / max(1.0, len(keywords) / 2.0))
     phrase_hits = _phrase_hits(prompt_lower, spec["phrases"])
-    phrase_score = min(1.0, phrase_hits * 0.45)
-    score = min(1.0, keyword_score * 0.6 + phrase_score)
+    phrase_score = min(1.0, phrase_hits * 0.5)
+    score = min(1.0, keyword_score * 0.55 + phrase_score)
+    if phrase_hits > 0 and matched_keywords:
+        score = min(1.0, score + (0.18 if command.startswith("ox-") else 0.08))
     return {
         "command": command,
         "score": round(score, 4),
