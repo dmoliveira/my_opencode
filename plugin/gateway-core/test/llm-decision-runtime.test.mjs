@@ -53,6 +53,7 @@ test("resolveLlmDecisionRuntimeConfigForHook applies per-hook mode overrides", (
       hookModes: { "auto-slash-command": "assist" },
       command: "opencode",
       model: "github-copilot/gpt-5-mini",
+      env: {},
       timeoutMs: 1000,
       failureCooldownMs: 10000,
       maxPromptChars: 200,
@@ -74,6 +75,7 @@ test("llm decision runtime accepts valid JSON text output", async () => {
       mode: "assist",
       command: "opencode",
       model: "github-copilot/gpt-5-mini",
+      env: {},
       timeoutMs: 1000,
       failureCooldownMs: 10000,
       maxPromptChars: 200,
@@ -109,6 +111,7 @@ test("llm decision runtime rejects invalid multi-character output", async () => 
       mode: "shadow",
       command: "opencode",
       model: "github-copilot/gpt-5-mini",
+      env: {},
       timeoutMs: 1000,
       failureCooldownMs: 10000,
       maxPromptChars: 200,
@@ -146,6 +149,7 @@ test("llm decision runtime skips nested helper child processes", async () => {
         mode: "assist",
         command: "opencode",
         model: "github-copilot/gpt-5-mini",
+        env: {},
         timeoutMs: 1000,
         failureCooldownMs: 10000,
         maxPromptChars: 200,
@@ -190,6 +194,7 @@ test("llm decision runtime skips standalone opencode helpers by default", async 
         mode: "assist",
         command: "opencode",
         model: "github-copilot/gpt-5-mini",
+        env: {},
         timeoutMs: 1000,
         failureCooldownMs: 10000,
         maxPromptChars: 200,
@@ -216,6 +221,44 @@ test("llm decision runtime skips standalone opencode helpers by default", async 
       process.env.MY_OPENCODE_LLM_DECISION_ALLOW_STANDALONE_OPENCODE = previous
     }
   }
+})
+
+test("llm decision runtime allows standalone opencode when explicitly enabled", async () => {
+  let calls = 0
+  const runtime = createLlmDecisionRuntime({
+    directory: process.cwd(),
+    config: {
+      enabled: true,
+      mode: "assist",
+      command: "opencode",
+      model: "openai/gpt-5.4-mini",
+      env: {},
+      allowStandaloneOpencode: true,
+      timeoutMs: 1000,
+      failureCooldownMs: 10000,
+      maxPromptChars: 200,
+      maxContextChars: 200,
+      enableCache: false,
+      cacheTtlMs: 10000,
+      maxCacheEntries: 8,
+    },
+    runner: async () => {
+      calls += 1
+      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+    },
+  })
+
+  const result = await runtime.decide({
+    hookId: "test-hook",
+    sessionId: "session-standalone-enabled",
+    templateId: "continue-v1",
+    instruction: "Continue loop?",
+    context: "Pending tasks remain.",
+    allowedChars: ["Y", "N"],
+  })
+
+  assert.equal(result.accepted, true)
+  assert.equal(calls, 1)
 })
 
 test("llm decision runtime rejects refusal-style text output", async () => {
@@ -250,6 +293,50 @@ test("llm decision runtime rejects refusal-style text output", async () => {
   })
   assert.equal(result.accepted, false)
   assert.equal(result.skippedReason, "invalid_response")
+})
+
+test("llm decision runtime forwards configured env to child runner", async () => {
+  let receivedEnv = null
+  const runtime = createLlmDecisionRuntime({
+    directory: process.cwd(),
+    config: {
+      enabled: true,
+      mode: "assist",
+      hookModes: {},
+      command: "opencode",
+      model: "openai/smollm2-135m",
+      env: {
+        OPENAI_BASE_URL: "http://127.0.0.1:8000/v1",
+        OPENAI_API_KEY: "dummy",
+      },
+      allowStandaloneOpencode: true,
+      timeoutMs: 1000,
+      failureCooldownMs: 10000,
+      maxPromptChars: 200,
+      maxContextChars: 200,
+      enableCache: false,
+      cacheTtlMs: 10000,
+      maxCacheEntries: 8,
+    },
+    runner: async (_args, _timeoutMs, _cwd, env) => {
+      receivedEnv = env
+      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+    },
+  })
+
+  const result = await runtime.decide({
+    hookId: "test-hook",
+    sessionId: "session-env-forward",
+    templateId: "continue-v1",
+    instruction: "Continue loop?",
+    context: "Pending tasks remain.",
+    allowedChars: ["Y", "N"],
+  })
+
+  assert.equal(result.accepted, true)
+  assert.equal(receivedEnv.OPENAI_BASE_URL, "http://127.0.0.1:8000/v1")
+  assert.equal(receivedEnv.OPENAI_API_KEY, "dummy")
+  assert.equal(receivedEnv.MY_OPENCODE_LLM_DECISION_CHILD, "1")
 })
 
 test("buildSingleCharDecisionPrompt serializes adversarial context as data", () => {
@@ -412,11 +499,12 @@ test("llm decision runtime caches accepted decisions", async () => {
   const runtime = createLlmDecisionRuntime({
     directory: process.cwd(),
     config: {
-      enabled: true,
-      mode: "assist",
-      command: "opencode",
-      model: "github-copilot/gpt-5-mini",
-      timeoutMs: 1000,
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "github-copilot/gpt-5-mini",
+        env: {},
+        timeoutMs: 1000,
       failureCooldownMs: 10000,
       maxPromptChars: 200,
       maxContextChars: 200,

@@ -13,6 +13,14 @@ function stringList(value) {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
 }
+function stringRecord(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {};
+    }
+    return Object.fromEntries(Object.entries(value)
+        .map(([key, entryValue]) => [String(key ?? "").trim(), String(entryValue ?? "").trim()])
+        .filter(([key, entryValue]) => key.length > 0 && entryValue.length > 0));
+}
 function recordValue(value) {
     return value && typeof value === "object"
         ? value
@@ -748,6 +756,10 @@ export function loadGatewayConfig(raw) {
                 llmDecisionRuntimeSource.model.trim().length > 0
                 ? llmDecisionRuntimeSource.model.trim()
                 : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
+            env: stringRecord(llmDecisionRuntimeSource.env),
+            allowStandaloneOpencode: typeof llmDecisionRuntimeSource.allowStandaloneOpencode === "boolean"
+                ? llmDecisionRuntimeSource.allowStandaloneOpencode
+                : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.allowStandaloneOpencode,
             timeoutMs: positiveInt(llmDecisionRuntimeSource.timeoutMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs),
             failureCooldownMs: positiveInt(llmDecisionRuntimeSource.failureCooldownMs, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.failureCooldownMs),
             maxConcurrentDecisions: positiveInt(llmDecisionRuntimeSource.maxConcurrentDecisions, DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.maxConcurrentDecisions),

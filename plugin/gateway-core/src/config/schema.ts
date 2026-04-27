@@ -198,6 +198,8 @@ export interface LlmDecisionRuntimeConfig {
   hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
   command: string;
   model: string;
+  env: Record<string, string>;
+  allowStandaloneOpencode: boolean;
   timeoutMs: number;
   failureCooldownMs: number;
   maxConcurrentDecisions: number;
@@ -949,6 +951,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     hookModes: {},
     command: "opencode",
     model: "github-copilot/gpt-5-mini",
+    env: {},
+    allowStandaloneOpencode: false,
     timeoutMs: 10000,
     failureCooldownMs: 120000,
     maxConcurrentDecisions: 1,

@@ -16,6 +16,17 @@ function stringList(value: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
+function stringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, entryValue]) => [String(key ?? "").trim(), String(entryValue ?? "").trim()])
+      .filter(([key, entryValue]) => key.length > 0 && entryValue.length > 0),
+  );
+}
+
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -1178,6 +1189,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         llmDecisionRuntimeSource.model.trim().length > 0
           ? llmDecisionRuntimeSource.model.trim()
           : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.model,
+      env: stringRecord(llmDecisionRuntimeSource.env),
+      allowStandaloneOpencode:
+        typeof llmDecisionRuntimeSource.allowStandaloneOpencode === "boolean"
+          ? llmDecisionRuntimeSource.allowStandaloneOpencode
+          : DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.allowStandaloneOpencode,
       timeoutMs: positiveInt(
         llmDecisionRuntimeSource.timeoutMs,
         DEFAULT_GATEWAY_CONFIG.llmDecisionRuntime.timeoutMs,

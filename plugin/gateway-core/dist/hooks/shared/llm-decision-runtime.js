@@ -191,20 +191,12 @@ function pruneDecisionCache(cache, now, maxEntries) {
         cache.delete(oldestKey);
     }
 }
-async function defaultRunner(args, timeoutMs, cwd) {
+async function defaultRunner(args, timeoutMs, cwd, env) {
     return await new Promise((resolve, reject) => {
         const child = spawn(args[0] ?? "opencode", args.slice(1), {
             cwd,
             stdio: ["ignore", "pipe", "pipe"],
-            env: {
-                ...process.env,
-                CI: process.env.CI ?? "true",
-                GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT ?? "0",
-                GIT_EDITOR: process.env.GIT_EDITOR ?? "true",
-                GIT_PAGER: process.env.GIT_PAGER ?? "cat",
-                PAGER: process.env.PAGER ?? "cat",
-                [LLM_DECISION_CHILD_ENV]: "1",
-            },
+            env,
         });
         let stdout = "";
         let stderr = "";
@@ -274,6 +266,10 @@ export function createLlmDecisionRuntime(options) {
         hookModes: options.config.hookModes ?? {},
         command: String(options.config.command || "opencode").trim() || "opencode",
         model: String(options.config.model || "github-copilot/gpt-5-mini").trim() || "github-copilot/gpt-5-mini",
+        env: Object.fromEntries(Object.entries(options.config.env ?? {})
+            .map(([key, value]) => [String(key ?? "").trim(), String(value ?? "").trim()])
+            .filter(([key, value]) => key.length > 0 && value.length > 0)) || {},
+        allowStandaloneOpencode: Boolean(options.config.allowStandaloneOpencode),
         timeoutMs: safePositiveInt(options.config.timeoutMs, 10000),
         failureCooldownMs: safePositiveInt(options.config.failureCooldownMs, 120000),
         maxConcurrentDecisions: safePositiveInt(options.config.maxConcurrentDecisions, 1),
@@ -318,6 +314,7 @@ export function createLlmDecisionRuntime(options) {
             }
             if (!hasCustomRunner &&
                 isStandaloneOpencodeCommand(config.command) &&
+                !config.allowStandaloneOpencode &&
                 !allowsStandaloneOpencodeDecisionRuntime()) {
                 return {
                     ...baseResult,
@@ -392,7 +389,17 @@ export function createLlmDecisionRuntime(options) {
             try {
                 activeDecisions++;
                 const runArgs = [config.command, "run", "--model", config.model, "--format", "json", prompt];
-                const response = await runner(runArgs, config.timeoutMs, options.directory);
+                const childEnv = {
+                    ...process.env,
+                    ...config.env,
+                    CI: process.env.CI ?? "true",
+                    GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT ?? "0",
+                    GIT_EDITOR: process.env.GIT_EDITOR ?? "true",
+                    GIT_PAGER: process.env.GIT_PAGER ?? "cat",
+                    PAGER: process.env.PAGER ?? "cat",
+                    [LLM_DECISION_CHILD_ENV]: "1",
+                };
+                const response = await runner(runArgs, config.timeoutMs, options.directory, childEnv);
                 const raw = extractTextFromJsonLines(response.stdout);
                 const char = parseSingleCharDecision(raw, allowedChars);
                 const meaning = resolveDecisionMeaning(char, request.decisionMeaning);

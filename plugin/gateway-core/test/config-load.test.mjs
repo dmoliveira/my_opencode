@@ -105,6 +105,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.llmDecisionRuntime.mode, "disabled")
   assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
   assert.equal(config.llmDecisionRuntime.model, "github-copilot/gpt-5-mini")
+  assert.deepEqual(config.llmDecisionRuntime.env, {})
+  assert.equal(config.llmDecisionRuntime.allowStandaloneOpencode, false)
   assert.equal(config.llmDecisionRuntime.timeoutMs, 10000)
   assert.equal(config.llmDecisionRuntime.failureCooldownMs, 120000)
   assert.equal(config.llmDecisionRuntime.enableCache, true)
@@ -122,6 +124,26 @@ test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
     },
   })
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
+})
+
+test("loadGatewayConfig normalizes llmDecisionRuntime env to non-empty string pairs", () => {
+  const config = loadGatewayConfig({
+    llmDecisionRuntime: {
+      env: {
+        OPENAI_BASE_URL: "http://127.0.0.1:8000/v1",
+        OPENAI_API_KEY: "dummy",
+        EMPTY_VALUE: "   ",
+        "   ": "ignored",
+      },
+      allowStandaloneOpencode: true,
+    },
+  })
+
+  assert.deepEqual(config.llmDecisionRuntime.env, {
+    OPENAI_BASE_URL: "http://127.0.0.1:8000/v1",
+    OPENAI_API_KEY: "dummy",
+  })
+  assert.equal(config.llmDecisionRuntime.allowStandaloneOpencode, true)
 })
 
 test("loadGatewayConfig accepts concise mode sidecar override", () => {
