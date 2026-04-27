@@ -155,6 +155,8 @@ export interface LlmDecisionRuntimeConfig {
     hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
     command: string;
     model: string;
+    env: Record<string, string>;
+    allowStandaloneOpencode: boolean;
     timeoutMs: number;
     failureCooldownMs: number;
     maxConcurrentDecisions: number;

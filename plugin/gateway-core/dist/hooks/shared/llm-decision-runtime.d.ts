@@ -5,6 +5,8 @@ export interface LlmDecisionRuntimeConfig {
     hookModes: Record<string, LlmDecisionMode>;
     command: string;
     model: string;
+    env: Record<string, string>;
+    allowStandaloneOpencode: boolean;
     timeoutMs: number;
     failureCooldownMs: number;
     maxConcurrentDecisions: number;
@@ -62,7 +64,7 @@ type RunnerResult = {
 interface RuntimeOptions {
     directory: string;
     config: LlmDecisionRuntimeConfig;
-    runner?: (args: string[], timeoutMs: number, cwd: string) => Promise<RunnerResult>;
+    runner?: (args: string[], timeoutMs: number, cwd: string, env: Record<string, string>) => Promise<RunnerResult>;
 }
 export declare function buildLlmDecisionFallbackNotice(failureCooldownMs: number): string;
 export declare function peekLlmDecisionFallbackNotice(directory: string, sessionId: string): string;
