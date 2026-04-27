@@ -179,6 +179,45 @@ test("llm decision runtime skips nested helper child processes", async () => {
   }
 })
 
+test("llm decision runtime skips standalone opencode helpers by default", async () => {
+  const previous = process.env.MY_OPENCODE_LLM_DECISION_ALLOW_STANDALONE_OPENCODE
+  delete process.env.MY_OPENCODE_LLM_DECISION_ALLOW_STANDALONE_OPENCODE
+  try {
+    const runtime = createLlmDecisionRuntime({
+      directory: process.cwd(),
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "github-copilot/gpt-5-mini",
+        timeoutMs: 1000,
+        failureCooldownMs: 10000,
+        maxPromptChars: 200,
+        maxContextChars: 200,
+        enableCache: false,
+        cacheTtlMs: 10000,
+        maxCacheEntries: 8,
+      },
+    })
+    const result = await runtime.decide({
+      hookId: "test-hook",
+      sessionId: "session-standalone-opencode",
+      templateId: "continue-v1",
+      instruction: "Continue loop?",
+      context: "Pending tasks remain.",
+      allowedChars: ["Y", "N"],
+    })
+    assert.equal(result.accepted, false)
+    assert.equal(result.skippedReason, "standalone_opencode_runtime_disabled")
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_LLM_DECISION_ALLOW_STANDALONE_OPENCODE
+    } else {
+      process.env.MY_OPENCODE_LLM_DECISION_ALLOW_STANDALONE_OPENCODE = previous
+    }
+  }
+})
+
 test("llm decision runtime rejects refusal-style text output", async () => {
   const runtime = createLlmDecisionRuntime({
     directory: process.cwd(),

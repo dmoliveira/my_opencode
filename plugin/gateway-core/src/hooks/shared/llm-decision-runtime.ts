@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process"
+import { basename } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 
@@ -92,6 +93,7 @@ interface RuntimeOptions {
   runner?: (args: string[], timeoutMs: number, cwd: string) => Promise<RunnerResult>
 }
 const LLM_DECISION_CHILD_ENV = "MY_OPENCODE_LLM_DECISION_CHILD"
+const LLM_DECISION_ALLOW_STANDALONE_OPENCODE_ENV = "MY_OPENCODE_LLM_DECISION_ALLOW_STANDALONE_OPENCODE"
 const llmDecisionFallbackNoticeBySession = new Map<string, string>()
 
 function llmDecisionNoticeKey(directory: string, sessionId: string): string {
@@ -164,6 +166,18 @@ function clearLlmDecisionFallbackNotice(directory: string, sessionId: string): v
 
 function safePositiveInt(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
+}
+
+function isStandaloneOpencodeCommand(command: string): boolean {
+  const normalized = String(command ?? "").trim()
+  if (!normalized) {
+    return true
+  }
+  return basename(normalized).toLowerCase() === "opencode"
+}
+
+function allowsStandaloneOpencodeDecisionRuntime(): boolean {
+  return process.env[LLM_DECISION_ALLOW_STANDALONE_OPENCODE_ENV] === "1"
 }
 
 const INVISIBLE_FORMATTING_PATTERN = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]+/g
@@ -373,6 +387,7 @@ function extractTextFromJsonLines(stdout: string): string {
 
 export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRuntime {
   const runner = options.runner ?? defaultRunner
+  const hasCustomRunner = Boolean(options.runner)
   const config: LlmDecisionRuntimeConfig = {
     enabled: options.config.enabled,
     mode: options.config.mode,
@@ -422,6 +437,17 @@ export function createLlmDecisionRuntime(options: RuntimeOptions): LlmDecisionRu
           ...baseResult,
           durationMs: Date.now() - start,
           skippedReason: "nested_decision_child",
+        }
+      }
+      if (
+        !hasCustomRunner &&
+        isStandaloneOpencodeCommand(config.command) &&
+        !allowsStandaloneOpencodeDecisionRuntime()
+      ) {
+        return {
+          ...baseResult,
+          durationMs: Date.now() - start,
+          skippedReason: "standalone_opencode_runtime_disabled",
         }
       }
       if (!request.instruction.trim() || allowedChars.length === 0) {
