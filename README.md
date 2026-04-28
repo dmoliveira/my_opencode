@@ -17,6 +17,8 @@ This repo gives you a clean, portable OpenCode setup with fast MCP controls insi
 
 Start here: `docs/quickstart.md`
 
+For optional low-token operator defaults, see `docs/silent-first-command-defaults.md`.
+
 ## Related playbook repo
 
 For the reusable delivery contract and lighter-weight policy docs that complement this runtime repo, search your local clone first when available, and use these public references when you need a shareable or canonical link:
