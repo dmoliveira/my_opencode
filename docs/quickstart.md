@@ -8,30 +8,42 @@
 
 Startup instructions are loaded from `~/.config/opencode/my_opencode/AGENTS.md` and `~/.config/opencode/my_opencode/instructions/shell_strategy.md`. If you use `./scripts/setup_local_dev_symlinks.sh`, the repo `AGENTS.md` points at the sibling checkout `../agents_md/AGENTS.md` when present and falls back to `../agents.md/AGENTS.md` for older layouts, which keeps your main operating contract centralized for all new sessions without reinstalling OpenCode.
 
-## Canonical first-run commands
-
-Managed MCPs start disabled by default; opt into a focused profile only when you need extra context.
-
-```text
-/doctor run
-/devtools status
-/plugin status
-/mcp status
-/browser ensure --json
-/notify status
-/gateway concise status --json
-/ox
-/ox-ux --repo top-uni
-/ox-design --goal "explore a design direction for this app"
-/image doctor --json
-/autoflow status --json
-/digest run --reason manual
-/gateway status
-/bg doctor --json
-/agent-pool doctor --json
-/tmux doctor --json
-```
-
+## Canonical first-run commands [h:79a9eb20]
+ [h:b29cb517]
+Managed MCPs start disabled by default; opt into a focused profile only when you need extra context. [h:5ec50bf5]
+ [h:90502280]
+Required first-run checks: [h:bf437ec9]
+ [h:92b53b41]
+```text [h:be7b1450]
+/doctor run [h:e0fa3cbe]
+/devtools status [h:edbb473e]
+/plugin status [h:014e2cdb]
+/mcp status [h:5435d065]
+/notify status [h:2890edfb]
+/gateway concise status --json [h:8674ea32]
+``` [h:1c9a971a]
+ [h:7f7f70d2]
+Optional capability checks when you need them: [h:371d5a53]
+ [h:69822f88]
+```text [h:4d0a35db]
+/browser ensure --json [h:eed56897]
+/image doctor --json [h:d70ff749]
+/autoflow status --json [h:b4a6e840]
+/gateway status [h:ba871087]
+/bg doctor --json [h:d5f4c4e1]
+/agent-pool doctor --json [h:478f2820]
+/tmux doctor --json [h:ae3cceae]
+``` [h:0a584b58]
+ [h:47685be0]
+Exploratory examples after startup is healthy: [h:9e27aaf8]
+ [h:e0a80255]
+```text [h:f71fe560]
+/ox [h:a4484e02]
+/ox-ux --repo top-uni [h:997ec94a]
+/ox-design --goal "explore a design direction for this app" [h:7360f925]
+/digest run --reason manual [h:c26b764a]
+``` [h:df2941d1]
+ [h:f9e58fe7]
 Optional next step when you want lightweight repo or docs context:
 
 ```text
@@ -43,6 +55,8 @@ Run `/session handoff --json` after you have at least one indexed digest. If you
 For background runtime ownership, use `/agent-pool` to register or drain visible manual capacity and `/bg` to actually run, inspect, and clean up jobs.
 
 For automation-friendly help output, prefer command-specific help from this repo (for example `python3 scripts/session_command.py help`) because the upstream `opencode --help` banner formatting is not controlled here.
+
+For low-token command execution defaults, use `docs/silent-first-command-defaults.md` to prefer JSON, quiet, or short forms before expanding to verbose logs.
 
 Gateway runtime behavior is primarily tuned through the sidecar config at `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`). Use that file for normal hook/runtime tuning; if the same gateway keys are also set in root config, the root values still override the sidecar today.
 
@@ -112,6 +126,7 @@ Continuation loop controls:
 ## References
 
 - Full command catalog: `docs/command-handbook.md`
+- Silent-first command defaults: `docs/silent-first-command-defaults.md`
 - OX prompt-pack contracts: `docs/ox-command-pack.md`
 - Operator runbook: `docs/operator-playbook.md`
 - Worktree-first execution: `docs/parallel-wt-playbook.md`

@@ -133,6 +133,25 @@ Quick taxonomy:
 | active session mode | `lite`, `full`, `ultra`, `review`, `commit` | current runtime session |
 | one-shot alias | `compress` | single command run |
 
+## Local KVForge connections 🔌
+
+Use these directly in OpenCode:
+
+```text
+/models
+/models --json
+/connect
+/connect --name local-dev
+/connect --model openai/gpt-5.4-mini
+/connect --mode assist --json
+```
+
+Use `/models` to inspect discovered live and stale KVForge-backed local models.
+
+Use `/connect` to point the runtime at a discovered local OpenAI-compatible server by default selection, connection name, or provider/model.
+
+If multiple servers are running, prefer `/models --json` first so you can choose a specific `--name` or `--model` without guesswork.
+
 ## Design and image workflows 🎨
 
 Use these directly in OpenCode:
