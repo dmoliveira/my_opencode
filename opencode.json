@@ -319,9 +319,13 @@
       "description": "Manage gateway runtime controls (status|enable|disable|doctor|tune memory|recover memory|protection)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before gateway --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
-    "kvforge": {
-      "description": "Discover and connect to a live KVForge OpenAI-compatible local server (status|models|connect)",
-      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/kvforge_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    "connect": {
+      "description": "Connect to a discovered live KVForge/OpenAI-compatible local server (default|--name|--model)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/connect_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "models": {
+      "description": "List discovered live and stale KVForge-backed local models", 
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/models_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "delegation-health": {
       "description": "Summarize delegation health and detect routing drift (status|doctor)",
