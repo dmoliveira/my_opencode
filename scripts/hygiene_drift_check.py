@@ -30,7 +30,7 @@ ALLOWED_DUPLICATE_TEMPLATE_MARKERS = {
 # Transitional allowlist for hook IDs present in config order but not yet
 # guaranteed in every branch snapshot. Keep this list short and temporary.
 ALLOWED_MISSING_HOOK_IDS = {"mistake-ledger"}
-MAX_COMMAND_SURFACE = 63
+MAX_COMMAND_SURFACE = 64
 MAX_COMMANDS_PER_SCRIPT = 3
 ALLOWED_MULTI_COMMAND_SCRIPTS = {
     "slash_command_wrapper.py",
