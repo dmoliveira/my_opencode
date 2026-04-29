@@ -7,7 +7,7 @@ import test from "node:test"
 import GatewayCorePlugin from "../dist/index.js"
 import { createDoneProofEnforcerHook } from "../dist/hooks/done-proof-enforcer/index.js"
 import { createValidationEvidenceLedgerHook } from "../dist/hooks/validation-evidence-ledger/index.js"
-import {
+import { 
   missingValidationMarkers,
   validationEvidence,
 } from "../dist/hooks/validation-evidence-ledger/evidence.js"
@@ -184,40 +184,45 @@ test("validation-evidence-ledger does not misattribute overlapping pending bash 
 })
 
 test("validation-evidence-ledger clears pending invocation on before error", async () => {
-  const hook = createValidationEvidenceLedgerHook({
-    directory: process.cwd(),
-    enabled: true,
-  })
+  const directory = mkdtempSync(join(tmpdir(), "gateway-validation-ledger-before-error-"))
+  try {
+    const hook = createValidationEvidenceLedgerHook({
+      directory,
+      enabled: true,
+    })
 
-  const run = { args: { command: "npm run lint" } }
-  await hook.event("tool.execute.before", {
-    input: { tool: "bash", sessionID: "session-ledger-before-error" },
-    output: run,
-  })
-  await hook.event("tool.execute.before.error", {
-    input: { tool: "bash", sessionID: "session-ledger-before-error" },
-    output: run,
-  })
+    const run = { args: { command: "npm run lint" } }
+    await hook.event("tool.execute.before", {
+      input: { tool: "bash", sessionID: "session-ledger-before-error" },
+      output: run,
+    })
+    await hook.event("tool.execute.before.error", {
+      input: { tool: "bash", sessionID: "session-ledger-before-error" },
+      output: run,
+    })
 
-  await hook.event("tool.execute.after", {
-    input: { tool: "bash", sessionID: "session-ledger-before-error" },
-    output: { ...run, output: "lint passed" },
-  })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-ledger-before-error" },
+      output: { ...run, output: "lint passed" },
+    })
 
-  const done = { output: "finalizing\n<promise>DONE</promise>" }
-  const doneHook = createDoneProofEnforcerHook({
-    directory: process.cwd(),
-    enabled: true,
-    requiredMarkers: ["lint"],
-    requireLedgerEvidence: true,
-    allowTextFallback: false,
-  })
-  await doneHook.event("tool.execute.after", {
-    input: { tool: "bash", sessionID: "session-ledger-before-error" },
-    output: done,
-  })
+    const done = { output: "finalizing\n<promise>DONE</promise>" }
+    const doneHook = createDoneProofEnforcerHook({
+      directory,
+      enabled: true,
+      requiredMarkers: ["lint"],
+      requireLedgerEvidence: true,
+      allowTextFallback: false,
+    })
+    await doneHook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "session-ledger-before-error" },
+      output: done,
+    })
 
-  assert.equal(done.output.includes("PENDING_VALIDATION"), true)
+    assert.equal(done.output.includes("PENDING_VALIDATION"), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test("validation-evidence-ledger clears evidence on session.compacted", async () => {

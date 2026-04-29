@@ -69,43 +69,48 @@ test("done-proof-enforcer uses LLM fallback for semantic evidence wording", asyn
 })
 
 test("done-proof-enforcer shadow mode records semantic evidence but keeps pending validation", async () => {
-  const hook = createDoneProofEnforcerHook({
-    enabled: true,
-    requiredMarkers: ["test"],
-    requireLedgerEvidence: true,
-    allowTextFallback: true,
-    directory: process.cwd(),
-    decisionRuntime: {
-      config: {
-        enabled: true,
-        mode: "shadow",
-        command: "opencode",
-        model: "openai/gpt-5.1-codex-mini",
-        timeoutMs: 1000,
-        maxPromptChars: 200,
-        maxContextChars: 200,
-        enableCache: true,
-        cacheTtlMs: 10000,
-        maxCacheEntries: 8,
+  const directory = mkdtempSync(join(tmpdir(), "gateway-done-proof-shadow-"))
+  try {
+    const hook = createDoneProofEnforcerHook({
+      enabled: true,
+      requiredMarkers: ["test"],
+      requireLedgerEvidence: true,
+      allowTextFallback: true,
+      directory,
+      decisionRuntime: {
+        config: {
+          enabled: true,
+          mode: "shadow",
+          command: "opencode",
+          model: "openai/gpt-5.1-codex-mini",
+          timeoutMs: 1000,
+          maxPromptChars: 200,
+          maxContextChars: 200,
+          enableCache: true,
+          cacheTtlMs: 10000,
+          maxCacheEntries: 8,
+        },
+        decide: async () => ({
+          mode: "shadow",
+          accepted: true,
+          char: "Y",
+          raw: "Y",
+          durationMs: 1,
+          model: "openai/gpt-5.1-codex-mini",
+          templateId: "done-proof-marker-test-v1",
+          meaning: "test_present",
+        }),
       },
-      decide: async () => ({
-        mode: "shadow",
-        accepted: true,
-        char: "Y",
-        raw: "Y",
-        durationMs: 1,
-        model: "openai/gpt-5.1-codex-mini",
-        templateId: "done-proof-marker-test-v1",
-        meaning: "test_present",
-      }),
-    },
-  })
+    })
 
-  const output = {
-    output: "Completed smoke verification and regression checks successfully.\n<promise>DONE</promise>",
+    const output = {
+      output: "Completed smoke verification and regression checks successfully.\n<promise>DONE</promise>",
+    }
+    await hook.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-proof-shadow-1" }, output })
+    assert.equal(output.output.includes("PENDING_VALIDATION"), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
   }
-  await hook.event("tool.execute.after", { input: { tool: "bash", sessionID: "session-proof-shadow-1" }, output })
-  assert.equal(output.output.includes("PENDING_VALIDATION"), true)
 })
 
 test("done-proof-enforcer rewrites structured bash output payloads", async () => {

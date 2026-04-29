@@ -139,6 +139,9 @@ test("compaction-context-injector coexists with auto-slash in default hook flow"
     const plugin = GatewayCorePlugin({
       directory,
       config: {
+        autoSlashCommand: {
+          enabled: true,
+        },
         compactionContextInjector: {
           enabled: true,
         },
@@ -173,6 +176,9 @@ test("compaction context survives custom order before auto-slash", async () => {
           enabled: true,
           order: ["compaction-context-injector", "auto-slash-command"],
           disabled: [],
+        },
+        autoSlashCommand: {
+          enabled: true,
         },
         compactionContextInjector: {
           enabled: true,
