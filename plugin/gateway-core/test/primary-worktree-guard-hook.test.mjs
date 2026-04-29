@@ -122,6 +122,29 @@ test("primary-worktree-guard blocks switching the primary worktree onto task bra
       { tool: "bash", sessionID: "session-primary-checkout-path" },
       { args: { command: "git checkout main -- file.txt" } }
     )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-branch-detach-main" },
+      { args: { command: "git switch --detach origin/main" } }
+    )
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-branch-detach-main-checkout" },
+      { args: { command: "git checkout --detach main" } }
+    )
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-primary-maintenance-helper-execute" },
+        {
+          args: {
+            command:
+              'python3 scripts/worktree_helper_command.py maintenance --directory . --command "git commit -m \'msg\'" --execute --json',
+          },
+        }
+      ),
+      /Direct maintenance-helper execute mode is blocked in the primary project folder/
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

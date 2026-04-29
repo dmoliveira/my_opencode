@@ -3,7 +3,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PARENT_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
+
+resolve_default_repo_root() {
+	local git_common_dir
+	git_common_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+	if [[ -n "$git_common_dir" && -d "$git_common_dir" ]]; then
+		cd "$git_common_dir/.." && pwd
+		return 0
+	fi
+	printf '%s\n' "$REPO_ROOT"
+}
+
+DEFAULT_REPO_ROOT="$(resolve_default_repo_root)"
+PARENT_ROOT="$(cd "$DEFAULT_REPO_ROOT/.." && pwd)"
 AGENTS_MD_LINK_TARGET="../agents_md/AGENTS.md"
 AGENTS_DOT_MD_LINK_TARGET="../agents.md/AGENTS.md"
 
@@ -29,7 +41,7 @@ elif [[ "$DEFAULT_AGENTS_SOURCE" == "$PARENT_ROOT/agents.md/AGENTS.md" ]]; then
 	DEFAULT_AGENTS_LINK_TARGET="$AGENTS_DOT_MD_LINK_TARGET"
 fi
 
-MY_OPENCODE_REPO="${MY_OPENCODE_REPO:-$REPO_ROOT}"
+MY_OPENCODE_REPO="${MY_OPENCODE_REPO:-$DEFAULT_REPO_ROOT}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 AGENTS_SOURCE_PATH="${AGENTS_SOURCE_PATH:-$DEFAULT_AGENTS_SOURCE}"
 AGENTS_LINK_TARGET="$AGENTS_SOURCE_PATH"

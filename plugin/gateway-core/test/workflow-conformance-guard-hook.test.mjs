@@ -71,6 +71,39 @@ test("workflow-conformance-guard blocks file edits on protected branch", async (
   }
 })
 
+test("workflow-conformance-guard blocks direct maintenance-helper execute mode on protected branch", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["workflow-conformance-guard"], disabled: [] },
+        workflowConformanceGuard: {
+          enabled: true,
+          protectedBranches: ["main"],
+          blockEditsOnProtectedBranches: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-workflow-maintenance-helper-execute" },
+        {
+          args: {
+            command:
+              'python3 scripts/worktree_helper_command.py maintenance --directory . --command "git commit -m \'msg\'" --execute --json',
+          },
+        },
+      ),
+      /Direct maintenance-helper execute mode is blocked on protected branch 'main'/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("workflow-conformance-guard allows safe inspection bash commands on protected branches", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
@@ -202,6 +235,26 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-remote-set-url-safe" },
       { args: { command: "git remote set-url origin git@github.com:foo/bar.git" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-merge-base-safe" },
+      { args: { command: "git merge-base HEAD main" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-rev-list-safe" },
+      { args: { command: "git rev-list --count main..HEAD" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-show-safe" },
+      { args: { command: "git show --stat HEAD" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-symbolic-ref-safe" },
+      { args: { command: "git symbolic-ref --short HEAD" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-detach-main-safe" },
+      { args: { command: "git switch --detach origin/main" } }
     )
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-push-main-safe" },

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 
@@ -25,6 +28,24 @@ function runHelper(blockedCommand) {
     )
   } catch (error) {
     return JSON.parse(error.stdout)
+  }
+}
+
+function runHelperWithArgs(args, options = {}) {
+  try {
+    return {
+      status: 0,
+      stdout: execFileSync("python3", [helperPath, ...args], {
+        encoding: "utf-8",
+        cwd: options.cwd,
+      }),
+    }
+  } catch (error) {
+    return {
+      status: error.status ?? 1,
+      stdout: error.stdout,
+      stderr: error.stderr,
+    }
   }
 }
 
@@ -134,4 +155,47 @@ test("worktree helper does not classify chained oc commands as direct-run safe",
   assert.match(report.note, /blocked command was not executed/i)
   assert.equal(report.blocked_command, 'oc done task_175 --note "completed" && git commit -m "msg"')
   assert.equal(report.commands.length, 2)
+})
+
+test("worktree helper execute mode runs the blocked command in place", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'python3 -c "print(123)"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "EXECUTED")
+  assert.equal(report.returncode, 0)
+  assert.equal(report.stdout.trim(), "123")
+  assert.equal(report.stderr, "")
+})
+
+test("worktree helper falls back to initial-commit guidance when HEAD is missing", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "worktree-helper-no-head-"))
+  try {
+    execFileSync("git", ["init", "-b", "main", tempRoot], { encoding: "utf-8" })
+    const report = JSON.parse(
+      runHelperWithArgs([
+        "maintenance",
+        "--directory",
+        tempRoot,
+        "--command",
+        'git commit -m "msg"',
+        "--json",
+      ]).stdout,
+    )
+
+    assert.equal(report.result, "FAIL")
+    assert.equal(report.mode, "maintenance_worktree")
+    assert.match(report.commands[0], /git -C .* add \. && git -C .* commit -m "Initial commit"/)
+    assert.match(report.commands[1], /status --short --branch$/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })

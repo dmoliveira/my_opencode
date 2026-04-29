@@ -70,6 +70,10 @@ function isMaintenanceHelperInvocation(command: string): boolean {
   return /(?:^|&&|\|\||;)\s*(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*python3\s+['"]?[^'";&|]*worktree_helper_command\.py['"]?\s+maintenance\b/i.test(command)
 }
 
+function isExecuteMaintenanceHelperInvocation(command: string): boolean {
+  return isMaintenanceHelperInvocation(command) && /(?:^|\s)--execute(?:\s|$)/i.test(command)
+}
+
 function maintenanceHelperError(directory: string, originalCommand: string): Error {
   const helperPath = maintenanceHelperPath(directory)
   const rewrittenCommand = maintenanceHelperCommand(directory, originalCommand)
@@ -102,6 +106,14 @@ interface BranchSwitchInfo {
 
 function branchSwitchInfo(command: string): BranchSwitchInfo | null {
   if (new RegExp(`${GIT_PREFIX}checkout\\s+(?:"[^"]+"|'[^']+'|[^\\s;&|]+)\\s+--\\s+`, "i").test(command)) {
+    return null
+  }
+  if (
+    hasPattern(
+      command,
+      new RegExp(`${GIT_PREFIX}(?:switch|checkout)\\s+--detach\\s+(?:origin/)?(?:main|master)\\b`, "i"),
+    )
+  ) {
     return null
   }
   const destructiveTarget =
@@ -202,6 +214,19 @@ export function createPrimaryWorktreeGuardHook(options: {
         return
       }
       const command = String(eventPayload.output?.args?.command ?? "").trim()
+      if (isExecuteMaintenanceHelperInvocation(command)) {
+        writeGatewayEventAudit(directory, {
+          hook: "primary-worktree-guard",
+          stage: "skip",
+          reason_code: "maintenance_helper_execute_blocked",
+          session_id: sessionId,
+          blocked_command: command,
+          repo_root: directory,
+        })
+        throw new Error(
+          "Direct maintenance-helper execute mode is blocked in the primary project folder. Create or use a dedicated git worktree branch instead."
+        )
+      }
       if (isMaintenanceHelperInvocation(command)) {
         return
       }
