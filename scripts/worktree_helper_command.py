@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
 
 def usage() -> int:
     print(
-        "usage: /worktree-helper maintenance [--directory <path>] [--branch <name>] [--command <text>] [--json]"
+        "usage: /worktree-helper maintenance [--directory <path>] [--branch <name>] [--command <text>] [--execute] [--json]"
     )
     return 2
 
@@ -112,16 +113,35 @@ def has_disallowed_shell_syntax(command: str) -> bool:
     return False
 
 
+def has_head_commit(directory: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=directory,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
 def command_maintenance(args: list[str]) -> int:
     directory = Path.cwd()
     branch: str | None = None
     blocked_command: str | None = None
     json_output = False
+    execute = False
     index = 0
     while index < len(args):
         token = args[index]
         if token == "--json":
             json_output = True
+            index += 1
+            continue
+        if token == "--execute":
+            execute = True
             index += 1
             continue
         if token == "--directory":
@@ -144,6 +164,48 @@ def command_maintenance(args: list[str]) -> int:
             continue
         return usage()
 
+    if execute:
+        if not blocked_command:
+            return usage()
+        try:
+            result = subprocess.run(
+                blocked_command,
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                shell=True,
+                check=False,
+            )
+        except OSError as exc:
+            report = {
+                "result": "ERROR",
+                "directory": str(directory),
+                "command": blocked_command,
+                "error": str(exc),
+            }
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(str(exc), file=sys.stderr)
+            return 1
+
+        report = {
+            "result": "EXECUTED",
+            "directory": str(directory),
+            "command": blocked_command,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        }
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            if result.stdout:
+                print(result.stdout, end="")
+            if result.stderr:
+                print(result.stderr, end="", file=sys.stderr)
+        return result.returncode
+
     if is_direct_allowed_protected_main_command(blocked_command):
         report = direct_run_report(directory, blocked_command)
     else:
@@ -151,7 +213,15 @@ def command_maintenance(args: list[str]) -> int:
         blocked_slug = slugify(blocked_command or "maintenance")
         suggested_branch = branch or f"chore/{blocked_slug[:40]}"
         suggested_worktree = (directory.parent / f"{repo_name}-wt-maintenance").resolve()
-        create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
+        if has_head_commit(directory):
+            create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
+            followup_command = f"git -C {shell_quote(str(suggested_worktree))} status --short --branch"
+        else:
+            create_command = (
+                f'git -C {shell_quote(str(directory))} add . && '
+                f'git -C {shell_quote(str(directory))} commit -m "Initial commit"'
+            )
+            followup_command = f"git -C {shell_quote(str(directory))} status --short --branch"
         report = {
             "result": "FAIL",
             "mode": "maintenance_worktree",
@@ -165,7 +235,7 @@ def command_maintenance(args: list[str]) -> int:
             ),
             "commands": [
                 create_command,
-                f"git -C {shell_quote(str(suggested_worktree))} status --short --branch",
+                followup_command,
             ],
         }
     if json_output:
