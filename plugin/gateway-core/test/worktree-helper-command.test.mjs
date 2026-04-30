@@ -216,6 +216,24 @@ test("worktree helper execute mode supports env-prefixed commands without a shel
   assert.equal(report.stdout.trim(), "456")
 })
 
+test("worktree helper execute mode supports bare env assignment prefixes", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'DEMO_VALUE=789 python3 -c "import os; print(os.environ[\'DEMO_VALUE\'])"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "EXECUTED")
+  assert.equal(report.returncode, 0)
+  assert.equal(report.stdout.trim(), "789")
+})
+
 test("worktree helper execute mode rejects chained shell syntax", () => {
   const report = JSON.parse(
     runHelperWithArgs([
@@ -231,6 +249,36 @@ test("worktree helper execute mode rejects chained shell syntax", () => {
 
   assert.equal(report.result, "ERROR")
   assert.match(report.error, /single command without shell chaining or redirection/)
+})
+
+test("worktree helper execute mode rejects redirection and pipeline syntax", () => {
+  const redirectReport = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'python3 -c "print(1)" > /tmp/worktree-helper-test',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+  const pipelineReport = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'python3 -c "print(1)" | python3 -c "print(2)"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(redirectReport.result, "ERROR")
+  assert.match(redirectReport.error, /single command without shell chaining or redirection/)
+  assert.equal(pipelineReport.result, "ERROR")
+  assert.match(pipelineReport.error, /single command without shell chaining or redirection/)
 })
 
 test("worktree helper falls back to initial-commit guidance when HEAD is missing", () => {
