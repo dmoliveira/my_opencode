@@ -34,6 +34,7 @@ _SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:{_SAFE_ENV_KEY}={_SHELL_TOKEN}\s+)*)"
 _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
 _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
+_SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
 _GIT_READ_ONLY_PATTERN = (
     rf"(?:status|diff|log"
     rf"|remote\s+-v"
@@ -52,6 +53,21 @@ _GIT_READ_ONLY_PATTERN = (
     rf"|symbolic-ref(?:\s+{_SHELL_TOKEN})+"
     rf"|worktree\s+list(?:\s+{_SHELL_TOKEN})*)"
 )
+
+
+def sqlite_direct_pattern() -> re.Pattern[str]:
+    return re.compile(
+        rf"^{_SAFE_ENV_PREFIX}(?:[^\s;&|]*/)?sqlite3"
+        rf"(?=[^;&|]*\s-readonly\b)(?:\s+{_SQLITE_SAFE_FLAG})*\s+{_SHELL_TOKEN}\s+"
+        rf"(?:(?:\"\.(?:tables|schema(?:\s+[^\"]+)?)\")"
+        rf"|(?:'\.(?:tables|schema(?:\s+[^']+)?)')"
+        rf"|(?:\"PRAGMA\s+table_info\s*\([^\";=]+\)\s*;?\")"
+        rf"|(?:'PRAGMA\s+table_info\s*\([^';=]+\)\s*;?')"
+        rf"|(?:\"SELECT\b(?![^\";]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^\";]*;?\")"
+        rf"|(?:'SELECT\b(?![^';]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^';]*;?'))\s*$"
+    )
+
+
 _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}date(?:\s+.+)?\s*$"),
     re.compile(
@@ -74,6 +90,7 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
+    sqlite_direct_pattern(),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+init\s+-y\s*$"),

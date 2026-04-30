@@ -148,6 +148,22 @@ test("worktree helper stays aligned with newly allowed read-only git inspection 
   assert.equal(worktreeListReport.mode, "direct_run")
 })
 
+test("worktree helper stays aligned with allowed readonly sqlite inspection commands", () => {
+  const tablesReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" ".tables"')
+  const pragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"')
+  const selectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"')
+  const mutatingPragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"')
+
+  assert.equal(tablesReport.result, "PASS")
+  assert.equal(tablesReport.mode, "direct_run")
+  assert.equal(pragmaReport.result, "PASS")
+  assert.equal(pragmaReport.mode, "direct_run")
+  assert.equal(selectReport.result, "PASS")
+  assert.equal(selectReport.mode, "direct_run")
+  assert.equal(mutatingPragmaReport.result, "FAIL")
+  assert.equal(mutatingPragmaReport.mode, "maintenance_worktree")
+})
+
 test("worktree helper keeps path-switching npm bootstrap commands blocked", () => {
   const report = runHelper("npm install --yes --prefix /tmp/other-project")
 
