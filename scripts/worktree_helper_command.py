@@ -175,6 +175,9 @@ def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
         if token == "env":
             argv.pop(0)
             continue
+        if token == "--":
+            argv.pop(0)
+            break
         if token in {"-u", "--unset"}:
             option = argv.pop(0)
             if not argv:
