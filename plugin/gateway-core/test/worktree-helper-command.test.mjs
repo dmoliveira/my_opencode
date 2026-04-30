@@ -198,6 +198,41 @@ test("worktree helper execute mode runs the blocked command in place", () => {
   assert.equal(report.stderr, "")
 })
 
+test("worktree helper execute mode supports env-prefixed commands without a shell", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'env DEMO_VALUE=456 python3 -c "import os; print(os.environ[\'DEMO_VALUE\'])"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "EXECUTED")
+  assert.equal(report.returncode, 0)
+  assert.equal(report.stdout.trim(), "456")
+})
+
+test("worktree helper execute mode rejects chained shell syntax", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'python3 -c "print(1)" && python3 -c "print(2)"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "ERROR")
+  assert.match(report.error, /single command without shell chaining or redirection/)
+})
+
 test("worktree helper falls back to initial-commit guidance when HEAD is missing", () => {
   const tempRoot = mkdtempSync(join(tmpdir(), "worktree-helper-no-head-"))
   try {

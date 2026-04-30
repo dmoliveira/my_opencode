@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -146,6 +147,29 @@ def has_head_commit(directory: Path) -> bool:
     return result.returncode == 0
 
 
+def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
+    if has_disallowed_shell_syntax(command):
+        raise ValueError("execute mode only supports a single command without shell chaining or redirection")
+    argv = shlex.split(command)
+    if not argv:
+        raise ValueError("execute mode requires a command to run")
+    env = os.environ.copy()
+    while argv:
+        token = argv[0]
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token):
+            key, value = token.split("=", 1)
+            env[key] = value
+            argv.pop(0)
+            continue
+        if token == "env":
+            argv.pop(0)
+            continue
+        break
+    if not argv:
+        raise ValueError("execute mode requires a command after environment assignments")
+    return env, argv
+
+
 def command_maintenance(args: list[str]) -> int:
     directory = Path.cwd()
     branch: str | None = None
@@ -187,15 +211,16 @@ def command_maintenance(args: list[str]) -> int:
         if not blocked_command:
             return usage()
         try:
+            env, argv = parse_execute_command(blocked_command)
             result = subprocess.run(
-                blocked_command,
+                argv,
                 cwd=directory,
+                env=env,
                 capture_output=True,
                 text=True,
-                shell=True,
                 check=False,
             )
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             report = {
                 "result": "ERROR",
                 "directory": str(directory),
