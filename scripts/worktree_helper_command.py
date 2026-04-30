@@ -181,6 +181,18 @@ def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
         if token == "env":
             argv.pop(0)
             continue
+        if token == "-u":
+            argv.pop(0)
+            if not argv:
+                raise ValueError("execute mode requires a variable name after env -u")
+            env.pop(argv.pop(0), None)
+            continue
+        if token.startswith("--unset="):
+            env.pop(token.split("=", 1)[1], None)
+            argv.pop(0)
+            continue
+        if token.startswith("-"):
+            raise ValueError(f"unsupported env option for execute mode: {token}")
         break
     if not argv:
         raise ValueError("execute mode requires a command after environment assignments")
