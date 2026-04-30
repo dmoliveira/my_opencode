@@ -197,7 +197,10 @@ def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
 def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
     if has_disallowed_shell_syntax(command):
         raise ValueError("execute mode only supports a single command without shell chaining or redirection")
-    argv = shlex.split(command)
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        raise ValueError("execute mode requires valid shell-style quoting") from exc
     if not argv:
         raise ValueError("execute mode requires a command to run")
     env = os.environ.copy()

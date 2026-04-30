@@ -321,6 +321,23 @@ test("worktree helper execute mode rejects unsupported env flags", () => {
   assert.match(report.error, /unsupported env option for execute mode: -i/)
 })
 
+test("worktree helper execute mode reports stable errors for malformed quoting", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'python3 -c "print(1)',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "ERROR")
+  assert.match(report.error, /valid shell-style quoting/)
+})
+
 test("worktree helper execute mode rejects chained shell syntax", () => {
   const report = JSON.parse(
     runHelperWithArgs([
