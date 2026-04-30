@@ -268,6 +268,24 @@ test("worktree helper execute mode supports env unsets", () => {
   assert.equal(report.stdout.trim(), "missing")
 })
 
+test("worktree helper execute mode supports long-form env unsets", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'env DEMO_VALUE=keep --unset DEMO_VALUE python3 -c "import os; print(os.environ.get(\'DEMO_VALUE\', \'missing\'))"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "EXECUTED")
+  assert.equal(report.returncode, 0)
+  assert.equal(report.stdout.trim(), "missing")
+})
+
 test("worktree helper execute mode rejects unsupported env flags", () => {
   const report = JSON.parse(
     runHelperWithArgs([

@@ -164,13 +164,7 @@ def has_head_commit(directory: Path) -> bool:
     return result.returncode == 0
 
 
-def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
-    if has_disallowed_shell_syntax(command):
-        raise ValueError("execute mode only supports a single command without shell chaining or redirection")
-    argv = shlex.split(command)
-    if not argv:
-        raise ValueError("execute mode requires a command to run")
-    env = os.environ.copy()
+def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
     while argv:
         token = argv[0]
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token):
@@ -181,10 +175,10 @@ def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
         if token == "env":
             argv.pop(0)
             continue
-        if token == "-u":
-            argv.pop(0)
+        if token in {"-u", "--unset"}:
+            option = argv.pop(0)
             if not argv:
-                raise ValueError("execute mode requires a variable name after env -u")
+                raise ValueError(f"execute mode requires a variable name after env {option}")
             env.pop(argv.pop(0), None)
             continue
         if token.startswith("--unset="):
@@ -194,6 +188,17 @@ def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
         if token.startswith("-"):
             raise ValueError(f"unsupported env option for execute mode: {token}")
         break
+    return argv
+
+
+def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
+    if has_disallowed_shell_syntax(command):
+        raise ValueError("execute mode only supports a single command without shell chaining or redirection")
+    argv = shlex.split(command)
+    if not argv:
+        raise ValueError("execute mode requires a command to run")
+    env = os.environ.copy()
+    argv = apply_execute_env_prefix(argv, env)
     if not argv:
         raise ValueError("execute mode requires a command after environment assignments")
     return env, argv
