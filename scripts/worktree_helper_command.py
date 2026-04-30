@@ -33,6 +33,24 @@ _SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:{_SAFE_ENV_KEY}={_SHELL_TOKEN}\s+)*)"
 _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
 _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
+_GIT_READ_ONLY_PATTERN = (
+    rf"(?:status|diff|log"
+    rf"|remote\s+-v"
+    rf"|branch\s+--show-current"
+    rf"|branch\s+-r(?:\s+--contains\s+{_SHELL_TOKEN})?"
+    rf"|branch\s+(?:--list|-a)(?:\s+{_SHELL_TOKEN})*"
+    rf"|remote\s+get-url\s+{_SHELL_TOKEN}"
+    rf"|remote\s+add\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}"
+    rf"|remote\s+set-url\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}"
+    rf"|rev-parse(?:\s+{_SHELL_TOKEN})+"
+    rf"|rev-list(?:\s+{_SHELL_TOKEN})+"
+    rf"|merge-base(?:\s+{_SHELL_TOKEN})+"
+    rf"|show(?:\s+{_SHELL_TOKEN})+"
+    rf"|ls-files(?:\s+{_SHELL_TOKEN})*"
+    rf"|for-each-ref(?:\s+{_SHELL_TOKEN})+"
+    rf"|symbolic-ref(?:\s+{_SHELL_TOKEN})+"
+    rf"|worktree\s+list(?:\s+{_SHELL_TOKEN})*)"
+)
 _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}date(?:\s+.+)?\s*$"),
     re.compile(
@@ -43,6 +61,7 @@ _ALLOWED_DIRECT_PATTERNS = [
         rf"|(?:end-session)(?:\s+.+)"
         rf")\s*$"
     ),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+{_GIT_READ_ONLY_PATTERN}\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN}|add\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}|set-url\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN})\s*$"),

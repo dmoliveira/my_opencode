@@ -126,6 +126,28 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
   assert.equal(envBypassReport.mode, "maintenance_worktree")
 })
 
+test("worktree helper stays aligned with newly allowed read-only git inspection commands", () => {
+  const mergeBaseReport = runHelper("git merge-base HEAD main")
+  const revListReport = runHelper("git rev-list --count main..HEAD")
+  const showReport = runHelper("git show --stat HEAD")
+  const symbolicRefReport = runHelper("git symbolic-ref --short HEAD")
+  const branchListReport = runHelper("git branch --list feature/*")
+  const worktreeListReport = runHelper("git worktree list --porcelain")
+
+  assert.equal(mergeBaseReport.result, "PASS")
+  assert.equal(mergeBaseReport.mode, "direct_run")
+  assert.equal(revListReport.result, "PASS")
+  assert.equal(revListReport.mode, "direct_run")
+  assert.equal(showReport.result, "PASS")
+  assert.equal(showReport.mode, "direct_run")
+  assert.equal(symbolicRefReport.result, "PASS")
+  assert.equal(symbolicRefReport.mode, "direct_run")
+  assert.equal(branchListReport.result, "PASS")
+  assert.equal(branchListReport.mode, "direct_run")
+  assert.equal(worktreeListReport.result, "PASS")
+  assert.equal(worktreeListReport.mode, "direct_run")
+})
+
 test("worktree helper keeps path-switching npm bootstrap commands blocked", () => {
   const report = runHelper("npm install --yes --prefix /tmp/other-project")
 
