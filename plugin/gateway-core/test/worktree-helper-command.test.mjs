@@ -353,6 +353,7 @@ test("worktree helper execute mode runs the blocked command in place", () => {
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 0)
   assert.equal(report.stdout.trim(), "123")
   assert.equal(report.stderr, "")
@@ -372,6 +373,7 @@ test("worktree helper execute mode supports env-prefixed commands without a shel
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 0)
   assert.equal(report.stdout.trim(), "456")
 })
@@ -390,6 +392,7 @@ test("worktree helper execute mode supports bare env assignment prefixes", () =>
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 0)
   assert.equal(report.stdout.trim(), "789")
 })
@@ -408,6 +411,7 @@ test("worktree helper execute mode supports env unsets", () => {
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 0)
   assert.equal(report.stdout.trim(), "missing")
 })
@@ -426,6 +430,7 @@ test("worktree helper execute mode supports long-form env unsets", () => {
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 0)
   assert.equal(report.stdout.trim(), "missing")
 })
@@ -444,6 +449,7 @@ test("worktree helper execute mode supports env option terminator", () => {
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 0)
   assert.equal(report.stdout.trim(), "kept")
 })
@@ -462,6 +468,7 @@ test("worktree helper execute mode rejects unsupported env flags", () => {
   )
 
   assert.equal(report.result, "ERROR")
+  assert.equal(report.mode, "execute_error")
   assert.match(report.error, /unsupported env option for execute mode: -i/)
 })
 
@@ -490,8 +497,10 @@ test("worktree helper execute mode rejects bare unset prefixes without env", () 
   )
 
   assert.equal(shortUnsetReport.result, "ERROR")
+  assert.equal(shortUnsetReport.mode, "execute_error")
   assert.match(shortUnsetReport.error, /unsupported execute-mode prefix without env: --unset/)
   assert.equal(longUnsetReport.result, "ERROR")
+  assert.equal(longUnsetReport.mode, "execute_error")
   assert.match(longUnsetReport.error, /unsupported execute-mode prefix without env: --unset=CI/)
 })
 
@@ -520,8 +529,10 @@ test("worktree helper execute mode rejects unsafe environment keys", () => {
   )
 
   assert.equal(pathOverrideReport.result, "ERROR")
+  assert.equal(pathOverrideReport.mode, "execute_error")
   assert.match(pathOverrideReport.error, /unsupported execute-mode environment key: PATH/)
   assert.equal(unsetPathReport.result, "ERROR")
+  assert.equal(unsetPathReport.mode, "execute_error")
   assert.match(unsetPathReport.error, /unsupported execute-mode environment key: PATH/)
 })
 
@@ -539,6 +550,7 @@ test("worktree helper execute mode reports stable errors for malformed quoting",
   )
 
   assert.equal(report.result, "ERROR")
+  assert.equal(report.mode, "execute_error")
   assert.match(report.error, /valid shell-style quoting/)
 })
 
@@ -559,6 +571,7 @@ test("worktree helper execute mode times out long-running commands", () => {
   )
 
   assert.equal(report.result, "ERROR")
+  assert.equal(report.mode, "execute_timeout")
   assert.match(report.error, /timed out after 0.1s/)
 })
 
@@ -576,6 +589,7 @@ test("worktree helper execute mode closes stdin for input-reading commands", () 
   )
 
   assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
   assert.equal(report.returncode, 1)
   assert.match(report.stderr, /EOF when reading a line/)
 })
@@ -594,6 +608,7 @@ test("worktree helper execute mode rejects chained shell syntax", () => {
   )
 
   assert.equal(report.result, "ERROR")
+  assert.equal(report.mode, "execute_error")
   assert.match(report.error, /single command without shell chaining or redirection/)
 })
 
@@ -622,8 +637,10 @@ test("worktree helper execute mode rejects redirection and pipeline syntax", () 
   )
 
   assert.equal(redirectReport.result, "ERROR")
+  assert.equal(redirectReport.mode, "execute_error")
   assert.match(redirectReport.error, /single command without shell chaining or redirection/)
   assert.equal(pipelineReport.result, "ERROR")
+  assert.equal(pipelineReport.mode, "execute_error")
   assert.match(pipelineReport.error, /single command without shell chaining or redirection/)
 })
 

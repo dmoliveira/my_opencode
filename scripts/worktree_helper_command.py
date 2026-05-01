@@ -399,6 +399,7 @@ def command_maintenance(args: list[str]) -> int:
         except subprocess.TimeoutExpired as exc:
             report = {
                 "result": "ERROR",
+                "mode": "execute_timeout",
                 "directory": str(directory),
                 "command": blocked_command,
                 "error": f"execute mode timed out after {timeout_seconds:g}s",
@@ -413,6 +414,7 @@ def command_maintenance(args: list[str]) -> int:
         except (OSError, ValueError) as exc:
             report = {
                 "result": "ERROR",
+                "mode": "execute_error",
                 "directory": str(directory),
                 "command": blocked_command,
                 "error": str(exc),
@@ -425,6 +427,7 @@ def command_maintenance(args: list[str]) -> int:
 
         report = {
             "result": "EXECUTED",
+            "mode": "execute_run",
             "directory": str(directory),
             "command": blocked_command,
             "returncode": result.returncode,
