@@ -589,6 +589,44 @@ test("worktree helper execute mode times out long-running commands", () => {
   assert.match(report.error, /timed out after 0.1s/)
 })
 
+test("worktree helper execute mode rejects non-finite timeout values", () => {
+  const nanReport = JSON.parse(
+    runHelperWithArgs(
+      [
+        "maintenance",
+        "--directory",
+        repoDirectory,
+        "--command",
+        'python3 -c "print(123)"',
+        "--execute",
+        "--json",
+      ],
+      { env: { OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT: "NaN" } },
+    ).stdout,
+  )
+  const infReport = JSON.parse(
+    runHelperWithArgs(
+      [
+        "maintenance",
+        "--directory",
+        repoDirectory,
+        "--command",
+        'python3 -c "print(123)"',
+        "--execute",
+        "--json",
+      ],
+      { env: { OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT: "inf" } },
+    ).stdout,
+  )
+
+  assert.equal(nanReport.result, "ERROR")
+  assert.equal(nanReport.mode, "execute_error")
+  assert.match(nanReport.error, /must be a finite number/)
+  assert.equal(infReport.result, "ERROR")
+  assert.equal(infReport.mode, "execute_error")
+  assert.match(infReport.error, /must be a finite number/)
+})
+
 test("worktree helper execute mode closes stdin for input-reading commands", () => {
   const report = JSON.parse(
     runHelperWithArgs([

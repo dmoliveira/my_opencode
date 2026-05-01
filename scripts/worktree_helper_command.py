@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import hashlib
 import json
 import os
@@ -254,6 +255,8 @@ def execute_timeout_seconds() -> float:
         value = float(raw)
     except ValueError as exc:
         raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be a positive number") from exc
+    if not math.isfinite(value):
+        raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be a finite number")
     if value <= 0:
         raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be greater than zero")
     return value
