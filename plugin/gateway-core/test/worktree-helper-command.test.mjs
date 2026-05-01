@@ -306,6 +306,29 @@ test("worktree helper reports stable errors for non-directory paths", () => {
   }
 })
 
+test("worktree helper reports stable errors for non-git directories", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "worktree-helper-non-git-"))
+
+  try {
+    const report = JSON.parse(
+      runHelperWithArgs([
+        "maintenance",
+        "--directory",
+        tempRoot,
+        "--command",
+        'git commit -m "msg"',
+        "--json",
+      ]).stdout,
+    )
+
+    assert.equal(report.result, "ERROR")
+    assert.equal(report.mode, "invalid_repository")
+    assert.match(report.error, /directory is not a git repository/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test("worktree helper does not classify chained oc commands as direct-run safe", () => {
   const report = runHelper('oc done task_175 --note "completed" && git commit -m "msg"')
 

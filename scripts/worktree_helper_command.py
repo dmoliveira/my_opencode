@@ -151,6 +151,16 @@ def invalid_branch_report(directory: Path, blocked_command: str | None, branch: 
     }
 
 
+def invalid_repository_report(directory: Path, blocked_command: str | None, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_repository",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "error": message,
+    }
+
+
 def is_valid_git_branch_name(branch: str) -> bool:
     result = subprocess.run(
         ["git", "check-ref-format", "--branch", branch],
@@ -159,6 +169,17 @@ def is_valid_git_branch_name(branch: str) -> bool:
         check=False,
     )
     return result.returncode == 0
+
+
+def is_git_repository(directory: Path) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=directory,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
 
 
 def suggested_worktree_path(directory: Path, repo_name: str, suggested_branch: str, blocked_slug: str) -> Path:
@@ -337,6 +358,14 @@ def command_maintenance(args: list[str]) -> int:
 
     if not directory.is_dir():
         report = invalid_directory_report(directory, blocked_command, f"directory is not a folder: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if not is_git_repository(directory):
+        report = invalid_repository_report(directory, blocked_command, f"directory is not a git repository: {directory}")
         if json_output:
             print(json.dumps(report, indent=2))
         else:
