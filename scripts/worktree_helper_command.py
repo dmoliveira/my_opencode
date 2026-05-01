@@ -46,7 +46,9 @@ _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
 _SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
 _DEFAULT_EXECUTE_TIMEOUT_SECONDS = 10.0
 _GIT_READ_ONLY_PATTERN = (
-    rf"(?:status|diff|log"
+    rf"(?:status(?:\s+{_SHELL_TOKEN})*"
+    rf"|diff(?:\s+{_SHELL_TOKEN})*"
+    rf"|log(?:\s+{_SHELL_TOKEN})*"
     rf"|remote\s+-v"
     rf"|branch\s+--show-current"
     rf"|branch\s+-r(?:\s+--contains\s+{_SHELL_TOKEN})?"

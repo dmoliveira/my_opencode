@@ -146,6 +146,9 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
 })
 
 test("worktree helper stays aligned with newly allowed read-only git inspection commands", () => {
+  const statusArgsReport = runHelper("git status --short --branch")
+  const diffArgsReport = runHelper("git diff --stat HEAD~1")
+  const logArgsReport = runHelper("git log --oneline -n 5")
   const mergeBaseReport = runHelper("git merge-base HEAD main")
   const revListReport = runHelper("git rev-list --count main..HEAD")
   const showReport = runHelper("git show --stat HEAD")
@@ -153,6 +156,12 @@ test("worktree helper stays aligned with newly allowed read-only git inspection 
   const branchListReport = runHelper("git branch --list feature/*")
   const worktreeListReport = runHelper("git worktree list --porcelain")
 
+  assert.equal(statusArgsReport.result, "PASS")
+  assert.equal(statusArgsReport.mode, "direct_run")
+  assert.equal(diffArgsReport.result, "PASS")
+  assert.equal(diffArgsReport.mode, "direct_run")
+  assert.equal(logArgsReport.result, "PASS")
+  assert.equal(logArgsReport.mode, "direct_run")
   assert.equal(mergeBaseReport.result, "PASS")
   assert.equal(mergeBaseReport.mode, "direct_run")
   assert.equal(revListReport.result, "PASS")
