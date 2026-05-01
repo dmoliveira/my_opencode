@@ -117,6 +117,16 @@ def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object
     }
 
 
+def invalid_directory_report(directory: Path, blocked_command: str | None, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_directory",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "error": message,
+    }
+
+
 def suggested_worktree_path(directory: Path, repo_name: str, suggested_branch: str, blocked_slug: str) -> Path:
     branch_slug = slugify(suggested_branch.replace("/", "-"))
     suffix = branch_slug or blocked_slug or "maintenance"
@@ -272,6 +282,22 @@ def command_maintenance(args: list[str]) -> int:
             index += 2
             continue
         return usage()
+
+    if not directory.exists():
+        report = invalid_directory_report(directory, blocked_command, f"directory does not exist: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if not directory.is_dir():
+        report = invalid_directory_report(directory, blocked_command, f"directory is not a folder: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
 
     if execute:
         if not blocked_command:

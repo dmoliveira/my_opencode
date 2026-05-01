@@ -210,6 +210,54 @@ test("worktree helper still suggests a maintenance worktree for blocked commands
   assert.equal(report.commands.length, 2)
 })
 
+test("worktree helper reports stable errors for missing maintenance directories", () => {
+  const missingPath = join(tmpdir(), "worktree-helper-missing-dir")
+  rmSync(missingPath, { recursive: true, force: true })
+
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      missingPath,
+      "--command",
+      'git commit -m "msg"',
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "ERROR")
+  assert.equal(report.mode, "invalid_directory")
+  assert.match(report.error, /directory does not exist/)
+})
+
+test("worktree helper reports stable errors for non-directory paths", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "worktree-helper-file-dir-"))
+  const filePath = join(tempRoot, "not-a-directory.txt")
+  execFileSync("python3", ["-c", `from pathlib import Path; Path(${JSON.stringify(filePath)}).write_text("x", encoding="utf-8")`], {
+    encoding: "utf-8",
+  })
+
+  try {
+    const report = JSON.parse(
+      runHelperWithArgs([
+        "maintenance",
+        "--directory",
+        filePath,
+        "--command",
+        'python3 -c "print(1)"',
+        "--execute",
+        "--json",
+      ]).stdout,
+    )
+
+    assert.equal(report.result, "ERROR")
+    assert.equal(report.mode, "invalid_directory")
+    assert.match(report.error, /directory is not a folder/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test("worktree helper does not classify chained oc commands as direct-run safe", () => {
   const report = runHelper('oc done task_175 --note "completed" && git commit -m "msg"')
 
