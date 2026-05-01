@@ -339,14 +339,16 @@ def command_maintenance(args: list[str]) -> int:
         suggested_branch = branch or f"chore/{blocked_slug[:40]}"
         suggested_worktree = (directory.parent / f"{repo_name}-wt-maintenance").resolve()
         if has_head_commit(directory):
-            create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
-            followup_command = f"git -C {shell_quote(str(suggested_worktree))} status --short --branch"
+            commands = [
+                f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD",
+                f"git -C {shell_quote(str(suggested_worktree))} status --short --branch",
+            ]
         else:
-            create_command = (
-                f'git -C {shell_quote(str(directory))} add . && '
-                f'git -C {shell_quote(str(directory))} commit -m "Initial commit"'
-            )
-            followup_command = f"git -C {shell_quote(str(directory))} status --short --branch"
+            commands = [
+                f"git -C {shell_quote(str(directory))} add .",
+                f'git -C {shell_quote(str(directory))} commit -m "Initial commit"',
+                f"git -C {shell_quote(str(directory))} status --short --branch",
+            ]
         report = {
             "result": "FAIL",
             "mode": "maintenance_worktree",
@@ -358,10 +360,7 @@ def command_maintenance(args: list[str]) -> int:
                 "Guidance only: the blocked command was not executed. "
                 "Create or use the suggested worktree and rerun the intended command there."
             ),
-            "commands": [
-                create_command,
-                followup_command,
-            ],
+            "commands": commands,
         }
     if json_output:
         print(json.dumps(report, indent=2))

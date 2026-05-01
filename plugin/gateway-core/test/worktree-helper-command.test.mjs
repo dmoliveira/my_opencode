@@ -459,8 +459,9 @@ test("worktree helper falls back to initial-commit guidance when HEAD is missing
 
     assert.equal(report.result, "FAIL")
     assert.equal(report.mode, "maintenance_worktree")
-    assert.match(report.commands[0], /git -C .* add \. && git -C .* commit -m "Initial commit"/)
-    assert.match(report.commands[1], /status --short --branch$/)
+    assert.match(report.commands[0], /git -C .* add \.$/)
+    assert.match(report.commands[1], /git -C .* commit -m "Initial commit"$/)
+    assert.match(report.commands[2], /status --short --branch$/)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
