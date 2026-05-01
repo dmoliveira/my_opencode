@@ -166,6 +166,7 @@ def has_head_commit(directory: Path) -> bool:
 
 
 def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
+    explicit_env = False
     while argv:
         token = argv[0]
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token):
@@ -174,23 +175,32 @@ def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
             argv.pop(0)
             continue
         if token == "env":
+            explicit_env = True
             argv.pop(0)
             continue
         if token == "--":
+            if not explicit_env:
+                break
             argv.pop(0)
             break
         if token in {"-u", "--unset"}:
+            if not explicit_env:
+                raise ValueError(f"unsupported execute-mode prefix without env: {token}")
             option = argv.pop(0)
             if not argv:
                 raise ValueError(f"execute mode requires a variable name after env {option}")
             env.pop(argv.pop(0), None)
             continue
         if token.startswith("--unset="):
+            if not explicit_env:
+                raise ValueError(f"unsupported execute-mode prefix without env: {token}")
             env.pop(token.split("=", 1)[1], None)
             argv.pop(0)
             continue
         if token.startswith("-"):
-            raise ValueError(f"unsupported env option for execute mode: {token}")
+            if explicit_env:
+                raise ValueError(f"unsupported env option for execute mode: {token}")
+            break
         break
     return argv
 
