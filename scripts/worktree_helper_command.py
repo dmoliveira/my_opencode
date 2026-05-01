@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,19 @@ def slugify(value: str) -> str:
 
 def shell_quote(value: str) -> str:
     return shlex.quote(value)
+
+
+def short_hash(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+
+
+def unique_slug(value: str, limit: int) -> str:
+    slug = slugify(value)
+    if len(slug) <= limit:
+        return slug
+    digest = short_hash(value)
+    prefix_limit = max(1, limit - len(digest) - 1)
+    return f"{slug[:prefix_limit]}-{digest}"
 
 
 _SHELL_TOKEN = r'(?:"[^"]*"|\'[^\']*\'|\S+)'
@@ -183,9 +197,9 @@ def is_git_repository(directory: Path) -> bool:
 
 
 def suggested_worktree_path(directory: Path, repo_name: str, suggested_branch: str, blocked_slug: str) -> Path:
-    branch_slug = slugify(suggested_branch.replace("/", "-"))
+    branch_slug = unique_slug(suggested_branch.replace("/", "-"), 48)
     suffix = branch_slug or blocked_slug or "maintenance"
-    return (directory.parent / f"{repo_name}-wt-{suffix[:48]}").resolve()
+    return (directory.parent / f"{repo_name}-wt-{suffix}").resolve()
 
 
 def has_disallowed_shell_syntax(command: str) -> bool:
@@ -448,7 +462,7 @@ def command_maintenance(args: list[str]) -> int:
     else:
         repo_name = directory.name or "repo"
         blocked_slug = slugify(blocked_command or "maintenance")
-        suggested_branch = branch or f"chore/{blocked_slug[:40]}"
+        suggested_branch = branch or f"chore/{unique_slug(blocked_command or 'maintenance', 40)}"
         suggested_worktree = suggested_worktree_path(directory, repo_name, suggested_branch, blocked_slug)
         if has_head_commit(directory):
             commands = [

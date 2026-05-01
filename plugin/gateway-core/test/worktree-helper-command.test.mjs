@@ -222,6 +222,20 @@ test("worktree helper still suggests a maintenance worktree for blocked commands
   assert.equal(report.commands.length, 2)
 })
 
+test("worktree helper generates distinct hashed suggestions for colliding long commands", () => {
+  const commandA = 'git commit -m "this-is-a-very-long-command-name-that-forces-a-collision-prefix-aaaaaaaa"'
+  const commandB = 'git commit -m "this-is-a-very-long-command-name-that-forces-a-collision-prefix-bbbbbbbb"'
+  const reportA = runHelper(commandA)
+  const reportB = runHelper(commandB)
+
+  assert.equal(reportA.result, "FAIL")
+  assert.equal(reportB.result, "FAIL")
+  assert.notEqual(reportA.suggested_branch, reportB.suggested_branch)
+  assert.notEqual(reportA.suggested_worktree, reportB.suggested_worktree)
+  assert.match(reportA.suggested_branch, /^chore\/.*-[0-9a-f]{8}$/)
+  assert.match(reportB.suggested_branch, /^chore\/.*-[0-9a-f]{8}$/)
+})
+
 test("worktree helper rejects invalid custom branch suggestions", () => {
   const report = JSON.parse(
     runHelperWithArgs([
