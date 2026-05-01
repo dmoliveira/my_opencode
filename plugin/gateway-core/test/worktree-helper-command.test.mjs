@@ -536,6 +536,24 @@ test("worktree helper execute mode times out long-running commands", () => {
   assert.match(report.error, /timed out after 0.1s/)
 })
 
+test("worktree helper execute mode closes stdin for input-reading commands", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'python3 -c "input()"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "EXECUTED")
+  assert.equal(report.returncode, 1)
+  assert.match(report.stderr, /EOF when reading a line/)
+})
+
 test("worktree helper execute mode rejects chained shell syntax", () => {
   const report = JSON.parse(
     runHelperWithArgs([
