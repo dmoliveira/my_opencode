@@ -294,7 +294,7 @@ test("worktree helper execute mode supports env-prefixed commands without a shel
       "--directory",
       repoDirectory,
       "--command",
-      'env DEMO_VALUE=456 python3 -c "import os; print(os.environ[\'DEMO_VALUE\'])"',
+      'env CI=456 python3 -c "import os; print(os.environ[\'CI\'])"',
       "--execute",
       "--json",
     ]).stdout,
@@ -312,7 +312,7 @@ test("worktree helper execute mode supports bare env assignment prefixes", () =>
       "--directory",
       repoDirectory,
       "--command",
-      'DEMO_VALUE=789 python3 -c "import os; print(os.environ[\'DEMO_VALUE\'])"',
+      'CI=789 python3 -c "import os; print(os.environ[\'CI\'])"',
       "--execute",
       "--json",
     ]).stdout,
@@ -330,7 +330,7 @@ test("worktree helper execute mode supports env unsets", () => {
       "--directory",
       repoDirectory,
       "--command",
-      'env DEMO_VALUE=keep -u DEMO_VALUE python3 -c "import os; print(os.environ.get(\'DEMO_VALUE\', \'missing\'))"',
+      'env CI=keep -u CI python3 -c "import os; print(os.environ.get(\'CI\', \'missing\'))"',
       "--execute",
       "--json",
     ]).stdout,
@@ -348,7 +348,7 @@ test("worktree helper execute mode supports long-form env unsets", () => {
       "--directory",
       repoDirectory,
       "--command",
-      'env DEMO_VALUE=keep --unset DEMO_VALUE python3 -c "import os; print(os.environ.get(\'DEMO_VALUE\', \'missing\'))"',
+      'env CI=keep --unset CI python3 -c "import os; print(os.environ.get(\'CI\', \'missing\'))"',
       "--execute",
       "--json",
     ]).stdout,
@@ -366,7 +366,7 @@ test("worktree helper execute mode supports env option terminator", () => {
       "--directory",
       repoDirectory,
       "--command",
-      'env DEMO_VALUE=kept -- python3 -c "import os; print(os.environ[\'DEMO_VALUE\'])"',
+      'env CI=kept -- python3 -c "import os; print(os.environ[\'CI\'])"',
       "--execute",
       "--json",
     ]).stdout,
@@ -401,7 +401,7 @@ test("worktree helper execute mode rejects bare unset prefixes without env", () 
       "--directory",
       repoDirectory,
       "--command",
-      '--unset DEMO_VALUE python3 -c "print(1)"',
+      '--unset CI python3 -c "print(1)"',
       "--execute",
       "--json",
     ]).stdout,
@@ -412,7 +412,7 @@ test("worktree helper execute mode rejects bare unset prefixes without env", () 
       "--directory",
       repoDirectory,
       "--command",
-      '--unset=DEMO_VALUE python3 -c "print(1)"',
+      '--unset=CI python3 -c "print(1)"',
       "--execute",
       "--json",
     ]).stdout,
@@ -421,7 +421,37 @@ test("worktree helper execute mode rejects bare unset prefixes without env", () 
   assert.equal(shortUnsetReport.result, "ERROR")
   assert.match(shortUnsetReport.error, /unsupported execute-mode prefix without env: --unset/)
   assert.equal(longUnsetReport.result, "ERROR")
-  assert.match(longUnsetReport.error, /unsupported execute-mode prefix without env: --unset=DEMO_VALUE/)
+  assert.match(longUnsetReport.error, /unsupported execute-mode prefix without env: --unset=CI/)
+})
+
+test("worktree helper execute mode rejects unsafe environment keys", () => {
+  const pathOverrideReport = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'env PATH=/tmp python3 -c "print(1)"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+  const unsetPathReport = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'env --unset PATH python3 -c "print(1)"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(pathOverrideReport.result, "ERROR")
+  assert.match(pathOverrideReport.error, /unsupported execute-mode environment key: PATH/)
+  assert.equal(unsetPathReport.result, "ERROR")
+  assert.match(unsetPathReport.error, /unsupported execute-mode environment key: PATH/)
 })
 
 test("worktree helper execute mode reports stable errors for malformed quoting", () => {

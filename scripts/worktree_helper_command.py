@@ -30,6 +30,15 @@ def shell_quote(value: str) -> str:
 
 _SHELL_TOKEN = r'(?:"[^"]*"|\'[^\']*\'|\S+)'
 _SAFE_ENV_KEY = r"(?:CI|GIT_TERMINAL_PROMPT|GIT_EDITOR|GIT_PAGER|PAGER|GCM_INTERACTIVE|OPENCODE_SESSION_ID)"
+_SAFE_EXECUTE_ENV_KEYS = {
+    "CI",
+    "GIT_TERMINAL_PROMPT",
+    "GIT_EDITOR",
+    "GIT_PAGER",
+    "PAGER",
+    "GCM_INTERACTIVE",
+    "OPENCODE_SESSION_ID",
+}
 _SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:{_SAFE_ENV_KEY}={_SHELL_TOKEN}\s+)*)"
 _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
 _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
@@ -190,12 +199,18 @@ def execute_timeout_seconds() -> float:
     return value
 
 
+def ensure_safe_execute_env_key(key: str) -> None:
+    if key not in _SAFE_EXECUTE_ENV_KEYS:
+        raise ValueError(f"unsupported execute-mode environment key: {key}")
+
+
 def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
     explicit_env = False
     while argv:
         token = argv[0]
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token):
             key, value = token.split("=", 1)
+            ensure_safe_execute_env_key(key)
             env[key] = value
             argv.pop(0)
             continue
@@ -214,12 +229,16 @@ def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
             option = argv.pop(0)
             if not argv:
                 raise ValueError(f"execute mode requires a variable name after env {option}")
-            env.pop(argv.pop(0), None)
+            unset_key = argv.pop(0)
+            ensure_safe_execute_env_key(unset_key)
+            env.pop(unset_key, None)
             continue
         if token.startswith("--unset="):
             if not explicit_env:
                 raise ValueError(f"unsupported execute-mode prefix without env: {token}")
-            env.pop(token.split("=", 1)[1], None)
+            unset_key = token.split("=", 1)[1]
+            ensure_safe_execute_env_key(unset_key)
+            env.pop(unset_key, None)
             argv.pop(0)
             continue
         if token.startswith("-"):
