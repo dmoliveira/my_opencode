@@ -35,6 +35,7 @@ _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
 _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
 _SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
+_DEFAULT_EXECUTE_TIMEOUT_SECONDS = 10.0
 _GIT_READ_ONLY_PATTERN = (
     rf"(?:status|diff|log"
     rf"|remote\s+-v"
@@ -165,6 +166,19 @@ def has_head_commit(directory: Path) -> bool:
     return result.returncode == 0
 
 
+def execute_timeout_seconds() -> float:
+    raw = os.environ.get("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT", "").strip()
+    if not raw:
+        return _DEFAULT_EXECUTE_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be a positive number") from exc
+    if value <= 0:
+        raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be greater than zero")
+    return value
+
+
 def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
     explicit_env = False
     while argv:
@@ -263,6 +277,7 @@ def command_maintenance(args: list[str]) -> int:
             return usage()
         try:
             env, argv = parse_execute_command(blocked_command)
+            timeout_seconds = execute_timeout_seconds()
             result = subprocess.run(
                 argv,
                 cwd=directory,
@@ -270,7 +285,22 @@ def command_maintenance(args: list[str]) -> int:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=timeout_seconds,
             )
+        except subprocess.TimeoutExpired as exc:
+            report = {
+                "result": "ERROR",
+                "directory": str(directory),
+                "command": blocked_command,
+                "error": f"execute mode timed out after {timeout_seconds:g}s",
+                "stdout": exc.stdout or "",
+                "stderr": exc.stderr or "",
+            }
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(report["error"], file=sys.stderr)
+            return 1
         except (OSError, ValueError) as exc:
             report = {
                 "result": "ERROR",

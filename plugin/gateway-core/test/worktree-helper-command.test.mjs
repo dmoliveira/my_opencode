@@ -38,6 +38,7 @@ function runHelperWithArgs(args, options = {}) {
       stdout: execFileSync("python3", [helperPath, ...args], {
         encoding: "utf-8",
         cwd: options.cwd,
+        env: { ...process.env, ...(options.env ?? {}) },
       }),
     }
   } catch (error) {
@@ -372,6 +373,26 @@ test("worktree helper execute mode reports stable errors for malformed quoting",
 
   assert.equal(report.result, "ERROR")
   assert.match(report.error, /valid shell-style quoting/)
+})
+
+test("worktree helper execute mode times out long-running commands", () => {
+  const report = JSON.parse(
+    runHelperWithArgs(
+      [
+        "maintenance",
+        "--directory",
+        repoDirectory,
+        "--command",
+        'python3 -c "import time; time.sleep(1); print(123)"',
+        "--execute",
+        "--json",
+      ],
+      { env: { OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT: "0.1" } },
+    ).stdout,
+  )
+
+  assert.equal(report.result, "ERROR")
+  assert.match(report.error, /timed out after 0.1s/)
 })
 
 test("worktree helper execute mode rejects chained shell syntax", () => {
