@@ -43,8 +43,6 @@ _GIT_READ_ONLY_PATTERN = (
     rf"|branch\s+-r(?:\s+--contains\s+{_SHELL_TOKEN})?"
     rf"|branch\s+(?:--list|-a)(?:\s+{_SHELL_TOKEN})*"
     rf"|remote\s+get-url\s+{_SHELL_TOKEN}"
-    rf"|remote\s+add\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}"
-    rf"|remote\s+set-url\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}"
     rf"|rev-parse(?:\s+{_SHELL_TOKEN})+"
     rf"|rev-list(?:\s+{_SHELL_TOKEN})+"
     rf"|merge-base(?:\s+{_SHELL_TOKEN})+"
@@ -83,14 +81,11 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+{_GIT_READ_ONLY_PATTERN}\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN}|add\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}|set-url\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN})\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+push(?:\s+(?:-u|--set-upstream))?\s+origin\s+(?:main|master)\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+worktree\s+(?:add|remove)(?:\s+.+)\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+branch\s+(?:-d|--delete)(?:\s+.+)\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+stash\s+(?:push(?:\s+.+)|list|show)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN})\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+stash\s+(?:list|show)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+auth\s+status(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+view(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
     sqlite_direct_pattern(),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
