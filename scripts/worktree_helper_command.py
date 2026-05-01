@@ -64,7 +64,8 @@ def sqlite_direct_pattern() -> re.Pattern[str]:
         rf"|(?:\"PRAGMA\s+table_info\s*\([^\";=]+\)\s*;?\")"
         rf"|(?:'PRAGMA\s+table_info\s*\([^';=]+\)\s*;?')"
         rf"|(?:\"SELECT\b(?![^\";]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^\";]*;?\")"
-        rf"|(?:'SELECT\b(?![^';]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^';]*;?'))\s*$"
+        rf"|(?:'SELECT\b(?![^';]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^';]*;?'))\s*$",
+        re.IGNORECASE,
     )
 
 
