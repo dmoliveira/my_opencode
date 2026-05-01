@@ -122,6 +122,12 @@ def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object
     }
 
 
+def suggested_worktree_path(directory: Path, repo_name: str, suggested_branch: str, blocked_slug: str) -> Path:
+    branch_slug = slugify(suggested_branch.replace("/", "-"))
+    suffix = branch_slug or blocked_slug or "maintenance"
+    return (directory.parent / f"{repo_name}-wt-{suffix[:48]}").resolve()
+
+
 def has_disallowed_shell_syntax(command: str) -> bool:
     quote: str | None = None
     index = 0
@@ -337,7 +343,7 @@ def command_maintenance(args: list[str]) -> int:
         repo_name = directory.name or "repo"
         blocked_slug = slugify(blocked_command or "maintenance")
         suggested_branch = branch or f"chore/{blocked_slug[:40]}"
-        suggested_worktree = (directory.parent / f"{repo_name}-wt-maintenance").resolve()
+        suggested_worktree = suggested_worktree_path(directory, repo_name, suggested_branch, blocked_slug)
         if has_head_commit(directory):
             commands = [
                 f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD",
