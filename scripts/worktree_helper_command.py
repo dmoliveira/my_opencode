@@ -138,6 +138,27 @@ def invalid_directory_report(directory: Path, blocked_command: str | None, messa
     }
 
 
+def invalid_branch_report(directory: Path, blocked_command: str | None, branch: str, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_branch",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "suggested_branch": branch,
+        "error": message,
+    }
+
+
+def is_valid_git_branch_name(branch: str) -> bool:
+    result = subprocess.run(
+        ["git", "check-ref-format", "--branch", branch],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
 def suggested_worktree_path(directory: Path, repo_name: str, suggested_branch: str, blocked_slug: str) -> Path:
     branch_slug = slugify(suggested_branch.replace("/", "-"))
     suffix = branch_slug or blocked_slug or "maintenance"
@@ -314,6 +335,14 @@ def command_maintenance(args: list[str]) -> int:
 
     if not directory.is_dir():
         report = invalid_directory_report(directory, blocked_command, f"directory is not a folder: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if branch and not is_valid_git_branch_name(branch):
+        report = invalid_branch_report(directory, blocked_command, branch, f"branch is not a valid git branch name: {branch}")
         if json_output:
             print(json.dumps(report, indent=2))
         else:

@@ -219,6 +219,42 @@ test("worktree helper still suggests a maintenance worktree for blocked commands
   assert.equal(report.commands.length, 2)
 })
 
+test("worktree helper rejects invalid custom branch suggestions", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--branch",
+      "bad branch name",
+      "--command",
+      'git commit -m "msg"',
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "ERROR")
+  assert.equal(report.mode, "invalid_branch")
+  assert.equal(report.suggested_branch, "bad branch name")
+  assert.match(report.error, /branch is not a valid git branch name/)
+})
+
+test("worktree helper accepts valid custom branch suggestions", () => {
+  const report = runHelperWithArgs([
+    "maintenance",
+    "--directory",
+    repoDirectory,
+    "--branch",
+    "chore/valid-branch",
+    "--command",
+    'git commit -m "msg"',
+    "--json",
+  ])
+
+  assert.equal(JSON.parse(report.stdout).suggested_branch, "chore/valid-branch")
+  assert.equal(report.status, 3)
+})
+
 test("worktree helper reports stable errors for missing maintenance directories", () => {
   const missingPath = join(tmpdir(), "worktree-helper-missing-dir")
   rmSync(missingPath, { recursive: true, force: true })
