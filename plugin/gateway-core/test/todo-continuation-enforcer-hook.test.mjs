@@ -1546,3 +1546,59 @@ test("todo-continuation-enforcer defers injection while latest assistant turn is
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("todo-continuation-enforcer re-probes after assistant completion updates a later continue marker", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-todo-continuation-"))
+  try {
+    let promptCalls = 0
+    const hook = createTodoContinuationEnforcerHook({
+      directory,
+      enabled: true,
+      cooldownMs: 30000,
+      maxConsecutiveFailures: 5,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant", time: { completed: Date.now() } },
+                  parts: [{ type: "text", text: "Remaining items to continue now\n<CONTINUE-LOOP>" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("tool.execute.after", {
+      directory,
+      input: { tool: "task", sessionID: "session-todo-late-marker" },
+      output: { output: "This slice is done." },
+    })
+
+    await hook.event("message.updated", {
+      directory,
+      properties: {
+        info: {
+          role: "assistant",
+          sessionID: "session-todo-late-marker",
+          time: { completed: Date.now() },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-todo-late-marker" },
+    })
+
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
