@@ -193,6 +193,25 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
   assert.equal(ghRepoEditReport.mode, "direct_run")
 })
 
+test("worktree helper keeps direct-run guidance for wrapper and env-prefixed safe commands", () => {
+  const rtkGitReport = runHelper("rtk git status --short --branch")
+  const pathGitReport = runHelper("/usr/bin/git diff --stat HEAD~1")
+  const rtkGhReport = runHelper("rtk gh pr view --json number")
+  const envGhReport = runHelper("env CI=true gh auth status")
+  const envGitReport = runHelper("env GIT_PAGER=cat git log --oneline -n 1")
+
+  assert.equal(rtkGitReport.result, "PASS")
+  assert.equal(rtkGitReport.mode, "direct_run")
+  assert.equal(pathGitReport.result, "PASS")
+  assert.equal(pathGitReport.mode, "direct_run")
+  assert.equal(rtkGhReport.result, "PASS")
+  assert.equal(rtkGhReport.mode, "direct_run")
+  assert.equal(envGhReport.result, "PASS")
+  assert.equal(envGhReport.mode, "direct_run")
+  assert.equal(envGitReport.result, "PASS")
+  assert.equal(envGitReport.mode, "direct_run")
+})
+
 test("worktree helper stays aligned with newly allowed read-only git inspection commands", () => {
   const statusArgsReport = runHelper("git status --short --branch")
   const diffArgsReport = runHelper("git diff --stat HEAD~1")
