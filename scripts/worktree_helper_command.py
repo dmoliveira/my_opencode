@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import math
+import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -27,14 +30,82 @@ def shell_quote(value: str) -> str:
     return shlex.quote(value)
 
 
+def short_hash(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+
+
+def unique_slug(value: str, limit: int) -> str:
+    slug = slugify(value)
+    if len(slug) <= limit:
+        return slug
+    digest = short_hash(value)
+    prefix_limit = max(1, limit - len(digest) - 1)
+    return f"{slug[:prefix_limit]}-{digest}"
+
+
 _SHELL_TOKEN = r'(?:"[^"]*"|\'[^\']*\'|\S+)'
 _SAFE_ENV_KEY = r"(?:CI|GIT_TERMINAL_PROMPT|GIT_EDITOR|GIT_PAGER|PAGER|GCM_INTERACTIVE|OPENCODE_SESSION_ID)"
+_SAFE_EXECUTE_ENV_KEYS = {
+    "CI",
+    "GIT_TERMINAL_PROMPT",
+    "GIT_EDITOR",
+    "GIT_PAGER",
+    "PAGER",
+    "GCM_INTERACTIVE",
+    "OPENCODE_SESSION_ID",
+}
 _SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:{_SAFE_ENV_KEY}={_SHELL_TOKEN}\s+)*)"
 _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
 _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
+_SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
+_DEFAULT_EXECUTE_TIMEOUT_SECONDS = 10.0
+_GIT_SAFE_GLOBAL_FLAGS = rf"(?:\s+(?:--no-pager|-C\s+{_SHELL_TOKEN}|--git-dir\s+{_SHELL_TOKEN}|--work-tree\s+{_SHELL_TOKEN}))*"
+_GIT_READ_ONLY_PATTERN = (
+    rf"(?:status(?:\s+{_SHELL_TOKEN})*"
+    rf"|diff(?:\s+{_SHELL_TOKEN})*"
+    rf"|log(?:\s+{_SHELL_TOKEN})*"
+    rf"|remote\s+-v"
+    rf"|branch\s+--show-current"
+    rf"|branch\s+-r(?:\s+--contains\s+{_SHELL_TOKEN})?"
+    rf"|branch\s+(?:--list|-a)(?:\s+{_SHELL_TOKEN})*"
+    rf"|remote\s+get-url\s+{_SHELL_TOKEN}"
+    rf"|rev-parse(?:\s+{_SHELL_TOKEN})+"
+    rf"|rev-list(?:\s+{_SHELL_TOKEN})+"
+    rf"|merge-base(?:\s+{_SHELL_TOKEN})+"
+    rf"|show(?:\s+{_SHELL_TOKEN})+"
+    rf"|ls-files(?:\s+{_SHELL_TOKEN})*"
+    rf"|for-each-ref(?:\s+{_SHELL_TOKEN})+"
+    rf"|symbolic-ref(?:\s+{_SHELL_TOKEN})+"
+    rf"|worktree\s+list(?:\s+{_SHELL_TOKEN})*)"
+)
+_GIT_SAFE_MUTATION_PATTERN = (
+    rf"(?:push(?:\s+(?:-u|--set-upstream))?\s+origin\s+(?:main|master)"
+    rf"|remote\s+(?:add|set-url)\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}"
+    rf"|worktree\s+(?:add|remove)(?:\s+{_SHELL_TOKEN})+"
+    rf"|branch\s+(?:-d|--delete)(?:\s+{_SHELL_TOKEN})+"
+    rf"|stash\s+(?:push(?:\s+{_SHELL_TOKEN})+|list|show))"
+)
+
+
+def sqlite_direct_pattern() -> re.Pattern[str]:
+    return re.compile(
+        rf"^{_SAFE_ENV_PREFIX}(?:[^\s;&|]*/)?sqlite3"
+        rf"(?=[^;&|]*\s-readonly\b)(?:\s+{_SQLITE_SAFE_FLAG})*\s+{_SHELL_TOKEN}\s+"
+        rf"(?:(?:\"\.(?:tables|schema(?:\s+[^\"]+)?)\")"
+        rf"|(?:'\.(?:tables|schema(?:\s+[^']+)?)')"
+        rf"|(?:\"PRAGMA\s+table_info\s*\([^\";=]+\)\s*;?\")"
+        rf"|(?:'PRAGMA\s+table_info\s*\([^';=]+\)\s*;?')"
+        rf"|(?:\"SELECT\b(?![^\";]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^\";]*;?\")"
+        rf"|(?:'SELECT\b(?![^';]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^';]*;?'))\s*$",
+        re.IGNORECASE,
+    )
+
+
 _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}date(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}pwd\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}ls(?:\s+[^;&|]+)*\s*$"),
     re.compile(
         rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:"
         rf"(?:current|next|queue)(?:\s+.+)?"
@@ -43,20 +114,36 @@ _ALLOWED_DIRECT_PATTERNS = [
         rf"|(?:end-session)(?:\s+.+)"
         rf")\s*$"
     ),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN}|add\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN}|set-url\s+{_SHELL_TOKEN}\s+{_SHELL_TOKEN})\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+push(?:\s+(?:-u|--set-upstream))?\s+origin\s+(?:main|master)\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+worktree\s+(?:add|remove)(?:\s+.+)\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+branch\s+(?:-d|--delete)(?:\s+.+)\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+stash\s+(?:push(?:\s+.+)|list|show)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+{_GIT_READ_ONLY_PATTERN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+merge\s+--(?:no-edit|ff-only)\s+{_SHELL_TOKEN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN})\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+{_GIT_SAFE_MUTATION_PATTERN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+switch\s+--detach\s+(?:origin/)?(?:main|master)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+checkout\s+--detach\s+(?:origin/)?(?:main|master)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+restore\s+--source\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+checkout\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+auth\s+status(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
+    sqlite_direct_pattern(),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+init\s+-y\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}npm(?:\s+--prefix\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}pnpm(?:\s+--dir\s+[^;&|]+)?\s+(?:test|lint|build)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}yarn(?:\s+--cwd\s+[^;&|]+)?\s+(?:test|lint|build)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}bun(?:\s+--cwd\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}python3?\s+-m\s+(?:unittest|pytest|py_compile)(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}pytest(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}node\s+--test(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}pre-commit\s+run(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}eslint(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}tsc(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}ruff(?:\s+[^;&|]+)*\s*$"),
 ]
 
 
@@ -65,6 +152,10 @@ def is_direct_allowed_protected_main_command(command: str | None) -> bool:
         return False
     normalized = command.strip()
     if has_disallowed_shell_syntax(normalized):
+        return False
+    if re.search(r"(?:^|\s)--output(?:=|\s)", normalized):
+        return False
+    if re.search(r"(?:^|\s)--(?:ext-diff|textconv)(?:\s|$)", normalized):
         return False
     return any(pattern.match(normalized) for pattern in _ALLOWED_DIRECT_PATTERNS)
 
@@ -81,6 +172,74 @@ def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object
         ),
         "commands": [blocked_command],
     }
+
+
+def invalid_directory_report(directory: Path, blocked_command: str | None, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_directory",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "error": message,
+    }
+
+
+def invalid_branch_report(directory: Path, blocked_command: str | None, branch: str, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_branch",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "suggested_branch": branch,
+        "error": message,
+    }
+
+
+def invalid_repository_report(directory: Path, blocked_command: str | None, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_repository",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "error": message,
+    }
+
+
+def invalid_command_report(directory: Path, blocked_command: str | None, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_command",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "error": message,
+    }
+
+
+def is_valid_git_branch_name(branch: str) -> bool:
+    result = subprocess.run(
+        ["git", "check-ref-format", "--branch", branch],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def is_git_repository(directory: Path) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=directory,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
+def suggested_worktree_path(directory: Path, repo_name: str, suggested_branch: str, blocked_slug: str) -> Path:
+    branch_slug = unique_slug(suggested_branch.replace("/", "-"), 48)
+    suffix = branch_slug or blocked_slug or "maintenance"
+    return (directory.parent / f"{repo_name}-wt-{suffix}").resolve()
 
 
 def has_disallowed_shell_syntax(command: str) -> bool:
@@ -127,6 +286,87 @@ def has_head_commit(directory: Path) -> bool:
     return result.returncode == 0
 
 
+def execute_timeout_seconds() -> float:
+    raw = os.environ.get("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT", "").strip()
+    if not raw:
+        return _DEFAULT_EXECUTE_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be a positive number") from exc
+    if not math.isfinite(value):
+        raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be a finite number")
+    if value <= 0:
+        raise ValueError("OPENCODE_MAINTENANCE_HELPER_EXEC_TIMEOUT must be greater than zero")
+    return value
+
+
+def ensure_safe_execute_env_key(key: str) -> None:
+    if key not in _SAFE_EXECUTE_ENV_KEYS:
+        raise ValueError(f"unsupported execute-mode environment key: {key}")
+
+
+def apply_execute_env_prefix(argv: list[str], env: dict[str, str]) -> list[str]:
+    explicit_env = False
+    while argv:
+        token = argv[0]
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token):
+            key, value = token.split("=", 1)
+            ensure_safe_execute_env_key(key)
+            env[key] = value
+            argv.pop(0)
+            continue
+        if token == "env":
+            explicit_env = True
+            argv.pop(0)
+            continue
+        if token == "--":
+            if not explicit_env:
+                break
+            argv.pop(0)
+            break
+        if token in {"-u", "--unset"}:
+            if not explicit_env:
+                raise ValueError(f"unsupported execute-mode prefix without env: {token}")
+            option = argv.pop(0)
+            if not argv:
+                raise ValueError(f"execute mode requires a variable name after env {option}")
+            unset_key = argv.pop(0)
+            ensure_safe_execute_env_key(unset_key)
+            env.pop(unset_key, None)
+            continue
+        if token.startswith("--unset="):
+            if not explicit_env:
+                raise ValueError(f"unsupported execute-mode prefix without env: {token}")
+            unset_key = token.split("=", 1)[1]
+            ensure_safe_execute_env_key(unset_key)
+            env.pop(unset_key, None)
+            argv.pop(0)
+            continue
+        if token.startswith("-"):
+            if explicit_env:
+                raise ValueError(f"unsupported env option for execute mode: {token}")
+            break
+        break
+    return argv
+
+
+def parse_execute_command(command: str) -> tuple[dict[str, str], list[str]]:
+    if has_disallowed_shell_syntax(command):
+        raise ValueError("execute mode only supports a single command without shell chaining or redirection")
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        raise ValueError("execute mode requires valid shell-style quoting") from exc
+    if not argv:
+        raise ValueError("execute mode requires a command to run")
+    env = os.environ.copy()
+    argv = apply_execute_env_prefix(argv, env)
+    if not argv:
+        raise ValueError("execute mode requires a command after environment assignments")
+    return env, argv
+
+
 def command_maintenance(args: list[str]) -> int:
     directory = Path.cwd()
     branch: str | None = None
@@ -164,21 +404,88 @@ def command_maintenance(args: list[str]) -> int:
             continue
         return usage()
 
+    if not directory.exists():
+        report = invalid_directory_report(directory, blocked_command, f"directory does not exist: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if not directory.is_dir():
+        report = invalid_directory_report(directory, blocked_command, f"directory is not a folder: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if not is_git_repository(directory):
+        report = invalid_repository_report(directory, blocked_command, f"directory is not a git repository: {directory}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if branch and not is_valid_git_branch_name(branch):
+        report = invalid_branch_report(directory, blocked_command, branch, f"branch is not a valid git branch name: {branch}")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    if not blocked_command:
+        report = invalid_command_report(directory, blocked_command, "command must not be empty")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
+    direct_allowed = is_direct_allowed_protected_main_command(blocked_command)
+
     if execute:
-        if not blocked_command:
-            return usage()
+        if direct_allowed:
+            report = direct_run_report(directory, blocked_command)
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(report["note"])
+            return 0
         try:
+            env, argv = parse_execute_command(blocked_command)
+            timeout_seconds = execute_timeout_seconds()
             result = subprocess.run(
-                blocked_command,
+                argv,
                 cwd=directory,
+                env=env,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
-                shell=True,
                 check=False,
+                timeout=timeout_seconds,
             )
-        except OSError as exc:
+        except subprocess.TimeoutExpired as exc:
             report = {
                 "result": "ERROR",
+                "mode": "execute_timeout",
+                "directory": str(directory),
+                "command": blocked_command,
+                "error": f"execute mode timed out after {timeout_seconds:g}s",
+                "stdout": exc.stdout or "",
+                "stderr": exc.stderr or "",
+            }
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(report["error"], file=sys.stderr)
+            return 1
+        except (OSError, ValueError) as exc:
+            report = {
+                "result": "ERROR",
+                "mode": "execute_error",
                 "directory": str(directory),
                 "command": blocked_command,
                 "error": str(exc),
@@ -191,6 +498,7 @@ def command_maintenance(args: list[str]) -> int:
 
         report = {
             "result": "EXECUTED",
+            "mode": "execute_run",
             "directory": str(directory),
             "command": blocked_command,
             "returncode": result.returncode,
@@ -206,22 +514,24 @@ def command_maintenance(args: list[str]) -> int:
                 print(result.stderr, end="", file=sys.stderr)
         return result.returncode
 
-    if is_direct_allowed_protected_main_command(blocked_command):
+    if direct_allowed:
         report = direct_run_report(directory, blocked_command)
     else:
         repo_name = directory.name or "repo"
         blocked_slug = slugify(blocked_command or "maintenance")
-        suggested_branch = branch or f"chore/{blocked_slug[:40]}"
-        suggested_worktree = (directory.parent / f"{repo_name}-wt-maintenance").resolve()
+        suggested_branch = branch or f"chore/{unique_slug(blocked_command or 'maintenance', 40)}"
+        suggested_worktree = suggested_worktree_path(directory, repo_name, suggested_branch, blocked_slug)
         if has_head_commit(directory):
-            create_command = f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD"
-            followup_command = f"git -C {shell_quote(str(suggested_worktree))} status --short --branch"
+            commands = [
+                f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD",
+                f"git -C {shell_quote(str(suggested_worktree))} status --short --branch",
+            ]
         else:
-            create_command = (
-                f'git -C {shell_quote(str(directory))} add . && '
-                f'git -C {shell_quote(str(directory))} commit -m "Initial commit"'
-            )
-            followup_command = f"git -C {shell_quote(str(directory))} status --short --branch"
+            commands = [
+                f"git -C {shell_quote(str(directory))} add .",
+                f'git -C {shell_quote(str(directory))} commit -m "Initial commit"',
+                f"git -C {shell_quote(str(directory))} status --short --branch",
+            ]
         report = {
             "result": "FAIL",
             "mode": "maintenance_worktree",
@@ -233,10 +543,7 @@ def command_maintenance(args: list[str]) -> int:
                 "Guidance only: the blocked command was not executed. "
                 "Create or use the suggested worktree and rerun the intended command there."
             ),
-            "commands": [
-                create_command,
-                followup_command,
-            ],
+            "commands": commands,
         }
     if json_output:
         print(json.dumps(report, indent=2))
