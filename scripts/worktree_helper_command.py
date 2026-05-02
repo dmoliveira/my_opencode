@@ -60,6 +60,7 @@ _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
 _SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
 _DEFAULT_EXECUTE_TIMEOUT_SECONDS = 10.0
+_GIT_SAFE_GLOBAL_FLAGS = rf"(?:\s+(?:--no-pager|-C\s+{_SHELL_TOKEN}|--git-dir\s+{_SHELL_TOKEN}|--work-tree\s+{_SHELL_TOKEN}))*"
 _GIT_READ_ONLY_PATTERN = (
     rf"(?:status(?:\s+{_SHELL_TOKEN})*"
     rf"|diff(?:\s+{_SHELL_TOKEN})*"
@@ -113,14 +114,14 @@ _ALLOWED_DIRECT_PATTERNS = [
         rf"|(?:end-session)(?:\s+.+)"
         rf")\s*$"
     ),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+{_GIT_READ_ONLY_PATTERN}\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+merge\s+--(?:no-edit|ff-only)\s+{_SHELL_TOKEN}\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN})\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+{_GIT_SAFE_MUTATION_PATTERN}\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+restore\s+--source\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}\s+checkout\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+{_GIT_READ_ONLY_PATTERN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+merge\s+--(?:no-edit|ff-only)\s+{_SHELL_TOKEN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN})\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+{_GIT_SAFE_MUTATION_PATTERN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+restore\s+--source\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+checkout\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+auth\s+status(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
