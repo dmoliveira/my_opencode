@@ -176,6 +176,16 @@ def invalid_repository_report(directory: Path, blocked_command: str | None, mess
     }
 
 
+def invalid_command_report(directory: Path, blocked_command: str | None, message: str) -> dict[str, object]:
+    return {
+        "result": "ERROR",
+        "mode": "invalid_command",
+        "directory": str(directory),
+        "blocked_command": blocked_command,
+        "error": message,
+    }
+
+
 def is_valid_git_branch_name(branch: str) -> bool:
     result = subprocess.run(
         ["git", "check-ref-format", "--branch", branch],
@@ -397,9 +407,15 @@ def command_maintenance(args: list[str]) -> int:
             print(report["error"], file=sys.stderr)
         return 1
 
+    if not blocked_command:
+        report = invalid_command_report(directory, blocked_command, "command must not be empty")
+        if json_output:
+            print(json.dumps(report, indent=2))
+        else:
+            print(report["error"], file=sys.stderr)
+        return 1
+
     if execute:
-        if not blocked_command:
-            return usage()
         try:
             env, argv = parse_execute_command(blocked_command)
             timeout_seconds = execute_timeout_seconds()

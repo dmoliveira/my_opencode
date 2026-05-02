@@ -343,6 +343,37 @@ test("worktree helper reports stable errors for non-git directories", () => {
   }
 })
 
+test("worktree helper reports stable errors for empty commands", () => {
+  const previewReport = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      "   ",
+      "--json",
+    ]).stdout,
+  )
+  const executeReport = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      "   ",
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(previewReport.result, "ERROR")
+  assert.equal(previewReport.mode, "invalid_command")
+  assert.match(previewReport.error, /command must not be empty/)
+  assert.equal(executeReport.result, "ERROR")
+  assert.equal(executeReport.mode, "invalid_command")
+  assert.match(executeReport.error, /command must not be empty/)
+})
+
 test("worktree helper does not classify chained oc commands as direct-run safe", () => {
   const report = runHelper('oc done task_175 --note "completed" && git commit -m "msg"')
 
