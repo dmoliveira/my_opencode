@@ -120,6 +120,8 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+merge\s+--(?:no-edit|ff-only)\s+{_SHELL_TOKEN}\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN})\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+{_GIT_SAFE_MUTATION_PATTERN}\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+switch\s+--detach\s+(?:origin/)?(?:main|master)\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+checkout\s+--detach\s+(?:origin/)?(?:main|master)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+restore\s+--source\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+checkout\s+(?:main|master)\s+--(?:\s+{_SHELL_TOKEN})+\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+auth\s+status(?:\s+.+)?\s*$"),
