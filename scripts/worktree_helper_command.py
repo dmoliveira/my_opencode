@@ -441,7 +441,16 @@ def command_maintenance(args: list[str]) -> int:
             print(report["error"], file=sys.stderr)
         return 1
 
+    direct_allowed = is_direct_allowed_protected_main_command(blocked_command)
+
     if execute:
+        if direct_allowed:
+            report = direct_run_report(directory, blocked_command)
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(report["note"])
+            return 0
         try:
             env, argv = parse_execute_command(blocked_command)
             timeout_seconds = execute_timeout_seconds()
@@ -502,7 +511,7 @@ def command_maintenance(args: list[str]) -> int:
                 print(result.stderr, end="", file=sys.stderr)
         return result.returncode
 
-    if is_direct_allowed_protected_main_command(blocked_command):
+    if direct_allowed:
         report = direct_run_report(directory, blocked_command)
     else:
         repo_name = directory.name or "repo"

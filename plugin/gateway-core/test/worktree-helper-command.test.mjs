@@ -731,6 +731,24 @@ test("worktree helper execute mode closes stdin for input-reading commands", () 
   assert.match(report.stderr, /EOF when reading a line/)
 })
 
+test("worktree helper execute mode preserves direct-run guidance for allowed commands", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'oc done task_175 --note "completed"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "PASS")
+  assert.equal(report.mode, "direct_run")
+  assert.deepEqual(report.commands, ['oc done task_175 --note "completed"'])
+})
+
 test("worktree helper execute mode rejects chained shell syntax", () => {
   const report = JSON.parse(
     runHelperWithArgs([
