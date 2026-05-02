@@ -565,6 +565,25 @@ test("worktree helper execute mode supports long-form env unsets", () => {
   assert.equal(report.stdout.trim(), "missing")
 })
 
+test("worktree helper execute mode supports compact env unset syntax", () => {
+  const report = JSON.parse(
+    runHelperWithArgs([
+      "maintenance",
+      "--directory",
+      repoDirectory,
+      "--command",
+      'env CI=keep --unset=CI python3 -c "import os; print(os.environ.get(\'CI\', \'missing\'))"',
+      "--execute",
+      "--json",
+    ]).stdout,
+  )
+
+  assert.equal(report.result, "EXECUTED")
+  assert.equal(report.mode, "execute_run")
+  assert.equal(report.returncode, 0)
+  assert.equal(report.stdout.trim(), "missing")
+})
+
 test("worktree helper execute mode supports env option terminator", () => {
   const report = JSON.parse(
     runHelperWithArgs([
