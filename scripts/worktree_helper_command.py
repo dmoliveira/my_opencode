@@ -96,6 +96,8 @@ def sqlite_direct_pattern() -> re.Pattern[str]:
 
 _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}date(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}pwd\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}ls(?:\s+[^;&|]+)*\s*$"),
     re.compile(
         rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:"
         rf"(?:current|next|queue)(?:\s+.+)?"
@@ -114,9 +116,17 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+view(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
     sqlite_direct_pattern(),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+init\s+-y\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}npm(?:\s+--prefix\s+[^;&|]+)?\s+(?:test|run\s+(?:lint|test|build))\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}python3?\s+-m\s+(?:unittest|pytest|py_compile)(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}pytest(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}node\s+--test(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}eslint(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}tsc(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}ruff(?:\s+[^;&|]+)*\s*$"),
 ]
 
 
