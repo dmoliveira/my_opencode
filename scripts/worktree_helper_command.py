@@ -128,6 +128,8 @@ def is_direct_allowed_protected_main_command(command: str | None) -> bool:
         return False
     if re.search(r"(?:^|\s)--output(?:=|\s)", normalized):
         return False
+    if re.search(r"(?:^|\s)--(?:ext-diff|textconv)(?:\s|$)", normalized):
+        return False
     return any(pattern.match(normalized) for pattern in _ALLOWED_DIRECT_PATTERNS)
 
 
