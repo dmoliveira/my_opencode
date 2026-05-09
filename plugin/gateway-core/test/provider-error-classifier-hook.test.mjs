@@ -41,6 +41,34 @@ test("provider-error-classifier classifies rate limited and overloaded signals",
   assert.match(String(prompts[1].body.parts[0].text), /overload/i)
 })
 
+test("provider-error-classifier classifies structured service_unavailable overload payloads", async () => {
+  const prompts = []
+  const hook = createProviderErrorClassifierHook({
+    directory: process.cwd(),
+    enabled: true,
+    cooldownMs: 1,
+    client: { session: { async promptAsync(args) { prompts.push(args) } } },
+  })
+
+  await hook.event("session.error", {
+    properties: {
+      sessionID: "s2b",
+      error: {
+        type: "error",
+        error: {
+          type: "service_unavailable_error",
+          code: "server_is_overloaded",
+          message: "Our servers are currently overloaded. Please try again later.",
+        },
+      },
+    },
+  })
+
+  assert.equal(prompts.length, 1)
+  assert.match(String(prompts[0].body.parts[0].text), /overload/i)
+  assert.match(String(prompts[0].body.parts[0].text), /wait and retry with backoff/i)
+})
+
 
 test("provider-error-classifier skips context-overflow non-retryable errors", async () => {
   const prompts = []

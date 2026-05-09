@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
 import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js";
+import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js";
 const STALE_QUESTION_PREVENTION_MS = 60_000;
 function nowMs() {
     return Date.now();
@@ -20,10 +21,27 @@ function isQuestionTool(raw) {
 }
 // Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error) {
-    const candidate = error && typeof error === "object" && "message" in error
-        ? String(error.message ?? "")
-        : String(error ?? "");
-    const message = candidate.toLowerCase();
+    const parts = [];
+    if (error && typeof error === "object") {
+        const record = error;
+        if ("message" in record && record.message != null) {
+            parts.push(String(record.message));
+        }
+        try {
+            parts.push(JSON.stringify(error));
+        }
+        catch {
+            // ignore serialization failure and fall back to string coercion below
+        }
+    }
+    parts.push(String(error ?? ""));
+    const message = parts.filter(Boolean).join("\n").toLowerCase();
+    if (isContextOverflowNonRetryable(message)) {
+        return false;
+    }
+    if (classifyProviderRetryReason(message)) {
+        return true;
+    }
     return (message.includes("context") ||
         message.includes("rate limit") ||
         message.includes("temporar") ||

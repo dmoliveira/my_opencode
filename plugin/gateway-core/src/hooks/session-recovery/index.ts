@@ -2,6 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js"
+import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
 
 // Declares minimal session prompt API used for recovery resume.
 interface GatewayClient {
@@ -128,11 +129,26 @@ function isQuestionTool(raw: unknown): boolean {
 
 // Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error: unknown): boolean {
-  const candidate =
-    error && typeof error === "object" && "message" in (error as Record<string, unknown>)
-      ? String((error as Record<string, unknown>).message ?? "")
-      : String(error ?? "")
-  const message = candidate.toLowerCase()
+  const parts: string[] = []
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>
+    if ("message" in record && record.message != null) {
+      parts.push(String(record.message))
+    }
+    try {
+      parts.push(JSON.stringify(error))
+    } catch {
+      // ignore serialization failure and fall back to string coercion below
+    }
+  }
+  parts.push(String(error ?? ""))
+  const message = parts.filter(Boolean).join("\n").toLowerCase()
+  if (isContextOverflowNonRetryable(message)) {
+    return false
+  }
+  if (classifyProviderRetryReason(message)) {
+    return true
+  }
   return (
     message.includes("context") ||
     message.includes("rate limit") ||

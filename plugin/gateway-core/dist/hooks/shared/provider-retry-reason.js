@@ -18,7 +18,12 @@ export function classifyProviderRetryReason(text) {
             message: "Rate Limited",
         };
     }
-    if (/overloaded/i.test(text) || /code.*(exhausted|unavailable)/i.test(text) || /provider is overloaded/i.test(text)) {
+    if (/(provider|server).{0,24}overloaded/i.test(text) ||
+        /overloaded.{0,24}(provider|server)/i.test(text) ||
+        /code.*(exhausted|unavailable)/i.test(text) ||
+        /provider is overloaded/i.test(text) ||
+        /service[_ -]?unavailable_error/i.test(text) ||
+        /server[_ -]?is[_ -]?overloaded/i.test(text)) {
         return {
             code: "provider_overloaded",
             message: "Provider is overloaded",
