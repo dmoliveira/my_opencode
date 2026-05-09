@@ -13,6 +13,12 @@ test("classifyProviderRetryReason recognizes structured rate-limit and overload 
   assert.equal(classifyProviderRetryReason('{"type":"error","error":{"type":"too_many_requests"}}')?.code, "too_many_requests")
   assert.equal(classifyProviderRetryReason('rate_limit_exceeded')?.code, "rate_limited")
   assert.equal(classifyProviderRetryReason('provider is overloaded')?.code, "provider_overloaded")
+  assert.equal(
+    classifyProviderRetryReason('{"type":"error","error":{"type":"service_unavailable_error","code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later."}}')?.code,
+    "provider_overloaded",
+  )
+  assert.equal(classifyProviderRetryReason("Service unavailable, try again later")?.code, undefined)
+  assert.equal(classifyProviderRetryReason("Local queue overloaded while indexing docs")?.code, undefined)
 })
 
 

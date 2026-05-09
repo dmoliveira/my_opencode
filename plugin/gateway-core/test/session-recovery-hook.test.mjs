@@ -106,6 +106,47 @@ test("session-recovery skips non-recoverable errors", async () => {
   }
 })
 
+test("session-recovery skips context-overflow session errors", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "session-recovery-context-overflow",
+          error: { message: "ContextOverflowError: maximum context reached" },
+        },
+      },
+    })
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("session-recovery resumes recoverable errors without message history API", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
   try {
@@ -138,6 +179,54 @@ test("session-recovery resumes recoverable errors without message history API", 
         properties: {
           sessionID: "session-recovery-3",
           error: { message: "temporary network timeout" },
+        },
+      },
+    })
+    assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-recovery resumes structured provider overload session errors", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "session-recovery-overload",
+          error: {
+            type: "error",
+            error: {
+              type: "service_unavailable_error",
+              code: "server_is_overloaded",
+              message: "Our servers are currently overloaded. Please try again later.",
+            },
+          },
         },
       },
     })
