@@ -2,6 +2,18 @@
 export function resolveContextLimit(options) {
     const provider = options.providerID.trim().toLowerCase();
     const model = options.modelID.trim().toLowerCase();
+    if (provider === "kvforge") {
+        if (model.includes("128k")) {
+            return 128_000;
+        }
+        if (model.includes("64k")) {
+            return 64_000;
+        }
+        if (model.includes("32k")) {
+            return 32_000;
+        }
+        return 32_768;
+    }
     if (provider === "anthropic") {
         if (process.env.ANTHROPIC_1M_CONTEXT === "true" ||
             process.env.VERTEX_ANTHROPIC_1M_CONTEXT === "true") {

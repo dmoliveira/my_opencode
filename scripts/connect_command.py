@@ -9,7 +9,7 @@ from kvforge_discovery import KVFORGE_STATE_PATH, select_state, write_gateway_co
 
 
 def usage() -> int:
-    print("usage: /connect [--mode <assist|shadow|enforce>] [--name <name>] [--model <provider/model>] [--json]")
+    print("usage: connect_command.py [--mode <assist|shadow|enforce>] [--name <name>] [--model <provider/model>] [--json]")
     return 2
 
 

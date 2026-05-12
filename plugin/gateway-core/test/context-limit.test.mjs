@@ -37,3 +37,19 @@ test("resolveContextLimit uses model hints for non-anthropic providers", () => {
   })
   assert.equal(limitFallback, 128000)
 })
+
+test("resolveContextLimit gives kvforge a conservative local-model fallback", () => {
+  const kvforgeFallback = resolveContextLimit({
+    providerID: "kvforge",
+    modelID: "gpt-5.4-fast",
+    defaultContextLimitTokens: 128000,
+  })
+  assert.equal(kvforgeFallback, 32768)
+
+  const kvforge64k = resolveContextLimit({
+    providerID: "kvforge",
+    modelID: "local-64k",
+    defaultContextLimitTokens: 128000,
+  })
+  assert.equal(kvforge64k, 64000)
+})
