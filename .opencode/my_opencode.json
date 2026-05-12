@@ -163,6 +163,14 @@
       "description": "Manage safety hooks (status|help|enable|disable|run)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before hooks --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "connect": {
+      "description": "Connect the native OpenCode model/provider config to a running KVForge server",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/connect_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "models": {
+      "description": "List discovered native KVForge/OpenCode model mappings",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/models_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
     "model-routing": {
       "description": "Manage model routing (status|set-category|resolve|trace|recommend)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before model-routing --raw-args \"$ARGUMENTS\"`\nShow only the command output."
@@ -351,8 +359,8 @@
       "stack"
     ],
     "last_detection": {
-      "timestamp": "2026-04-25T10:18:01.231811+00:00",
-      "prompt": "review this code and improve end to end",
+      "timestamp": "2026-05-12T12:58:02.398709+00:00",
+      "prompt": "review the latest work, polish it, and fix inconsistencies",
       "result": "MATCH",
       "reason": "matched",
       "selected": {
@@ -363,11 +371,12 @@
         "slash_command": "/ox-review",
         "score": 1.0,
         "matched_keywords": [
-          "code",
-          "improve",
+          "inconsistencies",
+          "latest",
+          "polish",
           "review"
         ],
-        "phrase_hits": 2,
+        "phrase_hits": 1,
         "script": "ox_command.py"
       }
     }
@@ -478,18 +487,49 @@
   "policy": {
     "current": "strict",
     "description": "Only high-signal prompts with visual emphasis.",
-    "updated_at": "2026-04-25T10:18:01.050317+00:00",
-    "notify_config": "/Users/diego/Codes/Projects/my_opencode-wt-ox-design/.opencode/my_opencode.json"
+    "updated_at": "2026-05-12T12:58:02.227956+00:00",
+    "notify_config": "/Users/diego/Codes/Projects/my_opencode-wt-native-connect-kvforge/.opencode/my_opencode.json"
   },
   "stack_profile": {
     "current": "focus",
     "description": "Minimal interruptions for deep work.",
-    "updated_at": "2026-04-25T10:18:01.089023+00:00"
+    "updated_at": "2026-05-12T12:58:02.264326+00:00"
+  },
+  "provider": {
+    "kvforge": {
+      "name": "KVForge",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:18010/v1",
+        "apiKey": "dummy"
+      },
+      "models": {
+        "gpt-5.4-mini": {
+          "name": "gpt-5.4-mini"
+        }
+      }
+    }
+  },
+  "model": "kvforge/gpt-5.4-mini",
+  "llmDecisionRuntime": {
+    "enabled": true,
+    "mode": "assist",
+    "command": "opencode",
+    "model": "kvforge/gpt-5.4-mini",
+    "allowStandaloneOpencode": true,
+    "env": {}
+  },
+  "kvforge": {
+    "connectionName": "kvforge-gpt-5-4-mini",
+    "lastConnectedBaseUrl": "http://127.0.0.1:18010/v1",
+    "lastConnectedModel": "kvforge/gpt-5.4-mini",
+    "lastConnectedProviderModel": "openai/gpt-5.4-mini",
+    "lastConnectedServedModelName": "gpt-5.4-mini"
   },
   "budget_runtime": {
     "profile": "balanced",
     "overrides": {},
-    "updated_at": "2026-04-25T10:17:58Z",
+    "updated_at": "2026-05-12T12:57:59Z",
     "updated_by": "budget profile",
     "override_reason": null
   }

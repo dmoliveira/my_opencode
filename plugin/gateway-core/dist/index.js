@@ -94,8 +94,45 @@ import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
+import { resolveContextLimit } from "./hooks/shared/context-limit.js";
 const AUTO_SLASH_COMMAND_OPEN_TAG = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE_TAG = "</auto-slash-command>";
+const CHAT_OUTPUT_HEADROOM_TOKENS = 1024;
+const COMPACT_TOOL_DEFINITIONS = new Map([
+    ["bash", "Execute a shell command in the workspace."],
+    ["read", "Read a local file or directory by absolute path."],
+    ["glob", "Find files by glob pattern in the workspace."],
+    ["grep", "Search file contents with a regular expression."],
+    ["task", "Launch a specialized subagent for delegated work."],
+    ["webfetch", "Fetch content from a URL for analysis."],
+    ["todowrite", "Create or update a structured task list."],
+    ["skill", "Load a named skill into the current session."],
+    ["apply_patch", "Apply a structured patch to local files."],
+]);
+function clampChatMaxOutputTokens(input) {
+    if (!Number.isFinite(input.maxOutputTokens) || input.maxOutputTokens === undefined) {
+        return input.maxOutputTokens;
+    }
+    const providerID = typeof input.providerID === "string" ? input.providerID : "";
+    const modelID = typeof input.modelID === "string" ? input.modelID : "";
+    if (!providerID || !modelID) {
+        return input.maxOutputTokens;
+    }
+    const contextLimit = resolveContextLimit({
+        providerID,
+        modelID,
+        defaultContextLimitTokens: 128_000,
+    });
+    const safeBudget = Math.max(256, contextLimit - CHAT_OUTPUT_HEADROOM_TOKENS);
+    return Math.min(input.maxOutputTokens, safeBudget);
+}
+function compactToolDefinitionDescription(toolID, description) {
+    const compact = COMPACT_TOOL_DEFINITIONS.get(toolID.trim());
+    if (!compact) {
+        return description;
+    }
+    return compact;
+}
 function unwrapAutoSlashCommandText(text) {
     if (!text.includes(AUTO_SLASH_COMMAND_OPEN_TAG)) {
         return text;
@@ -993,6 +1030,12 @@ export default function GatewayCorePlugin(ctx) {
             }
         }
     }
+    async function toolDefinition(input, output) {
+        if (typeof output.description !== "string") {
+            return;
+        }
+        output.description = compactToolDefinitionDescription(input.toolID, output.description);
+    }
     // Dispatches chat message lifecycle signal to ordered hooks.
     async function chatMessage(input, output) {
         writeGatewayEventAudit(directory, {
@@ -1022,6 +1065,13 @@ export default function GatewayCorePlugin(ctx) {
             }
         }
         unwrapAutoSlashCommandParts(output?.parts);
+    }
+    async function chatParams(input, output) {
+        output.maxOutputTokens = clampChatMaxOutputTokens({
+            providerID: input.model?.providerID ?? input.provider?.id,
+            modelID: input.model?.modelID,
+            maxOutputTokens: output.maxOutputTokens,
+        });
     }
     // Dispatches experimental chat transform lifecycle signal to ordered hooks.
     async function chatMessagesTransform(input, output) {
@@ -1112,7 +1162,9 @@ export default function GatewayCorePlugin(ctx) {
         "command.execute.before": commandExecuteBefore,
         "command.execute.after": commandExecuteAfter,
         "tool.execute.after": toolExecuteAfter,
+        "tool.definition": toolDefinition,
         "chat.message": chatMessage,
+        "chat.params": chatParams,
         "experimental.chat.messages.transform": chatMessagesTransform,
         "experimental.chat.system.transform": chatSystemTransform,
         "experimental.text.complete": textComplete,

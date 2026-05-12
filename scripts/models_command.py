@@ -5,11 +5,11 @@ import json
 import sys
 from typing import Any
 
-from kvforge_discovery import load_states, state_running
+from kvforge_discovery import load_states, selected_native_model, state_running
 
 
 def usage() -> int:
-    print("usage: /models [--json]")
+    print("usage: models_command.py [--json]")
     return 2
 
 
@@ -31,6 +31,7 @@ def models_payload() -> dict[str, Any]:
             {
                 "connection_name": state.get("connection_name"),
                 "provider_model": state.get("provider_model"),
+                "native_model": selected_native_model(state),
                 "served_model_name": state.get("served_model_name"),
                 "source_model": state.get("model"),
                 "base_url": state.get("base_url"),

@@ -154,7 +154,31 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     "command.execute.before"(input: CommandBeforeInput, output: CommandBeforeOutput): Promise<void>;
     "command.execute.after"(input: CommandAfterInput, output: CommandAfterOutput): Promise<void>;
     "tool.execute.after"(input: ToolAfterInput, output: ToolAfterOutput): Promise<void>;
+    "tool.definition"(input: {
+        toolID: string;
+    }, output: {
+        description: string;
+        parameters: unknown;
+    }): Promise<void>;
     "chat.message"(input: ChatMessageInput, output?: ChatMessageOutput): Promise<void>;
+    "chat.params"(input: {
+        sessionID: string;
+        agent: string;
+        model: {
+            providerID?: string;
+            modelID?: string;
+        };
+        provider: {
+            id?: string;
+        };
+        message: unknown;
+    }, output: {
+        temperature: number;
+        topP: number;
+        topK: number;
+        maxOutputTokens: number | undefined;
+        options: Record<string, unknown>;
+    }): Promise<void>;
     "experimental.chat.messages.transform"(input: {
         sessionID?: string;
     }, output: ChatMessagesTransformOutput): Promise<void>;
