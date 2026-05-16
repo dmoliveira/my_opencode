@@ -70,11 +70,11 @@ Before execution starts:
 4. attach work to Codememory epic/task state
 5. prefer JSON/quiet output first
 
-Current known prerequisite/blocker to verify before execution:
+Historical prerequisite note from Run 1:
 
-- `oc current`, `oc next`, and `oc queue` timed out on DB connection in this worktree on 2026-05-16
-- `make doctor` in the Codememory repo reported sqlite config healthy, so repo/runtime config drift or env drift is likely
-- treat Codememory recovery as gate `R0` before meaningful validation execution starts
+- `oc current`, `oc next`, and `oc queue` timed out on DB connection in this worktree earlier on 2026-05-16
+- `make doctor` in the Codememory repo reported sqlite config healthy, so repo/runtime config drift or env drift was suspected
+- Run 2 restored usable Codememory access in this worktree; keep `R0` as a verification gate, but do not treat the earlier timeout as the current default state
 
 ## Minimal AI communication contract
 
@@ -950,6 +950,28 @@ Append one block per future run.
   - no exact `ailoop` template found; local equivalent is autopilot/resume/digest/session-handoff stack
 - cleanup: none needed beyond keeping work in dedicated worktree
 - nxt: recover R0, then execute exercise sets A-G in small validated slices
+
+### Run 2 — 2026-05-16 — agent
+
+- scope: continue same-branch reliability review with resumable improvement ledger and first docs-fix slice
+- tasks touched: R0.1 recovery evidence, R8.1 ledger upkeep, R8.2 finding capture, R8.3 first remediation
+- env: same dedicated worktree branch; Codememory working again in repo worktree (`task_5`, `session_5`)
+- cmds:
+  - `git fetch --all --prune --quiet`
+  - `oc current`
+  - `oc next`
+  - `oc queue`
+  - `oc add task 'Continue reliability review improvements' --scope 'dmoliveira/my_opencode' --kind docs --priority P1`
+  - `oc add session 'continue reliability review improvements' --scope 'dmoliveira/my_opencode' --task 'task_5' --worktree '.' --branch 'feat/opencode-reliability-validation-review'`
+  - `git diff --check`
+  - `make validate`
+- result: ok
+- findings:
+  - local `docs/validation-policy.md` was missing even though repo startup/review docs referenced it as a local path
+  - a root append-only session ledger (`improvements-review-2026-05-16.md`) improves resumability for later AI iterations on this branch
+  - Codememory access that was previously timing out is now usable in this worktree, so R0 execution can continue from real task/session state
+- cleanup: none
+- nxt: continue R0-R2 execution with real command evidence and append new findings/remediations to the shared ledger
 
 ## Exit criteria for this review campaign
 
