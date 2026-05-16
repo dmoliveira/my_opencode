@@ -126,6 +126,7 @@ Continuation loop controls:
 ## References
 
 - Full command catalog: `docs/command-handbook.md`
+- Reliability/E2E review runbook: `docs/plan/opencode-reliability-review-runbook.md`
 - Silent-first command defaults: `docs/silent-first-command-defaults.md`
 - OX prompt-pack contracts: `docs/ox-command-pack.md`
 - Operator runbook: `docs/operator-playbook.md`

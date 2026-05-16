@@ -115,3 +115,5 @@ If an operation fails repeatedly:
 2. run `/doctor run`
 3. apply the first listed quick fix
 4. re-run the failing command once
+
+For a reusable reliability/E2E validation plan that connects hooks, slash commands, tmux/bg flows, session handoff, and SQLite investigation, use `docs/plan/opencode-reliability-review-runbook.md`.
