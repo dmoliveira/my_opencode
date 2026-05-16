@@ -144,7 +144,7 @@ Use one umbrella epic plus explicit task groups so future runs can extend the sa
 
 | Epic | Name | Goal | Status |
 | --- | --- | --- | --- |
-| R0 | Preconditions + instrumentation | make runtime, evidence, and tracking usable before review | pending |
+| R0 | Preconditions + instrumentation | make runtime, evidence, and tracking usable before review | in_progress |
 | R1 | Prior-week struggle review | mine last-week evidence to find where OpenCode stalled, drifted, or asked too much | pending |
 | R2 | Session continuity | validate start/resume/close/handoff/stop flow | pending |
 | R3 | Hook reliability | validate direct hook behavior plus auto-hook paths | pending |
@@ -152,13 +152,13 @@ Use one umbrella epic plus explicit task groups so future runs can extend the sa
 | R5 | Long-run autonomy + recovery | validate idle, lock, tmux, bg, subagent, and stale-loop recovery | pending |
 | R6 | Low-interruption autonomy | reduce needless user prompts and verify concise independent progress | pending |
 | R7 | Cleanup + resource hygiene | make tmux/bg/tmp/config cleanup deterministic | pending |
-| R8 | Docs + remediation ledger | keep reusable evidence, findings, fixes, and rerun history | pending |
+| R8 | Docs + remediation ledger | keep reusable evidence, findings, fixes, and rerun history | in_progress |
 
 ### Task index
 
 | Id | Epic | Task | Goal | Depends on | Status |
 | --- | --- | --- | --- | --- | --- |
-| R0.1 | R0 | Codememory/runtime preflight | restore `oc` usability or document temporary fallback | none | pending |
+| R0.1 | R0 | Codememory/runtime preflight | restore `oc` usability or document temporary fallback | none | done |
 | R0.2 | R0 | Startup instrumentation baseline | confirm doctor/plugin/mcp/notify/gateway/bg/tmux/session health surfaces | R0.1 | pending |
 | R0.3 | R0 | Evidence sink check | verify digest/session index/memory/artifact paths are writable and discoverable | R0.2 | pending |
 | R1.1 | R1 | Prior-week evidence gather | review last-week digests, session handoffs, memory, notes, and issue/PR context | R0.3 | pending |
@@ -190,10 +190,10 @@ Use one umbrella epic plus explicit task groups so future runs can extend the sa
 | R7.2 | R7 | BG cleanup recipe | standardize `bg` queue/runs cleanup after pass/fail/timeout | R5.3 | pending |
 | R7.3 | R7 | Temp artifact cleanup | standardize tmp dirs, sandbox files, and retained artifact policy | R4.5 | pending |
 | R7.4 | R7 | Config rollback | restore temporary post-session/notify/tmux/gateway changes after tests | R3.2 | pending |
-| R8.1 | R8 | Run ledger upkeep | append one run block per execution cycle | none | pending |
-| R8.2 | R8 | Findings ledger | capture each issue with trigger, impact, evidence, likely cause, fix idea | R1.2 | pending |
-| R8.3 | R8 | Remediation backlog | turn validated gaps into follow-up fixes or docs changes | R8.2 | pending |
-| R8.4 | R8 | Rerun expansion policy | keep the doc append-only and safe for future review waves | none | pending |
+| R8.1 | R8 | Run ledger upkeep | append one run block per execution cycle | none | in_progress |
+| R8.2 | R8 | Findings ledger | capture each issue with trigger, impact, evidence, likely cause, fix idea | R1.2 | in_progress |
+| R8.3 | R8 | Remediation backlog | turn validated gaps into follow-up fixes or docs changes | R8.2 | in_progress |
+| R8.4 | R8 | Rerun expansion policy | keep the doc append-only and safe for future review waves | none | done |
 
 ### Codememory naming rule
 
@@ -972,6 +972,32 @@ Append one block per future run.
   - Codememory access that was previously timing out is now usable in this worktree, so R0 execution can continue from real task/session state
 - cleanup: none
 - nxt: continue R0-R2 execution with real command evidence and append new findings/remediations to the shared ledger
+
+### Run 3 — 2026-05-16 — agent
+
+- scope: continue same-branch review by hardening missing local operator-reference docs named by repo instructions
+- tasks touched: R0.1 evidence reuse, R8.1 ledger upkeep, R8.2 finding capture, R8.3 docs remediation
+- env: same dedicated worktree branch; Codememory still active on `task_5` / `session_5`
+- cmds:
+  - `git fetch --all --prune --quiet`
+  - `oc current`
+  - `oc next`
+  - `oc queue`
+  - `test -f docs/index.md`
+  - `test -f docs/github-cli.md`
+  - `test -f docs/tooling-quick-ref.md`
+  - `test -f docs/orchestration-advanced.md`
+  - `test -f docs/iterative-testing-workflow.md`
+  - `test -f docs/concise-communication-workflow.md`
+  - `git diff --check`
+  - `make validate`
+- result: ok
+- findings:
+  - repo instructions referenced multiple local docs that were still missing in this worktree, not just `docs/validation-policy.md`
+  - adding compact repo-local reference docs closes startup friction for future AI sessions and reduces dependency on sibling/external lookups
+  - runbook status rows were stale after Run 2 and are now aligned with current progress
+- cleanup: none
+- nxt: validate the new doc pack, then continue with real R0.2-R0.3 command evidence or the next highest-value reliability gap
 
 ## Exit criteria for this review campaign
 
