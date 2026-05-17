@@ -159,8 +159,8 @@ Use one umbrella epic plus explicit task groups so future runs can extend the sa
 | Id | Epic | Task | Goal | Depends on | Status |
 | --- | --- | --- | --- | --- | --- |
 | R0.1 | R0 | Codememory/runtime preflight | restore `oc` usability or document temporary fallback | none | done |
-| R0.2 | R0 | Startup instrumentation baseline | confirm doctor/plugin/mcp/notify/gateway/bg/tmux/session health surfaces | R0.1 | pending |
-| R0.3 | R0 | Evidence sink check | verify digest/session index/memory/artifact paths are writable and discoverable | R0.2 | pending |
+| R0.2 | R0 | Startup instrumentation baseline | confirm doctor/plugin/mcp/notify/gateway/bg/tmux/session health surfaces | R0.1 | in_progress |
+| R0.3 | R0 | Evidence sink check | verify digest/session index/memory/artifact paths are writable and discoverable | R0.2 | done |
 | R1.1 | R1 | Prior-week evidence gather | review last-week digests, session handoffs, memory, notes, and issue/PR context | R0.3 | pending |
 | R1.2 | R1 | Struggle taxonomy | classify failures: lock/idle, subagent stall, over-questioning, orphan state, cleanup drift, hook miss | R1.1 | pending |
 | R1.3 | R1 | Reliability priority list | rank top failures by frequency, impact, and reproducibility | R1.2 | pending |
@@ -998,6 +998,34 @@ Append one block per future run.
   - runbook status rows were stale after Run 2 and are now aligned with current progress
 - cleanup: none
 - nxt: validate the new doc pack, then continue with real R0.2-R0.3 command evidence or the next highest-value reliability gap
+
+### Run 4 — 2026-05-16 — agent
+
+- scope: execute R0.2-R0.3 command-equivalent runtime checks and capture baseline health evidence
+- tasks touched: R0.2 startup instrumentation baseline, R0.3 evidence sink check, R8.1 ledger upkeep, R8.2 finding capture
+- env: same dedicated worktree branch; runtime session id `ses_1d026cf9dffeDJqh15lHxWn06r`
+- cmds:
+  - `python3 scripts/doctor_command.py run --json`
+  - `python3 scripts/devtools_command.py status`
+  - `python3 scripts/plugin_command.py status`
+  - `python3 scripts/mcp_command.py status`
+  - `python3 scripts/notify_command.py status`
+  - `python3 scripts/gateway_command.py concise status --json`
+  - `python3 scripts/background_task_manager.py doctor --json`
+  - `python3 scripts/tmux_command.py doctor --json`
+  - `python3 scripts/session_command.py doctor --json`
+  - `python3 scripts/session_digest.py run --reason manual`
+  - `python3 scripts/session_command.py list --limit 5 --json`
+  - `python3 scripts/memory_command.py doctor --json`
+  - `python3 scripts/session_command.py repair-stale --json`
+- result: warn
+- findings:
+  - most startup surfaces passed or reported expected disabled/default states
+  - `session doctor` failed on one stale delegated-child runtime recovery issue from a 2026-05-15 session outside this branch
+  - digest/session-index/shared-memory evidence sinks are writable, so `R0.3` can move to done
+  - `repair-stale --json` found one repair candidate and proposed an `--apply` follow-up
+- cleanup: none
+- nxt: decide whether to apply `session repair-stale --apply --json`, then continue into R1/R2 with the stale-session finding recorded
 
 ## Exit criteria for this review campaign
 
