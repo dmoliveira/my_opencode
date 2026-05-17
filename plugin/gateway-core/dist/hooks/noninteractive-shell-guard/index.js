@@ -97,10 +97,44 @@ function parseCommand(command) {
 }
 function allowedEnvKeys(command) {
     const binary = commandBinary(command);
-    if (binary === "git" || binary === "gh") {
+    if (binary === "git") {
         return new Set(["CI", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_PAGER", "PAGER", "GCM_INTERACTIVE", "OPENCODE_SESSION_ID"]);
     }
+    if (binary === "gh") {
+        return new Set([
+            "CI",
+            "GIT_TERMINAL_PROMPT",
+            "GIT_EDITOR",
+            "GIT_PAGER",
+            "PAGER",
+            "GCM_INTERACTIVE",
+            "GH_PROMPT_DISABLED",
+            "GH_EDITOR",
+            "BROWSER",
+            "OPENCODE_SESSION_ID",
+        ]);
+    }
     return new Set();
+}
+function hasAnyFlag(argsLower, flags) {
+    return argsLower.some((item) => flags.includes(item));
+}
+function hasValueFlag(argsLower, longFlag, shortFlag) {
+    return argsLower.some((item, index) => item === longFlag ||
+        item.startsWith(`${longFlag}=`) ||
+        item === shortFlag ||
+        item.startsWith(shortFlag) ||
+        argsLower[index - 1] === longFlag ||
+        argsLower[index - 1] === shortFlag);
+}
+function isScriptedGhPrCreate(binary, argsLower) {
+    if (binary !== "gh" || argsLower[1] !== "pr" || argsLower[2] !== "create") {
+        return false;
+    }
+    const hasFill = hasAnyFlag(argsLower, ["--fill", "--fill-first", "--fill-verbose"]);
+    const hasTitle = hasValueFlag(argsLower, "--title", "-t");
+    const hasBody = hasValueFlag(argsLower, "--body", "-b") || hasValueFlag(argsLower, "--body-file", "-f");
+    return (hasFill || hasTitle) && (hasFill || hasBody);
 }
 function shellQuoteEnvValue(value) {
     return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -151,6 +185,15 @@ function violation(command, blockedPatterns) {
     const parsed = parseCommand(value);
     const binary = baseCommandName(parsed.binary);
     const argsLower = parsed.args.map((item) => item.toLowerCase());
+    if (binary === "gh" && argsLower[1] === "pr" && argsLower[2] === "create") {
+        if (hasAnyFlag(argsLower, ["--web", "-w", "--editor", "-e"])) {
+            return "Use scripted `gh pr create` flags in non-interactive sessions, not browser/editor flows.";
+        }
+        if (!isScriptedGhPrCreate(binary, argsLower)) {
+            return "Use non-interactive gh PR creation format: `gh pr create --title \"...\" --body \"...\"` (or `--body-file` / `--fill`).";
+        }
+        return null;
+    }
     if (binary === "npm" && /\bnpm\s+install\b/.test(lower) && !/--yes\b/.test(lower)) {
         return "Use `npm install --yes` in non-interactive sessions.";
     }

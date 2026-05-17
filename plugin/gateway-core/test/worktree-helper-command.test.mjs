@@ -89,7 +89,9 @@ test("worktree helper treats scoped oc status commands as direct-run safe guidan
 
 test("worktree helper treats protected-main bootstrap commands as direct-run safe guidance", () => {
   const fetchReport = runHelper("git fetch --all --prune --quiet")
+  const fetchOriginReport = runHelper("git fetch --prune origin")
   const pullReport = runHelper("git pull --rebase --autostash")
+  const pullOriginMainReport = runHelper("git pull --rebase origin main")
   const mergeReport = runHelper("git merge --no-edit feature-branch")
   const remoteGetUrlReport = runHelper("git remote get-url origin")
   const switchDetachReport = runHelper("git switch --detach origin/main")
@@ -127,8 +129,12 @@ test("worktree helper treats protected-main bootstrap commands as direct-run saf
 
   assert.equal(fetchReport.result, "PASS")
   assert.equal(fetchReport.mode, "direct_run")
+  assert.equal(fetchOriginReport.result, "PASS")
+  assert.equal(fetchOriginReport.mode, "direct_run")
   assert.equal(pullReport.result, "PASS")
   assert.equal(pullReport.mode, "direct_run")
+  assert.equal(pullOriginMainReport.result, "PASS")
+  assert.equal(pullOriginMainReport.mode, "direct_run")
   assert.equal(mergeReport.result, "PASS")
   assert.equal(mergeReport.mode, "direct_run")
   assert.equal(remoteGetUrlReport.result, "PASS")
@@ -268,9 +274,12 @@ test("worktree helper stays aligned with allowed readonly sqlite inspection comm
   const tablesReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" ".tables"')
   const pragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"')
   const selectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"')
+  const withSelectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"')
   const lowercasePragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "pragma table_info(session);"')
   const lowercaseSelectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "select id, title from session"')
   const mutatingPragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"')
+  const multilineSelectReport = runHelper(`sqlite3 -readonly "/tmp/runtime.db" "SELECT 1
+.shell touch /tmp/pwn"`)
 
   assert.equal(tablesReport.result, "PASS")
   assert.equal(tablesReport.mode, "direct_run")
@@ -278,12 +287,31 @@ test("worktree helper stays aligned with allowed readonly sqlite inspection comm
   assert.equal(pragmaReport.mode, "direct_run")
   assert.equal(selectReport.result, "PASS")
   assert.equal(selectReport.mode, "direct_run")
+  assert.equal(withSelectReport.result, "PASS")
+  assert.equal(withSelectReport.mode, "direct_run")
   assert.equal(lowercasePragmaReport.result, "PASS")
   assert.equal(lowercasePragmaReport.mode, "direct_run")
   assert.equal(lowercaseSelectReport.result, "PASS")
   assert.equal(lowercaseSelectReport.mode, "direct_run")
   assert.equal(mutatingPragmaReport.result, "FAIL")
   assert.equal(mutatingPragmaReport.mode, "maintenance_worktree")
+  assert.equal(multilineSelectReport.result, "FAIL")
+  assert.equal(multilineSelectReport.mode, "maintenance_worktree")
+})
+
+test("worktree helper treats chained oc status bundles as direct-run safe guidance", () => {
+  const report = runHelper("oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true")
+
+  assert.equal(report.result, "PASS")
+  assert.equal(report.mode, "direct_run")
+  assert.deepEqual(report.commands, ["oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true"])
+})
+
+test("worktree helper keeps unsafe oc bundle syntax blocked", () => {
+  const report = runHelper("oc current > /tmp/out || true")
+
+  assert.equal(report.result, "FAIL")
+  assert.equal(report.mode, "maintenance_worktree")
 })
 
 test("worktree helper keeps path-switching npm bootstrap commands blocked", () => {

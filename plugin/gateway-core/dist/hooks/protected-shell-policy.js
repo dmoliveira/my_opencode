@@ -10,6 +10,10 @@ const PROTECTED_BRANCH_REF = String.raw `(?:main|master)`;
 const SQLITE_SAFE_FLAG = String.raw `(?:-readonly|-header|-column|-csv|-json|-line|-list)`;
 const GH_PROTECTED_BINARY = String.raw `${OPTIONAL_RTK_WRAPPER}(?:[^\s;&|]*/)?gh`;
 const OC_PROTECTED_BINARY = String.raw `(?:[^\s;&|]*/)?oc`;
+const TRUE_PATTERN = new RegExp(String.raw `^${SAFE_ENV_PREFIX}true$`, "i");
+const PRINTF_LITERAL_PATTERN = new RegExp(String.raw `^${SAFE_ENV_PREFIX}printf\s+(?:'[^']*'|"[^"]*")(?:\s+(?:'[^']*'|"[^"]*"))*$`, "i");
+const OC_STATUS_PATTERN = new RegExp(String.raw `^${SAFE_ENV_PREFIX}${OC_PROTECTED_BINARY}\s+(?:current|next|queue)(?:\s+.+)?$`, "i");
+const SQLITE_DANGEROUS_TOKEN_PATTERN = /\b(?:load_extension|readfile|writefile|attach|vacuum|alter|insert|update|delete|replace|create|drop|reindex|analyze|backup|restore|detach)\b/i;
 function protectedPattern(commandPattern) {
     return new RegExp(String.raw `^${SAFE_ENV_PREFIX}${commandPattern}$`, "i");
 }
@@ -18,9 +22,6 @@ function gitProtectedPattern(subcommandPattern, argsPattern = GIT_SAFE_ARGS) {
 }
 function ocProtectedPattern(subcommandPattern, argsPattern = GIT_SAFE_ARGS) {
     return protectedPattern(String.raw `${OC_PROTECTED_BINARY}\s+${subcommandPattern}${argsPattern}`);
-}
-function sqliteProtectedPattern() {
-    return protectedPattern(String.raw `(?:[^\s;&|]*/)?sqlite3(?=[^;&|]*\s-readonly\b)(?:\s+${SQLITE_SAFE_FLAG})*\s+${SHELL_TOKEN}\s+(?:(?:"\.(?:tables|schema(?:\s+[^"]+)?)")|(?:'\.(?:tables|schema(?:\s+[^']+)?)')|(?:"PRAGMA\s+table_info\s*\([^";=]+\)\s*;?")|(?:'PRAGMA\s+table_info\s*\([^';=]+\)\s*;?')|(?:"SELECT\b(?![^";]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^";]*;?")|(?:'SELECT\b(?![^';]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^';]*;?'))`);
 }
 const READ_ONLY_GIT_PATTERNS = [
     gitProtectedPattern("status"),
@@ -56,7 +57,7 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     ...READ_ONLY_GIT_PATTERNS,
     ...SAFE_GIT_CLEANUP_PATTERNS,
     gitProtectedPattern("fetch", ""),
-    gitProtectedPattern(String.raw `fetch(?:\s+--(?:all|prune|quiet))*`, ""),
+    gitProtectedPattern(String.raw `fetch(?:\s+--(?:all|prune|quiet))*(?:\s+(?!-)${SHELL_TOKEN})?`, ""),
     gitProtectedPattern(String.raw `fetch\s+--prune`, ""),
     gitProtectedPattern(String.raw `pull\s+--rebase`, ""),
     gitProtectedPattern(String.raw `pull\s+--rebase\s+--autostash`, ""),
@@ -79,7 +80,6 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     protectedPattern(String.raw `${GH_PROTECTED_BINARY}\s+repo\s+create(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `${GH_PROTECTED_BINARY}\s+repo\s+edit(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `${GH_PROTECTED_BINARY}\s+api\s+user(?:\s+[^;&|]+)*`),
-    sqliteProtectedPattern(),
     protectedPattern(String.raw `make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)`),
     protectedPattern(String.raw `npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*`),
     protectedPattern(String.raw `npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*`),
@@ -210,13 +210,254 @@ function splitChainedCommands(command) {
     return segments;
 }
 export function isAllowedProtectedShellCommand(command) {
+    const normalized = normalizeShellCommand(command);
+    if (isAllowedOcStatusBundleCommand(normalized) || isAllowedReadonlySqliteCommand(command)) {
+        return true;
+    }
     if (hasHardDisallowedShellSyntax(command) || hasShellExpansionSyntax(command)) {
         return false;
     }
-    const normalized = normalizeShellCommand(command);
     const commands = splitChainedCommands(normalized);
     if (commands.length === 0) {
         return false;
     }
     return commands.every((candidate) => ALLOWED_PROTECTED_SHELL_PATTERNS.some((pattern) => pattern.test(candidate)));
+}
+function isAllowedOcStatusBundleCommand(command) {
+    if (!command || hasShellExpansionSyntax(command)) {
+        return false;
+    }
+    const segments = splitShellSequence(command);
+    if (segments.length === 0) {
+        return false;
+    }
+    let sawOcStatus = false;
+    for (let index = 0; index < segments.length; index += 1) {
+        const current = segments[index];
+        if (hasDisallowedShellSyntax(current.segment) || hasShellExpansionSyntax(current.segment)) {
+            return false;
+        }
+        if (OC_STATUS_PATTERN.test(current.segment)) {
+            sawOcStatus = true;
+        }
+        else if (TRUE_PATTERN.test(current.segment)) {
+            if (index === 0 || current.separatorBefore !== "||") {
+                return false;
+            }
+        }
+        else if (PRINTF_LITERAL_PATTERN.test(current.segment)) {
+            if (index === 0) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
+        if (current.separatorBefore === "||" && !TRUE_PATTERN.test(current.segment)) {
+            return false;
+        }
+    }
+    return sawOcStatus;
+}
+function isAllowedReadonlySqliteCommand(command) {
+    if (!command || hasDisallowedShellSyntax(command) || hasShellExpansionSyntax(command)) {
+        return false;
+    }
+    const argv = splitShellArgv(command);
+    if (argv.length < 3) {
+        return false;
+    }
+    const stripped = stripAllowedEnvPrefix(argv);
+    if (stripped.length < 3) {
+        return false;
+    }
+    if (!/sqlite3$/i.test(stripped[0] ?? "")) {
+        return false;
+    }
+    if (!stripped.slice(1).includes("-readonly")) {
+        return false;
+    }
+    let offset = 1;
+    while (offset < stripped.length && new RegExp(`^${SQLITE_SAFE_FLAG}$`, "i").test(stripped[offset] ?? "")) {
+        offset += 1;
+    }
+    const trailing = stripped.slice(offset);
+    if (trailing.slice(0, -2).some((token) => token.startsWith("-"))) {
+        return false;
+    }
+    if (trailing.length < 2) {
+        return false;
+    }
+    const statement = String(trailing[trailing.length - 1] ?? "").trim();
+    if (!statement) {
+        return false;
+    }
+    if (/[\r\n]/.test(statement)) {
+        return false;
+    }
+    const normalized = statement.replace(/;\s*$/, "").trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+    if (normalized === ".tables") {
+        return true;
+    }
+    if (normalized.startsWith(".schema")) {
+        return true;
+    }
+    if (/^pragma\s+table_info\s*\([^);=]+\)$/i.test(normalized)) {
+        return true;
+    }
+    if (SQLITE_DANGEROUS_TOKEN_PATTERN.test(normalized)) {
+        return false;
+    }
+    if (normalized.startsWith("select")) {
+        return true;
+    }
+    if (normalized.startsWith("with") && /\bselect\b/i.test(normalized)) {
+        return true;
+    }
+    return false;
+}
+function splitShellArgv(command) {
+    const argv = [];
+    let current = "";
+    let quote = null;
+    for (let index = 0; index < command.length; index += 1) {
+        const char = command[index] ?? "";
+        if (quote) {
+            if (char === quote) {
+                quote = null;
+                continue;
+            }
+            if (char === "\\" && quote === '"' && index + 1 < command.length) {
+                current += command[index + 1] ?? "";
+                index += 1;
+                continue;
+            }
+            current += char;
+            continue;
+        }
+        if (char === '"' || char === "'") {
+            quote = char;
+            continue;
+        }
+        if (/\s/.test(char)) {
+            if (current) {
+                argv.push(current);
+                current = "";
+            }
+            continue;
+        }
+        current += char;
+    }
+    if (quote) {
+        return [];
+    }
+    if (current) {
+        argv.push(current);
+    }
+    return argv;
+}
+function stripAllowedEnvPrefix(argv) {
+    const remaining = [...argv];
+    let explicitEnv = false;
+    while (remaining.length > 0) {
+        const token = remaining[0] ?? "";
+        if (/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(token)) {
+            const key = token.split("=", 1)[0] ?? "";
+            if (!new RegExp(`^${SAFE_ENV_KEY}$`, "i").test(key)) {
+                return [];
+            }
+            remaining.shift();
+            continue;
+        }
+        if (token === "env") {
+            explicitEnv = true;
+            remaining.shift();
+            continue;
+        }
+        if (!explicitEnv) {
+            break;
+        }
+        if (token === "--") {
+            remaining.shift();
+            break;
+        }
+        if (token === "-u" || token === "--unset") {
+            remaining.shift();
+            const unsetKey = remaining.shift() ?? "";
+            if (!new RegExp(`^${SAFE_ENV_KEY}$`, "i").test(unsetKey)) {
+                return [];
+            }
+            continue;
+        }
+        if (token.startsWith("--unset=")) {
+            const unsetKey = token.slice("--unset=".length);
+            if (!new RegExp(`^${SAFE_ENV_KEY}$`, "i").test(unsetKey)) {
+                return [];
+            }
+            remaining.shift();
+            continue;
+        }
+        if (token.startsWith("-")) {
+            return [];
+        }
+        break;
+    }
+    return remaining;
+}
+function splitShellSequence(command) {
+    const segments = [];
+    let current = "";
+    let quote = null;
+    let separatorBefore = null;
+    const pushCurrent = () => {
+        const normalized = normalizeShellCommand(current);
+        if (normalized) {
+            segments.push({ separatorBefore, segment: normalized });
+            separatorBefore = null;
+        }
+        current = "";
+    };
+    for (let index = 0; index < command.length; index += 1) {
+        const char = command[index] ?? "";
+        const next = command[index + 1] ?? "";
+        if (quote) {
+            current += char;
+            if (char === quote) {
+                quote = null;
+            }
+            else if (char === "\\" && quote === '"' && index + 1 < command.length) {
+                current += command[index + 1] ?? "";
+                index += 1;
+            }
+            continue;
+        }
+        if (char === '"' || char === "'") {
+            quote = char;
+            current += char;
+            continue;
+        }
+        if (char === ";") {
+            pushCurrent();
+            separatorBefore = ";";
+            continue;
+        }
+        if (char === "&" && next === "&") {
+            pushCurrent();
+            separatorBefore = "&&";
+            index += 1;
+            continue;
+        }
+        if (char === "|" && next === "|") {
+            pushCurrent();
+            separatorBefore = "||";
+            index += 1;
+            continue;
+        }
+        current += char;
+    }
+    pushCurrent();
+    return segments;
 }

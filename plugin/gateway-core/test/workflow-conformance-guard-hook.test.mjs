@@ -202,6 +202,30 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
       'sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"',
     )
 
+    const sqliteWithPayload = {
+      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"' },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-sqlite-with-safe" },
+      sqliteWithPayload,
+    )
+    assert.equal(
+      sqliteWithPayload.args.command,
+      'sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"',
+    )
+
+    const ocBundlePayload = {
+      args: { command: "oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true" },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-oc-bundle-safe" },
+      ocBundlePayload,
+    )
+    assert.equal(
+      ocBundlePayload.args.command,
+      "oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true",
+    )
+
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-gh-abs-safe" },
       { args: { command: "/usr/bin/gh pr view --json number" } }
@@ -215,6 +239,10 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-prune-safe" },
       { args: { command: "git fetch --prune" } }
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-workflow-fetch-prune-origin-safe" },
+      { args: { command: "git fetch --prune origin" } }
     )
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-fetch-all-prune-quiet-safe" },

@@ -60,6 +60,13 @@ _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
 _SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
 _DEFAULT_EXECUTE_TIMEOUT_SECONDS = 10.0
+_TRUE_PATTERN = re.compile(rf"^{_SAFE_ENV_PREFIX}true\s*$")
+_PRINTF_LITERAL_PATTERN = re.compile(rf"^{_SAFE_ENV_PREFIX}printf\s+(?:'[^']*'|\"[^\"]*\")(?:\s+(?:'[^']*'|\"[^\"]*\"))*\s*$")
+_OC_STATUS_PATTERN = re.compile(rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:current|next|queue)(?:\s+.+)?\s*$")
+_SQLITE_DANGEROUS_TOKEN_PATTERN = re.compile(
+    r"\b(?:load_extension|readfile|writefile|attach|vacuum|alter|insert|update|delete|replace|create|drop|reindex|analyze|backup|restore|detach)\b",
+    re.IGNORECASE,
+)
 _GIT_SAFE_GLOBAL_FLAGS = rf"(?:\s+(?:--no-pager|-C\s+{_SHELL_TOKEN}|--git-dir\s+{_SHELL_TOKEN}|--work-tree\s+{_SHELL_TOKEN}))*"
 _GIT_READ_ONLY_PATTERN = (
     rf"(?:status(?:\s+{_SHELL_TOKEN})*"
@@ -88,20 +95,6 @@ _GIT_SAFE_MUTATION_PATTERN = (
 )
 
 
-def sqlite_direct_pattern() -> re.Pattern[str]:
-    return re.compile(
-        rf"^{_SAFE_ENV_PREFIX}(?:[^\s;&|]*/)?sqlite3"
-        rf"(?=[^;&|]*\s-readonly\b)(?:\s+{_SQLITE_SAFE_FLAG})*\s+{_SHELL_TOKEN}\s+"
-        rf"(?:(?:\"\.(?:tables|schema(?:\s+[^\"]+)?)\")"
-        rf"|(?:'\.(?:tables|schema(?:\s+[^']+)?)')"
-        rf"|(?:\"PRAGMA\s+table_info\s*\([^\";=]+\)\s*;?\")"
-        rf"|(?:'PRAGMA\s+table_info\s*\([^';=]+\)\s*;?')"
-        rf"|(?:\"SELECT\b(?![^\";]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^\";]*;?\")"
-        rf"|(?:'SELECT\b(?![^';]*(?:load_extension|readfile|writefile|attach|pragma)\b)[^';]*;?'))\s*$",
-        re.IGNORECASE,
-    )
-
-
 _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}date(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}pwd\s*$"),
@@ -115,7 +108,7 @@ _ALLOWED_DIRECT_PATTERNS = [
         rf")\s*$"
     ),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+{_GIT_READ_ONLY_PATTERN}\s*$"),
-    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+fetch(?:\s+--(?:all|prune|quiet))*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+fetch(?:\s+--(?:all|prune|quiet))*(?:\s+(?!-){_SHELL_TOKEN})?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+pull\s+--rebase(?:\s+--autostash)?(?:\s+origin\s+(?:main|master))?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+merge\s+--(?:no-edit|ff-only)\s+{_SHELL_TOKEN}\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GIT_BINARY}{_GIT_SAFE_GLOBAL_FLAGS}\s+remote\s+(?:-v|get-url\s+{_SHELL_TOKEN})\s*$"),
@@ -128,7 +121,6 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
-    sqlite_direct_pattern(),
     re.compile(rf"^{_SAFE_ENV_PREFIX}make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
@@ -151,6 +143,10 @@ def is_direct_allowed_protected_main_command(command: str | None) -> bool:
     if not command:
         return False
     normalized = command.strip()
+    if is_allowed_oc_status_bundle_command(normalized):
+        return True
+    if is_allowed_readonly_sqlite_command(normalized):
+        return True
     if has_disallowed_shell_syntax(normalized):
         return False
     if re.search(r"(?:^|\s)--output(?:=|\s)", normalized):
@@ -158,6 +154,143 @@ def is_direct_allowed_protected_main_command(command: str | None) -> bool:
     if re.search(r"(?:^|\s)--(?:ext-diff|textconv)(?:\s|$)", normalized):
         return False
     return any(pattern.match(normalized) for pattern in _ALLOWED_DIRECT_PATTERNS)
+
+
+def split_shell_sequence(command: str) -> tuple[list[str], list[str]]:
+    segments: list[str] = []
+    separators: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        char = command[index]
+        next_char = command[index + 1] if index + 1 < len(command) else ""
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = None
+            elif char == "\\" and quote == '"' and index + 1 < len(command):
+                index += 1
+                current.append(command[index])
+            index += 1
+            continue
+        if char in {'"', "'"}:
+            quote = char
+            current.append(char)
+            index += 1
+            continue
+        if char == ";":
+            normalized = "".join(current).strip()
+            if normalized:
+                segments.append(normalized)
+                separators.append(";")
+            current = []
+            index += 1
+            continue
+        if char == "&" and next_char == "&":
+            normalized = "".join(current).strip()
+            if normalized:
+                segments.append(normalized)
+                separators.append("&&")
+            current = []
+            index += 2
+            continue
+        if char == "|" and next_char == "|":
+            normalized = "".join(current).strip()
+            if normalized:
+                segments.append(normalized)
+                separators.append("||")
+            current = []
+            index += 2
+            continue
+        current.append(char)
+        index += 1
+    normalized = "".join(current).strip()
+    if normalized:
+        segments.append(normalized)
+    if len(separators) >= len(segments):
+        separators = separators[: max(0, len(segments) - 1)]
+    return segments, separators
+
+
+def is_allowed_oc_status_bundle_command(command: str) -> bool:
+    if not command or has_shell_expansion_syntax(command):
+        return False
+    segments, separators = split_shell_sequence(command)
+    if not segments:
+        return False
+    saw_oc_status = False
+    for idx, segment in enumerate(segments):
+        if has_disallowed_shell_syntax(segment) or has_shell_expansion_syntax(segment):
+            return False
+        if _OC_STATUS_PATTERN.match(segment):
+            saw_oc_status = True
+        elif _TRUE_PATTERN.match(segment):
+            if idx == 0 or separators[idx - 1] != "||":
+                return False
+        elif _PRINTF_LITERAL_PATTERN.match(segment):
+            if idx == 0:
+                return False
+        else:
+            return False
+        if idx > 0 and separators[idx - 1] == "||" and not _TRUE_PATTERN.match(segment):
+            return False
+    return saw_oc_status
+
+
+def has_shell_expansion_syntax(command: str) -> bool:
+    return bool(re.search(r"`|\$\(|\$\{|\$[A-Za-z_]", command))
+
+
+def is_allowed_readonly_sqlite_command(command: str) -> bool:
+    if not command or has_disallowed_shell_syntax(command) or has_shell_expansion_syntax(command):
+        return False
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    if not argv:
+        return False
+    env: dict[str, str] = {}
+    try:
+        argv = apply_execute_env_prefix(argv, env)
+    except ValueError:
+        return False
+    if len(argv) < 3:
+        return False
+    if not argv[0].endswith("sqlite3"):
+        return False
+    if "-readonly" not in argv[1:]:
+        return False
+    trailing = argv[1:]
+    while trailing and re.fullmatch(_SQLITE_SAFE_FLAG, trailing[0]):
+        trailing = trailing[1:]
+    if any(token.startswith("-") for token in trailing[:-2]):
+        return False
+    if len(trailing) < 2:
+        return False
+    statement = trailing[-1].strip()
+    if not statement:
+        return False
+    if "\n" in statement or "\r" in statement:
+        return False
+    normalized = statement.rstrip(";").strip()
+    lowered = normalized.lower()
+    if not lowered:
+        return False
+    if lowered == ".tables":
+        return True
+    if lowered.startswith(".schema"):
+        return True
+    if re.fullmatch(r"pragma\s+table_info\s*\([^);=]+\)", lowered, re.IGNORECASE):
+        return True
+    if _SQLITE_DANGEROUS_TOKEN_PATTERN.search(lowered):
+        return False
+    if lowered.startswith("select"):
+        return True
+    if lowered.startswith("with") and re.search(r"\bselect\b", lowered, re.IGNORECASE):
+        return True
+    return False
 
 
 def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object]:
