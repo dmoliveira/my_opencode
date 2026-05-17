@@ -439,7 +439,7 @@ function splitShellSequence(command: string): Array<{ separatorBefore: string | 
   let current = ""
   let quote: '"' | "'" | null = null
   let separatorBefore: string | null = null
-  const pushCurrent = () => {
+  const pushCurrent = (): void => {
     const normalized = normalizeShellCommand(current)
     if (normalized) {
       segments.push({ separatorBefore, segment: normalized })
