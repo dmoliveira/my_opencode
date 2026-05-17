@@ -348,6 +348,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "GIT_PAGER=cat",
             "PAGER=cat",
             "GCM_INTERACTIVE=never",
+            "GH_PROMPT_DISABLED=1",
             "HOMEBREW_NO_AUTO_UPDATE=1",
             "npm_config_yes=true",
             "PIP_NO_INPUT=1",

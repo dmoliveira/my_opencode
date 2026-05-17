@@ -20,7 +20,7 @@ test("noninteractive-shell-guard blocks interactive and prompt-prone shell comma
         noninteractiveShellGuard: {
           enabled: true,
           injectEnvPrefix: true,
-          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
           prefixCommands: ["git"],
           blockedPatterns: ["\\bgit\\s+add\\s+-p\\b"],
         },
@@ -104,7 +104,7 @@ test("noninteractive-shell-guard prefixes wrapped rtk git commands with non-inte
         noninteractiveShellGuard: {
           enabled: true,
           injectEnvPrefix: true,
-          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
           prefixCommands: ["git", "gh"],
           blockedPatterns: [],
         },
@@ -136,7 +136,7 @@ test("noninteractive-shell-guard prefixes env-wrapped rtk git commands with non-
         noninteractiveShellGuard: {
           enabled: true,
           injectEnvPrefix: true,
-          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
           prefixCommands: ["git", "gh"],
           blockedPatterns: [],
         },
@@ -250,7 +250,7 @@ test("noninteractive-shell-guard prefixes absolute-path gh commands with runtime
         noninteractiveShellGuard: {
           enabled: true,
           injectEnvPrefix: true,
-          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0"],
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
           prefixCommands: ["git", "gh"],
           blockedPatterns: [],
         },
@@ -261,7 +261,111 @@ test("noninteractive-shell-guard prefixes absolute-path gh commands with runtime
     await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-abs-gh" }, output)
     assert.equal(
       output.args.command,
-      "CI=true GIT_TERMINAL_PROMPT=0 OPENCODE_SESSION_ID='session-abs-gh' /usr/bin/gh pr view --json number",
+      "CI=true GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1 OPENCODE_SESSION_ID='session-abs-gh' /usr/bin/gh pr view --json number",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard prefixes scripted gh pr create with noninteractive env", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    const output = { args: { command: 'gh pr create --title "Fix" --body "Validation complete" --base main --head feature' } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-gh-pr-create" }, output)
+    assert.equal(
+      output.args.command,
+      "CI=true GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1 OPENCODE_SESSION_ID='session-gh-pr-create' gh pr create --title \"Fix\" --body \"Validation complete\" --base main --head feature",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard blocks underspecified gh pr create in headless mode", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-gh-pr-create-bad" },
+        { args: { command: "gh pr create --base main --head feature" } },
+      ),
+      /Use non-interactive gh PR creation format/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard allows noninteractive gh api PR creation and curl PR creation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: true,
+          envPrefixes: ["CI=true", "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1"],
+          prefixCommands: ["git", "gh"],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    const ghApi = { args: { command: "gh api repos/foo/bar/pulls -X POST -f title=Fix -f head=feature -f base=main -f body=Ready" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-gh-api-pr-create" }, ghApi)
+    assert.equal(
+      ghApi.args.command,
+      "CI=true GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1 OPENCODE_SESSION_ID='session-gh-api-pr-create' gh api repos/foo/bar/pulls -X POST -f title=Fix -f head=feature -f base=main -f body=Ready",
+    )
+
+    const curlApi = { args: { command: "curl -fsSL -X POST https://api.github.com/repos/foo/bar/pulls -H 'Authorization: Bearer token' -H 'Accept: application/vnd.github+json' -d '{\"title\":\"Fix\",\"head\":\"feature\",\"base\":\"main\"}'" } }
+    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "session-curl-pr-create" }, curlApi)
+    assert.equal(
+      curlApi.args.command,
+      "OPENCODE_SESSION_ID='session-curl-pr-create' curl -fsSL -X POST https://api.github.com/repos/foo/bar/pulls -H 'Authorization: Bearer token' -H 'Accept: application/vnd.github+json' -d '{\"title\":\"Fix\",\"head\":\"feature\",\"base\":\"main\"}'",
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
