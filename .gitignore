@@ -9,3 +9,5 @@ runtime/
 bg/
 .opencode/*
 !.opencode/my_opencode.json
+!.opencode/skills/
+!.opencode/skills/**
