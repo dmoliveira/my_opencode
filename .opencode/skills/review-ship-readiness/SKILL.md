@@ -18,9 +18,9 @@ Decide whether a slice is ship-ready and surface only the highest-value blockers
 - the request is pure UX concepting or browser execution
 
 ## First Steps
-- inspect the current diff and validation evidence
-- check whether required gates already ran on the current diff
-- verify whether any blocker remains before calling the slice done
+- Inspect the current diff and validation evidence.
+- Check whether required gates already ran on the current diff.
+- Verify whether any blocker remains before calling the slice done.
 
 ## Working Rules
 - Prioritize blockers, regressions, and merge risks before polish.
@@ -30,10 +30,10 @@ Decide whether a slice is ship-ready and surface only the highest-value blockers
 - Prefer a short ship/no-ship conclusion with evidence.
 
 ## Evidence / Done
-- ship-ready or blocked status is explicit
-- blocker findings, if any, are concrete and scoped
-- latest validation state is reflected accurately
-- follow-up items are separated from merge blockers
+- Ship-ready or blocked status is explicit.
+- Blocker findings, if any, are concrete and scoped.
+- Latest validation state is reflected accurately.
+- Follow-up items are separated from merge blockers.
 
 ## References
 - `AGENTS.md`

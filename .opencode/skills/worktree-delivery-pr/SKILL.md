@@ -19,9 +19,9 @@ Run the smallest safe worktree-to-PR delivery flow with clear validation and cle
 
 ## First Steps
 - `git fetch --all --prune --quiet`
-- create a dedicated worktree branch from current `origin/main`
-- attach a Codememory task and session to that worktree
-- check open PR state before creating a new PR
+- Create a dedicated worktree branch from current `origin/main`.
+- Attach a Codememory task and session to that worktree.
+- Check open PR state before creating a new PR.
 
 ## Working Rules
 - Keep `main` as sync/merge only; do implementation in the task worktree.
@@ -31,10 +31,10 @@ Run the smallest safe worktree-to-PR delivery flow with clear validation and cle
 - After merge, delete the task worktree and sync local `main`.
 
 ## Evidence / Done
-- worktree branch and Codememory session are explicit
-- validation for the delivered diff is recorded
-- PR URL, checks state, and merge outcome are captured
-- merged worktree cleanup and local `main` sync are complete
+- Worktree branch and Codememory session are explicit.
+- Validation for the delivered diff is recorded.
+- PR URL, checks state, and merge outcome are captured.
+- Merged worktree cleanup and local `main` sync are complete.
 
 ## References
 - `AGENTS.md`
