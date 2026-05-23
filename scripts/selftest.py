@@ -12323,6 +12323,152 @@ exit 0
             "gateway doctor should include hook diagnostics in status",
         )
 
+        gateway_runtime_db_path = tmp / "gateway-doctor-runtime.db"
+        conn = sqlite3.connect(gateway_runtime_db_path)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE session (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    title TEXT,
+                    directory TEXT,
+                    time_created INTEGER,
+                    time_updated INTEGER
+                );
+                CREATE TABLE message (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                CREATE TABLE part (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT,
+                    session_id TEXT,
+                    data TEXT,
+                    time_created INTEGER
+                );
+                """
+            )
+            now_ms = int(time.time() * 1000)
+            stale_parent_ms = now_ms - (8 * 24 * 60 * 60 * 1000)
+            stale_child_ms = now_ms - (8 * 24 * 60 * 60 * 1000) + 30_000
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "gateway-parent-session",
+                    None,
+                    "gateway stale delegated parent",
+                    str(REPO_ROOT),
+                    stale_parent_ms,
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session (id, parent_id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    "gateway-child-session",
+                    "gateway-parent-session",
+                    "gateway stale delegated child",
+                    str(REPO_ROOT),
+                    stale_child_ms,
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "gateway-parent-message",
+                    "gateway-parent-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "gateway-parent-part",
+                    "gateway-parent-message",
+                    "gateway-parent-session",
+                    json.dumps(
+                        {
+                            "type": "tool",
+                            "tool": "task",
+                            "state": {"status": "running"},
+                        }
+                    ),
+                    stale_parent_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+                (
+                    "gateway-child-message",
+                    "gateway-child-session",
+                    json.dumps({"role": "assistant", "time": {}}),
+                    stale_child_ms,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+                (
+                    "gateway-child-part",
+                    "gateway-child-message",
+                    "gateway-child-session",
+                    json.dumps(
+                        {
+                            "type": "reasoning",
+                            "text": "still active without parent recovery",
+                        }
+                    ),
+                    stale_child_ms,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = run_gateway(
+            "doctor",
+            "--json",
+            env_override={"MY_OPENCODE_RUNTIME_DB_PATH": str(gateway_runtime_db_path)},
+        )
+        expect(
+            result.returncode == 1,
+            "gateway doctor should fail when recent session health finds an actionable stale delegated child runtime miss",
+        )
+        gateway_doctor_runtime = parse_json_output(result.stdout)
+        runtime_session_health = gateway_doctor_runtime.get("runtime_session_health", {})
+        expect(
+            runtime_session_health.get("runtime_db_path") == str(gateway_runtime_db_path)
+            and int(runtime_session_health.get("stale_seconds") or 0) >= 300,
+            "gateway doctor should report the runtime DB path and actionable stale threshold in runtime session health",
+        )
+        expect(
+            runtime_session_health.get("targeted_stuck_count") == 1
+            and runtime_session_health.get("issue_type_counts", {}).get(
+                "stale_delegated_child_runtime_recovery_missed"
+            )
+            == 1,
+            "gateway doctor should summarize stale delegated-child recovery misses in runtime session health",
+        )
+        expect(
+            any(
+                "stale delegated-child" in problem
+                or "stale_delegated_child_runtime_recovery_missed" in problem
+                for problem in gateway_doctor_runtime.get("problems") or []
+            ),
+            "gateway doctor should surface stale delegated-child runtime misses as blocking problems",
+        )
+        expect(
+            any(
+                "/session repair-stale --db-path" in item
+                for item in runtime_session_health.get("repair_commands") or []
+            ),
+            "gateway doctor should include session repair guidance for stale runtime findings",
+        )
+
         smoke_home = tmp / "gateway-smoke-home"
         smoke_repo = tmp / "gateway-smoke-repo"
         smoke_output_dir = tmp / "gateway-smoke-output"
