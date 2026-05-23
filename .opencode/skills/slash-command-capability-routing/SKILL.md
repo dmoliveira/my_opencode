@@ -1,6 +1,6 @@
 ---
 name: slash-command-capability-routing
-description: Use when choosing the right repo slash command family such as /ox-*, /browser, /image, /tmux, /mcp, /workflow, or related runtime controls.
+description: Use when choosing which repo slash command family should handle a task, then hand off to the narrower workflow or skill.
 ---
 
 ## Goal
@@ -14,7 +14,7 @@ Choose the smallest slash-command family that matches the task instead of restat
 
 ## Do Not Use When
 - the task already names the exact command to run
-- a skill-specific workflow already covers the execution path
+- a skill-specific workflow already covers the execution path after command family selection
 - plain bash or code editing is clearly the right tool
 
 ## First Steps
@@ -23,7 +23,8 @@ Choose the smallest slash-command family that matches the task instead of restat
 - prefer JSON or doctor/status variants when discovery is needed
 
 ## Working Rules
-- Use `/ox-design` for concepting and `/ox-ux` or `/browser` for real implemented UI validation.
+- Route to the narrowest command family first, then hand off to the specific workflow or skill.
+- Use `/ox-design` for concepting and `/browser ensure --json`, `/mcp profile playwright`, then `/ox-ux` for real implemented web UI validation.
 - Use `/tmux` for terminal-session state, not browser state.
 - Use `/mcp` for managed MCP profiles and server toggling.
 - Use `/workflow`, `/delivery`, or `/ship` for reusable delivery orchestration.

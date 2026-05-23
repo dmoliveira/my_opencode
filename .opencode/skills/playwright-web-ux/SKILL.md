@@ -37,9 +37,9 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - findings include concrete user impact and suggested fixes
 
 ## References
+- `docs/ox-command-pack.md`
+- `docs/command-handbook.md`
 - https://playwright.dev/mcp/introduction
 - https://playwright.dev/mcp/tools/assertions
 - https://playwright.dev/docs/best-practices
 - https://playwright.dev/docs/locators
-- `docs/ox-command-pack.md`
-- `docs/command-handbook.md`
