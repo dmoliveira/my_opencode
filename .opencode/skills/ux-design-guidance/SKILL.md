@@ -19,7 +19,7 @@ Produce one strong UX or design direction with minimal tokens and clear next act
 
 ## First Steps
 - For concepting, use `/ox-design ...`.
-- If the task turns into implemented UI validation, switch to `playwright-web-ux` or `/ox-ux ...`.
+- If the task turns into implemented web UI validation, switch to `playwright-web-ux` or run `/browser ensure --json`, `/mcp profile playwright`, then `/ox-ux ...`.
 - If image generation matters, check `/image access --json` and `/image location show --json`.
 
 ## Working Rules
