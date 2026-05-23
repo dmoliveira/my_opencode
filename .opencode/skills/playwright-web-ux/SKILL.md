@@ -20,7 +20,7 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 ## First Steps
 - `/browser ensure --json`
 - `/mcp profile playwright`
-- `/ox-ux --repo <repo>` or use `--target` and `--scope` for a narrower audit
+- `/ox-ux --repo <repo>` or use `--target` and `--scope` for a narrower audit.
 
 ## Working Rules
 - Test user-visible behavior, not implementation details.
