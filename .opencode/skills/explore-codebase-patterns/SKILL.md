@@ -18,10 +18,10 @@ Find the smallest relevant set of files and local patterns needed to act safely 
 - the task is final review or validation rather than discovery
 
 ## First Steps
-- start with `glob` to find candidate files or directories
-- use `grep` to narrow exact symbols, commands, or phrases
-- compare 1-3 local examples before proposing an implementation path
-- if scope is still broad, delegate `explore` with constrained ownership
+- Start with `glob` to find candidate files or directories.
+- Use `grep` to narrow exact symbols, commands, or phrases.
+- Compare 1-3 local examples before proposing an implementation path.
+- If scope is still broad, delegate `explore` with constrained ownership.
 
 ## Working Rules
 - Prefer repo-local patterns before external references.
@@ -31,10 +31,10 @@ Find the smallest relevant set of files and local patterns needed to act safely 
 - Keep discovery outputs concise and implementation-oriented.
 
 ## Evidence / Done
-- relevant files or modules are explicit
-- one or more local patterns were identified
-- the recommended starting point is clear
-- unnecessary extra exploration was avoided
+- Relevant files or modules are explicit.
+- One or more local patterns were identified.
+- The recommended starting point is clear.
+- Unnecessary extra exploration was avoided.
 
 ## References
 - `AGENTS.md`

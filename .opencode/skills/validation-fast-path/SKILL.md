@@ -18,10 +18,10 @@ Select the smallest validation bundle that still proves the current slice is don
 - full repo CI is already the explicit ask
 
 ## First Steps
-- name the validation bundle before editing
-- start with `git diff --check` for docs, config, or skills changes
-- add `python3 -m py_compile <touched-files>` when Python scripts change
-- broaden to targeted lint, test, or selftest only when the touched surface requires it
+- Name the validation bundle before editing.
+- Start with `git diff --check` for docs, config, or skills changes.
+- Add `python3 -m py_compile <touched-files>` when Python scripts change.
+- Broaden to targeted lint, test, or selftest only when the touched surface requires it.
 
 ## Working Rules
 - Match validation depth to risk, not habit.
@@ -31,10 +31,10 @@ Select the smallest validation bundle that still proves the current slice is don
 - Prefer one strong realistic smoke path over many weak speculative checks.
 
 ## Evidence / Done
-- the chosen validation bundle is explicit
-- required checks ran on the current diff
-- failures were fixed or a concrete blocker was recorded
-- no broader suite was skipped without a reason
+- The chosen validation bundle is explicit.
+- Required checks ran on the current diff.
+- Failures were fixed or a concrete blocker was recorded.
+- No broader suite was skipped without a reason.
 
 ## References
 - `AGENTS.md`

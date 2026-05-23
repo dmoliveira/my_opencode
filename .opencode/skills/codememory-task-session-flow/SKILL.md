@@ -20,8 +20,8 @@ Keep meaningful work attached to the right Codememory task and session so anothe
 ## First Steps
 - `oc current`
 - `oc next --scope dmoliveira/my_opencode --limit 5`
-- create or attach the right `task`
-- create one active `session` for the active worktree
+- Create or attach the right `task`.
+- Create one active `session` for the active worktree.
 
 ## Working Rules
 - Use one active session per active worktree path.
@@ -31,10 +31,10 @@ Keep meaningful work attached to the right Codememory task and session so anothe
 - Close the task and session when the slice outcome is known.
 
 ## Evidence / Done
-- active task and session ids are explicit
-- worktree binding is correct
-- durable context was recorded when needed
-- closeout state matches the actual outcome
+- Active task and session ids are explicit.
+- Worktree binding is correct.
+- Durable context was recorded when needed.
+- Closeout state matches the actual outcome.
 
 ## References
 - `AGENTS.md`

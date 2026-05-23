@@ -33,10 +33,10 @@ Produce one strong UX or design direction with minimal tokens and clear next act
 - For games, focus on HUD clarity, feedback loops, affordances, and cognitive load.
 
 ## Evidence / Done
-- target flow or surface is explicit
-- main friction points are named
-- one preferred direction is proposed
-- artifact or prompt next step is defined when needed
+- Target flow or surface is explicit.
+- Main friction points are named.
+- One preferred direction is proposed.
+- Artifact or prompt next step is defined when needed.
 
 ## References
 - `docs/image-design-workflow.md`

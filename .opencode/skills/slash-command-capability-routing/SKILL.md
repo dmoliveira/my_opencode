@@ -18,9 +18,9 @@ Choose the smallest slash-command family that matches the task instead of restat
 - plain bash or code editing is clearly the right tool
 
 ## First Steps
-- identify whether the task is browser validation, design concepting, tmux/live-state, MCP control, workflow execution, or repo delivery
-- choose the narrowest command family first
-- prefer JSON or doctor/status variants when discovery is needed
+- Identify whether the task is browser validation, design concepting, tmux/live-state, MCP control, workflow execution, or repo delivery.
+- Choose the narrowest command family first.
+- Prefer JSON or doctor/status variants when discovery is needed.
 
 ## Working Rules
 - Route to the narrowest command family first, then hand off to the specific workflow or skill.
@@ -31,10 +31,10 @@ Choose the smallest slash-command family that matches the task instead of restat
 - Use doctor/status/help variants before deeper mutation when capability is unclear.
 
 ## Evidence / Done
-- chosen command family matches the task category
-- the routing reason is explicit
-- fallback path is clear if the first command family is unavailable
-- no broader command set was used without need
+- Chosen command family matches the task category.
+- The routing reason is explicit.
+- Fallback path is clear if the first command family is unavailable.
+- No broader command set was used without need.
 
 ## References
 - `docs/command-handbook.md`

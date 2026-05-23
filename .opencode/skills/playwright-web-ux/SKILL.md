@@ -31,10 +31,10 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - Use screenshots only as supporting evidence.
 
 ## Evidence / Done
-- key flows were exercised
-- desktop and mobile states were checked
-- top UX issues were prioritized
-- findings include concrete user impact and suggested fixes
+- Key flows were exercised.
+- Desktop and mobile states were checked.
+- Top UX issues were prioritized.
+- Findings include concrete user impact and suggested fixes.
 
 ## References
 - `docs/ox-command-pack.md`

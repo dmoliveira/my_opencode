@@ -30,10 +30,10 @@ Use tmux as a persistent sandbox for live-state validation, service inspection, 
 - Make the persistence vs cleanup decision explicit before finishing.
 
 ## Evidence / Done
-- session name is known
-- running process or service state was observed
-- relevant pane output was captured
-- cleanup or keep-alive status was stated
+- Session name is known.
+- Running process or service state was observed.
+- Relevant pane output was captured.
+- Cleanup or keep-alive status was stated.
 
 ## References
 - `docs/iterative-testing-workflow.md`
