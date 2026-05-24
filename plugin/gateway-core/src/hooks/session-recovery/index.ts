@@ -312,6 +312,9 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
     return { matched: false, tool: "" }
   }
   const parts = Array.isArray(message.parts) ? message.parts : []
+  if (parts.length === 0) {
+    return { matched: true, tool: "unknown" }
+  }
   if (
     parts.some((part) => {
       const toolName = String(part?.tool ?? "").trim().toLowerCase()
