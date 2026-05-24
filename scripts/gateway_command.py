@@ -58,6 +58,27 @@ from gateway_plugin_bridge import (  # type: ignore
     plugin_enabled,
     set_plugin_enabled,
 )
+from session_command import (  # type: ignore
+    DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
+    DEFAULT_RUNTIME_DB_PATH,
+    DEFAULT_STALE_SESSION_SECONDS,
+    _scan_runtime_stuck_sessions,
+)
+
+GATEWAY_DOCTOR_STALE_SECONDS = max(
+    60,
+    int(
+        os.environ.get(
+            "MY_OPENCODE_GATEWAY_DOCTOR_STALE_SECONDS",
+            str(DEFAULT_STALE_SESSION_SECONDS),
+        )
+        or str(DEFAULT_STALE_SESSION_SECONDS)
+    ),
+)
+GATEWAY_DOCTOR_SESSION_HEALTH_SAMPLE_LIMIT = max(
+    1,
+    int(os.environ.get("MY_OPENCODE_GATEWAY_DOCTOR_SESSION_HEALTH_SAMPLE_LIMIT", "3") or "3"),
+)
 
 
 # Prints usage for gateway command.
@@ -129,6 +150,40 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
         print("quick_fixes:")
         for item in fixes[:6]:
             print(f"- {item}")
+
+    session_health_any = report.get("runtime_session_health")
+    session_health = session_health_any if isinstance(session_health_any, dict) else {}
+    if session_health:
+        print("runtime_session_health:")
+        print(f"- runtime_db_path: {session_health.get('runtime_db_path')}")
+        print(f"- stale_seconds: {session_health.get('stale_seconds')}")
+        print(f"- targeted_stuck_count: {session_health.get('targeted_stuck_count')}")
+        print(f"- generic_stale_count: {session_health.get('generic_stale_count')}")
+        issue_counts_any = session_health.get("issue_type_counts")
+        issue_counts = issue_counts_any if isinstance(issue_counts_any, dict) else {}
+        if issue_counts:
+            print("- issue_type_counts:")
+            for key, value in issue_counts.items():
+                print(f"  - {key}: {value}")
+        sample_findings_any = session_health.get("sample_findings")
+        sample_findings = sample_findings_any if isinstance(sample_findings_any, list) else []
+        if sample_findings:
+            print("- sample_findings:")
+            for item in sample_findings:
+                if not isinstance(item, dict):
+                    continue
+                print(
+                    "  - issue_type="
+                    + str(item.get("issue_type") or "unknown")
+                    + f" parent={item.get('parent_session_id') or 'unknown'}"
+                    + f" child={item.get('child_session_id') or 'unknown'}"
+                )
+        repair_commands_any = session_health.get("repair_commands")
+        repair_commands = repair_commands_any if isinstance(repair_commands_any, list) else []
+        if repair_commands:
+            print("- repair_commands:")
+            for item in repair_commands:
+                print(f"  - {item}")
 
     smoke_any = report.get("local_plugin_runtime_smoke")
     smoke = smoke_any if isinstance(smoke_any, dict) else {}
@@ -360,6 +415,84 @@ def parse_gateway_event_ts(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _summarize_stuck_finding(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "issue_type": item.get("issue_type"),
+        "stale_cause_code": item.get("stale_cause_code"),
+        "stale_cause_summary": item.get("stale_cause_summary"),
+        "parent_session_id": item.get("parent_session_id"),
+        "child_session_id": item.get("child_session_id"),
+        "parent_last_tool_status": item.get("parent_last_tool_status"),
+        "child_state": item.get("child_state"),
+    }
+
+
+def runtime_session_health_summary(
+    *,
+    db_path: Path = DEFAULT_RUNTIME_DB_PATH,
+    stale_seconds: int = GATEWAY_DOCTOR_STALE_SECONDS,
+    generic_stale_problem_threshold: int = DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
+    sample_limit: int = GATEWAY_DOCTOR_SESSION_HEALTH_SAMPLE_LIMIT,
+) -> dict[str, Any]:
+    runtime = _scan_runtime_stuck_sessions(
+        db_path,
+        stale_seconds,
+        generic_stale_problem_threshold,
+    )
+    stuck_findings_any = runtime.get("stuck_findings")
+    stuck_findings = stuck_findings_any if isinstance(stuck_findings_any, list) else []
+    generic_stale_findings_any = runtime.get("generic_stale_findings")
+    generic_stale_findings = (
+        generic_stale_findings_any if isinstance(generic_stale_findings_any, list) else []
+    )
+    issue_type_counts = Counter(
+        str(item.get("issue_type") or "unknown")
+        for item in stuck_findings
+        if isinstance(item, dict)
+    )
+    repair_commands: list[str] = []
+    result = "PASS"
+    if runtime.get("problems") or stuck_findings:
+        result = "FAIL"
+    elif runtime.get("warnings") or generic_stale_findings:
+        result = "WARN"
+    if stuck_findings or generic_stale_findings or int(runtime.get("generic_stale_count") or 0) > 0:
+        repair_commands = [
+            f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
+            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
+            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
+        ]
+    return {
+        "result": result,
+        "runtime_db_path": str(db_path),
+        "exists": db_path.exists(),
+        "stale_seconds": stale_seconds,
+        "generic_stale_problem_threshold": generic_stale_problem_threshold,
+        "targeted_stuck_count": len(stuck_findings),
+        "generic_stale_count": int(runtime.get("generic_stale_count") or 0),
+        "issue_type_counts": dict(issue_type_counts),
+        "sample_findings": [
+            _summarize_stuck_finding(item)
+            for item in stuck_findings[: max(1, sample_limit)]
+            if isinstance(item, dict)
+        ],
+        "sample_generic_stale_findings": [
+            {
+                "session_id": item.get("session_id"),
+                "title": item.get("title"),
+                "stale_seconds": item.get("stale_seconds"),
+                "last_tool": item.get("last_tool"),
+                "stale_cause_code": item.get("stale_cause_code"),
+            }
+            for item in generic_stale_findings[: max(1, sample_limit)]
+            if isinstance(item, dict)
+        ],
+        "warnings": list(runtime.get("warnings") or []),
+        "problems": list(runtime.get("problems") or []),
+        "repair_commands": repair_commands,
+    }
 
 
 def command_continuation_report(as_json: bool, *, minutes: int, limit: int) -> int:
@@ -1823,6 +1956,7 @@ def command_doctor(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
     status = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
+    session_health = runtime_session_health_summary()
 
     problems: list[str] = []
     warnings: list[str] = []
@@ -1915,6 +2049,42 @@ def command_doctor(as_json: bool) -> int:
             "recent critical global pressure event(s) detected; prioritize recovery flow before opening new long-running sessions"
         )
 
+    session_health_warnings_any = session_health.get("warnings")
+    session_health_warnings = (
+        session_health_warnings_any if isinstance(session_health_warnings_any, list) else []
+    )
+    warnings.extend(
+            f"runtime session health scan: {item}"
+        for item in session_health_warnings
+        if isinstance(item, str) and item.strip()
+    )
+    session_health_problems_any = session_health.get("problems")
+    session_health_problems = (
+        session_health_problems_any if isinstance(session_health_problems_any, list) else []
+    )
+    for item in session_health_problems:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        normalized = item.strip()
+        if normalized.startswith("detected ") and "stuck session health finding" in normalized:
+            continue
+        problems.append(f"runtime session health scan: {normalized}")
+    targeted_stuck_count = int(session_health.get("targeted_stuck_count") or 0)
+    issue_type_counts_any = session_health.get("issue_type_counts")
+    issue_type_counts = issue_type_counts_any if isinstance(issue_type_counts_any, dict) else {}
+    if targeted_stuck_count >= 1:
+        summary = ", ".join(
+            f"{key}={value}" for key, value in issue_type_counts.items() if value
+        ) or "unknown"
+        problems.append(
+            f"runtime session health scan found {targeted_stuck_count} actionable stuck runtime finding(s) older than {int(session_health.get('stale_seconds') or GATEWAY_DOCTOR_STALE_SECONDS)}s ({summary})"
+        )
+    generic_stale_count = int(session_health.get("generic_stale_count") or 0)
+    if generic_stale_count >= 1 and not session_health_problems:
+        warnings.append(
+            f"runtime session health scan found {generic_stale_count} generic stale assistant/runtime session(s) older than {int(session_health.get('stale_seconds') or GATEWAY_DOCTOR_STALE_SECONDS)}s"
+        )
+
     remediation_commands: list[str] = []
     manual_emergency_steps: list[str] = []
     if max_pressure_mb >= 10240 or critical_events_recent >= 1:
@@ -1974,9 +2144,15 @@ def command_doctor(as_json: bool) -> int:
             "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
             "run /autopilot report to inspect blockers and stale runtime status",
             "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode both --output json",
+        ]
+        + [
+            item
+            for item in (session_health.get("repair_commands") or [])
+            if isinstance(item, str) and item.strip()
         ],
         "remediation_commands": remediation_commands,
         "manual_emergency_steps": manual_emergency_steps,
+        "runtime_session_health": session_health,
         "local_plugin_runtime_smoke": local_plugin_runtime_smoke,
     }
     if as_json:

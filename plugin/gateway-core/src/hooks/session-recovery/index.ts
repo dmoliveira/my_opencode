@@ -312,6 +312,11 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
     return { matched: false, tool: "" }
   }
   const parts = Array.isArray(message.parts) ? message.parts : []
+  if (parts.length === 0) {
+    return { matched: true, tool: "unknown" }
+  }
+  const lastPart = parts.at(-1)
+  const lastPartType = String(lastPart?.type ?? "").trim().toLowerCase()
   if (
     parts.some((part) => {
       const toolName = String(part?.tool ?? "").trim().toLowerCase()
@@ -322,9 +327,6 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
   }
   const lastToolPart = [...parts].reverse().find((part) => part?.type === "tool")
   const tool = String(lastToolPart?.tool ?? "").trim().toLowerCase()
-  if (!tool || tool === "question" || tool === "askuserquestion") {
-    return { matched: false, tool: "" }
-  }
   const hasVisibleText = parts.some(
     (part) =>
       part?.type === "text" &&
@@ -332,6 +334,12 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
       part.text.trim() &&
       !part.synthetic,
   )
+  if (!tool && !hasVisibleText && lastPartType === "step-start") {
+    return { matched: true, tool: "step-start" }
+  }
+  if (!tool || tool === "question" || tool === "askuserquestion") {
+    return { matched: false, tool: "" }
+  }
   return { matched: !hasVisibleText, tool }
 }
 
