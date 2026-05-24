@@ -1158,3 +1158,62 @@ test("session-recovery injects fallback when idle session ends with incomplete n
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("session-recovery injects fallback when idle session ends with step-start and no later parts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  let lastPromptBody = null
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "user", time: { completed: Date.now() } },
+                  parts: [{ type: "text", text: "please continue" }],
+                },
+                {
+                  info: { role: "assistant", time: {} },
+                  parts: [
+                    { type: "step-start" },
+                  ],
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        directory,
+        properties: {
+          sessionID: "session-recovery-step-start-tail",
+        },
+      },
+    })
+
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /incomplete assistant turn detected during idle/i)
+    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /last_tool: step-start/i)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
