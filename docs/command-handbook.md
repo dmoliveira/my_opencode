@@ -356,7 +356,7 @@ Use these directly in OpenCode:
 
 /audit status --json
 /audit list --limit 20 --json
-/audit report --days 7 --json
+/audit report --days 7 --bucket week --json
 /audit export --path ./runtime-audit-export.json --json
 
 /governance profile strict --json
@@ -368,15 +368,12 @@ Use these directly in OpenCode:
 `/claims claim --role <role>` auto-assigns the least-loaded active agent from `/agent-pool` for that role.
 `/workflow run` now supports dependency-aware step ordering (`depends_on`) and records per-step execution results (status, timestamps, failure reason codes). Use `--execute` to run guarded command steps.
 
-<<<<<<< HEAD
 Background runtime triage split:
 
 - use `/bg doctor --json` for backend execution health, queue depth, stale-running jobs, and failure triage
 - use `/agent-pool doctor --json` and `/agent-pool health --json` for manual capacity registry visibility plus backend health passthrough
 - use `/agent-pool drain --id <agent_id> --json` to mark capacity unavailable, and `/bg cleanup --json` to prune stale/terminal backend jobs
-=======
 `/workflow swarm` is the initial swarm prototype on top of current runtime contracts. It creates inspectable multi-lane plans using `workflow`, `claims`, `agent-pool`, and `reservation` state. Each lane now carries explicit `depends_on` metadata, `path_scopes`, and reservation/access metadata. Read-only lanes are explicitly marked with `reservation_mode: reservation-safe-read`, while write-capable lanes stay `writer-reserved`. You can also author a custom lane graph with `--graph-file`, as long as the graph is acyclic and lane metadata is valid. Write-capable custom lanes may also carry `lease_identity` to pin activation to a specific expected lease owner. `handoff` and `rebalance` mutate lane ownership safely, `accept-handoff` activates a handoff-pending lane and can enqueue controlled background work only for a narrow allowlist (`make validate|selftest|install-test`, `python3 scripts/selftest.py`, `python3 scripts/doctor_command.py`), and `complete-lane`/`fail-lane` add explicit lane outcome transitions with swarm-level progress summaries, follow-up guidance, explicit failure-recovery policy, and deterministic auto-progression of the next planned lane into `handoff-pending` when no other lane is active. Failed lanes can now be `reset-lane` back to `planned`, `retry-lane` into `handoff-pending`, or `resolve-failure` to execute the currently recommended recovery action automatically. Coordination remains conservative; dependency-satisfied read-only lanes can activate in parallel only when reservation-safe read guarantees are present and lane `path_scopes` do not overlap. A tiny write-capable parallel allowlist is now enabled for disjoint `implement` lanes only when lease-backed writer guarantees are present, dependencies are satisfied, writer `path_scopes` do not overlap, and the activating owner matches both the reservation lease owner and any lane-level `lease_identity`. All other write-capable lanes remain serialized. `/reservation set` does not auto-mint lease fields; lease-backed writer guarantees must be supplied explicitly.
->>>>>>> 551182d (Build local shared-memory and swarm execution foundation)
 
 ## Post-session hook inside OpenCode ✅
 
