@@ -17382,6 +17382,11 @@ jobs:
             model_routing_set.returncode == 0,
             "model-routing set-category should succeed",
         )
+        model_routing_state_path = (
+            home / ".config" / "opencode" / "opencode-model-routing.json"
+        )
+        model_routing_state_path.parent.mkdir(parents=True, exist_ok=True)
+        model_routing_state_path.write_text("", encoding="utf-8")
         model_routing_resolve = subprocess.run(
             [
                 sys.executable,
@@ -17401,14 +17406,14 @@ jobs:
         )
         expect(
             model_routing_resolve.returncode == 0,
-            "model-routing resolve should succeed",
+            "model-routing resolve should recover from empty persisted state",
         )
         model_routing_report = parse_json_output(model_routing_resolve.stdout)
         expect(
-            model_routing_report.get("category") == "visual"
+            model_routing_report.get("category") == "balanced"
             and model_routing_report.get("settings", {}).get("model")
             == "openai/gpt-5.3-codex",
-            "model-routing resolve should keep active category and apply model fallback",
+            "model-routing resolve should recover from empty state by falling back to defaults and applying model fallback",
         )
         expect(
             isinstance(model_routing_report.get("resolution_trace"), dict),

@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -79,23 +80,47 @@ def _merged_state(raw_state: Any) -> dict[str, Any]:
     return merged
 
 
+def _load_json_file(path: Path) -> dict[str, Any] | None:
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=str(path.parent),
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as tmp:
+        tmp.write(json.dumps(payload, indent=2) + "\n")
+        tmp_path = Path(tmp.name)
+    tmp_path.replace(path)
+
+
 def load_state_snapshot(
     *, persist_missing: bool = False
 ) -> tuple[dict[str, Any], dict[str, Any], Path]:
     config, _ = load_layered_config()
     write_path = resolve_write_path()
     if LEGACY_ENV_SET and CONFIG_PATH.exists():
-        loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return config, _merged_state(loaded), CONFIG_PATH
+        loaded = _load_json_file(CONFIG_PATH)
+        if loaded is not None:
+            return config, _merged_state(loaded), CONFIG_PATH
 
     if CONFIG_PATH.exists():
-        loaded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return config, _merged_state(loaded), CONFIG_PATH
+        loaded = _load_json_file(CONFIG_PATH)
+        if loaded is not None:
+            return config, _merged_state(loaded), CONFIG_PATH
 
     merged = _merged_state(config.get(SECTION))
     if persist_missing:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(CONFIG_PATH, merged)
     return config, merged, CONFIG_PATH
 
 
@@ -110,12 +135,10 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
         "latest_trace": state.get("latest_trace", {}),
     }
     if LEGACY_ENV_SET:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(CONFIG_PATH, payload)
         return
 
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _write_json_atomic(CONFIG_PATH, payload)
 
 
 def active_config_path(write_path: Path) -> Path:
