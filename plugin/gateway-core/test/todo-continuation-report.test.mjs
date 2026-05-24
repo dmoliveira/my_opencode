@@ -193,3 +193,33 @@ test("todo continuation report renders markdown artifact", () => {
   assert.match(markdown, /max_open_todos=4/)
   assert.match(markdown, /llm=1/)
 })
+
+test("todo continuation report adds insight text for degenerate distributions", () => {
+  const markdown = renderTodoContinuationMarkdown({
+    totalEvents: 3,
+    totalSessions: 2,
+    reasonCounts: [{ reasonCode: "unknown", count: 3 }],
+    sessions: [
+      {
+        sessionId: "ses-1",
+        lastTs: "2026-03-11T10:01:00.000Z",
+        injected: 0,
+        todowriteSignals: 0,
+        probeRetained: 0,
+        stopGuards: 0,
+        noPending: 0,
+        probeFailures: 0,
+        injectFailures: 0,
+        llmDecisions: 0,
+        llmShadows: 0,
+        maxOpenTodoCount: 0,
+        lastReasonCode: "unknown",
+      },
+    ],
+  })
+
+  assert.match(markdown, /## Distribution insights/)
+  assert.match(markdown, /All continuation evidence is concentrated in one reason bucket: `unknown`\./)
+  assert.match(markdown, /Every continuation event is labeled `unknown`; inspect the audit source before drawing workflow conclusions\./)
+  assert.ok(markdown.indexOf("## Distribution insights") < markdown.indexOf("## Reason counts (event totals by continuation reason)"))
+})

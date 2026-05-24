@@ -169,6 +169,30 @@ export function parseTodoContinuationReport(
   }
 }
 
+function describeDegenerateTodoDistribution(report: TodoContinuationReport): string[] {
+  if (report.totalEvents === 0) {
+    return []
+  }
+
+  const insights: string[] = []
+  const topReason = report.reasonCounts[0]
+  if (topReason && topReason.count === report.totalEvents) {
+    insights.push(`- All continuation evidence is concentrated in one reason bucket: \`${topReason.reasonCode}\`.`)
+  }
+
+  const unknownCount = report.reasonCounts
+    .filter((item) => item.reasonCode === "unknown")
+    .reduce((sum, item) => sum + item.count, 0)
+
+  if (unknownCount === report.totalEvents) {
+    insights.push("- Every continuation event is labeled `unknown`; inspect the audit source before drawing workflow conclusions.")
+  } else if (unknownCount > 0) {
+    insights.push(`- Unknown reason codes account for ${unknownCount}/${report.totalEvents} continuation events; reason-count rankings are incomplete.`)
+  }
+
+  return insights
+}
+
 export function renderTodoContinuationMarkdown(report: TodoContinuationReport): string {
   const lines: string[] = [
     "# Todo Continuation Audit Report",
@@ -191,9 +215,15 @@ export function renderTodoContinuationMarkdown(report: TodoContinuationReport): 
     ...(report.totalSessions > report.sessions.length
       ? [`- Session snapshot rows rendered: ${report.sessions.length}`]
       : []),
-    "",
-    "## Reason counts (event totals by continuation reason)",
   ]
+
+  const distributionInsights = describeDegenerateTodoDistribution(report)
+
+  if (distributionInsights.length > 0) {
+    lines.push("", "## Distribution insights", ...distributionInsights)
+  }
+
+  lines.push("", "## Reason counts (event totals by continuation reason)")
 
   if (report.reasonCounts.length === 0) {
     lines.push("", "- No todo continuation audit events found.")

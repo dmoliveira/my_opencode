@@ -162,3 +162,28 @@ test("llm disagreement report renders markdown artifact", () => {
   assert.match(markdown, /thresholds: investigate>=10, tune>=4, observe>=1/)
   assert.match(markdown, /route_explore -> route_librarian \(3\)/)
 })
+
+test("llm disagreement report adds insight text for degenerate distributions", () => {
+  const markdown = renderLlmRolloutMarkdown({
+    summary: {
+      total: 4,
+      byHook: [{ hook: "unknown", count: 4 }],
+      pairs: [{ hook: "unknown", deterministicMeaning: "unknown", aiMeaning: "unknown", count: 4 }],
+    },
+    recommendations: [
+      {
+        hook: "unknown",
+        action: "tune",
+        reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
+        disagreementCount: 4,
+        thresholds: { investigateAt: 10, tuneAt: 4, observeAt: 1 },
+      },
+    ],
+  })
+
+  assert.match(markdown, /## Distribution insights/)
+  assert.match(markdown, /Hook distribution is fully concentrated in `unknown`/)
+  assert.match(markdown, /All disagreements currently fall into one meaning pair: `unknown -> unknown` for `unknown`\./)
+  assert.match(markdown, /All disagreement rows are dominated by `unknown` fields/)
+  assert.ok(markdown.indexOf("## Distribution insights") < markdown.indexOf("## Recommendations (hook-level disagreement totals)"))
+})

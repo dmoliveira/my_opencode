@@ -188,6 +188,35 @@ export function buildLlmRolloutReport(
   }
 }
 
+function describeDegenerateLlmDistribution(summary: LlmDisagreementSummary): string[] {
+  if (summary.total === 0) {
+    return []
+  }
+
+  const insights: string[] = []
+  const topHook = summary.byHook[0]
+  const topPair = summary.pairs[0]
+
+  if (topHook && topHook.count === summary.total) {
+    insights.push(`- Hook distribution is fully concentrated in \`${topHook.hook}\`; compare more sessions before treating this report as representative.`)
+  }
+  if (topPair && topPair.count === summary.total) {
+    insights.push(`- All disagreements currently fall into one meaning pair: \`${topPair.deterministicMeaning} -> ${topPair.aiMeaning}\` for \`${topPair.hook}\`.`)
+  }
+
+  const unknownShare = summary.pairs
+    .filter((item) => item.hook === "unknown" || item.deterministicMeaning === "unknown" || item.aiMeaning === "unknown")
+    .reduce((sum, item) => sum + item.count, 0)
+
+  if (unknownShare === summary.total) {
+    insights.push("- All disagreement rows are dominated by `unknown` fields; investigate missing hook or decision labels before trusting the distribution.")
+  } else if (unknownShare > 0) {
+    insights.push(`- Unknown labels affect ${unknownShare}/${summary.total} disagreement rows; treat the top-pair ranking as incomplete.`)
+  }
+
+  return insights
+}
+
 export function renderLlmRolloutMarkdown(report: LlmRolloutReport): string {
   const lines: string[] = [
     "# LLM Disagreement Rollout Report",
@@ -204,9 +233,15 @@ export function renderLlmRolloutMarkdown(report: LlmRolloutReport): string {
     `- Hooks with disagreements: ${report.summary.byHook.length}`,
     "- Recommendations aggregate disagreement totals per hook.",
     "- Top disagreement pairs aggregate rows by hook and deterministic -> AI meaning pair.",
-    "",
-    "## Recommendations (hook-level disagreement totals)",
   ]
+
+  const distributionInsights = describeDegenerateLlmDistribution(report.summary)
+
+  if (distributionInsights.length > 0) {
+    lines.push("", "## Distribution insights", ...distributionInsights)
+  }
+
+  lines.push("", "## Recommendations (hook-level disagreement totals)")
 
   if (report.recommendations.length === 0) {
     lines.push("", "- No disagreement data found.")
