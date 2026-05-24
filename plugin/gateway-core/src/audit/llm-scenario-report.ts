@@ -58,6 +58,10 @@ export function summarizeLlmScenarioResults(results: LlmScenarioResult[]): LlmSc
 }
 
 export function renderLlmScenarioMarkdown(summary: LlmScenarioSummary, results: LlmScenarioResult[]): string {
+  const failures = results.filter((result) => !result.correct)
+  const weakestHook = summary.byHook
+    .filter((item) => item.correct < item.total)
+    .sort((left, right) => left.accuracyPct - right.accuracyPct || right.total - left.total || left.hookId.localeCompare(right.hookId))[0]
   const lines: string[] = [
     "# LLM Scenario Reliability Report",
     "",
@@ -75,6 +79,17 @@ export function renderLlmScenarioMarkdown(summary: LlmScenarioSummary, results: 
   for (const item of summary.byRequestType) {
     lines.push(`- ${item.requestType}: ${item.correct}/${item.total} (${item.accuracyPct}%)`)
   }
+
+  if (failures.length > 0) {
+    lines.push("", "## Failure focus")
+    if (weakestHook) {
+      lines.push("", `- Start with \`${weakestHook.hookId}\` (${weakestHook.correct}/${weakestHook.total}); it is the weakest hook bucket in this run.`)
+    }
+    for (const result of failures) {
+      lines.push("", `- ${result.id}: FAIL | ${result.hookId} | ${result.requestType} | expected=${result.expectedChar} actual=${result.actualChar || "(none)"}`)
+    }
+  }
+
   lines.push("", "## Scenario Results (one row per scenario)")
   for (const result of results) {
     lines.push(

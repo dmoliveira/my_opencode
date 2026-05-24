@@ -33,3 +33,15 @@ test("workflow scenario report renders markdown", () => {
   assert.match(markdown, /mistake-ledger/)
   assert.match(markdown, /pending_marker/)
 })
+
+test("workflow scenario report highlights failed scenarios and weakest workflow", () => {
+  const results = [
+    { id: "a", workflow: "todo-continuation-enforcer", requestType: "pending_marker", description: "", expectedAction: "inject_prompt", actualAction: "inject_prompt", correct: true },
+    { id: "b", workflow: "mistake-ledger", requestType: "semantic_deferral", description: "", expectedAction: "write_ledger_entry", actualAction: "skip", correct: false },
+  ]
+
+  const markdown = renderWorkflowScenarioMarkdown(summarizeWorkflowScenarioResults(results), results)
+  assert.match(markdown, /## Failure focus/)
+  assert.match(markdown, /Start with `mistake-ledger` \(0\/1\); it is the weakest workflow bucket in this run\./)
+  assert.match(markdown, /b: FAIL \| mistake-ledger \| semantic_deferral \| expected=write_ledger_entry actual=skip/)
+})
