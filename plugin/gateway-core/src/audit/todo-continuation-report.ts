@@ -173,24 +173,26 @@ export function renderTodoContinuationMarkdown(report: TodoContinuationReport): 
   const lines: string[] = [
     "# Todo Continuation Audit Report",
     "",
-    ...(report.metadata?.generatedAt ? [`- Generated at: ${report.metadata.generatedAt}`] : []),
+    ...(report.metadata?.generatedAt ? [`- Snapshot generated at: ${report.metadata.generatedAt}`] : []),
     ...(report.metadata?.branch ? [`- Branch: \`${report.metadata.branch}\``] : []),
     ...(report.metadata?.worktreePath ? [`- Worktree: \`${report.metadata.worktreePath}\``] : []),
-    ...(report.metadata?.sourceAuditPath ? [`- Source audit: \`${report.metadata.sourceAuditPath}\``] : []),
-    ...(report.metadata?.sourceAuditShared ? ["- Audit source scope: shared primary repo audit feed"] : []),
+    ...(report.metadata?.sourceAuditPath ? [`- Snapshot source audit: \`${report.metadata.sourceAuditPath}\``] : []),
+    ...(report.metadata?.sourceAuditShared ? ["- Snapshot source scope: shared primary repo audit feed"] : []),
     ...(typeof report.metadata?.invalidLines === "number"
       ? [`- Invalid audit lines skipped: ${report.metadata.invalidLines}`]
       : []),
     ...(typeof report.metadata?.sessionLimit === "number"
-      ? [`- Session rows shown: ${report.metadata.sessionLimit}`]
+      ? [`- Session snapshot rows requested: ${report.metadata.sessionLimit}`]
       : []),
     `- Total continuation events: ${report.totalEvents}`,
     `- Sessions with continuation evidence: ${report.totalSessions}`,
+    "- Reason counts summarize audit events by continuation reason code.",
+    "- Session rows show the latest retained snapshot per session, sorted by newest evidence.",
     ...(report.totalSessions > report.sessions.length
-      ? [`- Session rows rendered: ${report.sessions.length}`]
+      ? [`- Session snapshot rows rendered: ${report.sessions.length}`]
       : []),
     "",
-    "## Reason counts",
+    "## Reason counts (event totals by continuation reason)",
   ]
 
   if (report.reasonCounts.length === 0) {
@@ -201,7 +203,7 @@ export function renderTodoContinuationMarkdown(report: TodoContinuationReport): 
     }
   }
 
-  lines.push("", "## Recent sessions")
+  lines.push("", "## Session snapshots (latest evidence per session)")
   if (report.sessions.length === 0) {
     lines.push("", "- No continuation sessions found.")
   } else {

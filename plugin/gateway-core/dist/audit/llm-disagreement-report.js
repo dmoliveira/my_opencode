@@ -118,18 +118,20 @@ export function renderLlmRolloutMarkdown(report) {
     const lines = [
         "# LLM Disagreement Rollout Report",
         "",
-        ...(report.metadata?.generatedAt ? [`- Generated at: ${report.metadata.generatedAt}`] : []),
+        ...(report.metadata?.generatedAt ? [`- Snapshot generated at: ${report.metadata.generatedAt}`] : []),
         ...(report.metadata?.branch ? [`- Branch: \`${report.metadata.branch}\``] : []),
         ...(report.metadata?.worktreePath ? [`- Worktree: \`${report.metadata.worktreePath}\``] : []),
-        ...(report.metadata?.sourceAuditPath ? [`- Source audit: \`${report.metadata.sourceAuditPath}\``] : []),
-        ...(report.metadata?.sourceAuditShared ? ["- Audit source scope: shared primary repo audit feed"] : []),
+        ...(report.metadata?.sourceAuditPath ? [`- Snapshot source audit: \`${report.metadata.sourceAuditPath}\``] : []),
+        ...(report.metadata?.sourceAuditShared ? ["- Snapshot source scope: shared primary repo audit feed"] : []),
         ...(typeof report.metadata?.invalidLines === "number"
             ? [`- Invalid audit lines skipped: ${report.metadata.invalidLines}`]
             : []),
         `- Total disagreements: ${report.summary.total}`,
         `- Hooks with disagreements: ${report.summary.byHook.length}`,
+        "- Recommendations aggregate disagreement totals per hook.",
+        "- Top disagreement pairs aggregate rows by hook and deterministic -> AI meaning pair.",
         "",
-        "## Recommendations",
+        "## Recommendations (hook-level disagreement totals)",
     ];
     if (report.recommendations.length === 0) {
         lines.push("", "- No disagreement data found.");
@@ -139,7 +141,7 @@ export function renderLlmRolloutMarkdown(report) {
             lines.push("", `- ${item.hook}: ${item.action} (${item.disagreementCount})`, `  - ${item.reason}`, `  - thresholds: investigate>=${item.thresholds.investigateAt}, tune>=${item.thresholds.tuneAt}, observe>=${item.thresholds.observeAt}`);
         }
     }
-    lines.push("", "## Top disagreement pairs");
+    lines.push("", "## Top disagreement pairs (counts by hook and meaning pair)");
     if (report.summary.pairs.length === 0) {
         lines.push("", "- No disagreement pairs found.");
     }

@@ -27,6 +27,11 @@ test("llm scenario report renders markdown with scenario details", () => {
   ]
   const markdown = renderLlmScenarioMarkdown(summarizeLlmScenarioResults(results), results)
   assert.match(markdown, /# LLM Scenario Reliability Report/)
+  assert.match(markdown, /Overall accuracy \(correct \/ total scenarios\): 100%/)
+  assert.match(markdown, /By Hook and By Request Type sections show correct \/ total scenario counts for each bucket\./)
+  assert.match(markdown, /## By Hook \(correct \/ total scenarios per hook\)/)
+  assert.match(markdown, /## By Request Type \(correct \/ total scenarios per request type\)/)
+  assert.match(markdown, /## Scenario Results \(one row per scenario\)/)
   assert.match(markdown, /auto-slash-command: 1\/1 \(100%\)/)
   assert.match(markdown, /a: PASS \| auto-slash-command \| contamination/)
 })

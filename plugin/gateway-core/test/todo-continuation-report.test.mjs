@@ -123,7 +123,7 @@ test("todo continuation report keeps total session count when rows are limited",
   assert.equal(report.sessions.length, 2)
   const markdown = renderTodoContinuationMarkdown(report)
   assert.match(markdown, /Sessions with continuation evidence: 3/)
-  assert.match(markdown, /Session rows rendered: 2/)
+  assert.match(markdown, /Session snapshot rows rendered: 2/)
 })
 
 test("todo continuation report uses latest timestamp even when events are out of order", () => {
@@ -181,9 +181,12 @@ test("todo continuation report renders markdown artifact", () => {
   })
 
   assert.match(markdown, /# Todo Continuation Audit Report/)
-  assert.match(markdown, /Generated at: 2026-03-11T11:00:00.000Z/)
+  assert.match(markdown, /Snapshot generated at: 2026-03-11T11:00:00.000Z/)
   assert.match(markdown, /Branch: `feat\/continuation-audit-report`/)
-  assert.match(markdown, /Session rows shown: 5/)
+  assert.match(markdown, /Session snapshot rows requested: 5/)
+  assert.match(markdown, /Reason counts summarize audit events by continuation reason code\./)
+  assert.match(markdown, /Session rows show the latest retained snapshot per session, sorted by newest evidence\./)
+  assert.match(markdown, /## Session snapshots \(latest evidence per session\)/)
   assert.match(markdown, /Sessions with continuation evidence: 1/)
   assert.match(markdown, /todo_continuation_injected: 2/)
   assert.match(markdown, /ses-1 \(2026-03-11T10:01:00.000Z\)/)

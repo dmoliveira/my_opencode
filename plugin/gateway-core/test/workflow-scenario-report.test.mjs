@@ -25,6 +25,10 @@ test("workflow scenario report renders markdown", () => {
   ]
   const markdown = renderWorkflowScenarioMarkdown(summarizeWorkflowScenarioResults(results), results)
   assert.match(markdown, /# Workflow Scenario Reliability Report/)
+  assert.match(markdown, /Overall accuracy \(correct \/ total scenarios\): 100%/)
+  assert.match(markdown, /By Workflow shows correct \/ total scenario counts for each workflow bucket\./)
+  assert.match(markdown, /## By Workflow \(correct \/ total scenarios per workflow\)/)
+  assert.match(markdown, /## Scenario Results \(one row per scenario\)/)
   assert.match(markdown, /todo-continuation-enforcer: 1\/1 \(100%\)/)
   assert.match(markdown, /mistake-ledger/)
   assert.match(markdown, /pending_marker/)

@@ -30,12 +30,13 @@ export function renderWorkflowScenarioMarkdown(summary, results) {
         "",
         `- Total scenarios: ${summary.total}`,
         `- Correct actions: ${summary.correct}`,
-        `- Accuracy: ${summary.accuracyPct}%`,
+        `- Overall accuracy (correct / total scenarios): ${summary.accuracyPct}%`,
+        "- By Workflow shows correct / total scenario counts for each workflow bucket.",
         "",
-        "## By Workflow",
+        "## By Workflow (correct / total scenarios per workflow)",
         ...summary.byWorkflow.map((item) => `- ${item.workflow}: ${item.correct}/${item.total} (${item.accuracyPct}%)`),
         "",
-        "## Scenario Results",
+        "## Scenario Results (one row per scenario)",
         ...results.map((result) => `- ${result.id}: ${result.correct ? "PASS" : "FAIL"} | ${result.workflow} | ${result.requestType} | expected=${result.expectedAction} actual=${result.actualAction}`),
     ];
     return `${lines.join("\n")}\n`;
