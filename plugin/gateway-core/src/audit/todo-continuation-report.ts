@@ -35,6 +35,12 @@ export interface TodoContinuationReport {
   totalSessions: number
   reasonCounts: TodoContinuationReasonCount[]
   sessions: TodoContinuationSessionSummary[]
+  aggregateSignals?: {
+    probeFailures: number
+    injectFailures: number
+    stopGuards: number
+    maxOpenTodos: number
+  }
 }
 
 export interface TodoContinuationParsedReport {
@@ -155,6 +161,12 @@ export function buildTodoContinuationReport(
       .map(([reasonCode, count]) => ({ reasonCode, count }))
       .sort((left, right) => right.count - left.count || left.reasonCode.localeCompare(right.reasonCode)),
     sessions: sessions.slice(0, sessionLimit && sessionLimit > 0 ? sessionLimit : 10),
+    aggregateSignals: {
+      probeFailures: sessions.reduce((sum, session) => sum + session.probeFailures, 0),
+      injectFailures: sessions.reduce((sum, session) => sum + session.injectFailures, 0),
+      stopGuards: sessions.reduce((sum, session) => sum + session.stopGuards, 0),
+      maxOpenTodos: sessions.reduce((max, session) => Math.max(max, session.maxOpenTodoCount), 0),
+    },
   }
 }
 
@@ -193,6 +205,37 @@ function describeDegenerateTodoDistribution(report: TodoContinuationReport): str
   return insights
 }
 
+function buildTodoFollowUps(report: TodoContinuationReport): string[] {
+  if (report.totalEvents === 0) {
+    return []
+  }
+
+  const followUps: string[] = []
+  const topReason = report.reasonCounts[0]
+  const probeFailures = report.aggregateSignals?.probeFailures ?? 0
+  const injectFailures = report.aggregateSignals?.injectFailures ?? 0
+  const stopGuards = report.aggregateSignals?.stopGuards ?? 0
+  const maxOpenTodos = report.aggregateSignals?.maxOpenTodos ?? 0
+
+  if (topReason?.reasonCode === "todo_continuation_no_pending") {
+    followUps.push("- Review whether the continuation check is firing after tasks were already closed; repeated `no_pending` events usually mean the prompt landed too late to help.")
+  }
+  if (topReason?.reasonCode === "todo_continuation_stop_guard" || stopGuards > 0) {
+    followUps.push("- Inspect recent stop-guard sessions for messages that ended early without validation proof; these are the clearest candidates for follow-up prompt tuning.")
+  }
+  if (probeFailures > 0 || injectFailures > 0) {
+    followUps.push(`- Investigate probe/injection failures first (${probeFailures} probe, ${injectFailures} inject); delivery gaps here can hide the true continuation rate.`)
+  }
+  if (maxOpenTodos >= 3) {
+    followUps.push(`- Sessions peaked at ${maxOpenTodos} open todos; verify whether operators need a tighter summary or earlier reminder before the list grows.`)
+  }
+  if (followUps.length === 0 && topReason) {
+    followUps.push(`- Start with the dominant reason bucket \`${topReason.reasonCode}\` and compare its latest sessions before changing the continuation policy.`)
+  }
+
+  return followUps
+}
+
 export function renderTodoContinuationMarkdown(report: TodoContinuationReport): string {
   const lines: string[] = [
     "# Todo Continuation Audit Report",
@@ -218,9 +261,14 @@ export function renderTodoContinuationMarkdown(report: TodoContinuationReport): 
   ]
 
   const distributionInsights = describeDegenerateTodoDistribution(report)
+  const followUps = buildTodoFollowUps(report)
 
   if (distributionInsights.length > 0) {
     lines.push("", "## Distribution insights", ...distributionInsights)
+  }
+
+  if (followUps.length > 0) {
+    lines.push("", "## Operator follow-up", ...followUps)
   }
 
   lines.push("", "## Reason counts (event totals by continuation reason)")
