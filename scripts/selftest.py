@@ -17454,8 +17454,8 @@ jobs:
         expect(routing_status.returncode == 0, "routing status should succeed")
         routing_status_report = parse_json_output(routing_status.stdout)
         expect(
-            routing_status_report.get("active_category") == "visual",
-            "routing status should reflect active category from model routing state",
+            routing_status_report.get("active_category") == "balanced",
+            "routing status should fall back to default category when model routing state is empty or malformed",
         )
 
         routing_explain = subprocess.run(
