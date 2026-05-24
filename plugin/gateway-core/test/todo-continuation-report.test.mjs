@@ -123,7 +123,47 @@ test("todo continuation report keeps total session count when rows are limited",
   assert.equal(report.sessions.length, 2)
   const markdown = renderTodoContinuationMarkdown(report)
   assert.match(markdown, /Sessions with continuation evidence: 3/)
-  assert.match(markdown, /Session rows rendered: 2/)
+  assert.match(markdown, /Session snapshot rows rendered: 2/)
+})
+
+test("todo continuation follow-up guidance uses full-session aggregates even when rows are limited", () => {
+  const report = buildTodoContinuationReport(
+    [
+      {
+        hook: "todo-continuation-enforcer",
+        reason_code: "todo_continuation_todowrite_state_recorded",
+        session_id: "ses-a",
+        ts: "2026-03-11T10:00:00.000Z",
+        open_todo_count: 1,
+      },
+      {
+        hook: "todo-continuation-enforcer",
+        reason_code: "todo_continuation_todowrite_state_recorded",
+        session_id: "ses-b",
+        ts: "2026-03-11T10:01:00.000Z",
+        open_todo_count: 2,
+      },
+      {
+        hook: "todo-continuation-enforcer",
+        reason_code: "todo_continuation_probe_failed",
+        session_id: "ses-c",
+        ts: "2026-03-11T10:02:00.000Z",
+      },
+      {
+        hook: "todo-continuation-enforcer",
+        reason_code: "todo_continuation_todowrite_state_recorded",
+        session_id: "ses-z",
+        ts: "2026-03-11T09:00:00.000Z",
+        open_todo_count: 5,
+      },
+    ],
+    { sessionLimit: 2 },
+  )
+
+  assert.equal(report.sessions.length, 2)
+  const markdown = renderTodoContinuationMarkdown(report)
+  assert.match(markdown, /Investigate probe\/injection failures first \(1 probe, 0 inject\); delivery gaps here can hide the true continuation rate\./)
+  assert.match(markdown, /Sessions peaked at 5 open todos; verify whether operators need a tighter summary or earlier reminder before the list grows\./)
 })
 
 test("todo continuation report uses latest timestamp even when events are out of order", () => {
@@ -161,6 +201,12 @@ test("todo continuation report renders markdown artifact", () => {
     totalEvents: 3,
     totalSessions: 1,
     reasonCounts: [{ reasonCode: "todo_continuation_injected", count: 2 }],
+    aggregateSignals: {
+      probeFailures: 0,
+      injectFailures: 0,
+      stopGuards: 0,
+      maxOpenTodos: 4,
+    },
     sessions: [
       {
         sessionId: "ses-1",
@@ -181,12 +227,55 @@ test("todo continuation report renders markdown artifact", () => {
   })
 
   assert.match(markdown, /# Todo Continuation Audit Report/)
-  assert.match(markdown, /Generated at: 2026-03-11T11:00:00.000Z/)
+  assert.match(markdown, /Snapshot generated at: 2026-03-11T11:00:00.000Z/)
   assert.match(markdown, /Branch: `feat\/continuation-audit-report`/)
-  assert.match(markdown, /Session rows shown: 5/)
+  assert.match(markdown, /Session snapshot rows requested: 5/)
+  assert.match(markdown, /Reason counts summarize audit events by continuation reason code\./)
+  assert.match(markdown, /Session rows show the latest retained snapshot per session, sorted by newest evidence\./)
+  assert.match(markdown, /## Operator follow-up/)
+  assert.match(markdown, /Sessions peaked at 4 open todos; verify whether operators need a tighter summary or earlier reminder before the list grows\./)
+  assert.match(markdown, /## Session snapshots \(latest evidence per session\)/)
   assert.match(markdown, /Sessions with continuation evidence: 1/)
   assert.match(markdown, /todo_continuation_injected: 2/)
   assert.match(markdown, /ses-1 \(2026-03-11T10:01:00.000Z\)/)
   assert.match(markdown, /max_open_todos=4/)
   assert.match(markdown, /llm=1/)
+})
+
+test("todo continuation report adds insight text for degenerate distributions", () => {
+  const markdown = renderTodoContinuationMarkdown({
+    totalEvents: 3,
+    totalSessions: 2,
+    reasonCounts: [{ reasonCode: "unknown", count: 3 }],
+    aggregateSignals: {
+      probeFailures: 0,
+      injectFailures: 0,
+      stopGuards: 0,
+      maxOpenTodos: 0,
+    },
+    sessions: [
+      {
+        sessionId: "ses-1",
+        lastTs: "2026-03-11T10:01:00.000Z",
+        injected: 0,
+        todowriteSignals: 0,
+        probeRetained: 0,
+        stopGuards: 0,
+        noPending: 0,
+        probeFailures: 0,
+        injectFailures: 0,
+        llmDecisions: 0,
+        llmShadows: 0,
+        maxOpenTodoCount: 0,
+        lastReasonCode: "unknown",
+      },
+    ],
+  })
+
+  assert.match(markdown, /## Distribution insights/)
+  assert.match(markdown, /## Operator follow-up/)
+  assert.match(markdown, /All continuation evidence is concentrated in one reason bucket: `unknown`\./)
+  assert.match(markdown, /Every continuation event is labeled `unknown`; inspect the audit source before drawing workflow conclusions\./)
+  assert.match(markdown, /Start with the dominant reason bucket `unknown` and compare its latest sessions before changing the continuation policy\./)
+  assert.ok(markdown.indexOf("## Distribution insights") < markdown.indexOf("## Reason counts (event totals by continuation reason)"))
 })

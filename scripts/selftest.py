@@ -11100,6 +11100,27 @@ exit 0
             "audit status should include events from mutating runtime commands",
         )
 
+        audit_bucket_path = tmp / "audit-bucket-fixture.json"
+        audit_bucket_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "events": [
+                        {"at": "2026-05-01T10:00:00Z", "command": "claims", "action": "claim", "result": "PASS", "details": {}},
+                        {"at": "2026-05-08T11:00:00Z", "command": "claims", "action": "claim", "result": "FAIL", "details": {}},
+                        {"at": "2026-05-15T12:00:00Z", "command": "audit", "action": "report", "result": "WARN", "details": {}},
+                        {"at": "2026-05-20T09:00:00Z", "command": "claims", "action": "release", "result": "PASS", "details": {}},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        audit_bucket_env = productivity_env.copy()
+        audit_bucket_env["MY_OPENCODE_AUDIT_PATH"] = str(audit_bucket_path)
+        audit_bucket_env["MY_OPENCODE_AUDIT_NOW"] = "2026-05-21T00:00:00Z"
+
         result = subprocess.run(
             [
                 sys.executable,
@@ -11133,6 +11154,37 @@ exit 0
             int(audit_report_payload.get("events_in_window", 0) or 0)
             <= int(audit_report_payload.get("total_events", 0) or 0),
             "audit report window count should not exceed total event count",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(AUDIT_SCRIPT),
+                "report",
+                "--days",
+                "30",
+                "--bucket",
+                "week",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=audit_bucket_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(result.returncode == 0, f"audit report bucket failed: {result.stderr}")
+        audit_bucket_payload = parse_json_output(result.stdout)
+        expect(
+            audit_bucket_payload.get("bucket") == "week"
+            and audit_bucket_payload.get("bucket_series")
+            == [
+                {"bucket": "2026-W18", "total": 1, "by_result": {"PASS": 1}},
+                {"bucket": "2026-W19", "total": 1, "by_result": {"FAIL": 1}},
+                {"bucket": "2026-W20", "total": 1, "by_result": {"WARN": 1}},
+                {"bucket": "2026-W21", "total": 1, "by_result": {"PASS": 1}},
+            ],
+            "audit report should expose selected temporal bucket metadata and series",
         )
 
         result = subprocess.run(

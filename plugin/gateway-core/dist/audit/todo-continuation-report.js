@@ -98,6 +98,12 @@ export function buildTodoContinuationReport(events, options) {
             .map(([reasonCode, count]) => ({ reasonCode, count }))
             .sort((left, right) => right.count - left.count || left.reasonCode.localeCompare(right.reasonCode)),
         sessions: sessions.slice(0, sessionLimit && sessionLimit > 0 ? sessionLimit : 10),
+        aggregateSignals: {
+            probeFailures: sessions.reduce((sum, session) => sum + session.probeFailures, 0),
+            injectFailures: sessions.reduce((sum, session) => sum + session.injectFailures, 0),
+            stopGuards: sessions.reduce((sum, session) => sum + session.stopGuards, 0),
+            maxOpenTodos: sessions.reduce((max, session) => Math.max(max, session.maxOpenTodoCount), 0),
+        },
     };
 }
 export function parseTodoContinuationReport(text, options) {
@@ -107,29 +113,85 @@ export function parseTodoContinuationReport(text, options) {
         invalidLines: parsed.invalidLines,
     };
 }
+function describeDegenerateTodoDistribution(report) {
+    if (report.totalEvents === 0) {
+        return [];
+    }
+    const insights = [];
+    const topReason = report.reasonCounts[0];
+    if (topReason && topReason.count === report.totalEvents) {
+        insights.push(`- All continuation evidence is concentrated in one reason bucket: \`${topReason.reasonCode}\`.`);
+    }
+    const unknownCount = report.reasonCounts
+        .filter((item) => item.reasonCode === "unknown")
+        .reduce((sum, item) => sum + item.count, 0);
+    if (unknownCount === report.totalEvents) {
+        insights.push("- Every continuation event is labeled `unknown`; inspect the audit source before drawing workflow conclusions.");
+    }
+    else if (unknownCount > 0) {
+        insights.push(`- Unknown reason codes account for ${unknownCount}/${report.totalEvents} continuation events; reason-count rankings are incomplete.`);
+    }
+    return insights;
+}
+function buildTodoFollowUps(report) {
+    if (report.totalEvents === 0) {
+        return [];
+    }
+    const followUps = [];
+    const topReason = report.reasonCounts[0];
+    const probeFailures = report.aggregateSignals?.probeFailures ?? 0;
+    const injectFailures = report.aggregateSignals?.injectFailures ?? 0;
+    const stopGuards = report.aggregateSignals?.stopGuards ?? 0;
+    const maxOpenTodos = report.aggregateSignals?.maxOpenTodos ?? 0;
+    if (topReason?.reasonCode === "todo_continuation_no_pending") {
+        followUps.push("- Review whether the continuation check is firing after tasks were already closed; repeated `no_pending` events usually mean the prompt landed too late to help.");
+    }
+    if (topReason?.reasonCode === "todo_continuation_stop_guard" || stopGuards > 0) {
+        followUps.push("- Inspect recent stop-guard sessions for messages that ended early without validation proof; these are the clearest candidates for follow-up prompt tuning.");
+    }
+    if (probeFailures > 0 || injectFailures > 0) {
+        followUps.push(`- Investigate probe/injection failures first (${probeFailures} probe, ${injectFailures} inject); delivery gaps here can hide the true continuation rate.`);
+    }
+    if (maxOpenTodos >= 3) {
+        followUps.push(`- Sessions peaked at ${maxOpenTodos} open todos; verify whether operators need a tighter summary or earlier reminder before the list grows.`);
+    }
+    if (followUps.length === 0 && topReason) {
+        followUps.push(`- Start with the dominant reason bucket \`${topReason.reasonCode}\` and compare its latest sessions before changing the continuation policy.`);
+    }
+    return followUps;
+}
 export function renderTodoContinuationMarkdown(report) {
     const lines = [
         "# Todo Continuation Audit Report",
         "",
-        ...(report.metadata?.generatedAt ? [`- Generated at: ${report.metadata.generatedAt}`] : []),
+        ...(report.metadata?.generatedAt ? [`- Snapshot generated at: ${report.metadata.generatedAt}`] : []),
         ...(report.metadata?.branch ? [`- Branch: \`${report.metadata.branch}\``] : []),
         ...(report.metadata?.worktreePath ? [`- Worktree: \`${report.metadata.worktreePath}\``] : []),
-        ...(report.metadata?.sourceAuditPath ? [`- Source audit: \`${report.metadata.sourceAuditPath}\``] : []),
-        ...(report.metadata?.sourceAuditShared ? ["- Audit source scope: shared primary repo audit feed"] : []),
+        ...(report.metadata?.sourceAuditPath ? [`- Snapshot source audit: \`${report.metadata.sourceAuditPath}\``] : []),
+        ...(report.metadata?.sourceAuditShared ? ["- Snapshot source scope: shared primary repo audit feed"] : []),
         ...(typeof report.metadata?.invalidLines === "number"
             ? [`- Invalid audit lines skipped: ${report.metadata.invalidLines}`]
             : []),
         ...(typeof report.metadata?.sessionLimit === "number"
-            ? [`- Session rows shown: ${report.metadata.sessionLimit}`]
+            ? [`- Session snapshot rows requested: ${report.metadata.sessionLimit}`]
             : []),
         `- Total continuation events: ${report.totalEvents}`,
         `- Sessions with continuation evidence: ${report.totalSessions}`,
+        "- Reason counts summarize audit events by continuation reason code.",
+        "- Session rows show the latest retained snapshot per session, sorted by newest evidence.",
         ...(report.totalSessions > report.sessions.length
-            ? [`- Session rows rendered: ${report.sessions.length}`]
+            ? [`- Session snapshot rows rendered: ${report.sessions.length}`]
             : []),
-        "",
-        "## Reason counts",
     ];
+    const distributionInsights = describeDegenerateTodoDistribution(report);
+    const followUps = buildTodoFollowUps(report);
+    if (distributionInsights.length > 0) {
+        lines.push("", "## Distribution insights", ...distributionInsights);
+    }
+    if (followUps.length > 0) {
+        lines.push("", "## Operator follow-up", ...followUps);
+    }
+    lines.push("", "## Reason counts (event totals by continuation reason)");
     if (report.reasonCounts.length === 0) {
         lines.push("", "- No todo continuation audit events found.");
     }
@@ -138,7 +200,7 @@ export function renderTodoContinuationMarkdown(report) {
             lines.push("", `- ${item.reasonCode}: ${item.count}`);
         }
     }
-    lines.push("", "## Recent sessions");
+    lines.push("", "## Session snapshots (latest evidence per session)");
     if (report.sessions.length === 0) {
         lines.push("", "- No continuation sessions found.");
     }

@@ -53,6 +53,11 @@ test("assistant-message-timestamp prepends timestamp to experimental.text.comple
   );
 });
 
+test("assistant-message-timestamp uses zero-padded sortable dates", () => {
+  const timestamp = new Date(2026, 2, 3, 4, 5, 6).getTime();
+  assert.equal(formatAssistantMessageTimestamp(timestamp), "[2026-03-03 04:05:06]");
+});
+
 test("assistant-message-timestamp keeps session.idle fallback behavior", async () => {
   const timestamp = Date.parse("2026-03-13T12:34:56.000Z");
   const hook = createAssistantMessageTimestampHook({ enabled: true, now: () => timestamp });
@@ -105,7 +110,7 @@ test("assistant-message-timestamp prepends queued LLM fallback notice once on se
 
   await hook.event("session.idle", payload);
 
-  assert.match(payload.output.output, /^\[\d{4}-\d{1,2}-\d{1,2} \d{2}:\d{2}:\d{2}\]\n\[llm-decision-runtime\] LLM helper unavailable;/);
+  assert.match(payload.output.output, /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\n\[llm-decision-runtime\] LLM helper unavailable;/);
   assert.match(payload.output.output, /Done shipping the change\./);
 
   const nextPayload = {
@@ -134,6 +139,20 @@ test("assistant-message-timestamp skips already-prefixed text-complete output", 
   assert.equal(payload.output.text, `${existing}\nStill here.`);
 });
 
+test("assistant-message-timestamp still stamps bracket-leading non-prefixed output", async () => {
+  const timestamp = Date.parse("2026-03-13T12:34:56.000Z");
+  const hook = createAssistantMessageTimestampHook({ enabled: true, now: () => timestamp });
+  const payload = {
+    output: {
+      text: "[note] keep this visible.",
+    },
+  };
+
+  await hook.event("experimental.text.complete", payload);
+
+  assert.equal(payload.output.text, `${formatAssistantMessageTimestamp(timestamp)}\n[note] keep this visible.`);
+});
+
 test("gateway-core dispatches experimental.text.complete to the timestamp hook", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-assistant-timestamp-"));
   try {
@@ -145,7 +164,7 @@ test("gateway-core dispatches experimental.text.complete to the timestamp hook",
       output,
     );
 
-    assert.match(output.text, /^\[\d{4}-\d{1,2}-\d{1,2} \d{2}:\d{2}:\d{2}\]\nOctopuses have three hearts\.$/);
+    assert.match(output.text, /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]\nOctopuses have three hearts\.$/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

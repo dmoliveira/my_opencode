@@ -64,6 +64,7 @@ interface AssistantLifecyclePayload {
 }
 
 const TIMESTAMP_PREFIX_LABEL = "[";
+const TIMESTAMP_PREFIX_PATTERN = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\](?:\n|$)/;
 const TARGET_EVENT_TYPES = new Set([
   "message.updated",
   "message.part.updated",
@@ -73,8 +74,8 @@ const TARGET_EVENT_TYPES = new Set([
 export function formatAssistantMessageTimestamp(timestamp: number): string {
   const value = new Date(timestamp);
   const year = value.getFullYear();
-  const month = value.getMonth() + 1;
-  const day = value.getDate();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
   const hours = String(value.getHours()).padStart(2, "0");
   const minutes = String(value.getMinutes()).padStart(2, "0");
   const seconds = String(value.getSeconds()).padStart(2, "0");
@@ -87,7 +88,7 @@ function debugAuditEnabled(): boolean {
 
 function prependTimestampToText(text: string, timestamp: string): string {
   const trimmed = text.trim();
-  if (!trimmed || trimmed.startsWith(TIMESTAMP_PREFIX_LABEL)) {
+  if (!trimmed || TIMESTAMP_PREFIX_PATTERN.test(trimmed)) {
     return text;
   }
   return `${timestamp}\n${trimmed}`;

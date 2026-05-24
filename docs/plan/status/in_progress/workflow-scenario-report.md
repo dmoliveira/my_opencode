@@ -1,33 +1,20 @@
 # Workflow Scenario Reliability Report
 
-- Total scenarios: 20
-- Correct actions: 20
-- Accuracy: 100%
+- Total scenarios: 2
+- Correct actions: 1
+- Overall accuracy (correct / total scenarios): 50%
+- By Workflow shows correct / total scenario counts for each workflow bucket.
 
-## By Workflow
-- todo-continuation-enforcer: 14/14 (100%)
-- mistake-ledger: 2/2 (100%)
-- task-resume-info: 2/2 (100%)
-- done-proof-enforcer: 2/2 (100%)
+## By Workflow (correct / total scenarios per workflow)
+- mistake-ledger: 0/1 (0%)
+- todo-continuation-enforcer: 1/1 (100%)
 
-## Scenario Results
+## Failure focus
+
+- Start with `mistake-ledger` (0/1); it is the weakest workflow bucket in this run.
+
+- mistake-ledger-llm-deferral: FAIL | mistake-ledger | semantic_deferral | expected=write_ledger_entry actual=skip
+
+## Scenario Results (one row per scenario)
 - todo-pending-marker: PASS | todo-continuation-enforcer | pending_marker | expected=inject_prompt actual=inject_prompt
-- mistake-ledger-llm-deferral: PASS | mistake-ledger | semantic_deferral | expected=write_ledger_entry actual=write_ledger_entry
-- mistake-ledger-shadow-deferral: PASS | mistake-ledger | semantic_deferral_shadow | expected=no_ledger_entry actual=no_ledger_entry
-- task-resume-llm-continuation: PASS | task-resume-info | semantic_continuation | expected=append_continuation_hint actual=append_continuation_hint
-- task-resume-shadow-continuation: PASS | task-resume-info | semantic_continuation_shadow | expected=no_hint actual=no_hint
-- todo-mixed-signal-llm: PASS | todo-continuation-enforcer | llm_soft_cue | expected=inject_prompt actual=inject_prompt
-- todo-informational-in-progress: PASS | todo-continuation-enforcer | false_positive | expected=no_inject actual=no_inject
-- todo-remaining-epic-wait: PASS | todo-continuation-enforcer | false_positive | expected=no_inject actual=no_inject
-- todo-remaining-epic-continue-loop: PASS | todo-continuation-enforcer | progress_summary | expected=inject_prompt actual=inject_prompt
-- todo-next-safe-steps-armed: PASS | todo-continuation-enforcer | soft_cue | expected=inject_prompt actual=inject_prompt
-- todo-pending-then-complete: PASS | todo-continuation-enforcer | alternating_tasks | expected=no_inject actual=no_inject
-- todo-chained-progress-sequence: PASS | todo-continuation-enforcer | progress_sequence | expected=inject_3_times actual=inject_3_times
-- todo-multi-idle-cooldown: PASS | todo-continuation-enforcer | cooldown | expected=inject_once actual=inject_once
-- todo-stop-resume-cycle: PASS | todo-continuation-enforcer | stop_resume | expected=inject_once_after_resume actual=inject_once_after_resume
-- todo-epic-progress-pending: PASS | todo-continuation-enforcer | progress_summary | expected=inject_prompt actual=inject_prompt
-- todo-epic-progress-complete: PASS | todo-continuation-enforcer | progress_summary | expected=no_inject actual=no_inject
-- todo-soft-cue-armed: PASS | todo-continuation-enforcer | soft_cue | expected=inject_prompt actual=inject_prompt
-- todo-soft-cue-unarmed: PASS | todo-continuation-enforcer | soft_cue | expected=no_inject actual=no_inject
-- done-proof-missing-proof: PASS | done-proof-enforcer | missing_proof | expected=pending_validation actual=pending_validation
-- done-proof-complete: PASS | done-proof-enforcer | complete_proof | expected=keep_done actual=keep_done
+- mistake-ledger-llm-deferral: FAIL | mistake-ledger | semantic_deferral | expected=write_ledger_entry actual=skip

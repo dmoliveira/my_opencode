@@ -58,23 +58,39 @@ export function summarizeLlmScenarioResults(results: LlmScenarioResult[]): LlmSc
 }
 
 export function renderLlmScenarioMarkdown(summary: LlmScenarioSummary, results: LlmScenarioResult[]): string {
+  const failures = results.filter((result) => !result.correct)
+  const weakestHook = summary.byHook
+    .filter((item) => item.correct < item.total)
+    .sort((left, right) => left.accuracyPct - right.accuracyPct || right.total - left.total || left.hookId.localeCompare(right.hookId))[0]
   const lines: string[] = [
     "# LLM Scenario Reliability Report",
     "",
     `- Total scenarios: ${summary.total}`,
     `- Correct decisions: ${summary.correct}`,
-    `- Accuracy: ${summary.accuracyPct}%`,
+    `- Overall accuracy (correct / total scenarios): ${summary.accuracyPct}%`,
+    "- By Hook and By Request Type sections show correct / total scenario counts for each bucket.",
     "",
-    "## By Hook",
+    "## By Hook (correct / total scenarios per hook)",
   ]
   for (const item of summary.byHook) {
     lines.push(`- ${item.hookId}: ${item.correct}/${item.total} (${item.accuracyPct}%)`)
   }
-  lines.push("", "## By Request Type")
+  lines.push("", "## By Request Type (correct / total scenarios per request type)")
   for (const item of summary.byRequestType) {
     lines.push(`- ${item.requestType}: ${item.correct}/${item.total} (${item.accuracyPct}%)`)
   }
-  lines.push("", "## Scenario Results")
+
+  if (failures.length > 0) {
+    lines.push("", "## Failure focus")
+    if (weakestHook) {
+      lines.push("", `- Start with \`${weakestHook.hookId}\` (${weakestHook.correct}/${weakestHook.total}); it is the weakest hook bucket in this run.`)
+    }
+    for (const result of failures) {
+      lines.push("", `- ${result.id}: FAIL | ${result.hookId} | ${result.requestType} | expected=${result.expectedChar} actual=${result.actualChar || "(none)"}`)
+    }
+  }
+
+  lines.push("", "## Scenario Results (one row per scenario)")
   for (const result of results) {
     lines.push(
       `- ${result.id}: ${result.correct ? "PASS" : "FAIL"} | ${result.hookId} | ${result.requestType} | expected=${result.expectedChar} actual=${result.actualChar || "(none)"} | ${result.durationMs}ms`,

@@ -151,12 +151,39 @@ test("llm disagreement report renders markdown artifact", () => {
     ],
   })
   assert.match(markdown, /# LLM Disagreement Rollout Report/)
-  assert.match(markdown, /Generated at: 2026-03-11T09:00:00.000Z/)
+  assert.match(markdown, /Snapshot generated at: 2026-03-11T09:00:00.000Z/)
   assert.match(markdown, /Branch: `fix\/next-parity-item-2`/)
-  assert.match(markdown, /Source audit: `\/tmp\/gateway-events.jsonl`/)
-  assert.match(markdown, /Audit source scope: shared primary repo audit feed/)
+  assert.match(markdown, /Snapshot source audit: `\/tmp\/gateway-events.jsonl`/)
+  assert.match(markdown, /Snapshot source scope: shared primary repo audit feed/)
+  assert.match(markdown, /Recommendations aggregate disagreement totals per hook\./)
+  assert.match(markdown, /Top disagreement pairs aggregate rows by hook and deterministic -> AI meaning pair\./)
   assert.match(markdown, /Invalid audit lines skipped: 2/)
   assert.match(markdown, /agent-model-resolver: observe \(3\)/)
   assert.match(markdown, /thresholds: investigate>=10, tune>=4, observe>=1/)
   assert.match(markdown, /route_explore -> route_librarian \(3\)/)
+})
+
+test("llm disagreement report adds insight text for degenerate distributions", () => {
+  const markdown = renderLlmRolloutMarkdown({
+    summary: {
+      total: 4,
+      byHook: [{ hook: "unknown", count: 4 }],
+      pairs: [{ hook: "unknown", deterministicMeaning: "unknown", aiMeaning: "unknown", count: 4 }],
+    },
+    recommendations: [
+      {
+        hook: "unknown",
+        action: "tune",
+        reason: "moderate disagreement volume; refine prompt, context shaping, or fallback policy",
+        disagreementCount: 4,
+        thresholds: { investigateAt: 10, tuneAt: 4, observeAt: 1 },
+      },
+    ],
+  })
+
+  assert.match(markdown, /## Distribution insights/)
+  assert.match(markdown, /Hook distribution is fully concentrated in `unknown`/)
+  assert.match(markdown, /All disagreements currently fall into one meaning pair: `unknown -> unknown` for `unknown`\./)
+  assert.match(markdown, /All disagreement rows are dominated by `unknown` fields/)
+  assert.ok(markdown.indexOf("## Distribution insights") < markdown.indexOf("## Recommendations (hook-level disagreement totals)"))
 })

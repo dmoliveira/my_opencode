@@ -32,6 +32,12 @@ export interface TodoContinuationReport {
     totalSessions: number;
     reasonCounts: TodoContinuationReasonCount[];
     sessions: TodoContinuationSessionSummary[];
+    aggregateSignals?: {
+        probeFailures: number;
+        injectFailures: number;
+        stopGuards: number;
+        maxOpenTodos: number;
+    };
 }
 export interface TodoContinuationParsedReport {
     report: TodoContinuationReport;
