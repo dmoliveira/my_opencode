@@ -70,6 +70,8 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     gitProtectedPattern(String.raw `restore\s+--source\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
     gitProtectedPattern(String.raw `checkout\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
     ocProtectedPattern(String.raw `(?:current|next|queue)`, GIT_SAFE_ARGS),
+    ocProtectedPattern(String.raw `add\s+task`, GIT_REQUIRED_ARGS),
+    ocProtectedPattern(String.raw `add\s+session`, GIT_REQUIRED_ARGS),
     ocProtectedPattern(String.raw `resume`, GIT_REQUIRED_ARGS),
     ocProtectedPattern(String.raw `done`, GIT_REQUIRED_ARGS),
     ocProtectedPattern(String.raw `end-session`, GIT_REQUIRED_ARGS),

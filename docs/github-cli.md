@@ -12,7 +12,7 @@ Use this file for automation-safe GitHub CLI usage in this repo.
 ```bash
 gh issue list --state open --limit 20 --json number,title,state,url
 gh issue view <id> --json number,title,state,body,url
-gh pr status --json currentBranch,createdBy,mergeStateStatus
+gh pr view --json number,title,headRefName,mergeStateStatus,isDraft
 gh pr view <id> --json number,title,state,url,headRefName,baseRefName
 gh pr checks <id>
 gh repo view --json name,defaultBranchRef,url

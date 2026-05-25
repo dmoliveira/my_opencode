@@ -714,6 +714,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "rules-injector",
       "directory-agents-injector",
       "directory-readme-injector",
+      "stale-path-healer",
       "noninteractive-shell-guard",
       "write-existing-file-guard",
       "agent-reservation-guard",

@@ -70,6 +70,7 @@ import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summ
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
 import { createSessionRuntimeSystemContextHook } from "./hooks/session-runtime-system-context/index.js";
+import { createStalePathHealerHook } from "./hooks/stale-path-healer/index.js";
 import { createStopContinuationGuardHook } from "./hooks/stop-continuation-guard/index.js";
 import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blocker/index.js";
 import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-timeline/index.js";
@@ -837,6 +838,12 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         directory,
         enabled: cfg.directoryReadmeInjector.enabled,
         maxChars: cfg.directoryReadmeInjector.maxChars,
+      }),
+    ),
+    safeHook("stale-path-healer", () =>
+      createStalePathHealerHook({
+        directory,
+        enabled: true,
       }),
     ),
     safeHook("noninteractive-shell-guard", () =>

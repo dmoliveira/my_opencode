@@ -102,6 +102,8 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(
         rf"^{_SAFE_ENV_PREFIX}{_OC_BINARY}\s+(?:"
         rf"(?:current|next|queue)(?:\s+.+)?"
+        rf"|(?:add\s+task)(?:\s+.+)"
+        rf"|(?:add\s+session)(?:\s+.+)"
         rf"|(?:resume)(?:\s+.+)"
         rf"|(?:done)(?:\s+.+)"
         rf"|(?:end-session)(?:\s+.+)"

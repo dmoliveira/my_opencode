@@ -45,7 +45,7 @@ This repo-local quick ref exists because `AGENTS.md` points to `docs/tooling-qui
 
 - `git fetch --all --prune --quiet`
 - `git status --short --branch`
-- `gh pr status --json currentBranch,createdBy,mergeStateStatus`
+- `gh pr view --json number,title,headRefName,mergeStateStatus`
 - `gh issue list --state open --limit 20 --json number,title,state,url`
 - `gh repo view --json name,defaultBranchRef`
 
