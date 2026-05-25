@@ -1,13 +1,13 @@
 # Runtime DB schema
 
-OpenCode runtime history lives in `~/.local/share/opencode/opencode.db` by default.
+OpenCode runtime history lives in a platform-specific `opencode.db` path by default. This repo resolves it automatically in `scripts/session_command.py`, prefers `MY_OPENCODE_RUNTIME_DB_PATH` when set, and commonly lands at `~/.local/share/opencode/opencode.db` on Linux or `~/Library/Application Support/opencode/opencode.db` on macOS. Use `/session doctor --json` or `/gateway doctor --json` to confirm the exact resolved `runtime_db_path` before direct SQLite inspection when needed.
 
 Use these read-only inspection patterns:
 
 ```text
-sqlite3 -readonly ~/.local/share/opencode/opencode.db ".tables"
-sqlite3 -readonly ~/.local/share/opencode/opencode.db ".schema session"
-sqlite3 -readonly ~/.local/share/opencode/opencode.db "PRAGMA table_info(part);"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> ".tables"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> ".schema session"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> "PRAGMA table_info(part);"
 ```
 
 On protected branches, keep direct SQLite inspection to narrow read-only forms such as `.tables`, `.schema`, `PRAGMA table_info(...)`, and `SELECT ...`.
