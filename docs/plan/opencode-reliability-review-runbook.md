@@ -639,15 +639,15 @@ Use read-only inspection when a scenario needs deeper runtime evidence.
 
 Default DB path:
 
-- `~/.local/share/opencode/opencode.db`
+- resolved `runtime_db_path` from `/session doctor --json` or `/gateway doctor --json` (commonly `~/.local/share/opencode/opencode.db` on Linux or `~/Library/Application Support/opencode/opencode.db` on macOS)
 
 Read-only patterns:
 
 ```bash
-sqlite3 -readonly ~/.local/share/opencode/opencode.db ".tables"
-sqlite3 -readonly ~/.local/share/opencode/opencode.db ".schema session"
-sqlite3 -readonly ~/.local/share/opencode/opencode.db "SELECT id, directory, title FROM session ORDER BY time_updated DESC LIMIT 20;"
-sqlite3 -readonly ~/.local/share/opencode/opencode.db "SELECT p.session_id, json_extract(m.data, '$.role') AS role, json_extract(p.data, '$.type') AS part_type, json_extract(p.data, '$.tool') AS tool_name, datetime(p.time_created / 1000, 'unixepoch') AS created_at FROM part p JOIN message m ON m.id = p.message_id WHERE json_extract(p.data, '$.type') = 'tool' ORDER BY p.time_created DESC LIMIT 20;"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> ".tables"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> ".schema session"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> "SELECT id, directory, title FROM session ORDER BY time_updated DESC LIMIT 20;"
+sqlite3 -readonly <runtime_db_path_from_session_doctor> "SELECT p.session_id, json_extract(m.data, '$.role') AS role, json_extract(p.data, '$.type') AS part_type, json_extract(p.data, '$.tool') AS tool_name, datetime(p.time_created / 1000, 'unixepoch') AS created_at FROM part p JOIN message m ON m.id = p.message_id WHERE json_extract(p.data, '$.type') = 'tool' ORDER BY p.time_created DESC LIMIT 20;"
 ```
 
 Use SQLite inspection to answer:

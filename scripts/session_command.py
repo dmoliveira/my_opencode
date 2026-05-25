@@ -23,9 +23,47 @@ DEFAULT_DIGEST_PATH = Path(
     )
 ).expanduser()
 
-DEFAULT_RUNTIME_DB_PATH = Path(
-    os.environ.get("MY_OPENCODE_RUNTIME_DB_PATH", "~/.local/share/opencode/opencode.db")
-).expanduser()
+def _runtime_db_candidates() -> list[Path]:
+    configured = os.environ.get("MY_OPENCODE_RUNTIME_DB_PATH", "").strip()
+    if configured:
+        return [Path(configured).expanduser()]
+
+    home = Path.home()
+    candidates: list[Path] = []
+    xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+    if xdg_data_home:
+        candidates.append(Path(xdg_data_home).expanduser() / "opencode" / "opencode.db")
+    candidates.append(home / ".local" / "share" / "opencode" / "opencode.db")
+
+    if sys.platform == "darwin":
+        candidates.insert(0, home / "Library" / "Application Support" / "opencode" / "opencode.db")
+    elif sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+        appdata = os.environ.get("APPDATA", "").strip()
+        if local_appdata:
+            candidates.insert(0, Path(local_appdata) / "opencode" / "opencode.db")
+        if appdata:
+            candidates.append(Path(appdata) / "opencode" / "opencode.db")
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        normalized = str(candidate.expanduser())
+        if normalized and normalized not in seen:
+            deduped.append(Path(normalized))
+            seen.add(normalized)
+    return deduped
+
+
+def _default_runtime_db_path() -> Path:
+    candidates = _runtime_db_candidates()
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0] if candidates else Path("~/.local/share/opencode/opencode.db").expanduser()
+
+
+DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
 
 DEFAULT_STALE_SESSION_SECONDS = max(
     60,

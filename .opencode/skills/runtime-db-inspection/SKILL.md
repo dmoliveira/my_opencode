@@ -18,7 +18,7 @@ Inspect the OpenCode runtime SQLite store safely and extract only the evidence n
 - broad data forensics is unnecessary
 
 ## First Steps
-- Use `sqlite3 -readonly ~/.local/share/opencode/opencode.db ".tables"`.
+- Use `/session doctor --json` or `/gateway doctor --json` first when you need the exact resolved `runtime_db_path`, then run `sqlite3 -readonly <runtime_db_path_from_doctor> ".tables"` or the equivalent direct path.
 - Use `.schema` or `PRAGMA table_info(...)` before guessing columns.
 - Query `session.directory`, not a nonexistent `session.cwd`.
 - Use `json_extract(...)` for `message.data` and `part.data` fields.
