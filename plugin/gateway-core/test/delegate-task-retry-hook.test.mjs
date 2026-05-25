@@ -88,3 +88,33 @@ test("delegate-task-retry appends fallback guidance for aborted delegated tasks"
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("delegate-task-retry does not append abort guidance when a structured task result is present", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-delegate-task-retry-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["delegate-task-retry"],
+          disabled: [],
+        },
+        delegateTaskRetry: {
+          enabled: true,
+        },
+      },
+    })
+    const output = {
+      output: {
+        output: `<task_result>\nRecovered useful delegated output\n</task_result>\n[task CALL FAILED - IMMEDIATE RETRY REQUIRED]\nError Type: delegated_task_aborted\nFix: retry`,
+      },
+    }
+    await plugin["tool.execute.after"]({ tool: "task", sessionID: "session-task-4" }, output)
+    assert.equal(typeof output.output.output, "string")
+    assert.equal(output.output.output.match(/delegated_task_aborted/g)?.length ?? 0, 1)
+    assert.equal(output.output.output.match(/IMMEDIATE RETRY REQUIRED/g)?.length ?? 0, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

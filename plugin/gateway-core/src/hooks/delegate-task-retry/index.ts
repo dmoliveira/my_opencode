@@ -66,6 +66,10 @@ interface ToolAfterPayload {
   }
 }
 
+function hasStructuredTaskResult(output: string): boolean {
+  return /<task_result>[\s\S]*<\/task_result>/i.test(output)
+}
+
 // Detects known delegate task failures from task output.
 function detectDelegateTaskError(output: string): DelegateTaskErrorPattern | null {
   if (
@@ -76,6 +80,9 @@ function detectDelegateTaskError(output: string): DelegateTaskErrorPattern | nul
     return null
   }
   for (const pattern of DELEGATE_TASK_ERROR_PATTERNS) {
+    if (pattern.errorType === "delegated_task_aborted" && hasStructuredTaskResult(output)) {
+      continue
+    }
     if (output.includes(pattern.pattern)) {
       return pattern
     }

@@ -43,6 +43,9 @@ const DELEGATE_TASK_ERROR_PATTERNS = [
         action: "Do not leave the parent session silent; surface a fallback status update now.",
     },
 ];
+function hasStructuredTaskResult(output) {
+    return /<task_result>[\s\S]*<\/task_result>/i.test(output);
+}
 // Detects known delegate task failures from task output.
 function detectDelegateTaskError(output) {
     if (!output.includes("[ERROR]") &&
@@ -51,6 +54,9 @@ function detectDelegateTaskError(output) {
         return null;
     }
     for (const pattern of DELEGATE_TASK_ERROR_PATTERNS) {
+        if (pattern.errorType === "delegated_task_aborted" && hasStructuredTaskResult(output)) {
+            continue;
+        }
         if (output.includes(pattern.pattern)) {
             return pattern;
         }

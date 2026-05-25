@@ -10,6 +10,17 @@ test("protected shell policy allows chained oc status bundles", () => {
   )
 })
 
+test("protected shell policy allows codememory task/session creation on protected main", () => {
+  assert.equal(
+    isAllowedProtectedShellCommand('oc add task "Improve gateway stall recovery" --scope dmoliveira/my_opencode --kind feature --priority P1'),
+    true,
+  )
+  assert.equal(
+    isAllowedProtectedShellCommand('oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery'),
+    true,
+  )
+})
+
 test("protected shell policy allows readonly sqlite CTE selects", () => {
   assert.equal(
     isAllowedProtectedShellCommand('sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"'),

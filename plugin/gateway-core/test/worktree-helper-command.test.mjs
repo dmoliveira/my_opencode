@@ -60,6 +60,18 @@ test("worktree helper tells operators to run allowed oc done directly", () => {
   assert.ok(!("suggested_worktree" in report))
 })
 
+test("worktree helper tells operators to run allowed oc add commands directly", () => {
+  const taskReport = runHelper('oc add task "Improve gateway stall recovery" --scope dmoliveira/my_opencode --kind feature --priority P1')
+  const sessionReport = runHelper('oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery')
+
+  assert.equal(taskReport.result, "PASS")
+  assert.equal(taskReport.mode, "direct_run")
+  assert.deepEqual(taskReport.commands, ['oc add task "Improve gateway stall recovery" --scope dmoliveira/my_opencode --kind feature --priority P1'])
+  assert.equal(sessionReport.result, "PASS")
+  assert.equal(sessionReport.mode, "direct_run")
+  assert.deepEqual(sessionReport.commands, ['oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery'])
+})
+
 test("worktree helper tells operators to run allowed oc end-session directly", () => {
   const report = runHelper('oc end-session --outcome done session_64 --achievements "cleanup complete"')
 

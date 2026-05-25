@@ -77,7 +77,7 @@ Escalate only if needed:
 Prefer JSON over prose when the output feeds the runtime or another script:
 
 ```bash
-gh pr status --json currentBranch,createdBy,mergeStateStatus
+gh pr view --json number,title,headRefName,mergeStateStatus,isDraft
 gh issue list --json number,title,state,url
 gh repo view --json name,defaultBranchRef
 ```
