@@ -187,6 +187,106 @@ test("continuation hook bootstraps loop from runtime when state is missing", asy
   }
 })
 
+test("continuation hook degrades safely when idle message fetch fails", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-idle-fetch-fail",
+        objective: "continue safely",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 0,
+        startedAt: new Date().toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test-fixture",
+    })
+
+    let promptCalls = 0
+    const hook = createContinuationHook({
+      directory,
+      client: {
+        session: {
+          async messages() {
+            throw new Error("runtime unavailable")
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-idle-fetch-fail" },
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.iteration, 1)
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("continuation hook degrades safely when idle prompt injection fails", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-idle-prompt-fail",
+        objective: "continue safely",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 0,
+        startedAt: new Date().toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test-fixture",
+    })
+
+    const hook = createContinuationHook({
+      directory,
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [{ type: "text", text: "still working" }],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            throw new Error("inject failed")
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-idle-prompt-fail" },
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.iteration, 2)
+    assert.equal(state?.source, "gateway_loop_idle_continued")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("continuation hook ignores completion token when runtime is incomplete", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
   const runtimePath = join(directory, "autopilot_runtime.json")

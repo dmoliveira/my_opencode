@@ -2,6 +2,8 @@ export declare const REASON_CODES: {
     readonly LOOP_STARTED: "gateway_loop_started";
     readonly LOOP_STOPPED: "gateway_loop_stopped";
     readonly LOOP_IDLE_CONTINUED: "gateway_loop_idle_continued";
+    readonly LOOP_IDLE_MESSAGES_FAILED: "gateway_loop_idle_messages_failed";
+    readonly LOOP_IDLE_PROMPT_FAILED: "gateway_loop_idle_prompt_failed";
     readonly LOOP_MAX_ITERATIONS: "gateway_loop_max_iterations_reached";
     readonly LOOP_COMPLETED_PROMISE: "gateway_loop_promise_detected";
     readonly LOOP_COMPLETED_OBJECTIVE: "gateway_loop_objective_completed";

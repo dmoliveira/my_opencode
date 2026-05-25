@@ -320,11 +320,22 @@ export function createContinuationHook(options: {
 
       const client = options.client?.session
       if (client) {
-        const response = await client.messages({
-          path: { id: sessionId },
-          query: { directory },
-        })
-        const text = lastAssistantText(Array.isArray(response.data) ? response.data : [])
+        let text = ""
+        try {
+          const response = await client.messages({
+            path: { id: sessionId },
+            query: { directory },
+          })
+          text = lastAssistantText(Array.isArray(response.data) ? response.data : [])
+        } catch {
+          writeGatewayEventAudit(directory, {
+            hook: "continuation",
+            stage: "skip",
+            reason_code: REASON_CODES.LOOP_IDLE_MESSAGES_FAILED,
+            session_id: sessionId,
+          })
+          return
+        }
         if (isLoopComplete(state, text)) {
           const runtime = loadAutopilotRuntime()
           if (runtimeBlocksCompletion(runtime, state)) {
@@ -411,19 +422,29 @@ export function createContinuationHook(options: {
           return
         }
         const mode = options.keywordDetector?.modeForSession(sessionId) ?? null
-        const injected = await injectHookMessage({
-          session: client,
-          sessionId,
-          content: continuationPrompt(state, mode),
-          directory,
-        })
-        writeGatewayEventAudit(directory, {
-          hook: "continuation",
-          stage: injected ? "inject" : "skip",
-          reason_code: injected ? "idle_prompt_injected" : "idle_prompt_inject_failed",
-          session_id: sessionId,
-          iteration: active.iteration,
-        })
+        try {
+          const injected = await injectHookMessage({
+            session: client,
+            sessionId,
+            content: continuationPrompt(state, mode),
+            directory,
+          })
+          writeGatewayEventAudit(directory, {
+            hook: "continuation",
+            stage: injected ? "inject" : "skip",
+            reason_code: injected ? "idle_prompt_injected" : "idle_prompt_inject_failed",
+            session_id: sessionId,
+            iteration: active.iteration,
+          })
+        } catch {
+          writeGatewayEventAudit(directory, {
+            hook: "continuation",
+            stage: "skip",
+            reason_code: REASON_CODES.LOOP_IDLE_PROMPT_FAILED,
+            session_id: sessionId,
+            iteration: active.iteration,
+          })
+        }
       }
       return
     },
