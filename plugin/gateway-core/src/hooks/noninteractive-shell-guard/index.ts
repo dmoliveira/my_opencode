@@ -18,6 +18,41 @@ interface ParsedCommand {
   args: string[]
 }
 
+function interactiveRemediationHint(command: string): string {
+  const lower = command.trim().toLowerCase()
+  if (/\bgit\s+add\s+-p\b/.test(lower)) {
+    return "Use `git add <path>` or `git add .` instead of patch mode."
+  }
+  if (/\bgit\s+rebase\s+-i\b/.test(lower)) {
+    return "Use non-interactive `git rebase` flows, or perform the interactive rebase manually outside gateway automation."
+  }
+  if (/\b(vim|vi|nano|emacs)\b/.test(lower)) {
+    return "Use file-edit tools or scripted file writes instead of launching an editor."
+  }
+  if (/\b(less|more|man)\b/.test(lower)) {
+    return "Use `--help`, targeted file reads, or `git --no-pager ...` style commands instead of pagers/manual pages."
+  }
+  if (/\bnpm\s+install\b/.test(lower) && !/--yes\b/.test(lower)) {
+    return "Use `npm install --yes`."
+  }
+  if (/\byarn\s+install\b/.test(lower) && !/--non-interactive\b/.test(lower)) {
+    return "Use `yarn install --non-interactive`."
+  }
+  if (/\bpnpm\s+install\b/.test(lower) && !/--reporter\s*=\s*silent\b/.test(lower)) {
+    return "Use `pnpm install --reporter=silent`."
+  }
+  if (/\bapt(?:-get)?\s+install\b/.test(lower) && !/\s-y\b/.test(lower)) {
+    return "Use apt install commands with `-y`."
+  }
+  if (/^\s*(python3?|node)\s*$/.test(lower)) {
+    return "Use script mode like `python -c`, `node -e`, or a file path instead of a REPL."
+  }
+  if (/\bgit\s+commit\b/.test(lower) && !/(^|\s)-m(\s|$)/.test(lower)) {
+    return 'Use `git commit -m "message"`.'
+  }
+  return "Use non-interactive flags or scripted command execution."
+}
+
 function baseCommandName(binary: string): string {
   const normalized = binary.trim().toLowerCase()
   if (!normalized) {
@@ -336,8 +371,10 @@ export function createNoninteractiveShellGuardHook(options: {
         stage: "skip",
         reason_code: "interactive_command_blocked",
         session_id: sessionId,
+        blocked_command: updatedCommand,
       })
-      throw new Error(`[noninteractive-shell-guard] ${message}`)
+      const hint = interactiveRemediationHint(updatedCommand)
+      throw new Error(`[noninteractive-shell-guard] ${message} Blocked command: ${updatedCommand}. ${hint}`)
     },
   }
 }

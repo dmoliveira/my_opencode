@@ -32,7 +32,7 @@ test("noninteractive-shell-guard blocks interactive and prompt-prone shell comma
         { tool: "bash", sessionID: "session-noninteractive" },
         { args: { command: "git add -p" } },
       ),
-      /noninteractive-shell-guard/,
+      /git add <path>|git add \\./,
     )
 
     await assert.rejects(
@@ -46,6 +46,39 @@ test("noninteractive-shell-guard blocks interactive and prompt-prone shell comma
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-noninteractive" },
       { args: { command: "npm install --yes" } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard includes editor remediation for interactive commands", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: false,
+          envPrefixes: [],
+          prefixCommands: [],
+          blockedPatterns: ["\\bvim\\b"],
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-editor-blocked" },
+        { args: { command: "vim README.md" } },
+      ),
+      /file-edit tools or scripted file writes/i,
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
