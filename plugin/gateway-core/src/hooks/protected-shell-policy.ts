@@ -10,6 +10,7 @@ const PROTECTED_BRANCH_REF = String.raw`(?:main|master)`
 const SQLITE_SAFE_FLAG = String.raw`(?:-readonly|-header|-column|-csv|-json|-line|-list)`
 const GH_PROTECTED_BINARY = String.raw`${OPTIONAL_RTK_WRAPPER}(?:[^\s;&|]*/)?gh`
 const OC_PROTECTED_BINARY = String.raw`(?:[^\s;&|]*/)?oc`
+const PYTHON_PROTECTED_BINARY = String.raw`(?:[^\s;&|]*/)?python3?`
 const TRUE_PATTERN = new RegExp(String.raw`^${SAFE_ENV_PREFIX}true$`, "i")
 const PRINTF_LITERAL_PATTERN = new RegExp(
   String.raw`^${SAFE_ENV_PREFIX}printf\s+(?:'[^']*'|"[^"]*")(?:\s+(?:'[^']*'|"[^"]*"))*$`,
@@ -90,6 +91,8 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
   ocProtectedPattern(String.raw`resume`, GIT_REQUIRED_ARGS),
   ocProtectedPattern(String.raw`done`, GIT_REQUIRED_ARGS),
   ocProtectedPattern(String.raw`end-session`, GIT_REQUIRED_ARGS),
+  protectedPattern(String.raw`${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+doctor(?:\s+[^;&|]+)*`),
+  protectedPattern(String.raw`${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-stale(?:\s+[^;&|]+)*`),
   protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+auth\s+status(?:\s+[^;&|]+)*`),
   protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+view(?:\s+[^;&|]+)*`),
   protectedPattern(String.raw`${GH_PROTECTED_BINARY}\s+pr\s+checks(?:\s+[^;&|]+)*`),
