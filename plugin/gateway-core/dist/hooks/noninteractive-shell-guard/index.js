@@ -1,6 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 function interactiveRemediationHint(command) {
     const lower = command.trim().toLowerCase();
+    const parsed = parseCommand(command);
+    const binary = baseCommandName(parsed.binary);
+    const argsLower = parsed.args.map((item) => item.toLowerCase());
     if (/\bgit\s+add\s+-p\b/.test(lower)) {
         return "Use `git add <path>` or `git add .` instead of patch mode.";
     }
@@ -25,10 +28,16 @@ function interactiveRemediationHint(command) {
     if (/\bapt(?:-get)?\s+install\b/.test(lower) && !/\s-y\b/.test(lower)) {
         return "Use apt install commands with `-y`.";
     }
+    if (binary === "gh" && argsLower[1] === "pr" && argsLower[2] === "create") {
+        if (hasAnyFlag(argsLower, ["--web", "-w", "--editor", "-e"])) {
+            return "Use scripted `gh pr create` flags like `--title`, `--body-file`, or `--fill-verbose` instead of browser/editor flows.";
+        }
+        return "Use non-interactive `gh pr create --title \"...\" --body-file <path>` or `gh pr create --fill-verbose`.";
+    }
     if (/^\s*(python3?|node)\s*$/.test(lower)) {
         return "Use script mode like `python -c`, `node -e`, or a file path instead of a REPL.";
     }
-    if (/\bgit\s+commit\b/.test(lower) && !/(^|\s)-m(\s|$)/.test(lower)) {
+    if (binary === "git" && argsLower[1] === "commit" && !argsLower.some((item) => item === "-m" || item.startsWith("-m"))) {
         return 'Use `git commit -m "message"`.';
     }
     return "Use non-interactive flags or scripted command execution.";
@@ -221,7 +230,7 @@ function violation(command, blockedPatterns) {
     const argsLower = parsed.args.map((item) => item.toLowerCase());
     if (binary === "gh" && argsLower[1] === "pr" && argsLower[2] === "create") {
         if (hasAnyFlag(argsLower, ["--web", "-w", "--editor", "-e"])) {
-            return "Use scripted `gh pr create` flags in non-interactive sessions, not browser/editor flows.";
+            return "Use scripted `gh pr create` flags like `--title`, `--body-file`, or `--fill-verbose` in non-interactive sessions, not browser/editor flows.";
         }
         if (!isScriptedGhPrCreate(binary, argsLower)) {
             return "Use non-interactive gh PR creation format: `gh pr create --title \"...\" --body \"...\"` (or `--body-file` / `--fill`).";

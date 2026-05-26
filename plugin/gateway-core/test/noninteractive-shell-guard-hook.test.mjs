@@ -85,6 +85,72 @@ test("noninteractive-shell-guard includes editor remediation for interactive com
   }
 })
 
+test("noninteractive-shell-guard includes gh pr create remediation for browser/editor flows", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: false,
+          envPrefixes: [],
+          prefixCommands: [],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-gh-create-web" },
+        { args: { command: "gh pr create --web" } },
+      ),
+      /--title|--body-file|--fill-verbose/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("noninteractive-shell-guard includes git commit remediation without -m", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: false,
+          envPrefixes: [],
+          prefixCommands: [],
+          blockedPatterns: [],
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-git-commit-blocked" },
+        { args: { command: "git commit" } },
+      ),
+      /git commit -m/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 
 test("noninteractive-shell-guard prefixes git commands with non-interactive env", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
