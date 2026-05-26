@@ -151,6 +151,36 @@ test("noninteractive-shell-guard includes git commit remediation without -m", as
   }
 })
 
+test("noninteractive-shell-guard ignores blocked-pattern words inside quoted commit text", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["noninteractive-shell-guard"],
+          disabled: ["dependency-risk-guard"],
+        },
+        noninteractiveShellGuard: {
+          enabled: true,
+          injectEnvPrefix: false,
+          envPrefixes: [],
+          prefixCommands: [],
+          blockedPatterns: ["\\bmore\\b", "\\bman\\b"],
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-quoted-more-text" },
+      { args: { command: 'git commit -m "more actionable docs"' } },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 
 test("noninteractive-shell-guard prefixes git commands with non-interactive env", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-noninteractive-"))

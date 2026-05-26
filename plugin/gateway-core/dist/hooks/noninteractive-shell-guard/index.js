@@ -92,6 +92,53 @@ function tokenizeShellWords(command) {
     }
     return tokens;
 }
+function stripQuotedText(command) {
+    let result = "";
+    let quote = null;
+    for (let index = 0; index < command.length; index += 1) {
+        const char = command[index] ?? "";
+        if (quote) {
+            if (char === quote) {
+                quote = null;
+            }
+            else if (char === "\\" && quote === '"' && index + 1 < command.length) {
+                index += 1;
+            }
+            continue;
+        }
+        if (char === '"' || char === "'") {
+            quote = char;
+            continue;
+        }
+        result += char;
+    }
+    return result;
+}
+function sanitizeBlockedPatternTarget(command) {
+    const stripped = stripQuotedText(command);
+    const tokens = tokenizeShellWords(stripped);
+    const sanitized = [];
+    const valueFlags = new Set(["-m", "--message", "-t", "--title", "-b", "--body", "-f", "--body-file"]);
+    for (let index = 0; index < tokens.length; index += 1) {
+        const token = tokens[index] ?? "";
+        const lower = token.toLowerCase();
+        if (valueFlags.has(lower)) {
+            sanitized.push(token);
+            if (index + 1 < tokens.length) {
+                sanitized.push("<value>");
+                index += 1;
+            }
+            continue;
+        }
+        const equalIndex = token.indexOf("=");
+        if (equalIndex > 0 && valueFlags.has(token.slice(0, equalIndex).toLowerCase())) {
+            sanitized.push(`${token.slice(0, equalIndex)}=<value>`);
+            continue;
+        }
+        sanitized.push(token);
+    }
+    return sanitized.join(" ");
+}
 function shouldPrefixCommand(command, prefixes) {
     const binary = baseCommandName(parseCommand(command).binary);
     if (!binary) {
@@ -219,8 +266,9 @@ function violation(command, blockedPatterns) {
     if (!value) {
         return null;
     }
+    const blockedPatternTarget = sanitizeBlockedPatternTarget(value);
     for (const pattern of blockedPatterns) {
-        if (pattern.test(value)) {
+        if (pattern.test(blockedPatternTarget)) {
             return "Interactive command detected. Use non-interactive flags or scripted command execution.";
         }
     }
