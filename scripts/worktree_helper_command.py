@@ -58,6 +58,7 @@ _SAFE_ENV_PREFIX = rf"(?:(?:env\s+)?(?:{_SAFE_ENV_KEY}={_SHELL_TOKEN}\s+)*)"
 _OC_BINARY = r"(?:[^\s;&|]*/)?oc"
 _GIT_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?git"
 _GH_BINARY = r"(?:(?:[^\s;&|]*/)?rtk\s+)?(?:[^\s;&|]*/)?gh"
+_PYTHON_BINARY = r"(?:[^\s;&|]*/)?python3?"
 _SQLITE_SAFE_FLAG = r"(?:-readonly|-header|-column|-csv|-json|-line|-list)"
 _DEFAULT_EXECUTE_TIMEOUT_SECONDS = 10.0
 _TRUE_PATTERN = re.compile(rf"^{_SAFE_ENV_PREFIX}true\s*$")
@@ -123,6 +124,8 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+pr\s+(?:view|checks)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+repo\s+(?:view|create|edit)(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_PYTHON_BINARY}\s+[^;&|]*scripts/session_command\.py\s+doctor(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_PYTHON_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-stale(?:\s+[^;&|]+)*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+ci\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),

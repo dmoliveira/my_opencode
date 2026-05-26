@@ -72,6 +72,18 @@ test("worktree helper tells operators to run allowed oc add commands directly", 
   assert.deepEqual(sessionReport.commands, ['oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery'])
 })
 
+test("worktree helper treats direct session doctor and repair commands as protected-main safe guidance", () => {
+  const doctorReport = runHelper("python3 scripts/session_command.py doctor --json")
+  const repairReport = runHelper("python3 scripts/session_command.py repair-stale --stale-seconds 300 --apply --json")
+
+  assert.equal(doctorReport.result, "PASS")
+  assert.equal(doctorReport.mode, "direct_run")
+  assert.deepEqual(doctorReport.commands, ["python3 scripts/session_command.py doctor --json"])
+  assert.equal(repairReport.result, "PASS")
+  assert.equal(repairReport.mode, "direct_run")
+  assert.deepEqual(repairReport.commands, ["python3 scripts/session_command.py repair-stale --stale-seconds 300 --apply --json"])
+})
+
 test("worktree helper tells operators to run allowed oc end-session directly", () => {
   const report = runHelper('oc end-session --outcome done session_64 --achievements "cleanup complete"')
 

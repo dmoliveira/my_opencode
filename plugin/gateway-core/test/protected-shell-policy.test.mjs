@@ -21,6 +21,17 @@ test("protected shell policy allows codememory task/session creation on protecte
   )
 })
 
+test("protected shell policy allows direct session doctor and repair commands on protected main", () => {
+  assert.equal(
+    isAllowedProtectedShellCommand("python3 scripts/session_command.py doctor --json"),
+    true,
+  )
+  assert.equal(
+    isAllowedProtectedShellCommand("python3 scripts/session_command.py repair-stale --stale-seconds 300 --apply --json"),
+    true,
+  )
+})
+
 test("protected shell policy allows readonly sqlite CTE selects", () => {
   assert.equal(
     isAllowedProtectedShellCommand('sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"'),
