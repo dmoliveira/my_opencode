@@ -40,7 +40,7 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
         "title": "Browser UX audit and polish",
         "summary": "Use Playwright/browser tooling to inspect the full experience, capture UI/UX friction, and improve the product with visible polish.",
         "agent": "orchestrator",
-        "mcp_profiles": [],
+        "mcp_profiles": ["playwright", "web"],
         "startup": [
             "/browser ensure --json",
             "/mcp profile playwright",
