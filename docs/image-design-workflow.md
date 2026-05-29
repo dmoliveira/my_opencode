@@ -6,6 +6,7 @@ Use this workflow when you want structured UX/design help, repo-native visual ar
 
 - `/ox-design`: concepting, design critique, prompt/spec planning, artifact naming, and UX direction.
 - `/image`: direct image prompt/build flow for repo-native artifacts under `artifacts/design/`.
+- `codex-image-generation`: dedicated runtime skill for prompt-to-PNG execution, especially when local Codex access is preferred.
 - `/ox-ux`: browser-first audit of the real implemented experience.
 - `/browser`: narrow bridge for browser-owned blockers and final visual verification.
 
@@ -81,6 +82,7 @@ Access note:
 - If you want Codex as your usual local preference, use `/image preference set codex-experimental`; the hardcoded stable default remains `openai_api` when no preference is configured.
 - If you want images to land under the current working directory or Desktop by default, use `/image location set cwd-artifacts` or `/image location set desktop`.
 - Use `/image access --json` when you want the runtime to explain that distinction explicitly.
+- Use the `codex-image-generation` skill when the agent needs a deterministic command recipe for prompt -> generate -> PNG artifact -> review.
 
 Required env:
 
@@ -108,3 +110,11 @@ Optional env overrides:
 - Use official OpenAI image tooling terminology such as **OpenAI image generation** or **GPT Image models**.
 - Do not treat exploratory images as product truth until the implemented UI is reviewed in-browser.
 - Prefer one strong direction over noisy batches.
+
+## JSON fields to watch
+
+For `/image generate --json`, report these fields back to the user:
+- `provider`
+- `output`
+- `metadata`
+- for Codex path also `resolved_generated_image` and `resolved_generated_image_selection`
