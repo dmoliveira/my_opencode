@@ -54,7 +54,8 @@
       "command": [
         "npx",
         "-y",
-        "@playwright/mcp@latest"
+        "@playwright/mcp@latest",
+        "--caps=testing,network,storage,vision,devtools,pdf"
       ],
       "enabled": false
     },

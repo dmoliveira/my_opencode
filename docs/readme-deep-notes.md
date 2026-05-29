@@ -931,7 +931,7 @@ Recommended defaults:
 - start with `playwright`
 - run `/browser ensure --json` before browser-first tasks so provider drift and missing deps become explicit remediation instead of a vague unavailable-tool reply
 - switch to `agent-browser` only when you need those capabilities
-- run `/browser doctor --json` after changes to confirm dependency readiness
+- run `/browser doctor --json` after changes to inspect selected-provider config, capability drift, and dependency warnings; treat `/browser ensure --json` as the primary readiness/remediation check
 
 Wizard support:
 - `install_wizard.py` supports `--browser-profile <playwright|agent-browser>`

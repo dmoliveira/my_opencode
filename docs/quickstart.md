@@ -35,6 +35,10 @@ Optional capability checks when you need them: [h:371d5a53]
 /tmux doctor --json [h:ae3cceae]
 ``` [h:0a584b58]
  [h:47685be0]
+For advanced browser UX work, keep this split:
+- `/browser ensure --json` + `/ox-ux ...` for normal website/app audits
+- `playwright-cli install --skills` + `docs/playwright-ux-scenarios.md` for canvas, WebGL, browser-game, or long exploratory loops
+
 Exploratory examples after startup is healthy: [h:9e27aaf8]
  [h:e0a80255]
 ```text [h:f71fe560]

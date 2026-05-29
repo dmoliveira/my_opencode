@@ -85,6 +85,13 @@ Recommended first step for browser-first work:
 
 This removes the common first-run friction where the agent only says Playwright/browser tooling is unavailable. `ensure` normalizes the selected provider back to `playwright`, reports exact missing binaries, and points to the next remediation command instead of leaving the workflow stuck.
 
+Execution split:
+- Use Playwright MCP for standard browser-first site and app audits.
+- Use `playwright-cli` first for advanced canvas, WebGL, browser-game, or long persistent exploratory loops.
+- Keep `/ox-ux` as the routing contract either way so the agent still frames the work as a full UX audit instead of ad hoc browser poking.
+
+Detailed scenario templates: `docs/playwright-ux-scenarios.md`
+
 ### `/ox-design`
 
 Design concept, asset-planning, and image-ready workflow.

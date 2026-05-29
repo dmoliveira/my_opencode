@@ -25,6 +25,7 @@ Choose the smallest slash-command family that matches the task instead of restat
 ## Working Rules
 - Route to the narrowest command family first, then hand off to the specific workflow or skill.
 - Use `/ox-design` for concepting and `/browser ensure --json`, `/mcp profile playwright`, then `/ox-ux` for real implemented web UI validation.
+- When the implemented UI is canvas-heavy, WebGL-based, or browser-game-like, still route to `playwright-web-ux`, but prefer `playwright-cli` as the advanced execution path inside that workflow.
 - Use `/tmux` for terminal-session state, not browser state.
 - Use `/mcp` for managed MCP profiles and server toggling.
 - Use `/workflow`, `/delivery`, or `/ship` for reusable delivery orchestration.

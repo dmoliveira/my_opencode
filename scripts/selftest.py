@@ -17791,6 +17791,18 @@ jobs:
             and browser_doctor_playwright_report.get("selected_ready") is True,
             "browser doctor should report ready selected provider after reset",
         )
+        playwright_provider_report = (
+            browser_doctor_playwright_report.get("providers", {}).get("playwright", {})
+        )
+        expect(
+            "--caps=testing,network,storage,vision,devtools,pdf"
+            in playwright_provider_report.get("args", []),
+            "browser doctor should expose the full Playwright MCP capability flag",
+        )
+        expect(
+            playwright_provider_report.get("missing_capabilities", []) == [],
+            "browser doctor should report no missing Playwright capabilities in default config",
+        )
 
         browser_profile_agent_again = subprocess.run(
             [sys.executable, str(BROWSER_SCRIPT), "profile", "agent-browser"],
@@ -17827,6 +17839,13 @@ jobs:
         expect(
             "run /mcp profile playwright" in ensure_quick_fixes,
             "browser ensure should recommend the playwright MCP profile",
+        )
+        ensure_playwright_provider = (
+            browser_ensure_report.get("providers", {}).get("playwright", {})
+        )
+        expect(
+            ensure_playwright_provider.get("missing_capabilities", []) == [],
+            "browser ensure should keep the default Playwright capability set intact",
         )
 
         browser_cfg_after_ensure = load_json_file(browser_config_path)
@@ -21407,6 +21426,27 @@ version: 1
         expect(
             "Top Uni" in str(ox_ux_report.get("prompt_block") or ""),
             "ox ux prompt block should include linked Top Uni context",
+        )
+
+        mcp_doctor = subprocess.run(
+            [sys.executable, str(MCP_SCRIPT), "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(mcp_doctor.returncode == 0, "mcp doctor should succeed")
+        mcp_doctor_report = parse_json_output(mcp_doctor.stdout)
+        playwright_server = (mcp_doctor_report.get("servers") or {}).get("playwright", {})
+        expect(
+            "--caps=testing,network,storage,vision,devtools,pdf"
+            in playwright_server.get("command", []),
+            "mcp doctor should expose the full Playwright MCP capability flag",
+        )
+        expect(
+            playwright_server.get("missing_capabilities", []) == [],
+            "mcp doctor should report no missing Playwright capabilities in default config",
         )
 
         ox_review = subprocess.run(
