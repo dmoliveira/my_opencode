@@ -111,11 +111,11 @@ Examples:
 /ox-design --target artifacts/design/source/onboarding-reference.png --goal "turn this into three stronger redesign directions"
 ```
 
-Recommended first step for design work with later image generation:
+Recommended first step for design work with later image generation or Codex prompt-to-PNG flow:
 
 ```text
-/browser ensure --json
-/mcp profile playwright
+/image access --json
+/image location show --json
 /image doctor --json
 ```
 
