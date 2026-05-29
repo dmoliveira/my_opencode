@@ -20,7 +20,7 @@ Produce one strong UX or design direction with minimal tokens and clear next act
 ## First Steps
 - For concepting, use `/ox-design ...`.
 - If the task turns into implemented web UI validation, switch to `playwright-web-ux` or run `/browser ensure --json`, `/mcp profile playwright`, then `/ox-ux ...`.
-- If image generation matters, check `/image access --json` and `/image location show --json`.
+- If image generation matters, check `/image access --json` and `/image location show --json`, then use `codex-image-generation` for the prompt-to-PNG flow.
 
 ## Working Rules
 - Optimize for clarity, hierarchy, trust, feedback, and calm UI.
@@ -37,9 +37,11 @@ Produce one strong UX or design direction with minimal tokens and clear next act
 - Main friction points are named.
 - One preferred direction is proposed.
 - Artifact or prompt next step is defined when needed.
+- If generation is requested, the provider path (`openai_api` vs `codex-experimental`) is made explicit.
 
 ## References
 - `docs/image-design-workflow.md`
+- `codex-image-generation`
 - `docs/ox-command-pack.md`
 - `docs/command-handbook.md`
 - `agent/experience-designer.md`
