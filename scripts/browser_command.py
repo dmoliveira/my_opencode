@@ -18,14 +18,22 @@ from config_layering import (  # type: ignore
     save_config as save_config_file,
 )
 
-
 SECTION = "browser"
 DEFAULT_PROVIDER = "playwright"
+PLAYWRIGHT_MCP_CAPABILITIES = [
+    "testing",
+    "network",
+    "storage",
+    "vision",
+    "devtools",
+    "pdf",
+]
+PLAYWRIGHT_MCP_CAPS_FLAG = "--caps=" + ",".join(PLAYWRIGHT_MCP_CAPABILITIES)
 PROVIDERS = {
     "playwright": {
         "enabled": True,
         "command": "npx",
-        "args": ["@playwright/mcp@latest"],
+        "args": ["@playwright/mcp@latest", PLAYWRIGHT_MCP_CAPS_FLAG],
         "doctor": {
             "required_binaries": ["node", "npx"],
             "install_hint": "npm i -D @playwright/mcp",
@@ -106,6 +114,14 @@ def selected_provider(state: dict[str, Any]) -> str:
     return str(provider) if provider is not None else ""
 
 
+def parse_capabilities(args: list[str]) -> list[str]:
+    capabilities: list[str] = []
+    for item in args:
+        if item.startswith("--caps="):
+            capabilities.extend(part.strip() for part in item.split("=", 1)[1].split(",") if part.strip())
+    return list(dict.fromkeys(capabilities))
+
+
 def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
     if not isinstance(provider_cfg, dict):
         return {
@@ -115,6 +131,10 @@ def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
             "missing_binaries": [],
             "ready": False,
             "install_hint": "",
+            "args": [],
+            "capabilities": [],
+            "recommended_capabilities": [],
+            "missing_capabilities": [],
         }
 
     doctor_cfg = provider_cfg.get("doctor")
@@ -128,6 +148,11 @@ def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
         else []
     )
     missing = [binary for binary in required if shutil.which(binary) is None]
+    args = provider_cfg.get("args") if isinstance(provider_cfg.get("args"), list) else []
+    args = [str(item) for item in args]
+    capabilities = parse_capabilities(args)
+    recommended_capabilities = PLAYWRIGHT_MCP_CAPABILITIES if name == DEFAULT_PROVIDER else []
+    missing_capabilities = [cap for cap in recommended_capabilities if cap not in capabilities]
 
     return {
         "enabled": bool(provider_cfg.get("enabled", False)),
@@ -136,9 +161,10 @@ def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
         "missing_binaries": missing,
         "ready": not missing,
         "install_hint": str(doctor_cfg.get("install_hint") or ""),
-        "args": provider_cfg.get("args")
-        if isinstance(provider_cfg.get("args"), list)
-        else [],
+        "args": args,
+        "capabilities": capabilities,
+        "recommended_capabilities": recommended_capabilities,
+        "missing_capabilities": missing_capabilities,
         "name": name,
     }
 
@@ -260,18 +286,12 @@ def command_ensure(argv: list[str]) -> int:
             f"browser provider changed from '{original_provider or '(unset)'}' to '{DEFAULT_PROVIDER}'"
         )
 
-    missing = (
-        list(selected.get("missing_binaries", [])) if isinstance(selected, dict) else []
-    )
+    missing = list(selected.get("missing_binaries", [])) if isinstance(selected, dict) else []
     if missing:
         warnings.append(
             f"selected provider '{DEFAULT_PROVIDER}' missing binaries: {', '.join(str(item) for item in missing)}"
         )
-        install_hint = (
-            str(selected.get("install_hint") or "")
-            if isinstance(selected, dict)
-            else ""
-        )
+        install_hint = str(selected.get("install_hint") or "") if isinstance(selected, dict) else ""
         if install_hint:
             quick_fixes.append(install_hint)
         quick_fixes.append("run /mcp profile playwright")
@@ -280,8 +300,17 @@ def command_ensure(argv: list[str]) -> int:
         quick_fixes.append("run /mcp profile playwright")
         quick_fixes.append("proceed with /ox-ux or other browser-first workflow")
 
+    missing_capabilities = list(selected.get("missing_capabilities", [])) if isinstance(selected, dict) else []
+    if missing_capabilities:
+        warnings.append(
+            "selected provider 'playwright' missing recommended capabilities: "
+            + ", ".join(str(item) for item in missing_capabilities)
+        )
+        quick_fixes.append("run /mcp profile playwright")
+        quick_fixes.append("use playwright-cli for advanced canvas/game loops if MCP capability drift persists")
+
     report = {
-        "result": "PASS" if not missing else "WARN",
+        "result": "PASS" if not missing and not missing_capabilities else "WARN",
         **payload,
         "ensured_provider": DEFAULT_PROVIDER,
         "provider_changed": provider_changed,
@@ -343,6 +372,14 @@ def command_doctor(argv: list[str]) -> int:
             if install_hint:
                 quick_fixes.append(install_hint)
             quick_fixes.append(f"run /browser profile {provider}")
+        missing_capabilities = list(selected.get("missing_capabilities", []))
+        if provider == DEFAULT_PROVIDER and missing_capabilities:
+            warnings.append(
+                "selected provider 'playwright' missing recommended capabilities: "
+                + ", ".join(str(item) for item in missing_capabilities)
+            )
+            quick_fixes.append("run /mcp profile playwright")
+            quick_fixes.append("use playwright-cli for advanced canvas/game flows when MCP capability drift blocks the task")
 
     report = {
         "result": "PASS" if not problems else "FAIL",

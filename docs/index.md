@@ -22,6 +22,7 @@ This repo-local index exists because `AGENTS.md` and related startup docs refere
 - `operator-playbook.md`: operator-facing execution and incident flow
 - `parallel-wt-playbook.md`: worktree-first execution and safe reservation guidance
 - `command-handbook.md`: detailed slash-command reference
+- `playwright-ux-scenarios.md`: scenario templates for website, dashboard, resilience, and browser-game UX testing
 - `silent-first-command-defaults.md`: JSON-first and low-noise command defaults
 - `runtime-db-schema.md`: read-only SQLite/runtime inspection notes
 

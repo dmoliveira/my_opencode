@@ -54,7 +54,8 @@
       "command": [
         "npx",
         "-y",
-        "@playwright/mcp@latest"
+        "@playwright/mcp@latest",
+        "--caps=testing,network,storage,vision,devtools,pdf"
       ],
       "enabled": false
     },
@@ -192,7 +193,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before ship --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "browser": {
-      "description": "Manage browser automation provider profile (status|profile|doctor)",
+      "description": "Manage browser automation provider profile and readiness (status|profile|doctor|ensure)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before browser --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "autopilot": {
@@ -392,7 +393,8 @@
         "enabled": true,
         "command": "npx",
         "args": [
-          "@playwright/mcp@latest"
+          "@playwright/mcp@latest",
+          "--caps=testing,network,storage,vision,devtools,pdf"
         ],
         "doctor": {
           "required_binaries": [

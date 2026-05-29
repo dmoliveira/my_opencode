@@ -46,6 +46,14 @@ For browser-first work, start with:
 
 `/browser ensure --json` normalizes the selected browser provider back to `playwright` and returns exact missing dependency guidance when first-run browser friction would otherwise look like “Playwright is not installed”.
 
+The default Playwright MCP profile is configured with capability flags for `testing`, `network`, `storage`, `vision`, `devtools`, and `pdf` so the browser tool surface stays broad enough for assertions, auth-state control, canvas fallback, and evidence capture.
+
+Advanced posture:
+- Use Playwright MCP first for standard website and application UX audits.
+- Use `playwright-cli` first for advanced canvas, WebGL, browser-gaming, or long exploratory loops.
+- Install local CLI skills with `playwright-cli install --skills` when you want the agent to discover the advanced CLI command surface directly.
+- Treat `/browser ensure --json` as the main readiness/remediation step; use `/browser doctor --json` and `/mcp doctor --json` to inspect config, capability coverage, and warnings.
+
 Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
 
 Default posture: all managed MCPs start disabled until you enable a targeted profile or individual server.

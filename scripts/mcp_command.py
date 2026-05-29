@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -16,7 +14,6 @@ from config_layering import (  # type: ignore
     save_config as save_config_file,
 )
 
-
 CONFIG_PATH = resolve_write_path()
 SUPPORTED = (
     "context7",
@@ -30,12 +27,21 @@ TARGET_ALIASES = {
     "ghgrep": "gh_grep",
     "exa": "exa_search",
 }
+PLAYWRIGHT_MCP_CAPABILITIES = [
+    "testing",
+    "network",
+    "storage",
+    "vision",
+    "devtools",
+    "pdf",
+]
+PLAYWRIGHT_MCP_CAPS_FLAG = "--caps=" + ",".join(PLAYWRIGHT_MCP_CAPABILITIES)
 SERVER_DEFAULTS = {
     "context7": {"type": "remote", "url": "https://mcp.context7.com/mcp"},
     "gh_grep": {"type": "remote", "url": "https://mcp.grep.app"},
     "playwright": {
         "type": "local",
-        "command": ["npx", "-y", "@playwright/mcp@latest"],
+        "command": ["npx", "-y", "@playwright/mcp@latest", PLAYWRIGHT_MCP_CAPS_FLAG],
     },
     "exa_search": {"type": "remote", "url": "https://mcp.exa.ai/mcp"},
     "firecrawl": {"type": "local", "command": ["npx", "-y", "firecrawl-mcp"]},
@@ -78,6 +84,17 @@ def endpoint_label(entry: dict) -> str:
             parts = [str(item).strip() for item in command if str(item).strip()]
             return " ".join(parts)
     return ""
+
+
+def parse_capabilities(command: list[str]) -> list[str]:
+    capabilities: list[str] = []
+    for part in command:
+        text = str(part)
+        if text.startswith("--caps="):
+            capabilities.extend(
+                cap.strip() for cap in text.split("=", 1)[1].split(",") if cap.strip()
+            )
+    return list(dict.fromkeys(capabilities))
 
 
 def ensure_server_entry(mcp: dict, name: str) -> dict:
@@ -156,6 +173,12 @@ def collect_doctor(mcp: dict) -> dict:
         url = entry.get("url", "") if isinstance(entry.get("url"), str) else ""
         command_value = entry.get("command")
         command = command_value if isinstance(command_value, list) else []
+        capabilities = parse_capabilities(command)
+        missing_capabilities = (
+            [cap for cap in PLAYWRIGHT_MCP_CAPABILITIES if cap not in capabilities]
+            if name == "playwright"
+            else []
+        )
         state = status_line(entry)
         servers[name] = {
             "status": state,
@@ -163,6 +186,9 @@ def collect_doctor(mcp: dict) -> dict:
             "command": [str(part) for part in command],
             "type": kind,
             "configured": "true" if isinstance(mcp.get(name), dict) else "false",
+            "capabilities": capabilities,
+            "recommended_capabilities": PLAYWRIGHT_MCP_CAPABILITIES if name == "playwright" else [],
+            "missing_capabilities": missing_capabilities,
         }
 
         if not isinstance(mcp.get(name), dict):
@@ -176,10 +202,13 @@ def collect_doctor(mcp: dict) -> dict:
         elif kind == "local":
             if not command:
                 problems.append(f"{name} command is missing")
+            elif name == "playwright" and missing_capabilities:
+                warnings.append(
+                    "playwright command missing recommended capabilities: " + ", ".join(missing_capabilities)
+                )
         elif kind:
             problems.append(f"{name} type is invalid: {kind}")
 
-    enabled_count = sum(1 for name in SUPPORTED if servers[name]["status"] == "enabled")
     return {
         "result": "PASS" if not problems else "FAIL",
         "config": str(CONFIG_PATH),
@@ -188,11 +217,11 @@ def collect_doctor(mcp: dict) -> dict:
         "problems": problems,
         "quick_fixes": [
             "run /mcp profile research, /mcp profile web, or enable only the MCPs you need",
+            "keep playwright on the full-capability default so assertions, network/storage control, vision mode, and devtools remain available",
+            "use playwright-cli for advanced canvas, WebGL, and browser-game loops when the task needs longer token-efficient sessions",
             "set remote MCP URLs and local MCP commands in ~/.config/opencode/opencode.json under mcp",
             "use /mcp status to stay minimal until extra context is worth the cost",
-        ]
-        if problems or warnings
-        else [],
+        ] if problems or warnings else [],
     }
 
 
