@@ -7,7 +7,7 @@ compatibility: opencode claude-code
 
 ## Goal
 
-Review implemented web application code and flows from a bug-hunter perspective, then surface the highest-risk security findings without drifting into generic style review.
+Review implemented web application code and flows from a bug-hunter perspective, then surface the highest-risk security findings without drifting into generic style review or broad speculative checklists.
 
 ## Use When
 
@@ -29,6 +29,7 @@ Review implemented web application code and flows from a bug-hunter perspective,
 - Identify the data and actions that must be protected.
 - Review the current diff, touched routes, and validation evidence before broadening scope.
 - Prefer concrete exploit paths over generic best-practice lists.
+- Prefer the touched surface first; only widen the review when the same trust boundary clearly spans other files or routes.
 
 ## Priority Review Areas
 
@@ -67,6 +68,7 @@ Review implemented web application code and flows from a bug-hunter perspective,
 - Distinguish definite vulnerability, plausible risk, and follow-up hardening clearly.
 - Prefer file- and route-specific findings over a generic checklist dump.
 - Keep remediation minimal and practical; do not propose broad rewrites unless required for safety.
+- Limit routine output to the highest-value findings instead of exhaustively restating every category checked.
 - When user-visible behavior matters, pair this skill with browser validation or ship-readiness review instead of guessing from code alone.
 
 ## Output
@@ -74,13 +76,13 @@ Review implemented web application code and flows from a bug-hunter perspective,
 When reporting findings:
 
 1. Start with overall verdict: `blocked`, `needs follow-up`, or `no blocker found`.
-2. List findings by severity.
+2. List blocker findings first, then non-blocking hardening follow-ups only if they materially matter.
 3. For each finding, include:
    - affected file/path or route
    - issue type
    - why it is exploitable or risky
    - smallest sensible remediation
-4. Separate non-blocking hardening ideas from real ship blockers.
+4. If no real finding exists, say so plainly instead of padding the report.
 
 ## Evidence / Done
 
