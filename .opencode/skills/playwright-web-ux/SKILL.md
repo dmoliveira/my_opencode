@@ -29,12 +29,17 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - For advanced canvas/game flows, install and use CLI skills: `playwright-cli install --skills`.
 
 ## Tool Selection Rules
+- Quick gate:
+  - Use Playwright MCP by default for standard implemented website and app audits.
+  - Use `playwright-cli` first when the flow is canvas-heavy, WebGL-based, multi-tab, auth-state-heavy, or needs a long exploratory session.
+  - If semantics are weak but the flow is still short, start with MCP and fall back to CLI only when the accessibility tree or refs are insufficient.
 - Prefer accessibility snapshots and refs first.
 - Use Playwright MCP assertions when you need deterministic visible-state checks.
 - Use network and storage controls when auth, retries, offline mode, or error states must be reproduced reliably.
 - Use vision mode only when the accessibility tree is insufficient, such as canvas, WebGL, maps, charts, or custom widgets without meaningful ARIA.
 - Use `playwright-cli` first when the task needs longer exploratory loops, multiple sessions, browser-game traversal, or token-efficient repeated commands.
 - Use screenshots and video as supporting evidence, not as the only proof of correctness.
+- Keep only high-signal commands in this skill; use the official CLI docs for the full command catalog.
 
 ## Scenario Playbooks
 
@@ -50,6 +55,11 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 
 ### Canvas, WebGL, or browser-game flow
 - Start with `playwright-cli` when the UI is mostly non-semantic or coordinate-driven.
+- High-value starter moves:
+  - use `open --persistent` or `attach --cdp=chrome` for longer sessions
+  - use `state-save` / `state-load` for auth-heavy flows
+  - use a few tactical helpers such as tab selection, dialog accept, routing, tracing/video, locator generation, or highlight only when they reduce ambiguity
+  - use `--raw` or `--json` when you need compact evidence or reusable follow-up automation
 - Capture a screenshot, identify coordinates, then use vision-mode or CLI mouse commands.
 - Prefer proving navigation, affordance clarity, input feedback, HUD readability, error handling, save/load, and flow comprehension.
 - Be explicit when a game scenario is observational UX validation rather than deterministic state proof.
@@ -74,6 +84,11 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - Top UX issues were prioritized.
 - Findings include concrete user impact and suggested fixes.
 - For advanced flows, the chosen mode (`MCP` vs `playwright-cli`) and why it was chosen are explicit.
+
+## Output Discipline
+- Keep the final readout compact: chosen mode, flows exercised, top findings ranked, and the exact evidence captured.
+- Prefer snapshots, `--raw`, or `--json` outputs before verbose console transcripts.
+- When no meaningful issue is found, say that directly instead of padding the report.
 
 ## References
 - `docs/ox-command-pack.md`
