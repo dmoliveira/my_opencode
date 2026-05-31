@@ -12,7 +12,7 @@ The repo should use a small set of memorable rules instead of many one-off habit
 - default repo `scope_key`: the GitHub repo slug
 - recommended value for this repo: `dmoliveira/my_opencode`
 - keep worktree and branch variation inside the same repo scope unless a future repo-specific reason requires a split
-- prefer a repo-local `.codememory/config.yaml` with `defaults.scope_key: dmoliveira/my_opencode` so `oc current` and related commands do not silently fall back to `local`
+- prefer a tracked `.codememory/config.sqlite.yaml` fallback with `defaults.scope_key: dmoliveira/my_opencode` so fresh worktrees pick up the repo scope and SQLite backend automatically; reserve local `.codememory/config.yaml` for machine-local overrides when needed
 
 ## Tracker split
 
