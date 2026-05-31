@@ -7,6 +7,7 @@ plugin/gateway-core/*.tgz
 plugin/gateway-core@latest
 runtime/
 bg/
+.codememory/*.sqlite3
 .opencode/*
 !.opencode/my_opencode.json
 !.opencode/skills/

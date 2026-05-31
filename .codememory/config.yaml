@@ -1,2 +1,8 @@
+version: 1
+database:
+  backend: sqlite
+  url: ''
+  path: .codememory/codememory.sqlite3
+  max_connections: 1
 defaults:
   scope_key: dmoliveira/my_opencode
