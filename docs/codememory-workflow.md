@@ -18,7 +18,7 @@ Codememory is the internal execution tracker and handoff memory.
 - use one active Codememory session per active worktree path
 - use one active Codememory task per focused execution slice
 - use GitHub Issues/PRs for delivery visibility; do not use them as the only AI handoff medium
-- prefer a repo-local `.codememory/config.yaml` that sets `defaults.scope_key` to `dmoliveira/my_opencode` so `oc current` and related commands do not silently fall back to `local`
+- prefer a tracked `.codememory/config.sqlite.yaml` fallback with `defaults.scope_key: dmoliveira/my_opencode` so fresh worktrees pick up the repo scope and SQLite backend automatically; use local `.codememory/config.yaml` only for machine-local overrides such as temporary PostgreSQL recovery
 
 ## Required startup flow
 

@@ -490,10 +490,10 @@ exit 0
         )
         codememory_workflow_doc = REPO_ROOT / "docs" / "codememory-workflow.md"
         codememory_conventions_doc = REPO_ROOT / "docs" / "codememory-conventions.md"
-        codememory_scope_config = REPO_ROOT / ".codememory" / "config.yaml"
+        codememory_scope_config = REPO_ROOT / ".codememory" / "config.sqlite.yaml"
         expect(codememory_workflow_doc.exists(), "docs/codememory-workflow.md should exist")
         expect(codememory_conventions_doc.exists(), "docs/codememory-conventions.md should exist")
-        expect(codememory_scope_config.exists(), ".codememory/config.yaml should exist")
+        expect(codememory_scope_config.exists(), ".codememory/config.sqlite.yaml should exist")
         expect(
             "dmoliveira/my_opencode" in codememory_workflow_doc.read_text(encoding="utf-8"),
             "Codememory workflow doc should mention the my_opencode scope",
@@ -504,7 +504,7 @@ exit 0
         )
         expect(
             "dmoliveira/my_opencode" in codememory_scope_config.read_text(encoding="utf-8"),
-            ".codememory/config.yaml should set the my_opencode scope",
+            ".codememory/config.sqlite.yaml should set the my_opencode scope",
         )
         plugin_entries_any = base_config_payload.get("plugin", [])
         plugin_entries = (
