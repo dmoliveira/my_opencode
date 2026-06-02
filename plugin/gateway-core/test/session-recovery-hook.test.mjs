@@ -65,6 +65,56 @@ test("session-recovery resumes recoverable session errors", async () => {
   }
 })
 
+test("session-recovery skips ambiguous incomplete assistant tails during idle", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let promptCalls = 0
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: { role: "assistant" },
+                  parts: [],
+                },
+              ],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await plugin.event({
+      event: {
+        type: "session.idle",
+        properties: {
+          sessionID: "session-recovery-ambiguous-tail",
+        },
+      },
+    })
+    assert.equal(promptCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("session-recovery skips non-recoverable errors", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
   try {
@@ -711,11 +761,10 @@ test("session-recovery rescues stale running question tool on idle using message
   }
 })
 
-test("session-recovery rescues incomplete assistant tail when latest assistant message has no parts", async () => {
+test("session-recovery skips incomplete assistant tail when latest assistant message has no parts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
   try {
     let promptCalls = 0
-    let lastPromptBody = null
     const plugin = GatewayCorePlugin({
       directory,
       config: {
@@ -744,9 +793,8 @@ test("session-recovery rescues incomplete assistant tail when latest assistant m
               ],
             }
           },
-          async promptAsync(args) {
+          async promptAsync() {
             promptCalls += 1
-            lastPromptBody = args.body
           },
         },
       },
@@ -762,12 +810,7 @@ test("session-recovery rescues incomplete assistant tail when latest assistant m
       },
     })
 
-    assert.equal(promptCalls, 1)
-    assert.match(
-      lastPromptBody?.parts?.[0]?.text ?? "",
-      /incomplete assistant turn detected during idle - continuing now/i,
-    )
-    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /last_tool: unknown/i)
+    assert.equal(promptCalls, 0)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -841,7 +884,7 @@ test("session-recovery ignores stale question rescue when latest message is user
   }
 })
 
-test("session-recovery ignores incomplete-tail recovery when question is not last tool part", async () => {
+test("session-recovery still rescues incomplete-tail recovery when question is not last tool part", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
   try {
     let promptCalls = 0
@@ -905,7 +948,7 @@ test("session-recovery ignores incomplete-tail recovery when question is not las
       },
     })
 
-    assert.equal(promptCalls, 0)
+    assert.equal(promptCalls, 1)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -1159,9 +1202,8 @@ test("session-recovery injects fallback when idle session ends with incomplete n
   }
 })
 
-test("session-recovery injects fallback when idle session ends with step-start and no later parts", async () => {
+test("session-recovery skips fallback when idle session ends with step-start and no later parts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
-  let lastPromptBody = null
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -1194,8 +1236,8 @@ test("session-recovery injects fallback when idle session ends with step-start a
               ],
             }
           },
-          async promptAsync(args) {
-            lastPromptBody = args.body
+          async promptAsync() {
+            throw new Error("promptAsync should not run for ambiguous step-start tails")
           },
         },
       },
@@ -1211,8 +1253,6 @@ test("session-recovery injects fallback when idle session ends with step-start a
       },
     })
 
-    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /incomplete assistant turn detected during idle/i)
-    assert.match(lastPromptBody?.parts?.[0]?.text ?? "", /last_tool: step-start/i)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

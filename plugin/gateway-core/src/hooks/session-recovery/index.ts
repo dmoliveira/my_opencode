@@ -317,14 +317,6 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
   }
   const lastPart = parts.at(-1)
   const lastPartType = String(lastPart?.type ?? "").trim().toLowerCase()
-  if (
-    parts.some((part) => {
-      const toolName = String(part?.tool ?? "").trim().toLowerCase()
-      return toolName === "question" || toolName === "askuserquestion"
-    })
-  ) {
-    return { matched: false, tool: "" }
-  }
   const lastToolPart = [...parts].reverse().find((part) => part?.type === "tool")
   const tool = String(lastToolPart?.tool ?? "").trim().toLowerCase()
   const hasVisibleText = parts.some(
@@ -341,6 +333,11 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
     return { matched: false, tool: "" }
   }
   return { matched: !hasVisibleText, tool }
+}
+
+function isAmbiguousIncompleteAssistantTail(tool: string): boolean {
+  const normalized = String(tool).trim().toLowerCase()
+  return normalized === "" || normalized === "unknown" || normalized === "step-start"
 }
 
 async function injectRecoveryMessage(args: {
@@ -529,6 +526,15 @@ export function createSessionRecoveryHook(options: {
           if (!silentQuestion.matched) {
             const incompleteTail = looksLikeIncompleteAssistantTailFromHistory(messages)
             if (!incompleteTail.matched) {
+              return
+            }
+            if (isAmbiguousIncompleteAssistantTail(incompleteTail.tool)) {
+              writeGatewayEventAudit(directory, {
+                hook: "session-recovery",
+                stage: "skip",
+                reason_code: "ambiguous_incomplete_assistant_tail",
+                session_id: sessionId,
+              })
               return
             }
             recoveringSessions.add(sessionId)
