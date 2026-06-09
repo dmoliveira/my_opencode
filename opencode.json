@@ -28,6 +28,28 @@
   },
   "autoupdate": true,
   "share": "manual",
+  "provider": {
+    "portkey-openai": {
+      "name": "Portkey OpenAI",
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-config": "{env:PORTKEY_OPENAI_CONFIG}"
+        }
+      },
+      "models": {
+        "gpt-5-mini": {
+          "name": "GPT-5 Mini"
+        },
+        "gpt-5-nano": {
+          "name": "GPT-5 Nano"
+        }
+      }
+    }
+  },
   "permission": {
     "*": "allow",
     "doom_loop": "allow",
