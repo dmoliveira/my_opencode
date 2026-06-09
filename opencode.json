@@ -37,15 +37,15 @@
         "baseURL": "https://api.portkey.ai/v1",
         "headers": {
           "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
-          "x-portkey-config": "{env:PORTKEY_OPENAI_CONFIG}"
+          "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_VIRTUAL_KEY}"
         }
       },
       "models": {
-        "gpt-5-mini": {
-          "name": "GPT-5 Mini"
+        "@azure-openai-useast2-nonprod/gpt-5-mini": {
+          "name": "GPT-5 Mini (USEast2)"
         },
-        "gpt-5-nano": {
-          "name": "GPT-5 Nano"
+        "@azure-openai-useast2-nonprod/gpt-5-nano": {
+          "name": "GPT-5 Nano (USEast2)"
         }
       }
     }

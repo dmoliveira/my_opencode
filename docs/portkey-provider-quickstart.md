@@ -14,15 +14,26 @@ If your shell/runtime currently exposes `PORTKEYAI_API_KEY`, map it once before 
 export PORTKEY_API_KEY="$PORTKEYAI_API_KEY"
 ```
 
-## Optional route selection
+## Required Portkey route selection (virtual key)
 
 ```bash
-export PORTKEY_OPENAI_CONFIG="pc-..."
+export PORTKEY_OPENAI_VIRTUAL_KEY="<virtual-key-id>"
 ```
 
-Use a config id from your own Portkey workspace. Reusing ids from other repos/workspaces will return `Invalid config id passed`.
+The current workspace returns zero config routes (`/v1/configs`), so `x-portkey-config` is not usable here. Use `x-portkey-virtual-key` instead.
+
+Quick discovery command:
+
+```bash
+curl -fsS "https://api.portkey.ai/v1/virtual-keys" \
+  -H "x-portkey-api-key: ${PORTKEY_API_KEY}" \
+  -H "accept: application/json" \
+  -H "user-agent: Mozilla/5.0"
+```
+
+Pick an active OpenAI/Azure OpenAI-backed virtual key id from that response.
 
 ## Smoke check model ids
 
-- `portkey-openai/gpt-5-mini`
-- `portkey-openai/gpt-5-nano`
+- `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
+- `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-nano`
