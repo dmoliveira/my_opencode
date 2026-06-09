@@ -66,7 +66,7 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
 Prompt caching is enabled by default for these Portkey providers through:
 
 ```json
-"x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":600}}"
+"x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
 ```
 
 Notes:

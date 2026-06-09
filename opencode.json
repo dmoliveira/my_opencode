@@ -38,7 +38,7 @@
         "headers": {
           "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
           "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_VIRTUAL_KEY}",
-          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":600}}"
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
         }
       },
       "models": {
@@ -77,7 +77,7 @@
         "headers": {
           "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
           "x-portkey-virtual-key": "{env:PORTKEY_CLAUDE_VIRTUAL_KEY}",
-          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":600}}"
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
         }
       },
       "models": {
@@ -110,7 +110,7 @@
         "headers": {
           "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
           "x-portkey-virtual-key": "{env:PORTKEY_GEMINI_VIRTUAL_KEY}",
-          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":600}}"
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
         }
       },
       "models": {
