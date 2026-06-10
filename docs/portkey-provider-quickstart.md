@@ -38,28 +38,11 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
 
 ## Added model sets (tested)
 
-- OpenAI
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.5`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-chat`
+- OpenAI (reliability-curated)
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-nano`
-  - `portkey-openai/@azure-openai-useast2-nonprod/o3`
-  - `portkey-openai/@azure-openai-useast2-nonprod/o4-mini`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-4.1-mini`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.2-codex`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.1-codex`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-codex`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.1-codex-mini`
-  - `portkey-openai/@azure-openai-australiaeast-nonprod/gpt-5.3-codex`
-- OpenAI Foundry (alternative route)
+- OpenAI Foundry (alternative route, reliability-curated)
   - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-mini`
-  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5`
-  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-nano`
-  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/o3`
-  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/o4-mini`
-  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-4.1-mini`
 - Claude
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7`
@@ -102,6 +85,10 @@ That shifts hidden small-model traffic to the Gemini virtual key and reduces con
 ### Codex routing note
 
 In this workspace, Codex routes responded successfully on the Portkey `/v1/responses` API. The same routes returned `The requested operation is unsupported` on `/v1/chat/completions`, so behavior in OpenCode depends on which OpenAI API surface the active client path uses.
+
+### OpenAI reliability curation note
+
+OpenAI and Foundry model lists in `opencode.json` are intentionally curated to known-working routes here. This reduces model-selection failures in `/models` when virtual-key backends expose mixed support.
 
 ### Azure OpenAI vs Azure Foundry note
 
