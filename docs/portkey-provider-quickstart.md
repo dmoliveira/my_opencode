@@ -79,6 +79,18 @@ Notes:
 - First identical request is typically `MISS`; subsequent identical requests become `HIT`.
 - To change TTL, edit `max_age` in `opencode.json`.
 
+## Rate-limit mitigation for OpenAI route
+
+OpenCode may issue a hidden `title` generation request using the configured `small_model` before/around the main `build` request. If both share the same constrained OpenAI virtual key, you can see intermittent `too_many_requests` even on early turns.
+
+This repo sets:
+
+```json
+"small_model": "portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite"
+```
+
+That shifts hidden small-model traffic to the Gemini virtual key and reduces contention on `PORTKEY_OPENAI_VIRTUAL_KEY`.
+
 ### Codex routing note
 
 In this workspace, Codex routes responded successfully on the Portkey `/v1/responses` API. The same routes returned `The requested operation is unsupported` on `/v1/chat/completions`, so behavior in OpenCode depends on which OpenAI API surface the active client path uses.
