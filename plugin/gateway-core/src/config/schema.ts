@@ -1002,11 +1002,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   directoryAgentsInjector: {
     enabled: true,
-    maxChars: 4000,
+    maxChars: 1000,
   },
   directoryReadmeInjector: {
     enabled: true,
-    maxChars: 4000,
+    maxChars: 1000,
   },
   noninteractiveShellGuard: {
     enabled: true,
