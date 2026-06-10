@@ -28,6 +28,7 @@
   },
   "autoupdate": true,
   "share": "manual",
+  "small_model": "portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite",
   "provider": {
     "portkey-openai": {
       "name": "Portkey OpenAI",
