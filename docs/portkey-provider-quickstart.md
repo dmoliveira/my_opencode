@@ -1,0 +1,74 @@
+# Portkey provider quickstart (OpenCode)
+
+`opencode.json` now includes optional `portkey-openai`, `portkey-claude`, and `portkey-gemini` providers for smoke-testing current models through Portkey, without changing the repo default model.
+
+## Required env
+
+```bash
+export PORTKEY_API_KEY="..."
+```
+
+If your shell/runtime currently exposes `PORTKEYAI_API_KEY`, map it once before running OpenCode:
+
+```bash
+export PORTKEY_API_KEY="$PORTKEYAI_API_KEY"
+```
+
+## Required Portkey route selection (virtual key)
+
+```bash
+export PORTKEY_OPENAI_VIRTUAL_KEY="<virtual-key-id>"
+export PORTKEY_CLAUDE_VIRTUAL_KEY="<virtual-key-id>"
+export PORTKEY_GEMINI_VIRTUAL_KEY="<virtual-key-id>"
+```
+
+The current workspace returns zero **saved config routes** (`/v1/configs`), so `x-portkey-config: pc-...` ids are not usable here. Use `x-portkey-virtual-key` for routing.
+
+Quick discovery command:
+
+```bash
+curl -fsS "https://api.portkey.ai/v1/virtual-keys" \
+  -H "x-portkey-api-key: ${PORTKEY_API_KEY}" \
+  -H "accept: application/json" \
+  -H "user-agent: Mozilla/5.0"
+```
+
+Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
+
+## Added model sets (tested)
+
+- OpenAI
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.5`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-chat`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-nano`
+  - `portkey-openai/@azure-openai-useast2-nonprod/o3`
+  - `portkey-openai/@azure-openai-useast2-nonprod/o4-mini`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-4.1-mini`
+- Claude
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-6-v1`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-6`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-haiku-4-5-20251001-v1:0`
+- Gemini
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.5-flash`
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.1-pro-preview`
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.1-flash-lite-preview`
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-pro`
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash`
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite`
+
+## Prompt caching
+
+Prompt caching is enabled by default for these Portkey providers through:
+
+```json
+"x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+```
+
+Notes:
+- First identical request is typically `MISS`; subsequent identical requests become `HIT`.
+- To change TTL, edit `max_age` in `opencode.json`.

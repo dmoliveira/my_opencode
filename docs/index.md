@@ -25,6 +25,7 @@ This repo-local index exists because `AGENTS.md` and related startup docs refere
 - `playwright-ux-scenarios.md`: scenario templates for website, dashboard, resilience, and browser-game UX testing
 - `silent-first-command-defaults.md`: JSON-first and low-noise command defaults
 - `runtime-db-schema.md`: read-only SQLite/runtime inspection notes
+- `portkey-provider-quickstart.md`: optional Portkey provider env + smoke-model setup
 
 ## Planning and review
 

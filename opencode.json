@@ -28,6 +28,113 @@
   },
   "autoupdate": true,
   "share": "manual",
+  "provider": {
+    "portkey-openai": {
+      "name": "Portkey OpenAI",
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@azure-openai-useast2-nonprod/gpt-5.5": {
+          "name": "GPT-5.5 (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5": {
+          "name": "GPT-5 (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5-chat": {
+          "name": "GPT-5 Chat (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5-mini": {
+          "name": "GPT-5 Mini (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5-nano": {
+          "name": "GPT-5 Nano (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/o3": {
+          "name": "o3 (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/o4-mini": {
+          "name": "o4-mini (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-4.1-mini": {
+          "name": "GPT-4.1 Mini (USEast2)"
+        }
+      }
+    },
+    "portkey-claude": {
+      "name": "Portkey Claude",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_CLAUDE_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8": {
+          "name": "Claude Opus 4.8 (Bedrock USE1)"
+        },
+        "@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7": {
+          "name": "Claude Opus 4.7 (Bedrock USE1)"
+        },
+        "@bedrock-use1-nonprod/global.anthropic.claude-opus-4-6-v1": {
+          "name": "Claude Opus 4.6 (Bedrock USE1)"
+        },
+        "@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6 (Bedrock USE1)"
+        },
+        "@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-5-20250929-v1:0": {
+          "name": "Claude Sonnet 4.5 (Bedrock USE1)"
+        },
+        "@bedrock-use1-nonprod/global.anthropic.claude-haiku-4-5-20251001-v1:0": {
+          "name": "Claude Haiku 4.5 (Bedrock USE1)"
+        }
+      }
+    },
+    "portkey-gemini": {
+      "name": "Portkey Gemini",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_GEMINI_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@vertex-ai-global-nonprod/gemini-3.5-flash": {
+          "name": "Gemini 3.5 Flash (Vertex Global)"
+        },
+        "@vertex-ai-global-nonprod/gemini-3.1-pro-preview": {
+          "name": "Gemini 3.1 Pro Preview (Vertex Global)"
+        },
+        "@vertex-ai-global-nonprod/gemini-3.1-flash-lite-preview": {
+          "name": "Gemini 3.1 Flash Lite Preview (Vertex Global)"
+        },
+        "@vertex-ai-global-nonprod/gemini-2.5-pro": {
+          "name": "Gemini 2.5 Pro (Vertex Global)"
+        },
+        "@vertex-ai-global-nonprod/gemini-2.5-flash": {
+          "name": "Gemini 2.5 Flash (Vertex Global)"
+        },
+        "@vertex-ai-global-nonprod/gemini-2.5-flash-lite": {
+          "name": "Gemini 2.5 Flash Lite (Vertex Global)"
+        }
+      }
+    }
+  },
   "permission": {
     "*": "allow",
     "doom_loop": "allow",
