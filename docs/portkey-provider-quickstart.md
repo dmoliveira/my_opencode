@@ -18,6 +18,7 @@ export PORTKEY_API_KEY="$PORTKEYAI_API_KEY"
 
 ```bash
 export PORTKEY_OPENAI_VIRTUAL_KEY="<virtual-key-id>"
+export PORTKEY_OPENAI_FOUNDRY_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_CLAUDE_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_GEMINI_VIRTUAL_KEY="<virtual-key-id>"
 ```
@@ -52,6 +53,13 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-codex`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.1-codex-mini`
   - `portkey-openai/@azure-openai-australiaeast-nonprod/gpt-5.3-codex`
+- OpenAI Foundry (alternative route)
+  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-mini`
+  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5`
+  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-nano`
+  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/o3`
+  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/o4-mini`
+  - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-4.1-mini`
 - Claude
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7`
@@ -94,3 +102,7 @@ That shifts hidden small-model traffic to the Gemini virtual key and reduces con
 ### Codex routing note
 
 In this workspace, Codex routes responded successfully on the Portkey `/v1/responses` API. The same routes returned `The requested operation is unsupported` on `/v1/chat/completions`, so behavior in OpenCode depends on which OpenAI API surface the active client path uses.
+
+### Azure OpenAI vs Azure Foundry note
+
+In current tests for `gpt-5-mini`, both `azure-openai-useast2-nonprod` and `azure-foundry-useast2-nonprod` returned the same rate-limit headers (`10 RPM`, `10000 TPM`). Foundry is now enabled as an alternative route, but it may not improve throttling unless backend limits differ in your workspace.

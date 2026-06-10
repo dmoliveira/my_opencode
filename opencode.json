@@ -87,6 +87,39 @@
         }
       }
     },
+    "portkey-openai-foundry": {
+      "name": "Portkey OpenAI Foundry",
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_FOUNDRY_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@azure-foundry-useast2-nonprod/gpt-5-mini": {
+          "name": "GPT-5 Mini (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/gpt-5": {
+          "name": "GPT-5 (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/gpt-5-nano": {
+          "name": "GPT-5 Nano (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/o3": {
+          "name": "o3 (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/o4-mini": {
+          "name": "o4-mini (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/gpt-4.1-mini": {
+          "name": "GPT-4.1 Mini (Foundry USEast2)"
+        }
+      }
+    },
     "portkey-claude": {
       "name": "Portkey Claude",
       "npm": "@ai-sdk/openai-compatible",
