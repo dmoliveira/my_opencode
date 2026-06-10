@@ -65,6 +65,24 @@
         },
         "@azure-openai-useast2-nonprod/gpt-4.1-mini": {
           "name": "GPT-4.1 Mini (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5.3-codex": {
+          "name": "GPT-5.3 Codex (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5.2-codex": {
+          "name": "GPT-5.2 Codex (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5.1-codex": {
+          "name": "GPT-5.1 Codex (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5-codex": {
+          "name": "GPT-5 Codex (USEast2)"
+        },
+        "@azure-openai-useast2-nonprod/gpt-5.1-codex-mini": {
+          "name": "GPT-5.1 Codex Mini (USEast2)"
+        },
+        "@azure-openai-australiaeast-nonprod/gpt-5.3-codex": {
+          "name": "GPT-5.3 Codex (AUEast)"
         }
       }
     },

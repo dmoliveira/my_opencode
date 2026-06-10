@@ -46,6 +46,12 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
   - `portkey-openai/@azure-openai-useast2-nonprod/o3`
   - `portkey-openai/@azure-openai-useast2-nonprod/o4-mini`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-4.1-mini`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.2-codex`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.1-codex`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-codex`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.1-codex-mini`
+  - `portkey-openai/@azure-openai-australiaeast-nonprod/gpt-5.3-codex`
 - Claude
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7`
@@ -72,3 +78,7 @@ Prompt caching is enabled by default for these Portkey providers through:
 Notes:
 - First identical request is typically `MISS`; subsequent identical requests become `HIT`.
 - To change TTL, edit `max_age` in `opencode.json`.
+
+### Codex routing note
+
+In this workspace, Codex routes responded successfully on the Portkey `/v1/responses` API. The same routes returned `The requested operation is unsupported` on `/v1/chat/completions`, so behavior in OpenCode depends on which OpenAI API surface the active client path uses.
