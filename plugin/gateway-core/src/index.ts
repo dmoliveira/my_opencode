@@ -818,6 +818,8 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         directory,
         enabled: cfg.hooks.enabled,
         collector: contextCollector,
+        dedupeEnabled: cfg.contextInjector.dedupeEnabled,
+        minDeltaChars: cfg.contextInjector.minDeltaChars,
       }),
     ),
     safeHook("rules-injector", () =>

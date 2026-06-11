@@ -117,6 +117,12 @@ export interface CompactionContextInjectorConfig {
   enabled: boolean;
 }
 
+// Declares context injector dedupe settings to reduce cache-key churn.
+export interface ContextInjectorConfig {
+  dedupeEnabled: boolean;
+  minDeltaChars: number;
+}
+
 // Declares session recovery settings for event-driven auto-resume attempts.
 export interface SessionRecoveryConfig {
   enabled: boolean;
@@ -591,6 +597,7 @@ export interface GatewayConfig {
   contextWindowMonitor: ContextWindowMonitorConfig;
   preemptiveCompaction: PreemptiveCompactionConfig;
   compactionContextInjector: CompactionContextInjectorConfig;
+  contextInjector: ContextInjectorConfig;
   globalProcessPressure: GlobalProcessPressureConfig;
   longTurnWatchdog: LongTurnWatchdogConfig;
   notifyEvents: NotifyEventsConfig;
@@ -812,6 +819,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   compactionContextInjector: {
     enabled: true,
+  },
+  contextInjector: {
+    dedupeEnabled: true,
+    minDeltaChars: 120,
   },
   globalProcessPressure: {
     enabled: true,
