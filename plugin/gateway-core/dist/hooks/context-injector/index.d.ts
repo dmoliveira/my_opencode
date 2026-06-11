@@ -5,4 +5,7 @@ export declare function createContextInjectorHook(options: {
     enabled: boolean;
     collector: ContextCollector;
     maxChars?: number;
+    dedupeEnabled?: boolean;
+    minDeltaChars?: number;
+    dedupeNormalizeWhitespace?: boolean;
 }): GatewayHook;

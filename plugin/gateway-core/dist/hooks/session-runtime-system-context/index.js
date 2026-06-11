@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { loadGatewayState } from "../../state/storage.js";
 const SYSTEM_CONTEXT_MARKER = "runtime_session_context:";
 const CONCISE_CONTEXT_MARKER = "runtime_concise_mode:";
@@ -120,42 +121,77 @@ export function createSessionRuntimeSystemContextHook(options) {
             if (!sessionId || !Array.isArray(system)) {
                 return;
             }
-            const nextContext = buildSystemContext(sessionId);
-            const existingIndex = runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER);
-            if (existingIndex >= 0 && system[existingIndex] !== nextContext) {
-                system.splice(existingIndex, 1);
-            }
-            if (runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER) < 0) {
-                system.unshift(nextContext);
-            }
             const concise = resolveConfiguredConciseMode({
                 directory,
                 sessionId,
                 conciseModeEnabled: options.conciseModeEnabled,
                 conciseDefaultMode: options.conciseDefaultMode,
             });
+            const injectSessionIdContext = options.injectSessionIdContext !== false;
+            const shouldInjectSessionId = injectSessionIdContext &&
+                (!options.injectSessionIdWhenConciseModeOnly || (concise && concise.mode !== "off"));
+            const existingIndex = runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER);
+            let sessionContextChanged = false;
+            if (shouldInjectSessionId) {
+                const nextContext = buildSystemContext(sessionId);
+                if (existingIndex >= 0 && system[existingIndex] !== nextContext) {
+                    system.splice(existingIndex, 1);
+                    sessionContextChanged = true;
+                }
+                if (runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER) < 0) {
+                    system.unshift(nextContext);
+                    sessionContextChanged = true;
+                }
+            }
+            else if (existingIndex >= 0) {
+                system.splice(existingIndex, 1);
+                sessionContextChanged = true;
+            }
             const conciseIndex = runtimeContextEntryIndex(system, CONCISE_CONTEXT_MARKER);
+            const currentConcise = conciseIndex >= 0 ? system[conciseIndex] : "";
             if (!concise || concise.mode === "off") {
+                let conciseContextChanged = false;
                 if (conciseIndex >= 0) {
                     system.splice(conciseIndex, 1);
+                    conciseContextChanged = true;
                 }
                 writeGatewayEventAudit(directory, {
                     hook: "session-runtime-system-context",
                     stage: "inject",
-                    reason_code: "session_runtime_context_injected_without_concise_mode",
+                    reason_code: shouldInjectSessionId
+                        ? sessionContextChanged || conciseContextChanged
+                            ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_INJECTED
+                            : REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_NOOP
+                        : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
+                            ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
+                            : sessionContextChanged || conciseContextChanged
+                                ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_REMOVED
+                                : REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_SKIPPED,
                     session_id: sessionId,
                 });
                 return;
             }
             const nextConcise = buildConciseModeContext(directory, concise.mode, concise.source);
-            if (conciseIndex >= 0) {
-                system.splice(conciseIndex, 1);
+            let conciseContextChanged = false;
+            if (currentConcise !== nextConcise) {
+                if (conciseIndex >= 0) {
+                    system.splice(conciseIndex, 1);
+                }
+                system.unshift(nextConcise);
+                conciseContextChanged = true;
             }
-            system.unshift(nextConcise);
             writeGatewayEventAudit(directory, {
                 hook: "session-runtime-system-context",
                 stage: "inject",
-                reason_code: "session_runtime_context_with_concise_mode_injected",
+                reason_code: shouldInjectSessionId
+                    ? sessionContextChanged || conciseContextChanged
+                        ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_INJECTED
+                        : REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_NOOP
+                    : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
+                        ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
+                        : sessionContextChanged || conciseContextChanged
+                            ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED
+                            : REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED_NOOP,
                 session_id: sessionId,
                 concise_mode: concise.mode,
                 concise_mode_source: concise.source,

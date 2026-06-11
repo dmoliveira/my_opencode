@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import { REASON_CODES } from "../../bridge/reason-codes.js"
 import { loadGatewayState } from "../../state/storage.js"
 import type { GatewayHook } from "../registry.js"
 
@@ -134,7 +135,8 @@ function buildConciseModeContext(directory: string, mode: string, source: string
 export function createSessionRuntimeSystemContextHook(options: {
   directory: string
   enabled: boolean
-  injectSessionIdContext: boolean
+  injectSessionIdContext?: boolean
+  injectSessionIdWhenConciseModeOnly?: boolean
   conciseModeEnabled: boolean
   conciseDefaultMode: "off" | "lite" | "full" | "ultra"
 }): GatewayHook {
@@ -156,9 +158,19 @@ export function createSessionRuntimeSystemContextHook(options: {
         return
       }
 
+      const concise = resolveConfiguredConciseMode({
+        directory,
+        sessionId,
+        conciseModeEnabled: options.conciseModeEnabled,
+        conciseDefaultMode: options.conciseDefaultMode,
+      })
+      const injectSessionIdContext = options.injectSessionIdContext !== false
+      const shouldInjectSessionId = injectSessionIdContext &&
+        (!options.injectSessionIdWhenConciseModeOnly || (concise && concise.mode !== "off"))
+
       const existingIndex = runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER)
       let sessionContextChanged = false
-      if (options.injectSessionIdContext) {
+      if (shouldInjectSessionId) {
         const nextContext = buildSystemContext(sessionId)
         if (existingIndex >= 0 && system[existingIndex] !== nextContext) {
           system.splice(existingIndex, 1)
@@ -172,13 +184,6 @@ export function createSessionRuntimeSystemContextHook(options: {
         system.splice(existingIndex, 1)
         sessionContextChanged = true
       }
-
-      const concise = resolveConfiguredConciseMode({
-        directory,
-        sessionId,
-        conciseModeEnabled: options.conciseModeEnabled,
-        conciseDefaultMode: options.conciseDefaultMode,
-      })
       const conciseIndex = runtimeContextEntryIndex(system, CONCISE_CONTEXT_MARKER)
       const currentConcise = conciseIndex >= 0 ? system[conciseIndex] : ""
       if (!concise || concise.mode === "off") {
@@ -190,13 +195,15 @@ export function createSessionRuntimeSystemContextHook(options: {
         writeGatewayEventAudit(directory, {
           hook: "session-runtime-system-context",
           stage: "inject",
-          reason_code: options.injectSessionIdContext
+          reason_code: shouldInjectSessionId
             ? sessionContextChanged || conciseContextChanged
-              ? "session_runtime_context_injected_without_concise_mode"
-              : "session_runtime_context_noop_without_concise_mode"
-            : sessionContextChanged || conciseContextChanged
-              ? "session_runtime_context_removed_without_concise_mode"
-              : "session_runtime_context_skipped_without_concise_mode",
+              ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_INJECTED
+              : REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_NOOP
+            : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
+              ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
+              : sessionContextChanged || conciseContextChanged
+                ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_REMOVED
+                : REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_SKIPPED,
           session_id: sessionId,
         })
         return
@@ -215,13 +222,15 @@ export function createSessionRuntimeSystemContextHook(options: {
       writeGatewayEventAudit(directory, {
         hook: "session-runtime-system-context",
         stage: "inject",
-        reason_code: options.injectSessionIdContext
+        reason_code: shouldInjectSessionId
           ? sessionContextChanged || conciseContextChanged
-            ? "session_runtime_context_with_concise_mode_injected"
-            : "session_runtime_context_with_concise_mode_noop"
-          : sessionContextChanged || conciseContextChanged
-            ? "session_runtime_context_skipped_with_concise_mode"
-            : "session_runtime_context_skipped_with_concise_mode_noop",
+            ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_INJECTED
+            : REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_NOOP
+          : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
+            ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
+            : sessionContextChanged || conciseContextChanged
+              ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED
+              : REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED_NOOP,
         session_id: sessionId,
         concise_mode: concise.mode,
         concise_mode_source: concise.source,

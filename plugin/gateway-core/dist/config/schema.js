@@ -143,6 +143,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
     compactionContextInjector: {
         enabled: true,
     },
+    contextInjector: {
+        dedupeEnabled: true,
+        minDeltaChars: 120,
+        dedupeNormalizeWhitespace: true,
+    },
     globalProcessPressure: {
         enabled: true,
         checkCooldownToolCalls: 3,
@@ -206,6 +211,8 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     sessionRuntimeSystemContext: {
         enabled: true,
+        injectSessionIdContext: true,
+        injectSessionIdWhenConciseModeOnly: false,
     },
     conciseMode: {
         enabled: false,
@@ -332,11 +339,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     directoryAgentsInjector: {
         enabled: true,
-        maxChars: 4000,
+        maxChars: 1000,
     },
     directoryReadmeInjector: {
         enabled: true,
-        maxChars: 4000,
+        maxChars: 1000,
     },
     noninteractiveShellGuard: {
         enabled: true,
@@ -382,7 +389,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: false,
     },
     assistantMessageTimestamp: {
-        enabled: true,
+        enabled: false,
     },
     taskResumeInfo: {
         enabled: true,

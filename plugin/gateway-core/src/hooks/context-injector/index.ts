@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { REASON_CODES } from "../../bridge/reason-codes.js"
+import { createHash } from "node:crypto"
 import type { GatewayHook } from "../registry.js"
 import { DEFAULT_INJECTED_TEXT_MAX_CHARS, truncateInjectedText } from "../shared/injected-text-truncator.js"
 import type { ContextCollector } from "./collector.js"
@@ -112,10 +113,29 @@ function estimateChangedChars(previous: string, next: string): number {
   return Math.max(changedPrevious, changedNext, Math.abs(previous.length - next.length))
 }
 
+interface ContextFingerprint {
+  normalized: string
+  hash: string
+}
+
+function normalizeForDedupe(input: string, normalizeWhitespace: boolean): string {
+  if (!normalizeWhitespace) {
+    return input
+  }
+  return input.replace(/\s+/g, " ").trim()
+}
+
+function fingerprintContext(input: string): ContextFingerprint {
+  return {
+    normalized: input,
+    hash: createHash("sha1").update(input).digest("hex"),
+  }
+}
+
 function rememberInjectedContext(
-  tracked: Map<string, string>,
+  tracked: Map<string, ContextFingerprint>,
   sessionId: string,
-  context: string,
+  context: ContextFingerprint,
 ): void {
   tracked.delete(sessionId)
   tracked.set(sessionId, context)
@@ -136,8 +156,10 @@ export function createContextInjectorHook(options: {
   maxChars?: number
   dedupeEnabled?: boolean
   minDeltaChars?: number
+  dedupeNormalizeWhitespace?: boolean
 }): GatewayHook {
-  const lastInjectedBySession = new Map<string, string>()
+  const lastInjectedBySession = new Map<string, ContextFingerprint>()
+  let lastSeenSessionId = ""
   const maxChars =
     typeof options.maxChars === "number" && Number.isFinite(options.maxChars) && options.maxChars > 0
       ? Math.floor(options.maxChars)
@@ -147,6 +169,7 @@ export function createContextInjectorHook(options: {
     typeof options.minDeltaChars === "number" && Number.isFinite(options.minDeltaChars)
       ? Math.max(0, Math.floor(options.minDeltaChars))
       : 0
+  const dedupeNormalizeWhitespace = options.dedupeNormalizeWhitespace !== false
   return {
     id: "context-injector",
     priority: 295,
@@ -161,6 +184,9 @@ export function createContextInjectorHook(options: {
           const normalized = sessionId.trim()
           options.collector.clear(normalized)
           lastInjectedBySession.delete(normalized)
+          if (lastSeenSessionId === normalized) {
+            lastSeenSessionId = ""
+          }
         }
         return
       }
@@ -172,6 +198,9 @@ export function createContextInjectorHook(options: {
             ? eventPayload.directory
             : options.directory
         const sessionId = resolveSessionId(eventPayload)
+        if (sessionId) {
+          lastSeenSessionId = sessionId
+        }
         const parts = eventPayload.output?.parts
         if (!sessionId || !Array.isArray(parts) || !options.collector.hasPending(sessionId)) {
           return
@@ -181,11 +210,12 @@ export function createContextInjectorHook(options: {
           return
         }
         const truncated = truncateInjectedText(pending.merged, maxChars)
+        const dedupeValue = normalizeForDedupe(truncated.text, dedupeNormalizeWhitespace)
+        const dedupeFingerprint = fingerprintContext(dedupeValue)
         if (dedupeEnabled) {
-          const previous = lastInjectedBySession.get(sessionId) ?? ""
+          const previous = lastInjectedBySession.get(sessionId)
           if (previous) {
-            const deltaChars = estimateChangedChars(previous, truncated.text)
-            if (deltaChars === 0) {
+            if (previous.hash === dedupeFingerprint.hash && previous.normalized === dedupeFingerprint.normalized) {
               writeGatewayEventAudit(directory, {
                 hook: "context-injector",
                 stage: "inject",
@@ -195,6 +225,7 @@ export function createContextInjectorHook(options: {
               })
               return
             }
+            const deltaChars = estimateChangedChars(previous.normalized, dedupeFingerprint.normalized)
             if (minDeltaChars > 0 && deltaChars < minDeltaChars) {
               writeGatewayEventAudit(directory, {
                 hook: "context-injector",
@@ -242,7 +273,7 @@ export function createContextInjectorHook(options: {
           session_id: sessionId,
           context_length: truncated.text.length,
         })
-        rememberInjectedContext(lastInjectedBySession, sessionId, truncated.text)
+        rememberInjectedContext(lastInjectedBySession, sessionId, dedupeFingerprint)
         return
       }
 
@@ -255,11 +286,12 @@ export function createContextInjectorHook(options: {
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
-      const sessionId = resolveSessionId(eventPayload)
+      const sessionId = resolveSessionId(eventPayload, lastSeenSessionId)
       const messages = eventPayload.output?.messages
       if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
         return
       }
+      lastSeenSessionId = sessionId
       const recent = recentMessages(messages)
       let lastUserIndex = -1
       for (let idx = recent.length - 1; idx >= 0; idx -= 1) {
@@ -296,11 +328,12 @@ export function createContextInjectorHook(options: {
         return
       }
       const truncated = truncateInjectedText(pending.merged, maxChars)
+      const dedupeValue = normalizeForDedupe(truncated.text, dedupeNormalizeWhitespace)
+      const dedupeFingerprint = fingerprintContext(dedupeValue)
       if (dedupeEnabled) {
-        const previous = lastInjectedBySession.get(sessionId) ?? ""
+        const previous = lastInjectedBySession.get(sessionId)
         if (previous) {
-          const deltaChars = estimateChangedChars(previous, truncated.text)
-          if (deltaChars === 0) {
+          if (previous.hash === dedupeFingerprint.hash && previous.normalized === dedupeFingerprint.normalized) {
             writeGatewayEventAudit(directory, {
               hook: "context-injector",
               stage: "inject",
@@ -310,6 +343,7 @@ export function createContextInjectorHook(options: {
             })
             return
           }
+          const deltaChars = estimateChangedChars(previous.normalized, dedupeFingerprint.normalized)
           if (minDeltaChars > 0 && deltaChars < minDeltaChars) {
             writeGatewayEventAudit(directory, {
               hook: "context-injector",
@@ -347,7 +381,7 @@ export function createContextInjectorHook(options: {
         session_id: sessionId,
         context_length: truncated.text.length,
       })
-      rememberInjectedContext(lastInjectedBySession, sessionId, truncated.text)
+      rememberInjectedContext(lastInjectedBySession, sessionId, dedupeFingerprint)
     },
   }
 }
