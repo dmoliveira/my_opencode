@@ -237,6 +237,10 @@ export function loadGatewayConfig(raw) {
         typeof source.compactionContextInjector === "object"
         ? source.compactionContextInjector
         : {};
+    const contextInjectorSource = source.contextInjector &&
+        typeof source.contextInjector === "object"
+        ? source.contextInjector
+        : {};
     const globalProcessPressureSource = source.globalProcessPressure &&
         typeof source.globalProcessPressure === "object"
         ? source.globalProcessPressure
@@ -573,6 +577,15 @@ export function loadGatewayConfig(raw) {
                 ? compactionContextInjectorSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.compactionContextInjector.enabled,
         },
+        contextInjector: {
+            dedupeEnabled: typeof contextInjectorSource.dedupeEnabled === "boolean"
+                ? contextInjectorSource.dedupeEnabled
+                : DEFAULT_GATEWAY_CONFIG.contextInjector.dedupeEnabled,
+            minDeltaChars: nonNegativeInt(contextInjectorSource.minDeltaChars, DEFAULT_GATEWAY_CONFIG.contextInjector.minDeltaChars),
+            dedupeNormalizeWhitespace: typeof contextInjectorSource.dedupeNormalizeWhitespace === "boolean"
+                ? contextInjectorSource.dedupeNormalizeWhitespace
+                : DEFAULT_GATEWAY_CONFIG.contextInjector.dedupeNormalizeWhitespace,
+        },
         globalProcessPressure: {
             enabled: typeof globalProcessPressureSource.enabled === "boolean"
                 ? globalProcessPressureSource.enabled
@@ -656,12 +669,19 @@ export function loadGatewayConfig(raw) {
             enabled: typeof sessionRuntimeSystemContextSource.enabled === "boolean"
                 ? sessionRuntimeSystemContextSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
+            injectSessionIdContext: typeof sessionRuntimeSystemContextSource.injectSessionIdContext === "boolean"
+                ? sessionRuntimeSystemContextSource.injectSessionIdContext
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdContext,
+            injectSessionIdWhenConciseModeOnly: typeof sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly === "boolean"
+                ? sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly
+                : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly,
         },
         conciseMode: {
             enabled: typeof conciseModeSource.enabled === "boolean"
                 ? conciseModeSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.conciseMode.enabled,
-            defaultMode: conciseModeSource.defaultMode === "lite" ||
+            defaultMode: conciseModeSource.defaultMode === "off" ||
+                conciseModeSource.defaultMode === "lite" ||
                 conciseModeSource.defaultMode === "full" ||
                 conciseModeSource.defaultMode === "ultra"
                 ? conciseModeSource.defaultMode

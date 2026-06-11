@@ -93,12 +93,19 @@ export interface PressureEscalationGuardConfig {
 export interface CompactionContextInjectorConfig {
     enabled: boolean;
 }
+export interface ContextInjectorConfig {
+    dedupeEnabled: boolean;
+    minDeltaChars: number;
+    dedupeNormalizeWhitespace: boolean;
+}
 export interface SessionRecoveryConfig {
     enabled: boolean;
     autoResume: boolean;
 }
 export interface SessionRuntimeSystemContextConfig {
     enabled: boolean;
+    injectSessionIdContext: boolean;
+    injectSessionIdWhenConciseModeOnly: boolean;
 }
 export interface ConciseModeConfig {
     enabled: boolean;
@@ -440,6 +447,7 @@ export interface GatewayConfig {
     contextWindowMonitor: ContextWindowMonitorConfig;
     preemptiveCompaction: PreemptiveCompactionConfig;
     compactionContextInjector: CompactionContextInjectorConfig;
+    contextInjector: ContextInjectorConfig;
     globalProcessPressure: GlobalProcessPressureConfig;
     longTurnWatchdog: LongTurnWatchdogConfig;
     notifyEvents: NotifyEventsConfig;

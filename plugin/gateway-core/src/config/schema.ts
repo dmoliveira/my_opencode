@@ -121,6 +121,7 @@ export interface CompactionContextInjectorConfig {
 export interface ContextInjectorConfig {
   dedupeEnabled: boolean;
   minDeltaChars: number;
+  dedupeNormalizeWhitespace: boolean;
 }
 
 // Declares session recovery settings for event-driven auto-resume attempts.
@@ -133,6 +134,7 @@ export interface SessionRecoveryConfig {
 export interface SessionRuntimeSystemContextConfig {
   enabled: boolean;
   injectSessionIdContext: boolean;
+  injectSessionIdWhenConciseModeOnly: boolean;
 }
 
 export interface ConciseModeConfig {
@@ -824,6 +826,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   contextInjector: {
     dedupeEnabled: true,
     minDeltaChars: 120,
+    dedupeNormalizeWhitespace: true,
   },
   globalProcessPressure: {
     enabled: true,
@@ -889,6 +892,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   sessionRuntimeSystemContext: {
     enabled: true,
     injectSessionIdContext: true,
+    injectSessionIdWhenConciseModeOnly: false,
   },
   conciseMode: {
     enabled: false,

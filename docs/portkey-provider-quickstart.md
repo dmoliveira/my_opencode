@@ -104,7 +104,8 @@ Create or edit `.opencode/gateway-core.config.json`:
 {
   "contextInjector": {
     "dedupeEnabled": true,
-    "minDeltaChars": 120
+    "minDeltaChars": 120,
+    "dedupeNormalizeWhitespace": true
   }
 }
 ```
@@ -114,6 +115,7 @@ If you also define `contextInjector` in repo-root `opencode.json`, root config v
 - Set `dedupeEnabled: false` to disable dedupe quickly.
 - Increase `minDeltaChars` to skip more small context deltas.
 - Set `minDeltaChars: 0` to only skip exact duplicates.
+- Keep `dedupeNormalizeWhitespace: true` (default) to treat formatting-only drift as duplicate.
 
 ### Session runtime context cache tuning (toggle)
 
@@ -123,10 +125,46 @@ To reduce cross-session cache fragmentation, you can disable runtime session-id 
 {
   "sessionRuntimeSystemContext": {
     "enabled": true,
-    "injectSessionIdContext": false
+    "injectSessionIdContext": false,
+    "injectSessionIdWhenConciseModeOnly": false
   }
 }
 ```
 
 - `injectSessionIdContext: true` (default): preserve strict runtime session-id guidance in system prompt.
 - `injectSessionIdContext: false`: remove that per-session marker from system prompt to improve cache reuse across sessions.
+- `injectSessionIdWhenConciseModeOnly: true`: inject runtime session-id context only when concise mode context is active.
+
+### Cache-optimized sidecar profile (recommended baseline)
+
+Use this when your priority is prompt-cache hit rate over strict per-session runtime id injection.
+
+```json
+{
+  "contextInjector": {
+    "dedupeEnabled": true,
+    "minDeltaChars": 120,
+    "dedupeNormalizeWhitespace": true
+  },
+  "sessionRuntimeSystemContext": {
+    "enabled": true,
+    "injectSessionIdContext": false,
+    "injectSessionIdWhenConciseModeOnly": false
+  }
+}
+```
+
+Save this in `.opencode/gateway-core.config.json`.
+
+If root `opencode.json` also sets the same keys, root values still win.
+
+Quick rollback profile (strict runtime id semantics):
+
+```json
+{
+  "sessionRuntimeSystemContext": {
+    "enabled": true,
+    "injectSessionIdContext": true
+  }
+}
+```

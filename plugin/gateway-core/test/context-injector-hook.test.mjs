@@ -480,3 +480,90 @@ test("context-injector limits transform user scan to recent messages", async () 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("context-injector dedupe treats whitespace-only drift as duplicate by default", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-whitespace", {
+      source: "test",
+      id: "w1",
+      content: "alpha   beta\n\n gamma",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+      dedupeEnabled: true,
+      minDeltaChars: 0,
+    })
+    const output = { parts: [{ type: "text", text: "Prompt" }] }
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-whitespace" },
+      output,
+      directory,
+    })
+
+    collector.register("session-context-whitespace", {
+      source: "test",
+      id: "w2",
+      content: "alpha beta gamma",
+      priority: "high",
+    })
+    const secondOutput = { parts: [{ type: "text", text: "Prompt" }] }
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-whitespace" },
+      output: secondOutput,
+      directory,
+    })
+
+    assert.equal(String(secondOutput.parts[0].text), "Prompt")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-injector can disable whitespace normalization for dedupe", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-injector-"))
+  try {
+    const collector = new ContextCollector()
+    collector.register("session-context-whitespace-off", {
+      source: "test",
+      id: "w1",
+      content: "alpha   beta\n\n gamma",
+      priority: "high",
+    })
+    const hook = createContextInjectorHook({
+      directory,
+      enabled: true,
+      collector,
+      dedupeEnabled: true,
+      minDeltaChars: 0,
+      dedupeNormalizeWhitespace: false,
+    })
+    const output = { parts: [{ type: "text", text: "Prompt" }] }
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-whitespace-off" },
+      output,
+      directory,
+    })
+
+    collector.register("session-context-whitespace-off", {
+      source: "test",
+      id: "w2",
+      content: "alpha beta gamma",
+      priority: "high",
+    })
+    const secondOutput = { parts: [{ type: "text", text: "Prompt" }] }
+    await hook.event("chat.message", {
+      properties: { sessionID: "session-context-whitespace-off" },
+      output: secondOutput,
+      directory,
+    })
+
+    assert.match(String(secondOutput.parts[0].text), /alpha beta gamma/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

@@ -28,7 +28,7 @@ test("session-runtime-system-context injects hidden system session id", async ()
 test("session-runtime-system-context dedupes hidden system session id", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {
-    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const output = { system: ["existing system"] }
     await hook.event("experimental.chat.system.transform", {
       input: { sessionID: "session-hidden-2" },
@@ -49,7 +49,7 @@ test("session-runtime-system-context dedupes hidden system session id", async ()
 test("session-runtime-system-context replaces stale hidden system session id", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {
-    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const output = { system: ["runtime_session_context: stale-session\nUse this exact runtime session id for commits, logs, telemetry, and external tooling created during this session."] }
     await hook.event("experimental.chat.system.transform", {
       input: { sessionID: "session-hidden-3" },
@@ -100,7 +100,7 @@ test("session-runtime-system-context injects active concise mode from gateway st
       },
       lastUpdatedAt: nowIso(),
     })
-    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const output = { system: ["baseline"] }
     await hook.event("experimental.chat.system.transform", {
       input: { sessionID: "session-hidden-4" },
@@ -128,7 +128,7 @@ test("session-runtime-system-context ignores concise mode from a different sessi
       },
       lastUpdatedAt: nowIso(),
     })
-    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const output = { system: ["baseline"] }
     await hook.event("experimental.chat.system.transform", {
       input: { sessionID: "session-hidden-5" },
@@ -136,6 +136,64 @@ test("session-runtime-system-context ignores concise mode from a different sessi
       directory,
     })
     assert.equal(output.system.some((line) => line.includes("runtime_concise_mode:")), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-runtime-system-context can scope session id injection to concise mode only", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  try {
+    const hook = createSessionRuntimeSystemContextHook({
+      directory,
+      enabled: true,
+      injectSessionIdContext: true,
+      injectSessionIdWhenConciseModeOnly: true,
+      conciseModeEnabled: false,
+      conciseDefaultMode: "off",
+    })
+    const output = { system: ["baseline"] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-6" },
+      output,
+      directory,
+    })
+    assert.equal(output.system.some((line) => line.includes("runtime_session_context:")), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-runtime-system-context concise-only scope injects when concise is active", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "lite",
+        source: "test",
+        sessionId: "session-hidden-7",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+    const hook = createSessionRuntimeSystemContextHook({
+      directory,
+      enabled: true,
+      injectSessionIdContext: true,
+      injectSessionIdWhenConciseModeOnly: true,
+      conciseModeEnabled: false,
+      conciseDefaultMode: "off",
+    })
+    const output = { system: ["baseline"] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-7" },
+      output,
+      directory,
+    })
+    assert.match(output.system[0], /runtime_concise_mode: lite/)
+    assert.ok(output.system.some((line) => line.includes("runtime_session_context: session-hidden-7")))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

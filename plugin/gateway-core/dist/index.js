@@ -468,6 +468,8 @@ function configuredHooks(ctx) {
         safeHook("session-runtime-system-context", () => createSessionRuntimeSystemContextHook({
             directory,
             enabled: cfg.sessionRuntimeSystemContext.enabled,
+            injectSessionIdContext: cfg.sessionRuntimeSystemContext.injectSessionIdContext,
+            injectSessionIdWhenConciseModeOnly: cfg.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly,
             conciseModeEnabled: cfg.conciseMode.enabled,
             conciseDefaultMode: cfg.conciseMode.defaultMode,
         })),
@@ -521,6 +523,9 @@ function configuredHooks(ctx) {
             directory,
             enabled: cfg.hooks.enabled,
             collector: contextCollector,
+            dedupeEnabled: cfg.contextInjector.dedupeEnabled,
+            minDeltaChars: cfg.contextInjector.minDeltaChars,
+            dedupeNormalizeWhitespace: cfg.contextInjector.dedupeNormalizeWhitespace,
         })),
         safeHook("rules-injector", () => createRulesInjectorHook({
             directory,

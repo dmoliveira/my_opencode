@@ -52,10 +52,16 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.notifyEvents.style, "brief")
   assert.equal(config.conciseMode.enabled, false)
   assert.equal(config.conciseMode.defaultMode, "off")
+  assert.equal(config.contextInjector.dedupeEnabled, true)
+  assert.equal(config.contextInjector.minDeltaChars, 120)
+  assert.equal(config.contextInjector.dedupeNormalizeWhitespace, true)
+  assert.equal(config.sessionRuntimeSystemContext.enabled, true)
+  assert.equal(config.sessionRuntimeSystemContext.injectSessionIdContext, true)
+  assert.equal(config.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly, false)
   assert.equal(config.thinkMode.enabled, true)
   assert.equal(config.thinkingBlockValidator.enabled, true)
-  assert.equal(config.directoryAgentsInjector.maxChars, 4000)
-  assert.equal(config.directoryReadmeInjector.maxChars, 4000)
+  assert.equal(config.directoryAgentsInjector.maxChars, 1000)
+  assert.equal(config.directoryReadmeInjector.maxChars, 1000)
   assert.equal(config.todoContinuationEnforcer.enabled, true)
   assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
   assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
@@ -124,6 +130,28 @@ test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
     },
   })
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
+})
+
+test("loadGatewayConfig applies context injector and session runtime overrides", () => {
+  const config = loadGatewayConfig({
+    contextInjector: {
+      dedupeEnabled: false,
+      minDeltaChars: 5,
+      dedupeNormalizeWhitespace: false,
+    },
+    sessionRuntimeSystemContext: {
+      enabled: true,
+      injectSessionIdContext: false,
+      injectSessionIdWhenConciseModeOnly: true,
+    },
+  })
+
+  assert.equal(config.contextInjector.dedupeEnabled, false)
+  assert.equal(config.contextInjector.minDeltaChars, 5)
+  assert.equal(config.contextInjector.dedupeNormalizeWhitespace, false)
+  assert.equal(config.sessionRuntimeSystemContext.enabled, true)
+  assert.equal(config.sessionRuntimeSystemContext.injectSessionIdContext, false)
+  assert.equal(config.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly, true)
 })
 
 test("loadGatewayConfig normalizes llmDecisionRuntime env to non-empty string pairs", () => {
@@ -309,8 +337,8 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.notifyEvents.enabled, true)
   assert.equal(config.notifyEvents.cooldownMs, 1200)
   assert.equal(config.notifyEvents.style, "brief")
-  assert.equal(config.directoryAgentsInjector.maxChars, 4000)
-  assert.equal(config.directoryReadmeInjector.maxChars, 4000)
+  assert.equal(config.directoryAgentsInjector.maxChars, 1000)
+  assert.equal(config.directoryReadmeInjector.maxChars, 1000)
   assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
   assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
   assert.equal(config.compactionTodoPreserver.maxChars, 4000)

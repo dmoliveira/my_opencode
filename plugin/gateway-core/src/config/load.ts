@@ -850,6 +850,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         contextInjectorSource.minDeltaChars,
         DEFAULT_GATEWAY_CONFIG.contextInjector.minDeltaChars,
       ),
+      dedupeNormalizeWhitespace:
+        typeof contextInjectorSource.dedupeNormalizeWhitespace === "boolean"
+          ? contextInjectorSource.dedupeNormalizeWhitespace
+          : DEFAULT_GATEWAY_CONFIG.contextInjector.dedupeNormalizeWhitespace,
     },
     globalProcessPressure: {
       enabled:
@@ -1027,6 +1031,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof sessionRuntimeSystemContextSource.injectSessionIdContext === "boolean"
           ? sessionRuntimeSystemContextSource.injectSessionIdContext
           : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdContext,
+      injectSessionIdWhenConciseModeOnly:
+        typeof sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly === "boolean"
+          ? sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly,
     },
     conciseMode: {
       enabled:
