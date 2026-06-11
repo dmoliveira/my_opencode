@@ -1052,7 +1052,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: false,
   },
   assistantMessageTimestamp: {
-    enabled: true,
+    enabled: false,
   },
   taskResumeInfo: {
     enabled: true,

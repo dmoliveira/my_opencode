@@ -147,20 +147,6 @@ function prependHint(original: string, hint: string): string {
   return `${hint}\n\n${original}`
 }
 
-function formatTimestamp(date: Date): { full: string; time: string } {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  const hours = String(date.getHours()).padStart(2, "0")
-  const minutes = String(date.getMinutes()).padStart(2, "0")
-  const seconds = String(date.getSeconds()).padStart(2, "0")
-  const time = `${hours}:${minutes}:${seconds}`
-  return {
-    full: `${year}-${month}-${day} ${time}`,
-    time,
-  }
-}
-
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -376,12 +362,12 @@ function policyForAgent(
   return { overrideDelta, intentThreshold }
 }
 
-function formatSubagentLabel(subagentType: string, reasoning: string, timestamp: string): string {
+function formatSubagentLabel(subagentType: string, reasoning: string): string {
   const icon = SUBAGENT_ICON_BY_TYPE[subagentType] ?? {
     nerd: "󰚩",
     fallback: "[agent]",
   }
-  return formatHeader("SUBAGENT", `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`, timestamp)
+  return formatHeader("SUBAGENT", `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`)
 }
 
 export function createAgentModelResolverHook(options: {
@@ -615,11 +601,9 @@ export function createAgentModelResolverHook(options: {
 
       args.category = category
       const model = MODEL_BY_CATEGORY[category]
-      const stamp = formatTimestamp(new Date())
       const modelHintPrompt = formatHeader(
         "MODEL ROUTING",
         `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
-        stamp.full,
       )
       const modelHintDescription = formatHeader(
         "MODEL ROUTING",
@@ -645,7 +629,7 @@ export function createAgentModelResolverHook(options: {
         "WORKTREE CONTEXT",
         `cwd=${directory}; execute file discovery and validation relative to this path unless prompt explicitly overrides.`,
       )
-      const subagentLabel = formatSubagentLabel(subagentType, model.reasoning, stamp.full)
+      const subagentLabel = formatSubagentLabel(subagentType, model.reasoning)
 
       const cleanPrompt = stripInjectedHeaders(String(args.prompt ?? ""))
       const cleanDescription = stripInjectedHeaders(String(args.description ?? ""))
