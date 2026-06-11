@@ -41,6 +41,7 @@ interface EventPayload {
   }
 }
 const TRANSFORM_MESSAGE_LOOKBACK_LIMIT = 64
+const MAX_TRACKED_INJECTED_SESSIONS = 512
 
 function recentMessages<T>(messages: T[], limit = TRANSFORM_MESSAGE_LOOKBACK_LIMIT): T[] {
   if (!Array.isArray(messages) || messages.length <= limit) {
@@ -111,6 +112,22 @@ function estimateChangedChars(previous: string, next: string): number {
   return Math.max(changedPrevious, changedNext, Math.abs(previous.length - next.length))
 }
 
+function rememberInjectedContext(
+  tracked: Map<string, string>,
+  sessionId: string,
+  context: string,
+): void {
+  tracked.delete(sessionId)
+  tracked.set(sessionId, context)
+  while (tracked.size > MAX_TRACKED_INJECTED_SESSIONS) {
+    const oldest = tracked.keys().next().value
+    if (typeof oldest !== "string") {
+      break
+    }
+    tracked.delete(oldest)
+  }
+}
+
 // Creates context injector that injects pending context on chat and transform hooks.
 export function createContextInjectorHook(options: {
   directory: string
@@ -172,7 +189,7 @@ export function createContextInjectorHook(options: {
               writeGatewayEventAudit(directory, {
                 hook: "context-injector",
                 stage: "inject",
-                reason_code: "context_inject_chat_skipped_duplicate",
+                reason_code: REASON_CODES.CONTEXT_INJECT_CHAT_SKIPPED_DUPLICATE,
                 session_id: sessionId,
                 context_length: truncated.text.length,
               })
@@ -182,7 +199,7 @@ export function createContextInjectorHook(options: {
               writeGatewayEventAudit(directory, {
                 hook: "context-injector",
                 stage: "inject",
-                reason_code: "context_inject_chat_skipped_small_delta",
+                reason_code: REASON_CODES.CONTEXT_INJECT_CHAT_SKIPPED_SMALL_DELTA,
                 session_id: sessionId,
                 context_length: truncated.text.length,
                 delta_chars: deltaChars,
@@ -225,7 +242,7 @@ export function createContextInjectorHook(options: {
           session_id: sessionId,
           context_length: truncated.text.length,
         })
-        lastInjectedBySession.set(sessionId, truncated.text)
+        rememberInjectedContext(lastInjectedBySession, sessionId, truncated.text)
         return
       }
 
@@ -287,7 +304,7 @@ export function createContextInjectorHook(options: {
             writeGatewayEventAudit(directory, {
               hook: "context-injector",
               stage: "inject",
-              reason_code: "context_inject_transform_skipped_duplicate",
+              reason_code: REASON_CODES.CONTEXT_INJECT_TRANSFORM_SKIPPED_DUPLICATE,
               session_id: sessionId,
               context_length: truncated.text.length,
             })
@@ -297,7 +314,7 @@ export function createContextInjectorHook(options: {
             writeGatewayEventAudit(directory, {
               hook: "context-injector",
               stage: "inject",
-              reason_code: "context_inject_transform_skipped_small_delta",
+              reason_code: REASON_CODES.CONTEXT_INJECT_TRANSFORM_SKIPPED_SMALL_DELTA,
               session_id: sessionId,
               context_length: truncated.text.length,
               delta_chars: deltaChars,
@@ -330,7 +347,7 @@ export function createContextInjectorHook(options: {
         session_id: sessionId,
         context_length: truncated.text.length,
       })
-      lastInjectedBySession.set(sessionId, truncated.text)
+      rememberInjectedContext(lastInjectedBySession, sessionId, truncated.text)
     },
   }
 }

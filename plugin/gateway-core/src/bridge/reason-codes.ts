@@ -26,6 +26,10 @@ export const REASON_CODES = {
   CONTEXT_REQUEUED_NO_TEXT_PART: "pending_context_requeued_no_text_part",
   CONTEXT_TRANSFORM_NO_USER_MESSAGE: "pending_context_transform_no_user_message",
   CONTEXT_TRANSFORM_NO_PARTS: "pending_context_transform_missing_parts",
+  CONTEXT_INJECT_CHAT_SKIPPED_DUPLICATE: "context_inject_chat_skipped_duplicate",
+  CONTEXT_INJECT_CHAT_SKIPPED_SMALL_DELTA: "context_inject_chat_skipped_small_delta",
+  CONTEXT_INJECT_TRANSFORM_SKIPPED_DUPLICATE: "context_inject_transform_skipped_duplicate",
+  CONTEXT_INJECT_TRANSFORM_SKIPPED_SMALL_DELTA: "context_inject_transform_skipped_small_delta",
   COMPACTION_CONTEXT_INJECTED: "compaction_context_injected",
   COMPACTION_CONTEXT_ALREADY_PRESENT: "compaction_context_already_present",
 } as const
