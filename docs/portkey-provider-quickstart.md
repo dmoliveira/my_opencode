@@ -114,3 +114,19 @@ If you also define `contextInjector` in repo-root `opencode.json`, root config v
 - Set `dedupeEnabled: false` to disable dedupe quickly.
 - Increase `minDeltaChars` to skip more small context deltas.
 - Set `minDeltaChars: 0` to only skip exact duplicates.
+
+### Session runtime context cache tuning (toggle)
+
+To reduce cross-session cache fragmentation, you can disable runtime session-id system context injection while keeping concise-mode behavior.
+
+```json
+{
+  "sessionRuntimeSystemContext": {
+    "enabled": true,
+    "injectSessionIdContext": false
+  }
+}
+```
+
+- `injectSessionIdContext: true` (default): preserve strict runtime session-id guidance in system prompt.
+- `injectSessionIdContext: false`: remove that per-session marker from system prompt to improve cache reuse across sessions.
