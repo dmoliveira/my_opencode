@@ -132,6 +132,7 @@ export interface SessionRecoveryConfig {
 // Declares hidden runtime session system context settings.
 export interface SessionRuntimeSystemContextConfig {
   enabled: boolean;
+  injectSessionIdContext: boolean;
 }
 
 export interface ConciseModeConfig {
@@ -887,6 +888,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   sessionRuntimeSystemContext: {
     enabled: true,
+    injectSessionIdContext: true,
   },
   conciseMode: {
     enabled: false,

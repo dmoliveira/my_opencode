@@ -1023,6 +1023,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof sessionRuntimeSystemContextSource.enabled === "boolean"
           ? sessionRuntimeSystemContextSource.enabled
           : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
+      injectSessionIdContext:
+        typeof sessionRuntimeSystemContextSource.injectSessionIdContext === "boolean"
+          ? sessionRuntimeSystemContextSource.injectSessionIdContext
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdContext,
     },
     conciseMode: {
       enabled:
