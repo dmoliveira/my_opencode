@@ -93,3 +93,22 @@ OpenAI and Foundry model lists in `opencode.json` are intentionally curated to k
 ### Azure OpenAI vs Azure Foundry note
 
 In current tests for `gpt-5-mini`, both `azure-openai-useast2-nonprod` and `azure-foundry-useast2-nonprod` returned the same rate-limit headers (`10 RPM`, `10000 TPM`). Foundry is now enabled as an alternative route, but it may not improve throttling unless backend limits differ in your workspace.
+
+### Context-injector cache tuning (toggle)
+
+To reduce cache misses from tiny synthetic-context drift, gateway now supports context-injector dedupe controls.
+
+Create or edit `.opencode/gateway-core.config.json`:
+
+```json
+{
+  "contextInjector": {
+    "dedupeEnabled": true,
+    "minDeltaChars": 120
+  }
+}
+```
+
+- Set `dedupeEnabled: false` to disable dedupe quickly.
+- Increase `minDeltaChars` to skip more small context deltas.
+- Set `minDeltaChars: 0` to only skip exact duplicates.

@@ -92,18 +92,44 @@ function injectIntoParts(parts: TextPart[], merged: string): boolean {
   return true
 }
 
+function estimateChangedChars(previous: string, next: string): number {
+  if (previous === next) {
+    return 0
+  }
+  let start = 0
+  while (start < previous.length && start < next.length && previous[start] === next[start]) {
+    start += 1
+  }
+  let endPrevious = previous.length - 1
+  let endNext = next.length - 1
+  while (endPrevious >= start && endNext >= start && previous[endPrevious] === next[endNext]) {
+    endPrevious -= 1
+    endNext -= 1
+  }
+  const changedPrevious = Math.max(0, endPrevious - start + 1)
+  const changedNext = Math.max(0, endNext - start + 1)
+  return Math.max(changedPrevious, changedNext, Math.abs(previous.length - next.length))
+}
+
 // Creates context injector that injects pending context on chat and transform hooks.
 export function createContextInjectorHook(options: {
   directory: string
   enabled: boolean
   collector: ContextCollector
   maxChars?: number
+  dedupeEnabled?: boolean
+  minDeltaChars?: number
 }): GatewayHook {
-  let lastKnownSessionId = ""
+  const lastInjectedBySession = new Map<string, string>()
   const maxChars =
     typeof options.maxChars === "number" && Number.isFinite(options.maxChars) && options.maxChars > 0
       ? Math.floor(options.maxChars)
       : DEFAULT_INJECTED_TEXT_MAX_CHARS
+  const dedupeEnabled = options.dedupeEnabled !== false
+  const minDeltaChars =
+    typeof options.minDeltaChars === "number" && Number.isFinite(options.minDeltaChars)
+      ? Math.max(0, Math.floor(options.minDeltaChars))
+      : 0
   return {
     id: "context-injector",
     priority: 295,
@@ -117,9 +143,7 @@ export function createContextInjectorHook(options: {
         if (typeof sessionId === "string" && sessionId.trim()) {
           const normalized = sessionId.trim()
           options.collector.clear(normalized)
-          if (lastKnownSessionId === normalized) {
-            lastKnownSessionId = ""
-          }
+          lastInjectedBySession.delete(normalized)
         }
         return
       }
@@ -130,10 +154,7 @@ export function createContextInjectorHook(options: {
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
             : options.directory
-        const sessionId = resolveSessionId(eventPayload, lastKnownSessionId)
-        if (sessionId) {
-          lastKnownSessionId = sessionId
-        }
+        const sessionId = resolveSessionId(eventPayload)
         const parts = eventPayload.output?.parts
         if (!sessionId || !Array.isArray(parts) || !options.collector.hasPending(sessionId)) {
           return
@@ -143,6 +164,34 @@ export function createContextInjectorHook(options: {
           return
         }
         const truncated = truncateInjectedText(pending.merged, maxChars)
+        if (dedupeEnabled) {
+          const previous = lastInjectedBySession.get(sessionId) ?? ""
+          if (previous) {
+            const deltaChars = estimateChangedChars(previous, truncated.text)
+            if (deltaChars === 0) {
+              writeGatewayEventAudit(directory, {
+                hook: "context-injector",
+                stage: "inject",
+                reason_code: "context_inject_chat_skipped_duplicate",
+                session_id: sessionId,
+                context_length: truncated.text.length,
+              })
+              return
+            }
+            if (minDeltaChars > 0 && deltaChars < minDeltaChars) {
+              writeGatewayEventAudit(directory, {
+                hook: "context-injector",
+                stage: "inject",
+                reason_code: "context_inject_chat_skipped_small_delta",
+                session_id: sessionId,
+                context_length: truncated.text.length,
+                delta_chars: deltaChars,
+                min_delta_chars: minDeltaChars,
+              })
+              return
+            }
+          }
+        }
         if (truncated.truncated) {
           writeGatewayEventAudit(directory, {
             hook: "context-injector",
@@ -176,6 +225,7 @@ export function createContextInjectorHook(options: {
           session_id: sessionId,
           context_length: truncated.text.length,
         })
+        lastInjectedBySession.set(sessionId, truncated.text)
         return
       }
 
@@ -188,10 +238,7 @@ export function createContextInjectorHook(options: {
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
-      const sessionId = resolveSessionId(eventPayload, lastKnownSessionId)
-      if (sessionId) {
-        lastKnownSessionId = sessionId
-      }
+      const sessionId = resolveSessionId(eventPayload)
       const messages = eventPayload.output?.messages
       if (!sessionId || !Array.isArray(messages) || !options.collector.hasPending(sessionId)) {
         return
@@ -232,6 +279,34 @@ export function createContextInjectorHook(options: {
         return
       }
       const truncated = truncateInjectedText(pending.merged, maxChars)
+      if (dedupeEnabled) {
+        const previous = lastInjectedBySession.get(sessionId) ?? ""
+        if (previous) {
+          const deltaChars = estimateChangedChars(previous, truncated.text)
+          if (deltaChars === 0) {
+            writeGatewayEventAudit(directory, {
+              hook: "context-injector",
+              stage: "inject",
+              reason_code: "context_inject_transform_skipped_duplicate",
+              session_id: sessionId,
+              context_length: truncated.text.length,
+            })
+            return
+          }
+          if (minDeltaChars > 0 && deltaChars < minDeltaChars) {
+            writeGatewayEventAudit(directory, {
+              hook: "context-injector",
+              stage: "inject",
+              reason_code: "context_inject_transform_skipped_small_delta",
+              session_id: sessionId,
+              context_length: truncated.text.length,
+              delta_chars: deltaChars,
+              min_delta_chars: minDeltaChars,
+            })
+            return
+          }
+        }
+      }
       if (truncated.truncated) {
         writeGatewayEventAudit(directory, {
           hook: "context-injector",
@@ -255,6 +330,7 @@ export function createContextInjectorHook(options: {
         session_id: sessionId,
         context_length: truncated.text.length,
       })
+      lastInjectedBySession.set(sessionId, truncated.text)
     },
   }
 }
