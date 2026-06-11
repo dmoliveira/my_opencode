@@ -109,6 +109,8 @@ Create or edit `.opencode/gateway-core.config.json`:
 }
 ```
 
+If you also define `contextInjector` in repo-root `opencode.json`, root config values take precedence over sidecar defaults.
+
 - Set `dedupeEnabled: false` to disable dedupe quickly.
 - Increase `minDeltaChars` to skip more small context deltas.
 - Set `minDeltaChars: 0` to only skip exact duplicates.
