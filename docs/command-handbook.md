@@ -542,9 +542,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 
 ### Compatibility aliases (secondary)
 
-- `/do` -> shorthand alias for `/autopilot`
 - `/plan` -> compatibility/internal contract-checking wrapper; prefer `/autoflow` for new usage
-- `/start-work` -> legacy plan-execution surface; prefer `/autoflow` in new guidance
 
 ## OX prompt-pack namespace
 
@@ -594,23 +592,11 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /audit - Inspect runtime audit trail (status|list|report|export|doctor)
 /auto-slash - Detect and preview natural-language slash intents
 /autopilot - Continue current task autonomously with autopilot guardrails
-/autopilot-status - Alias for /autopilot status
-/autopilot-report - Alias for /autopilot report
-/autopilot-pause - Alias for /autopilot pause
-/autopilot-resume - Alias for /autopilot resume
-/autopilot-stop - Alias for /autopilot stop
-/autopilot-doctor - Alias for /autopilot doctor
 /autoflow - Run deterministic plan execution flow (start|status|report|resume|doctor)
-/start-work - Run plan-file execution and resume controls (legacy alias surface)
-/start-work-status - Alias for /start-work status
-/start-work-deviations - Alias for /start-work deviations
 /agent-pool - Manage manual runtime capacity registry and lifecycle controls (spawn|list|health|drain|logs|doctor); capacity registration does not start workers, and `/bg` remains the execution backend
 /continuation-stop - Stop active continuation loops and disable auto-resume
 /bg - Manage background jobs as the execution backend (start|status|list|read|cancel|cleanup|doctor)
 /browser - Manage browser automation provider profile (status|profile|doctor)
-/browser-status - Alias for /browser status
-/browser-profile - Alias for /browser profile <provider>
-/browser-doctor-json - Alias for /browser doctor --json
 /budget - Manage execution budget controls (status|profile|override|doctor)
 /changes - Explain local change narrative for handoff/release notes (explain|--since)
 /claims - Manage collaborative issue claims and handoffs (claim|handoff|accept-handoff|reject-handoff|release|expire-stale|status|list|doctor)
@@ -621,7 +607,6 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /delegation-health - Summarize delegation health and detect routing drift (status|doctor)
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate or show session digests (run|show)
-/do - Shorthand alias for /autopilot
 /doctor - Run diagnostics and reason-code registry export
 /gateway - Manage gateway runtime controls (status|enable|disable|doctor|watchdog|continuation report|tune memory|recover memory|protection)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
@@ -635,9 +620,6 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /memory - Manage shared memory content (add|find|recall|pin|summarize|promote|doctor)
 /memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)
 /model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
-/routing - Inspect compact routing fallback visibility (status|explain)
-/keyword-mode - Manage prompt keyword execution modes and per-keyword toggles
-/resilience - Inspect context resilience status and doctor diagnostics
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
 /ox - Namespace catalog, diagnostics, and ecosystem links for the `/ox-*` prompt-pack family
@@ -657,9 +639,6 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /refactor-lite - Run safe refactor workflow backend
 /release-train - Run release-train workflow controls (status|prepare|draft|rollup|publish with optional --profile docs-only|runtime)
 /resume - Manage runtime recovery controls (status|now|smart|disable)
-/resume-status - Alias for /resume status
-/resume-now - Alias for /resume now
-/resume-disable - Alias for /resume disable
 /rules - Inspect conditional rules (status|explain|disable-id|enable-id|doctor)
 /safe-edit - Plan semantic safe-edit execution (status|plan|doctor)
 /session - Inspect indexed sessions (list|show|search|handoff|doctor)
@@ -667,7 +646,5 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /stack - Apply cross-command profile bundles
 /telemetry - Manage telemetry forwarding (status|doctor|profile|enable|disable|set)
 /todo - Inspect todo compliance state (status|enforce)
-/todo-status - Alias for /todo status
-/todo-enforce - Alias for /todo enforce
 /workflow - Run reusable workflow templates and swarm planning (run|validate|list|status|resume|stop|swarm|template|doctor)
 ```
