@@ -1,6 +1,7 @@
 {
   "name": "orchestrator",
   "mode": "primary",
+  "model": "openai/gpt-5.3-codex",
   "description_template": "Primary execution orchestrator for complex tasks with profile {{PROFILE_LABEL}}. Uses specialist delegation and strict completion gates.",
   "tools": {
     "bash": true,

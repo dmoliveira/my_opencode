@@ -1,6 +1,7 @@
 {
   "name": "release-scribe",
   "mode": "subagent",
+  "model": "openai/gpt-5.4-mini",
   "description_template": "Read-only release documentation specialist for PR summaries, changelog entries, and concise release notes.",
   "tools": {
     "bash": true,

@@ -36,6 +36,18 @@ def _validate_tools(name: str, tools: Any) -> dict[str, bool]:
     return normalized
 
 
+def _validate_model(name: str, value: Any) -> str:
+    """Validate optional provider/model reference for an agent spec."""
+    if value is None:
+        return ""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name}: model must be a non-empty string when provided")
+    normalized = value.strip()
+    if "/" not in normalized:
+        raise ValueError(f"{name}: model must use provider/model format")
+    return normalized
+
+
 def _validate_metadata(name: str, metadata: Any) -> dict[str, Any]:
     """Validate optional routing metadata for an agent spec."""
     if metadata is None:
@@ -128,6 +140,7 @@ def _render_agent(spec: dict[str, Any], profile: str) -> tuple[str, str]:
         raise ValueError(f"{name}: body_template is required")
 
     tools = _validate_tools(name, spec.get("tools"))
+    model = _validate_model(name, spec.get("model"))
     metadata = _validate_metadata(name, spec.get("metadata"))
     vars_map = _collect_vars(spec, profile)
     description = _render_template(description_template, vars_map, name=name)
@@ -138,8 +151,10 @@ def _render_agent(spec: dict[str, Any], profile: str) -> tuple[str, str]:
         "description: >-",
         f"  {description}",
         f"mode: {mode}",
-        "tools:",
     ]
+    if model:
+        header_lines.append(f"model: {model}")
+    header_lines.append("tools:")
     for tool_name, enabled in tools.items():
         header_lines.append(f"  {tool_name}: {'true' if enabled else 'false'}")
     if metadata:
