@@ -19,6 +19,13 @@ function isQuestionTool(raw) {
     const tool = normalizeToolName(raw);
     return tool === "question" || tool === "askuserquestion";
 }
+function hasVisibleAssistantText(parts) {
+    const resolved = Array.isArray(parts) ? parts : [];
+    return resolved.some((part) => part?.type === "text" &&
+        typeof part.text === "string" &&
+        part.text.trim() &&
+        !part.synthetic);
+}
 // Returns true when event error resembles recoverable transient session failure.
 function isRecoverableError(error) {
     const parts = [];
@@ -91,10 +98,7 @@ function looksLikeSilentDelegatedAbortFromHistory(messages) {
             return { matched: false, childSessionId: "" };
         }
         const parts = Array.isArray(message.parts) ? message.parts : [];
-        const hasVisibleText = parts.some((part) => part?.type === "text" &&
-            typeof part.text === "string" &&
-            part.text.trim() &&
-            !part.synthetic);
+        const hasVisibleText = hasVisibleAssistantText(parts);
         if (hasVisibleText) {
             return { matched: false, childSessionId: "" };
         }
@@ -128,10 +132,7 @@ function looksLikeSilentQuestionStallFromHistory(messages) {
         return { matched: false, tool: "" };
     }
     const parts = Array.isArray(message.parts) ? message.parts : [];
-    const hasVisibleText = parts.some((part) => part?.type === "text" &&
-        typeof part.text === "string" &&
-        part.text.trim() &&
-        !part.synthetic);
+    const hasVisibleText = hasVisibleAssistantText(parts);
     if (hasVisibleText) {
         return { matched: false, tool: "" };
     }
@@ -149,36 +150,29 @@ function looksLikeSilentQuestionStallFromHistory(messages) {
 function looksLikeIncompleteAssistantTailFromHistory(messages) {
     const message = messages.at(-1);
     if (message?.info?.role !== "assistant") {
-        return { matched: false, tool: "" };
+        return { matched: false, tool: "", ambiguous: false };
     }
     const errored = message.info?.error !== undefined && message.info?.error !== null;
     const completed = Number.isFinite(Number(message.info?.time?.completed ?? Number.NaN));
     if (errored || completed) {
-        return { matched: false, tool: "" };
+        return { matched: false, tool: "", ambiguous: false };
     }
     const parts = Array.isArray(message.parts) ? message.parts : [];
     if (parts.length === 0) {
-        return { matched: true, tool: "unknown" };
+        return { matched: true, tool: "unknown", ambiguous: true };
     }
     const lastPart = parts.at(-1);
     const lastPartType = String(lastPart?.type ?? "").trim().toLowerCase();
     const lastToolPart = [...parts].reverse().find((part) => part?.type === "tool");
     const tool = String(lastToolPart?.tool ?? "").trim().toLowerCase();
-    const hasVisibleText = parts.some((part) => part?.type === "text" &&
-        typeof part.text === "string" &&
-        part.text.trim() &&
-        !part.synthetic);
+    const hasVisibleText = hasVisibleAssistantText(parts);
     if (!tool && !hasVisibleText && lastPartType === "step-start") {
-        return { matched: true, tool: "step-start" };
+        return { matched: true, tool: "step-start", ambiguous: true };
     }
-    if (!tool || tool === "question" || tool === "askuserquestion") {
-        return { matched: false, tool: "" };
+    if (!tool || isQuestionTool(tool)) {
+        return { matched: false, tool: "", ambiguous: false };
     }
-    return { matched: !hasVisibleText, tool };
-}
-function isAmbiguousIncompleteAssistantTail(tool) {
-    const normalized = String(tool).trim().toLowerCase();
-    return normalized === "" || normalized === "unknown" || normalized === "step-start";
+    return { matched: !hasVisibleText, tool, ambiguous: false };
 }
 async function injectRecoveryMessage(args) {
     const safety = await inspectHookMessageSafety({
@@ -352,7 +346,7 @@ export function createSessionRecoveryHook(options) {
                         if (!incompleteTail.matched) {
                             return;
                         }
-                        if (isAmbiguousIncompleteAssistantTail(incompleteTail.tool)) {
+                        if (incompleteTail.ambiguous) {
                             writeGatewayEventAudit(directory, {
                                 hook: "session-recovery",
                                 stage: "skip",
