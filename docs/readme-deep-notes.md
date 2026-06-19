@@ -2,7 +2,7 @@
 
 This document contains detailed historical implementation notes moved out of the root README to keep the primary guide concise.
 
-Note: this archive includes historical references (for example `/start-work` and `/autoflow`) that may no longer be part of the active slash-command surface. Use `docs/quickstart.md` and `docs/command-handbook.md` for current operator workflows.
+Note: this archive includes historical implementation notes and may mention legacy or compatibility command forms alongside canonical ones. Use `docs/quickstart.md` and `docs/command-handbook.md` for the current operator-facing command surface.
 
 ## Roadmap plan 🗺️
 
@@ -419,10 +419,10 @@ Task 28.4 autopilot command UX/workflow notes:
 - command module: `scripts/autopilot_command.py`
 - canonical slash command is `/autopilot` with subcommands `start|go|status|pause|resume|stop|report|doctor`
 - objective-mode uses `/autopilot go --completion-mode objective ...` when you want done-criteria gates instead of promise token.
-- compatibility aliases were removed to keep the command surface canonical (`/autopilot*`).
+- canonical guidance should prefer `/autopilot ...`, even when compatibility aliases exist for operator convenience.
 - unified workflow controls now expose `start|go|status|pause|resume|stop|report|doctor` with deterministic JSON payloads and reason codes.
 - status/report/go payloads now include gateway bridge telemetry via `gateway_loop_state` and `gateway_orphan_cleanup`.
-- legacy `/start-work*` slash commands are removed from active command surface to avoid redundant orchestration paths.
+- legacy `/start-work*` compatibility aliases remain secondary to `/autoflow` and should not be used in new guidance.
 - resume path now supports `--touched-paths <csv>` to enforce objective scope boundaries before cycle execution.
 
 Autopilot gateway telemetry fields (`--json`):
