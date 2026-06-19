@@ -542,9 +542,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 
 ### Compatibility aliases (secondary)
 
-- `/do` -> shorthand alias for `/autopilot`
 - `/plan` -> compatibility/internal contract-checking wrapper; prefer `/autoflow` for new usage
-- `/start-work` -> legacy alias path that redirects to `/autoflow`; keep `/autoflow` in new guidance
 
 ## OX prompt-pack namespace
 

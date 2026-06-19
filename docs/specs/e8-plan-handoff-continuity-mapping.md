@@ -19,12 +19,12 @@ Canonical surfaces to reuse:
 
 | `@plan`-style intent | Canonical local flow | Notes |
 | --- | --- | --- |
-| Generate/confirm execution plan before acting | `/plan-handoff plan` plus `/task ready --json` | Use compatibility profile guidance before starting bounded execution. |
-| Start execution with tracked progress | `/autopilot-go "<goal>"` | Runtime state and blockers remain authoritative in `/autopilot-status`. |
-| Keep continuity when context/session changes | `/plan-handoff resume` then `/resume status --json` | Resume path is deterministic and must preserve stop/budget/todo guardrails. |
+| Generate/confirm execution plan before acting | `/plan run` plus `/task ready --json` | Use compatibility profile guidance before starting bounded execution. |
+| Start execution with tracked progress | `/autopilot go --goal "<goal>"` | Runtime state and blockers remain authoritative in `/autopilot-status`. |
+| Keep continuity when context/session changes | `/resume status --json` then `/resume now --json` | Resume path is deterministic and must preserve stop/budget/todo guardrails. |
 | Preserve pending work between loops | `/task ready --json` and checkpoint-backed runtime status | Task graph is the durable pending-work source; checkpoints augment run context. |
-| Handoff across runs/agents | `/plan-handoff handoff` + `/autopilot-report` + `/digest run --reason manual` | Report captures deviations/recovery trail; digest captures concise handoff summary. |
-| End run safely | `/plan-handoff stop` + `/autopilot-stop --reason "manual_handoff"` | Stop is explicit, auditable, and prevents hidden loop continuation. |
+| Handoff across runs/agents | `/autopilot-report` + `/digest run --reason manual` + `/task ready --json` | Report captures deviations/recovery trail; digest captures concise handoff summary. |
+| End run safely | `/autopilot-stop --reason "manual_handoff"` | Stop is explicit, auditable, and prevents hidden loop continuation. |
 
 ## Acceptance Checks
 
@@ -51,14 +51,14 @@ Canonical surfaces to reuse:
 Example 1: plan and begin execution
 
 ```bash
-/plan-handoff plan
-/autopilot-go "implement <objective>"
+/plan run
+/autopilot go --goal "implement <objective>"
 ```
 
 Example 2: interruption and deterministic resume
 
 ```bash
-/plan-handoff resume
+/resume status --json
 /resume-now
 /autopilot-resume
 ```
@@ -66,7 +66,6 @@ Example 2: interruption and deterministic resume
 Example 3: handoff to next cycle/agent
 
 ```bash
-/plan-handoff handoff
 /autopilot-report
 /task ready --json
 ```
