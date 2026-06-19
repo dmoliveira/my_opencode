@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -194,6 +195,79 @@ def _load_agent_metadata() -> dict[str, dict[str, Any]]:
     return metadata_map
 
 
+
+
+
+
+def _extract_ts_category_models() -> dict[str, str]:
+    ts_path = Path(__file__).resolve().parent.parent / "plugin" / "gateway-core" / "src" / "hooks" / "shared" / "routing-profiles.ts"
+    try:
+        text = ts_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    match = re.search(r"ROUTING_PROFILES:\s*Record<string, RoutingProfile>\s*=\s*\{([\s\S]*?)\n\}\n\nexport const ROUTING_DOWNGRADE_CATEGORY", text)
+    if not match:
+        return {}
+    body = match.group(1)
+    category_models: dict[str, str] = {}
+    category_pattern = re.compile(r"([a-z-]+):\s*\{([\s\S]*?)\n\s*\},", re.MULTILINE)
+    model_pattern = re.compile(r'model:\s*"([^"]+)"')
+    for category, block in category_pattern.findall(body):
+        model_match = model_pattern.search(block)
+        if model_match:
+            category_models[category.strip()] = model_match.group(1).strip()
+    return category_models
+
+
+def _routing_profile_parity_warnings(schema: dict[str, Any]) -> list[str]:
+    categories = schema.get("categories")
+    if not isinstance(categories, dict):
+        return []
+    python_models = {
+        name: cfg.get("model")
+        for name, cfg in categories.items()
+        if isinstance(cfg, dict) and isinstance(cfg.get("model"), str)
+    }
+    ts_models = _extract_ts_category_models()
+    if not ts_models:
+        return ["gateway runtime routing profiles could not be read for parity check"]
+    warnings: list[str] = []
+    for category, model in python_models.items():
+        if ts_models.get(category) != model:
+            warnings.append(
+                f"routing profile mismatch for {category}: python={model} ts={ts_models.get(category)}"
+            )
+    for category, model in ts_models.items():
+        if category not in python_models:
+            warnings.append(f"routing profile exists only in gateway runtime table: {category}={model}")
+    return warnings
+
+def _load_pinned_primary_agents() -> list[dict[str, Any]]:
+    pinned: list[dict[str, Any]] = []
+    if not SPEC_DIR.exists() or not SPEC_DIR.is_dir():
+        return pinned
+    for path in sorted(SPEC_DIR.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        name = payload.get("name")
+        mode = payload.get("mode")
+        model = payload.get("model")
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if mode != "primary" or not isinstance(model, str) or not model.strip():
+            continue
+        pinned.append({
+            "agent": name.strip(),
+            "model": model.strip(),
+            "default_category": metadata.get("default_category"),
+        })
+    return pinned
+
 def _recommend_for_agent(agent_name: str) -> dict[str, Any]:
     metadata_map = _load_agent_metadata()
     metadata = metadata_map.get(agent_name)
@@ -316,11 +390,17 @@ def command_status(argv: list[str]) -> int:
         return usage()
     json_output = "--json" in argv
     _, state, write_path = load_state()
+    schema = default_schema()
+    categories = schema.get("categories", {}) if isinstance(schema.get("categories"), dict) else {}
+    parity_warnings = _routing_profile_parity_warnings(schema)
     payload = {
         "active_category": state.get("active_category"),
         "system_defaults": state.get("system_defaults"),
         "has_latest_trace": bool(state.get("latest_trace")),
         "config": str(active_config_path(write_path)),
+        "category_models": {name: cfg.get("model") for name, cfg in categories.items() if isinstance(cfg, dict)},
+        "pinned_primary_agents": _load_pinned_primary_agents(),
+        "parity_warnings": parity_warnings,
     }
     if json_output:
         print(json.dumps(payload, indent=2))
@@ -329,6 +409,11 @@ def command_status(argv: list[str]) -> int:
         print(f"system_defaults: {json.dumps(payload['system_defaults'])}")
         print(f"has_latest_trace: {'yes' if payload['has_latest_trace'] else 'no'}")
         print(f"config: {payload['config']}")
+        if payload["parity_warnings"]:
+            print(f"warnings: {json.dumps(payload['parity_warnings'])}")
+        print(f"category_models: {json.dumps(payload['category_models'])}")
+        print(f"pinned_primary_agents: {json.dumps(payload['pinned_primary_agents'])}")
+        print(f"parity_warnings: {json.dumps(payload['parity_warnings'])}")
     return 0
 
 
@@ -404,14 +489,19 @@ def command_doctor(argv: list[str]) -> int:
     _, state, write_path = load_state_snapshot(persist_missing=False)
     schema = default_schema()
     problems = validate_schema(schema)
+    categories = schema.get("categories", {}) if isinstance(schema.get("categories"), dict) else {}
+    parity_warnings = _routing_profile_parity_warnings(schema)
+    warnings = list(parity_warnings)
     payload = {
-        "result": "PASS" if not problems else "FAIL",
+        "result": "PASS" if not problems and not warnings else ("WARN" if warnings and not problems else "FAIL"),
         "active_category": state.get("active_category"),
         "system_defaults": state.get("system_defaults"),
         "has_latest_trace": bool(state.get("latest_trace")),
         "config": str(active_config_path(write_path)),
+        "category_models": {name: cfg.get("model") for name, cfg in categories.items() if isinstance(cfg, dict)},
+        "pinned_primary_agents": _load_pinned_primary_agents(),
         "problems": problems,
-        "warnings": [],
+        "warnings": warnings,
         "quick_fixes": [
             "/model-routing status --json",
             "/model-routing resolve --json",
@@ -427,6 +517,10 @@ def command_doctor(argv: list[str]) -> int:
         print("problems:")
         for problem in payload["problems"]:
             print(f"- {problem}")
+    if payload["warnings"]:
+        print("warnings:")
+        for warning in payload["warnings"]:
+            print(f"- {warning}")
     return 0 if payload["result"] == "PASS" else 1
 
 

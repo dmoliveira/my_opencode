@@ -11,13 +11,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_MINUTES = 60
 
 POSITIVE_REASON_CODES = {
     "delegation_decision_recorded",
     "subagent_lifecycle_started",
     "subagent_timeline_recorded",
+    "agent_runtime_model_observed",
 }
 
 RISK_REASON_CODES = {
@@ -26,6 +26,20 @@ RISK_REASON_CODES = {
     "delegation_fallback_applied",
     "delegation_failure_recorded",
     "delegation_route_overridden_low_confidence",
+    "agent_model_routing_drift_detected",
+    "provider_header_timeout_observed",
+    "session_recovery_model_downgrade_applied",
+}
+
+TIMEOUT_REASON_CODES = {
+    "provider_header_timeout_observed",
+    "provider_retry_backoff_delay_hint",
+    "provider_retry_backoff_generic_hint",
+    "session_recovery_model_downgrade_applied",
+}
+
+DRIFT_REASON_CODES = {
+    "agent_model_routing_drift_detected",
 }
 
 
@@ -121,6 +135,14 @@ def load_events(path: Path) -> list[dict[str, Any]]:
     return events
 
 
+def resolve_actor(event: dict[str, Any]) -> str:
+    for key in ("subagent_type", "agent"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "none"
+
+
 def summarize(events: list[dict[str, Any]], minutes: int) -> dict[str, Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     in_window: list[dict[str, Any]] = []
@@ -130,28 +152,32 @@ def summarize(events: list[dict[str, Any]], minutes: int) -> dict[str, Any]:
             in_window.append(event)
 
     reason_counts = Counter(str(event.get("reason_code") or "") for event in in_window)
-    by_subagent: dict[str, Counter[str]] = defaultdict(Counter)
+    by_actor: dict[str, Counter[str]] = defaultdict(Counter)
     by_trace: dict[str, Counter[str]] = defaultdict(Counter)
     for event in in_window:
         reason = str(event.get("reason_code") or "")
         if not reason:
             continue
-        subagent = str(event.get("subagent_type") or "none")
-        by_subagent[subagent][reason] += 1
+        actor = resolve_actor(event)
+        by_actor[actor][reason] += 1
         trace_id = str(event.get("trace_id") or "")
         if trace_id:
             by_trace[trace_id][reason] += 1
 
-    subagent_rows: list[dict[str, Any]] = []
-    for subagent, counts in sorted(by_subagent.items()):
+    actor_rows: list[dict[str, Any]] = []
+    for actor, counts in sorted(by_actor.items()):
         positive = sum(counts.get(code, 0) for code in POSITIVE_REASON_CODES)
         risks = sum(counts.get(code, 0) for code in RISK_REASON_CODES)
-        subagent_rows.append(
+        timeout_events = sum(counts.get(code, 0) for code in TIMEOUT_REASON_CODES)
+        drift_events = sum(counts.get(code, 0) for code in DRIFT_REASON_CODES)
+        actor_rows.append(
             {
-                "subagent": subagent,
+                "actor": actor,
                 "events": sum(counts.values()),
                 "positive": positive,
                 "risks": risks,
+                "timeouts": timeout_events,
+                "drifts": drift_events,
                 "reasons": dict(counts),
             }
         )
@@ -168,8 +194,11 @@ def summarize(events: list[dict[str, Any]], minutes: int) -> dict[str, Any]:
         "events_in_window": len(in_window),
         "traces_in_window": len(by_trace),
         "top_reasons": top_reasons,
-        "subagents": subagent_rows,
+        "actors": actor_rows,
+        "subagents": actor_rows,
         "risk_reason_codes": sorted(RISK_REASON_CODES),
+        "timeout_reason_codes": sorted(TIMEOUT_REASON_CODES),
+        "drift_reason_codes": sorted(DRIFT_REASON_CODES),
     }
 
 
@@ -211,12 +240,12 @@ def command_status(args: Args) -> int:
     print("top_reasons:")
     for item in summary["top_reasons"][:8]:
         print(f"- {item['reason_code']}: {item['count']}")
-    print("subagents:")
-    for row in summary["subagents"]:
-        if row["subagent"] == "none":
+    print("actors:")
+    for row in summary["actors"]:
+        if row["actor"] == "none":
             continue
         print(
-            f"- {row['subagent']}: events={row['events']} positive={row['positive']} risks={row['risks']}"
+            f"- {row['actor']}: events={row['events']} positive={row['positive']} risks={row['risks']} timeouts={row['timeouts']} drifts={row['drifts']}"
         )
     return 0
 
@@ -233,10 +262,16 @@ def command_doctor(args: Args) -> int:
         warnings.append("no delegation events found in selected window")
 
     risk_counts = Counter()
-    for item in summary["subagents"]:
+    timeout_counts = Counter()
+    drift_counts = Counter()
+    for item in summary["actors"]:
         for reason, count in item["reasons"].items():
             if reason in RISK_REASON_CODES:
                 risk_counts[reason] += count
+            if reason in TIMEOUT_REASON_CODES:
+                timeout_counts[reason] += count
+            if reason in DRIFT_REASON_CODES:
+                drift_counts[reason] += count
 
     if risk_counts.get("delegation_mutation_intent_blocked", 0) > 0:
         warnings.append("detected read-only mutation blocks in selected window")
@@ -244,6 +279,12 @@ def command_doctor(args: Args) -> int:
         warnings.append("detected denied-tool enforcement events in selected window")
     if risk_counts.get("delegation_fallback_applied", 0) > 3:
         problems.append("high fallback frequency suggests unstable delegation routing")
+    if timeout_counts.get("provider_header_timeout_observed", 0) > 0:
+        warnings.append("provider header timeouts detected in selected window")
+    if timeout_counts.get("session_recovery_model_downgrade_applied", 0) > 0:
+        warnings.append("session recovery downgraded models after repeated provider header timeouts")
+    if drift_counts.get("agent_model_routing_drift_detected", 0) > 0:
+        warnings.append("runtime model drift detected between expected and observed agent model selection")
 
     result = "FAIL" if problems else ("WARN" if warnings else "PASS")
     payload = {

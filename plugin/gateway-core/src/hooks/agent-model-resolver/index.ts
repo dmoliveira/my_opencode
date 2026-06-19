@@ -2,6 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js"
+import { routingProfileForCategory } from "../shared/routing-profiles.js"
 import {
   buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
@@ -24,15 +25,6 @@ interface ToolBeforePayload {
     metadata?: unknown
   }
   directory?: string
-}
-
-const MODEL_BY_CATEGORY: Record<string, { model: string; reasoning: string }> = {
-  quick: { model: "openai/gpt-5.4-mini", reasoning: "low" },
-  balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-  deep: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
-  critical: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
-  visual: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-  writing: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
 }
 
 const ROUTING_PATTERNS: Array<{ subagentType: string; patterns: RegExp[] }> = [
@@ -591,23 +583,22 @@ export function createAgentModelResolverHook(options: {
         )
       }
       const explicitCategory = String(args.category ?? "").toLowerCase().trim()
-      const requestedCategory =
-        explicitCategory && MODEL_BY_CATEGORY[explicitCategory] ? explicitCategory : ""
+      const requestedCategory = routingProfileForCategory(explicitCategory) ? explicitCategory : ""
       const category =
         requestedCategory || String(metadata?.default_category ?? "").toLowerCase().trim()
-      if (!category || !MODEL_BY_CATEGORY[category]) {
+      const profile = routingProfileForCategory(category)
+      if (!category || !profile) {
         return
       }
 
       args.category = category
-      const model = MODEL_BY_CATEGORY[category]
       const modelHintPrompt = formatHeader(
         "MODEL ROUTING",
-        `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
+        `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
       )
       const modelHintDescription = formatHeader(
         "MODEL ROUTING",
-        `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
+        `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
       )
       const allowedTools = normalizeToolList(metadata?.allowed_tools)
       const toolSurface = formatHeader(
@@ -629,7 +620,7 @@ export function createAgentModelResolverHook(options: {
         "WORKTREE CONTEXT",
         `cwd=${directory}; execute file discovery and validation relative to this path unless prompt explicitly overrides.`,
       )
-      const subagentLabel = formatSubagentLabel(subagentType, model.reasoning)
+      const subagentLabel = formatSubagentLabel(subagentType, profile.reasoning)
 
       const cleanPrompt = stripInjectedHeaders(String(args.prompt ?? ""))
       const cleanDescription = stripInjectedHeaders(String(args.description ?? ""))
@@ -648,8 +639,8 @@ export function createAgentModelResolverHook(options: {
         trace_id: traceId,
         subagent_type: subagentType,
         recommended_category: category,
-        model: model.model,
-        reasoning: model.reasoning,
+        model: profile.model,
+        reasoning: profile.reasoning,
         route_source: routeSource,
         tool_surface_injected: "true",
       })

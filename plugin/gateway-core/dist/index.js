@@ -97,6 +97,7 @@ import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 import { resolveContextLimit } from "./hooks/shared/context-limit.js";
+import { normalizeModelRef } from "./hooks/shared/routing-profiles.js";
 const AUTO_SLASH_COMMAND_OPEN_TAG = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE_TAG = "</auto-slash-command>";
 const CHAT_OUTPUT_HEADROOM_TOKENS = 1024;
@@ -111,14 +112,6 @@ const COMPACT_TOOL_DEFINITIONS = new Map([
     ["skill", "Load a named skill into the current session."],
     ["apply_patch", "Apply a structured patch to local files."],
 ]);
-function normalizeModelRef(providerID, modelID) {
-    const provider = typeof providerID === "string" ? providerID.trim() : "";
-    const model = typeof modelID === "string" ? modelID.trim() : "";
-    if (!provider || !model) {
-        return "";
-    }
-    return `${provider}/${model}`;
-}
 function expectedAgentModel(directory, agentName) {
     const normalizedAgent = agentName.trim().toLowerCase();
     if (!normalizedAgent) {
@@ -1108,6 +1101,18 @@ export default function GatewayCorePlugin(ctx) {
     async function chatParams(input, output) {
         const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID);
         const expected = expectedAgentModel(directory, input.agent);
+        if (actualModel) {
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "state",
+                reason_code: "agent_runtime_model_observed",
+                session_id: input.sessionID,
+                agent: input.agent,
+                actual_model: actualModel,
+                expected_category: expected?.category,
+                expected_model: expected?.model,
+            });
+        }
         if (expected && actualModel && expected.model !== actualModel) {
             writeGatewayEventAudit(directory, {
                 hook: "gateway-core",

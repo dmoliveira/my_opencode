@@ -167,6 +167,15 @@ export function buildHookMessageBody(content: string, identity: HookMessageIdent
   }
 }
 
+export function mergeHookMessageIdentity(base: HookMessageIdentity, override?: HookMessageIdentity): HookMessageIdentity {
+  return {
+    ...(base.agent ? { agent: base.agent } : {}),
+    ...(base.model ? { model: base.model } : {}),
+    ...(override?.agent ? { agent: override.agent } : {}),
+    ...(override?.model ? { model: override.model } : {}),
+  }
+}
+
 // Injects synthetic hook content while preserving recent agent/model metadata.
 export async function injectHookMessage(args: {
   session: SessionClient
@@ -174,6 +183,7 @@ export async function injectHookMessage(args: {
   content: string
   directory: string
   maxChars?: number
+  identityOverride?: HookMessageIdentity
 }): Promise<boolean> {
   const maxChars =
     typeof args.maxChars === "number" && Number.isFinite(args.maxChars) && args.maxChars > 0
@@ -185,11 +195,14 @@ export async function injectHookMessage(args: {
     return false
   }
 
-  const identity = await resolveHookMessageIdentity({
-    session: args.session,
-    sessionId: args.sessionId,
-    directory: args.directory,
-  })
+  const identity = mergeHookMessageIdentity(
+    await resolveHookMessageIdentity({
+      session: args.session,
+      sessionId: args.sessionId,
+      directory: args.directory,
+    }),
+    args.identityOverride,
+  )
 
   try {
     await args.session.promptAsync({

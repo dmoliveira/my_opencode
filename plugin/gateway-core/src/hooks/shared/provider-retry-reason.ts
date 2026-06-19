@@ -3,18 +3,37 @@ export type ProviderRetryReasonCode =
   | "too_many_requests"
   | "rate_limited"
   | "provider_overloaded"
+  | "provider_header_timeout"
 
 export interface ProviderRetryReason {
   code: ProviderRetryReasonCode
   message: string
 }
 
+export function isProviderHeaderTimeout(text: string): boolean {
+  return (
+    /providerheadertimeouterror/i.test(text) ||
+    /provider response headers timed out/i.test(text) ||
+    /response headers timed out after \d+ms/i.test(text)
+  )
+}
+
 // Returns canonical provider retry reason from serialized error text.
 export function classifyProviderRetryReason(text: string): ProviderRetryReason | null {
-  if (/freeusagelimiterror/i.test(text) || /free usage exceeded/i.test(text) || /insufficient.*credits/i.test(text)) {
+  if (
+    /freeusagelimiterror/i.test(text) ||
+    /free usage exceeded/i.test(text) ||
+    /insufficient.*credits/i.test(text)
+  ) {
     return {
       code: "free_usage_exhausted",
       message: "Free usage exceeded, add credits https://opencode.ai/zen",
+    }
+  }
+  if (isProviderHeaderTimeout(text)) {
+    return {
+      code: "provider_header_timeout",
+      message: "Provider response headers timed out",
     }
   }
   if (/too_many_requests/i.test(text) || /too many requests/i.test(text)) {
@@ -44,7 +63,6 @@ export function classifyProviderRetryReason(text: string): ProviderRetryReason |
   }
   return null
 }
-
 
 // Returns true when payload indicates context-overflow non-retryable failure.
 export function isContextOverflowNonRetryable(text: string): boolean {

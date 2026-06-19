@@ -35,7 +35,6 @@ function buildHint(context) {
     ].join("\n");
 }
 function buildTaskFocusReminder(context) {
-    const delegatedAt = new Date().toISOString();
     const trigger = Array.isArray(context.metadata.triggers) &&
         context.metadata.triggers.length > 0
         ? context.metadata.triggers[0]
@@ -48,7 +47,6 @@ function buildTaskFocusReminder(context) {
         "[agent-context-shaper] delegated task focus",
         `- subagent: ${context.subagentType}`,
         `- category: ${context.category}`,
-        `- delegated_at: ${delegatedAt}`,
         "- execute one delegated objective for this task call before returning control",
         `- prioritize: ${trigger}`,
         `- avoid: ${avoid}`,

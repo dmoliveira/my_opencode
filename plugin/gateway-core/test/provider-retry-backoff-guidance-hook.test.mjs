@@ -96,3 +96,34 @@ test("provider-retry-backoff-guidance caps headerless exponential backoff delay 
   assert.match(text, /30\.0s/)
   assert.match(text, /cap 30s without retry headers/i)
 })
+
+
+test("provider-retry-backoff-guidance tracks repeated provider header timeouts", async () => {
+  const prompts = []
+  const hook = createProviderRetryBackoffGuidanceHook({
+    directory: process.cwd(),
+    enabled: true,
+    cooldownMs: 1,
+    client: {
+      session: {
+        async promptAsync(args) {
+          prompts.push(args)
+        },
+      },
+    },
+  })
+
+  for (let idx = 0; idx < 2; idx += 1) {
+    await hook.event("session.error", {
+      properties: {
+        sessionID: "s-header-timeout",
+        error: "ProviderHeaderTimeoutError: Provider response headers timed out after 10000ms",
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 2))
+  }
+
+  const text = String(prompts.at(-1)?.body.parts[0].text ?? "")
+  assert.match(text, /Provider response headers timed out/i)
+  assert.match(text, /next auto-recovery may downgrade to a lighter model/i)
+})

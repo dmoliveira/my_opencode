@@ -88,11 +88,13 @@ export declare function buildHookMessageBody(content: string, identity: HookMess
         variant?: string;
     };
 };
+export declare function mergeHookMessageIdentity(base: HookMessageIdentity, override?: HookMessageIdentity): HookMessageIdentity;
 export declare function injectHookMessage(args: {
     session: SessionClient;
     sessionId: string;
     content: string;
     directory: string;
     maxChars?: number;
+    identityOverride?: HookMessageIdentity;
 }): Promise<boolean>;
 export {};

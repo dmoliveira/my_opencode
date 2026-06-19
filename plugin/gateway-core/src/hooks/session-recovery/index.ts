@@ -1,8 +1,24 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
-import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js"
+import {
+  injectHookMessage,
+  inspectHookMessageSafety,
+  resolveHookMessageIdentity,
+  type HookMessageIdentity,
+} from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
 import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js"
-import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
+import { loadAgentMetadata } from "../shared/agent-metadata.js"
+import { downgradeRoutingModel, normalizeModelName } from "../shared/routing-profiles.js"
+import {
+  getProviderHeaderTimeoutState,
+  PROVIDER_HEADER_TIMEOUT_DOWNGRADE_THRESHOLD,
+  resetProviderHeaderTimeoutState,
+} from "../shared/provider-timeout-state.js"
+import {
+  classifyProviderRetryReason,
+  isContextOverflowNonRetryable,
+  isProviderHeaderTimeout,
+} from "../shared/provider-retry-reason.js"
 
 // Declares minimal session prompt API used for recovery resume.
 interface GatewayClient {
@@ -330,6 +346,44 @@ function looksLikeIncompleteAssistantTailFromHistory(messages: Array<{
   return { matched: !hasVisibleText, tool, ambiguous: false }
 }
 
+async function buildRecoveryIdentityOverride(args: {
+  session: NonNullable<GatewayClient["session"]>
+  sessionId: string
+  directory: string
+}): Promise<{ identity: HookMessageIdentity; fromModel: string; toModel: string } | null> {
+  const state = getProviderHeaderTimeoutState(args.sessionId)
+  if (!state || state.count < PROVIDER_HEADER_TIMEOUT_DOWNGRADE_THRESHOLD) {
+    return null
+  }
+  const identity = await resolveHookMessageIdentity({
+    session: args.session,
+    sessionId: args.sessionId,
+    directory: args.directory,
+  })
+  const currentModel = normalizeModelName(
+    identity.model ? `${identity.model.providerID}/${identity.model.modelID}` : "",
+  )
+  const preferredCategory = identity.agent
+    ? loadAgentMetadata(args.directory).get(identity.agent.toLowerCase())?.default_category
+    : ""
+  const downgradedModel = downgradeRoutingModel(currentModel, preferredCategory)
+  if (!currentModel || !downgradedModel || downgradedModel == currentModel) {
+    return null
+  }
+  const [providerID, modelID] = downgradedModel.split("/", 2)
+  if (!providerID || !modelID) {
+    return null
+  }
+  return {
+    identity: {
+      ...(identity.agent ? { agent: identity.agent } : {}),
+      model: { providerID, modelID },
+    },
+    fromModel: currentModel,
+    toModel: downgradedModel,
+  }
+}
+
 async function injectRecoveryMessage(args: {
   session: NonNullable<GatewayClient["session"]>
   sessionId: string
@@ -338,6 +392,7 @@ async function injectRecoveryMessage(args: {
   reasonCode: string
   content: string
   allowIncompleteAssistantTurn?: boolean
+  identityOverride?: HookMessageIdentity
 }): Promise<boolean> {
   const safety = await inspectHookMessageSafety({
     session: args.session,
@@ -369,6 +424,7 @@ async function injectRecoveryMessage(args: {
     sessionId: args.sessionId,
     content: args.content,
     directory: args.directory,
+    identityOverride: args.identityOverride,
   })
   if (!injected) {
     writeGatewayEventAudit(args.directory, {
@@ -410,6 +466,7 @@ export function createSessionRecoveryHook(options: {
         if (sessionId) {
           recoveringSessions.delete(sessionId)
           pendingQuestions.delete(sessionId)
+          resetProviderHeaderTimeoutState(sessionId)
         }
         return
       }
@@ -646,6 +703,7 @@ export function createSessionRecoveryHook(options: {
         return
       }
       const error = eventPayload.properties?.error ?? eventPayload.properties?.info?.error
+      const errorText = typeof error === "string" ? error : JSON.stringify(error ?? "")
       if (!isRecoverableError(error)) {
         writeGatewayEventAudit(directory, {
           hook: "session-recovery",
@@ -676,6 +734,20 @@ export function createSessionRecoveryHook(options: {
       }
       recoveringSessions.add(sessionId)
       try {
+        const identityOverride = isProviderHeaderTimeout(errorText)
+          ? await buildRecoveryIdentityOverride({ session: client, sessionId, directory })
+          : null
+        if (identityOverride) {
+          writeGatewayEventAudit(directory, {
+            hook: "session-recovery",
+            stage: "state",
+            reason_code: "session_recovery_model_downgrade_applied",
+            session_id: sessionId,
+            actual_model: identityOverride.fromModel,
+            fallback_model: identityOverride.toModel,
+            timeout_count: String(getProviderHeaderTimeoutState(sessionId)?.count ?? 0),
+          })
+        }
         await injectRecoveryMessage({
           session: client,
           sessionId,
@@ -683,6 +755,7 @@ export function createSessionRecoveryHook(options: {
           hook: "session-recovery",
           reasonCode: "session_recovery_resume",
           content: "[session recovered - continuing previous task]",
+          identityOverride: identityOverride?.identity,
         })
       } catch {
         writeGatewayEventAudit(directory, {
