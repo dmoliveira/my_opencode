@@ -304,13 +304,65 @@
       "description": "Manage browser automation provider profile and readiness (status|profile|doctor|ensure)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before browser --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "browser-status": {
+      "description": "Alias for /browser status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" status $ARGUMENTS`\nShow only the command output."
+    },
+    "browser-profile": {
+      "description": "Alias for /browser profile <provider>",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" profile $ARGUMENTS`\nShow only the command output."
+    },
+    "browser-doctor-json": {
+      "description": "Alias for /browser doctor --json",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/browser_command.py\" doctor --json $ARGUMENTS`\nShow only the command output."
+    },
     "autopilot": {
       "description": "Run open-ended autonomous execution with autopilot guardrails",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" --fixed-before go --fixed-before --goal --literal \"$ARGUMENTS\" --fixed-after --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
     },
+    "do": {
+      "description": "Shorthand alias for /autopilot",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" --fixed-before go --fixed-before --goal --literal \"$ARGUMENTS\" --fixed-after --json`\nUse the runtime output as guardrails, then execute the work now from current repo context. Default completion mode is promise-based: only finish when objective is truly complete and emit `<promise>PENDING_VALIDATION</promise>`. If the run status is still running, continue iterating in this session without waiting for user input until completion gates pass or a concrete blocker is hit. Do not output another /autopilot command suggestion; perform concrete edits/checks or explain blocker with exact cause."
+    },
+    "autopilot-status": {
+      "description": "Alias for /autopilot status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" status --json $ARGUMENTS`\nShow only the command output."
+    },
+    "autopilot-report": {
+      "description": "Alias for /autopilot report",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" report --json $ARGUMENTS`\nShow only the command output."
+    },
+    "autopilot-pause": {
+      "description": "Alias for /autopilot pause",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" pause --json $ARGUMENTS`\nShow only the command output."
+    },
+    "autopilot-resume": {
+      "description": "Alias for /autopilot resume",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" resume --json $ARGUMENTS`\nShow only the command output."
+    },
+    "autopilot-stop": {
+      "description": "Alias for /autopilot stop",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" stop --json $ARGUMENTS`\nShow only the command output."
+    },
+    "autopilot-doctor": {
+      "description": "Alias for /autopilot doctor",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py\" doctor --json $ARGUMENTS`\nShow only the command output."
+    },
     "autoflow": {
       "description": "Run the public deterministic plan-file execution flow (start|status|report|resume|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before autoflow --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "start-work": {
+      "description": "Run plan-file execution and resume controls (legacy alias surface)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "start-work-status": {
+      "description": "Alias for /start-work status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" status --json $ARGUMENTS`\nShow only the command output."
+    },
+    "start-work-deviations": {
+      "description": "Alias for /start-work deviations",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/start_work_command.py\" deviations --json $ARGUMENTS`\nShow only the command output."
     },
     "continuation-stop": {
       "description": "Stop active continuation loops and disable auto-resume",
@@ -348,9 +400,41 @@
       "description": "Inspect todo compliance state (status|enforce)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before todo --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "todo-status": {
+      "description": "Alias for /todo status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before todo --fixed-before status --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "todo-enforce": {
+      "description": "Alias for /todo enforce",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before todo --fixed-before enforce --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
     "resume": {
       "description": "Manage runtime recovery controls (status|now|smart|disable)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before resume --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
+    "resume-status": {
+      "description": "Alias for /resume status",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" status --json $ARGUMENTS`\nShow only the command output."
+    },
+    "resume-now": {
+      "description": "Alias for /resume now",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" now --json $ARGUMENTS`\nShow only the command output."
+    },
+    "resume-disable": {
+      "description": "Alias for /resume disable",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/resume_command.py\" disable --json $ARGUMENTS`\nShow only the command output."
+    },
+    "routing": {
+      "description": "Inspect compact routing fallback visibility (status|explain)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/routing_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "keyword-mode": {
+      "description": "Manage prompt keyword execution modes and per-keyword toggles",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/keyword_mode_command.py\" $ARGUMENTS`\nShow only the command output."
+    },
+    "resilience": {
+      "description": "Inspect context resilience status and doctor diagnostics",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/context_resilience_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "safe-edit": {
       "description": "Plan semantic safe-edit execution (status|plan|doctor)",
