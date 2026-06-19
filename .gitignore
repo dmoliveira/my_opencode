@@ -10,6 +10,5 @@ runtime/
 bg/
 .codememory/*.sqlite3
 .opencode/*
-!.opencode/my_opencode.json
 !.opencode/skills/
 !.opencode/skills/**

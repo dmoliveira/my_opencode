@@ -13,6 +13,7 @@ validate: ## Validate scripts and JSON config
 	python3 scripts/readme_layout_check.py
 	python3 scripts/active_doc_script_ref_check.py
 	python3 scripts/script_reachability_check.py
+	python3 scripts/layered_config_hygiene_check.py
 	python3 scripts/docs_automation_sync_check.py
 	python3 scripts/release_note_validation_check.py
 	python3 scripts/plan_hygiene_check.py --json

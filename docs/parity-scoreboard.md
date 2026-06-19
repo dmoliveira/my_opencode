@@ -1,7 +1,7 @@
 # Parity Scoreboard
 
 Date: 2026-03-10
-Baseline: `oh-my-opencode` at `/Users/cauhirsch/Codes/External/oh-my-opencode`
+Baseline: local `oh-my-opencode` reference checkout when available, otherwise the upstream public project name `oh-my-opencode`
 
 Purpose: give one fast view of current parity progress, what is intentionally different, and where to look for evidence without re-running a full audit.
 

@@ -1,7 +1,7 @@
 # Upstream Divergence Registry
 
 Date: 2026-03-07
-Source baseline: `oh-my-opencode` (`/Users/cauhirsch/Codes/External/oh-my-opencode`)
+Source baseline: local `oh-my-opencode` reference checkout when available, otherwise the upstream public project name `oh-my-opencode`
 
 Purpose: keep a single, explicit record of intentional differences so parity audits do not repeatedly reopen already-decided scope.
 
