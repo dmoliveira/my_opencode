@@ -350,6 +350,11 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     typeof source.compactionContextInjector === "object"
       ? (source.compactionContextInjector as Record<string, unknown>)
       : {};
+  const contextInjectorSource =
+    source.contextInjector &&
+    typeof source.contextInjector === "object"
+      ? (source.contextInjector as Record<string, unknown>)
+      : {};
   const globalProcessPressureSource =
     source.globalProcessPressure &&
     typeof source.globalProcessPressure === "object"
@@ -836,6 +841,20 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? compactionContextInjectorSource.enabled
           : DEFAULT_GATEWAY_CONFIG.compactionContextInjector.enabled,
     },
+    contextInjector: {
+      dedupeEnabled:
+        typeof contextInjectorSource.dedupeEnabled === "boolean"
+          ? contextInjectorSource.dedupeEnabled
+          : DEFAULT_GATEWAY_CONFIG.contextInjector.dedupeEnabled,
+      minDeltaChars: nonNegativeInt(
+        contextInjectorSource.minDeltaChars,
+        DEFAULT_GATEWAY_CONFIG.contextInjector.minDeltaChars,
+      ),
+      dedupeNormalizeWhitespace:
+        typeof contextInjectorSource.dedupeNormalizeWhitespace === "boolean"
+          ? contextInjectorSource.dedupeNormalizeWhitespace
+          : DEFAULT_GATEWAY_CONFIG.contextInjector.dedupeNormalizeWhitespace,
+    },
     globalProcessPressure: {
       enabled:
         typeof globalProcessPressureSource.enabled === "boolean"
@@ -1008,6 +1027,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof sessionRuntimeSystemContextSource.enabled === "boolean"
           ? sessionRuntimeSystemContextSource.enabled
           : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
+      injectSessionIdContext:
+        typeof sessionRuntimeSystemContextSource.injectSessionIdContext === "boolean"
+          ? sessionRuntimeSystemContextSource.injectSessionIdContext
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdContext,
+      injectSessionIdWhenConciseModeOnly:
+        typeof sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly === "boolean"
+          ? sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly,
     },
     conciseMode: {
       enabled:
@@ -1015,6 +1042,7 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? conciseModeSource.enabled
           : DEFAULT_GATEWAY_CONFIG.conciseMode.enabled,
       defaultMode:
+        conciseModeSource.defaultMode === "off" ||
         conciseModeSource.defaultMode === "lite" ||
         conciseModeSource.defaultMode === "full" ||
         conciseModeSource.defaultMode === "ultra"

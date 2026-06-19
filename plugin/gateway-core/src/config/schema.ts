@@ -117,6 +117,13 @@ export interface CompactionContextInjectorConfig {
   enabled: boolean;
 }
 
+// Declares context injector dedupe settings to reduce cache-key churn.
+export interface ContextInjectorConfig {
+  dedupeEnabled: boolean;
+  minDeltaChars: number;
+  dedupeNormalizeWhitespace: boolean;
+}
+
 // Declares session recovery settings for event-driven auto-resume attempts.
 export interface SessionRecoveryConfig {
   enabled: boolean;
@@ -126,6 +133,8 @@ export interface SessionRecoveryConfig {
 // Declares hidden runtime session system context settings.
 export interface SessionRuntimeSystemContextConfig {
   enabled: boolean;
+  injectSessionIdContext: boolean;
+  injectSessionIdWhenConciseModeOnly: boolean;
 }
 
 export interface ConciseModeConfig {
@@ -591,6 +600,7 @@ export interface GatewayConfig {
   contextWindowMonitor: ContextWindowMonitorConfig;
   preemptiveCompaction: PreemptiveCompactionConfig;
   compactionContextInjector: CompactionContextInjectorConfig;
+  contextInjector: ContextInjectorConfig;
   globalProcessPressure: GlobalProcessPressureConfig;
   longTurnWatchdog: LongTurnWatchdogConfig;
   notifyEvents: NotifyEventsConfig;
@@ -813,6 +823,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   compactionContextInjector: {
     enabled: true,
   },
+  contextInjector: {
+    dedupeEnabled: true,
+    minDeltaChars: 120,
+    dedupeNormalizeWhitespace: true,
+  },
   globalProcessPressure: {
     enabled: true,
     checkCooldownToolCalls: 3,
@@ -876,6 +891,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   sessionRuntimeSystemContext: {
     enabled: true,
+    injectSessionIdContext: true,
+    injectSessionIdWhenConciseModeOnly: false,
   },
   conciseMode: {
     enabled: false,
@@ -1002,11 +1019,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   directoryAgentsInjector: {
     enabled: true,
-    maxChars: 4000,
+    maxChars: 1000,
   },
   directoryReadmeInjector: {
     enabled: true,
-    maxChars: 4000,
+    maxChars: 1000,
   },
   noninteractiveShellGuard: {
     enabled: true,
@@ -1052,7 +1069,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: false,
   },
   assistantMessageTimestamp: {
-    enabled: true,
+    enabled: false,
   },
   taskResumeInfo: {
     enabled: true,
