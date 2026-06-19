@@ -88,6 +88,7 @@ import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook, } fro
 import { safeCreateHook } from "./hooks/shared/safe-create-hook.js";
 import { dispatchGatewayHookEvent } from "./hooks/shared/hook-dispatch.js";
 import { isCriticalGatewayHookId } from "./hooks/shared/hook-failure.js";
+import { loadAgentMetadata } from "./hooks/shared/agent-metadata.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
 import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-guard/index.js";
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
@@ -110,6 +111,34 @@ const COMPACT_TOOL_DEFINITIONS = new Map([
     ["skill", "Load a named skill into the current session."],
     ["apply_patch", "Apply a structured patch to local files."],
 ]);
+function normalizeModelRef(providerID, modelID) {
+    const provider = typeof providerID === "string" ? providerID.trim() : "";
+    const model = typeof modelID === "string" ? modelID.trim() : "";
+    if (!provider || !model) {
+        return "";
+    }
+    return `${provider}/${model}`;
+}
+function expectedAgentModel(directory, agentName) {
+    const normalizedAgent = agentName.trim().toLowerCase();
+    if (!normalizedAgent) {
+        return null;
+    }
+    const metadata = loadAgentMetadata(directory).get(normalizedAgent);
+    const mode = String(metadata?.mode ?? "").trim().toLowerCase();
+    if (mode !== "primary") {
+        return null;
+    }
+    const explicitModel = String(metadata?.model ?? "").trim();
+    if (!explicitModel) {
+        return null;
+    }
+    const category = String(metadata?.default_category ?? "").trim().toLowerCase();
+    return {
+        category,
+        model: explicitModel,
+    };
+}
 function clampChatMaxOutputTokens(input) {
     if (!Number.isFinite(input.maxOutputTokens) || input.maxOutputTokens === undefined) {
         return input.maxOutputTokens;
@@ -1072,6 +1101,20 @@ export default function GatewayCorePlugin(ctx) {
         unwrapAutoSlashCommandParts(output?.parts);
     }
     async function chatParams(input, output) {
+        const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID);
+        const expected = expectedAgentModel(directory, input.agent);
+        if (expected && actualModel && expected.model !== actualModel) {
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "guard",
+                reason_code: "agent_model_routing_drift_detected",
+                session_id: input.sessionID,
+                agent: input.agent,
+                expected_category: expected.category,
+                expected_model: expected.model,
+                actual_model: actualModel,
+            });
+        }
         output.maxOutputTokens = clampChatMaxOutputTokens({
             providerID: input.model?.providerID ?? input.provider?.id,
             modelID: input.model?.modelID,

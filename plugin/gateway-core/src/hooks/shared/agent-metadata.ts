@@ -2,6 +2,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 export interface AgentRoutingMetadata {
+  mode?: string;
+  model?: string;
   cost_tier?: string;
   default_category?: string;
   fallback_policy?: string;
@@ -29,6 +31,14 @@ function normalizeMetadata(value: unknown): AgentRoutingMetadata {
   }
   const source = value as Record<string, unknown>;
   return {
+    model:
+      typeof source.model === "string" && source.model.trim()
+        ? source.model.trim()
+        : undefined,
+    mode:
+      typeof source.mode === "string" && source.mode.trim()
+        ? source.mode.trim()
+        : undefined,
     cost_tier:
       typeof source.cost_tier === "string" && source.cost_tier.trim()
         ? source.cost_tier.trim()
@@ -47,6 +57,30 @@ function normalizeMetadata(value: unknown): AgentRoutingMetadata {
     avoid_when: cleanStringArray(source.avoid_when),
     denied_tools: cleanStringArray(source.denied_tools),
   };
+}
+
+function frontmatterModel(directory: string, name: string): string | undefined {
+  const path = join(directory, "agent", `${name}.md`);
+  try {
+    const text = readFileSync(path, "utf-8");
+    if (!text.startsWith("---\n")) {
+      return undefined;
+    }
+    const lines = text.split(/\r?\n/);
+    for (let idx = 1; idx < lines.length; idx += 1) {
+      const line = lines[idx]?.trim() ?? "";
+      if (line === "---") {
+        break;
+      }
+      const match = line.match(/^model:\s*(.+)$/);
+      if (match?.[1]?.trim()) {
+        return match[1].trim();
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function collectAllowedTools(value: unknown): string[] {
@@ -82,6 +116,11 @@ function buildMap(directory: string): Map<string, AgentRoutingMetadata> {
       >;
       map.set(name, {
         ...normalizeMetadata(raw.metadata),
+        mode:
+          typeof raw.mode === "string" && raw.mode.trim()
+            ? raw.mode.trim()
+            : undefined,
+        model: frontmatterModel(directory, name),
         allowed_tools: collectAllowedTools(raw.tools),
       });
     } catch {

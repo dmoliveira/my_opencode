@@ -2,6 +2,7 @@
 description: >-
   Read-only release documentation specialist for PR summaries, changelog entries, and concise release notes.
 mode: subagent
+model: openai/gpt-5.4-mini
 tools:
   bash: true
   read: true

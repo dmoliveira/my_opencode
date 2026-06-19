@@ -31,7 +31,7 @@ def default_schema() -> dict[str, Any]:
         "categories": {
             "quick": {
                 "description": "Fast responses for routine operational tasks",
-                "model": "openai/gpt-5.1-codex-mini",
+                "model": "openai/gpt-5.4-mini",
                 "temperature": 0.1,
                 "reasoning": "low",
                 "verbosity": "low",
