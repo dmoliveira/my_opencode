@@ -17278,7 +17278,7 @@ jobs:
             and "balanced" in routing_categories
             and "critical" in routing_categories
             and routing_categories.get("quick", {}).get("model")
-            == "openai/gpt-5.1-codex-mini",
+            == "openai/gpt-5.4-mini",
             "model routing schema should define balanced/critical categories and quick mini profile",
         )
         expect(
@@ -17385,7 +17385,7 @@ jobs:
         resolved_unavailable = resolve_category(
             routing_schema,
             "deep",
-            available_models={"openai/gpt-5.1-codex-mini"},
+            available_models={"openai/gpt-5.4-mini"},
         )
         expect(
             resolved_unavailable.get("category")
@@ -17404,7 +17404,7 @@ jobs:
                 "reasoning": "medium",
                 "verbosity": "low",
             },
-            available_models={"openai/gpt-5.1-codex-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.3-codex"},
         )
         expect(
             resolved_with_precedence.get("settings", {}).get("model")
@@ -17447,7 +17447,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.1-codex-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.4-mini,openai/gpt-5.3-codex",
                 "--json",
             ],
             capture_output=True,
@@ -17520,7 +17520,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.1-codex-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.4-mini,openai/gpt-5.3-codex",
                 "--json",
             ],
             capture_output=True,
@@ -17553,7 +17553,7 @@ jobs:
                 "--category",
                 "quick",
                 "--available-models",
-                "openai/gpt-5.1-codex-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.4-mini,openai/gpt-5.3-codex",
                 "--json",
             ],
             capture_output=True,
@@ -17648,7 +17648,7 @@ jobs:
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5.1-codex-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.3-codex"},
         )
         deterministic_trace_b = resolve_model_settings(
             schema=routing_schema,
@@ -17660,7 +17660,7 @@ jobs:
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5.1-codex-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.3-codex"},
         )
         expect(
             deterministic_trace_a.get("resolution_trace")

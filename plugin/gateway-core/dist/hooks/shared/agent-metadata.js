@@ -16,6 +16,12 @@ function normalizeMetadata(value) {
     }
     const source = value;
     return {
+        model: typeof source.model === "string" && source.model.trim()
+            ? source.model.trim()
+            : undefined,
+        mode: typeof source.mode === "string" && source.mode.trim()
+            ? source.mode.trim()
+            : undefined,
         cost_tier: typeof source.cost_tier === "string" && source.cost_tier.trim()
             ? source.cost_tier.trim()
             : undefined,
@@ -31,6 +37,30 @@ function normalizeMetadata(value) {
         avoid_when: cleanStringArray(source.avoid_when),
         denied_tools: cleanStringArray(source.denied_tools),
     };
+}
+function frontmatterModel(directory, name) {
+    const path = join(directory, "agent", `${name}.md`);
+    try {
+        const text = readFileSync(path, "utf-8");
+        if (!text.startsWith("---\n")) {
+            return undefined;
+        }
+        const lines = text.split(/\r?\n/);
+        for (let idx = 1; idx < lines.length; idx += 1) {
+            const line = lines[idx]?.trim() ?? "";
+            if (line === "---") {
+                break;
+            }
+            const match = line.match(/^model:\s*(.+)$/);
+            if (match?.[1]?.trim()) {
+                return match[1].trim();
+            }
+        }
+    }
+    catch {
+        return undefined;
+    }
+    return undefined;
 }
 function collectAllowedTools(value) {
     if (!value || typeof value !== "object") {
@@ -62,6 +92,10 @@ function buildMap(directory) {
             const raw = JSON.parse(readFileSync(path, "utf-8"));
             map.set(name, {
                 ...normalizeMetadata(raw.metadata),
+                mode: typeof raw.mode === "string" && raw.mode.trim()
+                    ? raw.mode.trim()
+                    : undefined,
+                model: frontmatterModel(directory, name),
                 allowed_tools: collectAllowedTools(raw.tools),
             });
         }

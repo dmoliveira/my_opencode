@@ -2,6 +2,7 @@
 description: >-
   Read-only validation specialist for test/lint/build execution and failure triage.
 mode: subagent
+model: openai/gpt-5.4-mini
 tools:
   bash: true
   read: true

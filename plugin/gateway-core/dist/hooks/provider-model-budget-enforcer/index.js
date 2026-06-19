@@ -1,7 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 const MODEL_BY_CATEGORY = {
-    quick: "openai/gpt-5.1-codex-mini",
+    quick: "openai/gpt-5.4-mini",
     balanced: "openai/gpt-5.3-codex",
     deep: "openai/gpt-5.4-codex",
     critical: "openai/gpt-5.4-codex",

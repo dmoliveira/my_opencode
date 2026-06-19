@@ -1,6 +1,7 @@
 {
   "name": "verifier",
   "mode": "subagent",
+  "model": "openai/gpt-5.4-mini",
   "description_template": "Read-only validation specialist for test/lint/build execution and failure triage.",
   "tools": {
     "bash": true,

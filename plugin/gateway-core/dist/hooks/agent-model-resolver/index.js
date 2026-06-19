@@ -3,7 +3,7 @@ import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 const MODEL_BY_CATEGORY = {
-    quick: { model: "openai/gpt-5.1-codex-mini", reasoning: "low" },
+    quick: { model: "openai/gpt-5.4-mini", reasoning: "low" },
     balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
     deep: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
     critical: { model: "openai/gpt-5.4-codex", reasoning: "medium" },

@@ -1,4 +1,6 @@
 export interface AgentRoutingMetadata {
+    mode?: string;
+    model?: string;
     cost_tier?: string;
     default_category?: string;
     fallback_policy?: string;
