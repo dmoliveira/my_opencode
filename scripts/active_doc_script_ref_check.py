@@ -10,8 +10,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_DOCS = [
     REPO_ROOT / "README.md",
+    REPO_ROOT / "docs" / "index.md",
     REPO_ROOT / "docs" / "quickstart.md",
     REPO_ROOT / "docs" / "command-handbook.md",
+    REPO_ROOT / "docs" / "operator-playbook.md",
+    REPO_ROOT / "docs" / "tooling-quick-ref.md",
 ]
 
 
