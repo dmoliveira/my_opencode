@@ -17282,9 +17282,9 @@ jobs:
             "model routing schema should define balanced/critical categories and quick mini profile",
         )
         expect(
-            routing_categories.get("deep", {}).get("model") == "openai/gpt-5.4-codex"
+            routing_categories.get("deep", {}).get("model") == "openai/gpt-5.4"
             and routing_categories.get("critical", {}).get("model")
-            == "openai/gpt-5.4-codex",
+            == "openai/gpt-5.4",
             "model routing schema should route deep/critical categories to GPT-5.4",
         )
 
@@ -17371,7 +17371,7 @@ jobs:
         )
         expect(
             resolved_requested.get("settings", {}).get("model")
-            == "openai/gpt-5.4-codex",
+            == "openai/gpt-5.4",
             "deep category should resolve to GPT-5.4 by default",
         )
 
@@ -17399,16 +17399,16 @@ jobs:
             requested_category="deep",
             user_overrides={"verbosity": "high", "model": "openai/custom-unavailable"},
             system_defaults={
-                "model": "openai/gpt-5.3-codex",
+                "model": "openai/gpt-5.4",
                 "temperature": 0.3,
                 "reasoning": "medium",
                 "verbosity": "low",
             },
-            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.4"},
         )
         expect(
             resolved_with_precedence.get("settings", {}).get("model")
-            == "openai/gpt-5.3-codex",
+            == "openai/gpt-5.4",
             "model routing should fallback to available category/system model deterministically",
         )
         expect(
@@ -17447,7 +17447,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.4-mini,openai/gpt-5.4",
                 "--json",
             ],
             capture_output=True,
@@ -17464,7 +17464,7 @@ jobs:
         expect(
             model_routing_report.get("category") == "balanced"
             and model_routing_report.get("settings", {}).get("model")
-            == "openai/gpt-5.3-codex",
+            == "openai/gpt-5.4",
             "model-routing resolve should recover from empty state by falling back to defaults and applying model fallback",
         )
         expect(
@@ -17491,7 +17491,7 @@ jobs:
         )
         expect(
             model_routing_trace_report.get("trace", {}).get("selected", {}).get("model")
-            == "openai/gpt-5.3-codex",
+            == "openai/gpt-5.4",
             "model-routing trace should expose selected model from latest resolve",
         )
 
@@ -17520,7 +17520,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.4-mini,openai/gpt-5.4",
                 "--json",
             ],
             capture_output=True,
@@ -17532,7 +17532,7 @@ jobs:
         expect(routing_explain.returncode == 0, "routing explain should succeed")
         routing_explain_report = parse_json_output(routing_explain.stdout)
         expect(
-            routing_explain_report.get("selected_model") == "openai/gpt-5.3-codex",
+            routing_explain_report.get("selected_model") == "openai/gpt-5.4",
             "routing explain should expose selected model",
         )
         expect(
@@ -17553,7 +17553,7 @@ jobs:
                 "--category",
                 "quick",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.3-codex",
+                "openai/gpt-5.4-mini,openai/gpt-5.4",
                 "--json",
             ],
             capture_output=True,
@@ -17643,24 +17643,24 @@ jobs:
             requested_category="deep",
             user_overrides={"model": "openai/nonexistent"},
             system_defaults={
-                "model": "openai/gpt-5.3-codex",
+                "model": "openai/gpt-5.4",
                 "temperature": 0.2,
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.4"},
         )
         deterministic_trace_b = resolve_model_settings(
             schema=routing_schema,
             requested_category="deep",
             user_overrides={"model": "openai/nonexistent"},
             system_defaults={
-                "model": "openai/gpt-5.3-codex",
+                "model": "openai/gpt-5.4",
                 "temperature": 0.2,
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.3-codex"},
+            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.4"},
         )
         expect(
             deterministic_trace_a.get("resolution_trace")

@@ -2,7 +2,7 @@
 description: >-
   Primary execution orchestrator for complex tasks with profile balanced. Uses specialist delegation and strict completion gates.
 mode: primary
-model: openai/gpt-5.3-codex
+model: openai/gpt-5.4
 tools:
   bash: true
   read: true

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { recordProviderHeaderTimeout } from "../dist/hooks/shared/provider-timeout-state.js"
 
 test("session-recovery resumes recoverable session errors", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
@@ -33,7 +34,7 @@ test("session-recovery resumes recoverable session errors", async () => {
                   info: {
                     role: "user",
                     agent: "build",
-                    model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+                    model: { providerID: "openai", modelID: "gpt-5.4" },
                   },
                 },
               ],
@@ -59,7 +60,7 @@ test("session-recovery resumes recoverable session errors", async () => {
     assert.equal(promptCalls, 1)
     assert.equal(lastPromptBody?.agent, "build")
     assert.equal(lastPromptBody?.model?.providerID, "openai")
-    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.3-codex")
+    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.4")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -1253,6 +1254,66 @@ test("session-recovery skips fallback when idle session ends with step-start and
       },
     })
 
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+
+test("session-recovery downgrades repeated provider header timeouts to a lighter model", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-recovery-"))
+  try {
+    let lastPromptBody = null
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["session-recovery"],
+          disabled: [],
+        },
+        sessionRecovery: {
+          enabled: true,
+          autoResume: true,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "user",
+                    agent: "build",
+                    model: { providerID: "openai", modelID: "gpt-5.4" },
+                  },
+                },
+              ],
+            }
+          },
+          async promptAsync(args) {
+            lastPromptBody = args.body
+          },
+        },
+      },
+    })
+
+    recordProviderHeaderTimeout("session-recovery-header-timeout")
+    recordProviderHeaderTimeout("session-recovery-header-timeout")
+
+    await plugin.event({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "session-recovery-header-timeout",
+          error: { message: "ProviderHeaderTimeoutError: Provider response headers timed out after 10000ms" },
+        },
+      },
+    })
+
+    assert.equal(lastPromptBody?.model?.providerID, "openai")
+    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.4-mini")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

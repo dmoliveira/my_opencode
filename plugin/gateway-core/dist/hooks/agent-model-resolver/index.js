@@ -1,15 +1,8 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js";
+import { routingProfileForCategory } from "../shared/routing-profiles.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
-const MODEL_BY_CATEGORY = {
-    quick: { model: "openai/gpt-5.4-mini", reasoning: "low" },
-    balanced: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-    deep: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
-    critical: { model: "openai/gpt-5.4-codex", reasoning: "medium" },
-    visual: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-    writing: { model: "openai/gpt-5.3-codex", reasoning: "medium" },
-};
 const ROUTING_PATTERNS = [
     {
         subagentType: "explore",
@@ -113,19 +106,6 @@ function prependHint(original, hint) {
         return original;
     }
     return `${hint}\n\n${original}`;
-}
-function formatTimestamp(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    const seconds = String(date.getSeconds()).padStart(2, "0");
-    const time = `${hours}:${minutes}:${seconds}`;
-    return {
-        full: `${year}-${month}-${day} ${time}`,
-        time,
-    };
 }
 function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -301,12 +281,12 @@ function policyForAgent(subagentType, defaults, overrides) {
     const intentThreshold = Math.max(0, Number(policy.intentThreshold ?? defaults.intentThreshold));
     return { overrideDelta, intentThreshold };
 }
-function formatSubagentLabel(subagentType, reasoning, timestamp) {
+function formatSubagentLabel(subagentType, reasoning) {
     const icon = SUBAGENT_ICON_BY_TYPE[subagentType] ?? {
         nerd: "󰚩",
         fallback: "[agent]",
     };
-    return formatHeader("SUBAGENT", `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`, timestamp);
+    return formatHeader("SUBAGENT", `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`);
 }
 export function createAgentModelResolverHook(options) {
     return {
@@ -488,16 +468,15 @@ export function createAgentModelResolverHook(options) {
                 throw new Error(`Blocked task delegation for ${subagentType}: prompt requests mutating work but this subagent is read-only. Run commit/PR/edit actions directly with the primary agent.`);
             }
             const explicitCategory = String(args.category ?? "").toLowerCase().trim();
-            const requestedCategory = explicitCategory && MODEL_BY_CATEGORY[explicitCategory] ? explicitCategory : "";
+            const requestedCategory = routingProfileForCategory(explicitCategory) ? explicitCategory : "";
             const category = requestedCategory || String(metadata?.default_category ?? "").toLowerCase().trim();
-            if (!category || !MODEL_BY_CATEGORY[category]) {
+            const profile = routingProfileForCategory(category);
+            if (!category || !profile) {
                 return;
             }
             args.category = category;
-            const model = MODEL_BY_CATEGORY[category];
-            const stamp = formatTimestamp(new Date());
-            const modelHintPrompt = formatHeader("MODEL ROUTING", `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`, stamp.full);
-            const modelHintDescription = formatHeader("MODEL ROUTING", `Preferred category=${category}; model=${model.model}; reasoning=${model.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`);
+            const modelHintPrompt = formatHeader("MODEL ROUTING", `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`);
+            const modelHintDescription = formatHeader("MODEL ROUTING", `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`);
             const allowedTools = normalizeToolList(metadata?.allowed_tools);
             const toolSurface = formatHeader("TOOL SURFACE", `subagent=${subagentType}; allowed=${allowedTools.join(",") || "none"}; denied=${deniedTools.join(",") || "none"}.`);
             const routeHint = routeSource !== "explicit_subagent_type"
@@ -511,7 +490,7 @@ export function createAgentModelResolverHook(options) {
                 .join("\n");
             const flowHint = formatHeader("SESSION FLOW", `parent_session_id=${sid || "unknown"}; trace_id=${traceId}`);
             const worktreeHint = formatHeader("WORKTREE CONTEXT", `cwd=${directory}; execute file discovery and validation relative to this path unless prompt explicitly overrides.`);
-            const subagentLabel = formatSubagentLabel(subagentType, model.reasoning, stamp.full);
+            const subagentLabel = formatSubagentLabel(subagentType, profile.reasoning);
             const cleanPrompt = stripInjectedHeaders(String(args.prompt ?? ""));
             const cleanDescription = stripInjectedHeaders(String(args.description ?? ""));
             args.prompt = prependHint(prependHint(prependHint(cleanPrompt, worktreeHint), flowHint), composedPromptHint);
@@ -525,8 +504,8 @@ export function createAgentModelResolverHook(options) {
                 trace_id: traceId,
                 subagent_type: subagentType,
                 recommended_category: category,
-                model: model.model,
-                reasoning: model.reasoning,
+                model: profile.model,
+                reasoning: profile.reasoning,
                 route_source: routeSource,
                 tool_surface_injected: "true",
             });

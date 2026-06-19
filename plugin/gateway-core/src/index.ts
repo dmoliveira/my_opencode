@@ -104,6 +104,7 @@ import { createContextInjectorHook } from "./hooks/context-injector/index.js";
 import { resolveHookOrder, type GatewayHook } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 import { resolveContextLimit } from "./hooks/shared/context-limit.js";
+import { normalizeModelRef } from "./hooks/shared/routing-profiles.js";
 
 const AUTO_SLASH_COMMAND_OPEN_TAG = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE_TAG = "</auto-slash-command>";
@@ -129,15 +130,6 @@ const COMPACT_TOOL_DEFINITIONS = new Map<string, string>([
   ["skill", "Load a named skill into the current session."],
   ["apply_patch", "Apply a structured patch to local files."],
 ]);
-
-function normalizeModelRef(providerID: string | undefined, modelID: string | undefined): string {
-  const provider = typeof providerID === "string" ? providerID.trim() : "";
-  const model = typeof modelID === "string" ? modelID.trim() : "";
-  if (!provider || !model) {
-    return "";
-  }
-  return `${provider}/${model}`;
-}
 
 function expectedAgentModel(
   directory: string,
@@ -1653,6 +1645,18 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
       input.model?.modelID,
     );
     const expected = expectedAgentModel(directory, input.agent);
+    if (actualModel) {
+      writeGatewayEventAudit(directory, {
+        hook: "gateway-core",
+        stage: "state",
+        reason_code: "agent_runtime_model_observed",
+        session_id: input.sessionID,
+        agent: input.agent,
+        actual_model: actualModel,
+        expected_category: expected?.category,
+        expected_model: expected?.model,
+      });
+    }
     if (expected && actualModel && expected.model !== actualModel) {
       writeGatewayEventAudit(directory, {
         hook: "gateway-core",

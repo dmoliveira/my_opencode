@@ -22,13 +22,13 @@ Reference shape:
 {
   "requested": {
     "category": "deep",
-    "model": "openai/gpt-5.3-codex",
+    "model": "openai/gpt-5.4",
     "source": "user_override"
   },
   "attempted": [
     {
       "rank": 1,
-      "model": "openai/gpt-5.3-codex",
+      "model": "openai/gpt-5.4",
       "provider": "openai",
       "result": "unavailable",
       "reason": "model_not_in_available_set"

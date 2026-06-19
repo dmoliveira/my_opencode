@@ -1,7 +1,16 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { injectHookMessage } from "../hook-message-injector/index.js"
 import type { GatewayHook } from "../registry.js"
-import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../shared/provider-retry-reason.js"
+import {
+  PROVIDER_HEADER_TIMEOUT_DOWNGRADE_THRESHOLD,
+  recordProviderHeaderTimeout,
+  resetProviderHeaderTimeoutState,
+} from "../shared/provider-timeout-state.js"
+import {
+  classifyProviderRetryReason,
+  isContextOverflowNonRetryable,
+} from "../shared/provider-retry-reason.js"
+import { normalizeModelRef } from "../shared/routing-profiles.js"
 
 interface GatewayClient {
   session?: {
@@ -21,10 +30,12 @@ interface EventPayload {
     sessionID?: string
     sessionId?: string
     info?: { id?: string }
+    providerID?: string
+    modelID?: string
+    model?: { providerID?: string; modelID?: string }
     error?: unknown
   }
 }
-
 
 const RETRY_INITIAL_DELAY_MS = 2000
 const RETRY_BACKOFF_FACTOR = 2
@@ -116,15 +127,31 @@ function extractText(payload: EventPayload): string {
     .join("\n")
 }
 
-function buildHint(delayMs: number, reason: string | null, usesHeaderDelay: boolean): string {
-  const lines = ["[provider RETRY BACKOFF]", "Provider retry guidance detected."]
-  if (reason) {
-    lines.push(`- Canonical reason: ${reason}`)
+function extractModel(payload: EventPayload): string {
+  const direct = normalizeModelRef(payload.properties?.providerID, payload.properties?.modelID)
+  if (direct) {
+    return direct
   }
-  const seconds = (delayMs / 1000).toFixed(1)
+  return normalizeModelRef(payload.properties?.model?.providerID, payload.properties?.model?.modelID)
+}
+
+function buildHint(args: {
+  delayMs: number
+  reason: string | null
+  usesHeaderDelay: boolean
+  headerTimeoutCount: number
+}): string {
+  const lines = ["[provider RETRY BACKOFF]", "Provider retry guidance detected."]
+  if (args.reason) {
+    lines.push(`- Canonical reason: ${args.reason}`)
+  }
+  const seconds = (args.delayMs / 1000).toFixed(1)
   lines.push(`- Wait approximately ${seconds}s before the next provider retry`)
-  if (!usesHeaderDelay) {
+  if (!args.usesHeaderDelay) {
     lines.push(`- Apply exponential backoff before the next provider retry (cap ${RETRY_MAX_DELAY_NO_HEADERS_MS / 1000}s without retry headers)`)
+  }
+  if (args.headerTimeoutCount >= PROVIDER_HEADER_TIMEOUT_DOWNGRADE_THRESHOLD) {
+    lines.push("- Repeated header timeouts detected; the next auto-recovery may downgrade to a lighter model")
   }
   lines.push("- Prefer short follow-up prompts while provider pressure persists")
   return lines.join("\n")
@@ -150,6 +177,7 @@ export function createProviderRetryBackoffGuidanceHook(options: {
         if (sessionId) {
           lastInjectedAt.delete(sessionId)
           headerlessAttempts.delete(sessionId)
+          resetProviderHeaderTimeoutState(sessionId)
         }
         return
       }
@@ -182,10 +210,28 @@ export function createProviderRetryBackoffGuidanceHook(options: {
       const usesHeaderDelay = typeof parsedHeaderDelayMs === "number" && Number.isFinite(parsedHeaderDelayMs)
       const attempt = usesHeaderDelay ? 1 : (headerlessAttempts.get(sessionId) ?? 0) + 1
       const delayMs = usesHeaderDelay ? Math.ceil(parsedHeaderDelayMs as number) : fallbackDelayMs(attempt)
+      const headerTimeoutState =
+        reason?.code === "provider_header_timeout" ? recordProviderHeaderTimeout(sessionId) : null
+      const actualModel = extractModel(eventPayload)
+      if (headerTimeoutState) {
+        writeGatewayEventAudit(directory, {
+          hook: "provider-retry-backoff-guidance",
+          stage: "state",
+          reason_code: "provider_header_timeout_observed",
+          session_id: sessionId,
+          timeout_count: String(headerTimeoutState.count),
+          actual_model: actualModel || undefined,
+        })
+      }
       await injectHookMessage({
         session,
         sessionId,
-        content: buildHint(delayMs, reason?.message ?? null, usesHeaderDelay),
+        content: buildHint({
+          delayMs,
+          reason: reason?.message ?? null,
+          usesHeaderDelay,
+          headerTimeoutCount: headerTimeoutState?.count ?? 0,
+        }),
         directory,
       })
       writeGatewayEventAudit(directory, {

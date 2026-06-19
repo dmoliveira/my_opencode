@@ -51,7 +51,7 @@ test("resolveHookMessageIdentity extracts agent and model from recent user/syste
               info: {
                 role: "user",
                 agent: "build",
-                model: { providerID: "openai", modelID: "gpt-5.3-codex", variant: "fast" },
+                model: { providerID: "openai", modelID: "gpt-5.4", variant: "fast" },
               },
             },
           ],
@@ -65,7 +65,7 @@ test("resolveHookMessageIdentity extracts agent and model from recent user/syste
 
   assert.equal(identity.agent, "build")
   assert.equal(identity.model?.providerID, "openai")
-  assert.equal(identity.model?.modelID, "gpt-5.3-codex")
+  assert.equal(identity.model?.modelID, "gpt-5.4")
   assert.equal(identity.model?.variant, "fast")
 })
 
@@ -78,7 +78,7 @@ test("resolveHookMessageIdentity collects split agent/model metadata across mess
             {
               info: {
                 role: "system",
-                model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+                model: { providerID: "openai", modelID: "gpt-5.4" },
               },
             },
             {
@@ -98,13 +98,13 @@ test("resolveHookMessageIdentity collects split agent/model metadata across mess
 
   assert.equal(identity.agent, "build")
   assert.equal(identity.model?.providerID, "openai")
-  assert.equal(identity.model?.modelID, "gpt-5.3-codex")
+  assert.equal(identity.model?.modelID, "gpt-5.4")
 })
 
 test("buildHookMessageBody includes metadata only when present", () => {
   const body = buildHookMessageBody("continue work", {
     agent: "build",
-    model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+    model: { providerID: "openai", modelID: "gpt-5.4" },
   })
   assert.equal(body.agent, "build")
   assert.equal(body.model?.providerID, "openai")

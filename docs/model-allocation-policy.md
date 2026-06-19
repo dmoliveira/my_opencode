@@ -13,11 +13,11 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | Band | Routing Category | Default Model | Reasoning | Use Case |
 | --- | --- | --- | --- | --- |
 | fast | `quick` | `openai/gpt-5.1-codex-mini` | `low` | high-frequency discovery/verification loops |
-| standard | `balanced` | `openai/gpt-5.3-codex` | `medium` | normal implementation and planning |
-| standard | `visual` | `openai/gpt-5.3-codex` | `medium` | browser-first UX/UI audits and design-heavy refinement |
-| standard | `writing` | `openai/gpt-5.3-codex` | `medium` | planning capture and writing-heavy artifact work |
-| complex | `deep` | `openai/gpt-5.4-codex` | `medium` | multi-module architecture/debug work |
-| critical | `critical` | `openai/gpt-5.4-codex` | `medium` | final risk review, release/security sign-off |
+| standard | `balanced` | `openai/gpt-5.4` | `medium` | normal implementation and planning |
+| standard | `visual` | `openai/gpt-5.4` | `medium` | browser-first UX/UI audits and design-heavy refinement |
+| standard | `writing` | `openai/gpt-5.4` | `medium` | planning capture and writing-heavy artifact work |
+| complex | `deep` | `openai/gpt-5.4` | `medium` | multi-module architecture/debug work |
+| critical | `critical` | `openai/gpt-5.4` | `medium` | final risk review, release/security sign-off |
 
 ## Default Agent Routing
 
@@ -48,11 +48,11 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | Category | Primary | Fallback 1 | Fallback 2 |
 | --- | --- | --- | --- |
 | `quick` | `openai/gpt-5.1-codex-mini` | Copilot low-latency coding model | Copilot balanced coding model |
-| `balanced` | `openai/gpt-5.3-codex` (`medium`) | Copilot balanced reasoning model | Copilot high-reasoning model |
-| `deep` | `openai/gpt-5.4-codex` (`medium`) | Copilot high-reasoning model | Copilot balanced reasoning model |
-| `critical` | `openai/gpt-5.4-codex` (`medium`) | Copilot highest-reasoning available model | Copilot high-reasoning model |
-| `visual` | `openai/gpt-5.3-codex` (`medium`) | Copilot visual-capable reasoning model | Copilot balanced model |
-| `writing` | `openai/gpt-5.3-codex` (`medium`) | Copilot strong writing/reasoning model | Copilot balanced model |
+| `balanced` | `openai/gpt-5.4` (`medium`) | Copilot balanced reasoning model | Copilot high-reasoning model |
+| `deep` | `openai/gpt-5.4` (`medium`) | Copilot high-reasoning model | Copilot balanced reasoning model |
+| `critical` | `openai/gpt-5.4` (`medium`) | Copilot highest-reasoning available model | Copilot high-reasoning model |
+| `visual` | `openai/gpt-5.4` (`medium`) | Copilot visual-capable reasoning model | Copilot balanced model |
+| `writing` | `openai/gpt-5.4` (`medium`) | Copilot strong writing/reasoning model | Copilot balanced model |
 
 ## Provider Outage Behavior
 

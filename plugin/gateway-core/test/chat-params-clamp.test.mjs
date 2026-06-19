@@ -79,7 +79,7 @@ test("chat.params records routing drift when runtime model differs", { concurren
   mkdirSync(join(directory, "agent", "specs"), { recursive: true })
   writeFileSync(
     join(directory, "agent", "orchestrator.md"),
-    "---\nmodel: openai/gpt-5.3-codex\n---\n",
+    "---\nmodel: openai/gpt-5.4\n---\n",
   )
   writeFileSync(
     join(directory, "agent", "specs", "orchestrator.json"),
@@ -112,7 +112,7 @@ test("chat.params records routing drift when runtime model differs", { concurren
       {
         sessionID: "session-routing-drift",
         agent: "orchestrator",
-        model: { providerID: "openai", modelID: "gpt-5.4" },
+        model: { providerID: "openai", modelID: "gpt-5.4-mini" },
         provider: { id: "openai" },
         message: { role: "user", content: "Reply with OK" },
       },
@@ -124,14 +124,19 @@ test("chat.params records routing drift when runtime model differs", { concurren
       .split(/\r?\n/)
       .filter(Boolean)
       .map((line) => JSON.parse(line))
+    const observed = events.find(
+      (entry) => entry.reason_code === "agent_runtime_model_observed",
+    )
     const drift = events.find(
       (entry) => entry.reason_code === "agent_model_routing_drift_detected",
     )
 
+    assert.equal(observed?.agent, "orchestrator")
+    assert.equal(observed?.actual_model, "openai/gpt-5.4-mini")
     assert.equal(drift?.agent, "orchestrator")
     assert.equal(drift?.expected_category, "balanced")
-    assert.equal(drift?.expected_model, "openai/gpt-5.3-codex")
-    assert.equal(drift?.actual_model, "openai/gpt-5.4")
+    assert.equal(drift?.expected_model, "openai/gpt-5.4")
+    assert.equal(drift?.actual_model, "openai/gpt-5.4-mini")
   } finally {
     if (previous === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

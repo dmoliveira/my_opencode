@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { classifyProviderRetryReason, isContextOverflowNonRetryable } from "../dist/hooks/shared/provider-retry-reason.js"
+import {
+  classifyProviderRetryReason,
+  isContextOverflowNonRetryable,
+  isProviderHeaderTimeout,
+} from "../dist/hooks/shared/provider-retry-reason.js"
 
 test("classifyProviderRetryReason recognizes free usage exhaustion", () => {
   const result = classifyProviderRetryReason("FreeUsageLimitError: free usage exceeded")
@@ -25,4 +29,10 @@ test("classifyProviderRetryReason recognizes structured rate-limit and overload 
 test("isContextOverflowNonRetryable detects context-overflow signatures", () => {
   assert.equal(isContextOverflowNonRetryable("ContextOverflowError: prompt is too long"), true)
   assert.equal(isContextOverflowNonRetryable("normal rate limited"), false)
+})
+
+
+test("classifyProviderRetryReason recognizes provider header timeouts", () => {
+  assert.equal(classifyProviderRetryReason("ProviderHeaderTimeoutError: Provider response headers timed out after 10000ms")?.code, "provider_header_timeout")
+  assert.equal(isProviderHeaderTimeout("Provider response headers timed out after 10000ms"), true)
 })

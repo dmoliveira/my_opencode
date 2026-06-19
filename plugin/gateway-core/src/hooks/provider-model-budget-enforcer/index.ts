@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
+import { routingProfileForCategory } from "../shared/routing-profiles.js"
 
 interface ToolPayload {
   input?: {
@@ -24,15 +25,6 @@ interface BudgetRecord {
   provider: string
   model: string
   estimatedTokens: number
-}
-
-const MODEL_BY_CATEGORY: Record<string, string> = {
-  quick: "openai/gpt-5.4-mini",
-  balanced: "openai/gpt-5.3-codex",
-  deep: "openai/gpt-5.4-codex",
-  critical: "openai/gpt-5.4-codex",
-  visual: "openai/gpt-5.3-codex",
-  writing: "openai/gpt-5.3-codex",
 }
 
 function sessionId(payload: ToolPayload): string {
@@ -86,7 +78,8 @@ export function createProviderModelBudgetEnforcerHook(options: {
       const fallbackCategory = categoryArg.length > 0 ? categoryArg : "balanced"
       const metadataCategory = String(metadata?.default_category ?? "").toLowerCase().trim()
       const category = (categoryArg || metadataCategory || fallbackCategory).toLowerCase()
-      const model = MODEL_BY_CATEGORY[category] ?? "openai/gpt-5.3-codex"
+      const profile = routingProfileForCategory(category)
+      const model = profile?.model ?? "openai/gpt-5.4"
       const provider = model.split("/", 1)[0] || "openai"
       const estimatedTokens = estimateTokens(
         `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`,

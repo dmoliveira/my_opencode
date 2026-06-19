@@ -1,7 +1,7 @@
 {
   "name": "reviewer",
   "mode": "subagent",
-  "model": "openai/gpt-5.4-codex",
+  "model": "openai/gpt-5.4",
   "description_template": "Read-only implementation reviewer focused on correctness, maintainability, safety, and regressions.",
   "tools": {
     "bash": false,

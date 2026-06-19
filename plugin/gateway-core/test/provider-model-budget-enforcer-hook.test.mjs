@@ -124,7 +124,7 @@ test("provider-model-budget-enforcer honors explicit category override and deep 
     )
 
     assert.equal(reservation?.category, "deep")
-    assert.equal(reservation?.model, "openai/gpt-5.4-codex")
+    assert.equal(reservation?.model, "openai/gpt-5.4")
   } finally {
     if (previousAudit === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

@@ -11,7 +11,7 @@ test("chat.params skips drift audit for subagents with explicit model pins", asy
   mkdirSync(join(directory, "agent", "specs"), { recursive: true })
   writeFileSync(
     join(directory, "agent", "reviewer.md"),
-    "---\nmodel: openai/gpt-5.4-codex\n---\n",
+    "---\nmodel: openai/gpt-5.4\n---\n",
   )
   writeFileSync(
     join(directory, "agent", "specs", "reviewer.json"),
@@ -44,7 +44,7 @@ test("chat.params skips drift audit for subagents with explicit model pins", asy
       {
         sessionID: "session-subagent-no-drift",
         agent: "reviewer",
-        model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+        model: { providerID: "openai", modelID: "gpt-5.4" },
         provider: { id: "openai" },
         message: { role: "user", content: "Reply with OK" },
       },
