@@ -245,7 +245,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before memory-lifecycle --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "memory": {
-      "description": "Manage shared memory content (add|find|recall|pin|summarize|doctor)",
+      "description": "Manage shared memory content (add|find|recall|pin|summarize|promote|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/memory_command.py\" $ARGUMENTS`\nShow only the command output."
     },
     "hook-learning": {

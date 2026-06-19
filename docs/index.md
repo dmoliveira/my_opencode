@@ -19,6 +19,7 @@ This repo-local index exists because `AGENTS.md` and related startup docs refere
 ## Runtime/operator docs
 
 - `quickstart.md`: startup path and main command-surface overview
+- `agent-browser.md`: browser-owned blocker workflow for consent, re-auth, scope upgrade, and final visual verification
 - `operator-playbook.md`: operator-facing execution and incident flow
 - `parallel-wt-playbook.md`: worktree-first execution and safe reservation guidance
 - `command-handbook.md`: detailed slash-command reference

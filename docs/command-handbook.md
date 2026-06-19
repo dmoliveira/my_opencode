@@ -619,7 +619,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
-/memory - Manage shared memory content (add|find|recall|pin|summarize|doctor)
+/memory - Manage shared memory content (add|find|recall|pin|summarize|promote|doctor)
 /memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)
 /model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
