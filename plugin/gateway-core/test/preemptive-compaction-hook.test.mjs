@@ -93,7 +93,7 @@ test("preemptive-compaction triggers summarize for non-anthropic providers", asy
                   info: {
                     role: "assistant",
                     providerID: "openai",
-                    modelID: "gpt-5.3-codex",
+                    modelID: "gpt-5.4",
                     tokens: {
                       input: 180000,
                       cache: { read: 0 },

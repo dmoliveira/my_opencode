@@ -36,7 +36,7 @@ SPEC_DIR = Path(__file__).resolve().parent.parent / "agent" / "specs"
 DEFAULT_STATE = {
     "active_category": "balanced",
     "system_defaults": {
-        "model": "openai/gpt-5.3-codex",
+        "model": "openai/gpt-5.4",
         "temperature": 0.2,
         "reasoning": "medium",
         "verbosity": "medium",

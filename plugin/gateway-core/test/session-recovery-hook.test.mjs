@@ -34,7 +34,7 @@ test("session-recovery resumes recoverable session errors", async () => {
                   info: {
                     role: "user",
                     agent: "build",
-                    model: { providerID: "openai", modelID: "gpt-5.3-codex" },
+                    model: { providerID: "openai", modelID: "gpt-5.4" },
                   },
                 },
               ],
@@ -60,7 +60,7 @@ test("session-recovery resumes recoverable session errors", async () => {
     assert.equal(promptCalls, 1)
     assert.equal(lastPromptBody?.agent, "build")
     assert.equal(lastPromptBody?.model?.providerID, "openai")
-    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.3-codex")
+    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.4")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -1286,7 +1286,7 @@ test("session-recovery downgrades repeated provider header timeouts to a lighter
                   info: {
                     role: "user",
                     agent: "build",
-                    model: { providerID: "openai", modelID: "gpt-5.4-codex" },
+                    model: { providerID: "openai", modelID: "gpt-5.4" },
                   },
                 },
               ],
@@ -1313,7 +1313,7 @@ test("session-recovery downgrades repeated provider header timeouts to a lighter
     })
 
     assert.equal(lastPromptBody?.model?.providerID, "openai")
-    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.3-codex")
+    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.4-mini")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

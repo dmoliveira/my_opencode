@@ -881,7 +881,7 @@ Use:
 ```text
 /model-routing status
 /model-routing set-category deep
-/model-routing resolve --category deep --override-model openai/gpt-5.4-codex --json
+/model-routing resolve --category deep --override-model openai/gpt-5.4 --json
 /model-routing trace --json
 /model-routing recommend --agent reviewer --json
 /model-routing recommend --agent reviewer --apply --json

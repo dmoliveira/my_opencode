@@ -79,7 +79,7 @@ export function createProviderModelBudgetEnforcerHook(options: {
       const metadataCategory = String(metadata?.default_category ?? "").toLowerCase().trim()
       const category = (categoryArg || metadataCategory || fallbackCategory).toLowerCase()
       const profile = routingProfileForCategory(category)
-      const model = profile?.model ?? "openai/gpt-5.3-codex"
+      const model = profile?.model ?? "openai/gpt-5.4"
       const provider = model.split("/", 1)[0] || "openai"
       const estimatedTokens = estimateTokens(
         `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`,
