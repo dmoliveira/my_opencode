@@ -389,7 +389,7 @@ def command_status(argv: list[str]) -> int:
     if any(arg not in ("--json",) for arg in argv):
         return usage()
     json_output = "--json" in argv
-    _, state, write_path = load_state()
+    _, state, write_path = load_state_snapshot(persist_missing=False)
     schema = default_schema()
     categories = schema.get("categories", {}) if isinstance(schema.get("categories"), dict) else {}
     parity_warnings = _routing_profile_parity_warnings(schema)
@@ -464,7 +464,7 @@ def command_trace(argv: list[str]) -> int:
     if any(arg not in ("--json",) for arg in argv):
         return usage()
     json_output = "--json" in argv
-    _, state, _ = load_state()
+    _, state, _ = load_state_snapshot(persist_missing=False)
     trace = state.get("latest_trace")
     payload = {
         "result": "PASS",

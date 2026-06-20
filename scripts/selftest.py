@@ -17495,6 +17495,46 @@ jobs:
             "model-routing trace should expose selected model from latest resolve",
         )
 
+        read_only_routing_path = home / ".config" / "opencode" / "readonly-model-routing.json"
+        if read_only_routing_path.exists():
+            read_only_routing_path.unlink()
+        read_only_env = dict(refactor_env)
+        read_only_env["OPENCODE_MODEL_ROUTING_PATH"] = str(read_only_routing_path)
+
+        model_routing_status_read_only = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "status", "--json"],
+            capture_output=True,
+            text=True,
+            env=read_only_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_status_read_only.returncode == 0,
+            "model-routing status should succeed with a fresh read-only state path",
+        )
+        expect(
+            not read_only_routing_path.exists(),
+            "model-routing status should not persist state on inspection",
+        )
+
+        model_routing_trace_read_only = subprocess.run(
+            [sys.executable, str(MODEL_ROUTING_SCRIPT), "trace", "--json"],
+            capture_output=True,
+            text=True,
+            env=read_only_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            model_routing_trace_read_only.returncode == 0,
+            "model-routing trace should succeed with a fresh read-only state path",
+        )
+        expect(
+            not read_only_routing_path.exists(),
+            "model-routing trace should not persist state on inspection",
+        )
+
         routing_status = subprocess.run(
             [sys.executable, str(ROUTING_SCRIPT), "status", "--json"],
             capture_output=True,
