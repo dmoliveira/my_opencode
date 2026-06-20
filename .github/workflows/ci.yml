@@ -39,7 +39,7 @@ jobs:
       - name: Installer smoke test
         run: |
           TMP_HOME="$(mktemp -d)"
-          HOME="$TMP_HOME" REPO_URL="$GITHUB_WORKSPACE" REPO_REF="$GITHUB_SHA" ./install.sh --skip-self-check
+          HOME="$TMP_HOME" REPO_URL="$GITHUB_WORKSPACE" REPO_REF="$GITHUB_SHA" ./install.sh --self-check-profile core
           HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/mcp_command.py" status
           HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" profile lean
           HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" doctor --json
