@@ -20252,6 +20252,33 @@ version: 1
             and resume_exec_allowed.get("runtime", {}).get("status") == "completed",
             "recovery engine should resume approved non-idempotent step and complete run",
         )
+        blocked_execute = execute_resume(
+            resume_runtime,
+            "tool_failure",
+            actor="selftest",
+        )
+        expect(
+            blocked_execute.get("result") == "FAIL"
+            and blocked_execute.get("reason_code") == "resume_non_idempotent_step",
+            "execute_resume should fail fast on non-idempotent step without consuming a real retry",
+        )
+        blocked_resume_meta = blocked_execute.get("runtime", {}).get("resume", {})
+        expect(
+            blocked_resume_meta.get("attempt_count") == 0
+            and not blocked_resume_meta.get("last_attempt_at"),
+            "non-idempotent approval gate should not consume cooldown or attempt budget",
+        )
+        immediate_retry = execute_resume(
+            blocked_execute.get("runtime", {}),
+            "tool_failure",
+            approved_steps={2},
+            actor="selftest",
+        )
+        expect(
+            immediate_retry.get("result") == "PASS"
+            and immediate_retry.get("runtime", {}).get("status") == "completed",
+            "approved retry should succeed immediately after non-idempotent approval gate failure",
+        )
 
         recover_plan_path = tmp / "recovery_plan_selftest.md"
         recover_plan_path.write_text(
