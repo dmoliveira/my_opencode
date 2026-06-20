@@ -5,7 +5,7 @@ Epic 22 Task 22.1 defines the baseline contract for `/autoflow` orchestration.
 ## Goals
 
 - provide one deterministic orchestration surface over plan, todo, budget, and recovery primitives
-- keep default usage safe and auditable with explicit stop conditions
+- keep default usage safe and auditable with explicit validation and recovery conditions
 - preserve machine-readable output for automation while keeping concise human summaries
 
 ## Command surface
@@ -15,13 +15,12 @@ Epic 22 Task 22.1 defines the baseline contract for `/autoflow` orchestration.
 - `start <plan.md>`: run orchestration with guardrails
 - `status`: show latest orchestration state
 - `resume`: attempt deterministic recovery from latest checkpoint/resume context
-- `stop`: halt active orchestration and record stop reason
 - `report`: emit run summary with deviations, budget, and recovery trail
-- `dry-run <plan.md>`: resolve planned actions and safety checks without mutating state
+- `doctor`: inspect current command/backend readiness and configuration state
 
 ## Input and validation contract
 
-`start` and `dry-run` accept plan artifacts matching `instructions/plan_artifact_contract.md`.
+`start` accepts plan artifacts matching `instructions/plan_artifact_contract.md`.
 
 Validation requirements:
 
@@ -41,26 +40,24 @@ Deterministic validation error shape:
 
 ### Concise mode (default)
 
-Human-readable summary with:
+Current human-readable output is subcommand-specific:
 
-- final `result` and `status`
-- active `phase` (`planning`, `executing`, `paused`, `recovering`, `completed`, `failed`)
-- guardrail highlights (todo/budget/recovery)
-- 2-4 suggested next commands
+- `start`: plan path, final `status`, step progress, deviation count, and selected compliance/budget summaries
+- `status`: current `status`, step progress, completion-gate summary when present, and config path
+- `report`: deviations-oriented summary delegated from the backend `deviations` view
+- `resume`: backend recovery summary for the selected interruption class
+- `doctor`: backend doctor summary plus active routing entrypoint metadata
 
 ### Verbose mode (`--json`)
 
-Machine-readable payload with stable top-level keys:
+Machine-readable payloads differ slightly by subcommand, but the currently emitted top-level fields are:
 
-- `result`, `status`, `phase`
-- `plan` (path + metadata)
-- `step_counts` (total/done/in_progress/pending/skipped/failed)
-- `todo_compliance`, `budget`, `checkpoint`, `resume`
-- `deviations` (count + entries)
-- `task_graph_path` (shared dependency graph runtime path)
-- `trace` (decision events and fallback reasons)
-- `warnings`, `problems`, `quick_fixes`
-- `config`
+- `start --json` (foreground execution): `result`, `status`, `plan`, `step_counts`, `deviation_count`, `todo_compliance`, `budget`, `checkpoint`, `config`, `model_routing`, plus shared task-graph fields
+- `start --background --json` (queued execution): `result`, `status`, `background`, `job_id`, `evidence`, `plan`, `hint`, `model_routing`
+- `status --json`: `result`, `status`, `plan`, `step_counts`, `todo_compliance`, `completion_gates`, `completion_gate_status`, `budget`, `config`, `model_routing`, plus shared task-graph fields
+- `report --json`: `result`, `state`, `status`, `phase`, `plan`, `summary`, `step_counts`, `todo_compliance`, `budget`, `blockers`, `next_actions`, `recommendations`, `deviations`, `task_graph_path`, `task_graph`, `config`, `quick_fixes`, `model_routing` (treat `status/state/phase` as the authoritative run outcome fields; `result` is wrapper-level command success today)
+- `resume --json`: backend `recover` payload with `model_routing.entrypoint = "autoflow"`
+- `doctor --json`: backend `doctor` payload with `model_routing.entrypoint = "autoflow"`
 
 Shared runtime authority:
 
@@ -71,24 +68,21 @@ Shared runtime authority:
 
 ## Lifecycle states
 
-Overall orchestration status values:
+Current emitted status values across active `/autoflow` flows:
 
 - `queued`
-- `running`
-- `paused`
+- `idle`
+- `in_progress`
 - `completed`
 - `failed`
-- `stopped`
 - `budget_stopped`
-- `resume_required`
+- `resume_escalated`
 
-State transitions must be deterministic and reject illegal jumps with explicit reason codes.
+Background start is the main queued path. Status/report payloads otherwise mirror the underlying plan-execution runtime states.
 
 ## Safety defaults
 
-- `dry-run` does not write runtime/checkpoint state
 - `start` enforces todo compliance and budget checks before any destructive step
-- `stop` requires explicit operator reason and records actor/timestamp
 - `resume` is gated by interruption class and idempotency checks
 
 ## Integration expectations for Task 22.2+

@@ -159,23 +159,20 @@ Epic 22 Task 22.1 defines unified orchestration command semantics in:
 
 Current baseline includes:
 
-- `/autoflow` subcommands: `start`, `status`, `resume`, `stop`, `report`, `dry-run`
+- `/autoflow` subcommands: `start`, `status`, `resume`, `report`, `doctor`
 - deterministic validation/error payload rules with stable reason codes and remediation hints
 - concise human output plus structured `--json` schema for automation
-- lifecycle status model and safety defaults for dry-run, stop, and recovery gating
+- lifecycle status model and recovery gating for the active `/autoflow` surface
 
-Task 22.2 adapter baseline:
+Task 22.2 orchestration baseline:
 
-- adapter module: `scripts/autoflow_adapter.py`
 - primitive composition: `plan`, `todo_compliance`, `budget`, `checkpoint`, `resume`, and `loop_guard`
-- deterministic transition matrix for `start|status|resume|stop|report|dry-run`
+- deterministic transition matrix for `start|status|resume|report|doctor`
 - explain path that returns trace entries plus fallback intent/reason when transitions are illegal or resume gating fails
 
 Task 22.3 safety and usability controls:
 
 - command module: `scripts/autoflow_command.py`
-- kill-switch control: `/autoflow stop --reason <text> --json` sets runtime status to `stopped` with audit metadata
-- dry-run control: `/autoflow dry-run <plan.md> --json` previews transition decisions without mutating runtime state
 - migration path from low-level commands to `/autoflow`:
   - `/start-work <plan.md>` -> `/autoflow start <plan.md>`
   - `/start-work status --json` -> `/autoflow status --json`
@@ -186,7 +183,7 @@ Task 22.4 verification notes:
 
 - selftest validates `/autoflow` lifecycle coverage across `start -> status/report` with deterministic payload assertions.
 - selftest validates `/autoflow resume` recovery gating for non-idempotent steps and explicit approval replay.
-- install smoke validates `/autoflow dry-run`, `/autoflow status`, `/autoflow report`, and `/autoflow stop` happy-path controls.
+- install smoke validates `/autoflow status`, `/autoflow report`, and `/autoflow doctor` happy-path controls.
 
 Runtime storage note:
 
