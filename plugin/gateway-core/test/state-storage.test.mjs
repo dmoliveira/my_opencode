@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -8,6 +8,7 @@ import {
   cleanupOrphanGatewayLoop,
   loadGatewayState,
   nowIso,
+  resolveGatewayStatePath,
   saveGatewayState,
 } from "../dist/state/storage.js"
 
@@ -87,7 +88,7 @@ test("saveGatewayState round-trips concise mode state", () => {
   })
 })
 
-test("saveGatewayState preserves concise mode when caller omits it", () => {
+test("saveGatewayState preserves existing concise mode when caller omits it", () => {
   withTempDir((directory) => {
     saveGatewayState(directory, {
       activeLoop: null,
@@ -118,6 +119,32 @@ test("saveGatewayState preserves concise mode when caller omits it", () => {
     const state = loadGatewayState(directory)
     assert.equal(state?.conciseMode?.mode, "lite")
     assert.equal(state?.activeLoop?.sessionId, "s-3")
+  })
+})
+
+test("saveGatewayState writes provided concise mode without fallback state dependency", () => {
+  withTempDir((directory) => {
+    const path = resolveGatewayStatePath(directory)
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(path, "{not-json}\n", "utf-8")
+
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "review",
+        source: "test",
+        sessionId: "ses-test-3",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+      source: "write",
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.conciseMode?.mode, "review")
+    assert.equal(state?.conciseMode?.sessionId, "ses-test-3")
+    assert.equal(state?.source, "write")
   })
 })
 
