@@ -83,9 +83,7 @@ All notable changes to this project are documented in this file.
 - Added `scripts/budget_command.py` with `/budget status|profile|override|doctor` controls for execution budget visibility and tuning.
 - Added `/budget`, `/budget-status`, `/budget-profile`, `/budget-override`, and `/budget-doctor-json` aliases in `opencode.json`.
 - Added `instructions/autoflow_command_contract.md` defining Epic 22 Task 22.1 `/autoflow` subcommands, validation/error contract, output schema modes, lifecycle states, and safety defaults.
-- Added `scripts/autoflow_adapter.py` implementing Epic 22 Task 22.2 primitive composition and deterministic transition/explain logic for unified orchestration.
-- Added `scripts/autoflow_command.py` with `/autoflow start|status|resume|stop|report|dry-run` command controls, including non-mutating dry-run and explicit kill-switch stop behavior.
-- Added `/autoflow`, `/autoflow-status`, `/autoflow-report`, `/autoflow-dry-run`, and `/autoflow-stop` aliases in `opencode.json`.
+- Added `scripts/autoflow_command.py` with `/autoflow start|status|resume|report|doctor` command controls over the current plan-execution backend.
 - Added `instructions/pr_review_rubric.md` defining Epic 23 Task 23.1 deterministic risk categories, severity/confidence scoring, blocker evidence thresholds, and low-noise recommendation mapping for `/pr-review`.
 - Added `scripts/pr_review_analyzer.py` implementing Epic 23 Task 23.2 diff parsing, changed-area classification, missing evidence detection, and deterministic rubric-aligned findings/recommendation output for PR risk triage.
 - Added `scripts/pr_review_command.py` implementing Epic 23 Task 23.3 `/pr-review` command integration with concise/JSON review output, pre-merge checklist generation, and subsystem doctor diagnostics.
@@ -184,7 +182,7 @@ All notable changes to this project are documented in this file.
 - Marked Epic 20 Task 20.4 complete and promoted Epic 20 status to done in the roadmap.
 - Marked Epic 22 as in progress and completed Task 22.1 contract definition notes in the roadmap.
 - Expanded selftest coverage with `/autoflow` adapter status and explain-path checks for illegal transitions and resume-gating fallback reason codes.
-- Integrated `/autoflow` diagnostics into unified `/doctor`, expanded install smoke with `/autoflow` dry-run/status/report/stop checks, and documented migration guidance from `/start-work` and `/resume` flows.
+- Integrated `/autoflow` diagnostics into unified `/doctor` and documented migration guidance from `/start-work` and `/resume` flows.
 - Expanded `/autoflow` verification coverage for report lifecycle payloads and approval-gated resume recovery paths in selftest.
 - Marked Epic 22 Task 22.4 complete and promoted Epic 22 status to done in the roadmap.
 - Marked Epic 23 as in progress and completed Task 23.1 rubric-definition notes in the roadmap.

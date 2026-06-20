@@ -60,5 +60,5 @@ Use published knowledge entries to seed safer `/autoflow` execution plans:
 
 1. Run `/learn search --status published --json` to retrieve approved guidance.
 2. Review `autoflow_guidance` and `rule_injector_candidates` from search output.
-3. Apply relevant guidance before `/autoflow start` or `/autoflow dry-run`.
+3. Apply relevant guidance before `/autoflow start`.
 4. After execution, run `/learn capture --json` to record new outcomes and close the loop.

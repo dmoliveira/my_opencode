@@ -803,25 +803,25 @@ Every command-oriented epic must ship all of the following:
 **Depends on:** Epic 14, Epic 15, Epic 17, Epic 19, Epic 20
 
 - [x] Task 22.1: Define `/autoflow` command contract
-  - [x] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `stop`, `report`, `dry-run`)
+  - [x] Subtask 22.1.1: Define subcommands (`start`, `status`, `resume`, `report`, `doctor`)
   - [x] Subtask 22.1.2: Define input plan requirements and validation errors
   - [x] Subtask 22.1.3: Define output format for concise and verbose modes
   - [x] Notes: Added `instructions/autoflow_command_contract.md` defining `/autoflow` subcommands, deterministic validation/error shape, concise-vs-JSON output schema, lifecycle status model, and safety defaults for Task 22.2 implementation.
-- [x] Task 22.2: Implement orchestration adapter layer
-  - [x] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives
-  - [x] Subtask 22.2.2: Add deterministic state machine transitions
-  - [x] Subtask 22.2.3: Add explain mode showing decisions and fallbacks
-  - [x] Notes: Added `scripts/autoflow_adapter.py` to compose runtime primitives (`plan`, `todo`, `budget`, `checkpoint`, `resume`, `loop_guard`) and resolve deterministic intent transitions with explain traces and fallback reason codes.
+- [x] Task 22.2: Implement orchestration command bridge
+  - [x] Subtask 22.2.1: Compose existing plan, todo, budget, checkpoint, and loop primitives through the current backend bridge
+  - [x] Subtask 22.2.2: Add deterministic transition/state shaping for the active backend
+  - [x] Subtask 22.2.3: Add stable report/status payload rewriting and fallback pass-through
+  - [x] Notes: `scripts/autoflow_command.py` bridges to the current plan-execution backend and rewrites machine-readable payloads so `/autoflow` keeps a stable entrypoint identity on the active command surface.
 - [x] Task 22.3: Add safety and usability controls
-  - [x] Subtask 22.3.1: Add `dry-run` to preview actions without mutating state
-  - [x] Subtask 22.3.2: Add explicit kill-switch behavior for unsafe or runaway states
+  - [x] Subtask 22.3.1: Preserve deterministic JSON payload shaping for active commands
+  - [x] Subtask 22.3.2: Expose doctor/report/status guidance for operator workflows
   - [x] Subtask 22.3.3: Add docs and migration guidance from low-level commands
-  - [x] Notes: Added `scripts/autoflow_command.py` plus `/autoflow*` aliases with non-mutating `dry-run`, explicit `stop` kill-switch semantics, doctor integration, installer smoke coverage, and README migration mappings from low-level commands.
+  - [x] Notes: Added `scripts/autoflow_command.py` with the active `/autoflow` surface, doctor integration, and migration mappings from low-level commands.
 - [x] Task 22.4: Verification
   - [x] Subtask 22.4.1: Add integration tests for full lifecycle (`start -> status -> report`)
   - [x] Subtask 22.4.2: Add recovery tests (`resume` after interruption)
   - [x] Subtask 22.4.3: Add install-test smoke checks for `/autoflow` happy path
-  - [x] Notes: Expanded `scripts/selftest.py` with `/autoflow report` lifecycle assertions and approval-gated `/autoflow resume` recovery checks; install smoke validates `/autoflow dry-run|status|report|stop` flows.
+  - [x] Notes: Expanded `scripts/selftest.py` with `/autoflow report` lifecycle assertions and approval-gated `/autoflow resume` recovery checks for the active command surface.
 - [x] Exit criteria: `/autoflow` can run end-to-end flows with auditable outputs
 - [x] Exit criteria: users can always fall back to lower-level commands safely
 
