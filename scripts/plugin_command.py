@@ -86,6 +86,7 @@ def print_status(plugins: list[str]) -> None:
 def collect_doctor(plugins: list[str]) -> dict:
     problems: list[str] = []
     warnings: list[str] = []
+    quick_fixes: list[str] = []
     plugin_states: dict[str, dict[str, str]] = {}
 
     for alias in PLUGIN_ORDER:
@@ -106,7 +107,15 @@ def collect_doctor(plugins: list[str]) -> dict:
         KNOWN_PLUGINS["morph"] in plugins
         and not os.environ.get("MORPH_API_KEY", "").strip()
     ):
-        problems.append("morph enabled but MORPH_API_KEY is not set")
+        warnings.append(
+            "morph enabled but MORPH_API_KEY is not set; morph commands stay unavailable until the key is configured"
+        )
+        quick_fixes.extend(
+            [
+                "set MORPH_API_KEY for morph plugin usage",
+                "disable unmet plugins with: /plugin disable morph",
+            ]
+        )
 
     if KNOWN_PLUGINS["worktree"] in plugins and shutil.which("git") is None:
         problems.append("worktree enabled but git command is not available")
@@ -128,12 +137,7 @@ def collect_doctor(plugins: list[str]) -> dict:
         "plugins": plugin_states,
         "warnings": warnings,
         "problems": problems,
-        "quick_fixes": [
-            "set MORPH_API_KEY for morph plugin usage",
-            "disable unmet plugins with: /plugin disable <name>",
-        ]
-        if problems
-        else [],
+        "quick_fixes": quick_fixes,
     }
 
 
@@ -158,12 +162,14 @@ def print_doctor(plugins: list[str], json_output: bool = False) -> int:
         for item in report["warnings"]:
             print(f"- {item}")
 
+    if report["quick_fixes"]:
+        print("\nquick fixes:")
+        for item in report["quick_fixes"]:
+            print(f"- {item}")
+
     if report["problems"]:
         print("\nproblems:")
         for item in report["problems"]:
-            print(f"- {item}")
-        print("\nquick fixes:")
-        for item in report["quick_fixes"]:
             print(f"- {item}")
         print("\nresult: FAIL")
         return 1
