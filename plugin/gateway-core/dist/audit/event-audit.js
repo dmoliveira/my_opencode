@@ -210,13 +210,13 @@ function maybeExportOtel(directory, entry) {
     const rawHeaders = process.env.MY_OPENCODE_OTEL_EXPORT_HEADERS?.trim() ||
         process.env[headersEnv]?.trim() ||
         process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim() ||
-        derivedLangfuseAuth(settings);
-    if (!rawHeaders) {
+        (settings.provider === "langfuse" ? derivedLangfuseAuth(settings) : "");
+    if (!rawHeaders && settings.provider === "langfuse") {
         return;
     }
     const headers = {
         "content-type": "application/json",
-        ...parseHeaders(rawHeaders),
+        ...(rawHeaders ? parseHeaders(rawHeaders) : {}),
     };
     const payload = otelSpanPayload(settings.serviceName, entry);
     const fetchFn = globalThis.fetch;
