@@ -303,9 +303,11 @@ def execute_resume(
     }
     trail.append(decision)
 
+    consumes_attempt_budget = evaluation.get("reason_code") != "resume_non_idempotent_step"
     resume_meta["last_interruption_class"] = interruption_class
-    resume_meta["last_attempt_at"] = decision_at
-    resume_meta["attempt_count"] = int(evaluation.get("attempt_count", 0) or 0) + 1
+    if consumes_attempt_budget:
+        resume_meta["last_attempt_at"] = decision_at
+        resume_meta["attempt_count"] = int(evaluation.get("attempt_count", 0) or 0) + 1
     resume_meta["max_attempts"] = int(
         evaluation.get("max_attempts", MAX_RESUME_ATTEMPTS_DEFAULT)
         or MAX_RESUME_ATTEMPTS_DEFAULT
