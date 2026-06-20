@@ -117,7 +117,7 @@ install-test: ## Run installer smoke test in temp HOME
 	@TMP_HOME="$$(mktemp -d)"; \
 	SOURCE_REPO="$(PWD)"; \
 	SOURCE_REF="$$(git rev-parse --abbrev-ref HEAD)"; \
-	HOME="$$TMP_HOME" REPO_URL="$$SOURCE_REPO" REPO_REF="$$SOURCE_REF" ./install.sh --skip-self-check; \
+	HOME="$$TMP_HOME" REPO_URL="$$SOURCE_REPO" REPO_REF="$$SOURCE_REF" ./install.sh --self-check-profile core; \
 	cd "$$TMP_HOME/.config/opencode/my_opencode"; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/mcp_command.py" status; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" profile lean; \

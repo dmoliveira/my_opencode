@@ -34,6 +34,8 @@ def cmd_install(args: argparse.Namespace) -> int:
     command = ["bash", str(INSTALL_SCRIPT), "--non-interactive"]
     if args.skip_self_check:
         command.append("--skip-self-check")
+    elif args.self_check_profile:
+        command.extend(["--self-check-profile", args.self_check_profile])
 
     if args.dry_run:
         print(" ".join(command))
@@ -71,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--repo-ref", default="", help="Repository ref override")
     install.add_argument("--install-dir", default="", help="Install target directory")
     install.add_argument("--skip-self-check", action="store_true")
+    install.add_argument("--self-check-profile", choices=["core", "full"], default="core")
     install.add_argument("--dry-run", action="store_true")
     install.set_defaults(func=cmd_install)
 

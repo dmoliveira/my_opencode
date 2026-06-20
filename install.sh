@@ -8,6 +8,7 @@ CONFIG_DIR="$HOME/.config/opencode"
 CONFIG_PATH="$CONFIG_DIR/opencode.json"
 NON_INTERACTIVE=false
 SKIP_SELF_CHECK=false
+SELF_CHECK_PROFILE="core"
 RUN_WIZARD=false
 WIZARD_RECONFIGURE=false
 QUIET=false
@@ -20,6 +21,25 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--skip-self-check)
 		SKIP_SELF_CHECK=true
+		;;
+	--full-self-check)
+		SELF_CHECK_PROFILE="full"
+		;;
+	--self-check-profile)
+		shift
+		if [ "$#" -eq 0 ]; then
+			printf "Error: --self-check-profile requires value core|full\n" >&2
+			exit 2
+		fi
+		case "$1" in
+		core|full)
+			SELF_CHECK_PROFILE="$1"
+			;;
+		*)
+			printf "Error: invalid --self-check-profile value: %s\n" "$1" >&2
+			exit 2
+			;;
+		esac
 		;;
 	--wizard)
 		RUN_WIZARD=true
@@ -34,7 +54,7 @@ while [ "$#" -gt 0 ]; do
 		VERBOSE=true
 		;;
 	-h | --help)
-		printf "Usage: %s [--non-interactive] [--skip-self-check] [--wizard] [--reconfigure] [--quiet] [--verbose]\n" "$0"
+		printf "Usage: %s [--non-interactive] [--skip-self-check] [--full-self-check] [--self-check-profile <core|full>] [--wizard] [--reconfigure] [--quiet] [--verbose]\n" "$0"
 		exit 0
 		;;
 	*)
@@ -192,144 +212,174 @@ fi
 
 if [ "$SKIP_SELF_CHECK" = false ]; then
 	log_info ""
-	log_info "Running self-check..."
+	log_info "Running self-check ($SELF_CHECK_PROFILE profile)..."
 	python3 "$INSTALL_DIR/scripts/mcp_command.py" status
 	python3 "$INSTALL_DIR/scripts/plugin_command.py" status
 	python3 "$INSTALL_DIR/scripts/notify_command.py" status
-	python3 "$INSTALL_DIR/scripts/notify_command.py" doctor
-	python3 "$INSTALL_DIR/scripts/session_digest.py" show || true
 	python3 "$INSTALL_DIR/scripts/session_digest.py" doctor
-	if [ -f "$INSTALL_DIR/scripts/session_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/session_command.py" list --json
-		python3 "$INSTALL_DIR/scripts/session_command.py" search selfcheck --json
-		python3 "$INSTALL_DIR/scripts/session_command.py" doctor --json
-	fi
 	python3 "$INSTALL_DIR/scripts/telemetry_command.py" status
 	python3 "$INSTALL_DIR/scripts/post_session_command.py" status
 	python3 "$INSTALL_DIR/scripts/policy_command.py" status
 	python3 "$INSTALL_DIR/scripts/config_command.py" status
-	python3 "$INSTALL_DIR/scripts/config_command.py" layers
-	python3 "$INSTALL_DIR/scripts/background_task_manager.py" status
-	python3 "$INSTALL_DIR/scripts/background_task_manager.py" doctor --json
-	if [ -f "$INSTALL_DIR/scripts/refactor_lite_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/refactor_lite_command.py" profile --scope "scripts/*.py" --dry-run --json
-	fi
-	python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
-	python3 "$INSTALL_DIR/scripts/browser_command.py" status
-	python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
 	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
 		python3 "$INSTALL_DIR/scripts/gateway_command.py" status --json
-		python3 "$INSTALL_DIR/scripts/gateway_command.py" doctor --json
 	fi
-	SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
-	python3 -c "from pathlib import Path; Path('$SELF_CHECK_PLAN').write_text('---\nid: install-selfcheck-plan\ntitle: Install Selfcheck Plan\nowner: installer\ncreated_at: 2026-02-13T00:00:00Z\nversion: 1\n---\n\n# Plan\n\n- [ ] 1. Confirm command wiring\n- [ ] 2. Confirm checkpoint persistence\n', encoding='utf-8')"
-	if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/todo_command.py" status --json
-		python3 "$INSTALL_DIR/scripts/todo_command.py" enforce --json
-	fi
-	if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true
-		RUNTIME_PATH="$HOME/.config/opencode/my_opencode/runtime/plan_execution.json"
-		python3 -c "import json,pathlib; p=pathlib.Path('$RUNTIME_PATH'); data=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; steps=data.get('steps', []); data['status']='failed'; data['resume']={'enabled': True, 'attempt_count': 0, 'max_attempts': 3, 'trail': []};
+
+	if [ "$SELF_CHECK_PROFILE" = "full" ]; then
+		python3 "$INSTALL_DIR/scripts/notify_command.py" doctor
+		python3 "$INSTALL_DIR/scripts/session_digest.py" show || true
+		if [ -f "$INSTALL_DIR/scripts/session_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/session_command.py" list --json
+			python3 "$INSTALL_DIR/scripts/session_command.py" search selfcheck --json
+			python3 "$INSTALL_DIR/scripts/session_command.py" doctor --json
+		fi
+		python3 "$INSTALL_DIR/scripts/config_command.py" layers
+		python3 "$INSTALL_DIR/scripts/background_task_manager.py" status
+		python3 "$INSTALL_DIR/scripts/background_task_manager.py" doctor --json
+		if [ -f "$INSTALL_DIR/scripts/refactor_lite_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/refactor_lite_command.py" profile --scope "scripts/*.py" --dry-run --json
+		fi
+		python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
+		python3 "$INSTALL_DIR/scripts/browser_command.py" status
+		python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
+		if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/gateway_command.py" doctor --json
+		fi
+		SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
+		mkdir -p "$(dirname "$SELF_CHECK_PLAN")"
+		cat > "$SELF_CHECK_PLAN" <<'EOF'
+---
+id: install-selfcheck-plan
+title: Install Selfcheck Plan
+owner: installer
+created_at: 2026-02-13T00:00:00Z
+version: 1
+---
+
+# Plan
+
+- [ ] 1. Confirm command wiring
+- [ ] 2. Confirm checkpoint persistence
+EOF
+		if [ -f "$INSTALL_DIR/scripts/todo_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/todo_command.py" status --json
+			python3 "$INSTALL_DIR/scripts/todo_command.py" enforce --json
+		fi
+		if [ -f "$INSTALL_DIR/scripts/resume_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/resume_command.py" status --json || true
+			RUNTIME_PATH="$HOME/.config/opencode/my_opencode/runtime/plan_execution.json"
+			python3 -c "import json,pathlib; p=pathlib.Path('$RUNTIME_PATH'); data=json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}; steps=data.get('steps', []); data['status']='failed'; data['resume']={'enabled': True, 'attempt_count': 0, 'max_attempts': 3, 'trail': []};
 if isinstance(steps, list) and len(steps) >= 2:
   steps[0]['state']='done';
   steps[1]['state']='pending';
   steps[1]['idempotent']=False;
 p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"
-		python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --json || true
-		if ! python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json; then
-			sleep 31
-			python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
-		fi
-	fi
-	if [ -f "$INSTALL_DIR/scripts/safe_edit_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/safe_edit_command.py" status --json
-		python3 "$INSTALL_DIR/scripts/safe_edit_command.py" plan --operation rename --scope "scripts/*.py" --allow-text-fallback --json
-		python3 "$INSTALL_DIR/scripts/safe_edit_command.py" doctor --json || true
-	fi
-	if [ -f "$INSTALL_DIR/scripts/checkpoint_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/checkpoint_command.py" list --json
-		python3 "$INSTALL_DIR/scripts/checkpoint_command.py" show --snapshot latest --json || true
-		python3 "$INSTALL_DIR/scripts/checkpoint_command.py" prune --max-per-run 50 --max-age-days 14 --json
-		python3 "$INSTALL_DIR/scripts/checkpoint_command.py" doctor --json || true
-	fi
-	if [ -f "$INSTALL_DIR/scripts/budget_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/budget_command.py" status --json
-		python3 "$INSTALL_DIR/scripts/budget_command.py" override --tool-call-count 120 --reason install-self-check --json
-		python3 "$INSTALL_DIR/scripts/budget_command.py" doctor --json
-		python3 "$INSTALL_DIR/scripts/budget_command.py" override --clear --json
-	fi
-	if [ -f "$INSTALL_DIR/scripts/autopilot_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" start --goal "Install self-check objective" --scope "scripts/autopilot_command.py" --done-criteria "verify command wiring;verify runtime status" --max-budget balanced --json
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" status --confidence 0.9 --json
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" report --json
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" pause --json
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths scripts/autopilot_command.py --json
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths README.md --json || true
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" stop --reason install-self-check --json
-		python3 "$INSTALL_DIR/scripts/autopilot_command.py" doctor --json
-	fi
-	if [ -f "$INSTALL_DIR/scripts/pr_review_command.py" ]; then
-		SELF_CHECK_DIFF="$HOME/.config/opencode/my_opencode/.install-selfcheck-pr.diff"
-		python3 -c "from pathlib import Path; Path('$SELF_CHECK_DIFF').write_text('diff --git a/scripts/install_selfcheck.py b/scripts/install_selfcheck.py\nindex 0000000..1111111 100644\n--- a/scripts/install_selfcheck.py\n+++ b/scripts/install_selfcheck.py\n@@ -0,0 +1,1 @@\n+print(\"install\")\n', encoding='utf-8')"
-		python3 "$INSTALL_DIR/scripts/pr_review_command.py" --diff-file "$SELF_CHECK_DIFF" --json
-		python3 "$INSTALL_DIR/scripts/pr_review_command.py" checklist --diff-file "$SELF_CHECK_DIFF" --json
-		python3 "$INSTALL_DIR/scripts/pr_review_command.py" doctor --json
-	fi
-	if [ -f "$INSTALL_DIR/scripts/release_train_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/release_train_command.py" status --json
-		python3 "$INSTALL_DIR/scripts/release_train_command.py" prepare --version 0.0.1 --json || true
-		python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --head HEAD --json
-		python3 "$INSTALL_DIR/scripts/release_train_command.py" doctor --json
-	fi
-	if [ -f "$INSTALL_DIR/scripts/hotfix_command.py" ]; then
-		(
-			cd "$INSTALL_DIR"
-			python3 "$INSTALL_DIR/scripts/hotfix_command.py" start --incident-id INSTALL-SELF-CHECK --scope config_only --impact sev3 --json
-			python3 "$INSTALL_DIR/scripts/hotfix_runtime.py" checkpoint --label install-self-check --json
-			python3 "$INSTALL_DIR/scripts/hotfix_runtime.py" validate --target validate --result pass --json
-			python3 "$INSTALL_DIR/scripts/hotfix_command.py" status --json
-			python3 "$INSTALL_DIR/scripts/hotfix_command.py" remind --json
-			python3 "$INSTALL_DIR/scripts/hotfix_command.py" close --outcome resolved --followup-issue install-self-check --deferred-validation-owner installer --deferred-validation-due 2026-03-01 --json
-			python3 "$INSTALL_DIR/scripts/hotfix_command.py" doctor --json
-		)
-	fi
-	if [ -f "$INSTALL_DIR/scripts/health_command.py" ]; then
-		(
-			cd "$INSTALL_DIR"
-			python3 "$INSTALL_DIR/scripts/health_command.py" status --force-refresh --json
-			python3 "$INSTALL_DIR/scripts/health_command.py" trend --limit 5 --json
-			python3 "$INSTALL_DIR/scripts/health_command.py" drift --json
-			python3 "$INSTALL_DIR/scripts/health_command.py" doctor --json
-		)
-	fi
-	if [ -f "$INSTALL_DIR/scripts/learn_command.py" ]; then
-		(
-			cd "$INSTALL_DIR"
-			python3 "$INSTALL_DIR/scripts/learn_command.py" capture --limit 5 --json
-			LEARN_ENTRY_ID=$(python3 "$INSTALL_DIR/scripts/learn_command.py" search --limit 1 --json | python3 -c 'import json,sys; payload=json.load(sys.stdin); entries=payload.get("entries", []); print(entries[0].get("entry_id", "") if entries else "")')
-			if [ -n "$LEARN_ENTRY_ID" ]; then
-				python3 "$INSTALL_DIR/scripts/learn_command.py" review --entry-id "$LEARN_ENTRY_ID" --summary "install-self-check review" --confidence 88 --risk high --json
-				if python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer --json; then
-					printf "learn publish high-risk single approval unexpectedly passed\n" >&2
-					exit 1
-				fi
-				python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer-2 --json
+			python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --json || true
+			if ! python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json; then
+				sleep 31
+				python3 "$INSTALL_DIR/scripts/resume_command.py" now --interruption-class tool_failure --approve-step 2 --json
 			fi
-			python3 "$INSTALL_DIR/scripts/learn_command.py" search --query release --json
-			python3 "$INSTALL_DIR/scripts/learn_command.py" doctor --json
-		)
-	fi
-	python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
-	python3 "$INSTALL_DIR/scripts/devtools_command.py" status
-	python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
-	if ! python3 "$INSTALL_DIR/scripts/plugin_command.py" doctor; then
-		if [ "$NON_INTERACTIVE" = true ]; then
-			printf "\nSelf-check failed in non-interactive mode.\n" >&2
-			exit 1
 		fi
-		printf "\nSelf-check reported missing prerequisites; setup can continue.\n"
-		python3 "$INSTALL_DIR/scripts/plugin_command.py" setup-keys
+		if [ -f "$INSTALL_DIR/scripts/safe_edit_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/safe_edit_command.py" status --json
+			python3 "$INSTALL_DIR/scripts/safe_edit_command.py" plan --operation rename --scope "scripts/*.py" --allow-text-fallback --json
+			python3 "$INSTALL_DIR/scripts/safe_edit_command.py" doctor --json || true
+		fi
+		if [ -f "$INSTALL_DIR/scripts/checkpoint_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/checkpoint_command.py" list --json
+			python3 "$INSTALL_DIR/scripts/checkpoint_command.py" show --snapshot latest --json || true
+			python3 "$INSTALL_DIR/scripts/checkpoint_command.py" prune --max-per-run 50 --max-age-days 14 --json
+			python3 "$INSTALL_DIR/scripts/checkpoint_command.py" doctor --json || true
+		fi
+		if [ -f "$INSTALL_DIR/scripts/budget_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/budget_command.py" status --json
+			python3 "$INSTALL_DIR/scripts/budget_command.py" override --tool-call-count 120 --reason install-self-check --json
+			python3 "$INSTALL_DIR/scripts/budget_command.py" doctor --json
+			python3 "$INSTALL_DIR/scripts/budget_command.py" override --clear --json
+		fi
+		if [ -f "$INSTALL_DIR/scripts/autopilot_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" start --goal "Install self-check objective" --scope "scripts/autopilot_command.py" --done-criteria "verify command wiring;verify runtime status" --max-budget balanced --json
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" status --confidence 0.9 --json
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" report --json
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" pause --json
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths scripts/autopilot_command.py --json
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" resume --confidence 0.9 --tool-calls 1 --token-estimate 50 --touched-paths README.md --json || true
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" stop --reason install-self-check --json
+			python3 "$INSTALL_DIR/scripts/autopilot_command.py" doctor --json
+		fi
+		if [ -f "$INSTALL_DIR/scripts/pr_review_command.py" ]; then
+			SELF_CHECK_DIFF="$HOME/.config/opencode/my_opencode/.install-selfcheck-pr.diff"
+			python3 -c "from pathlib import Path; Path('$SELF_CHECK_DIFF').write_text('diff --git a/scripts/install_selfcheck.py b/scripts/install_selfcheck.py
+index 0000000..1111111 100644
+--- a/scripts/install_selfcheck.py
++++ b/scripts/install_selfcheck.py
+@@ -0,0 +1,1 @@
++print("install")
+', encoding='utf-8')"
+			python3 "$INSTALL_DIR/scripts/pr_review_command.py" --diff-file "$SELF_CHECK_DIFF" --json
+			python3 "$INSTALL_DIR/scripts/pr_review_command.py" checklist --diff-file "$SELF_CHECK_DIFF" --json
+			python3 "$INSTALL_DIR/scripts/pr_review_command.py" doctor --json
+		fi
+		if [ -f "$INSTALL_DIR/scripts/release_train_command.py" ]; then
+			python3 "$INSTALL_DIR/scripts/release_train_command.py" status --json
+			python3 "$INSTALL_DIR/scripts/release_train_command.py" prepare --version 0.0.1 --json || true
+			python3 "$INSTALL_DIR/scripts/release_train_command.py" draft --head HEAD --json
+			python3 "$INSTALL_DIR/scripts/release_train_command.py" doctor --json
+		fi
+		if [ -f "$INSTALL_DIR/scripts/hotfix_command.py" ]; then
+			(
+				cd "$INSTALL_DIR"
+				python3 "$INSTALL_DIR/scripts/hotfix_command.py" start --incident-id INSTALL-SELF-CHECK --scope config_only --impact sev3 --json
+				python3 "$INSTALL_DIR/scripts/hotfix_runtime.py" checkpoint --label install-self-check --json
+				python3 "$INSTALL_DIR/scripts/hotfix_runtime.py" validate --target validate --result pass --json
+				python3 "$INSTALL_DIR/scripts/hotfix_command.py" status --json
+				python3 "$INSTALL_DIR/scripts/hotfix_command.py" remind --json
+				python3 "$INSTALL_DIR/scripts/hotfix_command.py" close --outcome resolved --followup-issue install-self-check --deferred-validation-owner installer --deferred-validation-due 2026-03-01 --json
+				python3 "$INSTALL_DIR/scripts/hotfix_command.py" doctor --json
+			)
+		fi
+		if [ -f "$INSTALL_DIR/scripts/health_command.py" ]; then
+			(
+				cd "$INSTALL_DIR"
+				python3 "$INSTALL_DIR/scripts/health_command.py" status --force-refresh --json
+				python3 "$INSTALL_DIR/scripts/health_command.py" trend --limit 5 --json
+				python3 "$INSTALL_DIR/scripts/health_command.py" drift --json
+				python3 "$INSTALL_DIR/scripts/health_command.py" doctor --json
+			)
+		fi
+		if [ -f "$INSTALL_DIR/scripts/learn_command.py" ]; then
+			(
+				cd "$INSTALL_DIR"
+				python3 "$INSTALL_DIR/scripts/learn_command.py" capture --limit 5 --json
+				LEARN_ENTRY_ID=$(python3 "$INSTALL_DIR/scripts/learn_command.py" search --limit 1 --json | python3 -c 'import json,sys; payload=json.load(sys.stdin); entries=payload.get("entries", []); print(entries[0].get("entry_id", "") if entries else "")')
+				if [ -n "$LEARN_ENTRY_ID" ]; then
+					python3 "$INSTALL_DIR/scripts/learn_command.py" review --entry-id "$LEARN_ENTRY_ID" --summary "install-self-check review" --confidence 88 --risk high --json
+					if python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer --json; then
+						printf "learn publish high-risk single approval unexpectedly passed
+" >&2
+						exit 1
+					fi
+					python3 "$INSTALL_DIR/scripts/learn_command.py" publish --entry-id "$LEARN_ENTRY_ID" --approved-by installer-2 --json
+				fi
+				python3 "$INSTALL_DIR/scripts/learn_command.py" search --query release --json
+				python3 "$INSTALL_DIR/scripts/learn_command.py" doctor --json
+			)
+		fi
+		python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
+		python3 "$INSTALL_DIR/scripts/devtools_command.py" status
+		python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
+		if ! python3 "$INSTALL_DIR/scripts/plugin_command.py" doctor; then
+			if [ "$NON_INTERACTIVE" = true ]; then
+				printf "
+Self-check failed in non-interactive mode.
+" >&2
+				exit 1
+			fi
+			printf "
+Self-check reported missing prerequisites; setup can continue.
+"
+			python3 "$INSTALL_DIR/scripts/plugin_command.py" setup-keys
+		fi
 	fi
 fi
 

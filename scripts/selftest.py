@@ -22855,6 +22855,57 @@ exit 1
             "doctor safe-edit check should pass",
         )
 
+        my_opencode_cli_script = REPO_ROOT / "scripts" / "my_opencode_cli.py"
+        cli_full = subprocess.run(
+            [
+                sys.executable,
+                str(my_opencode_cli_script),
+                "install",
+                "--dry-run",
+                "--self-check-profile",
+                "full",
+            ],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            cli_full.returncode == 0,
+            f"my_opencode cli full dry-run should succeed: {cli_full.stderr}",
+        )
+        expect(
+            "--self-check-profile full" in cli_full.stdout,
+            "my_opencode cli full dry-run should include explicit full self-check profile",
+        )
+        cli_skip = subprocess.run(
+            [
+                sys.executable,
+                str(my_opencode_cli_script),
+                "install",
+                "--dry-run",
+                "--skip-self-check",
+            ],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            cli_skip.returncode == 0,
+            f"my_opencode cli skip dry-run should succeed: {cli_skip.stderr}",
+        )
+        expect(
+            "--skip-self-check" in cli_skip.stdout,
+            "my_opencode cli skip dry-run should include skip-self-check flag",
+        )
+        expect(
+            "--self-check-profile" not in cli_skip.stdout,
+            "my_opencode cli skip dry-run should not emit a self-check profile flag",
+        )
+
     print("selftest: PASS")
     return 0
 
