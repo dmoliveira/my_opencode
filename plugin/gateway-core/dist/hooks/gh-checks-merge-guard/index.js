@@ -158,14 +158,6 @@ export function createGhChecksMergeGuardHook(options) {
                 });
                 throw new Error(`[gh-checks-merge-guard] PR checks are not green (failed=${checks.failed}, pending=${checks.pending}).`);
             }
-            writeGatewayEventAudit(directory, {
-                hook: "gh-checks-merge-guard",
-                stage: "state",
-                reason_code: "merge_checks_verified",
-                session_id: sessionId,
-                selector,
-                checks_total: checks.total,
-            });
         },
     };
 }
