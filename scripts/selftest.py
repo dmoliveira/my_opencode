@@ -17556,6 +17556,18 @@ jobs:
             not read_only_routing_path.exists(),
             "model-routing status should not persist state on inspection",
         )
+        model_routing_status_read_only_report = parse_json_output(
+            model_routing_status_read_only.stdout
+        )
+        expect(
+            model_routing_status_read_only_report.get("parity_warnings") == [],
+            "model-routing status should keep parity warnings out of the hot path",
+        )
+        expect(
+            model_routing_status_read_only_report.get("parity_check")
+            == "deferred_to_doctor",
+            "model-routing status should direct parity inspection to doctor",
+        )
 
         model_routing_trace_read_only = subprocess.run(
             [sys.executable, str(MODEL_ROUTING_SCRIPT), "trace", "--json"],

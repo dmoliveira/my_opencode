@@ -392,7 +392,6 @@ def command_status(argv: list[str]) -> int:
     _, state, write_path = load_state_snapshot(persist_missing=False)
     schema = default_schema()
     categories = schema.get("categories", {}) if isinstance(schema.get("categories"), dict) else {}
-    parity_warnings = _routing_profile_parity_warnings(schema)
     payload = {
         "active_category": state.get("active_category"),
         "system_defaults": state.get("system_defaults"),
@@ -400,7 +399,8 @@ def command_status(argv: list[str]) -> int:
         "config": str(active_config_path(write_path)),
         "category_models": {name: cfg.get("model") for name, cfg in categories.items() if isinstance(cfg, dict)},
         "pinned_primary_agents": _load_pinned_primary_agents(),
-        "parity_warnings": parity_warnings,
+        "parity_warnings": [],
+        "parity_check": "deferred_to_doctor",
     }
     if json_output:
         print(json.dumps(payload, indent=2))
@@ -409,8 +409,7 @@ def command_status(argv: list[str]) -> int:
         print(f"system_defaults: {json.dumps(payload['system_defaults'])}")
         print(f"has_latest_trace: {'yes' if payload['has_latest_trace'] else 'no'}")
         print(f"config: {payload['config']}")
-        if payload["parity_warnings"]:
-            print(f"warnings: {json.dumps(payload['parity_warnings'])}")
+        print(f"parity_check: {payload['parity_check']}")
         print(f"category_models: {json.dumps(payload['category_models'])}")
         print(f"pinned_primary_agents: {json.dumps(payload['pinned_primary_agents'])}")
         print(f"parity_warnings: {json.dumps(payload['parity_warnings'])}")
