@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -117,10 +117,12 @@ test("gateway event audit rotates file when max bytes threshold is exceeded", as
     }
     const base = join(directory, ".opencode", "gateway-events.jsonl")
     const rotated = `${base}.1`
+    const overCap = `${base}.3`
     const baseLines = readFileSync(base, "utf-8").split(/\r?\n/).filter(Boolean)
     const rotatedLines = readFileSync(rotated, "utf-8").split(/\r?\n/).filter(Boolean)
     assert.ok(baseLines.length >= 1)
     assert.ok(rotatedLines.length >= 1)
+    assert.equal(existsSync(overCap), false)
   } finally {
     if (previousEnabled === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
@@ -156,10 +158,12 @@ test("gateway event audit direct writer keeps cached size correct across rotatio
 
     const base = join(directory, ".opencode", "gateway-events.jsonl")
     const rotated = `${base}.1`
+    const overCap = `${base}.3`
     const baseLines = readFileSync(base, "utf-8").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
     const rotatedLines = readFileSync(rotated, "utf-8").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
     assert.ok(rotatedLines.length >= 1)
     assert.equal(baseLines.at(-1)?.reason_code, "three")
+    assert.equal(existsSync(overCap), false)
   } finally {
     if (previousEnabled === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
