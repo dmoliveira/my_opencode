@@ -194,8 +194,12 @@ function otelSpanPayload(serviceName, entry) {
     };
 }
 function maybeExportOtel(directory, entry) {
+    const explicitEnvToggle = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED;
+    if (explicitEnvToggle && !parseBool(explicitEnvToggle, false)) {
+        return;
+    }
     const settings = loadObservabilitySettings(directory);
-    const envEnabled = parseBool(process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED, settings.enabled);
+    const envEnabled = parseBool(explicitEnvToggle, settings.enabled);
     if (!envEnabled) {
         return;
     }
