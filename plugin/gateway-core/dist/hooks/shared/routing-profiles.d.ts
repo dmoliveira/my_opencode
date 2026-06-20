@@ -1,4 +1,3 @@
-export declare const DEFAULT_ROUTING_CATEGORY = "balanced";
 export interface RoutingProfile {
     description: string;
     model: string;
@@ -6,6 +5,7 @@ export interface RoutingProfile {
     reasoning: string;
     verbosity: string;
 }
+export declare const DEFAULT_ROUTING_CATEGORY: string;
 export declare const ROUTING_PROFILES: Record<string, RoutingProfile>;
 export declare const ROUTING_DOWNGRADE_CATEGORY: Record<string, string>;
 export declare function normalizeRoutingCategory(value: unknown): string;

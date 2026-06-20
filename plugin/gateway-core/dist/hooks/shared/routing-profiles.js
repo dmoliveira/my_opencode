@@ -1,56 +1,16 @@
-export const DEFAULT_ROUTING_CATEGORY = "balanced";
-export const ROUTING_PROFILES = {
-    quick: {
-        description: "Fast responses for routine operational tasks",
-        model: "openai/gpt-5.4-mini",
-        temperature: 0.1,
-        reasoning: "low",
-        verbosity: "low",
-    },
-    balanced: {
-        description: "Default balanced profile for most engineering work",
-        model: "openai/gpt-5.4",
-        temperature: 0.2,
-        reasoning: "medium",
-        verbosity: "medium",
-    },
-    deep: {
-        description: "Higher-reliability analysis for complex engineering work",
-        model: "openai/gpt-5.4",
-        temperature: 0.1,
-        reasoning: "medium",
-        verbosity: "medium",
-    },
-    critical: {
-        description: "Critical-risk analysis and final safety review",
-        model: "openai/gpt-5.4",
-        temperature: 0.0,
-        reasoning: "medium",
-        verbosity: "medium",
-    },
-    visual: {
-        description: "UI/UX tasks with higher detail and output richness",
-        model: "openai/gpt-5.4",
-        temperature: 0.2,
-        reasoning: "medium",
-        verbosity: "high",
-    },
-    writing: {
-        description: "Documentation and communication with richer language style",
-        model: "openai/gpt-5.4",
-        temperature: 0.6,
-        reasoning: "medium",
-        verbosity: "high",
-    },
-};
-export const ROUTING_DOWNGRADE_CATEGORY = {
-    critical: "balanced",
-    deep: "balanced",
-    balanced: "quick",
-    quick: "",
-    visual: "balanced",
-    writing: "balanced",
-};
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+function loadRoutingProfilesData() {
+    const moduleDir = dirname(fileURLToPath(import.meta.url));
+    const packageRoot = join(moduleDir, "..", "..", "..");
+    const dataPath = join(packageRoot, "routing-profiles.data.json");
+    return JSON.parse(readFileSync(dataPath, "utf-8"));
+}
+const ROUTING_PROFILES_DATA = loadRoutingProfilesData();
+export const DEFAULT_ROUTING_CATEGORY = ROUTING_PROFILES_DATA.default_category;
+export const ROUTING_PROFILES = ROUTING_PROFILES_DATA.profiles;
+export const ROUTING_DOWNGRADE_CATEGORY = ROUTING_PROFILES_DATA.downgrade_category;
 export function normalizeRoutingCategory(value) {
     return String(value ?? "").trim().toLowerCase();
 }

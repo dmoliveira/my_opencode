@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
-
-DEFAULT_CATEGORY = "balanced"
-SYSTEM_DEFAULTS = {
-    "model": "openai/gpt-5.4",
-    "temperature": 0.2,
-    "reasoning": "medium",
-    "verbosity": "medium",
-}
+ROUTING_PROFILES_DATA_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "plugin"
+    / "gateway-core"
+    / "routing-profiles.data.json"
+)
 
 
 def _provider_from_model(model: Any) -> str:
@@ -21,6 +22,53 @@ def _provider_from_model(model: Any) -> str:
     return "unknown"
 
 
+@lru_cache(maxsize=1)
+def _load_routing_profiles_data() -> dict[str, Any]:
+    payload = json.loads(ROUTING_PROFILES_DATA_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("routing profiles data must be a JSON object")
+    return payload
+
+
+def _categories_from_shared_data() -> dict[str, dict[str, Any]]:
+    payload = _load_routing_profiles_data()
+    profiles = payload.get("profiles")
+    if not isinstance(profiles, dict):
+        raise ValueError("routing profiles data is missing profiles object")
+    categories: dict[str, dict[str, Any]] = {}
+    for name, raw in profiles.items():
+        if not isinstance(name, str) or not isinstance(raw, dict):
+            continue
+        categories[name] = dict(raw)
+    return categories
+
+
+def _default_category_from_shared_data() -> str:
+    payload = _load_routing_profiles_data()
+    value = payload.get("default_category")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("routing profiles data is missing default_category")
+    return value.strip()
+
+
+def _system_defaults_from_shared_data() -> dict[str, Any]:
+    categories = _categories_from_shared_data()
+    default_category = _default_category_from_shared_data()
+    profile = categories.get(default_category)
+    if not isinstance(profile, dict):
+        raise ValueError("routing profiles data default_category must reference a profile")
+    return {
+        "model": profile.get("model"),
+        "temperature": profile.get("temperature"),
+        "reasoning": profile.get("reasoning"),
+        "verbosity": profile.get("verbosity"),
+    }
+
+
+DEFAULT_CATEGORY = _default_category_from_shared_data()
+SYSTEM_DEFAULTS = _system_defaults_from_shared_data()
+
+
 def default_schema() -> dict[str, Any]:
     return {
         "default_category": DEFAULT_CATEGORY,
@@ -28,50 +76,7 @@ def default_schema() -> dict[str, Any]:
             "on_missing_category": "use_default_category",
             "on_unavailable_model": "use_default_category",
         },
-        "categories": {
-            "quick": {
-                "description": "Fast responses for routine operational tasks",
-                "model": "openai/gpt-5.4-mini",
-                "temperature": 0.1,
-                "reasoning": "low",
-                "verbosity": "low",
-            },
-            "balanced": {
-                "description": "Default balanced profile for most engineering work",
-                "model": "openai/gpt-5.4",
-                "temperature": 0.2,
-                "reasoning": "medium",
-                "verbosity": "medium",
-            },
-            "deep": {
-                "description": "Higher-reliability analysis for complex engineering work",
-                "model": "openai/gpt-5.4",
-                "temperature": 0.1,
-                "reasoning": "medium",
-                "verbosity": "medium",
-            },
-            "critical": {
-                "description": "Critical-risk analysis and final safety review",
-                "model": "openai/gpt-5.4",
-                "temperature": 0.0,
-                "reasoning": "medium",
-                "verbosity": "medium",
-            },
-            "visual": {
-                "description": "UI/UX tasks with higher detail and output richness",
-                "model": "openai/gpt-5.4",
-                "temperature": 0.2,
-                "reasoning": "medium",
-                "verbosity": "high",
-            },
-            "writing": {
-                "description": "Documentation and communication with richer language style",
-                "model": "openai/gpt-5.4",
-                "temperature": 0.6,
-                "reasoning": "medium",
-                "verbosity": "high",
-            },
-        },
+        "categories": _categories_from_shared_data(),
     }
 
 
@@ -111,9 +116,7 @@ def resolve_category(
     if not isinstance(default_category, str) or default_category not in categories:
         raise ValueError("invalid schema: default_category is missing")
 
-    choice = (
-        requested_category if requested_category in categories else default_category
-    )
+    choice = requested_category if requested_category in categories else default_category
     reason = (
         "requested_category"
         if requested_category and requested_category in categories
@@ -215,58 +218,35 @@ def resolve_model_settings(
 
     requested_model = overrides.get("model")
     if not isinstance(requested_model, str) or not requested_model.strip():
-        requested_model = category_settings.get("model")
-    if not isinstance(requested_model, str) or not requested_model.strip():
-        requested_model = base_system.get("model")
+        requested_model = None
 
-    attempted: list[dict[str, Any]] = []
-    first_model = requested_model
-    first_available = available_models is None or first_model in available_models
-    attempted.append(
-        {
-            "rank": 1,
-            "model": first_model,
-            "provider": _provider_from_model(first_model),
-            "result": "accepted" if first_available else "unavailable",
-            "reason": "requested_or_override_candidate",
-        }
-    )
-
-    final_model = resolved.get("model")
-    if final_model != first_model:
-        attempted.append(
-            {
-                "rank": 2,
-                "model": final_model,
-                "provider": _provider_from_model(final_model),
-                "result": "accepted",
-                "reason": trace[-1].get("reason") if trace else "fallback_selected",
-            }
-        )
-
-    resolution_trace = {
-        "requested": {
-            "category": requested_category,
-            "model": requested_model,
-            "source": (
-                "user_override"
-                if isinstance(overrides.get("model"), str)
-                and str(overrides.get("model")).strip()
-                else "category_default"
-            ),
-        },
-        "attempted": attempted,
-        "selected": {
-            "category": category_result.get("category"),
-            "model": final_model,
-            "provider": _provider_from_model(final_model),
-            "reason": trace[-1].get("reason") if trace else "selected",
-        },
-    }
+    category_model = category_settings.get("model")
+    selected_model = resolved.get("model")
+    fallback_reason = "none"
+    if requested_model and selected_model != requested_model:
+        fallback_reason = trace[-1].get("reason", "fallback_unavailable_model_to_category")
+    elif category_model and selected_model != category_model:
+        fallback_reason = trace[-1].get("reason", "fallback_unavailable_model")
 
     return {
         "category": category_result.get("category"),
         "settings": resolved,
         "trace": trace,
-        "resolution_trace": resolution_trace,
+        "selected_model": resolved.get("model"),
+        "selected_provider": _provider_from_model(resolved.get("model")),
+        "fallback_reason": fallback_reason,
+        "resolution_trace": {
+            "requested": {
+                "category": requested_category,
+                "model": requested_model,
+            },
+            "attempted": {
+                "category": category_result.get("category"),
+                "model": category_model,
+            },
+            "selected": {
+                "category": category_result.get("category"),
+                "model": selected_model,
+            },
+        },
     }
