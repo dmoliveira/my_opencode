@@ -1685,6 +1685,45 @@ exit 0
             "plugin doctor should report PASS for stable profile",
         )
 
+        # Plugin experimental should pass doctor with warnings when optional morph key is missing.
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "profile", "experimental")
+        expect(result.returncode == 0, f"plugin profile experimental failed: {result.stderr}")
+
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor", "--json")
+        expect(
+            result.returncode == 0,
+            "plugin doctor experimental should not hard-fail when MORPH_API_KEY is missing",
+        )
+        report = parse_json_output(result.stdout)
+        expect(
+            report.get("result") == "PASS",
+            "plugin doctor should report PASS for experimental profile without MORPH_API_KEY",
+        )
+        warnings = report.get("warnings") or []
+        expect(
+            any("MORPH_API_KEY" in str(item) for item in warnings),
+            "plugin doctor should warn when morph is enabled without MORPH_API_KEY",
+        )
+        quick_fixes = report.get("quick_fixes") or []
+        expect(
+            any("set MORPH_API_KEY" in str(item) for item in quick_fixes),
+            "plugin doctor should keep remediation guidance for missing MORPH_API_KEY",
+        )
+
+        result = run_script(PLUGIN_SCRIPT, cfg, home, "doctor")
+        expect(
+            result.returncode == 0,
+            "plugin doctor plain text should not hard-fail when MORPH_API_KEY is missing",
+        )
+        expect(
+            "morph enabled but MORPH_API_KEY is not set" in result.stdout,
+            "plugin doctor plain text should show the missing MORPH_API_KEY warning",
+        )
+        expect(
+            "set MORPH_API_KEY for morph plugin usage" in result.stdout,
+            "plugin doctor plain text should show remediation guidance for missing MORPH_API_KEY",
+        )
+
         result = run_script(PLUGIN_SCRIPT, cfg, home, "setup-keys")
         expect(result.returncode == 0, f"plugin setup-keys failed: {result.stderr}")
 
