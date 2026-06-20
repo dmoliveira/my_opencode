@@ -19,7 +19,13 @@ interface CacheEntry {
   settings: ObservabilitySettings
 }
 
+interface AuditWriterState {
+  directoryReady: boolean
+  fileSize: number | null
+}
+
 const observabilityCache = new Map<string, CacheEntry>()
+const auditWriterCache = new Map<string, AuditWriterState>()
 
 function parseBool(value: string | undefined, fallback: boolean): boolean {
   if (!value) {
@@ -333,6 +339,25 @@ function rotateAudit(path: string): void {
   }
 }
 
+function resolveAuditWriterState(path: string): AuditWriterState {
+  const cached = auditWriterCache.get(path)
+  if (cached) {
+    return cached
+  }
+  let fileSize = 0
+  try {
+    fileSize = existsSync(path) ? statSync(path).size : 0
+  } catch {
+    fileSize = 0
+  }
+  const state: AuditWriterState = {
+    directoryReady: false,
+    fileSize,
+  }
+  auditWriterCache.set(path, state)
+  return state
+}
+
 // Appends one sanitized gateway event audit entry.
 export function writeGatewayEventAudit(
   directory: string,
@@ -345,18 +370,26 @@ export function writeGatewayEventAudit(
 
   if (gatewayEventAuditEnabled()) {
     const path = gatewayEventAuditPath(directory)
-    mkdirSync(dirname(path), { recursive: true })
+    const writerState = resolveAuditWriterState(path)
+    if (!writerState.directoryReady) {
+      mkdirSync(dirname(path), { recursive: true })
+      writerState.directoryReady = true
+    }
     const line = `${JSON.stringify(payload)}\n`
+    const lineBytes = Buffer.byteLength(line, "utf-8")
     const maxBytes = auditMaxBytes()
     try {
-      const currentSize = existsSync(path) ? statSync(path).size : 0
-      if (currentSize + Buffer.byteLength(line, "utf-8") > maxBytes) {
+      const currentSize = writerState.fileSize ?? 0
+      if (currentSize + lineBytes > maxBytes) {
         rotateAudit(path)
+        writerState.fileSize = 0
       }
     } catch {
       // Best-effort rotation; continue append even if metadata checks fail.
+      writerState.fileSize = null
     }
     appendFileSync(path, line, "utf-8")
+    writerState.fileSize = (writerState.fileSize ?? 0) + lineBytes
   }
 
   maybeExportOtel(directory, payload)

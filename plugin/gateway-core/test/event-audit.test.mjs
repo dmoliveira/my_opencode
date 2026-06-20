@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { writeGatewayEventAudit } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
 
 test("gateway event audit writes dispatch entries when enabled", async () => {
@@ -120,6 +121,45 @@ test("gateway event audit rotates file when max bytes threshold is exceeded", as
     const rotatedLines = readFileSync(rotated, "utf-8").split(/\r?\n/).filter(Boolean)
     assert.ok(baseLines.length >= 1)
     assert.ok(rotatedLines.length >= 1)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousMax === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES = previousMax
+    }
+    if (previousBackups === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS = previousBackups
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("gateway event audit direct writer keeps cached size correct across rotation", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-direct-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousMax = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES
+  const previousBackups = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES = "180"
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS = "2"
+  try {
+    writeGatewayEventAudit(directory, { hook: "test", reason_code: "one", payload: "x".repeat(120) })
+    writeGatewayEventAudit(directory, { hook: "test", reason_code: "two", payload: "x".repeat(120) })
+    writeGatewayEventAudit(directory, { hook: "test", reason_code: "three", payload: "x".repeat(20) })
+
+    const base = join(directory, ".opencode", "gateway-events.jsonl")
+    const rotated = `${base}.1`
+    const baseLines = readFileSync(base, "utf-8").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
+    const rotatedLines = readFileSync(rotated, "utf-8").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
+    assert.ok(rotatedLines.length >= 1)
+    assert.equal(baseLines.at(-1)?.reason_code, "three")
   } finally {
     if (previousEnabled === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
