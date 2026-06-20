@@ -175,12 +175,6 @@ export function createPostMergeSyncGuardHook(options) {
             if (!rewrote && toolOutput) {
                 toolOutput.output = `${normalizeMergeOutput(entries[0].text)}${reminder}`;
             }
-            writeGatewayEventAudit(directory, {
-                hook: "post-merge-sync-guard",
-                stage: "state",
-                reason_code: "post_merge_sync_reminder_appended",
-                session_id: sessionId,
-            });
         },
     };
 }
