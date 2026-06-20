@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 const observabilityCache = new Map();
 const auditWriterCache = new Map();
+let auditEnvCache = null;
+let otelEnvCache = null;
 function parseBool(value, fallback) {
     if (!value) {
         return fallback;
@@ -15,6 +17,39 @@ function parseBool(value, fallback) {
         return false;
     }
     return fallback;
+}
+function parsePositiveInt(value, fallback, minimum) {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    if (!Number.isFinite(parsed) || parsed < minimum) {
+        return fallback;
+    }
+    return parsed;
+}
+function resolveAuditEnvState() {
+    const auditEnabledRaw = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT;
+    const auditPathRaw = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH;
+    const maxBytesRaw = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES;
+    const maxBackupsRaw = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS;
+    const cached = auditEnvCache;
+    if (cached &&
+        cached.auditEnabledRaw === auditEnabledRaw &&
+        cached.auditPathRaw === auditPathRaw &&
+        cached.maxBytesRaw === maxBytesRaw &&
+        cached.maxBackupsRaw === maxBackupsRaw) {
+        return cached;
+    }
+    const next = {
+        auditEnabledRaw,
+        auditEnabled: parseBool(auditEnabledRaw, false),
+        auditPathRaw,
+        auditPathOverride: auditPathRaw?.trim() ? auditPathRaw.trim() : null,
+        maxBytesRaw,
+        maxBytes: parsePositiveInt(maxBytesRaw, 5 * 1024 * 1024, 1),
+        maxBackupsRaw,
+        maxBackups: parsePositiveInt(maxBackupsRaw, 3, 1),
+    };
+    auditEnvCache = next;
+    return next;
 }
 function defaultObservabilitySettings() {
     return {
@@ -115,6 +150,70 @@ function derivedLangfuseAuth(settings) {
     const encoded = Buffer.from(`${publicKey}:${secretKey}`, "utf-8").toString("base64");
     return `Authorization=Basic ${encoded}`;
 }
+function resolveOtelEnvState(settings) {
+    const explicitToggleRaw = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED;
+    const tracesEndpointRaw = process.env.MY_OPENCODE_OTEL_EXPORT_TRACES_ENDPOINT;
+    const defaultTracesEndpointRaw = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+    const explicitHeadersRaw = process.env.MY_OPENCODE_OTEL_EXPORT_HEADERS;
+    const headersEnvKey = settings.otlpHeadersEnv || "OTEL_EXPORTER_OTLP_HEADERS";
+    const headersEnvRaw = process.env[headersEnvKey];
+    const defaultHeadersRaw = process.env.OTEL_EXPORTER_OTLP_HEADERS;
+    const langfusePublicKeyEnv = settings.langfusePublicKeyEnv;
+    const langfuseSecretKeyEnv = settings.langfuseSecretKeyEnv;
+    const langfusePublicKeyRaw = process.env[langfusePublicKeyEnv];
+    const langfuseSecretKeyRaw = process.env[langfuseSecretKeyEnv];
+    const timeoutRaw = process.env.MY_OPENCODE_OTEL_EXPORT_TIMEOUT_MS;
+    const cached = otelEnvCache;
+    if (cached &&
+        cached.provider === settings.provider &&
+        cached.otlpEndpoint === settings.otlpEndpoint &&
+        cached.otlpTracesEndpointSetting === settings.otlpTracesEndpoint &&
+        cached.explicitToggleRaw === explicitToggleRaw &&
+        cached.tracesEndpointRaw === tracesEndpointRaw &&
+        cached.defaultTracesEndpointRaw === defaultTracesEndpointRaw &&
+        cached.explicitHeadersRaw === explicitHeadersRaw &&
+        cached.headersEnvKey === headersEnvKey &&
+        cached.headersEnvRaw === headersEnvRaw &&
+        cached.defaultHeadersRaw === defaultHeadersRaw &&
+        cached.langfusePublicKeyEnv === langfusePublicKeyEnv &&
+        cached.langfusePublicKeyRaw === langfusePublicKeyRaw &&
+        cached.langfuseSecretKeyEnv === langfuseSecretKeyEnv &&
+        cached.langfuseSecretKeyRaw === langfuseSecretKeyRaw &&
+        cached.timeoutRaw === timeoutRaw) {
+        return cached;
+    }
+    const explicitToggleParsed = explicitToggleRaw ? parseBool(explicitToggleRaw, false) : null;
+    const rawHeaders = explicitHeadersRaw?.trim() ||
+        headersEnvRaw?.trim() ||
+        defaultHeadersRaw?.trim() ||
+        (settings.provider === "langfuse" ? derivedLangfuseAuth(settings) : "");
+    const next = {
+        provider: settings.provider,
+        otlpEndpoint: settings.otlpEndpoint,
+        otlpTracesEndpointSetting: settings.otlpTracesEndpoint,
+        explicitToggleRaw,
+        tracesEndpointRaw,
+        defaultTracesEndpointRaw,
+        explicitHeadersRaw,
+        headersEnvKey,
+        headersEnvRaw,
+        defaultHeadersRaw,
+        langfusePublicKeyEnv,
+        langfusePublicKeyRaw,
+        langfuseSecretKeyEnv,
+        langfuseSecretKeyRaw,
+        timeoutRaw,
+        explicitToggleParsed,
+        tracesEndpoint: tracesEndpointRaw?.trim() ||
+            defaultTracesEndpointRaw?.trim() ||
+            settings.otlpTracesEndpoint ||
+            `${settings.otlpEndpoint.replace(/\/$/, "")}/v1/traces`,
+        rawHeaders,
+        timeoutMs: parsePositiveInt(timeoutRaw, 1500, 1),
+    };
+    otelEnvCache = next;
+    return next;
+}
 function normalizeTraceId(value) {
     const raw = String(value ?? "").replace(/[^a-fA-F0-9]/g, "").toLowerCase();
     if (raw.length === 32) {
@@ -199,7 +298,8 @@ function maybeExportOtel(directory, entry) {
         return;
     }
     const settings = loadObservabilitySettings(directory);
-    const envEnabled = parseBool(explicitEnvToggle, settings.enabled);
+    const envState = resolveOtelEnvState(settings);
+    const envEnabled = envState.explicitToggleParsed ?? settings.enabled;
     if (!envEnabled) {
         return;
     }
@@ -210,15 +310,8 @@ function maybeExportOtel(directory, entry) {
     if (!fetchFn) {
         return;
     }
-    const endpoint = process.env.MY_OPENCODE_OTEL_EXPORT_TRACES_ENDPOINT?.trim() ||
-        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim() ||
-        settings.otlpTracesEndpoint ||
-        `${settings.otlpEndpoint.replace(/\/$/, "")}/v1/traces`;
-    const headersEnv = settings.otlpHeadersEnv || "OTEL_EXPORTER_OTLP_HEADERS";
-    const rawHeaders = process.env.MY_OPENCODE_OTEL_EXPORT_HEADERS?.trim() ||
-        process.env[headersEnv]?.trim() ||
-        process.env.OTEL_EXPORTER_OTLP_HEADERS?.trim() ||
-        (settings.provider === "langfuse" ? derivedLangfuseAuth(settings) : "");
+    const endpoint = envState.tracesEndpoint;
+    const rawHeaders = envState.rawHeaders;
     if (!rawHeaders && settings.provider === "langfuse") {
         return;
     }
@@ -227,10 +320,10 @@ function maybeExportOtel(directory, entry) {
         ...(rawHeaders ? parseHeaders(rawHeaders) : {}),
     };
     const payload = otelSpanPayload(settings.serviceName, entry);
-    const timeoutMs = Number.parseInt(String(process.env.MY_OPENCODE_OTEL_EXPORT_TIMEOUT_MS ?? "1500"), 10);
+    const timeoutMs = envState.timeoutMs;
     const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
     const timer = controller
-        ? setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1500)
+        ? setTimeout(() => controller.abort(), timeoutMs)
         : undefined;
     void fetchFn(endpoint, {
         method: "POST",
@@ -247,31 +340,21 @@ function maybeExportOtel(directory, entry) {
 }
 // Returns true when gateway event auditing is enabled.
 export function gatewayEventAuditEnabled() {
-    const raw = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT ?? "";
-    const value = raw.trim().toLowerCase();
-    return value === "1" || value === "true" || value === "yes" || value === "on";
+    return resolveAuditEnvState().auditEnabled;
 }
 // Resolves gateway event audit file path.
 export function gatewayEventAuditPath(directory) {
-    const raw = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH ?? "";
-    if (raw.trim()) {
-        return raw.trim();
+    const state = resolveAuditEnvState();
+    if (state.auditPathOverride) {
+        return state.auditPathOverride;
     }
     return join(directory, ".opencode", "gateway-events.jsonl");
 }
 function auditMaxBytes() {
-    const parsed = Number.parseInt(String(process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES ?? ""), 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-        return 5 * 1024 * 1024;
-    }
-    return parsed;
+    return resolveAuditEnvState().maxBytes;
 }
 function auditMaxBackups() {
-    const parsed = Number.parseInt(String(process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS ?? ""), 10);
-    if (!Number.isFinite(parsed) || parsed < 1) {
-        return 3;
-    }
-    return parsed;
+    return resolveAuditEnvState().maxBackups;
 }
 function rotateAudit(path) {
     const maxBackups = auditMaxBackups();
