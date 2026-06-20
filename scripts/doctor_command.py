@@ -10,6 +10,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CHECK_TIMEOUT_SECONDS = 30
+DOCTOR_PROFILES = {
+    "core": ["mcp", "plugin", "notify", "digest", "telemetry", "bg"],
+    "full": [],
+}
 
 
 def script_path(name: str) -> Path:
@@ -541,7 +545,7 @@ CHECKS = [
 
 def usage() -> int:
     print(
-        "usage: /doctor status | /doctor help | /doctor run [--json] | "
+        "usage: /doctor status | /doctor help | /doctor run [--json] [--profile <core|full>] | "
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 2
@@ -549,7 +553,7 @@ def usage() -> int:
 
 def print_help() -> int:
     print(
-        "usage: /doctor status | /doctor help | /doctor run [--json] | "
+        "usage: /doctor status | /doctor help | /doctor run [--json] [--profile <core|full>] | "
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 0
@@ -857,6 +861,17 @@ def summarize(items: list[dict]) -> dict:
     }
 
 
+def profile_entries(profile: str) -> list[dict]:
+    selected = str(profile or "full").strip().lower()
+    if selected == "full":
+        return CHECKS
+    names = DOCTOR_PROFILES.get(selected)
+    if not isinstance(names, list):
+        raise ValueError(f"unknown doctor profile: {profile}")
+    selected_names = {str(name) for name in names}
+    return [entry for entry in CHECKS if str(entry.get("name")) in selected_names]
+
+
 def print_human(summary: dict) -> int:
     print("doctor")
     print("------")
@@ -883,11 +898,33 @@ def print_human(summary: dict) -> int:
 
 def command_run(argv: list[str]) -> int:
     json_output = "--json" in argv
-    if any(arg not in ("--json",) for arg in argv):
+    profile = "full"
+    filtered: list[str] = []
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--json":
+            idx += 1
+            continue
+        if token == "--profile":
+            if idx + 1 >= len(argv):
+                return usage()
+            profile = argv[idx + 1].strip().lower()
+            idx += 2
+            continue
+        filtered.append(token)
+        idx += 1
+    if filtered:
         return usage()
 
-    items = [run_check(entry) for entry in CHECKS]
+    try:
+        entries = profile_entries(profile)
+    except ValueError:
+        return usage()
+
+    items = [run_check(entry) for entry in entries]
     summary = summarize(items)
+    summary["profile"] = profile
 
     if json_output:
         print(json.dumps(summary, indent=2))

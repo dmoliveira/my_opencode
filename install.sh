@@ -213,38 +213,24 @@ fi
 if [ "$SKIP_SELF_CHECK" = false ]; then
 	log_info ""
 	log_info "Running self-check ($SELF_CHECK_PROFILE profile)..."
-	python3 "$INSTALL_DIR/scripts/mcp_command.py" status
-	python3 "$INSTALL_DIR/scripts/plugin_command.py" status
-	python3 "$INSTALL_DIR/scripts/notify_command.py" status
-	python3 "$INSTALL_DIR/scripts/session_digest.py" doctor
-	python3 "$INSTALL_DIR/scripts/telemetry_command.py" status
-	python3 "$INSTALL_DIR/scripts/post_session_command.py" status
-	python3 "$INSTALL_DIR/scripts/policy_command.py" status
-	python3 "$INSTALL_DIR/scripts/config_command.py" status
-	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
-		python3 "$INSTALL_DIR/scripts/gateway_command.py" status --json
+	if [ "$SELF_CHECK_PROFILE" = "full" ]; then
+		python3 "$INSTALL_DIR/scripts/doctor_command.py" run --json --profile full || true
+	else
+		python3 "$INSTALL_DIR/scripts/doctor_command.py" run --json --profile core >/dev/null
+		python3 "$INSTALL_DIR/scripts/gateway_command.py" status --json >/dev/null
 	fi
 
 	if [ "$SELF_CHECK_PROFILE" = "full" ]; then
-		python3 "$INSTALL_DIR/scripts/notify_command.py" doctor
 		python3 "$INSTALL_DIR/scripts/session_digest.py" show || true
 		if [ -f "$INSTALL_DIR/scripts/session_command.py" ]; then
 			python3 "$INSTALL_DIR/scripts/session_command.py" list --json
 			python3 "$INSTALL_DIR/scripts/session_command.py" search selfcheck --json
-			python3 "$INSTALL_DIR/scripts/session_command.py" doctor --json
 		fi
 		python3 "$INSTALL_DIR/scripts/config_command.py" layers
-		python3 "$INSTALL_DIR/scripts/background_task_manager.py" status
-		python3 "$INSTALL_DIR/scripts/background_task_manager.py" doctor --json
 		if [ -f "$INSTALL_DIR/scripts/refactor_lite_command.py" ]; then
 			python3 "$INSTALL_DIR/scripts/refactor_lite_command.py" profile --scope "scripts/*.py" --dry-run --json
 		fi
 		python3 "$INSTALL_DIR/scripts/stack_profile_command.py" status
-		python3 "$INSTALL_DIR/scripts/browser_command.py" status
-		python3 "$INSTALL_DIR/scripts/browser_command.py" doctor --json
-		if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
-			python3 "$INSTALL_DIR/scripts/gateway_command.py" doctor --json
-		fi
 		SELF_CHECK_PLAN="$HOME/.config/opencode/my_opencode/.install-selfcheck-plan.md"
 		mkdir -p "$(dirname "$SELF_CHECK_PLAN")"
 		cat > "$SELF_CHECK_PLAN" <<'EOF'
@@ -367,7 +353,6 @@ index 0000000..1111111 100644
 		fi
 		python3 "$INSTALL_DIR/scripts/nvim_integration_command.py" status
 		python3 "$INSTALL_DIR/scripts/devtools_command.py" status
-		python3 "$INSTALL_DIR/scripts/doctor_command.py" run || true
 		if ! python3 "$INSTALL_DIR/scripts/plugin_command.py" doctor; then
 			if [ "$NON_INTERACTIVE" = true ]; then
 				printf "
