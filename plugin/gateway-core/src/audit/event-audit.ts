@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { randomBytes } from "node:crypto"
 
@@ -327,7 +327,15 @@ function auditMaxBackups(): number {
 
 function rotateAudit(path: string): void {
   const maxBackups = auditMaxBackups()
-  for (let idx = maxBackups; idx >= 1; idx -= 1) {
+  const oldest = `${path}.${maxBackups}`
+  if (existsSync(oldest)) {
+    try {
+      unlinkSync(oldest)
+    } catch {
+      // Best-effort cleanup; continue rotation even if the oldest backup cannot be removed.
+    }
+  }
+  for (let idx = maxBackups - 1; idx >= 1; idx -= 1) {
     const src = `${path}.${idx}`
     const dst = `${path}.${idx + 1}`
     if (existsSync(src)) {
