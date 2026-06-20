@@ -22551,6 +22551,33 @@ exit 1
             "doctor auto-slash check should pass",
         )
 
+        doctor_core = subprocess.run(
+            [sys.executable, str(DOCTOR_SCRIPT), "run", "--profile", "core", "--json"],
+            capture_output=True,
+            text=True,
+            env=doctor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            doctor_core.returncode in {0, 1},
+            f"doctor core profile should return structured report: stderr={doctor_core.stderr} stdout={doctor_core.stdout}",
+        )
+        doctor_core_payload = parse_json_output(doctor_core.stdout)
+        expect(
+            doctor_core_payload.get("profile") == "core",
+            "doctor core profile should report the selected profile",
+        )
+        core_check_names = [
+            str(check.get("name") or "")
+            for check in doctor_core_payload.get("checks", [])
+            if isinstance(check, dict)
+        ]
+        expect(
+            core_check_names == ["mcp", "plugin", "notify", "digest", "telemetry", "bg"],
+            "doctor core profile should limit checks to the lightweight installer subset",
+        )
+
         doctor_reason_codes = subprocess.run(
             [sys.executable, str(DOCTOR_SCRIPT), "reason-codes", "--json"],
             capture_output=True,
