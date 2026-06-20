@@ -412,6 +412,48 @@ test("gateway event audit exports to plain OTLP collector without auth headers",
   }
 })
 
+test("gateway event audit skips config reads when export is explicitly disabled", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  const previousConfigPath = process.env.OPENCODE_CONFIG_PATH
+  const originalFetch = globalThis.fetch
+
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0"
+  process.env.OPENCODE_CONFIG_PATH = join(directory, "missing-opencode.json")
+
+  const requests = []
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init })
+    return { ok: true, status: 200, text: async () => "ok" }
+  }
+
+  try {
+    const plugin = GatewayCorePlugin({ directory, config: {} })
+    await plugin.event({ event: { type: "session.idle", properties: { probe: "disabled" } } })
+    assert.equal(requests.length, 0)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
+    if (previousConfigPath === undefined) {
+      delete process.env.OPENCODE_CONFIG_PATH
+    } else {
+      process.env.OPENCODE_CONFIG_PATH = previousConfigPath
+    }
+    globalThis.fetch = originalFetch
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("gateway child mode records minimal hook activation", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
   const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
