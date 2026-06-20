@@ -454,6 +454,64 @@ test("gateway event audit skips config reads when export is explicitly disabled"
   }
 })
 
+test("gateway event audit returns early when fetch is unavailable", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  const previousHeaders = process.env.OTEL_EXPORTER_OTLP_HEADERS
+  const previousConfigPath = process.env.OPENCODE_CONFIG_PATH
+  const originalFetch = globalThis.fetch
+
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "1"
+  process.env.OTEL_EXPORTER_OTLP_HEADERS = "Authorization=Basic test"
+  process.env.OPENCODE_CONFIG_PATH = join(directory, "opencode.json")
+  globalThis.fetch = undefined
+
+  writeFileSync(
+    join(directory, "opencode.json"),
+    JSON.stringify({
+      observability: {
+        enabled: true,
+        provider: "langfuse",
+        otlp_traces_endpoint: "http://localhost:3005/api/public/otel/v1/traces",
+      },
+    }),
+    "utf-8",
+  )
+
+  try {
+    const plugin = GatewayCorePlugin({ directory, config: {} })
+    await plugin.event({ event: { type: "session.idle", properties: { probe: "no-fetch" } } })
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const lines = readFileSync(auditPath, "utf-8").split(/\r?\n/).filter(Boolean)
+    assert.ok(lines.length >= 1)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
+    if (previousHeaders === undefined) {
+      delete process.env.OTEL_EXPORTER_OTLP_HEADERS
+    } else {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = previousHeaders
+    }
+    if (previousConfigPath === undefined) {
+      delete process.env.OPENCODE_CONFIG_PATH
+    } else {
+      process.env.OPENCODE_CONFIG_PATH = previousConfigPath
+    }
+    globalThis.fetch = originalFetch
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("gateway child mode records minimal hook activation", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
   const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

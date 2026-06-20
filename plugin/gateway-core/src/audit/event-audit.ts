@@ -252,6 +252,11 @@ function maybeExportOtel(directory: string, entry: Record<string, unknown>): voi
     return
   }
 
+  const fetchFn = (globalThis as unknown as { fetch?: (url: string, init?: unknown) => Promise<unknown> }).fetch
+  if (!fetchFn) {
+    return
+  }
+
   const endpoint =
     process.env.MY_OPENCODE_OTEL_EXPORT_TRACES_ENDPOINT?.trim() ||
     process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim() ||
@@ -271,11 +276,6 @@ function maybeExportOtel(directory: string, entry: Record<string, unknown>): voi
     ...(rawHeaders ? parseHeaders(rawHeaders) : {}),
   }
   const payload = otelSpanPayload(settings.serviceName, entry)
-
-  const fetchFn = (globalThis as unknown as { fetch?: (url: string, init?: unknown) => Promise<unknown> }).fetch
-  if (!fetchFn) {
-    return
-  }
 
   const timeoutMs = Number.parseInt(String(process.env.MY_OPENCODE_OTEL_EXPORT_TIMEOUT_MS ?? "1500"), 10)
   const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined
