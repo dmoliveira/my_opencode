@@ -64,10 +64,13 @@ export function saveGatewayState(
   relativePath?: string,
 ): void {
   const path = resolveGatewayStatePath(directory, relativePath)
-  const existing = loadGatewayState(directory, relativePath)
+  const conciseMode =
+    state.conciseMode === undefined
+      ? loadGatewayState(directory, relativePath)?.conciseMode ?? null
+      : state.conciseMode
   const payload: GatewayState = {
     activeLoop: state.activeLoop,
-    conciseMode: state.conciseMode === undefined ? existing?.conciseMode ?? null : state.conciseMode,
+    conciseMode,
     lastUpdatedAt: state.lastUpdatedAt,
     source: state.source,
   }
