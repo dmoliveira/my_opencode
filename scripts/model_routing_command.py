@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -33,13 +32,16 @@ CONFIG_PATH = Path(
 ).expanduser()
 LEGACY_ENV_SET = "OPENCODE_MODEL_ROUTING_PATH" in os.environ
 SPEC_DIR = Path(__file__).resolve().parent.parent / "agent" / "specs"
+_DEFAULT_SCHEMA = default_schema()
+_DEFAULT_CATEGORY = str(_DEFAULT_SCHEMA.get("default_category") or "balanced")
+_DEFAULT_CATEGORY_SETTINGS = _DEFAULT_SCHEMA.get("categories", {}).get(_DEFAULT_CATEGORY, {})
 DEFAULT_STATE = {
-    "active_category": "balanced",
+    "active_category": _DEFAULT_CATEGORY,
     "system_defaults": {
-        "model": "openai/gpt-5.4",
-        "temperature": 0.2,
-        "reasoning": "medium",
-        "verbosity": "medium",
+        "model": _DEFAULT_CATEGORY_SETTINGS.get("model", "openai/gpt-5.4"),
+        "temperature": _DEFAULT_CATEGORY_SETTINGS.get("temperature", 0.2),
+        "reasoning": _DEFAULT_CATEGORY_SETTINGS.get("reasoning", "medium"),
+        "verbosity": _DEFAULT_CATEGORY_SETTINGS.get("verbosity", "medium"),
     },
     "latest_trace": {},
 }
@@ -200,22 +202,26 @@ def _load_agent_metadata() -> dict[str, dict[str, Any]]:
 
 
 def _extract_ts_category_models() -> dict[str, str]:
-    ts_path = Path(__file__).resolve().parent.parent / "plugin" / "gateway-core" / "src" / "hooks" / "shared" / "routing-profiles.ts"
+    data_path = (
+        Path(__file__).resolve().parent.parent
+        / "plugin"
+        / "gateway-core"
+        / "routing-profiles.data.json"
+    )
     try:
-        text = ts_path.read_text(encoding="utf-8")
-    except OSError:
+        payload = json.loads(data_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return {}
-    match = re.search(r"ROUTING_PROFILES:\s*Record<string, RoutingProfile>\s*=\s*\{([\s\S]*?)\n\}\n\nexport const ROUTING_DOWNGRADE_CATEGORY", text)
-    if not match:
+    profiles = payload.get("profiles") if isinstance(payload, dict) else None
+    if not isinstance(profiles, dict):
         return {}
-    body = match.group(1)
     category_models: dict[str, str] = {}
-    category_pattern = re.compile(r"([a-z-]+):\s*\{([\s\S]*?)\n\s*\},", re.MULTILINE)
-    model_pattern = re.compile(r'model:\s*"([^"]+)"')
-    for category, block in category_pattern.findall(body):
-        model_match = model_pattern.search(block)
-        if model_match:
-            category_models[category.strip()] = model_match.group(1).strip()
+    for category, profile in profiles.items():
+        if not isinstance(category, str) or not isinstance(profile, dict):
+            continue
+        model = profile.get("model")
+        if isinstance(model, str) and model.strip():
+            category_models[category.strip()] = model.strip()
     return category_models
 
 
