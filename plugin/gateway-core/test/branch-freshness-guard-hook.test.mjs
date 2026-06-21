@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import { execSync } from "node:child_process"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
 
 function commitAll(directory, message) {
@@ -123,6 +124,56 @@ test("branch-freshness-guard skips when base ref is unavailable", async () => {
       { args: { command: "gh pr create --title test --body test" } },
     )
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("branch-freshness-guard dedupes repeated unavailable-base skip audits", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-branch-freshness-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["branch-freshness-guard"],
+          disabled: ["pr-readiness-guard", "pr-body-evidence-guard", "primary-worktree-guard"],
+        },
+        branchFreshnessGuard: {
+          enabled: true,
+          baseRef: "main",
+          maxBehind: 0,
+          enforceOnPrCreate: true,
+          enforceOnPrMerge: true,
+        },
+      },
+    })
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-branch-freshness-dedupe" },
+      { args: { command: "gh pr create --title test --body test" } },
+    )
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-branch-freshness-dedupe" },
+      { args: { command: "gh pr create --title test --body test" } },
+    )
+
+    const lines = readFileSync(gatewayEventAuditPath(directory), "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.hook === "branch-freshness-guard")
+    assert.equal(lines.length, 1)
+    assert.equal(lines[0]?.reason_code, "branch_freshness_ref_unavailable")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })

@@ -22,6 +22,12 @@ interface CacheEntry {
 interface AuditWriterState {
   directoryReady: boolean
   fileSize: number | null
+  dedupeByKey: Map<string, number>
+}
+
+interface AuditWriteEntry extends Record<string, unknown> {
+  audit_dedupe_key?: unknown
+  audit_dedupe_window_ms?: unknown
 }
 
 interface AuditEnvCacheEntry {
@@ -430,6 +436,31 @@ function maybeExportOtel(directory: string, entry: Record<string, unknown>): voi
     })
 }
 
+function canExportOtel(directory: string): boolean {
+  const explicitEnvToggle = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  if (explicitEnvToggle && !parseBool(explicitEnvToggle, false)) {
+    return false
+  }
+  const settings = loadObservabilitySettings(directory)
+  const envState = resolveOtelEnvState(settings)
+  const envEnabled = envState.explicitToggleParsed ?? settings.enabled
+  if (!envEnabled) {
+    return false
+  }
+  if (!["langfuse", "otlp"].includes(settings.provider)) {
+    return false
+  }
+  const fetchFn = (globalThis as unknown as { fetch?: (url: string, init?: unknown) => Promise<unknown> }).fetch
+  if (!fetchFn) {
+    return false
+  }
+  const rawHeaders = envState.rawHeaders
+  if (!rawHeaders && settings.provider === "langfuse") {
+    return false
+  }
+  return true
+}
+
 // Returns true when gateway event auditing is enabled.
 export function gatewayEventAuditEnabled(): boolean {
   return resolveAuditEnvState().auditEnabled
@@ -488,6 +519,7 @@ function resolveAuditWriterState(path: string): AuditWriterState {
   const state: AuditWriterState = {
     directoryReady: false,
     fileSize,
+    dedupeByKey: new Map<string, number>(),
   }
   auditWriterCache.set(path, state)
   return state
@@ -498,14 +530,34 @@ export function writeGatewayEventAudit(
   directory: string,
   entry: Record<string, unknown>,
 ): void {
+  const rawEntry = entry as AuditWriteEntry
+  const auditDedupeKey = typeof rawEntry.audit_dedupe_key === "string" && rawEntry.audit_dedupe_key.trim()
+    ? rawEntry.audit_dedupe_key.trim()
+    : ""
+  const auditDedupeWindowMs = Number(rawEntry.audit_dedupe_window_ms)
+  const dedupeWindowMs = Number.isFinite(auditDedupeWindowMs) && auditDedupeWindowMs > 0
+    ? auditDedupeWindowMs
+    : 0
+  const { audit_dedupe_key: _auditDedupeKey, audit_dedupe_window_ms: _auditDedupeWindowMs, ...persistedEntry } = rawEntry
   const payload = {
     ts: new Date().toISOString(),
-    ...entry,
+    ...persistedEntry,
   }
 
-  if (gatewayEventAuditEnabled()) {
-    const path = gatewayEventAuditPath(directory)
-    const writerState = resolveAuditWriterState(path)
+  const fileAuditEnabled = gatewayEventAuditEnabled()
+  const otelExportEnabled = canExportOtel(directory)
+  const path = gatewayEventAuditPath(directory)
+  const writerState = resolveAuditWriterState(path)
+  if (auditDedupeKey && dedupeWindowMs > 0 && (fileAuditEnabled || otelExportEnabled)) {
+    const now = Date.now()
+    const previousTs = writerState.dedupeByKey.get(auditDedupeKey) ?? 0
+    if (now - previousTs < dedupeWindowMs) {
+      return
+    }
+    writerState.dedupeByKey.set(auditDedupeKey, now)
+  }
+
+  if (fileAuditEnabled) {
     if (!writerState.directoryReady) {
       mkdirSync(dirname(path), { recursive: true })
       writerState.directoryReady = true
@@ -527,5 +579,7 @@ export function writeGatewayEventAudit(
     writerState.fileSize = (writerState.fileSize ?? 0) + lineBytes
   }
 
-  maybeExportOtel(directory, payload)
+  if (otelExportEnabled) {
+    maybeExportOtel(directory, payload)
+  }
 }
