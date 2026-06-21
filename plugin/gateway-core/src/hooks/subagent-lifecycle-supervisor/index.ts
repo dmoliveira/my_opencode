@@ -771,16 +771,6 @@ export function createSubagentLifecycleSupervisorHook(options: {
           lastUpdatedAt: now,
           lastReasonCode: "subagent_lifecycle_started",
         })
-        writeGatewayEventAudit(directory, {
-          hook: "subagent-lifecycle-supervisor",
-          stage: "state",
-          reason_code: "subagent_lifecycle_started",
-          session_id: sid,
-          child_run_id: childRunId || undefined,
-          trace_id: traceId || undefined,
-          subagent_type: subagentType,
-          failure_count: String(nextFailureCount),
-        })
         return
       }
       if (type === "tool.execute.before.error") {
@@ -905,16 +895,6 @@ export function createSubagentLifecycleSupervisorHook(options: {
         status: "completed",
         lastUpdatedAt: nowMs(),
         lastReasonCode: "subagent_lifecycle_completed",
-      })
-      writeGatewayEventAudit(directory, {
-        hook: "subagent-lifecycle-supervisor",
-        stage: "state",
-        reason_code: "subagent_lifecycle_completed",
-        session_id: sid,
-        child_run_id: childRunId || undefined,
-        trace_id: traceId || undefined,
-        subagent_type: state.subagentType,
-        failure_count: String(state.failureCount),
       })
       byDelegation.delete(activeKey)
     },
