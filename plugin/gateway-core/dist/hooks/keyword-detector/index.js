@@ -1,4 +1,3 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 // Extracts searchable prompt text from chat payload variants.
 function extractPromptText(payload) {
     const props = payload.properties ?? {};
@@ -60,7 +59,6 @@ export function createKeywordDetectorHook(options) {
             if (typeof sessionId !== "string" || !sessionId.trim()) {
                 return;
             }
-            const directory = options.directory;
             const text = extractPromptText(eventPayload);
             if (!text) {
                 return;
@@ -70,13 +68,6 @@ export function createKeywordDetectorHook(options) {
                 return;
             }
             modesBySession.set(sessionId.trim(), detected);
-            writeGatewayEventAudit(directory, {
-                hook: "keyword-detector",
-                stage: "state",
-                reason_code: "keyword_mode_detected",
-                session_id: sessionId.trim(),
-                keyword_mode: detected,
-            });
         },
     };
 }
