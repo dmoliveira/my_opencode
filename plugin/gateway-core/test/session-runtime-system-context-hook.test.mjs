@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
 import { createSessionRuntimeSystemContextHook } from "../dist/hooks/session-runtime-system-context/index.js"
 import { saveGatewayState, nowIso } from "../dist/state/storage.js"
@@ -42,6 +43,43 @@ test("session-runtime-system-context dedupes hidden system session id", async ()
     })
     assert.equal(output.system.filter((line) => line.includes('runtime_session_context:')).length, 1)
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-runtime-system-context audits only changed no-concise transforms", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
+    const output = { system: ["baseline"] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-audit-1" },
+      output,
+      directory,
+    })
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-audit-1" },
+      output,
+      directory,
+    })
+
+    const auditLines = readFileSync(gatewayEventAuditPath(directory), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.hook === "session-runtime-system-context")
+
+    assert.equal(auditLines.length, 1)
+    assert.equal(auditLines[0]?.reason_code, "session_runtime_context_injected_without_concise_mode")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
@@ -200,6 +238,52 @@ test("session-runtime-system-context can scope session id injection to concise m
     })
     assert.equal(output.system.some((line) => line.includes("runtime_session_context:")), false)
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("session-runtime-system-context audits stale context removal under concise-only scope", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const hook = createSessionRuntimeSystemContextHook({
+      directory,
+      enabled: true,
+      injectSessionIdContext: true,
+      injectSessionIdWhenConciseModeOnly: true,
+      conciseModeEnabled: false,
+      conciseDefaultMode: "off",
+    })
+    const output = {
+      system: [
+        "runtime_session_context: stale-session\nUse this exact runtime session id for commits, logs, telemetry, and external tooling created during this session.",
+        "baseline",
+      ],
+    }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-6b" },
+      output,
+      directory,
+    })
+
+    assert.equal(output.system.some((line) => line.includes("runtime_session_context:")), false)
+
+    const auditLines = readFileSync(gatewayEventAuditPath(directory), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.hook === "session-runtime-system-context")
+
+    assert.equal(auditLines.length, 1)
+    assert.equal(auditLines[0]?.reason_code, "session_runtime_context_skipped_by_concise_scope")
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
