@@ -167,23 +167,11 @@ export function createAutopilotLoopHook(options: {
         if (templateParsed) {
           parsed = templateParsed
         } else {
-          writeGatewayEventAudit(scopedDir, {
-            hook: "autopilot-loop",
-            stage: "skip",
-            reason_code: "non_slash_tool",
-            tool: toolName,
-          })
           return
         }
       }
       const action = resolveAutopilotAction(parsed.name, parsed.args)
       if (action === "none") {
-        writeGatewayEventAudit(scopedDir, {
-          hook: "autopilot-loop",
-          stage: "skip",
-          reason_code: "non_autopilot_command",
-          command: parsed.name,
-        })
         return
       }
 
