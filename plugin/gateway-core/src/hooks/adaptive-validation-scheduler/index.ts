@@ -143,16 +143,6 @@ export function createAdaptiveValidationSchedulerHook(options: {
         "\n\n[adaptive-validation-scheduler] Multiple edits detected. Run a fast validation pass now (lint/typecheck/tests) before proceeding further."
       current.reminded = true
       stateBySession.set(sid, current)
-      const directory =
-        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-          ? eventPayload.directory
-          : options.directory
-      writeGatewayEventAudit(directory, {
-        hook: "adaptive-validation-scheduler",
-        stage: "state",
-        reason_code: "validation_reminder_injected",
-        session_id: sid,
-      })
     },
   }
 }
