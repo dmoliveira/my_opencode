@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -90,7 +90,14 @@ test("context-window-monitor does not audit missing session id skip", async () =
     })
 
     await plugin["tool.execute.after"]({ tool: "bash" }, { output: "tool result" })
-    assert.equal(existsSync(gatewayEventAuditPath(directory)), false)
+    assert.equal(existsSync(gatewayEventAuditPath(directory)), true)
+    const auditLines = readFileSync(gatewayEventAuditPath(directory), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.hook === "context-window-monitor")
+    assert.equal(auditLines.length, 0)
   } finally {
     if (previousAudit === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
