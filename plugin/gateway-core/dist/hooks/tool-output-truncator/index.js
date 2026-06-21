@@ -61,13 +61,6 @@ export function createToolOutputTruncatorHook(options) {
             }
             const truncated = truncateText(raw, maxChars, maxLines);
             if (!truncated.lineTruncated && !truncated.charTruncated) {
-                writeGatewayEventAudit(directory, {
-                    hook: "tool-output-truncator",
-                    stage: "skip",
-                    reason_code: "within_threshold",
-                    tool,
-                    output_chars: raw.length,
-                });
                 return;
             }
             if (!writeToolAfterOutputText(eventPayload.output?.output, truncated.text, channel) && eventPayload.output) {
