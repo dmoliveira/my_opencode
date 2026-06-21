@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
 
 test("preemptive-compaction triggers summarize on high usage", async () => {
@@ -161,6 +162,69 @@ test("preemptive-compaction warns when metadata missing under pressure", async (
     await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-metadata" }, output)
     assert.ok(output.output.includes("auto-compaction skipped"))
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("preemptive-compaction audits missing metadata only when notice changes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-preemptive-compaction-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["preemptive-compaction"],
+          disabled: [],
+        },
+        preemptiveCompaction: {
+          enabled: true,
+          warningThreshold: 0.78,
+          compactionCooldownToolCalls: 2,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            return {
+              data: [
+                {
+                  info: {
+                    role: "assistant",
+                    providerID: "openai",
+                    tokens: {
+                      input: 180000,
+                      cache: { read: 0 },
+                    },
+                  },
+                },
+              ],
+            }
+          },
+          async summarize() {},
+        },
+      },
+    })
+
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-metadata-audit" }, { output: "first" })
+    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "session-compaction-metadata-audit" }, { output: "second" })
+
+    const auditLines = readFileSync(gatewayEventAuditPath(directory), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.hook === "preemptive-compaction" && entry.reason_code === "compaction_missing_provider_or_model")
+
+    assert.equal(auditLines.length, 1)
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })

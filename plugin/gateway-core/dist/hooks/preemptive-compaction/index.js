@@ -125,6 +125,7 @@ export function createPreemptiveCompactionHook(options) {
                 if (!providerID || !modelID) {
                     const missingNoticeElapsed = nextState.toolCalls - nextState.lastMissingMetadataNoticeAtToolCall >=
                         options.compactionCooldownToolCalls;
+                    let metadataNoticeChanged = false;
                     if (missingNoticeElapsed && typeof eventPayload.output?.output === "string") {
                         const prefix = guardPrefix(options.guardMarkerMode);
                         eventPayload.output.output = `${eventPayload.output.output}\n\n${prefix} High context pressure detected but auto-compaction skipped: provider/model metadata unavailable.`;
@@ -132,13 +133,16 @@ export function createPreemptiveCompactionHook(options) {
                             ...nextState,
                             lastMissingMetadataNoticeAtToolCall: nextState.toolCalls,
                         });
+                        metadataNoticeChanged = true;
                     }
-                    writeGatewayEventAudit(directory, {
-                        hook: "preemptive-compaction",
-                        stage: "skip",
-                        reason_code: "compaction_missing_provider_or_model",
-                        session_id: sessionId,
-                    });
+                    if (metadataNoticeChanged) {
+                        writeGatewayEventAudit(directory, {
+                            hook: "preemptive-compaction",
+                            stage: "skip",
+                            reason_code: "compaction_missing_provider_or_model",
+                            session_id: sessionId,
+                        });
+                    }
                     return;
                 }
                 compactionInProgress.add(sessionId);
