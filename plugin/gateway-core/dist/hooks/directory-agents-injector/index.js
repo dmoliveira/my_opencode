@@ -1,4 +1,3 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { findNearestFile } from "../directory-context/finder.js";
 import { readFilePrefix } from "../shared/read-file-prefix.js";
 import { truncateInjectedText } from "../shared/injected-text-truncator.js";
@@ -17,15 +16,11 @@ function buildAgentsContextLine(path, maxChars) {
     const guidanceText = readFilePrefix(path, maxChars);
     const normalizedGuidance = guidanceText.trim();
     let contextLine = `Local instructions loaded from: ${path}`;
-    let reasonCode = "directory_agents_context_injected";
     if (normalizedGuidance) {
         const truncated = truncateInjectedText(normalizedGuidance, maxChars);
         contextLine = `${contextLine}\n\nAGENTS.md guidance excerpt:\n${truncated.text}`;
-        if (truncated.truncated) {
-            reasonCode = "directory_agents_context_truncated";
-        }
     }
-    return { text: contextLine, reasonCode };
+    return { text: contextLine };
 }
 // Creates AGENTS.md injector hook for local directory context hints.
 export function createDirectoryAgentsInjectorHook(options) {
@@ -86,12 +81,6 @@ export function createDirectoryAgentsInjectorHook(options) {
                     agentsPathBySession.set(sessionId, path);
                     lastInjectedPathBySession.set(sessionId, path);
                 }
-                writeGatewayEventAudit(directory, {
-                    hook: "directory-agents-injector",
-                    stage: "inject",
-                    reason_code: `${context.reasonCode}_system`,
-                    session_id: sessionId || undefined,
-                });
                 return;
             }
             if (type !== "tool.execute.after") {
@@ -112,12 +101,6 @@ export function createDirectoryAgentsInjectorHook(options) {
             const context = buildAgentsContextLine(path, options.maxChars);
             eventPayload.output.output = `${eventPayload.output.output}\n\n${context.text}`;
             lastInjectedPathBySession.set(sessionId, path);
-            writeGatewayEventAudit(directory, {
-                hook: "directory-agents-injector",
-                stage: "state",
-                reason_code: context.reasonCode,
-                session_id: sessionId,
-            });
         },
     };
 }

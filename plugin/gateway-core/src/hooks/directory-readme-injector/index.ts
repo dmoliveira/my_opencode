@@ -1,4 +1,3 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { findNearestFile } from "../directory-context/finder.js"
 import type { GatewayHook } from "../registry.js"
 import { readFilePrefix } from "../shared/read-file-prefix.js"
@@ -40,19 +39,15 @@ function resolveSessionId(payload: ToolPayload): string {
   return ""
 }
 
-function buildReadmeContextLine(path: string, maxChars: number): { text: string; reasonCode: string } {
+function buildReadmeContextLine(path: string, maxChars: number): { text: string } {
   const readmeText = readFilePrefix(path, maxChars)
   const normalizedReadme = readmeText.trim()
   let contextLine = `Local README context loaded from: ${path}`
-  let reasonCode = "directory_readme_context_injected"
   if (normalizedReadme) {
     const truncated = truncateInjectedText(normalizedReadme, maxChars)
     contextLine = `${contextLine}\n\nREADME.md excerpt:\n${truncated.text}`
-    if (truncated.truncated) {
-      reasonCode = "directory_readme_context_truncated"
-    }
   }
-  return { text: contextLine, reasonCode }
+  return { text: contextLine }
 }
 
 // Creates README injector hook for local docs context hints.
@@ -119,12 +114,6 @@ export function createDirectoryReadmeInjectorHook(options: {
           readmePathBySession.set(sessionId, path)
           lastInjectedPathBySession.set(sessionId, path)
         }
-        writeGatewayEventAudit(directory, {
-          hook: "directory-readme-injector",
-          stage: "inject",
-          reason_code: `${context.reasonCode}_system`,
-          session_id: sessionId || undefined,
-        })
         return
       }
       if (type !== "tool.execute.after") {
@@ -146,12 +135,6 @@ export function createDirectoryReadmeInjectorHook(options: {
       const context = buildReadmeContextLine(path, options.maxChars)
       eventPayload.output.output = `${eventPayload.output.output}\n\n${context.text}`
       lastInjectedPathBySession.set(sessionId, path)
-      writeGatewayEventAudit(directory, {
-        hook: "directory-readme-injector",
-        stage: "state",
-        reason_code: context.reasonCode,
-        session_id: sessionId,
-      })
     },
   }
 }
