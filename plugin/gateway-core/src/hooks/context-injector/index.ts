@@ -216,26 +216,10 @@ export function createContextInjectorHook(options: {
           const previous = lastInjectedBySession.get(sessionId)
           if (previous) {
             if (previous.hash === dedupeFingerprint.hash && previous.normalized === dedupeFingerprint.normalized) {
-              writeGatewayEventAudit(directory, {
-                hook: "context-injector",
-                stage: "inject",
-                reason_code: REASON_CODES.CONTEXT_INJECT_CHAT_SKIPPED_DUPLICATE,
-                session_id: sessionId,
-                context_length: truncated.text.length,
-              })
               return
             }
             const deltaChars = estimateChangedChars(previous.normalized, dedupeFingerprint.normalized)
             if (minDeltaChars > 0 && deltaChars < minDeltaChars) {
-              writeGatewayEventAudit(directory, {
-                hook: "context-injector",
-                stage: "inject",
-                reason_code: REASON_CODES.CONTEXT_INJECT_CHAT_SKIPPED_SMALL_DELTA,
-                session_id: sessionId,
-                context_length: truncated.text.length,
-                delta_chars: deltaChars,
-                min_delta_chars: minDeltaChars,
-              })
               return
             }
           }
@@ -334,26 +318,10 @@ export function createContextInjectorHook(options: {
         const previous = lastInjectedBySession.get(sessionId)
         if (previous) {
           if (previous.hash === dedupeFingerprint.hash && previous.normalized === dedupeFingerprint.normalized) {
-            writeGatewayEventAudit(directory, {
-              hook: "context-injector",
-              stage: "inject",
-              reason_code: REASON_CODES.CONTEXT_INJECT_TRANSFORM_SKIPPED_DUPLICATE,
-              session_id: sessionId,
-              context_length: truncated.text.length,
-            })
             return
           }
           const deltaChars = estimateChangedChars(previous.normalized, dedupeFingerprint.normalized)
           if (minDeltaChars > 0 && deltaChars < minDeltaChars) {
-            writeGatewayEventAudit(directory, {
-              hook: "context-injector",
-              stage: "inject",
-              reason_code: REASON_CODES.CONTEXT_INJECT_TRANSFORM_SKIPPED_SMALL_DELTA,
-              session_id: sessionId,
-              context_length: truncated.text.length,
-              delta_chars: deltaChars,
-              min_delta_chars: minDeltaChars,
-            })
             return
           }
         }
