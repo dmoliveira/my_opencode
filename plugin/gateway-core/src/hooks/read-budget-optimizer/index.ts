@@ -125,16 +125,6 @@ export function createReadBudgetOptimizerHook(options: {
         "\n\n[read-budget-optimizer] Repeated small reads detected on the same file. Prefer larger windows or `grep` first to reduce token usage."
       tracker.suggest = false
       trackers.set(sid, tracker)
-      const directory =
-        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-          ? eventPayload.directory
-          : options.directory
-      writeGatewayEventAudit(directory, {
-        hook: "read-budget-optimizer",
-        stage: "state",
-        reason_code: "small_read_streak_detected",
-        session_id: sid,
-      })
     },
   }
 }
