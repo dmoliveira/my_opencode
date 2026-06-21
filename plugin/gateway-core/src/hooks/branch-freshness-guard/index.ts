@@ -80,15 +80,6 @@ export function createBranchFreshnessGuardHook(options: {
         return
       }
       if (behind <= maxBehind) {
-        writeGatewayEventAudit(directory, {
-          hook: "branch-freshness-guard",
-          stage: "skip",
-          reason_code: "branch_freshness_within_budget",
-          session_id: sessionId,
-          base_ref: baseRef,
-          commits_behind: behind,
-          max_behind: maxBehind,
-        })
         return
       }
       writeGatewayEventAudit(directory, {
