@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
@@ -7,6 +7,12 @@ import { loadGatewayState } from "../../state/storage.js";
 const SYSTEM_CONTEXT_MARKER = "runtime_session_context:";
 const CONCISE_CONTEXT_MARKER = "runtime_concise_mode:";
 const VALID_MODES = new Set(["off", "lite", "full", "ultra", "review", "commit"]);
+const DEFAULT_CONCISE_SKILL_BODY = [
+    "Use concise/caveman-style communication only when active.",
+    "Remove filler and weak hedging first. Keep technical terms, commands, identifiers, filenames, and exact errors unchanged.",
+    "lite: concise full sentences. full: terse fragments OK when meaning stays obvious. ultra: strongest safe compression.",
+    "Relax concise mode for destructive warnings, security/privacy guidance, or multi-step instructions where clarity matters more than compression.",
+].join("\n");
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
     for (const value of candidates) {
@@ -18,6 +24,18 @@ function resolveSessionId(payload) {
 }
 function runtimeContextEntryIndex(system, marker) {
     return system.findIndex((entry) => typeof entry === "string" && entry.includes(marker));
+}
+function pathSignature(path) {
+    if (!existsSync(path)) {
+        return "missing";
+    }
+    try {
+        const stats = statSync(path);
+        return [stats.dev, stats.ino, stats.mode, stats.size, stats.mtimeMs, stats.ctimeMs].join(":");
+    }
+    catch {
+        return "missing";
+    }
 }
 function buildSystemContext(sessionId) {
     return [
@@ -39,8 +57,14 @@ function resolveConfiguredConciseMode(options) {
     }
     return null;
 }
-function candidateSkillPaths(directory) {
+function candidateSkillPaths(directory, candidateCacheByDirectory) {
     const home = String(process.env.HOME ?? "").trim() || homedir();
+    const siblingsRoot = resolve(directory, "..");
+    const siblingSignature = pathSignature(siblingsRoot);
+    const cached = candidateCacheByDirectory.get(directory);
+    if (cached?.siblingSignature === siblingSignature) {
+        return cached.candidates;
+    }
     const candidates = [
         resolve(directory, "skills", "concise-mode", "SKILL.md"),
         resolve(directory, "..", "agents_md", "skills", "concise-mode", "SKILL.md"),
@@ -48,7 +72,7 @@ function candidateSkillPaths(directory) {
         join(home, ".config", "opencode", "agents_md", "skills", "concise-mode", "SKILL.md"),
     ];
     try {
-        const siblings = readdirSync(resolve(directory, ".."), { withFileTypes: true });
+        const siblings = readdirSync(siblingsRoot, { withFileTypes: true });
         for (const entry of siblings) {
             if (!entry.isDirectory() || !entry.name.startsWith("agents_md")) {
                 continue;
@@ -59,27 +83,33 @@ function candidateSkillPaths(directory) {
     catch {
         // best-effort sibling worktree discovery only
     }
+    candidateCacheByDirectory.set(directory, {
+        siblingSignature,
+        candidates,
+    });
     return candidates;
 }
-function loadConciseSkillBody(directory) {
-    for (const path of candidateSkillPaths(directory)) {
+function loadConciseSkillBody(directory, candidateCacheByDirectory, bodyCacheByPath) {
+    for (const path of candidateSkillPaths(directory, candidateCacheByDirectory)) {
         if (!existsSync(path)) {
             continue;
         }
+        const signature = pathSignature(path);
+        const cached = bodyCacheByPath.get(path);
+        if (cached?.signature === signature) {
+            return cached.body;
+        }
         try {
             const text = readFileSync(path, "utf-8");
-            return text.replace(/^---[\s\S]*?---\s*/, "").trim();
+            const body = text.replace(/^---[\s\S]*?---\s*/, "").trim();
+            bodyCacheByPath.set(path, { signature, body });
+            return body;
         }
         catch {
             continue;
         }
     }
-    return [
-        "Use concise/caveman-style communication only when active.",
-        "Remove filler and weak hedging first. Keep technical terms, commands, identifiers, filenames, and exact errors unchanged.",
-        "lite: concise full sentences. full: terse fragments OK when meaning stays obvious. ultra: strongest safe compression.",
-        "Relax concise mode for destructive warnings, security/privacy guidance, or multi-step instructions where clarity matters more than compression.",
-    ].join("\n");
+    return DEFAULT_CONCISE_SKILL_BODY;
 }
 function modeSpecificRules(mode) {
     if (mode === "review") {
@@ -96,15 +126,17 @@ function modeSpecificRules(mode) {
     }
     return "Active level: full. Prefer short direct fragments when they stay clear and technically exact.";
 }
-function buildConciseModeContext(directory, mode, source) {
+function buildConciseModeContext(directory, mode, source, candidateCacheByDirectory, bodyCacheByPath) {
     return [
         `${CONCISE_CONTEXT_MARKER} ${mode}`,
         `Concise mode active from ${source}.`,
         modeSpecificRules(mode),
-        loadConciseSkillBody(directory),
+        loadConciseSkillBody(directory, candidateCacheByDirectory, bodyCacheByPath),
     ].join("\n\n");
 }
 export function createSessionRuntimeSystemContextHook(options) {
+    const conciseSkillCandidateCacheByDirectory = new Map();
+    const conciseSkillBodyCacheByPath = new Map();
     return {
         id: "session-runtime-system-context",
         priority: 294,
@@ -171,7 +203,7 @@ export function createSessionRuntimeSystemContextHook(options) {
                 });
                 return;
             }
-            const nextConcise = buildConciseModeContext(directory, concise.mode, concise.source);
+            const nextConcise = buildConciseModeContext(directory, concise.mode, concise.source, conciseSkillCandidateCacheByDirectory, conciseSkillBodyCacheByPath);
             let conciseContextChanged = false;
             if (currentConcise !== nextConcise) {
                 if (conciseIndex >= 0) {

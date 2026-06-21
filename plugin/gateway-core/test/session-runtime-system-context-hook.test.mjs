@@ -114,6 +114,46 @@ test("session-runtime-system-context injects active concise mode from gateway st
   }
 })
 
+test("session-runtime-system-context reloads changed concise skill body on later transforms", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  try {
+    mkdirSync(join(directory, "skills", "concise-mode"), { recursive: true })
+    const skillPath = join(directory, "skills", "concise-mode", "SKILL.md")
+    writeFileSync(skillPath, "---\nname: concise-mode\n---\nFirst concise rules.\n", "utf-8")
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "full",
+        source: "test",
+        sessionId: "session-hidden-4b",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+    const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
+    const first = { system: ["baseline"] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-4b" },
+      output: first,
+      directory,
+    })
+    assert.match(first.system[0], /First concise rules\./)
+
+    writeFileSync(skillPath, "---\nname: concise-mode\n---\nSecond concise rules are now longer.\n", "utf-8")
+    const second = { system: ["baseline"] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-hidden-4b" },
+      output: second,
+      directory,
+    })
+    assert.match(second.system[0], /Second concise rules are now longer\./)
+    assert.doesNotMatch(second.system[0], /First concise rules\./)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("session-runtime-system-context ignores concise mode from a different session", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {
