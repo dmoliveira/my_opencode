@@ -357,13 +357,6 @@ export function createAutoSlashCommandHook(options: {
         } else {
           return
         }
-        writeGatewayEventAudit(directory, {
-          hook: "auto-slash-command",
-          stage: "state",
-          reason_code: "auto_slash_command_detected",
-          session_id: sessionId,
-          slash_command: slash,
-        })
         return
       }
 
@@ -401,13 +394,6 @@ export function createAutoSlashCommandHook(options: {
         return
       }
 
-      writeGatewayEventAudit(directory, {
-        hook: "auto-slash-command",
-        stage: "state",
-        reason_code: "auto_slash_command_detected",
-        session_id: typeof sessionId === "string" ? sessionId : "",
-        slash_command: raw,
-      })
     },
   }
 }
