@@ -165,3 +165,43 @@ test("loadGatewayState drops legacy concise mode entries without session id", ()
     assert.equal(state?.conciseMode, null)
   })
 })
+
+test("loadGatewayState reloads external concise mode changes after cache warmup", () => {
+  withTempDir((directory) => {
+    saveGatewayState(directory, {
+      activeLoop: null,
+      conciseMode: {
+        mode: "lite",
+        source: "initial",
+        sessionId: "ses-initial",
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      },
+      lastUpdatedAt: nowIso(),
+    })
+    const first = loadGatewayState(directory)
+    assert.equal(first?.conciseMode?.mode, "lite")
+    assert.equal(first?.conciseMode?.sessionId, "ses-initial")
+
+    writeFileSync(
+      resolveGatewayStatePath(directory),
+      `${JSON.stringify({
+        activeLoop: null,
+        conciseMode: {
+          mode: "full",
+          source: "external",
+          sessionId: "ses-external",
+          activatedAt: nowIso(),
+          updatedAt: nowIso(),
+        },
+        lastUpdatedAt: nowIso(),
+      }, null, 2)}\n`,
+      "utf-8",
+    )
+
+    const second = loadGatewayState(directory)
+    assert.equal(second?.conciseMode?.mode, "full")
+    assert.equal(second?.conciseMode?.sessionId, "ses-external")
+    assert.equal(second?.conciseMode?.source, "external")
+  })
+})
