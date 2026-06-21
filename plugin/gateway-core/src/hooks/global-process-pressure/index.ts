@@ -466,12 +466,6 @@ export function createGlobalProcessPressureHook(options: {
           return
         }
       } else {
-        writeGatewayEventAudit(directory, {
-          hook: "global-process-pressure",
-          stage: "skip",
-          reason_code: "global_pressure_check_cooldown",
-          session_id: sessionId,
-        })
         return
       }
 
@@ -493,17 +487,6 @@ export function createGlobalProcessPressureHook(options: {
         sample.maxRssMb >= options.warningMaxRssMb
       const criticalExceeded = sample.maxRssMb >= options.criticalMaxRssMb
       if (!warningExceeded && !criticalExceeded) {
-        writeGatewayEventAudit(directory, {
-          hook: "global-process-pressure",
-          stage: "skip",
-          reason_code: "global_pressure_below_threshold",
-          session_id: sessionId,
-          severity: selfSummary.label,
-          self_pid: selfSummary.sample?.pid ?? null,
-          self_cpu_pct: selfSummary.sample ? Number(selfSummary.sample.cpuPct.toFixed(1)) : null,
-          self_rss_mb: selfSummary.sample ? Number(selfSummary.sample.rssMb.toFixed(1)) : null,
-          self_elapsed_seconds: selfSummary.sample?.elapsedSeconds ?? null,
-        })
         return
       }
       const activeCooldownCalls = criticalExceeded
