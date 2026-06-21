@@ -1,5 +1,3 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -44,7 +42,6 @@ export function createAgentDiscoverabilityInjectorHook(options) {
             if (sid && options.cooldownMs > 0 && now - last < options.cooldownMs) {
                 return;
             }
-            const traceId = resolveDelegationTraceId(args);
             const combined = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`;
             if (combined.includes("/agent-catalog")) {
                 return;
@@ -62,19 +59,6 @@ export function createAgentDiscoverabilityInjectorHook(options) {
             if (sid) {
                 lastInjectedAtBySession.set(sid, now);
             }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
-            writeGatewayEventAudit(directory, {
-                hook: "agent-discoverability-injector",
-                stage: "state",
-                reason_code: "agent_discoverability_hint_injected",
-                session_id: sid,
-                trace_id: traceId,
-                subagent_type: subagentType || undefined,
-                trigger_source: source,
-                cooldown_ms: String(options.cooldownMs),
-            });
         },
     };
 }
