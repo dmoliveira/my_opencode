@@ -73,11 +73,6 @@ export function createContextWindowMonitorHook(options) {
                 : options.directory;
             const sessionId = resolveSessionId(eventPayload);
             if (!sessionId) {
-                writeGatewayEventAudit(directory, {
-                    hook: "context-window-monitor",
-                    stage: "skip",
-                    reason_code: "missing_session_id",
-                });
                 return;
             }
             const priorState = sessionStates.get(sessionId) ?? {
@@ -94,22 +89,10 @@ export function createContextWindowMonitorHook(options) {
             sessionStates.set(sessionId, nextState);
             pruneSessionStates(sessionStates, options.maxSessionStateEntries);
             if (typeof eventPayload.output?.output !== "string") {
-                writeGatewayEventAudit(directory, {
-                    hook: "context-window-monitor",
-                    stage: "skip",
-                    reason_code: "output_not_text",
-                    session_id: sessionId,
-                });
                 return;
             }
             const client = options.client?.session;
             if (!client) {
-                writeGatewayEventAudit(directory, {
-                    hook: "context-window-monitor",
-                    stage: "skip",
-                    reason_code: "session_client_unavailable",
-                    session_id: sessionId,
-                });
                 return;
             }
             try {
@@ -123,12 +106,6 @@ export function createContextWindowMonitorHook(options) {
                     .map((item) => item.info);
                 const last = assistants[assistants.length - 1];
                 if (!last) {
-                    writeGatewayEventAudit(directory, {
-                        hook: "context-window-monitor",
-                        stage: "skip",
-                        reason_code: "assistant_message_missing",
-                        session_id: sessionId,
-                    });
                     return;
                 }
                 const totalInputTokens = (last.tokens?.input ?? 0) + (last.tokens?.cache?.read ?? 0);
