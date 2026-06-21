@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
 
 test("context-window-monitor appends warning when Anthropic usage is high", async () => {
@@ -56,6 +57,45 @@ test("context-window-monitor appends warning when Anthropic usage is high", asyn
       delete process.env.ANTHROPIC_1M_CONTEXT
     } else {
       process.env.ANTHROPIC_1M_CONTEXT = previousFlag
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("context-window-monitor does not audit missing session id skip", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-context-window-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["context-window-monitor"],
+          disabled: [],
+        },
+        contextWindowMonitor: {
+          enabled: true,
+          warningThreshold: 0.7,
+        },
+      },
+      client: {
+        session: {
+          async messages() {
+            throw new Error("should not be called without session id")
+          },
+        },
+      },
+    })
+
+    await plugin["tool.execute.after"]({ tool: "bash" }, { output: "tool result" })
+    assert.equal(existsSync(gatewayEventAuditPath(directory)), false)
+  } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
     }
     rmSync(directory, { recursive: true, force: true })
   }
