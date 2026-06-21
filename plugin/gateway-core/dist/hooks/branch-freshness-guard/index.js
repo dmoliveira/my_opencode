@@ -53,6 +53,8 @@ export function createBranchFreshnessGuardHook(options) {
                     reason_code: "branch_freshness_ref_unavailable",
                     session_id: sessionId,
                     base_ref: baseRef,
+                    audit_dedupe_key: `branch-freshness-ref-unavailable:${sessionId}:${baseRef}`,
+                    audit_dedupe_window_ms: 30000,
                 });
                 return;
             }

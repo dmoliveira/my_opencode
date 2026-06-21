@@ -184,6 +184,99 @@ test("gateway event audit direct writer keeps cached size correct across rotatio
   }
 })
 
+test("gateway event audit dedupes opt-in benign skip entries within cooldown window", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-direct-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "benign_skip",
+      audit_dedupe_key: "same-skip",
+      audit_dedupe_window_ms: 30000,
+    })
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "benign_skip",
+      audit_dedupe_key: "same-skip",
+      audit_dedupe_window_ms: 30000,
+    })
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "different_skip",
+      audit_dedupe_key: "other-skip",
+      audit_dedupe_window_ms: 30000,
+    })
+
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const lines = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.equal(lines.length, 2)
+    assert.equal(lines[0]?.reason_code, "benign_skip")
+    assert.equal(lines[1]?.reason_code, "different_skip")
+    assert.equal("audit_dedupe_key" in lines[0], false)
+    assert.equal("audit_dedupe_window_ms" in lines[0], false)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("gateway event audit does not arm dedupe while all sinks are disabled", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-direct-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  try {
+    process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "0"
+    process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0"
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "benign_skip",
+      audit_dedupe_key: "arming-check",
+      audit_dedupe_window_ms: 30000,
+    })
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    assert.equal(existsSync(auditPath), false)
+
+    process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "benign_skip",
+      audit_dedupe_key: "arming-check",
+      audit_dedupe_window_ms: 30000,
+    })
+    const lines = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    assert.equal(lines.length, 1)
+    assert.equal(lines[0]?.reason_code, "benign_skip")
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("gateway event audit re-reads env toggles after they change", () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-direct-"))
   const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
@@ -358,6 +451,83 @@ test("gateway event audit exports OTLP span when observability enabled", async (
     assert.ok(Array.isArray(spans) && spans.length >= 1)
     assert.equal(typeof spans[0].traceId, "string")
     assert.equal(spans[0].traceId.length, 32)
+  } finally {
+    if (previousEnabled === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousEnabled
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
+    if (previousHeaders === undefined) {
+      delete process.env.OTEL_EXPORTER_OTLP_HEADERS
+    } else {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = previousHeaders
+    }
+    if (previousConfigPath === undefined) {
+      delete process.env.OPENCODE_CONFIG_PATH
+    } else {
+      process.env.OPENCODE_CONFIG_PATH = previousConfigPath
+    }
+    globalThis.fetch = originalFetch
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("gateway event audit dedupes opt-in benign skip exports when file audit is disabled", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
+  const previousEnabled = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  const previousHeaders = process.env.OTEL_EXPORTER_OTLP_HEADERS
+  const previousConfigPath = process.env.OPENCODE_CONFIG_PATH
+  const originalFetch = globalThis.fetch
+
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "0"
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "1"
+  process.env.OTEL_EXPORTER_OTLP_HEADERS = "Authorization=Basic test"
+  delete process.env.OPENCODE_CONFIG_PATH
+
+  const requests = []
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init })
+    return { ok: true, status: 200, text: async () => "ok" }
+  }
+
+  writeFileSync(
+    join(directory, "opencode.json"),
+    JSON.stringify({
+      observability: {
+        enabled: true,
+        provider: "langfuse",
+        otlp_traces_endpoint: "http://localhost:3005/api/public/otel/v1/traces",
+        otlp_protocol: "http/json",
+        service_name: "my_opencode-test",
+      },
+    }),
+    "utf-8",
+  )
+
+  try {
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "benign_skip",
+      audit_dedupe_key: "otel-skip",
+      audit_dedupe_window_ms: 30000,
+    })
+    writeGatewayEventAudit(directory, {
+      hook: "test",
+      stage: "skip",
+      reason_code: "benign_skip",
+      audit_dedupe_key: "otel-skip",
+      audit_dedupe_window_ms: 30000,
+    })
+
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0]?.url, "http://localhost:3005/api/public/otel/v1/traces")
   } finally {
     if (previousEnabled === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

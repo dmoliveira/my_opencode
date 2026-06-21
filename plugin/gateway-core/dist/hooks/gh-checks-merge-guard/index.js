@@ -103,6 +103,8 @@ export function createGhChecksMergeGuardHook(options) {
                     reason_code: "merge_checks_lookup_failed",
                     session_id: sessionId,
                     selector,
+                    audit_dedupe_key: `merge-checks-lookup-failed:${sessionId}:${selector || "default"}`,
+                    audit_dedupe_window_ms: 30000,
                 });
                 if (options.failOpenOnError) {
                     return;

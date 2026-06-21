@@ -338,6 +338,30 @@ function maybeExportOtel(directory, entry) {
         }
     });
 }
+function canExportOtel(directory) {
+    const explicitEnvToggle = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED;
+    if (explicitEnvToggle && !parseBool(explicitEnvToggle, false)) {
+        return false;
+    }
+    const settings = loadObservabilitySettings(directory);
+    const envState = resolveOtelEnvState(settings);
+    const envEnabled = envState.explicitToggleParsed ?? settings.enabled;
+    if (!envEnabled) {
+        return false;
+    }
+    if (!["langfuse", "otlp"].includes(settings.provider)) {
+        return false;
+    }
+    const fetchFn = globalThis.fetch;
+    if (!fetchFn) {
+        return false;
+    }
+    const rawHeaders = envState.rawHeaders;
+    if (!rawHeaders && settings.provider === "langfuse") {
+        return false;
+    }
+    return true;
+}
 // Returns true when gateway event auditing is enabled.
 export function gatewayEventAuditEnabled() {
     return resolveAuditEnvState().auditEnabled;
@@ -393,19 +417,39 @@ function resolveAuditWriterState(path) {
     const state = {
         directoryReady: false,
         fileSize,
+        dedupeByKey: new Map(),
     };
     auditWriterCache.set(path, state);
     return state;
 }
 // Appends one sanitized gateway event audit entry.
 export function writeGatewayEventAudit(directory, entry) {
+    const rawEntry = entry;
+    const auditDedupeKey = typeof rawEntry.audit_dedupe_key === "string" && rawEntry.audit_dedupe_key.trim()
+        ? rawEntry.audit_dedupe_key.trim()
+        : "";
+    const auditDedupeWindowMs = Number(rawEntry.audit_dedupe_window_ms);
+    const dedupeWindowMs = Number.isFinite(auditDedupeWindowMs) && auditDedupeWindowMs > 0
+        ? auditDedupeWindowMs
+        : 0;
+    const { audit_dedupe_key: _auditDedupeKey, audit_dedupe_window_ms: _auditDedupeWindowMs, ...persistedEntry } = rawEntry;
     const payload = {
         ts: new Date().toISOString(),
-        ...entry,
+        ...persistedEntry,
     };
-    if (gatewayEventAuditEnabled()) {
-        const path = gatewayEventAuditPath(directory);
-        const writerState = resolveAuditWriterState(path);
+    const fileAuditEnabled = gatewayEventAuditEnabled();
+    const otelExportEnabled = canExportOtel(directory);
+    const path = gatewayEventAuditPath(directory);
+    const writerState = resolveAuditWriterState(path);
+    if (auditDedupeKey && dedupeWindowMs > 0 && (fileAuditEnabled || otelExportEnabled)) {
+        const now = Date.now();
+        const previousTs = writerState.dedupeByKey.get(auditDedupeKey) ?? 0;
+        if (now - previousTs < dedupeWindowMs) {
+            return;
+        }
+        writerState.dedupeByKey.set(auditDedupeKey, now);
+    }
+    if (fileAuditEnabled) {
         if (!writerState.directoryReady) {
             mkdirSync(dirname(path), { recursive: true });
             writerState.directoryReady = true;
@@ -427,5 +471,7 @@ export function writeGatewayEventAudit(directory, entry) {
         appendFileSync(path, line, "utf-8");
         writerState.fileSize = (writerState.fileSize ?? 0) + lineBytes;
     }
-    maybeExportOtel(directory, payload);
+    if (otelExportEnabled) {
+        maybeExportOtel(directory, payload);
+    }
 }
