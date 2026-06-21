@@ -187,20 +187,25 @@ export function createSessionRuntimeSystemContextHook(options) {
                     system.splice(conciseIndex, 1);
                     conciseContextChanged = true;
                 }
-                writeGatewayEventAudit(directory, {
-                    hook: "session-runtime-system-context",
-                    stage: "inject",
-                    reason_code: shouldInjectSessionId
+                const reasonCode = shouldInjectSessionId
+                    ? sessionContextChanged || conciseContextChanged
+                        ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_INJECTED
+                        : null
+                    : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
                         ? sessionContextChanged || conciseContextChanged
-                            ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_INJECTED
-                            : REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_NOOP
-                        : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
                             ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
-                            : sessionContextChanged || conciseContextChanged
-                                ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_REMOVED
-                                : REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_SKIPPED,
-                    session_id: sessionId,
-                });
+                            : null
+                        : sessionContextChanged || conciseContextChanged
+                            ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_REMOVED
+                            : null;
+                if (reasonCode) {
+                    writeGatewayEventAudit(directory, {
+                        hook: "session-runtime-system-context",
+                        stage: "inject",
+                        reason_code: reasonCode,
+                        session_id: sessionId,
+                    });
+                }
                 return;
             }
             const nextConcise = buildConciseModeContext(directory, concise.mode, concise.source, conciseSkillCandidateCacheByDirectory, conciseSkillBodyCacheByPath);
@@ -212,18 +217,22 @@ export function createSessionRuntimeSystemContextHook(options) {
                 system.unshift(nextConcise);
                 conciseContextChanged = true;
             }
+            const reasonCode = shouldInjectSessionId
+                ? sessionContextChanged || conciseContextChanged
+                    ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_INJECTED
+                    : null
+                : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
+                    ? null
+                    : sessionContextChanged || conciseContextChanged
+                        ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED
+                        : null;
+            if (!reasonCode) {
+                return;
+            }
             writeGatewayEventAudit(directory, {
                 hook: "session-runtime-system-context",
                 stage: "inject",
-                reason_code: shouldInjectSessionId
-                    ? sessionContextChanged || conciseContextChanged
-                        ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_INJECTED
-                        : REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_NOOP
-                    : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
-                        ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
-                        : sessionContextChanged || conciseContextChanged
-                            ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED
-                            : REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED_NOOP,
+                reason_code: reasonCode,
                 session_id: sessionId,
                 concise_mode: concise.mode,
                 concise_mode_source: concise.source,
