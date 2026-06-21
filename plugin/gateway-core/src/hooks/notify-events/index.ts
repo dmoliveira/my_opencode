@@ -928,26 +928,25 @@ export function createNotifyEventsHook(options: {
         directory,
       );
       lastSent.set(eventName, ts);
-      writeGatewayEventAudit(directory, {
-        hook: "notify-events",
-        stage: "state",
-        reason_code:
-          result.visualSent || result.soundSent
-            ? "notification_sent"
-            : "notification_not_sent",
-        event_type: type,
-        notify_event: eventName,
-        visual_enabled: visual,
-        sound_enabled: sound,
-        visual_sent: result.visualSent,
-        sound_sent: result.soundSent,
-        icon_mode: state.icons.mode,
-        icon_version: state.icons.version,
-        icon_image_path: resolvedImagePath,
-        icon_image_present: Boolean(resolvedImagePath),
-        sound_theme: state.sound.theme,
-        ...auditFields,
-      });
+      if (!result.visualSent && !result.soundSent) {
+        writeGatewayEventAudit(directory, {
+          hook: "notify-events",
+          stage: "state",
+          reason_code: "notification_not_sent",
+          event_type: type,
+          notify_event: eventName,
+          visual_enabled: visual,
+          sound_enabled: sound,
+          visual_sent: result.visualSent,
+          sound_sent: result.soundSent,
+          icon_mode: state.icons.mode,
+          icon_version: state.icons.version,
+          icon_image_path: resolvedImagePath,
+          icon_image_present: Boolean(resolvedImagePath),
+          sound_theme: state.sound.theme,
+          ...auditFields,
+        });
+      }
     },
   };
 }
