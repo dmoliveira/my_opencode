@@ -1,4 +1,3 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 // Resolves stable session id from event payload.
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId, payload.properties?.info?.id];
@@ -90,15 +89,6 @@ export function createParallelOpportunityDetectorHook(options) {
             eventPayload.output.output +=
                 "\n\n[parallel-opportunity-detector] Independent git diagnostics can run in parallel: `git status`, `git diff`, and `git log`.";
             remindedBySession.add(sid);
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
-            writeGatewayEventAudit(directory, {
-                hook: "parallel-opportunity-detector",
-                stage: "state",
-                reason_code: "parallel_opportunity_detected",
-                session_id: sid,
-            });
         },
     };
 }
