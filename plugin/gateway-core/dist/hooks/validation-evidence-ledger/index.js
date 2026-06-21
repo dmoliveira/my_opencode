@@ -301,13 +301,6 @@ export function createValidationEvidenceLedgerHook(options) {
                 ? eventPayload.directory
                 : options.directory;
             markValidationEvidence(sid, categories, directory);
-            writeGatewayEventAudit(directory, {
-                hook: "validation-evidence-ledger",
-                stage: "state",
-                reason_code: "validation_evidence_recorded",
-                session_id: sid,
-                evidence: categories.join(","),
-            });
         },
     };
 }
