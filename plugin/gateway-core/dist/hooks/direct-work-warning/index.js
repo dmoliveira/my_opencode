@@ -80,14 +80,6 @@ export function createDirectWorkWarningHook(options) {
             eventPayload.output.message = existing
                 ? `${existing}\n${reminder}`
                 : reminder;
-            writeGatewayEventAudit(options.directory, {
-                hook: "direct-work-warning",
-                stage: "before",
-                reason_code: "direct_work_warning_injected",
-                session_id: sid,
-                tool,
-                file_path: primaryPath || undefined,
-            });
             warnedSessions.add(sid);
         },
     };
