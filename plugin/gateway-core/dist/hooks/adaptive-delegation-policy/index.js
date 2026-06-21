@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { getDelegationFailureStats, getRecentDelegationOutcomes, } from "../shared/delegation-runtime-state.js";
+import { getDelegationFailureStats, } from "../shared/delegation-runtime-state.js";
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
@@ -71,20 +71,9 @@ export function createAdaptiveDelegationPolicyHook(options) {
                 });
                 throw new Error(`Blocked delegation: adaptive cooldown active due to recent failures; category=${category} is temporarily restricted.`);
             }
-            const recent = getRecentDelegationOutcomes(options.windowMs);
             const hint = `[adaptive-delegation-policy] cooldown active; recent_failures=${stats.failed}/${stats.total}; prefer low-risk scoped delegation and explicit validation steps.`;
             args.prompt = prependHint(String(args.prompt ?? ""), hint);
             args.description = prependHint(String(args.description ?? ""), hint);
-            writeGatewayEventAudit(directory, {
-                hook: "adaptive-delegation-policy",
-                stage: "state",
-                reason_code: "adaptive_policy_hint_injected",
-                session_id: sid,
-                trace_id: traceId,
-                category,
-                recent_outcomes: String(recent.length),
-                cooldown_until: String(cooldownUntil),
-            });
         },
     };
 }
