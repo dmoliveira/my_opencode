@@ -54,13 +54,6 @@ export function createPressureEscalationGuardHook(options) {
             const prompt = String(eventPayload.output?.args?.prompt ?? "");
             const description = String(eventPayload.output?.args?.description ?? "");
             if (includesAllowedPattern(`${prompt}\n${description}`, options.allowPromptPatterns)) {
-                writeGatewayEventAudit(directory, {
-                    hook: "pressure-escalation-guard",
-                    stage: "skip",
-                    reason_code: "pressure_escalation_override_allowed",
-                    session_id: sessionId(eventPayload),
-                    subagent_type: subagentType,
-                });
                 return;
             }
             let continueCount = 0;
@@ -78,14 +71,6 @@ export function createPressureEscalationGuardHook(options) {
                 return;
             }
             if (continueCount < options.maxContinueBeforeBlock) {
-                writeGatewayEventAudit(directory, {
-                    hook: "pressure-escalation-guard",
-                    stage: "skip",
-                    reason_code: "pressure_escalation_below_threshold",
-                    session_id: sessionId(eventPayload),
-                    subagent_type: subagentType,
-                    continue_count: continueCount,
-                });
                 return;
             }
             writeGatewayEventAudit(directory, {
