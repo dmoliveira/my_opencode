@@ -63,6 +63,11 @@ interface RulesCacheEntry {
   rules: RuleCandidate[]
 }
 
+interface RuleFileSnapshot {
+  paths: string[]
+  signature: string
+}
+
 const TRACKED_TOOLS = new Set(["read", "write", "edit", "multiedit"])
 const RULES_SYSTEM_MARKER = "[runtime-rules]"
 const RULES_DIRS = [
@@ -317,9 +322,17 @@ function buildRuleCacheSignature(paths: string[]): string {
   return hash.digest("hex")
 }
 
-// Collects rule files from common project directories.
-function collectRuleFiles(directory: string): RulesCacheEntry {
+// Collects rule file paths plus a cheap invalidation signature.
+function collectRuleFileSnapshot(directory: string): RuleFileSnapshot {
   const paths = collectRuleFilePaths(directory)
+  return {
+    paths,
+    signature: buildRuleCacheSignature(paths),
+  }
+}
+
+// Parses rule files only after snapshot invalidation determines content changed.
+function parseRules(paths: string[]): RuleCandidate[] {
   const rules: RuleCandidate[] = []
   for (const path of paths) {
     const parsed = parseRuleFile(path)
@@ -327,10 +340,7 @@ function collectRuleFiles(directory: string): RulesCacheEntry {
       rules.push(parsed)
     }
   }
-  return {
-    signature: buildRuleCacheSignature(paths),
-    rules,
-  }
+  return rules
 }
 
 // Resolves target file path from tool output metadata/title.
@@ -379,13 +389,17 @@ export function createRulesInjectorHook(options: { directory: string; enabled: b
   }
 
   function loadRules(directory: string): RuleCandidate[] {
-    const next = collectRuleFiles(directory)
+    const next = collectRuleFileSnapshot(directory)
     const cached = ruleCacheByDirectory.get(directory)
-    if (!cached || cached.signature !== next.signature) {
-      ruleCacheByDirectory.set(directory, next)
-      return next.rules
+    if (cached?.signature === next.signature) {
+      return cached.rules
     }
-    return cached.rules
+    const rules = parseRules(next.paths)
+    ruleCacheByDirectory.set(directory, {
+      signature: next.signature,
+      rules,
+    })
+    return rules
   }
 
   return {

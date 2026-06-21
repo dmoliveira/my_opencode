@@ -246,9 +246,16 @@ function buildRuleCacheSignature(paths) {
     }
     return hash.digest("hex");
 }
-// Collects rule files from common project directories.
-function collectRuleFiles(directory) {
+// Collects rule file paths plus a cheap invalidation signature.
+function collectRuleFileSnapshot(directory) {
     const paths = collectRuleFilePaths(directory);
+    return {
+        paths,
+        signature: buildRuleCacheSignature(paths),
+    };
+}
+// Parses rule files only after snapshot invalidation determines content changed.
+function parseRules(paths) {
     const rules = [];
     for (const path of paths) {
         const parsed = parseRuleFile(path);
@@ -256,10 +263,7 @@ function collectRuleFiles(directory) {
             rules.push(parsed);
         }
     }
-    return {
-        signature: buildRuleCacheSignature(paths),
-        rules,
-    };
+    return rules;
 }
 // Resolves target file path from tool output metadata/title.
 function resolveTargetPath(output) {
@@ -303,13 +307,17 @@ export function createRulesInjectorHook(options) {
         injectedStateBySession.delete(sessionId);
     }
     function loadRules(directory) {
-        const next = collectRuleFiles(directory);
+        const next = collectRuleFileSnapshot(directory);
         const cached = ruleCacheByDirectory.get(directory);
-        if (!cached || cached.signature !== next.signature) {
-            ruleCacheByDirectory.set(directory, next);
-            return next.rules;
+        if (cached?.signature === next.signature) {
+            return cached.rules;
         }
-        return cached.rules;
+        const rules = parseRules(next.paths);
+        ruleCacheByDirectory.set(directory, {
+            signature: next.signature,
+            rules,
+        });
+        return rules;
     }
     return {
         id: "rules-injector",
