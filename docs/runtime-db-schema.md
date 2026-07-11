@@ -154,3 +154,7 @@ A local incident bundle should contain machine-readable doctor output, store pat
 ## Support export
 
 Before sharing diagnostics, enable `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`, run the consolidated doctor JSON, inspect it locally, and remove any store path or identifier not required for the support case. Share only the redacted incident bundle and checksums; never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
+
+## Storage telemetry history
+
+Persist only bounded aggregate telemetry—timestamp, store category, byte footprint, WAL bytes, scan duration, schema state, and remediation codes. Do not persist paths, record content, session IDs, prompts, or user identifiers. Retain a short rolling window and use it for trend alerts, not audit reconstruction.
