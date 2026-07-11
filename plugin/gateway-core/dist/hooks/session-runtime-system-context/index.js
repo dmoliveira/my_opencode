@@ -171,7 +171,8 @@ export function createSessionRuntimeSystemContextHook(options) {
                     sessionContextChanged = true;
                 }
                 if (runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER) < 0) {
-                    system.unshift(nextContext);
+                    // Keep per-session data after stable system instructions for prompt-cache reuse.
+                    system.push(nextContext);
                     sessionContextChanged = true;
                 }
             }
@@ -214,7 +215,8 @@ export function createSessionRuntimeSystemContextHook(options) {
                 if (conciseIndex >= 0) {
                     system.splice(conciseIndex, 1);
                 }
-                system.unshift(nextConcise);
+                // Keep runtime mode context after stable system instructions for prompt-cache reuse.
+                system.push(nextConcise);
                 conciseContextChanged = true;
             }
             const reasonCode = shouldInjectSessionId
