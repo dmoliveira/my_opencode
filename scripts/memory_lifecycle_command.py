@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
@@ -114,6 +115,9 @@ def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
             confidence=normalize_confidence(entry.get("confidence")),
             session_id=str(entry.get("session_id") or "") or None,
             cwd=str(entry.get("cwd") or os.getcwd()),
+            created_at=str(entry.get("created_at") or "") or None,
+            updated_at=str(entry.get("updated_at") or "") or None,
+            commit=False,
         )
         if bool(entry.get("archived")):
             conn.execute(
@@ -245,7 +249,8 @@ def cmd_stats(argv: list[str]) -> int:
 
 def cmd_cleanup(argv: list[str]) -> int:
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    dry_run = "--dry-run" in argv
+    argv = [a for a in argv if a not in {"--json", "--dry-run"}]
     older_days = 30
     try:
         raw = parse_flag_value(argv, "--older-days")
@@ -255,23 +260,25 @@ def cmd_cleanup(argv: list[str]) -> int:
         return usage()
     conn = connect()
     cutoff = datetime.now(UTC) - timedelta(days=older_days)
-    moved = conn.execute(
-        """
-        UPDATE memories
-        SET archived = 1, updated_at = ?
-        WHERE archived = 0
-          AND pinned = 0
-          AND COALESCE(updated_at, created_at, '') < ?
-        """,
-        (now_iso(), cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")),
-    ).rowcount
-    conn.commit()
+    cutoff_value = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    if dry_run:
+        moved = int(conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
+            (cutoff_value,),
+        ).fetchone()[0])
+    else:
+        moved = conn.execute(
+            "UPDATE memories SET archived = 1, updated_at = ? WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
+            (now_iso(), cutoff_value),
+        ).rowcount
+        conn.commit()
     entry_count, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "cleanup",
             "moved": moved,
+            "dry_run": dry_run,
             "entry_count": entry_count,
             "archive_count": archive_count,
         },
@@ -281,13 +288,13 @@ def cmd_cleanup(argv: list[str]) -> int:
 
 def cmd_compress(argv: list[str]) -> int:
     as_json = "--json" in argv
+    dry_run = "--dry-run" in argv
     conn = connect()
     rows = conn.execute(
         "SELECT rowid, * FROM memories WHERE archived = 0 ORDER BY pinned DESC, updated_at DESC, created_at DESC"
     ).fetchall()
     before = len(rows)
-    seen: set[str] = set()
-    removed = 0
+    groups: dict[str, list[sqlite3.Row]] = {}
     for row in rows:
         key = str(row["source_type"] or "") + ":" + str(row["source_ref"] or "")
         if (
@@ -305,17 +312,30 @@ def cmd_compress(argv: list[str]) -> int:
                 + ":"
                 + str(row["content"] or "")
             )
-        if key in seen:
-            if bool(row["pinned"]):
+        groups.setdefault(key, []).append(row)
+
+    removed = 0
+    for duplicates in groups.values():
+        keeper = max(
+            duplicates,
+            key=lambda row: (
+                int(bool(row["pinned"])),
+                str(row["updated_at"] or ""),
+                str(row["created_at"] or ""),
+                int(row["rowid"]),
+            ),
+        )
+        for row in duplicates:
+            if int(row["rowid"]) == int(keeper["rowid"]):
                 continue
-            conn.execute(
-                "UPDATE memories SET archived = 1, updated_at = ? WHERE rowid = ?",
-                (now_iso(), int(row["rowid"])),
-            )
+            if not dry_run:
+                conn.execute(
+                    "UPDATE memories SET archived = 1, updated_at = ? WHERE rowid = ?",
+                    (now_iso(), int(row["rowid"])),
+                )
             removed += 1
-            continue
-        seen.add(key)
-    conn.commit()
+    if not dry_run:
+        conn.commit()
     after, archive_count = _query_counts(conn)
     return emit(
         {
@@ -324,6 +344,7 @@ def cmd_compress(argv: list[str]) -> int:
             "before": before,
             "after": after,
             "removed": removed,
+            "dry_run": dry_run,
             "archive_count": archive_count,
         },
         as_json,
@@ -358,7 +379,8 @@ def cmd_export(argv: list[str]) -> int:
 
 def cmd_import(argv: list[str]) -> int:
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    dry_run = "--dry-run" in argv
+    argv = [a for a in argv if a not in {"--json", "--dry-run"}]
     try:
         path_arg = parse_flag_value(argv, "--path")
     except ValueError:
@@ -385,26 +407,44 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
+    raw_entries = incoming.get("entries", [])
+    raw_archive = incoming.get("archive", [])
+    if not isinstance(raw_entries, list) or not isinstance(raw_archive, list):
+        return emit({"result": "FAIL", "command": "import", "error": "entries and archive must be lists"}, as_json)
+    if any(not isinstance(entry, dict) for entry in [*raw_entries, *raw_archive]):
+        return emit({"result": "FAIL", "command": "import", "error": "every imported entry must be an object"}, as_json)
+    new_entries = raw_entries
+    archived_entries = raw_archive
+    if dry_run:
+        return emit(
+            {
+                "result": "PASS",
+                "command": "import",
+                "dry_run": True,
+                "imported": len(new_entries) + len(archived_entries),
+                "backup_path": None,
+            },
+            as_json,
+        )
     conn = connect()
-    new_entries = (
-        [entry for entry in incoming.get("entries", []) if isinstance(entry, dict)]
-        if isinstance(incoming.get("entries"), list)
-        else []
-    )
-    archived_entries = (
-        [entry for entry in incoming.get("archive", []) if isinstance(entry, dict)]
-        if isinstance(incoming.get("archive"), list)
-        else []
-    )
-    for entry in new_entries + archived_entries:
-        _import_row(conn, entry)
-    conn.commit()
+    backup_path = source.with_name(f"{source.stem}.pre-import-{uuid.uuid4().hex}.json")
+    backup_path.write_text(json.dumps(_export_payload(conn), indent=2) + "\n", encoding="utf-8")
+    try:
+        conn.execute("BEGIN")
+        for entry in new_entries + archived_entries:
+            _import_row(conn, entry)
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        return emit({"result": "FAIL", "command": "import", "error": f"import rolled back: {exc}"}, as_json)
     entry_count, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "import",
             "imported": len(new_entries) + len(archived_entries),
+            "dry_run": False,
+            "backup_path": str(backup_path),
             "entry_count": entry_count,
             "archive_count": archive_count,
         },

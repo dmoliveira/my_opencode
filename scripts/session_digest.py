@@ -180,6 +180,7 @@ def collect_plan_execution_snapshot() -> dict:
 def write_digest(path: Path, digest: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(digest, indent=2) + "\n", encoding="utf-8")
+    path.chmod(0o600)
 
 
 def run_hook(command: str, digest_path: Path) -> int:
@@ -191,9 +192,7 @@ def run_hook(command: str, digest_path: Path) -> int:
 
 def trusted_post_session_paths() -> list[Path]:
     home = Path("~").expanduser()
-    layered_path = resolve_write_path()
     candidates = [
-        layered_path,
         home / ".config" / "opencode" / "my_opencode.jsonc",
         home / ".config" / "opencode" / "my_opencode.json",
         home / ".config" / "opencode" / "opencode.jsonc",

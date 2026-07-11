@@ -7,6 +7,7 @@ import os
 import shlex
 import sqlite3
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -64,6 +65,8 @@ def _default_runtime_db_path() -> Path:
 
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
+MAX_RUNTIME_STALE_FINDINGS = 100
+RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
     60,
@@ -79,7 +82,7 @@ DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD = max(
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -109,6 +112,15 @@ def _parse_positive_int_option(argv: list[str], name: str, default: int) -> int:
     if value <= 0:
         raise ValueError(f"invalid value for {name}")
     return value
+
+
+def _parse_text_option(argv: list[str], name: str) -> str | None:
+    if name not in argv:
+        return None
+    idx = argv.index(name)
+    if idx + 1 >= len(argv) or not argv[idx + 1].strip():
+        raise ValueError(f"missing value for {name}")
+    return argv[idx + 1]
 
 
 def _parse_path_option(argv: list[str], name: str, default: Path) -> Path:
@@ -391,15 +403,28 @@ def _load_digest(path: Path) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
+    """Open the upstream runtime history without creating or modifying it."""
+    connection = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    connection.execute(f"PRAGMA busy_timeout = {RUNTIME_DB_BUSY_TIMEOUT_MS}")
+    return connection
+
+
 def _scan_runtime_stuck_sessions(
     db_path: Path,
     stale_seconds: int,
     generic_stale_problem_threshold: int = DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
 ) -> dict:
+    started_at = time.perf_counter()
     warnings: list[str] = []
     problems: list[str] = []
+    runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
+    runtime_db_journal_mode: str | None = None
+    runtime_db_sqlite_version: str | None = None
+    runtime_db_missing_tables: list[str] = []
+    runtime_db_json1_available = False
     if not db_path.exists():
         warnings.append("runtime session database does not exist yet")
         return {
@@ -409,11 +434,37 @@ def _scan_runtime_stuck_sessions(
             "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": 0,
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
+            "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+            "runtime_db_journal_mode": runtime_db_journal_mode,
+            "runtime_db_sqlite_version": runtime_db_sqlite_version,
+            "runtime_db_missing_tables": runtime_db_missing_tables,
+            "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_size_bytes": runtime_db_size_bytes,
+            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
     try:
-        conn = sqlite3.connect(str(db_path))
+        conn = _connect_runtime_database_readonly(db_path)
         conn.row_factory = sqlite3.Row
+        journal_row = conn.execute("PRAGMA journal_mode").fetchone()
+        runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
+        version_row = conn.execute("SELECT sqlite_version()").fetchone()
+        runtime_db_sqlite_version = str(version_row[0]) if version_row else None
+        tables = {
+            str(row[0])
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        runtime_db_missing_tables = sorted({"session", "message", "part"} - tables)
+        runtime_db_json1_available = bool(
+            conn.execute("SELECT json_valid('{}')").fetchone()[0]
+        )
+        if runtime_db_missing_tables:
+            problems.append(
+                "runtime session database is missing required table(s): "
+                + ", ".join(runtime_db_missing_tables)
+            )
+        if not runtime_db_json1_available:
+            problems.append("runtime session database SQLite build lacks JSON1 support")
     except Exception as exc:
         problems.append(f"failed to open runtime session database: {exc}")
         return {
@@ -423,16 +474,31 @@ def _scan_runtime_stuck_sessions(
             "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": 0,
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
+            "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+            "runtime_db_journal_mode": runtime_db_journal_mode,
+            "runtime_db_sqlite_version": runtime_db_sqlite_version,
+            "runtime_db_missing_tables": runtime_db_missing_tables,
+            "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_size_bytes": runtime_db_size_bytes,
+            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
     try:
         parent_child_rows = conn.execute(
             """
             WITH parent_last_msg AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+              SELECT id, session_id FROM (
+                SELECT id, session_id,
+                  ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created DESC, id DESC) AS row_number
+                FROM message
+              ) WHERE row_number = 1
             ),
             child_last_msg AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+              SELECT id, session_id FROM (
+                SELECT id, session_id,
+                  ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created DESC, id DESC) AS row_number
+                FROM message
+              ) WHERE row_number = 1
             )
             SELECT
               p.id AS parent_session_id,
@@ -458,14 +524,14 @@ def _scan_runtime_stuck_sessions(
             FROM session p
             JOIN session c ON c.parent_id = p.id
             JOIN parent_last_msg plm ON plm.session_id = p.id
-            JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
-            LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
-              SELECT MAX(time_created) FROM part WHERE message_id = pm.id
+            JOIN message pm ON pm.id = plm.id
+            LEFT JOIN part pp ON pp.id = (
+              SELECT id FROM part WHERE message_id = pm.id ORDER BY time_created DESC, id DESC LIMIT 1
             )
             LEFT JOIN child_last_msg clm ON clm.session_id = c.id
-            LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
-            LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
-              SELECT MAX(time_created) FROM part WHERE message_id = cm.id
+            LEFT JOIN message cm ON cm.id = clm.id
+            LEFT JOIN part cp ON cp.id = (
+              SELECT id FROM part WHERE message_id = cm.id ORDER BY time_created DESC, id DESC LIMIT 1
             )
             WHERE json_extract(pm.data,'$.role') = 'assistant'
               AND json_extract(pm.data,'$.time.completed') IS NULL
@@ -738,6 +804,16 @@ def _scan_runtime_stuck_sessions(
 
     findings = _annotate_stale_findings(findings)
     generic_stale_findings = _annotate_stale_findings(generic_stale_findings)
+    findings_truncated = max(0, len(findings) - MAX_RUNTIME_STALE_FINDINGS)
+    generic_findings_truncated = max(
+        0, len(generic_stale_findings) - MAX_RUNTIME_STALE_FINDINGS
+    )
+    if findings_truncated or generic_findings_truncated:
+        warnings.append(
+            "runtime stale findings were capped; use scoped repair or raise diagnostic limits deliberately"
+        )
+    findings = findings[:MAX_RUNTIME_STALE_FINDINGS]
+    generic_stale_findings = generic_stale_findings[:MAX_RUNTIME_STALE_FINDINGS]
 
     if findings:
         problems.append(
@@ -759,6 +835,13 @@ def _scan_runtime_stuck_sessions(
         "generic_stale_findings": generic_stale_findings,
         "generic_stale_count": generic_stale_count,
         "generic_stale_problem_threshold": generic_stale_problem_threshold,
+        "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+        "runtime_db_journal_mode": runtime_db_journal_mode,
+        "runtime_db_sqlite_version": runtime_db_sqlite_version,
+        "runtime_db_missing_tables": runtime_db_missing_tables,
+        "runtime_db_json1_available": runtime_db_json1_available,
+        "runtime_db_size_bytes": runtime_db_size_bytes,
+        "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
     }
 
 
@@ -1148,8 +1231,30 @@ def _child_session_still_stale_incomplete(
     )
 
 
+def _backup_runtime_database(db_path: Path) -> Path:
+    """Create a transactionally consistent SQLite backup before runtime repair."""
+    backup_path = db_path.with_name(f"{db_path.name}.pre-repair-{uuid.uuid4().hex}.sqlite3")
+    source = _connect_runtime_database_readonly(db_path)
+    destination = sqlite3.connect(str(backup_path))
+    try:
+        source.backup(destination)
+    except Exception:
+        destination.close()
+        backup_path.unlink(missing_ok=True)
+        raise
+    else:
+        destination.close()
+        return backup_path
+    finally:
+        source.close()
+
+
 def _repair_runtime_stuck_sessions(
-    db_path: Path, stale_seconds: int, apply_changes: bool, include_generic: bool
+    db_path: Path,
+    stale_seconds: int,
+    apply_changes: bool,
+    include_generic: bool,
+    session_id: str | None = None,
 ) -> dict:
     repairs: list[dict] = []
     repairable_issue_types = {
@@ -1168,6 +1273,17 @@ def _repair_runtime_stuck_sessions(
         ]
         if include_generic:
             current_candidates.extend(current_scan.get("generic_stale_findings") or [])
+        if session_id:
+            current_candidates = [
+                finding
+                for finding in current_candidates
+                if session_id
+                in {
+                    str(finding.get("session_id") or ""),
+                    str(finding.get("parent_session_id") or ""),
+                    str(finding.get("child_session_id") or ""),
+                }
+            ]
         return current_candidates
 
     candidate_findings = collect_candidates(scan)
@@ -1178,8 +1294,22 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": 0,
             "repairs": repairs,
+            "preview": candidate_findings,
+            "backup_path": None,
         }
 
+    try:
+        backup_path = _backup_runtime_database(db_path)
+    except sqlite3.DatabaseError as exc:
+        return {
+            "warnings": scan["warnings"],
+            "problems": [*scan["problems"], f"failed to back up runtime session database: {exc}"],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": 0,
+            "repairs": repairs,
+            "preview": candidate_findings,
+            "backup_path": None,
+        }
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -1190,9 +1320,8 @@ def _repair_runtime_stuck_sessions(
             progress_this_round = 0
             conn.execute("BEGIN IMMEDIATE")
             for finding in remaining_candidates:
-                savepoint_name = (
-                    f"repair_{len(repairs)}_{str(finding.get('issue_type') or 'item')}"
-                )
+                # Savepoint identifiers cannot be bound parameters; keep them internal and fixed-format.
+                savepoint_name = f"repair_{len(repairs)}"
                 conn.execute(f"SAVEPOINT {savepoint_name}")
                 repaired = False
                 issue_type = str(finding.get("issue_type") or "")
@@ -1364,6 +1493,8 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": len(repairs),
             "repairs": repairs,
+            "preview": candidate_findings,
+            "backup_path": str(backup_path),
         }
     finally:
         conn.close()
@@ -1380,6 +1511,8 @@ def _repair_runtime_stuck_sessions(
         "candidate_count": len(candidate_findings),
         "repaired_count": len(repairs),
         "repairs": repairs,
+        "preview": candidate_findings,
+        "backup_path": str(backup_path),
     }
 
 
@@ -1520,9 +1653,17 @@ def _command_show(argv: list[str], index_path: Path) -> int:
     )
 
 
+def _redact_session_record(record: dict) -> dict:
+    return {
+        key: record.get(key)
+        for key in ("session_id", "started_at", "last_event_at", "event_count")
+    }
+
+
 def _command_search(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    args = [arg for arg in argv if arg not in {"--json"}]
+    redact = "--redact" in argv
+    args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     if not args:
         return _usage()
     query = args[0].strip().lower()
@@ -1553,7 +1694,8 @@ def _command_search(argv: list[str], index_path: Path) -> int:
             "index_path": str(index_path),
             "query": query,
             "count": len(matches),
-            "sessions": matches,
+            "redacted": redact,
+            "sessions": [_redact_session_record(row) for row in matches] if redact else matches,
         },
         json_output,
     )
@@ -1598,6 +1740,13 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "generic_stale_problem_threshold": runtime[
                     "generic_stale_problem_threshold"
                 ],
+                "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+                "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
+                "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
+                "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
+                "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+                "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
+                "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
                 "quick_fixes": [],
@@ -1651,6 +1800,13 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "generic_stale_problem_threshold": runtime[
                 "generic_stale_problem_threshold"
             ],
+            "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+            "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
+            "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
+            "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
+            "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+            "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
+            "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
                 "/doctor run",
@@ -1667,7 +1823,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
 
 def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    args = [arg for arg in argv if arg != "--json"]
+    redact = "--redact" in argv
+    args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     target_id: str | None = None
     launch_cwd: str | None = None
     fork = False
@@ -1772,16 +1929,24 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         next_actions.insert(0, launch_command)
         next_actions.insert(1, resume_command)
 
+    if redact:
+        resolved_launch_cwd = None
+        launch_command = ""
+        resume_command = ""
+        next_actions = ["/doctor run", "/session show <session_id> --json"]
+        git = {}
+
     payload = {
         "result": "PASS",
         "command": "handoff",
+        "redacted": redact,
         "session_id": selected.get("session_id"),
         "cwd": selected.get("cwd"),
         "launch_cwd": resolved_launch_cwd,
         "started_at": selected.get("started_at"),
         "last_event_at": selected.get("last_event_at"),
         "event_count": selected.get("event_count"),
-        "last_reason": selected.get("last_reason"),
+        "last_reason": None if redact else selected.get("last_reason"),
         "digest_path": str(DEFAULT_DIGEST_PATH),
         "git_branch": git.get("branch"),
         "git_status_count": git.get("status_count"),
@@ -1799,10 +1964,17 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
     apply_changes = "--apply" in argv
     include_generic = "--include-generic" in argv
+    confirm_generic = "--confirm-generic" in argv
     args = [
-        arg for arg in argv if arg not in {"--json", "--apply", "--include-generic"}
+        arg
+        for arg in argv
+        if arg not in {"--json", "--apply", "--include-generic", "--confirm-generic"}
     ]
     try:
+        session_id = _parse_text_option(args, "--session-id")
+        if session_id:
+            session_index = args.index("--session-id")
+            del args[session_index : session_index + 2]
         db_path = _parse_path_option(args, "--db-path", DEFAULT_RUNTIME_DB_PATH)
         stale_seconds = _parse_positive_int_option(
             args, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
@@ -1810,8 +1982,32 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     except ValueError:
         return _usage()
 
+    if apply_changes and include_generic and not confirm_generic:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "repair-stale",
+                "runtime_db_path": str(db_path),
+                "apply": apply_changes,
+                "include_generic": include_generic,
+                "confirm_generic": confirm_generic,
+                "session_id": session_id,
+                "warnings": [],
+                "problems": [
+                    "generic stale-session repair requires --confirm-generic with --include-generic --apply"
+                ],
+                "candidate_count": 0,
+                "repaired_count": 0,
+                "repairs": [],
+                "preview": [],
+                "backup_path": None,
+                "quick_fixes": [],
+            },
+            json_output,
+        )
+
     repair = _repair_runtime_stuck_sessions(
-        db_path, stale_seconds, apply_changes, include_generic
+        db_path, stale_seconds, apply_changes, include_generic, session_id
     )
     result = "PASS"
     if repair["problems"]:
@@ -1825,11 +2021,15 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         "stale_seconds": stale_seconds,
         "apply": apply_changes,
         "include_generic": include_generic,
+        "confirm_generic": confirm_generic,
+        "session_id": session_id,
         "warnings": repair["warnings"],
         "problems": repair["problems"],
         "candidate_count": repair["candidate_count"],
         "repaired_count": repair["repaired_count"],
         "repairs": repair["repairs"],
+        "preview": repair["preview"],
+        "backup_path": repair["backup_path"],
         "quick_fixes": []
         if apply_changes or not repair["candidate_count"]
         else [

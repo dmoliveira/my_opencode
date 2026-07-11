@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from config_layering import load_layered_config  # type: ignore
+
+
+class SessionIndexError(ValueError):
+    pass
 
 
 DEFAULT_INDEX_PATH = Path(
@@ -37,11 +44,17 @@ def _session_id(timestamp: str, cwd: str) -> str:
     if explicit:
         return explicit
     ts = _parse_iso(timestamp) or _utc_now()
-    return f"{cwd}::{ts.strftime('%Y%m%d')}"
+    return f"{cwd}::{ts.isoformat()}::{uuid.uuid4().hex}"
 
 
 def _load_policy() -> dict[str, int]:
-    policy = {"max_sessions": 120, "max_age_days": 30, "max_events_per_session": 24}
+    policy = {
+        "max_sessions": 120,
+        "max_age_days": 30,
+        "max_events_per_session": 24,
+        "max_reasons_per_session": 12,
+        "max_plan_ids_per_session": 12,
+    }
     try:
         config, _ = load_layered_config()
     except Exception:
@@ -56,15 +69,29 @@ def _load_policy() -> dict[str, int]:
     return policy
 
 
+@contextmanager
+def _index_write_lock(path: Path) -> Iterator[None]:
+    """Serialize the sidecar load-modify-write transaction on POSIX hosts."""
+    import fcntl
+
+    lock_path = path.with_name(f"{path.name}.lock")
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _load_index(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"version": 1, "generated_at": None, "sessions": []}
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {"version": 1, "generated_at": None, "sessions": []}
+    except Exception as exc:
+        raise SessionIndexError(f"session index is malformed; preserved at {path}: {exc}") from exc
     if not isinstance(loaded, dict):
-        return {"version": 1, "generated_at": None, "sessions": []}
+        raise SessionIndexError(f"session index root must be an object; preserved at {path}")
     raw_sessions = loaded.get("sessions")
     sessions = raw_sessions if isinstance(raw_sessions, list) else []
     return {
@@ -72,6 +99,30 @@ def _load_index(path: Path) -> dict[str, Any]:
         "generated_at": loaded.get("generated_at"),
         "sessions": [item for item in sessions if isinstance(item, dict)],
     }
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Persist sidecar JSON without exposing a partially written index."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        os.chmod(path, 0o600)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def _event_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
@@ -106,7 +157,19 @@ def update_session_index(
     digest: dict[str, Any], path: Path | None = None
 ) -> dict[str, Any]:
     index_path = path or DEFAULT_INDEX_PATH
-    index = _load_index(index_path)
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    with _index_write_lock(index_path):
+        return _update_session_index_unlocked(digest, index_path)
+
+
+def _update_session_index_unlocked(
+    digest: dict[str, Any], path: Path | None = None
+) -> dict[str, Any]:
+    index_path = path or DEFAULT_INDEX_PATH
+    try:
+        index = _load_index(index_path)
+    except SessionIndexError as exc:
+        return {"result": "FAIL", "path": str(index_path), "error": str(exc)}
     policy = _load_policy()
 
     timestamp = str(digest.get("timestamp") or _utc_now().isoformat())
@@ -146,7 +209,8 @@ def update_session_index(
         else []
     )
     events.append(event)
-    if len(events) > policy["max_events_per_session"]:
+    pruned_event_count = max(0, len(events) - policy["max_events_per_session"])
+    if pruned_event_count:
         events = events[-policy["max_events_per_session"] :]
 
     raw_reasons = target.get("reasons")
@@ -173,15 +237,17 @@ def update_session_index(
     target["event_count"] = int(target.get("event_count", 0)) + 1
     target["last_event_at"] = timestamp
     target["last_reason"] = reason
-    target["reasons"] = reasons[-12:]
-    target["plan_ids"] = plan_ids[-12:]
+    pruned_reason_count = max(0, len(reasons) - policy["max_reasons_per_session"])
+    pruned_plan_id_count = max(0, len(plan_ids) - policy["max_plan_ids_per_session"])
+    target["reasons"] = reasons[-policy["max_reasons_per_session"] :]
+    target["plan_ids"] = plan_ids[-policy["max_plan_ids_per_session"] :]
     target["cwd"] = cwd
 
     index["sessions"] = _prune_sessions(sessions, policy)
     index["generated_at"] = _utc_now().isoformat()
 
     index_path.parent.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_json(index_path, index)
 
     return {
         "result": "PASS",
@@ -189,4 +255,9 @@ def update_session_index(
         "session_id": session_id,
         "session_count": len(index["sessions"]),
         "policy": policy,
+        "pruned": {
+            "events": pruned_event_count,
+            "reasons": pruned_reason_count,
+            "plan_ids": pruned_plan_id_count,
+        },
     }
