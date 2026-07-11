@@ -71,16 +71,30 @@ def _load_policy() -> dict[str, int]:
 
 @contextmanager
 def _index_write_lock(path: Path) -> Iterator[None]:
-    """Serialize the sidecar load-modify-write transaction on POSIX hosts."""
-    import fcntl
-
+    """Serialize the sidecar load-modify-write transaction across supported hosts."""
     lock_path = path.with_name(f"{path.name}.lock")
     with lock_path.open("a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            handle.write("0")
+            handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _load_index(path: Path) -> dict[str, Any]:
