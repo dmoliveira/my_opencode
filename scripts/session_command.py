@@ -456,7 +456,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
+            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
     try:
@@ -504,7 +504,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
+            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
     try:
