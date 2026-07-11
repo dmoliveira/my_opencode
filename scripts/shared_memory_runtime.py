@@ -364,7 +364,11 @@ def _upsert_fts(conn: sqlite3.Connection, rowid: int, record: MemoryRecord) -> N
 
 
 def update_memory_links(
-    conn: sqlite3.Connection, memory_id: str, links: list[str] | str | None
+    conn: sqlite3.Connection,
+    memory_id: str,
+    links: list[str] | str | None,
+    *,
+    commit: bool = True,
 ) -> MemoryRecord | None:
     normalized_links = normalize_links(links)
     now = now_iso()

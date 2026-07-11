@@ -44,8 +44,8 @@ class SessionMetadataIndexTest(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 list(pool.map(update, ["first", "second"]))
             saved = json.loads(path.read_text())
-            self.assertEqual(2, saved["sessions"][0]["event_count"])
-            self.assertEqual({"first", "second"}, set(saved["sessions"][0]["reasons"]))
+            self.assertEqual(2, len(saved["sessions"]))
+            self.assertEqual({"first", "second"}, {item["last_reason"] for item in saved["sessions"]})
 
     def test_malformed_index_is_preserved_and_reported(self) -> None:
         if str(SCRIPTS_DIR) not in sys.path:
@@ -65,8 +65,10 @@ class SessionMetadataIndexTest(unittest.TestCase):
         module = importlib.reload(importlib.import_module("session_metadata_index"))
         previous = __import__("os").environ.pop("OPENCODE_SESSION_ID", None)
         try:
-            identity = module._session_id("2026-07-11T00:00:00+00:00", "/repo")
-            self.assertTrue(identity.endswith(module.FALLBACK_SESSION_INSTANCE_ID))
+            first = module._session_id("2026-07-11T00:00:00+00:00", "/repo")
+            second = module._session_id("2026-07-11T00:00:00+00:00", "/repo")
+            self.assertNotEqual(first, second)
+            self.assertTrue(first.startswith("/repo::2026-07-11T00:00:00+00:00::"))
         finally:
             if previous is not None:
                 __import__("os").environ["OPENCODE_SESSION_ID"] = previous

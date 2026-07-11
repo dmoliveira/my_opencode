@@ -18,9 +18,6 @@ class SessionIndexError(ValueError):
     pass
 
 
-FALLBACK_SESSION_INSTANCE_ID = uuid.uuid4().hex
-
-
 DEFAULT_INDEX_PATH = Path(
     os.environ.get(
         "MY_OPENCODE_SESSION_INDEX_PATH", "~/.config/opencode/sessions/index.json"
@@ -47,7 +44,7 @@ def _session_id(timestamp: str, cwd: str) -> str:
     if explicit:
         return explicit
     ts = _parse_iso(timestamp) or _utc_now()
-    return f"{cwd}::{ts.strftime('%Y%m%d')}::{FALLBACK_SESSION_INSTANCE_ID}"
+    return f"{cwd}::{ts.isoformat()}::{uuid.uuid4().hex}"
 
 
 def _load_policy() -> dict[str, int]:
