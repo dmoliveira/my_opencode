@@ -45,5 +45,17 @@ class SessionMetadataIndexTest(unittest.TestCase):
             self.assertEqual(2, saved["sessions"][0]["event_count"])
             self.assertEqual({"first", "second"}, set(saved["sessions"][0]["reasons"]))
 
+    def test_malformed_index_is_preserved_and_reported(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "index.json"
+            path.write_text("{not json", encoding="utf-8")
+            result = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("FAIL", result["result"])
+            self.assertIn("malformed", result["error"])
+            self.assertEqual("{not json", path.read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()

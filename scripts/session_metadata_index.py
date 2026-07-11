@@ -13,6 +13,10 @@ from typing import Any, Iterator
 from config_layering import load_layered_config  # type: ignore
 
 
+class SessionIndexError(ValueError):
+    pass
+
+
 DEFAULT_INDEX_PATH = Path(
     os.environ.get(
         "MY_OPENCODE_SESSION_INDEX_PATH", "~/.config/opencode/sessions/index.json"
@@ -77,10 +81,10 @@ def _load_index(path: Path) -> dict[str, Any]:
         return {"version": 1, "generated_at": None, "sessions": []}
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {"version": 1, "generated_at": None, "sessions": []}
+    except Exception as exc:
+        raise SessionIndexError(f"session index is malformed; preserved at {path}: {exc}") from exc
     if not isinstance(loaded, dict):
-        return {"version": 1, "generated_at": None, "sessions": []}
+        raise SessionIndexError(f"session index root must be an object; preserved at {path}")
     raw_sessions = loaded.get("sessions")
     sessions = raw_sessions if isinstance(raw_sessions, list) else []
     return {
@@ -154,7 +158,10 @@ def _update_session_index_unlocked(
     digest: dict[str, Any], path: Path | None = None
 ) -> dict[str, Any]:
     index_path = path or DEFAULT_INDEX_PATH
-    index = _load_index(index_path)
+    try:
+        index = _load_index(index_path)
+    except SessionIndexError as exc:
+        return {"result": "FAIL", "path": str(index_path), "error": str(exc)}
     policy = _load_policy()
 
     timestamp = str(digest.get("timestamp") or _utc_now().isoformat())
