@@ -414,9 +414,10 @@ def cmd_import(argv: list[str]) -> int:
     argv = [a for a in argv if a not in {"--json", "--dry-run"}]
     try:
         path_arg = parse_flag_value(argv, "--path")
+        conflict_policy = parse_flag_value(argv, "--conflict") or "overwrite"
     except ValueError:
         return usage()
-    if not path_arg:
+    if not path_arg or conflict_policy not in {"overwrite", "skip"}:
         return usage()
     source = Path(path_arg).expanduser()
     if not source.exists():
@@ -469,7 +470,18 @@ def cmd_import(argv: list[str]) -> int:
     backup_path.write_text(json.dumps(_export_payload(conn), indent=2) + "\n", encoding="utf-8")
     try:
         conn.execute("BEGIN")
+        skipped = 0
         for entry in new_entries + archived_entries:
+            source_type = entry.get("source_type")
+            source_ref = entry.get("source_ref")
+            if conflict_policy == "skip" and isinstance(source_type, str) and isinstance(source_ref, str):
+                existing = conn.execute(
+                    "SELECT 1 FROM memories WHERE source_type = ? AND source_ref = ? LIMIT 1",
+                    (source_type, source_ref),
+                ).fetchone()
+                if existing:
+                    skipped += 1
+                    continue
             _import_row(conn, entry)
         conn.commit()
     except Exception as exc:
@@ -482,6 +494,8 @@ def cmd_import(argv: list[str]) -> int:
             "command": "import",
             "imported": len(new_entries) + len(archived_entries),
             "dry_run": False,
+            "conflict_policy": conflict_policy,
+            "skipped": skipped,
             "backup_path": str(backup_path),
             "entry_count": entry_count,
             "archive_count": archive_count,
