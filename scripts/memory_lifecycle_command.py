@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
@@ -15,6 +16,7 @@ from shared_memory_runtime import (  # type: ignore
     _row_to_record,
     _upsert_fts,
     DEFAULT_DB_PATH,
+    SCHEMA_VERSION,
     connect,
     doctor_report,
     normalize_confidence,
@@ -83,12 +85,16 @@ def _export_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             archive.append(payload)
         else:
             entries.append(payload)
-    return {
+    payload = {
         "version": 2,
+        "schema_version": SCHEMA_VERSION,
         "path": str(runtime_path()),
         "entries": entries,
         "archive": archive,
     }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload["sha256"] = hashlib.sha256(canonical).hexdigest()
+    return payload
 
 
 def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
@@ -254,6 +260,7 @@ def cmd_cleanup(argv: list[str]) -> int:
     older_days = 30
     try:
         raw = parse_flag_value(argv, "--older-days")
+        scope = parse_flag_value(argv, "--scope")
         if raw is not None:
             older_days = max(1, int(raw))
     except (ValueError, TypeError):
@@ -261,15 +268,17 @@ def cmd_cleanup(argv: list[str]) -> int:
     conn = connect()
     cutoff = datetime.now(UTC) - timedelta(days=older_days)
     cutoff_value = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    scope_clause = " AND scope = ?" if scope else ""
+    parameters = (cutoff_value, scope) if scope else (cutoff_value,)
     if dry_run:
         moved = int(conn.execute(
-            "SELECT COUNT(*) FROM memories WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
-            (cutoff_value,),
+            "SELECT COUNT(*) FROM memories WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?" + scope_clause,
+            parameters,
         ).fetchone()[0])
     else:
         moved = conn.execute(
-            "UPDATE memories SET archived = 1, updated_at = ? WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
-            (now_iso(), cutoff_value),
+            "UPDATE memories SET archived = 1, updated_at = ? WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?" + scope_clause,
+            (now_iso(), *parameters),
         ).rowcount
         conn.commit()
     entry_count, archive_count = _query_counts(conn)
@@ -279,6 +288,7 @@ def cmd_cleanup(argv: list[str]) -> int:
             "command": "cleanup",
             "moved": moved,
             "dry_run": dry_run,
+            "scope": scope,
             "entry_count": entry_count,
             "archive_count": archive_count,
         },
@@ -351,6 +361,27 @@ def cmd_compress(argv: list[str]) -> int:
     )
 
 
+def cmd_restore(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    argv = [item for item in argv if item != "--json"]
+    try:
+        memory_id = parse_flag_value(argv, "--id")
+    except ValueError:
+        return usage()
+    if not memory_id:
+        return usage()
+    conn = connect()
+    restored = conn.execute(
+        "UPDATE memories SET archived = 0, updated_at = ? WHERE id = ? AND archived = 1",
+        (now_iso(), memory_id),
+    ).rowcount
+    conn.commit()
+    return emit(
+        {"result": "PASS", "command": "restore", "id": memory_id, "restored": restored},
+        as_json,
+    )
+
+
 def cmd_export(argv: list[str]) -> int:
     as_json = "--json" in argv
     argv = [a for a in argv if a != "--json"]
@@ -383,9 +414,10 @@ def cmd_import(argv: list[str]) -> int:
     argv = [a for a in argv if a not in {"--json", "--dry-run"}]
     try:
         path_arg = parse_flag_value(argv, "--path")
+        conflict_policy = parse_flag_value(argv, "--conflict") or "overwrite"
     except ValueError:
         return usage()
-    if not path_arg:
+    if not path_arg or conflict_policy not in {"overwrite", "skip"}:
         return usage()
     source = Path(path_arg).expanduser()
     if not source.exists():
@@ -407,6 +439,13 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
+    expected_digest = incoming.pop("sha256", None)
+    if expected_digest is not None:
+        canonical = json.dumps(incoming, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if not isinstance(expected_digest, str) or hashlib.sha256(canonical).hexdigest() != expected_digest:
+            return emit({"result": "FAIL", "command": "import", "error": "shared-memory export checksum mismatch"}, as_json)
+    if incoming.get("schema_version") not in {None, SCHEMA_VERSION}:
+        return emit({"result": "FAIL", "command": "import", "error": "incompatible shared-memory export schema"}, as_json)
     raw_entries = incoming.get("entries", [])
     raw_archive = incoming.get("archive", [])
     if not isinstance(raw_entries, list) or not isinstance(raw_archive, list):
@@ -431,7 +470,18 @@ def cmd_import(argv: list[str]) -> int:
     backup_path.write_text(json.dumps(_export_payload(conn), indent=2) + "\n", encoding="utf-8")
     try:
         conn.execute("BEGIN")
+        skipped = 0
         for entry in new_entries + archived_entries:
+            source_type = entry.get("source_type")
+            source_ref = entry.get("source_ref")
+            if conflict_policy == "skip" and isinstance(source_type, str) and isinstance(source_ref, str):
+                existing = conn.execute(
+                    "SELECT 1 FROM memories WHERE source_type = ? AND source_ref = ? LIMIT 1",
+                    (source_type, source_ref),
+                ).fetchone()
+                if existing:
+                    skipped += 1
+                    continue
             _import_row(conn, entry)
         conn.commit()
     except Exception as exc:
@@ -444,6 +494,8 @@ def cmd_import(argv: list[str]) -> int:
             "command": "import",
             "imported": len(new_entries) + len(archived_entries),
             "dry_run": False,
+            "conflict_policy": conflict_policy,
+            "skipped": skipped,
             "backup_path": str(backup_path),
             "entry_count": entry_count,
             "archive_count": archive_count,
@@ -480,6 +532,8 @@ def main(argv: list[str]) -> int:
         return cmd_cleanup(rest)
     if command == "compress":
         return cmd_compress(rest)
+    if command == "restore":
+        return cmd_restore(rest)
     if command == "export":
         return cmd_export(rest)
     if command == "import":

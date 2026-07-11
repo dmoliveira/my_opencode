@@ -18,6 +18,9 @@ class SessionIndexError(ValueError):
     pass
 
 
+SESSION_INDEX_VERSION = 1
+
+
 DEFAULT_INDEX_PATH = Path(
     os.environ.get(
         "MY_OPENCODE_SESSION_INDEX_PATH", "~/.config/opencode/sessions/index.json"
@@ -71,31 +74,50 @@ def _load_policy() -> dict[str, int]:
 
 @contextmanager
 def _index_write_lock(path: Path) -> Iterator[None]:
-    """Serialize the sidecar load-modify-write transaction on POSIX hosts."""
-    import fcntl
-
+    """Serialize the sidecar load-modify-write transaction across supported hosts."""
     lock_path = path.with_name(f"{path.name}.lock")
     with lock_path.open("a+", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            handle.write("0")
+            handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _load_index(path: Path) -> dict[str, Any]:
     if not path.exists():
-        return {"version": 1, "generated_at": None, "sessions": []}
+        return {"version": SESSION_INDEX_VERSION, "generated_at": None, "sessions": []}
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SessionIndexError(f"session index is malformed; preserved at {path}: {exc}") from exc
     if not isinstance(loaded, dict):
         raise SessionIndexError(f"session index root must be an object; preserved at {path}")
+    loaded_version = loaded.get("version", 1)
+    if loaded_version != SESSION_INDEX_VERSION:
+        raise SessionIndexError(
+            f"session index version {loaded_version} is incompatible with supported version {SESSION_INDEX_VERSION}; migrate before writing"
+        )
     raw_sessions = loaded.get("sessions")
     sessions = raw_sessions if isinstance(raw_sessions, list) else []
     return {
-        "version": 1,
+        "version": SESSION_INDEX_VERSION,
         "generated_at": loaded.get("generated_at"),
         "sessions": [item for item in sessions if isinstance(item, dict)],
     }

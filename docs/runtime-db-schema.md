@@ -114,3 +114,79 @@ For runtime history, use an isolated copy to test a query or restoration path be
 ## Operator dashboard fields
 
 Use `/doctor run --json` for the consolidated session and shared-memory checks. The session check exposes `runtime_db_path`, `runtime_db_size_bytes`, `runtime_db_scan_duration_ms`, journal mode, SQLite version, JSON1 support, required-table compatibility, and stale finding counts. The shared-memory check reports its store path and active/archive counts. Session-index update output reports its path, retention policy, and pruning totals. These fields are designed for automation-safe dashboards; do not scrape human-formatted output.
+
+## Backup retention policy
+
+Keep at least three verified runtime-history backups: the latest pre-repair backup, the latest successful manual/export backup, and one older recovery point. Store backups outside synchronized project directories with owner-only permissions. Before pruning a backup, run `PRAGMA integrity_check` on the candidate and retain any backup referenced by an unresolved incident. Automated cleanup must be previewable and must never delete the only verified backup.
+
+## Optional encrypted backups
+
+Use an external, organization-approved encryption tool such as `age` or your platform key-management service; do not place keys, passphrases, or recipient secrets in repository configuration. Encrypt only after creating and integrity-checking the SQLite backup. Keep the plaintext backup only for the minimum recovery window, verify decryption into a temporary owner-only directory, and run `PRAGMA integrity_check` again before a restore drill.
+
+## Restore verification
+
+Verify every restore against a disposable copy before touching the live runtime store: run `PRAGMA integrity_check`, inspect expected table/index inventory through `/session doctor --json`, compare a bounded session count or known session ID, and confirm the restored database remains readable with a read-only URI. Only then stop OpenCode, preserve the current store as a rollback backup, restore, and re-run the same checks.
+
+## Corruption quarantine
+
+When a local store is malformed, preserve it before any recovery write: remove group/world access, copy it to an incident-specific quarantine path outside active configuration, record its SHA-256 checksum and integrity-check output, then restore only from a verified backup. Do not rename or delete `-wal`/`-shm` files while the owning process is running. Session-index updates already fail closed on malformed JSON to make this procedure possible.
+
+## Shared-memory retention profiles
+
+Use `memory-lifecycle cleanup --older-days <n> --scope <scope> --dry-run --json` before archival. A conservative profile keeps 30 days of unpinned records; a focused project profile can use a shorter period only after exporting a verified recovery artifact. Pinned records are excluded from cleanup. Apply the exact same scope and age shown by dry-run, then use `memory-lifecycle restore --id <id>` for an explicit undo.
+
+## Pinned-memory lifecycle
+
+Pin only durable, high-signal records needed across sessions. Cleanup never archives pinned records; compression retains a pinned duplicate over unpinned copies. Review pins periodically, export before unpinning a record with recovery value, and use explicit restore rather than repinning stale copies.
+
+## Temporary-file policy
+
+Create local data intermediates only with owner-controlled temporary files in the destination directory, flush and fsync before atomic replacement, and remove failed intermediates. Never use predictable names for exports, recovery copies, or sidecars. Keep decrypted restore material in an owner-only temporary directory and remove it only after verification and handoff are complete.
+
+## SQLite status dashboard
+
+Use `/doctor run --json` as the operator dashboard entry point. It includes the session doctor’s resolved path, candidate paths, index inventory, database/WAL footprint, configured budget, latency, schema compatibility, and sidecar permissions; it also includes shared-memory health. Alert on `WARN`/`FAIL`, schema mismatch, FTS mismatch, unsafe permissions, budget breach, and unexpected WAL growth.
+
+## Incident bundle
+
+A local incident bundle should contain machine-readable doctor output, store paths, schema/index/permission/size fields, remediation codes, integrity-check results, and checksums of quarantined backups. Exclude prompts, tool inputs/outputs, raw memory content, session reasons, CWD, branch previews, and encryption material. Generate support artifacts from redacted output only.
+
+## Support export
+
+Before sharing diagnostics, enable `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`, run the consolidated doctor JSON, inspect it locally, and remove any store path or identifier not required for the support case. Share only the redacted incident bundle and checksums; never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
+
+## Storage telemetry history
+
+Persist only bounded aggregate telemetry—timestamp, store category, byte footprint, WAL bytes, scan duration, schema state, and remediation codes. Do not persist paths, record content, session IDs, prompts, or user identifiers. Retain a short rolling window and use it for trend alerts, not audit reconstruction.
+
+## Large-history fixture coverage
+
+Performance fixtures should include realistic session/message/part cardinalities, equal-timestamp ties, active WAL files, representative JSON payload shapes, and bounded diagnostic output. Measure query latency and memory use against the configured scan budget; fixtures must contain synthetic data only.
+
+## WAL and concurrent-writer fixtures
+
+Test diagnostics against a live WAL database with a writer transaction, a read-only doctor connection, configured busy timeout, WAL growth measurement, and no diagnostic mutation. Include contention, timeout, and recovery cases on each supported platform.
+
+## Interrupted-backup fixtures
+
+Exercise interruption before backup creation, during SQLite online backup, after backup integrity verification, and before restore replacement. Confirm no partial artifact is treated as verified, source history remains untouched, failed temporary files are quarantined or removed safely, and a known-good backup remains recoverable.
+
+## Import rollback fixtures
+
+Create malformed and conflicting export fixtures that fail before, during, and after validation. Verify checksum/schema failures cause zero mutation; transactional failures leave counts/content unchanged; pre-import exports remain usable; and `--dry-run`, `--conflict skip`, and overwrite behavior produce deterministic JSON summaries.
+
+## Compatibility matrix
+
+Supported runtime diagnostics require SQLite with JSON1 and window-function support; shared memory additionally uses WAL, FTS5 when available, foreign keys, and a compatible schema version. Doctor output is authoritative for the installed runtime’s version, JSON1, journal mode, FTS status, and schema compatibility. Treat unsupported features as warnings/failures rather than attempting in-place upgrades of an upstream OpenCode database.
+
+## Session-history archival
+
+Archive runtime history by creating a verified SQLite backup/export, recording its integrity result and retention class, then applying the archival policy only while OpenCode is stopped. Do not delete selected rows from an upstream OpenCode database as a routine operation; retain a rollback copy and validate restored readability before changing the live store.
+
+## Per-project shared-memory isolation
+
+Set `MY_OPENCODE_SHARED_MEMORY_PATH` to a project-owned, owner-only SQLite path when isolation is required. Keep default shared memory only for intentionally cross-project context. Back up, export, retain, and restore each isolated store independently; do not point multiple unrelated projects at the same path without an explicit shared-memory policy.
+
+## Optional analytics
+
+Analytics are opt-in only. Collect aggregate health counters and latency/size buckets, never raw SQLite content, paths, IDs, prompts, commands, or backup metadata. Default to disabled, make the effective setting visible in status output, and provide a deletion/reset path for any local aggregate history.

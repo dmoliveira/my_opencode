@@ -148,3 +148,15 @@ To update or disable Codememory later with minimal effort:
 ## SQLite operations
 
 The tracked Codememory fallback uses SQLite with `max_connections: 1`. Treat each worktree's `.codememory/codememory.sqlite3` as worktree-local state: attach one active session per worktree, avoid direct edits, and use `oc` for serialized graph changes. Before deleting a worktree, copy or export any required task graph state to the intended durable store and verify it with `oc plan doctor`. The cache is disposable; task/epic/session records are not.
+
+## Multi-worktree synchronization
+
+Codememory SQLite state is worktree-local unless a shared configured backend is deliberately used. Before deleting a worktree, export or replay the task graph into the intended durable backend, then verify it with `oc plan doctor`. Do not copy a live SQLite database between active worktrees; serialize ownership and use `oc` graph operations for durable handoff.
+
+## Task-graph export and import
+
+Use `oc batch export` to create a portable task-graph artifact and `oc batch import` only into an intended target scope after inspecting the artifact. Run `oc plan doctor` before and after import. Prefer imports into an inactive worktree and preserve the source graph until the destination is verified.
+
+## Durable graph backup
+
+Back up Codememory through a verified `oc batch export`, not a raw copy of an active SQLite file. Store the artifact with owner-only permissions, checksum it, and test import into a disposable target before relying on it for recovery. Keep a backup before large task-graph migrations or worktree cleanup.

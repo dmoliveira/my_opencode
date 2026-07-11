@@ -899,8 +899,17 @@ def doctor_report(
             "SELECT COUNT(*) AS count FROM memories WHERE pinned = 1 AND archived = 0"
         ).fetchone()["count"]
     )
+    fts_count: int | None = None
+    fts_status = "unavailable"
     if not fts_enabled(conn):
         warnings.append("fts5_unavailable_falling_back_to_like_search")
+    else:
+        fts_count = int(conn.execute("SELECT COUNT(*) AS count FROM memory_fts").fetchone()["count"])
+        if fts_count != memory_count:
+            fts_status = "stale"
+            warnings.append("fts_record_count_mismatch")
+        else:
+            fts_status = "ready"
     if schema_version != SCHEMA_VERSION:
         warnings.append("schema_version_mismatch")
     return {
@@ -909,5 +918,7 @@ def doctor_report(
         "schema_version": schema_version,
         "memory_count": memory_count,
         "pinned_count": pinned_count,
+        "fts_count": fts_count,
+        "fts_status": fts_status,
         "warnings": warnings,
     }

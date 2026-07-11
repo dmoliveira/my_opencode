@@ -66,6 +66,12 @@ def _default_runtime_db_path() -> Path:
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
 MAX_RUNTIME_STALE_FINDINGS = 100
+RUNTIME_DB_SIZE_WARN_BYTES = max(
+    1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SIZE_WARN_BYTES", str(1024**3)))
+)
+RUNTIME_DB_SCAN_WARN_MS = max(
+    1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SCAN_WARN_MS", "1000"))
+)
 RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
@@ -419,12 +425,19 @@ def _scan_runtime_stuck_sessions(
     warnings: list[str] = []
     problems: list[str] = []
     runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
+    runtime_db_wal_path = Path(f"{db_path}-wal")
+    runtime_db_wal_bytes = runtime_db_wal_path.stat().st_size if runtime_db_wal_path.exists() else 0
+    if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
+        warnings.append(
+            f"runtime database footprint exceeds configured budget {RUNTIME_DB_SIZE_WARN_BYTES} bytes"
+        )
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
     runtime_db_journal_mode: str | None = None
     runtime_db_sqlite_version: str | None = None
     runtime_db_missing_tables: list[str] = []
     runtime_db_json1_available = False
+    runtime_db_indexes: dict[str, list[str]] = {}
     if not db_path.exists():
         warnings.append("runtime session database does not exist yet")
         return {
@@ -439,7 +452,10 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
             "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_size_bytes": runtime_db_size_bytes,
+            "runtime_db_wal_bytes": runtime_db_wal_bytes,
+            "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
             "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
@@ -455,6 +471,11 @@ def _scan_runtime_stuck_sessions(
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         runtime_db_missing_tables = sorted({"session", "message", "part"} - tables)
+        runtime_db_indexes = {
+            table: [str(row[1]) for row in conn.execute(f"PRAGMA index_list({table})")]
+            for table in ("session", "message", "part")
+            if table in tables
+        }
         runtime_db_json1_available = bool(
             conn.execute("SELECT json_valid('{}')").fetchone()[0]
         )
@@ -479,7 +500,10 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
             "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_size_bytes": runtime_db_size_bytes,
+            "runtime_db_wal_bytes": runtime_db_wal_bytes,
+            "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
             "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
@@ -828,9 +852,20 @@ def _scan_runtime_stuck_sessions(
         else:
             warnings.append(generic_stale_message)
 
+    runtime_db_scan_duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    if runtime_db_scan_duration_ms >= RUNTIME_DB_SCAN_WARN_MS:
+        warnings.append(f"runtime diagnostic scan exceeds configured latency budget {RUNTIME_DB_SCAN_WARN_MS} ms")
+    remediation_codes = []
+    if runtime_db_missing_tables:
+        remediation_codes.append("runtime_schema_incompatible")
+    if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
+        remediation_codes.append("runtime_storage_budget_exceeded")
+    if not runtime_db_json1_available:
+        remediation_codes.append("runtime_json1_unavailable")
     return {
         "warnings": warnings,
         "problems": problems,
+        "remediation_codes": remediation_codes,
         "stuck_findings": findings,
         "generic_stale_findings": generic_stale_findings,
         "generic_stale_count": generic_stale_count,
@@ -840,8 +875,11 @@ def _scan_runtime_stuck_sessions(
         "runtime_db_sqlite_version": runtime_db_sqlite_version,
         "runtime_db_missing_tables": runtime_db_missing_tables,
         "runtime_db_json1_available": runtime_db_json1_available,
+        "runtime_db_indexes": runtime_db_indexes,
         "runtime_db_size_bytes": runtime_db_size_bytes,
-        "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+        "runtime_db_wal_bytes": runtime_db_wal_bytes,
+        "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
+        "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
     }
 
 
@@ -1654,15 +1692,21 @@ def _command_show(argv: list[str], index_path: Path) -> int:
 
 
 def _redact_session_record(record: dict) -> dict:
+    omitted = {
+        item.strip()
+        for item in os.environ.get("MY_OPENCODE_SESSION_REDACT_FIELDS", "").split(",")
+        if item.strip()
+    }
     return {
         key: record.get(key)
         for key in ("session_id", "started_at", "last_event_at", "event_count")
+        if key not in omitted
     }
 
 
 def _command_search(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv
+    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     if not args:
         return _usage()
@@ -1718,6 +1762,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     warnings: list[str] = []
     problems: list[str] = []
     exists = index_path.exists()
+    index_permission_mode = (index_path.stat().st_mode & 0o777) if exists else None
+    if exists and index_permission_mode != 0o600:
+        warnings.append("session index permissions should be 0600")
     if not exists:
         warnings.append("session index does not exist yet; run /digest run first")
         runtime = _scan_runtime_stuck_sessions(
@@ -1731,9 +1778,12 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "command": "doctor",
                 "index_path": str(index_path),
                 "runtime_db_path": str(db_path),
+                "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
                 "exists": False,
+                "index_permission_mode": index_permission_mode,
                 "warnings": warnings,
                 "problems": problems,
+                "remediation_codes": runtime.get("remediation_codes", []),
                 "stuck_findings": runtime["stuck_findings"],
                 "generic_stale_findings": runtime["generic_stale_findings"],
                 "generic_stale_count": runtime["generic_stale_count"],
@@ -1745,7 +1795,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
                 "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
                 "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+                "runtime_db_indexes": runtime["runtime_db_indexes"],
                 "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
+                "runtime_db_wal_bytes": runtime["runtime_db_wal_bytes"],
+                "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
                 "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
@@ -1763,7 +1816,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "error": f"failed to parse index: {exc}",
                 "index_path": str(index_path),
                 "runtime_db_path": str(db_path),
+                "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
                 "exists": True,
+                "index_permission_mode": index_permission_mode,
                 "warnings": warnings,
                 "problems": problems,
                 "count": 0,
@@ -1790,9 +1845,12 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "command": "doctor",
             "index_path": str(index_path),
             "runtime_db_path": str(db_path),
+            "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
             "exists": True,
+            "index_permission_mode": index_permission_mode,
             "warnings": warnings,
             "problems": problems,
+            "remediation_codes": runtime.get("remediation_codes", []),
             "count": len(rows),
             "stuck_findings": runtime["stuck_findings"],
             "generic_stale_findings": runtime["generic_stale_findings"],
@@ -1805,7 +1863,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
             "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
             "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+            "runtime_db_indexes": runtime["runtime_db_indexes"],
             "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
+            "runtime_db_wal_bytes": runtime["runtime_db_wal_bytes"],
+            "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
             "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
@@ -1823,7 +1884,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
 
 def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv
+    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     target_id: str | None = None
     launch_cwd: str | None = None
