@@ -150,3 +150,7 @@ Use `/doctor run --json` as the operator dashboard entry point. It includes the 
 ## Incident bundle
 
 A local incident bundle should contain machine-readable doctor output, store paths, schema/index/permission/size fields, remediation codes, integrity-check results, and checksums of quarantined backups. Exclude prompts, tool inputs/outputs, raw memory content, session reasons, CWD, branch previews, and encryption material. Generate support artifacts from redacted output only.
+
+## Support export
+
+Before sharing diagnostics, enable `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`, run the consolidated doctor JSON, inspect it locally, and remove any store path or identifier not required for the support case. Share only the redacted incident bundle and checksums; never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
