@@ -6,7 +6,7 @@ import test from "node:test"
 
 import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
-import { createSessionRuntimeSystemContextHook } from "../dist/hooks/session-runtime-system-context/index.js"
+import { createSessionRuntimeSystemContextHook, stablePromptFingerprint } from "../dist/hooks/session-runtime-system-context/index.js"
 import { saveGatewayState, nowIso } from "../dist/state/storage.js"
 
 test("session-runtime-system-context injects hidden system session id", async () => {
@@ -321,4 +321,17 @@ test("session-runtime-system-context concise-only scope injects when concise is 
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+
+test("stablePromptFingerprint ignores line ending and boundary whitespace churn", () => {
+  const canonical = stablePromptFingerprint(["system instruction", "second instruction"])
+  const formatted = stablePromptFingerprint(["  system instruction\r\n", "\nsecond instruction  "])
+  assert.equal(formatted, canonical)
+})
+
+test("stablePromptFingerprint changes for semantic prompt changes", () => {
+  const baseline = stablePromptFingerprint(["system instruction", "second instruction"])
+  const changed = stablePromptFingerprint(["system instruction", "changed instruction"])
+  assert.notEqual(changed, baseline)
 })
