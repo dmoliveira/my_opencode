@@ -248,7 +248,8 @@ def cmd_stats(argv: list[str]) -> int:
 
 def cmd_cleanup(argv: list[str]) -> int:
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    dry_run = "--dry-run" in argv
+    argv = [a for a in argv if a not in {"--json", "--dry-run"}]
     older_days = 30
     try:
         raw = parse_flag_value(argv, "--older-days")
@@ -258,23 +259,25 @@ def cmd_cleanup(argv: list[str]) -> int:
         return usage()
     conn = connect()
     cutoff = datetime.now(UTC) - timedelta(days=older_days)
-    moved = conn.execute(
-        """
-        UPDATE memories
-        SET archived = 1, updated_at = ?
-        WHERE archived = 0
-          AND pinned = 0
-          AND COALESCE(updated_at, created_at, '') < ?
-        """,
-        (now_iso(), cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")),
-    ).rowcount
-    conn.commit()
+    cutoff_value = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    if dry_run:
+        moved = int(conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
+            (cutoff_value,),
+        ).fetchone()[0])
+    else:
+        moved = conn.execute(
+            "UPDATE memories SET archived = 1, updated_at = ? WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
+            (now_iso(), cutoff_value),
+        ).rowcount
+        conn.commit()
     entry_count, archive_count = _query_counts(conn)
     return emit(
         {
             "result": "PASS",
             "command": "cleanup",
             "moved": moved,
+            "dry_run": dry_run,
             "entry_count": entry_count,
             "archive_count": archive_count,
         },
@@ -284,6 +287,7 @@ def cmd_cleanup(argv: list[str]) -> int:
 
 def cmd_compress(argv: list[str]) -> int:
     as_json = "--json" in argv
+    dry_run = "--dry-run" in argv
     conn = connect()
     rows = conn.execute(
         "SELECT rowid, * FROM memories WHERE archived = 0 ORDER BY pinned DESC, updated_at DESC, created_at DESC"
@@ -323,12 +327,14 @@ def cmd_compress(argv: list[str]) -> int:
         for row in duplicates:
             if int(row["rowid"]) == int(keeper["rowid"]):
                 continue
-            conn.execute(
-                "UPDATE memories SET archived = 1, updated_at = ? WHERE rowid = ?",
-                (now_iso(), int(row["rowid"])),
-            )
+            if not dry_run:
+                conn.execute(
+                    "UPDATE memories SET archived = 1, updated_at = ? WHERE rowid = ?",
+                    (now_iso(), int(row["rowid"])),
+                )
             removed += 1
-    conn.commit()
+    if not dry_run:
+        conn.commit()
     after, archive_count = _query_counts(conn)
     return emit(
         {
@@ -337,6 +343,7 @@ def cmd_compress(argv: list[str]) -> int:
             "before": before,
             "after": after,
             "removed": removed,
+            "dry_run": dry_run,
             "archive_count": archive_count,
         },
         as_json,
