@@ -80,7 +80,7 @@ DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD = max(
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -1880,8 +1880,11 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
     apply_changes = "--apply" in argv
     include_generic = "--include-generic" in argv
+    confirm_generic = "--confirm-generic" in argv
     args = [
-        arg for arg in argv if arg not in {"--json", "--apply", "--include-generic"}
+        arg
+        for arg in argv
+        if arg not in {"--json", "--apply", "--include-generic", "--confirm-generic"}
     ]
     try:
         session_id = _parse_text_option(args, "--session-id")
@@ -1894,6 +1897,30 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         )
     except ValueError:
         return _usage()
+
+    if apply_changes and include_generic and not confirm_generic:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "repair-stale",
+                "runtime_db_path": str(db_path),
+                "apply": apply_changes,
+                "include_generic": include_generic,
+                "confirm_generic": confirm_generic,
+                "session_id": session_id,
+                "warnings": [],
+                "problems": [
+                    "generic stale-session repair requires --confirm-generic with --include-generic --apply"
+                ],
+                "candidate_count": 0,
+                "repaired_count": 0,
+                "repairs": [],
+                "preview": [],
+                "backup_path": None,
+                "quick_fixes": [],
+            },
+            json_output,
+        )
 
     repair = _repair_runtime_stuck_sessions(
         db_path, stale_seconds, apply_changes, include_generic, session_id
@@ -1910,6 +1937,7 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         "stale_seconds": stale_seconds,
         "apply": apply_changes,
         "include_generic": include_generic,
+        "confirm_generic": confirm_generic,
         "session_id": session_id,
         "warnings": repair["warnings"],
         "problems": repair["problems"],
