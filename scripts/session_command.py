@@ -1686,7 +1686,7 @@ def _redact_session_record(record: dict) -> dict:
 
 def _command_search(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv
+    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     if not args:
         return _usage()
@@ -1853,7 +1853,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
 
 def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv
+    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     target_id: str | None = None
     launch_cwd: str | None = None
