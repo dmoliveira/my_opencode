@@ -156,3 +156,7 @@ Codememory SQLite state is worktree-local unless a shared configured backend is 
 ## Task-graph export and import
 
 Use `oc batch export` to create a portable task-graph artifact and `oc batch import` only into an intended target scope after inspecting the artifact. Run `oc plan doctor` before and after import. Prefer imports into an inactive worktree and preserve the source graph until the destination is verified.
+
+## Durable graph backup
+
+Back up Codememory through a verified `oc batch export`, not a raw copy of an active SQLite file. Store the artifact with owner-only permissions, checksum it, and test import into a disposable target before relying on it for recovery. Keep a backup before large task-graph migrations or worktree cleanup.
