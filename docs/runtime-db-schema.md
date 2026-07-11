@@ -158,3 +158,7 @@ Before sharing diagnostics, enable `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`, ru
 ## Storage telemetry history
 
 Persist only bounded aggregate telemetry—timestamp, store category, byte footprint, WAL bytes, scan duration, schema state, and remediation codes. Do not persist paths, record content, session IDs, prompts, or user identifiers. Retain a short rolling window and use it for trend alerts, not audit reconstruction.
+
+## Large-history fixture coverage
+
+Performance fixtures should include realistic session/message/part cardinalities, equal-timestamp ties, active WAL files, representative JSON payload shapes, and bounded diagnostic output. Measure query latency and memory use against the configured scan budget; fixtures must contain synthetic data only.
