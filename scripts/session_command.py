@@ -66,6 +66,9 @@ def _default_runtime_db_path() -> Path:
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
 MAX_RUNTIME_STALE_FINDINGS = 100
+RUNTIME_DB_SIZE_WARN_BYTES = max(
+    1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SIZE_WARN_BYTES", str(1024**3)))
+)
 RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
@@ -421,6 +424,10 @@ def _scan_runtime_stuck_sessions(
     runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     runtime_db_wal_path = Path(f"{db_path}-wal")
     runtime_db_wal_bytes = runtime_db_wal_path.stat().st_size if runtime_db_wal_path.exists() else 0
+    if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
+        warnings.append(
+            f"runtime database footprint exceeds configured budget {RUNTIME_DB_SIZE_WARN_BYTES} bytes"
+        )
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
     runtime_db_journal_mode: str | None = None
@@ -445,6 +452,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
+            "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
             "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
@@ -492,6 +500,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
+            "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
             "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
@@ -855,6 +864,7 @@ def _scan_runtime_stuck_sessions(
         "runtime_db_indexes": runtime_db_indexes,
         "runtime_db_size_bytes": runtime_db_size_bytes,
         "runtime_db_wal_bytes": runtime_db_wal_bytes,
+        "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
         "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
     }
 
@@ -1762,6 +1772,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_indexes": runtime["runtime_db_indexes"],
                 "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
                 "runtime_db_wal_bytes": runtime["runtime_db_wal_bytes"],
+                "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
                 "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
@@ -1824,6 +1835,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "runtime_db_indexes": runtime["runtime_db_indexes"],
             "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
             "runtime_db_wal_bytes": runtime["runtime_db_wal_bytes"],
+            "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
             "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
