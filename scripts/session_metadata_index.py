@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from config_layering import load_layered_config  # type: ignore
 
@@ -55,6 +56,20 @@ def _load_policy() -> dict[str, int]:
         if isinstance(value, int) and value > 0:
             policy[key] = value
     return policy
+
+
+@contextmanager
+def _index_write_lock(path: Path) -> Iterator[None]:
+    """Serialize the sidecar load-modify-write transaction on POSIX hosts."""
+    import fcntl
+
+    lock_path = path.with_name(f"{path.name}.lock")
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _load_index(path: Path) -> dict[str, Any]:
@@ -127,6 +142,15 @@ def _prune_sessions(
 
 
 def update_session_index(
+    digest: dict[str, Any], path: Path | None = None
+) -> dict[str, Any]:
+    index_path = path or DEFAULT_INDEX_PATH
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    with _index_write_lock(index_path):
+        return _update_session_index_unlocked(digest, index_path)
+
+
+def _update_session_index_unlocked(
     digest: dict[str, Any], path: Path | None = None
 ) -> dict[str, Any]:
     index_path = path or DEFAULT_INDEX_PATH
