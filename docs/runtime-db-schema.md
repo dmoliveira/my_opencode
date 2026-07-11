@@ -122,3 +122,7 @@ Keep at least three verified runtime-history backups: the latest pre-repair back
 ## Optional encrypted backups
 
 Use an external, organization-approved encryption tool such as `age` or your platform key-management service; do not place keys, passphrases, or recipient secrets in repository configuration. Encrypt only after creating and integrity-checking the SQLite backup. Keep the plaintext backup only for the minimum recovery window, verify decryption into a temporary owner-only directory, and run `PRAGMA integrity_check` again before a restore drill.
+
+## Restore verification
+
+Verify every restore against a disposable copy before touching the live runtime store: run `PRAGMA integrity_check`, inspect expected table/index inventory through `/session doctor --json`, compare a bounded session count or known session ID, and confirm the restored database remains readable with a read-only URI. Only then stop OpenCode, preserve the current store as a rollback backup, restore, and re-run the same checks.
