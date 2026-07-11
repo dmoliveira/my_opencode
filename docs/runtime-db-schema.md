@@ -82,3 +82,16 @@ sqlite3 -readonly <runtime_db_path> "PRAGMA integrity_check;"
 ```
 
 Do not run restore against an active OpenCode process. Use `/session doctor --json` after recovery to verify table compatibility, JSON1 support, journal mode, and stale-session findings.
+
+## Store boundaries
+
+This repository operates separate local stores with different ownership and safety rules:
+
+| Store | Default location | Owner | Mutation rule |
+| --- | --- | --- | --- |
+| OpenCode runtime history | platform-specific `opencode.db` | OpenCode | Inspect read-only; use `/session repair-stale` only with preview, scope, backup, and explicit apply. |
+| Shared memory | `~/.config/opencode/my_opencode/runtime/shared_memory.db` | my_opencode | Use lifecycle commands; export before import/cleanup/compression. |
+| Codememory task graph | `.codememory/codememory.sqlite3` | Codememory | Use `oc`; do not hand-edit or mix it with runtime-history recovery. |
+| Session sidecars | `~/.config/opencode/sessions/index.json` and digests | my_opencode | Owner-only files; recover malformed data before rewriting. |
+
+A backup or restore applies to exactly one store. Never replace the OpenCode runtime DB with shared-memory or Codememory artifacts, and do not run destructive operations while the owning process is active.
