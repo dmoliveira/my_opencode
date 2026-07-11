@@ -126,3 +126,7 @@ Use an external, organization-approved encryption tool such as `age` or your pla
 ## Restore verification
 
 Verify every restore against a disposable copy before touching the live runtime store: run `PRAGMA integrity_check`, inspect expected table/index inventory through `/session doctor --json`, compare a bounded session count or known session ID, and confirm the restored database remains readable with a read-only URI. Only then stop OpenCode, preserve the current store as a rollback backup, restore, and re-run the same checks.
+
+## Corruption quarantine
+
+When a local store is malformed, preserve it before any recovery write: remove group/world access, copy it to an incident-specific quarantine path outside active configuration, record its SHA-256 checksum and integrity-check output, then restore only from a verified backup. Do not rename or delete `-wal`/`-shm` files while the owning process is running. Session-index updates already fail closed on malformed JSON to make this procedure possible.
