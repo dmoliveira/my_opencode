@@ -418,6 +418,9 @@ def _scan_runtime_stuck_sessions(
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
     runtime_db_journal_mode: str | None = None
+    runtime_db_sqlite_version: str | None = None
+    runtime_db_missing_tables: list[str] = []
+    runtime_db_json1_available = False
     if not db_path.exists():
         warnings.append("runtime session database does not exist yet")
         return {
@@ -429,6 +432,9 @@ def _scan_runtime_stuck_sessions(
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
             "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
             "runtime_db_journal_mode": runtime_db_journal_mode,
+            "runtime_db_sqlite_version": runtime_db_sqlite_version,
+            "runtime_db_missing_tables": runtime_db_missing_tables,
+            "runtime_db_json1_available": runtime_db_json1_available,
         }
 
     try:
@@ -436,6 +442,23 @@ def _scan_runtime_stuck_sessions(
         conn.row_factory = sqlite3.Row
         journal_row = conn.execute("PRAGMA journal_mode").fetchone()
         runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
+        version_row = conn.execute("SELECT sqlite_version()").fetchone()
+        runtime_db_sqlite_version = str(version_row[0]) if version_row else None
+        tables = {
+            str(row[0])
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        runtime_db_missing_tables = sorted({"session", "message", "part"} - tables)
+        runtime_db_json1_available = bool(
+            conn.execute("SELECT json_valid('{}')").fetchone()[0]
+        )
+        if runtime_db_missing_tables:
+            problems.append(
+                "runtime session database is missing required table(s): "
+                + ", ".join(runtime_db_missing_tables)
+            )
+        if not runtime_db_json1_available:
+            problems.append("runtime session database SQLite build lacks JSON1 support")
     except Exception as exc:
         problems.append(f"failed to open runtime session database: {exc}")
         return {
@@ -447,6 +470,9 @@ def _scan_runtime_stuck_sessions(
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
             "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
             "runtime_db_journal_mode": runtime_db_journal_mode,
+            "runtime_db_sqlite_version": runtime_db_sqlite_version,
+            "runtime_db_missing_tables": runtime_db_missing_tables,
+            "runtime_db_json1_available": runtime_db_json1_available,
         }
 
     try:
@@ -785,6 +811,9 @@ def _scan_runtime_stuck_sessions(
         "generic_stale_problem_threshold": generic_stale_problem_threshold,
         "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
         "runtime_db_journal_mode": runtime_db_journal_mode,
+        "runtime_db_sqlite_version": runtime_db_sqlite_version,
+        "runtime_db_missing_tables": runtime_db_missing_tables,
+        "runtime_db_json1_available": runtime_db_json1_available,
     }
 
 
@@ -1676,6 +1705,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 ],
                 "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
                 "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
+                "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
+                "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
+                "runtime_db_json1_available": runtime["runtime_db_json1_available"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
                 "quick_fixes": [],
@@ -1731,6 +1763,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             ],
             "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
             "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
+            "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
+            "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
+            "runtime_db_json1_available": runtime["runtime_db_json1_available"],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
                 "/doctor run",
