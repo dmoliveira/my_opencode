@@ -1263,9 +1263,8 @@ def _repair_runtime_stuck_sessions(
             progress_this_round = 0
             conn.execute("BEGIN IMMEDIATE")
             for finding in remaining_candidates:
-                savepoint_name = (
-                    f"repair_{len(repairs)}_{str(finding.get('issue_type') or 'item')}"
-                )
+                # Savepoint identifiers cannot be bound parameters; keep them internal and fixed-format.
+                savepoint_name = f"repair_{len(repairs)}"
                 conn.execute(f"SAVEPOINT {savepoint_name}")
                 repaired = False
                 issue_type = str(finding.get("issue_type") or "")
