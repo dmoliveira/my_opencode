@@ -186,3 +186,7 @@ Archive runtime history by creating a verified SQLite backup/export, recording i
 ## Per-project shared-memory isolation
 
 Set `MY_OPENCODE_SHARED_MEMORY_PATH` to a project-owned, owner-only SQLite path when isolation is required. Keep default shared memory only for intentionally cross-project context. Back up, export, retain, and restore each isolated store independently; do not point multiple unrelated projects at the same path without an explicit shared-memory policy.
+
+## Optional analytics
+
+Analytics are opt-in only. Collect aggregate health counters and latency/size buckets, never raw SQLite content, paths, IDs, prompts, commands, or backup metadata. Default to disabled, make the effective setting visible in status output, and provide a deletion/reset path for any local aggregate history.
