@@ -134,3 +134,7 @@ When a local store is malformed, preserve it before any recovery write: remove g
 ## Shared-memory retention profiles
 
 Use `memory-lifecycle cleanup --older-days <n> --scope <scope> --dry-run --json` before archival. A conservative profile keeps 30 days of unpinned records; a focused project profile can use a shorter period only after exporting a verified recovery artifact. Pinned records are excluded from cleanup. Apply the exact same scope and age shown by dry-run, then use `memory-lifecycle restore --id <id>` for an explicit undo.
+
+## Pinned-memory lifecycle
+
+Pin only durable, high-signal records needed across sessions. Cleanup never archives pinned records; compression retains a pinned duplicate over unpinned copies. Review pins periodically, export before unpinning a record with recovery value, and use explicit restore rather than repinning stale copies.
