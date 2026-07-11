@@ -39,7 +39,8 @@ function pathSignature(path) {
     }
 }
 export function stablePromptFingerprint(entries) {
-    return createHash("sha256").update(entries.join("\n\u0000\n"), "utf8").digest("hex");
+    const normalized = entries.map((entry) => entry.replace(/\r\n/g, "\n").trim());
+    return createHash("sha256").update(normalized.join("\n\u0000\n"), "utf8").digest("hex");
 }
 function buildSystemContext(sessionId) {
     return [
