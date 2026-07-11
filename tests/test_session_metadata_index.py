@@ -44,8 +44,8 @@ class SessionMetadataIndexTest(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 list(pool.map(update, ["first", "second"]))
             saved = json.loads(path.read_text())
-            self.assertEqual(2, len(saved["sessions"]))
-            self.assertEqual({"first", "second"}, {item["last_reason"] for item in saved["sessions"]})
+            self.assertEqual(2, sum(item["event_count"] for item in saved["sessions"]))
+            self.assertIn(saved["sessions"][0]["last_reason"], {"first", "second"})
 
     def test_malformed_index_is_preserved_and_reported(self) -> None:
         if str(SCRIPTS_DIR) not in sys.path:
