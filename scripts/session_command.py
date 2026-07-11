@@ -391,6 +391,11 @@ def _load_digest(path: Path) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
+    """Open the upstream runtime history without creating or modifying it."""
+    return sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+
+
 def _scan_runtime_stuck_sessions(
     db_path: Path,
     stale_seconds: int,
@@ -412,7 +417,7 @@ def _scan_runtime_stuck_sessions(
         }
 
     try:
-        conn = sqlite3.connect(str(db_path))
+        conn = _connect_runtime_database_readonly(db_path)
         conn.row_factory = sqlite3.Row
     except Exception as exc:
         problems.append(f"failed to open runtime session database: {exc}")
