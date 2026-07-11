@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
@@ -84,13 +85,16 @@ def _export_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             archive.append(payload)
         else:
             entries.append(payload)
-    return {
+    payload = {
         "version": 2,
         "schema_version": SCHEMA_VERSION,
         "path": str(runtime_path()),
         "entries": entries,
         "archive": archive,
     }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload["sha256"] = hashlib.sha256(canonical).hexdigest()
+    return payload
 
 
 def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
@@ -434,6 +438,11 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
+    expected_digest = incoming.pop("sha256", None)
+    if expected_digest is not None:
+        canonical = json.dumps(incoming, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if not isinstance(expected_digest, str) or hashlib.sha256(canonical).hexdigest() != expected_digest:
+            return emit({"result": "FAIL", "command": "import", "error": "shared-memory export checksum mismatch"}, as_json)
     if incoming.get("schema_version") not in {None, SCHEMA_VERSION}:
         return emit({"result": "FAIL", "command": "import", "error": "incompatible shared-memory export schema"}, as_json)
     raw_entries = incoming.get("entries", [])
