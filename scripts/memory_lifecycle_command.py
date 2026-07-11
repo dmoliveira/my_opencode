@@ -254,6 +254,7 @@ def cmd_cleanup(argv: list[str]) -> int:
     older_days = 30
     try:
         raw = parse_flag_value(argv, "--older-days")
+        scope = parse_flag_value(argv, "--scope")
         if raw is not None:
             older_days = max(1, int(raw))
     except (ValueError, TypeError):
@@ -261,15 +262,17 @@ def cmd_cleanup(argv: list[str]) -> int:
     conn = connect()
     cutoff = datetime.now(UTC) - timedelta(days=older_days)
     cutoff_value = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    scope_clause = " AND scope = ?" if scope else ""
+    parameters = (cutoff_value, scope) if scope else (cutoff_value,)
     if dry_run:
         moved = int(conn.execute(
-            "SELECT COUNT(*) FROM memories WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
-            (cutoff_value,),
+            "SELECT COUNT(*) FROM memories WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?" + scope_clause,
+            parameters,
         ).fetchone()[0])
     else:
         moved = conn.execute(
-            "UPDATE memories SET archived = 1, updated_at = ? WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?",
-            (now_iso(), cutoff_value),
+            "UPDATE memories SET archived = 1, updated_at = ? WHERE archived = 0 AND pinned = 0 AND COALESCE(updated_at, created_at, '') < ?" + scope_clause,
+            (now_iso(), *parameters),
         ).rowcount
         conn.commit()
     entry_count, archive_count = _query_counts(conn)
@@ -279,6 +282,7 @@ def cmd_cleanup(argv: list[str]) -> int:
             "command": "cleanup",
             "moved": moved,
             "dry_run": dry_run,
+            "scope": scope,
             "entry_count": entry_count,
             "archive_count": archive_count,
         },
