@@ -65,6 +65,7 @@ def _default_runtime_db_path() -> Path:
 
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
+MAX_RUNTIME_STALE_FINDINGS = 100
 RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
@@ -795,6 +796,16 @@ def _scan_runtime_stuck_sessions(
 
     findings = _annotate_stale_findings(findings)
     generic_stale_findings = _annotate_stale_findings(generic_stale_findings)
+    findings_truncated = max(0, len(findings) - MAX_RUNTIME_STALE_FINDINGS)
+    generic_findings_truncated = max(
+        0, len(generic_stale_findings) - MAX_RUNTIME_STALE_FINDINGS
+    )
+    if findings_truncated or generic_findings_truncated:
+        warnings.append(
+            "runtime stale findings were capped; use scoped repair or raise diagnostic limits deliberately"
+        )
+    findings = findings[:MAX_RUNTIME_STALE_FINDINGS]
+    generic_stale_findings = generic_stale_findings[:MAX_RUNTIME_STALE_FINDINGS]
 
     if findings:
         problems.append(
