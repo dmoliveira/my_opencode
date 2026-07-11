@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -36,6 +37,10 @@ function pathSignature(path) {
     catch {
         return "missing";
     }
+}
+export function stablePromptFingerprint(entries) {
+    const normalized = entries.map((entry) => entry.replace(/\r\n/g, "\n").trim());
+    return createHash("sha256").update(normalized.join("\n\u0000\n"), "utf8").digest("hex");
 }
 function buildSystemContext(sessionId) {
     return [
@@ -171,7 +176,8 @@ export function createSessionRuntimeSystemContextHook(options) {
                     sessionContextChanged = true;
                 }
                 if (runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER) < 0) {
-                    system.unshift(nextContext);
+                    // Keep per-session data after stable system instructions for prompt-cache reuse.
+                    system.push(nextContext);
                     sessionContextChanged = true;
                 }
             }
@@ -214,7 +220,8 @@ export function createSessionRuntimeSystemContextHook(options) {
                 if (conciseIndex >= 0) {
                     system.splice(conciseIndex, 1);
                 }
-                system.unshift(nextConcise);
+                // Keep runtime mode context after stable system instructions for prompt-cache reuse.
+                system.push(nextConcise);
                 conciseContextChanged = true;
             }
             const reasonCode = shouldInjectSessionId

@@ -79,8 +79,8 @@ export function createAgentDiscoverabilityInjectorHook(options: {
       const hint = subagentType
         ? `[AGENT CATALOG] Inspect details with: /agent-catalog explain ${subagentType}`
         : "[AGENT CATALOG] Inspect details with: /agent-catalog list"
+      // Prompt is the canonical delegation channel; avoid duplicating static catalog text in description.
       args.prompt = prependHint(String(args.prompt ?? ""), hint)
-      args.description = prependHint(String(args.description ?? ""), hint)
       if (sid) {
         lastInjectedAtBySession.set(sid, now)
       }

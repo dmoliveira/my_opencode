@@ -6,7 +6,7 @@ import test from "node:test"
 
 import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
-import { createSessionRuntimeSystemContextHook } from "../dist/hooks/session-runtime-system-context/index.js"
+import { createSessionRuntimeSystemContextHook, stablePromptFingerprint } from "../dist/hooks/session-runtime-system-context/index.js"
 import { saveGatewayState, nowIso } from "../dist/state/storage.js"
 
 test("session-runtime-system-context injects hidden system session id", async () => {
@@ -19,8 +19,8 @@ test("session-runtime-system-context injects hidden system session id", async ()
       output,
       directory,
     })
-    assert.match(output.system[0], /runtime_session_context: session-hidden-1/)
-    assert.equal(output.system[1], "existing system")
+    assert.match(output.system.join("\n"), /runtime_session_context: session-hidden-1/)
+    assert.equal(output.system[0], "existing system")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -95,8 +95,8 @@ test("session-runtime-system-context replaces stale hidden system session id", a
       directory,
     })
     assert.equal(output.system.filter((line) => line.includes("runtime_session_context:")).length, 1)
-    assert.match(output.system[0], /runtime_session_context: session-hidden-3/)
-    assert.doesNotMatch(output.system[0], /stale-session/)
+    assert.match(output.system.join("\n"), /runtime_session_context: session-hidden-3/)
+    assert.doesNotMatch(output.system.join("\n"), /stale-session/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -111,7 +111,7 @@ test("session-runtime-system-context integrates through plugin system transform"
       { sessionID: "session-hidden-plugin", model: { providerID: "openai", modelID: "gpt-5" } },
       output,
     )
-    assert.match(output.system[0], /runtime_session_context: session-hidden-plugin/)
+    assert.match(output.system.join("\n"), /runtime_session_context: session-hidden-plugin/)
     assert.equal(output.system.includes("baseline"), true)
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -145,8 +145,8 @@ test("session-runtime-system-context injects active concise mode from gateway st
       output,
       directory,
     })
-    assert.match(output.system[0], /runtime_concise_mode: full/)
-    assert.match(output.system[0], /Respond terse\. Keep technical terms exact\./)
+    assert.match(output.system.join("\n"), /runtime_concise_mode: full/)
+    assert.match(output.system.join("\n"), /Respond terse\. Keep technical terms exact\./)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -176,7 +176,7 @@ test("session-runtime-system-context reloads changed concise skill body on later
       output: first,
       directory,
     })
-    assert.match(first.system[0], /First concise rules\./)
+    assert.match(first.system.join("\n"), /First concise rules\./)
 
     writeFileSync(skillPath, "---\nname: concise-mode\n---\nSecond concise rules are now longer.\n", "utf-8")
     const second = { system: ["baseline"] }
@@ -185,8 +185,8 @@ test("session-runtime-system-context reloads changed concise skill body on later
       output: second,
       directory,
     })
-    assert.match(second.system[0], /Second concise rules are now longer\./)
-    assert.doesNotMatch(second.system[0], /First concise rules\./)
+    assert.match(second.system.join("\n"), /Second concise rules are now longer\./)
+    assert.doesNotMatch(second.system.join("\n"), /First concise rules\./)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -316,9 +316,22 @@ test("session-runtime-system-context concise-only scope injects when concise is 
       output,
       directory,
     })
-    assert.match(output.system[0], /runtime_concise_mode: lite/)
+    assert.match(output.system.join("\n"), /runtime_concise_mode: lite/)
     assert.ok(output.system.some((line) => line.includes("runtime_session_context: session-hidden-7")))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+
+test("stablePromptFingerprint ignores line ending and boundary whitespace churn", () => {
+  const canonical = stablePromptFingerprint(["system instruction", "second instruction"])
+  const formatted = stablePromptFingerprint(["  system instruction\r\n", "\nsecond instruction  "])
+  assert.equal(formatted, canonical)
+})
+
+test("stablePromptFingerprint changes for semantic prompt changes", () => {
+  const baseline = stablePromptFingerprint(["system instruction", "second instruction"])
+  const changed = stablePromptFingerprint(["system instruction", "changed instruction"])
+  assert.notEqual(changed, baseline)
 })
