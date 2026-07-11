@@ -118,3 +118,7 @@ Use `/doctor run --json` for the consolidated session and shared-memory checks. 
 ## Backup retention policy
 
 Keep at least three verified runtime-history backups: the latest pre-repair backup, the latest successful manual/export backup, and one older recovery point. Store backups outside synchronized project directories with owner-only permissions. Before pruning a backup, run `PRAGMA integrity_check` on the candidate and retain any backup referenced by an unresolved incident. Automated cleanup must be previewable and must never delete the only verified backup.
+
+## Optional encrypted backups
+
+Use an external, organization-approved encryption tool such as `age` or your platform key-management service; do not place keys, passphrases, or recipient secrets in repository configuration. Encrypt only after creating and integrity-checking the SQLite backup. Keep the plaintext backup only for the minimum recovery window, verify decryption into a temporary owner-only directory, and run `PRAGMA integrity_check` again before a restore drill.
