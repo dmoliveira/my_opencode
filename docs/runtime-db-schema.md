@@ -162,3 +162,7 @@ Persist only bounded aggregate telemetry—timestamp, store category, byte footp
 ## Large-history fixture coverage
 
 Performance fixtures should include realistic session/message/part cardinalities, equal-timestamp ties, active WAL files, representative JSON payload shapes, and bounded diagnostic output. Measure query latency and memory use against the configured scan budget; fixtures must contain synthetic data only.
+
+## WAL and concurrent-writer fixtures
+
+Test diagnostics against a live WAL database with a writer transaction, a read-only doctor connection, configured busy timeout, WAL growth measurement, and no diagnostic mutation. Include contention, timeout, and recovery cases on each supported platform.
