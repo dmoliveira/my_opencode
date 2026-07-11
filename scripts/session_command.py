@@ -821,6 +821,8 @@ def _scan_runtime_stuck_sessions(
         "runtime_db_sqlite_version": runtime_db_sqlite_version,
         "runtime_db_missing_tables": runtime_db_missing_tables,
         "runtime_db_json1_available": runtime_db_json1_available,
+        "runtime_db_size_bytes": runtime_db_size_bytes,
+        "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
     }
 
 
