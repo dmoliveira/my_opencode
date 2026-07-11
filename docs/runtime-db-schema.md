@@ -61,3 +61,24 @@ WHERE json_extract(p.data, '$.type') = 'tool'
 ORDER BY p.time_created DESC
 LIMIT 20;
 ```
+
+## Backup and recovery
+
+Use the SQLite online backup API rather than copying a live `opencode.db` file. `/session repair-stale --apply --json` now creates a consistent pre-repair `backup_path` automatically. Keep that artifact outside a synced or shared directory because runtime history can contain prompts and tool output.
+
+For a portable manual export, first stop OpenCode writers, then use the SQLite CLI backup command:
+
+```text
+sqlite3 <runtime_db_path> ".backup '<destination>/opencode-runtime-backup.sqlite3'"
+sqlite3 -readonly <destination>/opencode-runtime-backup.sqlite3 "PRAGMA integrity_check;"
+```
+
+To restore, preserve the current database first, stop OpenCode, and use SQLite's restore command rather than overwriting files while a WAL writer is active:
+
+```text
+sqlite3 <runtime_db_path> ".backup '<destination>/opencode-runtime-before-restore.sqlite3'"
+sqlite3 <runtime_db_path> ".restore '<source>/opencode-runtime-backup.sqlite3'"
+sqlite3 -readonly <runtime_db_path> "PRAGMA integrity_check;"
+```
+
+Do not run restore against an active OpenCode process. Use `/session doctor --json` after recovery to verify table compatibility, JSON1 support, journal mode, and stale-session findings.
