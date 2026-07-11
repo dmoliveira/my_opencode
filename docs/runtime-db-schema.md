@@ -174,3 +174,7 @@ Exercise interruption before backup creation, during SQLite online backup, after
 ## Import rollback fixtures
 
 Create malformed and conflicting export fixtures that fail before, during, and after validation. Verify checksum/schema failures cause zero mutation; transactional failures leave counts/content unchanged; pre-import exports remain usable; and `--dry-run`, `--conflict skip`, and overwrite behavior produce deterministic JSON summaries.
+
+## Compatibility matrix
+
+Supported runtime diagnostics require SQLite with JSON1 and window-function support; shared memory additionally uses WAL, FTS5 when available, foreign keys, and a compatible schema version. Doctor output is authoritative for the installed runtime’s version, JSON1, journal mode, FTS status, and schema compatibility. Treat unsupported features as warnings/failures rather than attempting in-place upgrades of an upstream OpenCode database.
