@@ -114,6 +114,8 @@ def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
             confidence=normalize_confidence(entry.get("confidence")),
             session_id=str(entry.get("session_id") or "") or None,
             cwd=str(entry.get("cwd") or os.getcwd()),
+            created_at=str(entry.get("created_at") or "") or None,
+            updated_at=str(entry.get("updated_at") or "") or None,
         )
         if bool(entry.get("archived")):
             conn.execute(

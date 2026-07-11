@@ -557,8 +557,11 @@ def add_memory(
     confidence: int,
     session_id: str | None,
     cwd: str,
+    created_at: str | None = None,
+    updated_at: str | None = None,
 ) -> MemoryRecord:
-    timestamp = now_iso()
+    created_timestamp = created_at.strip() if isinstance(created_at, str) and created_at.strip() else now_iso()
+    updated_timestamp = updated_at.strip() if isinstance(updated_at, str) and updated_at.strip() else created_timestamp
     memory_id = _next_memory_id(conn)
     record = _build_record(
         memory_id=memory_id,
@@ -645,8 +648,8 @@ def upsert_memory_by_source(
             else None,
             cwd,
             normalize_confidence(confidence),
-            timestamp,
-            timestamp,
+            created_timestamp,
+            updated_timestamp,
         ),
     )
     row = conn.execute(
