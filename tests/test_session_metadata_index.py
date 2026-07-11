@@ -24,6 +24,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
                 path,
             )
             self.assertEqual("PASS", result["result"])
+            self.assertEqual({"events": 0, "reasons": 0, "plan_ids": 0}, result["pruned"])
             self.assertEqual("test", json.loads(path.read_text())["sessions"][0]["last_reason"])
             self.assertFalse(list(path.parent.glob(".index.json.*.tmp")))
 

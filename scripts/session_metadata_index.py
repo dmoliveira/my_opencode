@@ -47,7 +47,13 @@ def _session_id(timestamp: str, cwd: str) -> str:
 
 
 def _load_policy() -> dict[str, int]:
-    policy = {"max_sessions": 120, "max_age_days": 30, "max_events_per_session": 24}
+    policy = {
+        "max_sessions": 120,
+        "max_age_days": 30,
+        "max_events_per_session": 24,
+        "max_reasons_per_session": 12,
+        "max_plan_ids_per_session": 12,
+    }
     try:
         config, _ = load_layered_config()
     except Exception:
@@ -201,7 +207,8 @@ def _update_session_index_unlocked(
         else []
     )
     events.append(event)
-    if len(events) > policy["max_events_per_session"]:
+    pruned_event_count = max(0, len(events) - policy["max_events_per_session"])
+    if pruned_event_count:
         events = events[-policy["max_events_per_session"] :]
 
     raw_reasons = target.get("reasons")
@@ -228,8 +235,10 @@ def _update_session_index_unlocked(
     target["event_count"] = int(target.get("event_count", 0)) + 1
     target["last_event_at"] = timestamp
     target["last_reason"] = reason
-    target["reasons"] = reasons[-12:]
-    target["plan_ids"] = plan_ids[-12:]
+    pruned_reason_count = max(0, len(reasons) - policy["max_reasons_per_session"])
+    pruned_plan_id_count = max(0, len(plan_ids) - policy["max_plan_ids_per_session"])
+    target["reasons"] = reasons[-policy["max_reasons_per_session"] :]
+    target["plan_ids"] = plan_ids[-policy["max_plan_ids_per_session"] :]
     target["cwd"] = cwd
 
     index["sessions"] = _prune_sessions(sessions, policy)
@@ -244,4 +253,9 @@ def _update_session_index_unlocked(
         "session_id": session_id,
         "session_count": len(index["sessions"]),
         "policy": policy,
+        "pruned": {
+            "events": pruned_event_count,
+            "reasons": pruned_reason_count,
+            "plan_ids": pruned_plan_id_count,
+        },
     }
