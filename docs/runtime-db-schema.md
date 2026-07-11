@@ -95,3 +95,12 @@ This repository operates separate local stores with different ownership and safe
 | Session sidecars | `~/.config/opencode/sessions/index.json` and digests | my_opencode | Owner-only files; recover malformed data before rewriting. |
 
 A backup or restore applies to exactly one store. Never replace the OpenCode runtime DB with shared-memory or Codememory artifacts, and do not run destructive operations while the owning process is active.
+
+## Recovery drill checklist
+
+1. Stop the process that owns the affected store; do not delete WAL/SHM files by hand.
+2. Record `/session doctor --json` output and copy the affected database using SQLite `.backup`.
+3. Run `PRAGMA integrity_check` on the backup. If it fails, quarantine the original with owner-only permissions and restore the latest verified backup.
+4. For a malformed session index, preserve the file unchanged, repair or replace it from a known-good copy, then run `/digest run` and `/session doctor --json`.
+5. For a failed shared-memory import or lifecycle operation, export the current store first, restore the pre-operation export, and verify recall/order before re-enabling writers.
+6. Confirm recovery with the owner command (`/session doctor`, shared-memory status, or `oc plan doctor`) and record the incident without copying sensitive runtime content into tickets.
