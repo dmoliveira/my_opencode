@@ -425,6 +425,7 @@ def _scan_runtime_stuck_sessions(
     runtime_db_sqlite_version: str | None = None
     runtime_db_missing_tables: list[str] = []
     runtime_db_json1_available = False
+    runtime_db_indexes: dict[str, list[str]] = {}
     if not db_path.exists():
         warnings.append("runtime session database does not exist yet")
         return {
@@ -439,6 +440,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
             "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
@@ -455,6 +457,11 @@ def _scan_runtime_stuck_sessions(
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         runtime_db_missing_tables = sorted({"session", "message", "part"} - tables)
+        runtime_db_indexes = {
+            table: [str(row[1]) for row in conn.execute(f"PRAGMA index_list({table})")]
+            for table in ("session", "message", "part")
+            if table in tables
+        }
         runtime_db_json1_available = bool(
             conn.execute("SELECT json_valid('{}')").fetchone()[0]
         )
@@ -479,6 +486,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
             "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
@@ -840,6 +848,7 @@ def _scan_runtime_stuck_sessions(
         "runtime_db_sqlite_version": runtime_db_sqlite_version,
         "runtime_db_missing_tables": runtime_db_missing_tables,
         "runtime_db_json1_available": runtime_db_json1_available,
+        "runtime_db_indexes": runtime_db_indexes,
         "runtime_db_size_bytes": runtime_db_size_bytes,
         "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
     }
@@ -1745,6 +1754,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
                 "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
                 "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+                "runtime_db_indexes": runtime["runtime_db_indexes"],
                 "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
                 "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
                 "count": 0,
@@ -1805,6 +1815,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
             "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
             "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+            "runtime_db_indexes": runtime["runtime_db_indexes"],
             "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
             "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
