@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
@@ -378,7 +379,8 @@ def cmd_export(argv: list[str]) -> int:
 
 def cmd_import(argv: list[str]) -> int:
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    dry_run = "--dry-run" in argv
+    argv = [a for a in argv if a not in {"--json", "--dry-run"}]
     try:
         path_arg = parse_flag_value(argv, "--path")
     except ValueError:
@@ -413,7 +415,20 @@ def cmd_import(argv: list[str]) -> int:
         return emit({"result": "FAIL", "command": "import", "error": "every imported entry must be an object"}, as_json)
     new_entries = raw_entries
     archived_entries = raw_archive
+    if dry_run:
+        return emit(
+            {
+                "result": "PASS",
+                "command": "import",
+                "dry_run": True,
+                "imported": len(new_entries) + len(archived_entries),
+                "backup_path": None,
+            },
+            as_json,
+        )
     conn = connect()
+    backup_path = source.with_name(f"{source.stem}.pre-import-{uuid.uuid4().hex}.json")
+    backup_path.write_text(json.dumps(_export_payload(conn), indent=2) + "\n", encoding="utf-8")
     try:
         conn.execute("BEGIN")
         for entry in new_entries + archived_entries:
@@ -428,6 +443,8 @@ def cmd_import(argv: list[str]) -> int:
             "result": "PASS",
             "command": "import",
             "imported": len(new_entries) + len(archived_entries),
+            "dry_run": False,
+            "backup_path": str(backup_path),
             "entry_count": entry_count,
             "archive_count": archive_count,
         },
