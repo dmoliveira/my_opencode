@@ -112,6 +112,15 @@ def _parse_positive_int_option(argv: list[str], name: str, default: int) -> int:
     return value
 
 
+def _parse_text_option(argv: list[str], name: str) -> str | None:
+    if name not in argv:
+        return None
+    idx = argv.index(name)
+    if idx + 1 >= len(argv) or not argv[idx + 1].strip():
+        raise ValueError(f"missing value for {name}")
+    return argv[idx + 1]
+
+
 def _parse_path_option(argv: list[str], name: str, default: Path) -> Path:
     if name not in argv:
         return default
@@ -1184,7 +1193,11 @@ def _backup_runtime_database(db_path: Path) -> Path:
 
 
 def _repair_runtime_stuck_sessions(
-    db_path: Path, stale_seconds: int, apply_changes: bool, include_generic: bool
+    db_path: Path,
+    stale_seconds: int,
+    apply_changes: bool,
+    include_generic: bool,
+    session_id: str | None = None,
 ) -> dict:
     repairs: list[dict] = []
     repairable_issue_types = {
@@ -1203,6 +1216,17 @@ def _repair_runtime_stuck_sessions(
         ]
         if include_generic:
             current_candidates.extend(current_scan.get("generic_stale_findings") or [])
+        if session_id:
+            current_candidates = [
+                finding
+                for finding in current_candidates
+                if session_id
+                in {
+                    str(finding.get("session_id") or ""),
+                    str(finding.get("parent_session_id") or ""),
+                    str(finding.get("child_session_id") or ""),
+                }
+            ]
         return current_candidates
 
     candidate_findings = collect_candidates(scan)
@@ -1860,6 +1884,10 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         arg for arg in argv if arg not in {"--json", "--apply", "--include-generic"}
     ]
     try:
+        session_id = _parse_text_option(args, "--session-id")
+        if session_id:
+            session_index = args.index("--session-id")
+            del args[session_index : session_index + 2]
         db_path = _parse_path_option(args, "--db-path", DEFAULT_RUNTIME_DB_PATH)
         stale_seconds = _parse_positive_int_option(
             args, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
@@ -1868,7 +1896,7 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         return _usage()
 
     repair = _repair_runtime_stuck_sessions(
-        db_path, stale_seconds, apply_changes, include_generic
+        db_path, stale_seconds, apply_changes, include_generic, session_id
     )
     result = "PASS"
     if repair["problems"]:
@@ -1882,6 +1910,7 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         "stale_seconds": stale_seconds,
         "apply": apply_changes,
         "include_generic": include_generic,
+        "session_id": session_id,
         "warnings": repair["warnings"],
         "problems": repair["problems"],
         "candidate_count": repair["candidate_count"],
