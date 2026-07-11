@@ -43,5 +43,20 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertFalse(db_path.exists())
 
 
+    def test_pre_repair_backup_is_queryable_snapshot(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            source = sqlite3.connect(db_path)
+            source.execute("CREATE TABLE marker (value TEXT)")
+            source.execute("INSERT INTO marker VALUES ('before-repair')")
+            source.commit()
+            source.close()
+
+            backup_path = module._backup_runtime_database(db_path)
+            backup = sqlite3.connect(backup_path)
+            self.assertEqual("before-repair", backup.execute("SELECT value FROM marker").fetchone()[0])
+            backup.close()
+
 if __name__ == "__main__":
     unittest.main()

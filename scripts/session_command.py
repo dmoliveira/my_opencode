@@ -1165,6 +1165,24 @@ def _child_session_still_stale_incomplete(
     )
 
 
+def _backup_runtime_database(db_path: Path) -> Path:
+    """Create a transactionally consistent SQLite backup before runtime repair."""
+    backup_path = db_path.with_name(f"{db_path.name}.pre-repair-{uuid.uuid4().hex}.sqlite3")
+    source = _connect_runtime_database_readonly(db_path)
+    destination = sqlite3.connect(str(backup_path))
+    try:
+        source.backup(destination)
+    except Exception:
+        destination.close()
+        backup_path.unlink(missing_ok=True)
+        raise
+    else:
+        destination.close()
+        return backup_path
+    finally:
+        source.close()
+
+
 def _repair_runtime_stuck_sessions(
     db_path: Path, stale_seconds: int, apply_changes: bool, include_generic: bool
 ) -> dict:
@@ -1195,8 +1213,20 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": 0,
             "repairs": repairs,
+            "backup_path": None,
         }
 
+    try:
+        backup_path = _backup_runtime_database(db_path)
+    except sqlite3.DatabaseError as exc:
+        return {
+            "warnings": scan["warnings"],
+            "problems": [*scan["problems"], f"failed to back up runtime session database: {exc}"],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": 0,
+            "repairs": repairs,
+            "backup_path": None,
+        }
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -1381,6 +1411,7 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": len(repairs),
             "repairs": repairs,
+            "backup_path": str(backup_path),
         }
     finally:
         conn.close()
@@ -1397,6 +1428,7 @@ def _repair_runtime_stuck_sessions(
         "candidate_count": len(candidate_findings),
         "repaired_count": len(repairs),
         "repairs": repairs,
+        "backup_path": str(backup_path),
     }
 
 
