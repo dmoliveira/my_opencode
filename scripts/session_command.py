@@ -1625,9 +1625,17 @@ def _command_show(argv: list[str], index_path: Path) -> int:
     )
 
 
+def _redact_session_record(record: dict) -> dict:
+    return {
+        key: record.get(key)
+        for key in ("session_id", "started_at", "last_event_at", "event_count")
+    }
+
+
 def _command_search(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    args = [arg for arg in argv if arg not in {"--json"}]
+    redact = "--redact" in argv
+    args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     if not args:
         return _usage()
     query = args[0].strip().lower()
@@ -1658,7 +1666,8 @@ def _command_search(argv: list[str], index_path: Path) -> int:
             "index_path": str(index_path),
             "query": query,
             "count": len(matches),
-            "sessions": matches,
+            "redacted": redact,
+            "sessions": [_redact_session_record(row) for row in matches] if redact else matches,
         },
         json_output,
     )
@@ -1782,7 +1791,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
 
 def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    args = [arg for arg in argv if arg != "--json"]
+    redact = "--redact" in argv
+    args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     target_id: str | None = None
     launch_cwd: str | None = None
     fork = False
@@ -1887,16 +1897,24 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         next_actions.insert(0, launch_command)
         next_actions.insert(1, resume_command)
 
+    if redact:
+        resolved_launch_cwd = None
+        launch_command = ""
+        resume_command = ""
+        next_actions = ["/doctor run", "/session show <session_id> --json"]
+        git = {}
+
     payload = {
         "result": "PASS",
         "command": "handoff",
+        "redacted": redact,
         "session_id": selected.get("session_id"),
         "cwd": selected.get("cwd"),
         "launch_cwd": resolved_launch_cwd,
         "started_at": selected.get("started_at"),
         "last_event_at": selected.get("last_event_at"),
         "event_count": selected.get("event_count"),
-        "last_reason": selected.get("last_reason"),
+        "last_reason": None if redact else selected.get("last_reason"),
         "digest_path": str(DEFAULT_DIGEST_PATH),
         "git_branch": git.get("branch"),
         "git_status_count": git.get("status_count"),
