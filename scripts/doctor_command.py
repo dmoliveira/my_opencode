@@ -368,7 +368,7 @@ CHECKS = [
         "command": [
             sys.executable,
             str(script_path("memory_lifecycle_command.py")),
-            "doctor",
+            "stats",
             "--json",
         ],
     },
