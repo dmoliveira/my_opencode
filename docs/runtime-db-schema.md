@@ -146,3 +146,7 @@ Create local data intermediates only with owner-controlled temporary files in th
 ## SQLite status dashboard
 
 Use `/doctor run --json` as the operator dashboard entry point. It includes the session doctor’s resolved path, candidate paths, index inventory, database/WAL footprint, configured budget, latency, schema compatibility, and sidecar permissions; it also includes shared-memory health. Alert on `WARN`/`FAIL`, schema mismatch, FTS mismatch, unsafe permissions, budget breach, and unexpected WAL growth.
+
+## Incident bundle
+
+A local incident bundle should contain machine-readable doctor output, store paths, schema/index/permission/size fields, remediation codes, integrity-check results, and checksums of quarantined backups. Exclude prompts, tool inputs/outputs, raw memory content, session reasons, CWD, branch previews, and encryption material. Generate support artifacts from redacted output only.
