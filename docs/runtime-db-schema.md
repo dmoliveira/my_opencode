@@ -166,3 +166,7 @@ Performance fixtures should include realistic session/message/part cardinalities
 ## WAL and concurrent-writer fixtures
 
 Test diagnostics against a live WAL database with a writer transaction, a read-only doctor connection, configured busy timeout, WAL growth measurement, and no diagnostic mutation. Include contention, timeout, and recovery cases on each supported platform.
+
+## Interrupted-backup fixtures
+
+Exercise interruption before backup creation, during SQLite online backup, after backup integrity verification, and before restore replacement. Confirm no partial artifact is treated as verified, source history remains untouched, failed temporary files are quarantined or removed safely, and a known-good backup remains recoverable.
