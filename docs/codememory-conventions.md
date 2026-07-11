@@ -144,3 +144,7 @@ To update or disable Codememory later with minimal effort:
 - keep command detail in `docs/codememory-workflow.md`
 - keep taxonomy detail in this file
 - avoid scattering Codememory requirements across unrelated docs unless they are only short references
+
+## SQLite operations
+
+The tracked Codememory fallback uses SQLite with `max_connections: 1`. Treat each worktree's `.codememory/codememory.sqlite3` as worktree-local state: attach one active session per worktree, avoid direct edits, and use `oc` for serialized graph changes. Before deleting a worktree, copy or export any required task graph state to the intended durable store and verify it with `oc plan doctor`. The cache is disposable; task/epic/session records are not.
