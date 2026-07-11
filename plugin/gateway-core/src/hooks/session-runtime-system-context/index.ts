@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
@@ -63,6 +64,11 @@ function pathSignature(path: string): string {
     return "missing"
   }
 }
+
+export function stablePromptFingerprint(entries: string[]): string {
+  return createHash("sha256").update(entries.join("\n\u0000\n"), "utf8").digest("hex")
+}
+
 
 function buildSystemContext(sessionId: string): string {
   return [
