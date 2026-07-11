@@ -849,9 +849,17 @@ def _scan_runtime_stuck_sessions(
         else:
             warnings.append(generic_stale_message)
 
+    remediation_codes = []
+    if runtime_db_missing_tables:
+        remediation_codes.append("runtime_schema_incompatible")
+    if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
+        remediation_codes.append("runtime_storage_budget_exceeded")
+    if not runtime_db_json1_available:
+        remediation_codes.append("runtime_json1_unavailable")
     return {
         "warnings": warnings,
         "problems": problems,
+        "remediation_codes": remediation_codes,
         "stuck_findings": findings,
         "generic_stale_findings": generic_stale_findings,
         "generic_stale_count": generic_stale_count,
@@ -1769,6 +1777,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "index_permission_mode": index_permission_mode,
                 "warnings": warnings,
                 "problems": problems,
+                "remediation_codes": runtime.get("remediation_codes", []),
                 "stuck_findings": runtime["stuck_findings"],
                 "generic_stale_findings": runtime["generic_stale_findings"],
                 "generic_stale_count": runtime["generic_stale_count"],
@@ -1835,6 +1844,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "index_permission_mode": index_permission_mode,
             "warnings": warnings,
             "problems": problems,
+            "remediation_codes": runtime.get("remediation_codes", []),
             "count": len(rows),
             "stuck_findings": runtime["stuck_findings"],
             "generic_stale_findings": runtime["generic_stale_findings"],
