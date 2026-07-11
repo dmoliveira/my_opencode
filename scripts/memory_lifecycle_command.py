@@ -351,6 +351,27 @@ def cmd_compress(argv: list[str]) -> int:
     )
 
 
+def cmd_restore(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    argv = [item for item in argv if item != "--json"]
+    try:
+        memory_id = parse_flag_value(argv, "--id")
+    except ValueError:
+        return usage()
+    if not memory_id:
+        return usage()
+    conn = connect()
+    restored = conn.execute(
+        "UPDATE memories SET archived = 0, updated_at = ? WHERE id = ? AND archived = 1",
+        (now_iso(), memory_id),
+    ).rowcount
+    conn.commit()
+    return emit(
+        {"result": "PASS", "command": "restore", "id": memory_id, "restored": restored},
+        as_json,
+    )
+
+
 def cmd_export(argv: list[str]) -> int:
     as_json = "--json" in argv
     argv = [a for a in argv if a != "--json"]
@@ -480,6 +501,8 @@ def main(argv: list[str]) -> int:
         return cmd_cleanup(rest)
     if command == "compress":
         return cmd_compress(rest)
+    if command == "restore":
+        return cmd_restore(rest)
     if command == "export":
         return cmd_export(rest)
     if command == "import":
