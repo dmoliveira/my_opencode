@@ -116,6 +116,7 @@ def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
             cwd=str(entry.get("cwd") or os.getcwd()),
             created_at=str(entry.get("created_at") or "") or None,
             updated_at=str(entry.get("updated_at") or "") or None,
+            commit=False,
         )
         if bool(entry.get("archived")):
             conn.execute(
@@ -397,20 +398,23 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
+    raw_entries = incoming.get("entries", [])
+    raw_archive = incoming.get("archive", [])
+    if not isinstance(raw_entries, list) or not isinstance(raw_archive, list):
+        return emit({"result": "FAIL", "command": "import", "error": "entries and archive must be lists"}, as_json)
+    if any(not isinstance(entry, dict) for entry in [*raw_entries, *raw_archive]):
+        return emit({"result": "FAIL", "command": "import", "error": "every imported entry must be an object"}, as_json)
+    new_entries = raw_entries
+    archived_entries = raw_archive
     conn = connect()
-    new_entries = (
-        [entry for entry in incoming.get("entries", []) if isinstance(entry, dict)]
-        if isinstance(incoming.get("entries"), list)
-        else []
-    )
-    archived_entries = (
-        [entry for entry in incoming.get("archive", []) if isinstance(entry, dict)]
-        if isinstance(incoming.get("archive"), list)
-        else []
-    )
-    for entry in new_entries + archived_entries:
-        _import_row(conn, entry)
-    conn.commit()
+    try:
+        conn.execute("BEGIN")
+        for entry in new_entries + archived_entries:
+            _import_row(conn, entry)
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        return emit({"result": "FAIL", "command": "import", "error": f"import rolled back: {exc}"}, as_json)
     entry_count, archive_count = _query_counts(conn)
     return emit(
         {

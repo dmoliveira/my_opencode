@@ -377,7 +377,8 @@ def update_memory_links(
     record.links = normalized_links
     record.updated_at = now
     _upsert_fts(conn, int(row["rowid"]), record)
-    conn.commit()
+    if commit:
+        conn.commit()
     return record
 
 
@@ -557,11 +558,8 @@ def add_memory(
     confidence: int,
     session_id: str | None,
     cwd: str,
-    created_at: str | None = None,
-    updated_at: str | None = None,
-) -> MemoryRecord:
-    created_timestamp = created_at.strip() if isinstance(created_at, str) and created_at.strip() else now_iso()
-    updated_timestamp = updated_at.strip() if isinstance(updated_at, str) and updated_at.strip() else created_timestamp
+ ) -> MemoryRecord:
+    timestamp = now_iso()
     memory_id = _next_memory_id(conn)
     record = _build_record(
         memory_id=memory_id,
@@ -602,8 +600,12 @@ def upsert_memory_by_source(
     confidence: int,
     session_id: str | None,
     cwd: str,
+    created_at: str | None = None,
+    updated_at: str | None = None,
+    commit: bool = True,
 ) -> MemoryRecord:
-    timestamp = now_iso()
+    created_timestamp = created_at.strip() if isinstance(created_at, str) and created_at.strip() else now_iso()
+    updated_timestamp = updated_at.strip() if isinstance(updated_at, str) and updated_at.strip() else created_timestamp
     candidate_id = _next_memory_id(conn)
     tags_list = normalize_tags(tags)
     links_list = normalize_links(links)
@@ -663,7 +665,8 @@ def upsert_memory_by_source(
         )
     record = _row_to_record(row)
     _upsert_fts(conn, int(row["rowid"]), record)
-    conn.commit()
+    if commit:
+        conn.commit()
     return record
 
 
