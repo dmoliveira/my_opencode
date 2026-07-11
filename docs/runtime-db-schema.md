@@ -142,3 +142,7 @@ Pin only durable, high-signal records needed across sessions. Cleanup never arch
 ## Temporary-file policy
 
 Create local data intermediates only with owner-controlled temporary files in the destination directory, flush and fsync before atomic replacement, and remove failed intermediates. Never use predictable names for exports, recovery copies, or sidecars. Keep decrypted restore material in an owner-only temporary directory and remove it only after verification and handoff are complete.
+
+## SQLite status dashboard
+
+Use `/doctor run --json` as the operator dashboard entry point. It includes the session doctor’s resolved path, candidate paths, index inventory, database/WAL footprint, configured budget, latency, schema compatibility, and sidecar permissions; it also includes shared-memory health. Alert on `WARN`/`FAIL`, schema mismatch, FTS mismatch, unsafe permissions, budget breach, and unexpected WAL growth.
