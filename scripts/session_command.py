@@ -1678,9 +1678,15 @@ def _command_show(argv: list[str], index_path: Path) -> int:
 
 
 def _redact_session_record(record: dict) -> dict:
+    omitted = {
+        item.strip()
+        for item in os.environ.get("MY_OPENCODE_SESSION_REDACT_FIELDS", "").split(",")
+        if item.strip()
+    }
     return {
         key: record.get(key)
         for key in ("session_id", "started_at", "last_event_at", "event_count")
+        if key not in omitted
     }
 
 
