@@ -1213,6 +1213,7 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": 0,
             "repairs": repairs,
+            "preview": candidate_findings,
             "backup_path": None,
         }
 
@@ -1225,6 +1226,7 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": 0,
             "repairs": repairs,
+            "preview": candidate_findings,
             "backup_path": None,
         }
     conn = sqlite3.connect(str(db_path))
@@ -1411,6 +1413,7 @@ def _repair_runtime_stuck_sessions(
             "candidate_count": len(candidate_findings),
             "repaired_count": len(repairs),
             "repairs": repairs,
+            "preview": candidate_findings,
             "backup_path": str(backup_path),
         }
     finally:
@@ -1428,6 +1431,7 @@ def _repair_runtime_stuck_sessions(
         "candidate_count": len(candidate_findings),
         "repaired_count": len(repairs),
         "repairs": repairs,
+        "preview": candidate_findings,
         "backup_path": str(backup_path),
     }
 
@@ -1883,6 +1887,8 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         "candidate_count": repair["candidate_count"],
         "repaired_count": repair["repaired_count"],
         "repairs": repair["repairs"],
+        "preview": repair["preview"],
+        "backup_path": repair["backup_path"],
         "quick_fixes": []
         if apply_changes or not repair["candidate_count"]
         else [
