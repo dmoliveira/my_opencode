@@ -192,9 +192,7 @@ def run_hook(command: str, digest_path: Path) -> int:
 
 def trusted_post_session_paths() -> list[Path]:
     home = Path("~").expanduser()
-    layered_path = resolve_write_path()
     candidates = [
-        layered_path,
         home / ".config" / "opencode" / "my_opencode.jsonc",
         home / ".config" / "opencode" / "my_opencode.json",
         home / ".config" / "opencode" / "opencode.jsonc",
