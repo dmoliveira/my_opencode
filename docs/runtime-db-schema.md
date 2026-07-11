@@ -110,3 +110,7 @@ A backup or restore applies to exactly one store. Never replace the OpenCode run
 Treat local AI history as sensitive data. Before deleting or redacting any store, stop its owner, create a verified SQLite backup/export, and list the target path with `ls -l` or the owner status command. Prefer store-level operations that show scope and counts first; never recursively remove a parent configuration directory.
 
 For runtime history, use an isolated copy to test a query or restoration path before replacing the live database. For shared memory, export first and use lifecycle `--dry-run` before cleanup/compression. For session sidecars, preserve malformed files for recovery analysis rather than overwriting them. For Codememory, use `oc` state changes rather than direct SQLite edits.
+
+## Operator dashboard fields
+
+Use `/doctor run --json` for the consolidated session and shared-memory checks. The session check exposes `runtime_db_path`, `runtime_db_size_bytes`, `runtime_db_scan_duration_ms`, journal mode, SQLite version, JSON1 support, required-table compatibility, and stale finding counts. The shared-memory check reports its store path and active/archive counts. Session-index update output reports its path, retention policy, and pruning totals. These fields are designed for automation-safe dashboards; do not scrape human-formatted output.
