@@ -2930,6 +2930,7 @@ exit 0
                 "--stale-seconds",
                 "300",
                 "--include-generic",
+                "--confirm-generic",
                 "--apply",
                 "--json",
             ],
@@ -2941,7 +2942,7 @@ exit 0
         )
         expect(
             result.returncode in {0, 1},
-            f"session repair-stale --include-generic --apply --json should return structured output: {result.stderr}",
+            f"session repair-stale --include-generic --confirm-generic --apply --json should return structured output: {result.stderr}",
         )
         repair_generic_payload = parse_json_output(result.stdout)
         expect(
