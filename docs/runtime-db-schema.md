@@ -130,3 +130,7 @@ Verify every restore against a disposable copy before touching the live runtime 
 ## Corruption quarantine
 
 When a local store is malformed, preserve it before any recovery write: remove group/world access, copy it to an incident-specific quarantine path outside active configuration, record its SHA-256 checksum and integrity-check output, then restore only from a verified backup. Do not rename or delete `-wal`/`-shm` files while the owning process is running. Session-index updates already fail closed on malformed JSON to make this procedure possible.
+
+## Shared-memory retention profiles
+
+Use `memory-lifecycle cleanup --older-days <n> --scope <scope> --dry-run --json` before archival. A conservative profile keeps 30 days of unpinned records; a focused project profile can use a shorter period only after exporting a verified recovery artifact. Pinned records are excluded from cleanup. Apply the exact same scope and age shown by dry-run, then use `memory-lifecycle restore --id <id>` for an explicit undo.
