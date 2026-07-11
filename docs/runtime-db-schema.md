@@ -138,3 +138,7 @@ Use `memory-lifecycle cleanup --older-days <n> --scope <scope> --dry-run --json`
 ## Pinned-memory lifecycle
 
 Pin only durable, high-signal records needed across sessions. Cleanup never archives pinned records; compression retains a pinned duplicate over unpinned copies. Review pins periodically, export before unpinning a record with recovery value, and use explicit restore rather than repinning stale copies.
+
+## Temporary-file policy
+
+Create local data intermediates only with owner-controlled temporary files in the destination directory, flush and fsync before atomic replacement, and remove failed intermediates. Never use predictable names for exports, recovery copies, or sidecars. Keep decrypted restore material in an owner-only temporary directory and remove it only after verification and handoff are complete.
