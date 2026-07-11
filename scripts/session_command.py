@@ -487,10 +487,18 @@ def _scan_runtime_stuck_sessions(
         parent_child_rows = conn.execute(
             """
             WITH parent_last_msg AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+              SELECT id, session_id FROM (
+                SELECT id, session_id,
+                  ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created DESC, id DESC) AS row_number
+                FROM message
+              ) WHERE row_number = 1
             ),
             child_last_msg AS (
-              SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
+              SELECT id, session_id FROM (
+                SELECT id, session_id,
+                  ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created DESC, id DESC) AS row_number
+                FROM message
+              ) WHERE row_number = 1
             )
             SELECT
               p.id AS parent_session_id,
@@ -516,14 +524,14 @@ def _scan_runtime_stuck_sessions(
             FROM session p
             JOIN session c ON c.parent_id = p.id
             JOIN parent_last_msg plm ON plm.session_id = p.id
-            JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
-            LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
-              SELECT MAX(time_created) FROM part WHERE message_id = pm.id
+            JOIN message pm ON pm.id = plm.id
+            LEFT JOIN part pp ON pp.id = (
+              SELECT id FROM part WHERE message_id = pm.id ORDER BY time_created DESC, id DESC LIMIT 1
             )
             LEFT JOIN child_last_msg clm ON clm.session_id = c.id
-            LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
-            LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
-              SELECT MAX(time_created) FROM part WHERE message_id = cm.id
+            LEFT JOIN message cm ON cm.id = clm.id
+            LEFT JOIN part cp ON cp.id = (
+              SELECT id FROM part WHERE message_id = cm.id ORDER BY time_created DESC, id DESC LIMIT 1
             )
             WHERE json_extract(pm.data,'$.role') = 'assistant'
               AND json_extract(pm.data,'$.time.completed') IS NULL
