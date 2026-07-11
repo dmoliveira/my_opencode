@@ -59,5 +59,17 @@ class SessionMetadataIndexTest(unittest.TestCase):
             self.assertIn("malformed", result["error"])
             self.assertEqual("{not json", path.read_text(encoding="utf-8"))
 
+    def test_fallback_identity_is_process_unique(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        previous = __import__("os").environ.pop("OPENCODE_SESSION_ID", None)
+        try:
+            identity = module._session_id("2026-07-11T00:00:00+00:00", "/repo")
+            self.assertTrue(identity.endswith(module.FALLBACK_SESSION_INSTANCE_ID))
+        finally:
+            if previous is not None:
+                __import__("os").environ["OPENCODE_SESSION_ID"] = previous
+
 if __name__ == "__main__":
     unittest.main()

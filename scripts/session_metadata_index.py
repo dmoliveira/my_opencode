@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,6 +16,9 @@ from config_layering import load_layered_config  # type: ignore
 
 class SessionIndexError(ValueError):
     pass
+
+
+FALLBACK_SESSION_INSTANCE_ID = uuid.uuid4().hex
 
 
 DEFAULT_INDEX_PATH = Path(
@@ -43,7 +47,7 @@ def _session_id(timestamp: str, cwd: str) -> str:
     if explicit:
         return explicit
     ts = _parse_iso(timestamp) or _utc_now()
-    return f"{cwd}::{ts.strftime('%Y%m%d')}"
+    return f"{cwd}::{ts.strftime('%Y%m%d')}::{FALLBACK_SESSION_INSTANCE_ID}"
 
 
 def _load_policy() -> dict[str, int]:
