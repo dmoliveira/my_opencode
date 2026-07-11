@@ -257,10 +257,16 @@ def initialize(conn: sqlite3.Connection) -> None:
             ON memories(source_type, source_ref);
         """
     )
-    conn.execute(
-        "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
-        (str(SCHEMA_VERSION),),
-    )
+    version_row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+    if version_row is None:
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('schema_version', ?)",
+            (str(SCHEMA_VERSION),),
+        )
+    elif str(version_row["value"]) != str(SCHEMA_VERSION):
+        raise RuntimeError(
+            f"shared-memory schema version {version_row['value']} is incompatible with supported version {SCHEMA_VERSION}; run an explicit migration before opening the store"
+        )
     conn.execute(
         "INSERT OR REPLACE INTO meta(key, value) VALUES ('fts_enabled', ?)",
         ("1" if _ensure_fts(conn) else "0",),
