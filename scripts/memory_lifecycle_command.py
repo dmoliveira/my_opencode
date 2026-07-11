@@ -286,8 +286,7 @@ def cmd_compress(argv: list[str]) -> int:
         "SELECT rowid, * FROM memories WHERE archived = 0 ORDER BY pinned DESC, updated_at DESC, created_at DESC"
     ).fetchall()
     before = len(rows)
-    seen: set[str] = set()
-    removed = 0
+    groups: dict[str, list[sqlite3.Row]] = {}
     for row in rows:
         key = str(row["source_type"] or "") + ":" + str(row["source_ref"] or "")
         if (
@@ -305,16 +304,27 @@ def cmd_compress(argv: list[str]) -> int:
                 + ":"
                 + str(row["content"] or "")
             )
-        if key in seen:
-            if bool(row["pinned"]):
+        groups.setdefault(key, []).append(row)
+
+    removed = 0
+    for duplicates in groups.values():
+        keeper = max(
+            duplicates,
+            key=lambda row: (
+                int(bool(row["pinned"])),
+                str(row["updated_at"] or ""),
+                str(row["created_at"] or ""),
+                int(row["rowid"]),
+            ),
+        )
+        for row in duplicates:
+            if int(row["rowid"]) == int(keeper["rowid"]):
                 continue
             conn.execute(
                 "UPDATE memories SET archived = 1, updated_at = ? WHERE rowid = ?",
                 (now_iso(), int(row["rowid"])),
             )
             removed += 1
-            continue
-        seen.add(key)
     conn.commit()
     after, archive_count = _query_counts(conn)
     return emit(
