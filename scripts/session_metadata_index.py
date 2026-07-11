@@ -18,6 +18,9 @@ class SessionIndexError(ValueError):
     pass
 
 
+SESSION_INDEX_VERSION = 1
+
+
 DEFAULT_INDEX_PATH = Path(
     os.environ.get(
         "MY_OPENCODE_SESSION_INDEX_PATH", "~/.config/opencode/sessions/index.json"
@@ -99,17 +102,22 @@ def _index_write_lock(path: Path) -> Iterator[None]:
 
 def _load_index(path: Path) -> dict[str, Any]:
     if not path.exists():
-        return {"version": 1, "generated_at": None, "sessions": []}
+        return {"version": SESSION_INDEX_VERSION, "generated_at": None, "sessions": []}
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SessionIndexError(f"session index is malformed; preserved at {path}: {exc}") from exc
     if not isinstance(loaded, dict):
         raise SessionIndexError(f"session index root must be an object; preserved at {path}")
+    loaded_version = loaded.get("version", 1)
+    if loaded_version != SESSION_INDEX_VERSION:
+        raise SessionIndexError(
+            f"session index version {loaded_version} is incompatible with supported version {SESSION_INDEX_VERSION}; migrate before writing"
+        )
     raw_sessions = loaded.get("sessions")
     sessions = raw_sessions if isinstance(raw_sessions, list) else []
     return {
-        "version": 1,
+        "version": SESSION_INDEX_VERSION,
         "generated_at": loaded.get("generated_at"),
         "sessions": [item for item in sessions if isinstance(item, dict)],
     }
