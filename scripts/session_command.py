@@ -69,6 +69,9 @@ MAX_RUNTIME_STALE_FINDINGS = 100
 RUNTIME_DB_SIZE_WARN_BYTES = max(
     1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SIZE_WARN_BYTES", str(1024**3)))
 )
+RUNTIME_DB_SCAN_WARN_MS = max(
+    1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SCAN_WARN_MS", "1000"))
+)
 RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
@@ -453,7 +456,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
         }
 
     try:
@@ -501,7 +504,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
         }
 
     try:
@@ -849,6 +852,9 @@ def _scan_runtime_stuck_sessions(
         else:
             warnings.append(generic_stale_message)
 
+    runtime_db_scan_duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    if runtime_db_scan_duration_ms >= RUNTIME_DB_SCAN_WARN_MS:
+        warnings.append(f"runtime diagnostic scan exceeds configured latency budget {RUNTIME_DB_SCAN_WARN_MS} ms")
     remediation_codes = []
     if runtime_db_missing_tables:
         remediation_codes.append("runtime_schema_incompatible")
@@ -873,7 +879,7 @@ def _scan_runtime_stuck_sessions(
         "runtime_db_size_bytes": runtime_db_size_bytes,
         "runtime_db_wal_bytes": runtime_db_wal_bytes,
         "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-        "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+        "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
     }
 
 
