@@ -170,3 +170,7 @@ Test diagnostics against a live WAL database with a writer transaction, a read-o
 ## Interrupted-backup fixtures
 
 Exercise interruption before backup creation, during SQLite online backup, after backup integrity verification, and before restore replacement. Confirm no partial artifact is treated as verified, source history remains untouched, failed temporary files are quarantined or removed safely, and a known-good backup remains recoverable.
+
+## Import rollback fixtures
+
+Create malformed and conflicting export fixtures that fail before, during, and after validation. Verify checksum/schema failures cause zero mutation; transactional failures leave counts/content unchanged; pre-import exports remain usable; and `--dry-run`, `--conflict skip`, and overwrite behavior produce deterministic JSON summaries.
