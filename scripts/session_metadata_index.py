@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,29 @@ def _load_index(path: Path) -> dict[str, Any]:
         "generated_at": loaded.get("generated_at"),
         "sessions": [item for item in sessions if isinstance(item, dict)],
     }
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Persist sidecar JSON without exposing a partially written index."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def _event_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
@@ -181,7 +205,7 @@ def update_session_index(
     index["generated_at"] = _utc_now().isoformat()
 
     index_path.parent.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_json(index_path, index)
 
     return {
         "result": "PASS",
