@@ -15,6 +15,7 @@ from shared_memory_runtime import (  # type: ignore
     _row_to_record,
     _upsert_fts,
     DEFAULT_DB_PATH,
+    SCHEMA_VERSION,
     connect,
     doctor_report,
     normalize_confidence,
@@ -85,6 +86,7 @@ def _export_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             entries.append(payload)
     return {
         "version": 2,
+        "schema_version": SCHEMA_VERSION,
         "path": str(runtime_path()),
         "entries": entries,
         "archive": archive,
@@ -432,6 +434,8 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
+    if incoming.get("schema_version") not in {None, SCHEMA_VERSION}:
+        return emit({"result": "FAIL", "command": "import", "error": "incompatible shared-memory export schema"}, as_json)
     raw_entries = incoming.get("entries", [])
     raw_archive = incoming.get("archive", [])
     if not isinstance(raw_entries, list) or not isinstance(raw_archive, list):
