@@ -1748,6 +1748,9 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     warnings: list[str] = []
     problems: list[str] = []
     exists = index_path.exists()
+    index_permission_mode = (index_path.stat().st_mode & 0o777) if exists else None
+    if exists and index_permission_mode != 0o600:
+        warnings.append("session index permissions should be 0600")
     if not exists:
         warnings.append("session index does not exist yet; run /digest run first")
         runtime = _scan_runtime_stuck_sessions(
@@ -1762,6 +1765,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "index_path": str(index_path),
                 "runtime_db_path": str(db_path),
                 "exists": False,
+                "index_permission_mode": index_permission_mode,
                 "warnings": warnings,
                 "problems": problems,
                 "stuck_findings": runtime["stuck_findings"],
@@ -1797,6 +1801,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "index_path": str(index_path),
                 "runtime_db_path": str(db_path),
                 "exists": True,
+                "index_permission_mode": index_permission_mode,
                 "warnings": warnings,
                 "problems": problems,
                 "count": 0,
@@ -1824,6 +1829,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "index_path": str(index_path),
             "runtime_db_path": str(db_path),
             "exists": True,
+            "index_permission_mode": index_permission_mode,
             "warnings": warnings,
             "problems": problems,
             "count": len(rows),
