@@ -182,3 +182,7 @@ Supported runtime diagnostics require SQLite with JSON1 and window-function supp
 ## Session-history archival
 
 Archive runtime history by creating a verified SQLite backup/export, recording its integrity result and retention class, then applying the archival policy only while OpenCode is stopped. Do not delete selected rows from an upstream OpenCode database as a routine operation; retain a rollback copy and validate restored readability before changing the live store.
+
+## Per-project shared-memory isolation
+
+Set `MY_OPENCODE_SHARED_MEMORY_PATH` to a project-owned, owner-only SQLite path when isolation is required. Keep default shared memory only for intentionally cross-project context. Back up, export, retain, and restore each isolated store independently; do not point multiple unrelated projects at the same path without an explicit shared-memory policy.
