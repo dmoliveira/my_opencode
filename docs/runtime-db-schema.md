@@ -104,3 +104,9 @@ A backup or restore applies to exactly one store. Never replace the OpenCode run
 4. For a malformed session index, preserve the file unchanged, repair or replace it from a known-good copy, then run `/digest run` and `/session doctor --json`.
 5. For a failed shared-memory import or lifecycle operation, export the current store first, restore the pre-operation export, and verify recall/order before re-enabling writers.
 6. Confirm recovery with the owner command (`/session doctor`, shared-memory status, or `oc plan doctor`) and record the incident without copying sensitive runtime content into tickets.
+
+## Sanitization and deletion
+
+Treat local AI history as sensitive data. Before deleting or redacting any store, stop its owner, create a verified SQLite backup/export, and list the target path with `ls -l` or the owner status command. Prefer store-level operations that show scope and counts first; never recursively remove a parent configuration directory.
+
+For runtime history, use an isolated copy to test a query or restoration path before replacing the live database. For shared memory, export first and use lifecycle `--dry-run` before cleanup/compression. For session sidecars, preserve malformed files for recovery analysis rather than overwriting them. For Codememory, use `oc` state changes rather than direct SQLite edits.
