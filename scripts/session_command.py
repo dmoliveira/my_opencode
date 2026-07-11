@@ -7,6 +7,7 @@ import os
 import shlex
 import sqlite3
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -413,8 +414,10 @@ def _scan_runtime_stuck_sessions(
     stale_seconds: int,
     generic_stale_problem_threshold: int = DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
 ) -> dict:
+    started_at = time.perf_counter()
     warnings: list[str] = []
     problems: list[str] = []
+    runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
     runtime_db_journal_mode: str | None = None
@@ -435,6 +438,8 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
             "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_size_bytes": runtime_db_size_bytes,
+            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
     try:
@@ -473,6 +478,8 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
             "runtime_db_json1_available": runtime_db_json1_available,
+            "runtime_db_size_bytes": runtime_db_size_bytes,
+            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
         }
 
     try:
@@ -1717,6 +1724,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
                 "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
                 "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+                "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
+                "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
                 "quick_fixes": [],
@@ -1775,6 +1784,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
             "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
             "runtime_db_json1_available": runtime["runtime_db_json1_available"],
+            "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
+            "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
                 "/doctor run",
