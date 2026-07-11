@@ -64,6 +64,7 @@ def _default_runtime_db_path() -> Path:
 
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
+RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
     60,
@@ -393,7 +394,9 @@ def _load_digest(path: Path) -> dict:
 
 def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
     """Open the upstream runtime history without creating or modifying it."""
-    return sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    connection = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    connection.execute(f"PRAGMA busy_timeout = {RUNTIME_DB_BUSY_TIMEOUT_MS}")
+    return connection
 
 
 def _scan_runtime_stuck_sessions(
@@ -405,6 +408,7 @@ def _scan_runtime_stuck_sessions(
     problems: list[str] = []
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
+    runtime_db_journal_mode: str | None = None
     if not db_path.exists():
         warnings.append("runtime session database does not exist yet")
         return {
@@ -414,11 +418,15 @@ def _scan_runtime_stuck_sessions(
             "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": 0,
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
+            "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+            "runtime_db_journal_mode": runtime_db_journal_mode,
         }
 
     try:
         conn = _connect_runtime_database_readonly(db_path)
         conn.row_factory = sqlite3.Row
+        journal_row = conn.execute("PRAGMA journal_mode").fetchone()
+        runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
     except Exception as exc:
         problems.append(f"failed to open runtime session database: {exc}")
         return {
@@ -428,6 +436,8 @@ def _scan_runtime_stuck_sessions(
             "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": 0,
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
+            "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+            "runtime_db_journal_mode": runtime_db_journal_mode,
         }
 
     try:
@@ -764,6 +774,8 @@ def _scan_runtime_stuck_sessions(
         "generic_stale_findings": generic_stale_findings,
         "generic_stale_count": generic_stale_count,
         "generic_stale_problem_threshold": generic_stale_problem_threshold,
+        "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+        "runtime_db_journal_mode": runtime_db_journal_mode,
     }
 
 
@@ -1603,6 +1615,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "generic_stale_problem_threshold": runtime[
                     "generic_stale_problem_threshold"
                 ],
+                "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+                "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
                 "quick_fixes": [],
@@ -1656,6 +1670,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "generic_stale_problem_threshold": runtime[
                 "generic_stale_problem_threshold"
             ],
+            "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+            "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
             "stale_seconds": stale_seconds,
             "quick_fixes": [
                 "/doctor run",

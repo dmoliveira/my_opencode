@@ -26,10 +26,13 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             sqlite3.connect(db_path).close()
             with patch.object(module.sqlite3, "connect", wraps=sqlite3.connect) as connect:
                 connection = module._connect_runtime_database_readonly(db_path)
+                self.assertTrue(connect.call_args.kwargs["uri"])
+                self.assertTrue(connect.call_args.args[0].endswith("?mode=ro"))
+                self.assertEqual(
+                    module.RUNTIME_DB_BUSY_TIMEOUT_MS,
+                    connection.execute("PRAGMA busy_timeout").fetchone()[0],
+                )
                 connection.close()
-
-            self.assertTrue(connect.call_args.kwargs["uri"])
-            self.assertTrue(connect.call_args.args[0].endswith("?mode=ro"))
 
     def test_runtime_diagnostic_connection_does_not_create_missing_database(self) -> None:
         module = self._module()
