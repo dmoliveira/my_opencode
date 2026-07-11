@@ -152,3 +152,7 @@ The tracked Codememory fallback uses SQLite with `max_connections: 1`. Treat eac
 ## Multi-worktree synchronization
 
 Codememory SQLite state is worktree-local unless a shared configured backend is deliberately used. Before deleting a worktree, export or replay the task graph into the intended durable backend, then verify it with `oc plan doctor`. Do not copy a live SQLite database between active worktrees; serialize ownership and use `oc` graph operations for durable handoff.
+
+## Task-graph export and import
+
+Use `oc batch export` to create a portable task-graph artifact and `oc batch import` only into an intended target scope after inspecting the artifact. Run `oc plan doctor` before and after import. Prefer imports into an inactive worktree and preserve the source graph until the destination is verified.
