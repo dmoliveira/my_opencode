@@ -1103,7 +1103,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   modeTransitionReminder: {
-    enabled: true,
+    // Opt-in: transition text duplicates workflow policy in tool history.
+    enabled: false,
   },
   todoreadCadenceReminder: {
     // Opt-in: repeated task-list reminders add low-value tokens to tool history.
@@ -1122,7 +1123,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   planHandoffReminder: {
-    enabled: true,
+    // Opt-in: handoff text duplicates agent-mode instructions in tool history.
+    enabled: false,
   },
   commentChecker: {
     enabled: true,
