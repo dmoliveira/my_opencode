@@ -94,7 +94,7 @@ import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-gu
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
 import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
-import { resolveHookOrder } from "./hooks/registry.js";
+import { hooksForEvent, resolveHookOrder } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 import { resolveContextLimit } from "./hooks/shared/context-limit.js";
 import { normalizeModelRef } from "./hooks/shared/routing-profiles.js";
@@ -915,7 +915,7 @@ export default function GatewayCorePlugin(ctx) {
                 hook_count: hooks.length,
             });
         }
-        for (const hook of hooks) {
+        for (const hook of hooksForEvent(hooks, input.event.type)) {
             const result = await dispatchGatewayHookEvent({
                 hook,
                 eventType: input.event.type,
@@ -942,9 +942,10 @@ export default function GatewayCorePlugin(ctx) {
             has_command: typeof output.args?.command === "string" &&
                 output.args.command.trim().length > 0,
         });
+        const selectedHooks = hooksForEvent(hooks, "tool.execute.before");
         const executedHooks = [];
         try {
-            for (const hook of hooks) {
+            for (const hook of selectedHooks) {
                 const result = await dispatchGatewayHookEvent({
                     hook,
                     eventType: "tool.execute.before",
@@ -1003,7 +1004,7 @@ export default function GatewayCorePlugin(ctx) {
             command: input.command,
             hook_count: hooks.length,
         });
-        for (const hook of hooks) {
+        for (const hook of hooksForEvent(hooks, "command.execute.before")) {
             const result = await dispatchGatewayHookEvent({
                 hook,
                 eventType: "command.execute.before",
@@ -1027,7 +1028,7 @@ export default function GatewayCorePlugin(ctx) {
             hook_count: hooks.length,
             has_output: output.output !== undefined,
         });
-        for (const hook of hooks) {
+        for (const hook of hooksForEvent(hooks, "command.execute.after")) {
             const result = await dispatchGatewayHookEvent({
                 hook,
                 eventType: "command.execute.after",
@@ -1050,7 +1051,7 @@ export default function GatewayCorePlugin(ctx) {
             hook_count: hooks.length,
             has_output: typeof output.output === "string" && output.output.trim().length > 0,
         });
-        for (const hook of hooks) {
+        for (const hook of hooksForEvent(hooks, "tool.execute.after")) {
             const result = await dispatchGatewayHookEvent({
                 hook,
                 eventType: "tool.execute.after",

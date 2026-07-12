@@ -2,7 +2,14 @@
 export interface GatewayHook {
   id: string
   priority: number
+  /** Missing metadata preserves legacy dispatch to every event. */
+  events?: readonly string[]
   event(type: string, payload: unknown): Promise<void>
+}
+
+/** Selects hooks for an event while retaining legacy wildcard compatibility. */
+export function hooksForEvent(hooks: GatewayHook[], eventType: string): GatewayHook[] {
+  return hooks.filter((hook) => !hook.events || hook.events.includes(eventType))
 }
 
 // Resolves deterministic hook execution order.

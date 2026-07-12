@@ -1,3 +1,7 @@
+/** Selects hooks for an event while retaining legacy wildcard compatibility. */
+export function hooksForEvent(hooks, eventType) {
+    return hooks.filter((hook) => !hook.events || hook.events.includes(eventType));
+}
 // Resolves deterministic hook execution order.
 export function resolveHookOrder(hooks, order, disabled) {
     const disabledSet = new Set(disabled);
