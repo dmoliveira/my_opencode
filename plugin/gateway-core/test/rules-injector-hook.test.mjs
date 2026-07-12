@@ -189,6 +189,7 @@ test("rules-injector adds always-apply rules on system transform", async () => {
     assert.match(String(output.system[0]), /\[runtime-rules\]/)
     assert.match(String(output.system[0]), /copilot-instructions\.md/)
     assert.match(String(output.system[0]), /Always surface repo policy before the first decision\./)
+    assert.doesNotMatch(String(output.system[0]), new RegExp(directory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

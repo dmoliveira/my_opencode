@@ -1,106 +1,37 @@
+import { basename } from "node:path";
 import { findNearestFile } from "../directory-context/finder.js";
 import { readFilePrefix } from "../shared/read-file-prefix.js";
+import { insertStableSystemContext, stableContextLabel } from "../shared/stable-system-context.js";
 import { truncateInjectedText } from "../shared/injected-text-truncator.js";
-const README_SYSTEM_MARKER = "Local README context loaded from:";
-// Resolves stable session id from tool payload.
-function resolveSessionId(payload) {
-    const candidates = [payload.input?.sessionID, payload.input?.sessionId];
-    for (const value of candidates) {
-        if (typeof value === "string" && value.trim()) {
-            return value.trim();
-        }
-    }
-    return "";
-}
-function buildReadmeContextLine(path, maxChars) {
-    const readmeText = readFilePrefix(path, maxChars);
-    const normalizedReadme = readmeText.trim();
-    let contextLine = `Local README context loaded from: ${path}`;
-    if (normalizedReadme) {
-        const truncated = truncateInjectedText(normalizedReadme, maxChars);
+const MARKER = "Local README context loaded from:";
+function buildContextLine(path, maxChars) {
+    const sourceText = readFilePrefix(path, maxChars);
+    const normalized = sourceText.trim();
+    let contextLine = `Local README context loaded from: ${stableContextLabel(basename(path))}`;
+    if (normalized) {
+        const truncated = truncateInjectedText(normalized, maxChars);
         contextLine = `${contextLine}\n\nREADME.md excerpt:\n${truncated.text}`;
     }
     return { text: contextLine };
 }
-// Creates README injector hook for local docs context hints.
+// Injects stable local repository guidance into the system prompt once per request.
 export function createDirectoryReadmeInjectorHook(options) {
-    const readmePathBySession = new Map();
-    const lastInjectedPathBySession = new Map();
     return {
         id: "directory-readme-injector",
         priority: 300,
         async event(type, payload) {
-            if (!options.enabled) {
+            if (!options.enabled || type !== "experimental.chat.system.transform")
                 return;
-            }
-            if (type === "session.deleted") {
-                const eventPayload = (payload ?? {});
-                const sessionId = eventPayload.properties?.info?.id;
-                if (typeof sessionId === "string" && sessionId.trim()) {
-                    const key = sessionId.trim();
-                    readmePathBySession.delete(key);
-                    lastInjectedPathBySession.delete(key);
-                }
-                return;
-            }
-            if (type === "tool.execute.before") {
-                const eventPayload = (payload ?? {});
-                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                    ? eventPayload.directory
-                    : options.directory;
-                const sessionId = resolveSessionId(eventPayload);
-                if (!sessionId) {
-                    return;
-                }
-                const path = findNearestFile(directory, "README.md");
-                if (path) {
-                    readmePathBySession.set(sessionId, path);
-                }
-                else {
-                    readmePathBySession.delete(sessionId);
-                }
-                return;
-            }
-            if (type === "experimental.chat.system.transform") {
-                const eventPayload = (payload ?? {});
-                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                    ? eventPayload.directory
-                    : options.directory;
-                const system = eventPayload.output?.system;
-                if (!Array.isArray(system) || system.some((entry) => typeof entry === "string" && entry.includes(README_SYSTEM_MARKER))) {
-                    return;
-                }
-                const path = findNearestFile(directory, "README.md");
-                if (!path) {
-                    return;
-                }
-                const sessionId = resolveSessionId(eventPayload);
-                const context = buildReadmeContextLine(path, options.maxChars);
-                system.unshift(context.text);
-                if (sessionId) {
-                    readmePathBySession.set(sessionId, path);
-                    lastInjectedPathBySession.set(sessionId, path);
-                }
-                return;
-            }
-            if (type !== "tool.execute.after") {
-                return;
-            }
             const eventPayload = (payload ?? {});
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
-            const sessionId = resolveSessionId(eventPayload);
-            const path = sessionId ? readmePathBySession.get(sessionId) : null;
-            if (!path || typeof eventPayload.output?.output !== "string") {
+                ? eventPayload.directory : options.directory;
+            const system = eventPayload.output?.system;
+            if (!Array.isArray(system) || system.some((entry) => entry.includes(MARKER)))
                 return;
-            }
-            if (lastInjectedPathBySession.get(sessionId) === path) {
+            const path = findNearestFile(directory, "README.md");
+            if (!path)
                 return;
-            }
-            const context = buildReadmeContextLine(path, options.maxChars);
-            eventPayload.output.output = `${eventPayload.output.output}\n\n${context.text}`;
-            lastInjectedPathBySession.set(sessionId, path);
+            insertStableSystemContext(system, buildContextLine(path, options.maxChars).text);
         },
     };
 }

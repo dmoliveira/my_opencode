@@ -58,17 +58,28 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite`
 
-## Prompt caching
+## Response caching and provider prompt caching
 
-Prompt caching is enabled by default for these Portkey providers through:
+Portkey response caching is enabled by default for these providers through:
 
 ```json
 "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
 ```
 
 Notes:
-- First identical request is typically `MISS`; subsequent identical requests become `HIT`.
+- This is an exact-response cache: the first identical request is typically `MISS`; subsequent identical requests become `HIT`.
 - To change TTL, edit `max_age` in `opencode.json`.
+- It does **not** make changing agent conversations cheaper. Provider prompt caching is separate and needs provider-specific request support and usage telemetry.
+
+For all providers, keep reusable instructions and tools at the start of the request, and append session, user, tool, and changing repository context afterwards.
+
+| Provider family | Prompt-cache behavior | Gateway guidance |
+| --- | --- | --- |
+| OpenAI / Azure OpenAI | Exact common prefixes are cacheable; supported API routes may use a stable `prompt_cache_key`. | Keep repo-level policy stable and use a repo/provider/model-scoped key only when the active route supports it. |
+| Anthropic / Bedrock Claude | Explicit cache breakpoints (`cache_control`) cache tools, system blocks, and message prefixes. | Keep stable rules and local instructions before session-specific context; configure breakpoints in the provider adapter, not the generic Portkey response-cache header. |
+| Gemini / Vertex | Gemini 2.5+ can implicitly cache repeated prefixes; explicit cached content has its own TTL. | Reuse stable leading instructions and avoid per-turn context duplication. |
+
+Before claiming savings, collect provider usage fields for input, cache-read, and cache-write tokens. Portkey response-cache hits alone are not evidence of prompt-cache savings.
 
 ## Rate-limit mitigation for OpenAI route
 
