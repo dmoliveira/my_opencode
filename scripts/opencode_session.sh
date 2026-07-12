@@ -28,6 +28,7 @@ fi
 DIGEST_REASON_ON_EXIT="${DIGEST_REASON_ON_EXIT:-exit}"
 DIGEST_OUTPUT_PATH="${MY_OPENCODE_DIGEST_PATH:-$HOME/.config/opencode/digests/last-session.json}"
 DIGEST_HOOK="${MY_OPENCODE_DIGEST_HOOK:-}"
+AUTO_DIGEST_ON_EXIT="${MY_OPENCODE_AUTO_DIGEST:-0}"
 
 : "${MY_OPENCODE_GATEWAY_EVENT_AUDIT:=1}"
 : "${MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES:=8388608}"
@@ -50,6 +51,8 @@ run_digest() {
 	fi
 }
 
-trap run_digest EXIT
+if [ "$AUTO_DIGEST_ON_EXIT" = "1" ]; then
+	trap run_digest EXIT
+fi
 
 opencode "$@"
