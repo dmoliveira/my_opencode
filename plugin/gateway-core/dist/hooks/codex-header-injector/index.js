@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { insertStableSystemContext } from "../shared/stable-system-context.js";
 const CODEX_HEADER_MARKER = "[codex HEADER]";
 const CODEX_HEADER_LINES = [
     CODEX_HEADER_MARKER,
@@ -83,6 +84,25 @@ export function createCodexHeaderInjectorHook(options) {
                 if (sessionId) {
                     injectedSessions.delete(sessionId);
                 }
+                return;
+            }
+            if (type === "experimental.chat.system.transform") {
+                const eventPayload = (payload ?? {});
+                const sessionId = resolveSessionId(eventPayload);
+                const system = eventPayload.output?.system;
+                if (!sessionId || !isCodexModel(eventPayload) || !Array.isArray(system)) {
+                    return;
+                }
+                if (system.some((entry) => entry.includes(CODEX_HEADER_MARKER))) {
+                    return;
+                }
+                insertStableSystemContext(system, CODEX_HEADER_LINES);
+                writeGatewayEventAudit(eventPayload.directory || options.directory, {
+                    hook: "codex-header-injector",
+                    stage: "inject",
+                    reason_code: "codex_header_injected_system",
+                    session_id: sessionId,
+                });
                 return;
             }
             if (type === "chat.message") {

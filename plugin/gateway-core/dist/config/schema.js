@@ -392,7 +392,8 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: false,
     },
     taskResumeInfo: {
-        enabled: true,
+        // Opt-in: task-result prose duplicates durable task/session state in prompt history.
+        enabled: false,
     },
     todoContinuationEnforcer: {
         enabled: true,
@@ -417,16 +418,19 @@ export const DEFAULT_GATEWAY_CONFIG = {
         cooldownMs: 60000,
     },
     hashlineReadEnhancer: {
-        enabled: true,
+        // Opt-in: per-line hashes add substantial recurring read-output token overhead.
+        enabled: false,
     },
     maxStepRecovery: {
         enabled: true,
     },
     modeTransitionReminder: {
-        enabled: true,
+        // Opt-in: transition text duplicates workflow policy in tool history.
+        enabled: false,
     },
     todoreadCadenceReminder: {
-        enabled: true,
+        // Opt-in: repeated task-list reminders add low-value tokens to tool history.
+        enabled: false,
         cooldownEvents: 2,
     },
     providerRetryBackoffGuidance: {
@@ -441,13 +445,15 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
     },
     planHandoffReminder: {
-        enabled: true,
+        // Opt-in: handoff text duplicates agent-mode instructions in tool history.
+        enabled: false,
     },
     commentChecker: {
         enabled: true,
     },
     agentUserReminder: {
-        enabled: true,
+        // Opt-in: generic per-session advice duplicates primary agent policy in user context.
+        enabled: false,
     },
     directWorkWarning: {
         enabled: true,

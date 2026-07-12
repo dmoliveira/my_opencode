@@ -82,3 +82,28 @@ test("codex-header-injector limits transform model scan to recent messages", asy
 
   assert.equal(payload.output.messages.at(-1).parts[0].text, "m69")
 })
+
+
+test("codex-header-injector places stable provider guidance in system context", async () => {
+  const hook = createCodexHeaderInjectorHook({ directory: process.cwd(), enabled: true })
+  const output = { system: ["base system", "runtime_session_context: session-codex-system"] }
+  await hook.event("experimental.chat.system.transform", {
+    input: { sessionID: "session-codex-system", modelID: "gpt-5.3-codex" },
+    output,
+  })
+  assert.equal(output.system[0], "base system")
+  assert.match(String(output.system[1]), /\[codex HEADER\]/)
+  assert.match(String(output.system[2]), /runtime_session_context: session-codex-system/)
+})
+
+
+test("codex-header-injector reinjects system guidance on later turns", async () => {
+  const hook = createCodexHeaderInjectorHook({ directory: process.cwd(), enabled: true })
+  for (const output of [{ system: [] }, { system: [] }]) {
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-codex-repeat", modelID: "gpt-5.3-codex" },
+      output,
+    })
+    assert.equal(output.system.filter((entry) => entry.includes("[codex HEADER]")).length, 1)
+  }
+})

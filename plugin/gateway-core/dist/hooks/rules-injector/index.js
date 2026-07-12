@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { insertStableSystemContext, stableContextLabel } from "../shared/stable-system-context.js";
 const TRACKED_TOOLS = new Set(["read", "write", "edit", "multiedit"]);
 const RULES_SYSTEM_MARKER = "[runtime-rules]";
 const RULES_DIRS = [
@@ -355,13 +356,22 @@ export function createRulesInjectorHook(options) {
                 const cachedRules = loadRules(directory);
                 const sessionId = resolveSessionId(eventPayload);
                 const blocks = [];
-                for (const rule of cachedRules.filter((candidate) => candidate.alwaysApply)) {
-                    blocks.push(`[Rule: ${rule.path}]\n[Match: alwaysApply]\n${rule.body}`);
+                const alwaysApplyRules = cachedRules.filter((candidate) => candidate.alwaysApply);
+                for (const rule of alwaysApplyRules) {
+                    const label = stableContextLabel(toSlashPath(relative(directory, rule.path)));
+                    blocks.push(`[Rule: ${label}]\n[Match: alwaysApply]\n${rule.body}`);
+                }
+                if (sessionId && alwaysApplyRules.length > 0) {
+                    const state = injectedStateBySession.get(sessionId) ?? { hashes: new Set() };
+                    for (const rule of alwaysApplyRules) {
+                        state.hashes.add(createHash("sha1").update(rule.path).update("\n").update(rule.body).digest("hex"));
+                    }
+                    injectedStateBySession.set(sessionId, state);
                 }
                 if (blocks.length === 0) {
                     return;
                 }
-                system.unshift(`${RULES_SYSTEM_MARKER}\n${blocks.join("\n\n")}`);
+                insertStableSystemContext(system, `${RULES_SYSTEM_MARKER}\n${blocks.join("\n\n")}`);
                 writeGatewayEventAudit(directory, {
                     hook: "rules-injector",
                     stage: "inject",
@@ -405,7 +415,8 @@ export function createRulesInjectorHook(options) {
                     continue;
                 }
                 state.hashes.add(hash);
-                blocks.push(`[Rule: ${match.rule.path}]\n[Match: ${match.reason}]\n${match.rule.body}`);
+                const label = stableContextLabel(toSlashPath(relative(directory, match.rule.path)));
+                blocks.push(`[Rule: ${label}]\n[Match: ${match.reason}]\n${match.rule.body}`);
             }
             injectedStateBySession.set(sessionId, state);
             if (blocks.length === 0) {

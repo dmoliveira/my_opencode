@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { insertStableSystemContext } from "../shared/stable-system-context.js"
 
 interface TextPart {
   type?: string
@@ -45,6 +46,12 @@ interface TransformPayload {
   directory?: string
 }
 
+interface SystemTransformPayload {
+  input?: { sessionID?: string; sessionId?: string; providerID?: unknown; modelID?: unknown; model?: unknown }
+  output?: { system?: string[] }
+  directory?: string
+}
+
 interface SessionEventPayload {
   properties?: {
     info?: { id?: string }
@@ -70,7 +77,7 @@ function recentMessages<T>(messages: T[], limit = TRANSFORM_MESSAGE_LOOKBACK_LIM
   return messages.slice(messages.length - limit)
 }
 
-function resolveSessionId(payload: ChatPayload | TransformPayload | SessionEventPayload): string {
+function resolveSessionId(payload: ChatPayload | TransformPayload | SystemTransformPayload | SessionEventPayload): string {
   const typed = payload as {
     input?: { sessionID?: string; sessionId?: string }
     properties?: { sessionID?: string; sessionId?: string; info?: { id?: string } }
@@ -94,7 +101,7 @@ function textFromUnknown(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : ""
 }
 
-function isCodexModel(payload: ChatPayload | TransformPayload): boolean {
+function isCodexModel(payload: ChatPayload | TransformPayload | SystemTransformPayload): boolean {
   const candidates: unknown[] = []
   const chatPayload = payload as ChatPayload
   candidates.push(chatPayload.properties?.model)
@@ -156,6 +163,25 @@ export function createCodexHeaderInjectorHook(options: {
         return
       }
 
+      if (type === "experimental.chat.system.transform") {
+        const eventPayload = (payload ?? {}) as SystemTransformPayload
+        const sessionId = resolveSessionId(eventPayload)
+        const system = eventPayload.output?.system
+        if (!sessionId || !isCodexModel(eventPayload) || !Array.isArray(system)) {
+          return
+        }
+        if (system.some((entry) => entry.includes(CODEX_HEADER_MARKER))) {
+          return
+        }
+        insertStableSystemContext(system, CODEX_HEADER_LINES)
+        writeGatewayEventAudit(eventPayload.directory || options.directory, {
+          hook: "codex-header-injector",
+          stage: "inject",
+          reason_code: "codex_header_injected_system",
+          session_id: sessionId,
+        })
+        return
+      }
       if (type === "chat.message") {
         const eventPayload = (payload ?? {}) as ChatPayload
         const sessionId = resolveSessionId(eventPayload)
