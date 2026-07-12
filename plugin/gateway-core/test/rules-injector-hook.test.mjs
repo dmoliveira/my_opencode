@@ -343,3 +343,18 @@ test("rules-injector handles brace globs in inline applyTo arrays", async () => 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+
+test("rules-injector does not duplicate always-apply rules after a matching file tool", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-rules-injector-"))
+  try {
+    mkdirSync(join(directory, ".github"), { recursive: true })
+    writeFileSync(join(directory, ".github", "copilot-instructions.md"), "Always apply once.", "utf-8")
+    const plugin = setupPlugin(directory)
+    await plugin["experimental.chat.system.transform"]({ sessionID: "session-rules-overlap" }, { system: [] })
+    await plugin["tool.execute.before"]({ tool: "write", sessionID: "session-rules-overlap" }, { args: {} })
+    const output = { output: "write complete", metadata: { filePath: "src/a.ts" } }
+    await plugin["tool.execute.after"]({ tool: "write", sessionID: "session-rules-overlap" }, output)
+    assert.doesNotMatch(String(output.output), /Always apply once\./)
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})

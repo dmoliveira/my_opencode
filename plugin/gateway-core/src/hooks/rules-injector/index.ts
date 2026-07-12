@@ -443,9 +443,17 @@ export function createRulesInjectorHook(options: { directory: string; enabled: b
         const cachedRules = loadRules(directory)
         const sessionId = resolveSessionId(eventPayload as ToolBeforePayload)
         const blocks: string[] = []
-        for (const rule of cachedRules.filter((candidate) => candidate.alwaysApply)) {
+        const alwaysApplyRules = cachedRules.filter((candidate) => candidate.alwaysApply)
+        for (const rule of alwaysApplyRules) {
           const label = stableContextLabel(toSlashPath(relative(directory, rule.path)))
           blocks.push(`[Rule: ${label}]\n[Match: alwaysApply]\n${rule.body}`)
+        }
+        if (sessionId && alwaysApplyRules.length > 0) {
+          const state = injectedStateBySession.get(sessionId) ?? { hashes: new Set<string>() }
+          for (const rule of alwaysApplyRules) {
+            state.hashes.add(createHash("sha1").update(rule.path).update("\n").update(rule.body).digest("hex"))
+          }
+          injectedStateBySession.set(sessionId, state)
         }
         if (blocks.length === 0) {
           return
