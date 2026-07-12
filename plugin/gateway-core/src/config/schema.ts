@@ -1097,7 +1097,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     cooldownMs: 60000,
   },
   hashlineReadEnhancer: {
-    enabled: true,
+    // Opt-in: per-line hashes add substantial recurring read-output token overhead.
+    enabled: false,
   },
   maxStepRecovery: {
     enabled: true,
