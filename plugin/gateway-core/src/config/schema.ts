@@ -1106,7 +1106,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   todoreadCadenceReminder: {
-    enabled: true,
+    // Opt-in: repeated task-list reminders add low-value tokens to tool history.
+    enabled: false,
     cooldownEvents: 2,
   },
   providerRetryBackoffGuidance: {
