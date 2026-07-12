@@ -1128,7 +1128,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
   },
   agentUserReminder: {
-    enabled: true,
+    // Opt-in: generic per-session advice duplicates primary agent policy in user context.
+    enabled: false,
   },
   directWorkWarning: {
     enabled: true,
