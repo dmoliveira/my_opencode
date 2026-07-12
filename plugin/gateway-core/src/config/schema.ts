@@ -1072,7 +1072,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: false,
   },
   taskResumeInfo: {
-    enabled: true,
+    // Opt-in: task-result prose duplicates durable task/session state in prompt history.
+    enabled: false,
   },
   todoContinuationEnforcer: {
     enabled: true,
