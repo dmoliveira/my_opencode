@@ -19,7 +19,6 @@ import { createContinuationHook } from "./hooks/continuation/index.js";
 import { createContextWindowMonitorHook } from "./hooks/context-window-monitor/index.js";
 import { createDelegateTaskRetryHook } from "./hooks/delegate-task-retry/index.js";
 import { createDelegationConcurrencyGuardHook } from "./hooks/delegation-concurrency-guard/index.js";
-import { createDelegationDecisionAuditHook } from "./hooks/delegation-decision-audit/index.js";
 import { createDelegationFallbackOrchestratorHook } from "./hooks/delegation-fallback-orchestrator/index.js";
 import { createDelegationOutcomeLearnerHook } from "./hooks/delegation-outcome-learner/index.js";
 import { createDependencyRiskGuardHook } from "./hooks/dependency-risk-guard/index.js";
@@ -708,12 +707,6 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         directory,
         enabled: true,
         cooldownMs: cfg.adaptiveDelegationPolicy.discoverabilityCooldownMs,
-      }),
-    ),
-    safeHook("delegation-decision-audit", () =>
-      createDelegationDecisionAuditHook({
-        directory,
-        enabled: true,
       }),
     ),
     safeHook("subagent-lifecycle-supervisor", () =>
