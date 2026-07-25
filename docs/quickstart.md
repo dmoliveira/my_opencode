@@ -62,7 +62,7 @@ For automation-friendly help output, prefer command-specific help from this repo
 
 For low-token command execution defaults, use `docs/silent-first-command-defaults.md` to prefer JSON, quiet, or short forms before expanding to verbose logs.
 
-Gateway runtime behavior is primarily tuned through the sidecar config at `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`). Use that file for normal hook/runtime tuning; if the same gateway keys are also set in root config, the root values still override the sidecar today.
+Gateway runtime behavior uses layered sidecars: `~/.config/opencode/my_opencode/gateway-core.config.json` is the global base, the active project `.opencode/gateway-core.config.json` overrides it, and explicit plugin options apply last. Set `MY_OPENCODE_GATEWAY_CONFIG_PATH` only when one replacement sidecar should bypass the automatic global/project layers. Arrays replace the lower layer; nested objects merge. A malformed layer clears itself and lower-precedence sidecar state; a later valid project override can rebuild the effective config.
 
 That same sidecar file also carries the operator-facing default concise-mode setting (`conciseMode.enabled` + `conciseMode.defaultMode`) consumed by `/gateway concise ...` and the gateway system-context hook.
 

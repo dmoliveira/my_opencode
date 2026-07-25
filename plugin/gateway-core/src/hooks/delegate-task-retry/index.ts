@@ -72,10 +72,11 @@ function hasStructuredTaskResult(output: string): boolean {
 
 // Detects known delegate task failures from task output.
 function detectDelegateTaskError(output: string): DelegateTaskErrorPattern | null {
+  const normalizedOutput = output.toLowerCase()
   if (
-    !output.includes("[ERROR]") &&
-    !output.includes("Invalid arguments") &&
-    !output.includes("Tool execution aborted")
+    !normalizedOutput.includes("[error]") &&
+    !normalizedOutput.includes("invalid arguments") &&
+    !normalizedOutput.includes("tool execution aborted")
   ) {
     return null
   }
@@ -83,7 +84,7 @@ function detectDelegateTaskError(output: string): DelegateTaskErrorPattern | nul
     if (pattern.errorType === "delegated_task_aborted" && hasStructuredTaskResult(output)) {
       continue
     }
-    if (output.includes(pattern.pattern)) {
+    if (normalizedOutput.includes(pattern.pattern.toLowerCase())) {
       return pattern
     }
   }
@@ -95,6 +96,7 @@ export function createDelegateTaskRetryHook(options: { enabled: boolean }): Gate
   return {
     id: "delegate-task-retry",
     priority: 290,
+    events: ["tool.execute.after"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled || type !== "tool.execute.after") {
         return

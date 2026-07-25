@@ -102,6 +102,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.subagentTelemetryTimeline.enabled, true)
   assert.equal(config.subagentTelemetryTimeline.maxTimelineEntries, 1000)
   assert.equal(config.adaptiveDelegationPolicy.enabled, true)
+  assert.equal(config.adaptiveDelegationPolicy.outcomeLearnerMode, "shadow")
   assert.equal(config.adaptiveDelegationPolicy.windowMs, 300000)
   assert.equal(config.adaptiveDelegationPolicy.minSamples, 4)
   assert.equal(config.adaptiveDelegationPolicy.highFailureRate, 0.5)
@@ -121,6 +122,21 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("loadGatewayConfig normalizes adaptive outcome learner mode", () => {
+  assert.equal(
+    loadGatewayConfig({
+      adaptiveDelegationPolicy: { outcomeLearnerMode: "enforce" },
+    }).adaptiveDelegationPolicy.outcomeLearnerMode,
+    "enforce",
+  )
+  assert.equal(
+    loadGatewayConfig({
+      adaptiveDelegationPolicy: { outcomeLearnerMode: "unsafe" },
+    }).adaptiveDelegationPolicy.outcomeLearnerMode,
+    "shadow",
+  )
 })
 
 test("loadGatewayConfig normalizes invalid maxConcurrentWriters", () => {
@@ -413,6 +429,120 @@ test("loadGatewayConfigSource merges sidecar config with runtime source", () => 
   }
 })
 
+test("loadGatewayConfigSource layers home, project, and explicit runtime config", () => {
+  const root = mkdtempSync(join(tmpdir(), "gateway-config-layers-"))
+  const home = join(root, "home")
+  const project = join(root, "project")
+  const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+  const previousHome = process.env.HOME
+  try {
+    delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    process.env.HOME = home
+    const homeSidecar = join(
+      home,
+      ".config",
+      "opencode",
+      "my_opencode",
+      "gateway-core.config.json",
+    )
+    const projectSidecar = join(project, ".opencode", "gateway-core.config.json")
+    mkdirSync(dirname(homeSidecar), { recursive: true })
+    mkdirSync(dirname(projectSidecar), { recursive: true })
+    writeFileSync(
+      homeSidecar,
+      JSON.stringify({
+        globalProcessPressure: { enabled: false },
+        hooks: { disabled: ["home-only"] },
+        llmDecisionRuntime: {
+          enabled: true,
+          mode: "shadow",
+          hookModes: { "home-hook": "shadow" },
+        },
+      }),
+      "utf-8",
+    )
+    writeFileSync(
+      projectSidecar,
+      JSON.stringify({
+        conciseMode: { enabled: true, defaultMode: "lite" },
+        hooks: { disabled: ["project-only"] },
+        llmDecisionRuntime: {
+          mode: "disabled",
+          hookModes: { "project-hook": "assist" },
+        },
+      }),
+      "utf-8",
+    )
+
+    const loaded = loadGatewayConfigSourceWithMeta(project, {
+      llmDecisionRuntime: { timeoutMs: 4321 },
+    })
+    const config = loadGatewayConfig(loaded.source)
+
+    assert.deepEqual(
+      loaded.meta.layers.map((layer) => [layer.kind, layer.loaded]),
+      [["home", true], ["project", true]],
+    )
+    assert.equal(loaded.meta.sidecarPath, projectSidecar)
+    assert.equal(config.globalProcessPressure.enabled, false)
+    assert.equal(config.conciseMode.defaultMode, "lite")
+    assert.deepEqual(config.hooks.disabled, ["project-only"])
+    assert.equal(config.llmDecisionRuntime.enabled, true)
+    assert.equal(config.llmDecisionRuntime.mode, "disabled")
+    assert.deepEqual(config.llmDecisionRuntime.hookModes, {
+      "home-hook": "shadow",
+      "project-hook": "assist",
+    })
+    assert.equal(config.llmDecisionRuntime.timeoutMs, 4321)
+  } finally {
+    if (previousEnvPath === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = previousEnvPath
+    }
+    if (previousHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = previousHome
+    }
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("explicit gateway config env path replaces automatic sidecar layers", () => {
+  const root = mkdtempSync(join(tmpdir(), "gateway-config-env-layer-"))
+  const explicitPath = join(root, "explicit.json")
+  const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+  try {
+    mkdirSync(join(root, ".opencode"), { recursive: true })
+    writeFileSync(
+      join(root, ".opencode", "gateway-core.config.json"),
+      JSON.stringify({ globalProcessPressure: { enabled: false } }),
+      "utf-8",
+    )
+    writeFileSync(
+      explicitPath,
+      JSON.stringify({ globalProcessPressure: { enabled: true } }),
+      "utf-8",
+    )
+    process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = explicitPath
+
+    const loaded = loadGatewayConfigSourceWithMeta(root, {})
+    const config = loadGatewayConfig(loaded.source)
+
+    assert.deepEqual(loaded.meta.layers.map((layer) => layer.kind), ["env"])
+    assert.equal(loaded.meta.sidecarPath, explicitPath)
+    assert.equal(config.globalProcessPressure.enabled, true)
+  } finally {
+    if (previousEnvPath === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = previousEnvPath
+    }
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("loadGatewayConfigSourceWithMeta falls back to bundled default when no sidecar exists", () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-config-bundled-"))
   const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
@@ -519,27 +649,114 @@ test("loadGatewayConfigSourceWithMeta reports bundled sidecar load success", () 
   }
 })
 
-test("loadGatewayConfigSourceWithMeta reports sidecar parse failures", () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-config-meta-error-"))
+test("valid project config rebuilds state after malformed home config", () => {
+  const root = mkdtempSync(join(tmpdir(), "gateway-config-home-error-"))
+  const project = join(root, "project")
+  const home = join(root, "home")
+  const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+  const previousHome = process.env.HOME
   try {
-    mkdirSync(join(directory, ".opencode"), { recursive: true })
-    const sidecarPath = join(directory, ".opencode", "gateway-core.config.json")
-    writeFileSync(sidecarPath, "{not-json", "utf-8")
-    const loaded = loadGatewayConfigSourceWithMeta(directory, {
+    delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    process.env.HOME = home
+    const homeSidecar = join(
+      home,
+      ".config",
+      "opencode",
+      "my_opencode",
+      "gateway-core.config.json",
+    )
+    const projectSidecar = join(project, ".opencode", "gateway-core.config.json")
+    mkdirSync(dirname(homeSidecar), { recursive: true })
+    mkdirSync(dirname(projectSidecar), { recursive: true })
+    writeFileSync(homeSidecar, "{not-json", "utf-8")
+    writeFileSync(
+      projectSidecar,
+      JSON.stringify({
+        globalProcessPressure: { enabled: false },
+        conciseMode: { enabled: true, defaultMode: "lite" },
+      }),
+      "utf-8",
+    )
+
+    const loaded = loadGatewayConfigSourceWithMeta(project, {})
+    const config = loadGatewayConfig(loaded.source)
+
+    assert.deepEqual(
+      loaded.meta.layers.map((layer) => [layer.kind, layer.loaded, Boolean(layer.error)]),
+      [["home", false, true], ["project", true, false]],
+    )
+    assert.equal(loaded.meta.sidecarPath, projectSidecar)
+    assert.equal(loaded.meta.sidecarLoaded, true)
+    assert.equal(config.globalProcessPressure.enabled, false)
+    assert.equal(config.conciseMode.defaultMode, "lite")
+  } finally {
+    if (previousEnvPath === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = previousEnvPath
+    }
+    if (previousHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = previousHome
+    }
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSourceWithMeta fails closed on malformed project config", () => {
+  const root = mkdtempSync(join(tmpdir(), "gateway-config-meta-error-"))
+  const project = join(root, "project")
+  const home = join(root, "home")
+  const previousEnvPath = process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+  const previousHome = process.env.HOME
+  try {
+    delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    process.env.HOME = home
+    const homeSidecar = join(
+      home,
+      ".config",
+      "opencode",
+      "my_opencode",
+      "gateway-core.config.json",
+    )
+    const projectSidecar = join(project, ".opencode", "gateway-core.config.json")
+    mkdirSync(dirname(homeSidecar), { recursive: true })
+    mkdirSync(dirname(projectSidecar), { recursive: true })
+    writeFileSync(
+      homeSidecar,
+      JSON.stringify({ globalProcessPressure: { enabled: false } }),
+      "utf-8",
+    )
+    writeFileSync(projectSidecar, "{not-json", "utf-8")
+
+    const loaded = loadGatewayConfigSourceWithMeta(project, {
       llmDecisionRuntime: {
         enabled: true,
         mode: "assist",
       },
     })
     const config = loadGatewayConfig(loaded.source)
-    assert.equal(loaded.meta.sidecarPath, sidecarPath)
+
+    assert.equal(loaded.meta.sidecarPath, projectSidecar)
     assert.equal(loaded.meta.sidecarExists, true)
     assert.equal(loaded.meta.sidecarLoaded, false)
-    assert.match(String(loaded.meta.sidecarError), /expected property name|json|position/i)
+    assert.match(String(loaded.meta.sidecarError), /project:.*(?:property name|json|position)/i)
+    assert.equal(config.globalProcessPressure.enabled, true)
     assert.equal(config.llmDecisionRuntime.enabled, true)
     assert.equal(config.llmDecisionRuntime.mode, "assist")
   } finally {
-    rmSync(directory, { recursive: true, force: true })
+    if (previousEnvPath === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH = previousEnvPath
+    }
+    if (previousHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = previousHome
+    }
+    rmSync(root, { recursive: true, force: true })
   }
 })
 

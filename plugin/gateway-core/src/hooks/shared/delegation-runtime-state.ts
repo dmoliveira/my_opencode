@@ -31,6 +31,22 @@ export interface DelegationOutcomeRecord {
   traceId?: string
 }
 
+export interface DelegationPolicyProposalInput {
+  sessionId: string
+  traceId?: string
+  subagentType: string
+  failures: number
+  samples: number
+  failureRate: number
+  originalCategory: string
+  proposedCategory: string
+  mode: "shadow" | "enforce"
+  applied: boolean
+  createdAt: number
+}
+
+export type DelegationPolicyProposalRecord = DelegationPolicyProposalInput
+
 interface ActiveDelegation {
   childRunId: string
   subagentType: string
@@ -41,10 +57,12 @@ interface ActiveDelegation {
 
 interface PersistedState {
   timeline: DelegationOutcomeRecord[]
+  policyProposals?: DelegationPolicyProposalRecord[]
 }
 
 const activeByDelegation = new Map<string, ActiveDelegation>()
 const timeline: DelegationOutcomeRecord[] = []
+const policyProposals: DelegationPolicyProposalRecord[] = []
 
 let statePath = ""
 let stateMaxEntries = 300
@@ -92,6 +110,64 @@ function normalizeRecord(value: unknown): DelegationOutcomeRecord | null {
   }
 }
 
+function normalizePolicyProposal(value: unknown): DelegationPolicyProposalRecord | null {
+  if (!value || typeof value !== "object") {
+    return null
+  }
+  const source = value as Record<string, unknown>
+  const sessionId = String(source.sessionId ?? "").trim()
+  const traceId = String(source.traceId ?? "").trim() || undefined
+  const subagentType = String(source.subagentType ?? "").trim()
+  const originalCategory = String(source.originalCategory ?? "").trim()
+  const proposedCategory = String(source.proposedCategory ?? "").trim()
+  const mode = source.mode === "enforce" ? "enforce" : source.mode === "shadow" ? "shadow" : null
+  const failures = Number(source.failures ?? NaN)
+  const samples = Number(source.samples ?? NaN)
+  const failureRate = Number(source.failureRate ?? NaN)
+  const createdAt = Number(source.createdAt ?? NaN)
+  if (
+    !sessionId ||
+    !subagentType ||
+    !originalCategory ||
+    !proposedCategory ||
+    !mode ||
+    !Number.isFinite(failures) ||
+    failures < 0 ||
+    !Number.isFinite(samples) ||
+    samples <= 0 ||
+    failures > samples ||
+    !Number.isFinite(failureRate) ||
+    failureRate < 0 ||
+    failureRate > 1 ||
+    !Number.isFinite(createdAt)
+  ) {
+    return null
+  }
+  return {
+    sessionId,
+    traceId,
+    subagentType,
+    failures,
+    samples,
+    failureRate,
+    originalCategory,
+    proposedCategory,
+    mode,
+    applied: source.applied === true,
+    createdAt,
+  }
+}
+
+function trimPolicyProposals(maxEntries: number): void {
+  if (maxEntries <= 0) {
+    policyProposals.splice(0, policyProposals.length)
+    return
+  }
+  while (policyProposals.length > maxEntries) {
+    policyProposals.shift()
+  }
+}
+
 function trimTimeline(maxEntries: number): void {
   if (maxEntries <= 0) {
     timeline.splice(0, timeline.length)
@@ -106,7 +182,7 @@ function persist(): void {
   if (!persistenceEnabled || !statePath) {
     return
   }
-  const payload: PersistedState = { timeline }
+  const payload: PersistedState = { timeline, policyProposals }
   mkdirSync(dirname(statePath), { recursive: true })
   writeFileSync(statePath, JSON.stringify(payload, null, 2), "utf-8")
 }
@@ -124,10 +200,18 @@ function load(): void {
     const records = Array.isArray(parsed?.timeline)
       ? parsed.timeline.map((item) => normalizeRecord(item)).filter((item): item is DelegationOutcomeRecord => item !== null)
       : []
+    const proposals = Array.isArray(parsed?.policyProposals)
+      ? parsed.policyProposals
+          .map((item) => normalizePolicyProposal(item))
+          .filter((item): item is DelegationPolicyProposalRecord => item !== null)
+      : []
     timeline.splice(0, timeline.length, ...records)
+    policyProposals.splice(0, policyProposals.length, ...proposals)
     trimTimeline(stateMaxEntries)
+    trimPolicyProposals(stateMaxEntries)
   } catch {
     timeline.splice(0, timeline.length)
+    policyProposals.splice(0, policyProposals.length)
   }
 }
 
@@ -217,6 +301,28 @@ export function registerDelegationOutcome(
   trimTimeline(Math.max(1, Math.min(maxEntries, stateMaxEntries)))
   persist()
   return record
+}
+
+export function registerDelegationPolicyProposal(
+  input: DelegationPolicyProposalInput,
+): DelegationPolicyProposalRecord | null {
+  load()
+  const record = normalizePolicyProposal(input)
+  if (!record) {
+    return null
+  }
+  policyProposals.push(record)
+  trimPolicyProposals(stateMaxEntries)
+  persist()
+  return record
+}
+
+export function getRecentDelegationPolicyProposals(
+  windowMs: number,
+): DelegationPolicyProposalRecord[] {
+  load()
+  const minTs = Date.now() - Math.max(0, windowMs)
+  return policyProposals.filter((item) => item.createdAt >= minTs)
 }
 
 export function clearDelegationSession(sessionId: string): void {

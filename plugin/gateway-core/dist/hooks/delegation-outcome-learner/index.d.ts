@@ -2,6 +2,7 @@ import type { GatewayHook } from "../registry.js";
 export declare function createDelegationOutcomeLearnerHook(options: {
     directory: string;
     enabled: boolean;
+    mode: "shadow" | "enforce";
     windowMs: number;
     minSamples: number;
     highFailureRate: number;

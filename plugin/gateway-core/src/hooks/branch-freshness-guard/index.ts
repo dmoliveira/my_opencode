@@ -49,6 +49,7 @@ export function createBranchFreshnessGuardHook(options: {
   return {
     id: "branch-freshness-guard",
     priority: 438,
+    events: ["tool.execute.before"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled || type !== "tool.execute.before") {
         return

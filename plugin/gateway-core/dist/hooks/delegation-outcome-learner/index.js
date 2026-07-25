@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { getRecentDelegationOutcomes } from "../shared/delegation-runtime-state.js";
-import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
+import { getRecentDelegationOutcomes, registerDelegationPolicyProposal, } from "../shared/delegation-runtime-state.js";
+import { extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -17,6 +17,7 @@ export function createDelegationOutcomeLearnerHook(options) {
     return {
         id: "delegation-outcome-learner",
         priority: 293,
+        events: ["tool.execute.before"],
         async event(type, payload) {
             if (!options.enabled || type !== "tool.execute.before") {
                 return;
@@ -29,7 +30,10 @@ export function createDelegationOutcomeLearnerHook(options) {
             if (!args || typeof args !== "object") {
                 return;
             }
-            const traceId = resolveDelegationTraceId(args);
+            const enforce = options.mode === "enforce";
+            const traceId = enforce
+                ? resolveDelegationTraceId(args)
+                : extractDelegationTraceId(args);
             const subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
             if (!subagentType) {
                 return;
@@ -56,19 +60,36 @@ export function createDelegationOutcomeLearnerHook(options) {
                     currentCategory === "critical" || currentCategory === "deep"
                         ? "balanced"
                         : currentCategory;
-            if (adaptedCategory !== currentCategory) {
-                args.category = adaptedCategory;
-            }
             const hint = `[DELEGATION LEARNER] Recent outcomes for ${subagentType}: failures=${failed}/${outcomes.length} (${failureRate.toFixed(2)}). Prefer resilient, scoped delegation with explicit validation and fallback steps.`;
-            args.prompt = prependHint(String(args.prompt ?? ""), hint);
-            args.description = prependHint(String(args.description ?? ""), hint);
+            if (enforce) {
+                if (adaptedCategory !== currentCategory) {
+                    args.category = adaptedCategory;
+                }
+                args.prompt = prependHint(String(args.prompt ?? ""), hint);
+                args.description = prependHint(String(args.description ?? ""), hint);
+            }
+            registerDelegationPolicyProposal({
+                sessionId: sessionId(eventPayload),
+                traceId,
+                subagentType,
+                failures: failed,
+                samples: outcomes.length,
+                failureRate,
+                originalCategory: currentCategory,
+                proposedCategory: adaptedCategory,
+                mode: options.mode,
+                applied: enforce,
+                createdAt: Date.now(),
+            });
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;
             writeGatewayEventAudit(directory, {
                 hook: "delegation-outcome-learner",
                 stage: "state",
-                reason_code: "delegation_policy_adapted_from_outcomes",
+                reason_code: enforce
+                    ? "delegation_policy_adapted_from_outcomes"
+                    : "delegation_policy_change_proposed",
                 session_id: sessionId(eventPayload),
                 trace_id: traceId,
                 subagent_type: subagentType,
@@ -79,6 +100,8 @@ export function createDelegationOutcomeLearnerHook(options) {
                 high_failure_rate: String(highFailureRate),
                 original_category: currentCategory,
                 adapted_category: adaptedCategory,
+                learner_mode: options.mode,
+                mutation_applied: String(enforce),
             });
         },
     };

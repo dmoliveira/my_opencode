@@ -23,6 +23,7 @@ export function createPrReadinessGuardHook(options) {
     return {
         id: "pr-readiness-guard",
         priority: 440,
+        events: ["tool.execute.before"],
         async event(type, payload) {
             if (!options.enabled || type !== "tool.execute.before") {
                 return;

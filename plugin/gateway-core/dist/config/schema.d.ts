@@ -143,6 +143,7 @@ export interface SubagentTelemetryTimelineConfig {
 }
 export interface AdaptiveDelegationPolicyConfig {
     enabled: boolean;
+    outcomeLearnerMode: "shadow" | "enforce";
     windowMs: number;
     minSamples: number;
     highFailureRate: number;

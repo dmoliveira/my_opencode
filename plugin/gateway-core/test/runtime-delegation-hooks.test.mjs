@@ -12,7 +12,10 @@ import { createSubagentTelemetryTimelineHook } from "../dist/hooks/subagent-tele
 import { createSubagentLifecycleSupervisorHook } from "../dist/hooks/subagent-lifecycle-supervisor/index.js"
 import { createDelegationConcurrencyGuardHook } from "../dist/hooks/delegation-concurrency-guard/index.js"
 import { resolveHookOrder } from "../dist/hooks/registry.js"
-import { getRecentDelegationOutcomes } from "../dist/hooks/shared/delegation-runtime-state.js"
+import {
+  getRecentDelegationOutcomes,
+  getRecentDelegationPolicyProposals,
+} from "../dist/hooks/shared/delegation-runtime-state.js"
 
 const REPO_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 
@@ -318,6 +321,7 @@ test("delegation outcome learner adapts risky category after repeated failures",
   const learnerHook = createDelegationOutcomeLearnerHook({
     directory: REPO_DIRECTORY,
     enabled: true,
+    mode: "enforce",
     windowMs: 120000,
     minSamples: 2,
     highFailureRate: 0.5,
@@ -358,6 +362,99 @@ test("delegation outcome learner adapts risky category after repeated failures",
   })
   assert.equal(output.args.category, "balanced")
   assert.match(output.args.prompt, /\[DELEGATION LEARNER\]/)
+  const proposal = getRecentDelegationPolicyProposals(60000)
+    .filter((item) => item.sessionId === "session-learn-3")
+    .at(-1)
+  assert.ok(proposal)
+  assert.equal(proposal.mode, "enforce")
+  assert.equal(proposal.applied, true)
+  assert.equal(proposal.proposedCategory, "balanced")
+})
+
+test("delegation outcome learner defaults to a non-mutating shadow proposal", async () => {
+  const subagentType = "reviewer-shadow-test"
+  const timelineHook = createSubagentTelemetryTimelineHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    maxTimelineEntries: 100,
+    persistState: false,
+    stateFile: ".opencode/test-runtime-state.json",
+    stateMaxEntries: 100,
+  })
+  const failedOutput = { args: { subagent_type: subagentType, category: "critical" } }
+  await timelineHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-learn-shadow-failure" },
+    output: failedOutput,
+  })
+  await timelineHook.event("tool.execute.after", {
+    input: { tool: "task", sessionID: "session-learn-shadow-failure" },
+    output: { metadata: failedOutput.metadata, output: "[ERROR] Failed delegation" },
+  })
+
+  const learnerHook = createDelegationOutcomeLearnerHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    mode: "shadow",
+    windowMs: 120000,
+    minSamples: 1,
+    highFailureRate: 0.5,
+    agentPolicyOverrides: {},
+  })
+  const output = {
+    args: {
+      subagent_type: subagentType,
+      category: "critical",
+      prompt: "unchanged prompt",
+      description: "unchanged description",
+    },
+  }
+  const originalArgs = structuredClone(output.args)
+  await learnerHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-learn-shadow-proposal" },
+    output,
+  })
+
+  assert.deepEqual(output.args, originalArgs)
+  const proposal = getRecentDelegationPolicyProposals(60000)
+    .filter((item) => item.sessionId === "session-learn-shadow-proposal")
+    .at(-1)
+  assert.ok(proposal)
+  assert.equal(proposal.mode, "shadow")
+  assert.equal(proposal.applied, false)
+  assert.equal(proposal.originalCategory, "critical")
+  assert.equal(proposal.proposedCategory, "balanced")
+})
+
+test("disabled delegation outcome learner neither mutates nor records", async () => {
+  const learnerHook = createDelegationOutcomeLearnerHook({
+    directory: REPO_DIRECTORY,
+    enabled: false,
+    mode: "enforce",
+    windowMs: 120000,
+    minSamples: 1,
+    highFailureRate: 0,
+    agentPolicyOverrides: {},
+  })
+  const output = {
+    args: {
+      subagent_type: "reviewer-shadow-test",
+      category: "critical",
+      prompt: "unchanged prompt",
+    },
+  }
+  const originalArgs = structuredClone(output.args)
+  await learnerHook.event("tool.execute.before", {
+    input: { tool: "task", sessionID: "session-learn-disabled" },
+    output,
+  })
+
+  assert.deepEqual(output.args, originalArgs)
+  assert.equal(
+    getRecentDelegationPolicyProposals(60000).some(
+      (item) => item.sessionId === "session-learn-disabled",
+    ),
+    false,
+  )
 })
 
 test("tool surface enforcer v2 blocks denied tool and suggests allowed tool", async () => {

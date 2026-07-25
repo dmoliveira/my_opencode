@@ -49,11 +49,12 @@ class Args:
     minutes: int
     json_output: bool
     path: Path
+    state_path: Path
 
 
 def usage() -> int:
     print(
-        "usage: /delegation-health status [--minutes <n>] [--json] [--path <jsonl>] | /delegation-health doctor [--json] [--path <jsonl>]"
+        "usage: /delegation-health status [--minutes <n>] [--json] [--path <jsonl>] [--state-path <json>] | /delegation-health doctor [--minutes <n>] [--json] [--path <jsonl>] [--state-path <json>]"
     )
     return 2
 
@@ -73,6 +74,10 @@ def default_audit_path(cwd: Path) -> Path:
     return cwd / ".opencode" / "gateway-events.jsonl"
 
 
+def default_runtime_state_path(cwd: Path) -> Path:
+    return cwd / ".opencode" / "delegation-runtime-state.json"
+
+
 def parse_args(argv: list[str], cwd: Path) -> Args | None:
     if not argv:
         return None
@@ -82,6 +87,7 @@ def parse_args(argv: list[str], cwd: Path) -> Args | None:
     minutes = DEFAULT_MINUTES
     json_output = False
     path = default_audit_path(cwd)
+    state_path = default_runtime_state_path(cwd)
     idx = 1
     while idx < len(argv):
         arg = argv[idx]
@@ -101,8 +107,20 @@ def parse_args(argv: list[str], cwd: Path) -> Args | None:
             path = Path(argv[idx + 1]).expanduser()
             idx += 2
             continue
+        if arg == "--state-path":
+            if idx + 1 >= len(argv):
+                return None
+            state_path = Path(argv[idx + 1]).expanduser()
+            idx += 2
+            continue
         return None
-    return Args(command=command, minutes=minutes, json_output=json_output, path=path)
+    return Args(
+        command=command,
+        minutes=minutes,
+        json_output=json_output,
+        path=path,
+        state_path=state_path,
+    )
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -133,6 +151,96 @@ def load_events(path: Path) -> list[dict[str, Any]]:
         if isinstance(payload, dict):
             events.append(payload)
     return events
+
+
+def load_runtime_state(path: Path) -> dict[str, Any]:
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def runtime_epoch_ms(item: dict[str, Any], key: str) -> int:
+    try:
+        return int(item.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def summarize_runtime_state(
+    state: dict[str, Any], minutes: int
+) -> dict[str, Any]:
+    cutoff_ms = int(
+        (datetime.now(timezone.utc) - timedelta(minutes=minutes)).timestamp() * 1000
+    )
+    raw_timeline = state.get("timeline")
+    timeline = [item for item in raw_timeline if isinstance(item, dict)] if isinstance(raw_timeline, list) else []
+    timeline_in_window = [
+        item for item in timeline if runtime_epoch_ms(item, "endedAt") >= cutoff_ms
+    ]
+    raw_proposals = state.get("policyProposals")
+    proposals = [item for item in raw_proposals if isinstance(item, dict)] if isinstance(raw_proposals, list) else []
+    proposals_in_window = [
+        item
+        for item in proposals
+        if runtime_epoch_ms(item, "createdAt") >= cutoff_ms
+    ]
+
+    outcomes_by_subagent: dict[str, Counter[str]] = defaultdict(Counter)
+    for item in timeline_in_window:
+        subagent = str(item.get("subagentType") or "unknown")
+        status = str(item.get("status") or "unknown")
+        outcomes_by_subagent[subagent][status] += 1
+    outcome_rows = []
+    for subagent, counts in sorted(outcomes_by_subagent.items()):
+        completed = counts.get("completed", 0)
+        failed = counts.get("failed", 0)
+        total = completed + failed
+        outcome_rows.append(
+            {
+                "subagent": subagent,
+                "total": total,
+                "completed": completed,
+                "failed": failed,
+                "failure_rate": round(failed / total, 4) if total else 0.0,
+            }
+        )
+
+    proposals_by_subagent: dict[str, Counter[str]] = defaultdict(Counter)
+    for item in proposals_in_window:
+        subagent = str(item.get("subagentType") or "unknown")
+        mode = str(item.get("mode") or "unknown")
+        proposals_by_subagent[subagent][mode] += 1
+        if item.get("applied") is True:
+            proposals_by_subagent[subagent]["applied"] += 1
+    proposal_rows = [
+        {
+            "subagent": subagent,
+            "shadow": counts.get("shadow", 0),
+            "enforce": counts.get("enforce", 0),
+            "applied": counts.get("applied", 0),
+        }
+        for subagent, counts in sorted(proposals_by_subagent.items())
+    ]
+
+    return {
+        "path_format": "delegation-runtime-state-v1",
+        "timeline_total": len(timeline),
+        "timeline_in_window": len(timeline_in_window),
+        "outcomes_by_subagent": outcome_rows,
+        "policy_proposals_total": len(proposals),
+        "policy_proposals_in_window": len(proposals_in_window),
+        "policy_proposals_by_subagent": proposal_rows,
+        "shadow_proposals_in_window": sum(
+            1 for item in proposals_in_window if item.get("mode") == "shadow"
+        ),
+        "applied_proposals_in_window": sum(
+            1 for item in proposals_in_window if item.get("applied") is True
+        ),
+    }
 
 
 def resolve_actor(event: dict[str, Any]) -> str:
@@ -205,21 +313,37 @@ def summarize(events: list[dict[str, Any]], minutes: int) -> dict[str, Any]:
 def command_status(args: Args) -> int:
     events = load_events(args.path)
     summary = summarize(events, args.minutes)
+    runtime_state = summarize_runtime_state(
+        load_runtime_state(args.state_path), args.minutes
+    )
     warnings: list[str] = []
-    if not args.path.exists():
-        warnings.append("delegation audit path does not exist")
-    if summary["events_in_window"] == 0:
-        warnings.append("no delegation events found in selected window")
+    runtime_samples = int(runtime_state["timeline_in_window"]) + int(
+        runtime_state["policy_proposals_in_window"]
+    )
+    if summary["events_in_window"] == 0 and runtime_samples == 0:
+        warnings.append("no delegation telemetry found in selected window")
     result = "WARN" if warnings else "PASS"
     payload = {
         "result": result,
         "path": str(args.path),
         "exists": args.path.exists(),
+        "state_path": str(args.state_path),
+        "state_exists": args.state_path.exists(),
+        "telemetry_source": (
+            "audit+state"
+            if summary["events_in_window"] and runtime_samples
+            else "audit"
+            if summary["events_in_window"]
+            else "state"
+            if runtime_samples
+            else "none"
+        ),
         "warnings": warnings,
         "summary": summary,
+        "runtime_state": runtime_state,
         "quick_fixes": [
-            "set MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 and rerun your workflow",
             "rerun /delegation-health status --minutes 120 --json after delegated runs",
+            "enable MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 only when full event traces are needed",
         ],
     }
     if args.json_output:
@@ -229,6 +353,8 @@ def command_status(args: Args) -> int:
     print(f"result: {payload['result']}")
     print(f"path: {payload['path']}")
     print(f"exists: {'yes' if payload['exists'] else 'no'}")
+    print(f"state_path: {payload['state_path']}")
+    print(f"telemetry_source: {payload['telemetry_source']}")
     summary = payload["summary"]
     print(f"events_total: {summary['events_total']}")
     print(f"events_in_window: {summary['events_in_window']}")
@@ -253,13 +379,23 @@ def command_status(args: Args) -> int:
 def command_doctor(args: Args) -> int:
     events = load_events(args.path)
     summary = summarize(events, args.minutes)
+    runtime_state = summarize_runtime_state(
+        load_runtime_state(args.state_path), args.minutes
+    )
     problems: list[str] = []
     warnings: list[str] = []
 
-    if not args.path.exists():
-        warnings.append("delegation audit path does not exist")
-    if summary["events_in_window"] == 0:
-        warnings.append("no delegation events found in selected window")
+    runtime_samples = int(runtime_state["timeline_in_window"]) + int(
+        runtime_state["policy_proposals_in_window"]
+    )
+    if summary["events_in_window"] == 0 and runtime_samples == 0:
+        warnings.append("no delegation telemetry found in selected window")
+    if int(runtime_state["shadow_proposals_in_window"]) > 0:
+        warnings.append(
+            "shadow policy proposals await deterministic evaluation before promotion"
+        )
+    if int(runtime_state["applied_proposals_in_window"]) > 0:
+        warnings.append("enforced delegation policy proposals were applied in selected window")
 
     risk_counts = Counter()
     timeout_counts = Counter()
@@ -290,12 +426,14 @@ def command_doctor(args: Args) -> int:
     payload = {
         "result": result,
         "path": str(args.path),
+        "state_path": str(args.state_path),
         "window_minutes": args.minutes,
         "problems": problems,
         "warnings": warnings,
         "summary": summary,
+        "runtime_state": runtime_state,
         "quick_fixes": [
-            "set MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 and rerun delegated tasks",
+            "review shadow proposals against deterministic scenario results before enforce promotion",
             "check /gateway doctor --json for process-pressure or guard anomalies",
             "rerun /delegation-health doctor --minutes 120 --json",
         ],

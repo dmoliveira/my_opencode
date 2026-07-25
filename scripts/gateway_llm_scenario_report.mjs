@@ -16,7 +16,17 @@ import {
 const args = process.argv.slice(2)
 const markdownIndex = args.indexOf("--markdown-out")
 const markdownOut = markdownIndex >= 0 ? resolve(args[markdownIndex + 1] || "") : ""
-const fixtureArg = args.find((arg, index) => arg && index !== markdownIndex && index !== markdownIndex + 1 && !arg.startsWith("--"))
+const failBelowIndex = args.indexOf("--fail-below")
+const failBelow = failBelowIndex >= 0 ? Number(args[failBelowIndex + 1]) : null
+if (failBelow !== null && (!Number.isFinite(failBelow) || failBelow < 0 || failBelow > 100)) {
+  throw new Error("--fail-below must be a number from 0 to 100")
+}
+const optionValueIndexes = new Set()
+if (markdownIndex >= 0) optionValueIndexes.add(markdownIndex + 1)
+if (failBelowIndex >= 0) optionValueIndexes.add(failBelowIndex + 1)
+const fixtureArg = args.find(
+  (arg, index) => arg && !optionValueIndexes.has(index) && !arg.startsWith("--"),
+)
 const fixturePath = fixtureArg
   ? resolve(fixtureArg)
   : resolve("docs/plan/status/in_progress/llm-scenario-fixtures.json")
@@ -50,15 +60,25 @@ for (const fixture of fixtures) {
     actualChar: result.char,
     actualMeaning: result.meaning,
     accepted: result.accepted,
-    correct: result.accepted && result.char === fixture.expectedChar,
+    correct:
+      result.accepted &&
+      result.char === fixture.expectedChar &&
+      result.meaning === fixture.expectedMeaning,
     durationMs: result.durationMs,
     raw: result.raw,
   })
 }
 
 const summary = summarizeLlmScenarioResults(results)
-const payload = { summary, results }
+const gate = {
+  thresholdPct: failBelow,
+  passed: failBelow === null || summary.accuracyPct >= failBelow,
+}
+const payload = { summary, gate, results }
 console.log(JSON.stringify(payload, null, 2))
 if (markdownOut) {
   writeFileSync(markdownOut, renderLlmScenarioMarkdown(summary, results), "utf-8")
+}
+if (!gate.passed) {
+  process.exitCode = 1
 }

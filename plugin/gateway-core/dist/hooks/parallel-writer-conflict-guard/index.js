@@ -97,6 +97,7 @@ export function createParallelWriterConflictGuardHook(options) {
     return {
         id: "parallel-writer-conflict-guard",
         priority: 436,
+        events: ["tool.execute.before"],
         async event(type, payload) {
             if (!options.enabled || type !== "tool.execute.before") {
                 return;

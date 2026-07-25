@@ -138,6 +138,7 @@ export function createPostMergeSyncGuardHook(options: {
   return {
     id: "post-merge-sync-guard",
     priority: 447,
+    events: ["tool.execute.before", "tool.execute.after"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled) {
         return

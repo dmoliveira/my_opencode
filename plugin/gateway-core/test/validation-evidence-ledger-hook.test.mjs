@@ -7,7 +7,7 @@ import test from "node:test"
 import GatewayCorePlugin from "../dist/index.js"
 import { createDoneProofEnforcerHook } from "../dist/hooks/done-proof-enforcer/index.js"
 import { createValidationEvidenceLedgerHook } from "../dist/hooks/validation-evidence-ledger/index.js"
-import { 
+import {
   missingValidationMarkers,
   validationEvidence,
 } from "../dist/hooks/validation-evidence-ledger/evidence.js"

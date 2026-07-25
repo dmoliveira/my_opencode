@@ -229,7 +229,7 @@ def run_local_plugin_runtime_smoke() -> dict[str, Any]:
                 sys.executable,
                 str(script),
                 "--mode",
-                "both",
+                "direct",
                 "--output",
                 "json",
                 "--run-timeout-seconds",
@@ -2128,7 +2128,7 @@ def command_doctor(as_json: bool) -> int:
             "local gateway plugin runtime smoke failed; OpenCode could not reliably load the repo-local gateway plugin"
         )
         warnings.append(
-            "repo-local patched gateway runtime cannot be validated live until the plugin loader accepts local file/tarball specs"
+            "repo-local patched gateway runtime did not initialize through the supported local plugin shim"
         )
 
     report = {
@@ -2143,7 +2143,8 @@ def command_doctor(as_json: bool) -> int:
             "install bun if file plugins must auto-install",
             "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
             "run /autopilot report to inspect blockers and stale runtime status",
-            "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode both --output json",
+            "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode direct --output json",
+            "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode both --output json for optional package-loader compatibility evidence",
         ]
         + [
             item
