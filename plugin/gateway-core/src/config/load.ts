@@ -53,17 +53,39 @@ function deepMergeRecords(
   return result;
 }
 
-function resolveGatewayConfigSidecarPath(directory: string): string {
+function resolveBundledGatewayConfigPath(): string {
+  const modulePath = fileURLToPath(import.meta.url);
+  const packageRoot = resolve(dirname(modulePath), "..", "..");
+  return join(packageRoot, "config", "default-gateway-core.config.json");
+}
+
+export interface GatewayConfigLayerMeta {
+  kind: "env" | "home" | "project" | "bundled";
+  path: string;
+  exists: boolean;
+  loaded: boolean;
+  error?: string;
+}
+
+export interface GatewayConfigSourceMeta {
+  sidecarPath: string;
+  sidecarExists: boolean;
+  sidecarLoaded: boolean;
+  sidecarError?: string;
+  layers: GatewayConfigLayerMeta[];
+}
+
+function gatewayConfigLayerPaths(directory: string): Array<{
+  kind: GatewayConfigLayerMeta["kind"];
+  path: string;
+}> {
   const envPath = String(
     process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH ?? "",
   ).trim();
   if (envPath) {
-    return resolve(envPath);
+    return [{ kind: "env", path: resolve(envPath) }];
   }
-  const localPath = join(directory, ".opencode", "gateway-core.config.json");
-  if (existsSync(localPath)) {
-    return localPath;
-  }
+
   const homeDir = String(process.env.HOME ?? "").trim() || homedir();
   const homePath = join(
     homeDir,
@@ -72,51 +94,63 @@ function resolveGatewayConfigSidecarPath(directory: string): string {
     "my_opencode",
     "gateway-core.config.json",
   );
-  if (existsSync(homePath)) {
-    return homePath;
+  const projectPath = join(directory, ".opencode", "gateway-core.config.json");
+  const externalLayers = [
+    { kind: "home" as const, path: homePath },
+    { kind: "project" as const, path: projectPath },
+  ];
+  if (externalLayers.some((layer) => existsSync(layer.path))) {
+    return externalLayers;
   }
-  return resolveBundledGatewayConfigPath();
-}
-
-function resolveBundledGatewayConfigPath(): string {
-  const modulePath = fileURLToPath(import.meta.url);
-  const packageRoot = resolve(dirname(modulePath), "..", "..");
-  return join(packageRoot, "config", "default-gateway-core.config.json");
-}
-
-export interface GatewayConfigSourceMeta {
-  sidecarPath: string;
-  sidecarExists: boolean;
-  sidecarLoaded: boolean;
-  sidecarError?: string;
+  return [{ kind: "bundled", path: resolveBundledGatewayConfigPath() }];
 }
 
 export function loadGatewayConfigSourceWithMeta(
   directory: string,
   source: unknown,
 ): { source: Record<string, unknown>; meta: GatewayConfigSourceMeta } {
-  const sidecarPath = resolveGatewayConfigSidecarPath(directory);
-  const meta: GatewayConfigSourceMeta = {
-    sidecarPath,
-    sidecarExists: existsSync(sidecarPath),
-    sidecarLoaded: false,
-  };
+  const layers: GatewayConfigLayerMeta[] = [];
   let sidecar: Record<string, unknown> = {};
-  try {
-    if (meta.sidecarExists) {
-      const parsed = JSON.parse(readFileSync(sidecarPath, "utf-8")) as unknown;
-      if (isRecord(parsed)) {
-        sidecar = parsed;
-        meta.sidecarLoaded = true;
-      } else {
-        meta.sidecarError = "sidecar_not_object";
+
+  for (const layer of gatewayConfigLayerPaths(directory)) {
+    const meta: GatewayConfigLayerMeta = {
+      kind: layer.kind,
+      path: layer.path,
+      exists: existsSync(layer.path),
+      loaded: false,
+    };
+    if (meta.exists) {
+      try {
+        const parsed = JSON.parse(readFileSync(layer.path, "utf-8")) as unknown;
+        if (isRecord(parsed)) {
+          sidecar = deepMergeRecords(sidecar, parsed);
+          meta.loaded = true;
+        } else {
+          meta.error = "sidecar_not_object";
+          sidecar = {};
+        }
+      } catch (error) {
+        meta.error =
+          error instanceof Error ? error.message : String(error ?? "unknown_error");
+        sidecar = {};
       }
     }
-  } catch (error) {
-    meta.sidecarError =
-      error instanceof Error ? error.message : String(error ?? "unknown_error");
-    sidecar = {};
+    layers.push(meta);
   }
+
+  const effectiveLayer =
+    [...layers].reverse().find((layer) => layer.exists) ?? layers.at(-1);
+  const layerErrors = layers
+    .filter((layer) => layer.error)
+    .map((layer) => `${layer.kind}:${layer.error}`);
+  const meta: GatewayConfigSourceMeta = {
+    sidecarPath: effectiveLayer?.path ?? resolveBundledGatewayConfigPath(),
+    sidecarExists: effectiveLayer?.exists ?? false,
+    sidecarLoaded: effectiveLayer?.loaded ?? false,
+    sidecarError: layerErrors.length > 0 ? layerErrors.join("; ") : undefined,
+    layers,
+  };
+
   if (!isRecord(source)) {
     return { source: sidecar, meta };
   }
@@ -293,6 +327,16 @@ function llmDecisionMode(
     value === "assist" ||
     value === "enforce"
   ) {
+    return value;
+  }
+  return fallback;
+}
+
+function outcomeLearnerMode(
+  value: unknown,
+  fallback: "shadow" | "enforce",
+): "shadow" | "enforce" {
+  if (value === "shadow" || value === "enforce") {
     return value;
   }
   return fallback;
@@ -1142,6 +1186,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof adaptiveDelegationPolicySource.enabled === "boolean"
           ? adaptiveDelegationPolicySource.enabled
           : DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.enabled,
+      outcomeLearnerMode: outcomeLearnerMode(
+        adaptiveDelegationPolicySource.outcomeLearnerMode,
+        DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.outcomeLearnerMode,
+      ),
       windowMs: positiveInt(
         adaptiveDelegationPolicySource.windowMs,
         DEFAULT_GATEWAY_CONFIG.adaptiveDelegationPolicy.windowMs,

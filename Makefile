@@ -138,7 +138,7 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" doctor --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" status --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" doctor --json; \
-	HOME="$$TMP_HOME" XDG_CACHE_HOME="$$TMP_HOME/.cache" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_live_relaunch_smoke.py" --home "$$TMP_HOME" --repo-root "$$TMP_HOME/.config/opencode/my_opencode" --sync-source-dist "$$SOURCE_REPO/plugin/gateway-core/dist" --output-dir "$$TMP_HOME/.config/opencode/my_opencode/runtime/live-relaunch-smoke" --json; \
+	if [ "$${MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE:-0}" = "1" ]; then HOME="$$TMP_HOME" XDG_CACHE_HOME="$$TMP_HOME/.cache" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_live_relaunch_smoke.py" --home "$$TMP_HOME" --repo-root "$$TMP_HOME/.config/opencode/my_opencode" --sync-source-dist "$$SOURCE_REPO/plugin/gateway-core/dist" --output-dir "$$TMP_HOME/.config/opencode/my_opencode/runtime/live-relaunch-smoke" --json; else echo "gateway live relaunch smoke: SKIP (set MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE=1 for model-backed integration)"; fi; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers --json; \
 	HOME="$$TMP_HOME" python3 "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" backup --name install-test; \

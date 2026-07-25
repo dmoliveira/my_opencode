@@ -72,6 +72,7 @@ export function createGhChecksMergeGuardHook(options) {
     return {
         id: "gh-checks-merge-guard",
         priority: 446,
+        events: ["tool.execute.before"],
         async event(type, payload) {
             if (!options.enabled || type !== "tool.execute.before") {
                 return;

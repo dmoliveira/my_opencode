@@ -187,6 +187,7 @@ export interface SubagentTelemetryTimelineConfig {
 // Declares adaptive delegation policy settings for dynamic failure-response behavior.
 export interface AdaptiveDelegationPolicyConfig {
   enabled: boolean;
+  outcomeLearnerMode: "shadow" | "enforce";
   windowMs: number;
   minSamples: number;
   highFailureRate: number;
@@ -930,6 +931,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   adaptiveDelegationPolicy: {
     enabled: true,
+    outcomeLearnerMode: "shadow",
     windowMs: 300000,
     minSamples: 4,
     highFailureRate: 0.5,

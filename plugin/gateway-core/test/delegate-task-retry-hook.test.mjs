@@ -77,7 +77,7 @@ test("delegate-task-retry appends fallback guidance for aborted delegated tasks"
     })
     const output = {
       output: {
-        output: 'task tool failed: Tool execution aborted',
+        output: 'task tool failed: tool execution aborted',
       },
     }
     await plugin["tool.execute.after"]({ tool: "task", sessionID: "session-task-3" }, output)

@@ -25,6 +25,20 @@ export interface DelegationOutcomeRecord {
     durationMs: number;
     traceId?: string;
 }
+export interface DelegationPolicyProposalInput {
+    sessionId: string;
+    traceId?: string;
+    subagentType: string;
+    failures: number;
+    samples: number;
+    failureRate: number;
+    originalCategory: string;
+    proposedCategory: string;
+    mode: "shadow" | "enforce";
+    applied: boolean;
+    createdAt: number;
+}
+export type DelegationPolicyProposalRecord = DelegationPolicyProposalInput;
 export declare function configureDelegationRuntimeState(options: {
     directory: string;
     persistState: boolean;
@@ -37,6 +51,8 @@ export declare function clearActiveDelegation(input: {
     childRunId?: string;
 }): boolean;
 export declare function registerDelegationOutcome(input: DelegationOutcomeInput, maxEntries: number): DelegationOutcomeRecord | null;
+export declare function registerDelegationPolicyProposal(input: DelegationPolicyProposalInput): DelegationPolicyProposalRecord | null;
+export declare function getRecentDelegationPolicyProposals(windowMs: number): DelegationPolicyProposalRecord[];
 export declare function clearDelegationSession(sessionId: string): void;
 export declare function getRecentDelegationOutcomes(windowMs: number): DelegationOutcomeRecord[];
 export declare function getDelegationFailureStats(windowMs: number): {

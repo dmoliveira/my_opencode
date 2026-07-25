@@ -32,6 +32,10 @@ jobs:
           npm --prefix plugin/gateway-core run lint
           npm --prefix plugin/gateway-core run test
 
+      - name: Gate deterministic gateway workflows
+        run: |
+          node scripts/gateway_workflow_scenario_report.mjs --fail-below 100
+
       - name: Run deterministic self-tests
         run: |
           make selftest

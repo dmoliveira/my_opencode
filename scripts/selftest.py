@@ -102,6 +102,12 @@ from autopilot_runtime import (  # type: ignore
 )
 from autopilot_integration import integrate_controls  # type: ignore
 from pages_readiness_check import evaluate_pages_readiness  # type: ignore
+from gateway_live_relaunch_smoke import (  # type: ignore
+    dist_hashes,
+    restore_dist_files,
+    sync_dist_files,
+)
+from gateway_local_plugin_runtime_smoke import audit_has_reason_code  # type: ignore
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -115,6 +121,7 @@ POST_SESSION_SCRIPT = REPO_ROOT / "scripts" / "post_session_command.py"
 POLICY_SCRIPT = REPO_ROOT / "scripts" / "policy_command.py"
 QUALITY_SCRIPT = REPO_ROOT / "scripts" / "quality_command.py"
 GATEWAY_SCRIPT = REPO_ROOT / "scripts" / "gateway_command.py"
+DELEGATION_HEALTH_SCRIPT = REPO_ROOT / "scripts" / "delegation_health_command.py"
 DOCTOR_SCRIPT = REPO_ROOT / "scripts" / "doctor_command.py"
 CONFIG_SCRIPT = REPO_ROOT / "scripts" / "config_command.py"
 STACK_SCRIPT = REPO_ROOT / "scripts" / "stack_profile_command.py"
@@ -184,6 +191,9 @@ WAVE_LINKAGE_CHECK_SCRIPT = REPO_ROOT / "scripts" / "wave_linkage_check.py"
 WAVE_HANDOFF_SUMMARY_SCRIPT = REPO_ROOT / "scripts" / "wave_handoff_summary.py"
 GATEWAY_LIVE_RELAUNCH_SMOKE_SCRIPT = (
     REPO_ROOT / "scripts" / "gateway_live_relaunch_smoke.py"
+)
+GATEWAY_LOCAL_PLUGIN_RUNTIME_SMOKE_SCRIPT = (
+    REPO_ROOT / "scripts" / "gateway_local_plugin_runtime_smoke.py"
 )
 HOTFIX_RUNTIME_SCRIPT = REPO_ROOT / "scripts" / "hotfix_runtime.py"
 HOTFIX_COMMAND_SCRIPT = REPO_ROOT / "scripts" / "hotfix_command.py"
@@ -352,6 +362,29 @@ exit 0
             shutil.copy2(agent_file, installed_agent_dir / agent_file.name)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
+
+        source_dist = tmp / "source-dist"
+        live_dist = tmp / "live-dist"
+        sync_scratch = tmp / "sync-scratch"
+        (source_dist / "hooks").mkdir(parents=True)
+        (live_dist / "legacy").mkdir(parents=True)
+        (source_dist / "index.js").write_text("new-index", encoding="utf-8")
+        (source_dist / "hooks" / "new.js").write_text("new-hook", encoding="utf-8")
+        (live_dist / "index.js").write_text("old-index", encoding="utf-8")
+        (live_dist / "legacy" / "old.js").write_text("old-hook", encoding="utf-8")
+        original_live_hashes = dist_hashes(live_dist)
+        dist_sync_manifest = sync_dist_files(source_dist, live_dist, sync_scratch)
+        expect(
+            dist_hashes(live_dist) == dist_hashes(source_dist)
+            and dist_sync_manifest["hooks/new.js"]["live_before"] == "missing"
+            and dist_sync_manifest["legacy/old.js"]["source_before"] == "missing",
+            "gateway live relaunch sync should replace the complete dist tree",
+        )
+        restore_dist_files(live_dist, sync_scratch)
+        expect(
+            dist_hashes(live_dist) == original_live_hashes,
+            "gateway live relaunch sync should restore the complete installed dist tree",
+        )
 
         # Agent operating contract sanity checks
         expect(AGENT_DIR.exists(), "agent directory should exist")
@@ -748,33 +781,56 @@ exit 0
                 "--format",
                 "json",
             )
-            tasker_epic_links = run_oc_json(
-                REPO_ROOT,
-                "get",
-                str(tasker_epic["id"]),
-                "--view",
-                "links",
-                "--format",
-                "json",
-            )
-            tasker_docs_links = run_oc_json(
-                REPO_ROOT,
-                "get",
-                str(tasker_docs_task["id"]),
-                "--view",
-                "links",
-                "--format",
-                "json",
-            )
-            tasker_plan_links = run_oc_json(
-                REPO_ROOT,
-                "get",
-                str(tasker_plan_task["id"]),
-                "--view",
-                "links",
-                "--format",
-                "json",
-            )
+            tasker_link_records = [
+                run_oc_json(
+                    REPO_ROOT,
+                    "get",
+                    str(link["id"]),
+                    "--view",
+                    "full",
+                    "--format",
+                    "json",
+                )
+                for link in (
+                    parent_link_one,
+                    parent_link_two,
+                    dependency_link,
+                    memory_link,
+                )
+            ]
+
+            def tasker_edges_for(entity_id: str) -> list[dict]:
+                edges: list[dict] = []
+                for link in tasker_link_records:
+                    from_id = str(link.get("from_id") or "")
+                    to_id = str(link.get("to_id") or "")
+                    if from_id == entity_id:
+                        edges.append(
+                            {
+                                "direction": "outgoing",
+                                "edge_type": link.get("edge_type"),
+                                "target_id": to_id,
+                            }
+                        )
+                    elif to_id == entity_id:
+                        edges.append(
+                            {
+                                "direction": "incoming",
+                                "edge_type": link.get("edge_type"),
+                                "target_id": from_id,
+                            }
+                        )
+                return edges
+
+            tasker_epic_links = {
+                "links": tasker_edges_for(str(tasker_epic["id"]))
+            }
+            tasker_docs_links = {
+                "links": tasker_edges_for(str(tasker_docs_task["id"]))
+            }
+            tasker_plan_links = {
+                "links": tasker_edges_for(str(tasker_plan_task["id"]))
+            }
             tasker_memory_full = run_oc_json(
                 REPO_ROOT,
                 "get",
@@ -2602,6 +2658,37 @@ exit 0
             repair_dry_run_payload.get("repaired_count") == 0,
             "session repair-stale dry-run should not mutate the database",
         )
+        scoped_repair_dry_run = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-stale",
+                "--stale-seconds",
+                "300",
+                "--session-id",
+                "parent-session",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            scoped_repair_dry_run.returncode == 1,
+            "scoped session repair dry-run should report its candidate",
+        )
+        scoped_repair_payload = parse_json_output(scoped_repair_dry_run.stdout)
+        expect(
+            scoped_repair_payload.get("candidate_count") == 1
+            and scoped_repair_payload.get("problems") == []
+            and all(
+                "--session-id parent-session" in item
+                for item in scoped_repair_payload.get("quick_fixes", [])
+            ),
+            "scoped session repair quick fixes should preserve the exact session scope",
+        )
         conn = sqlite3.connect(runtime_db_path)
         try:
             parent_message_dry_run = json.loads(
@@ -2688,6 +2775,11 @@ exit 0
                     "SELECT data FROM part WHERE id = ?", ("question-part",)
                 ).fetchone()[0]
             )
+            conn.execute(
+                "UPDATE session SET time_updated = ? WHERE id = ?",
+                (stale_parent_ms, "parent-session"),
+            )
+            conn.commit()
         finally:
             conn.close()
 
@@ -2757,11 +2849,12 @@ exit 0
                 item.get("issue_type")
                 in {
                     "parent_child_mismatch",
+                    "silent_parent_after_delegation_abort",
                     "stale_running_tool",
                 }
                 for item in session_runtime_repaired_payload.get("stuck_findings") or []
             ),
-            "session doctor should clear the repairable targeted stuck findings after repair",
+            "session doctor should clear targeted findings without reclassifying repaired parents as silent aborts",
         )
         expect(
             session_runtime_repaired_payload.get("generic_stale_count") == 2,
@@ -12317,6 +12410,109 @@ exit 0
             "gateway status should expose event audit toggle and path telemetry",
         )
 
+        delegation_state_path = (
+            gateway_cwd / ".opencode" / "delegation-runtime-state.json"
+        )
+        delegation_state_path.parent.mkdir(parents=True, exist_ok=True)
+        now_ms = int(time.time() * 1000)
+        delegation_state_path.write_text(
+            json.dumps(
+                {
+                    "timeline": [
+                        {
+                            "sessionId": "selftest-session",
+                            "subagentType": "reviewer",
+                            "category": "critical",
+                            "status": "failed",
+                            "reasonCode": "delegation_runtime_failure",
+                            "startedAt": now_ms - 2000,
+                            "endedAt": now_ms - 1000,
+                            "durationMs": 1000,
+                        }
+                    ],
+                    "policyProposals": [
+                        {
+                            "sessionId": "selftest-session",
+                            "subagentType": "reviewer",
+                            "failures": 1,
+                            "samples": 1,
+                            "failureRate": 1.0,
+                            "originalCategory": "critical",
+                            "proposedCategory": "balanced",
+                            "mode": "shadow",
+                            "applied": False,
+                            "createdAt": now_ms,
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        delegation_health = subprocess.run(
+            [
+                sys.executable,
+                str(DELEGATION_HEALTH_SCRIPT),
+                "status",
+                "--minutes",
+                "60",
+                "--path",
+                str(gateway_cwd / ".opencode" / "missing-events.jsonl"),
+                "--state-path",
+                str(delegation_state_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=gateway_cwd,
+        )
+        expect(
+            delegation_health.returncode == 0,
+            f"delegation health runtime-state fallback failed: {delegation_health.stderr}",
+        )
+        delegation_health_payload = parse_json_output(delegation_health.stdout)
+        expect(
+            delegation_health_payload.get("result") == "PASS"
+            and delegation_health_payload.get("telemetry_source") == "state"
+            and delegation_health_payload.get("runtime_state", {}).get(
+                "policy_proposals_in_window"
+            )
+            == 1,
+            "delegation health should use bounded runtime state when event audit is off",
+        )
+        delegation_health_doctor = subprocess.run(
+            [
+                sys.executable,
+                str(DELEGATION_HEALTH_SCRIPT),
+                "doctor",
+                "--minutes",
+                "60",
+                "--path",
+                str(gateway_cwd / ".opencode" / "missing-events.jsonl"),
+                "--state-path",
+                str(delegation_state_path),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=gateway_cwd,
+        )
+        delegation_health_doctor_payload = parse_json_output(
+            delegation_health_doctor.stdout
+        )
+        expect(
+            delegation_health_doctor.returncode == 0
+            and delegation_health_doctor_payload.get("result") == "WARN"
+            and any(
+                "await deterministic evaluation" in str(item)
+                for item in delegation_health_doctor_payload.get("warnings", [])
+            ),
+            "delegation health doctor should surface shadow proposals without auto-promoting them",
+        )
+
         stale_loop_state_path = gateway_cwd / ".opencode" / "gateway-core.state.json"
         stale_loop_state_path.parent.mkdir(parents=True, exist_ok=True)
         stale_loop_state_path.write_text(
@@ -12559,6 +12755,132 @@ exit 0
                 for item in runtime_session_health.get("repair_commands") or []
             ),
             "gateway doctor should include session repair guidance for stale runtime findings",
+        )
+
+        direct_smoke_bin = tmp / "gateway-direct-smoke-bin"
+        direct_smoke_bin.mkdir(parents=True, exist_ok=True)
+        direct_smoke_args_path = tmp / "gateway-direct-smoke-args.json"
+        direct_opencode_stub = direct_smoke_bin / "opencode"
+        direct_opencode_stub.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "from pathlib import Path\n"
+            "record = {\n"
+            "  'argv': sys.argv[1:],\n"
+            "  'env': {key: os.environ.get(key) for key in [\n"
+            "    'HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME',\n"
+            "    'OPENAI_API_KEY', 'PORTKEY_API_KEY', 'ANTHROPIC_API_KEY',\n"
+            "  ]},\n"
+            "}\n"
+            f"Path({str(direct_smoke_args_path)!r}).write_text(json.dumps(record), encoding='utf-8')\n"
+            "audit = Path(os.environ['MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH'])\n"
+            "audit.parent.mkdir(parents=True, exist_ok=True)\n"
+            "audit.write_text(json.dumps({'reason_code':'gateway_runtime_bootstrap'}) + '\\n', encoding='utf-8')\n"
+            "print('{}')\n",
+            encoding="utf-8",
+        )
+        direct_opencode_stub.chmod(0o755)
+        direct_smoke_home = tmp / "gateway-direct-host-home"
+        (direct_smoke_home / ".config" / "opencode").mkdir(
+            parents=True, exist_ok=True
+        )
+        (direct_smoke_home / ".config" / "opencode" / "opencode.json").write_text(
+            '{"unsupported_host_key":true}\n', encoding="utf-8"
+        )
+        direct_smoke_env = os.environ.copy()
+        direct_smoke_env["HOME"] = str(direct_smoke_home)
+        direct_smoke_env["PATH"] = (
+            f"{direct_smoke_bin}:{direct_smoke_env.get('PATH', '')}"
+        )
+        direct_smoke_env["OPENAI_API_KEY"] = "must-not-leak"
+        direct_smoke_env["PORTKEY_API_KEY"] = "must-not-leak"
+        direct_smoke_env["ANTHROPIC_API_KEY"] = "must-not-leak"
+        direct_smoke_result = subprocess.run(
+            [
+                sys.executable,
+                str(GATEWAY_LOCAL_PLUGIN_RUNTIME_SMOKE_SCRIPT),
+                "--mode",
+                "direct",
+                "--output",
+                "json",
+            ],
+            cwd=REPO_ROOT,
+            env=direct_smoke_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        expect(
+            direct_smoke_result.returncode == 0,
+            f"direct gateway bootstrap smoke should pass without host config or a model request: {direct_smoke_result.stderr}",
+        )
+        direct_smoke_payload = parse_json_output(direct_smoke_result.stdout)
+        direct_smoke_results = direct_smoke_payload.get("results") or []
+        expect(
+            len(direct_smoke_results) == 1
+            and direct_smoke_results[0].get("mode") == "direct"
+            and direct_smoke_results[0].get("result") == "PASS"
+            and direct_smoke_results[0].get("bootstrap_seen") is True,
+            "direct gateway bootstrap smoke should require a gateway_runtime_bootstrap audit event",
+        )
+        direct_smoke_record = json.loads(
+            direct_smoke_args_path.read_text(encoding="utf-8")
+        )
+        expect(
+            direct_smoke_record.get("argv")
+            == ["debug", "config", "--print-logs", "--log-level", "INFO"],
+            "direct gateway bootstrap smoke should initialize config without invoking an LLM",
+        )
+        direct_probe_home = Path(direct_smoke_results[0]["work_dir"]) / "home"
+        direct_probe_env = direct_smoke_record.get("env") or {}
+        expect(
+            not Path(direct_smoke_results[0]["work_dir"])
+            .resolve()
+            .is_relative_to(REPO_ROOT.resolve()),
+            "direct gateway bootstrap smoke should run outside the repo config hierarchy",
+        )
+        expect(
+            direct_probe_env.get("HOME") == str(direct_probe_home)
+            and direct_probe_env.get("XDG_CONFIG_HOME")
+            == str(direct_probe_home / ".config")
+            and direct_probe_env.get("XDG_CACHE_HOME")
+            == str(direct_probe_home / ".cache")
+            and direct_probe_env.get("XDG_DATA_HOME")
+            == str(direct_probe_home / ".local" / "share")
+            and direct_probe_env.get("XDG_STATE_HOME")
+            == str(direct_probe_home / ".local" / "state"),
+            "direct gateway bootstrap smoke should isolate HOME and every XDG state root",
+        )
+        expect(
+            all(
+                direct_probe_env.get(key) is None
+                for key in (
+                    "OPENAI_API_KEY",
+                    "PORTKEY_API_KEY",
+                    "ANTHROPIC_API_KEY",
+                )
+            ),
+            "direct gateway bootstrap smoke should not forward ambient provider credentials",
+        )
+        expect(
+            audit_has_reason_code(
+                '{"reason_code":"gateway_runtime_bootstrap"}\n',
+                "gateway_runtime_bootstrap",
+            )
+            and not audit_has_reason_code(
+                "unstructured gateway_runtime_bootstrap text\n",
+                "gateway_runtime_bootstrap",
+            ),
+            "gateway bootstrap evidence should require a structured JSONL reason code",
+        )
+        direct_shim_path = Path(direct_smoke_results[0]["shim_path"])
+        expect(
+            direct_shim_path.exists()
+            and "dist/index.js" in direct_shim_path.read_text(encoding="utf-8")
+            and str(direct_smoke_home) not in direct_shim_path.read_text(
+                encoding="utf-8"
+            ),
+            "direct gateway bootstrap smoke should use an isolated local-plugin shim for the built dist entry",
         )
 
         smoke_home = tmp / "gateway-smoke-home"
@@ -22608,6 +22930,27 @@ exit 1
             isinstance(report.get("failed_count"), int),
             "doctor summary should report failed_count as an integer",
         )
+        doctor_checks = report.get("checks", [])
+        expect(
+            all(
+                check.get("normalized_result") in {"PASS", "SKIP", "FAIL"}
+                for check in doctor_checks
+            ),
+            "doctor checks should expose normalized PASS/SKIP/FAIL results",
+        )
+        skipped_names = {
+            str(check.get("name"))
+            for check in doctor_checks
+            if check.get("normalized_result") == "SKIP"
+        }
+        expect(
+            all(
+                not any(str(problem).startswith(f"{name}:") for name in skipped_names)
+                for problem in report.get("problems", [])
+            ),
+            "skipped optional diagnostics should not contribute blocking problems",
+        )
+
         bg_checks = [
             check for check in report.get("checks", []) if check.get("name") == "bg"
         ]

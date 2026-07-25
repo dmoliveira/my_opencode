@@ -12,14 +12,6 @@ import tempfile
 from pathlib import Path
 
 
-DIST_FILES = [
-    "hooks/delegation-concurrency-guard/index.js",
-    "hooks/shared/delegation-runtime-state.js",
-    "hooks/shared/delegation-trace.js",
-    "hooks/subagent-lifecycle-supervisor/index.js",
-    "hooks/subagent-telemetry-timeline/index.js",
-]
-
 PROMPT = (
     "Use exactly two explore subagents in parallel in this same session: one inspects README.md, "
     "one inspects docs/quickstart.md. Wait for both to finish. Then launch one more explore "
@@ -45,37 +37,49 @@ def resolve_plugin_dist(home: Path, repo_root: Path) -> Path:
     )
 
 
+def dist_hashes(root: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(root)): sha1(path)
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
 def sync_dist_files(
     source_root: Path, live_root: Path, scratch: Path
 ) -> dict[str, dict[str, str]]:
-    backup_root = scratch / "backup"
+    if not source_root.is_dir() or not live_root.is_dir():
+        raise FileNotFoundError("source and live gateway dist directories are required")
+    backup_root = scratch / "backup-dist"
     if backup_root.exists():
         shutil.rmtree(backup_root)
-    backup_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(live_root, backup_root, symlinks=True)
+
+    source_hashes = dist_hashes(source_root)
+    live_hashes = dist_hashes(live_root)
+    backup_hashes = dist_hashes(backup_root)
+    shutil.rmtree(live_root)
+    shutil.copytree(source_root, live_root, symlinks=True)
+    synced_hashes = dist_hashes(live_root)
+
     manifest: dict[str, dict[str, str]] = {}
-    for rel in DIST_FILES:
-        source = source_root / rel
-        live = live_root / rel
-        backup = backup_root / rel
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(live, backup)
+    for rel in sorted(set(source_hashes) | set(live_hashes)):
         manifest[rel] = {
-            "source_before": sha1(source),
-            "live_before": sha1(live),
-            "backup": sha1(backup),
+            "source_before": source_hashes.get(rel, "missing"),
+            "live_before": live_hashes.get(rel, "missing"),
+            "backup": backup_hashes.get(rel, "missing"),
+            "live_during": synced_hashes.get(rel, "missing"),
         }
-        shutil.copy2(source, live)
-        manifest[rel]["live_during"] = sha1(live)
     return manifest
 
 
 def restore_dist_files(live_root: Path, scratch: Path) -> None:
-    backup_root = scratch / "backup"
-    for rel in DIST_FILES:
-        backup = backup_root / rel
-        live = live_root / rel
-        if backup.exists():
-            shutil.copy2(backup, live)
+    backup_root = scratch / "backup-dist"
+    if not backup_root.is_dir():
+        return
+    if live_root.exists():
+        shutil.rmtree(live_root)
+    shutil.copytree(backup_root, live_root, symlinks=True)
 
 
 def run_smoke(

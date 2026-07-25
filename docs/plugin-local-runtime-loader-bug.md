@@ -1,5 +1,22 @@
 # Local Gateway Plugin Loader Bug
 
+The release gate uses the documented local-plugin directory mechanism and a
+network-free config bootstrap:
+
+```bash
+python3 scripts/gateway_local_plugin_runtime_smoke.py --mode direct --output json
+```
+
+This creates an isolated `.opencode/plugins/gateway-core.js` shim that imports
+the built `dist/index.js`, runs `opencode debug config`, and requires a
+`gateway_runtime_bootstrap` audit event. It does not copy host configuration,
+reuse host dependencies, or make a model request.
+
+The package path and tarball checks below remain optional compatibility probes.
+`make install-test` uses the direct bootstrap as its deterministic gateway gate;
+set `MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE=1` only when credentials are available
+for the separate model-backed relaunch integration.
+
 OpenCode `1.2.20` does not reliably load the repo-local gateway plugin when the plugin is configured with a local `file:` spec.
 
 ## Reproduction

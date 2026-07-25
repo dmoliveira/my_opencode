@@ -702,6 +702,7 @@ def run_check(entry: dict) -> dict:
                 "stderr": "",
                 "skipped": True,
                 "skip_reason": f"optional check unavailable: {required}",
+                "normalized_result": "SKIP",
             }
 
     timeout_seconds = int(entry.get("timeout_seconds") or DEFAULT_CHECK_TIMEOUT_SECONDS)
@@ -726,6 +727,7 @@ def run_check(entry: dict) -> dict:
             "stderr": stderr,
             "timeout_seconds": timeout_seconds,
             "timeout": True,
+            "normalized_result": "FAIL",
         }
 
     stdout = result.stdout.strip()
@@ -738,12 +740,14 @@ def run_check(entry: dict) -> dict:
         "ok": result.returncode == 0,
         "stdout": stdout,
         "stderr": stderr,
+        "normalized_result": "PASS" if result.returncode == 0 else "FAIL",
     }
 
     if entry["kind"] == "doctor-json":
         try:
             parsed = json.loads(stdout)
             item["report"] = parsed
+            item["raw_report_result"] = parsed.get("result")
             item["report_result"] = parsed.get("result")
             if entry.get("name") == "model-routing" and "result" not in parsed:
                 item["report_result"] = "PASS"
@@ -787,6 +791,12 @@ def run_check(entry: dict) -> dict:
             item["ok"] = False
             item["parse_error"] = str(exc)
 
+    if item.get("skipped"):
+        item["normalized_result"] = "SKIP"
+    elif item.get("ok"):
+        item["normalized_result"] = "PASS"
+    else:
+        item["normalized_result"] = "FAIL"
     return item
 
 
@@ -805,7 +815,8 @@ def summarize(items: list[dict]) -> dict:
                 warnings.append(f"{item['name']}: {warning}")
             report_problems = report.get("problems")
             for problem in report_problems if isinstance(report_problems, list) else []:
-                problems.append(f"{item['name']}: {problem}")
+                target = warnings if item.get("skipped") else problems
+                target.append(f"{item['name']}: {problem}")
 
     ops_names = {"delivery", "ship", "release-train", "hotfix"}
     ops_checks = [item for item in items if item.get("name") in ops_names]
@@ -876,10 +887,10 @@ def print_human(summary: dict) -> int:
     print("doctor")
     print("------")
     for item in summary["checks"]:
-        state = "PASS" if item["ok"] else "FAIL"
+        state = str(item.get("normalized_result") or ("PASS" if item["ok"] else "FAIL"))
         detail = ""
-        if item.get("report_result"):
-            detail = f" report={item['report_result']}"
+        if item.get("raw_report_result") and item.get("raw_report_result") != state:
+            detail = f" raw_report={item['raw_report_result']}"
         print(f"- {item['name']}: {state} (exit={item['exit_code']}){detail}")
 
     if summary["warnings"]:

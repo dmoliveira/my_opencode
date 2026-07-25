@@ -18,6 +18,19 @@ export function resolveHookOrder(
   order: string[],
   disabled: string[],
 ): GatewayHook[] {
+  const seenHookIds = new Set<string>()
+  const duplicateHookIds = new Set<string>()
+  for (const hook of hooks) {
+    if (seenHookIds.has(hook.id)) {
+      duplicateHookIds.add(hook.id)
+    }
+    seenHookIds.add(hook.id)
+  }
+  if (duplicateHookIds.size > 0) {
+    throw new Error(
+      `duplicate gateway hook ids: ${[...duplicateHookIds].sort().join(", ")}`,
+    )
+  }
   const disabledSet = new Set(disabled)
   const orderMap = new Map(order.map((id, idx) => [id, idx]))
   const explicitOrder = order.length > 0

@@ -25,6 +25,7 @@ export function createMergeReadinessGuardHook(options: {
   return {
     id: "merge-readiness-guard",
     priority: 445,
+    events: ["tool.execute.before"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled || type !== "tool.execute.before") {
         return

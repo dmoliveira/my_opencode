@@ -19,6 +19,11 @@ const sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise,
 const args = process.argv.slice(2)
 const markdownIndex = args.indexOf("--markdown-out")
 const markdownOut = markdownIndex >= 0 ? resolve(args[markdownIndex + 1] || "") : ""
+const failBelowIndex = args.indexOf("--fail-below")
+const failBelow = failBelowIndex >= 0 ? Number(args[failBelowIndex + 1]) : null
+if (failBelow !== null && (!Number.isFinite(failBelow) || failBelow < 0 || failBelow > 100)) {
+  throw new Error("--fail-below must be a number from 0 to 100")
+}
 
 const results = []
 
@@ -519,7 +524,14 @@ function decisionRuntime(char, meaning, mode = "assist") {
 }
 
 const summary = summarizeWorkflowScenarioResults(results)
-console.log(JSON.stringify({ summary, results }, null, 2))
+const gate = {
+  thresholdPct: failBelow,
+  passed: failBelow === null || summary.accuracyPct >= failBelow,
+}
+console.log(JSON.stringify({ summary, gate, results }, null, 2))
 if (markdownOut) {
   writeFileSync(markdownOut, renderWorkflowScenarioMarkdown(summary, results), "utf-8")
+}
+if (!gate.passed) {
+  process.exitCode = 1
 }

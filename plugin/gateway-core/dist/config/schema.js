@@ -250,6 +250,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     adaptiveDelegationPolicy: {
         enabled: true,
+        outcomeLearnerMode: "shadow",
         windowMs: 300000,
         minSamples: 4,
         highFailureRate: 0.5,

@@ -35,7 +35,7 @@ Canonical command mental model:
 
 For a reusable external delivery-policy reference, search your local `agents.md` clone first when available, then use the public `agents.md` playbook docs (`AGENTS.md`, `docs/index.md`, `docs/validation-policy.md`) when you need canonical shareable links.
 
-Gateway runtime tuning lives in `.opencode/gateway-core.config.json` (or `MY_OPENCODE_GATEWAY_CONFIG_PATH`). Treat that sidecar file as the operator-facing control plane for hook order, LLM hook modes, and related gateway behavior, with the caveat that duplicate gateway keys set in root config still override sidecar values today.
+Gateway runtime tuning is layered: `~/.config/opencode/my_opencode/gateway-core.config.json` provides global defaults, the active project `.opencode/gateway-core.config.json` overrides them, and explicit plugin options apply last. `MY_OPENCODE_GATEWAY_CONFIG_PATH` deliberately replaces the automatic sidecar layers. Arrays replace lower-layer values, nested objects merge, and a malformed layer clears itself and lower-precedence sidecar state before any later valid override is applied.
 
 ## Flow 1: Claim -> Deliver -> Close
 

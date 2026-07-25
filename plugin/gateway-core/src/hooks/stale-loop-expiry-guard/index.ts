@@ -31,6 +31,7 @@ export function createStaleLoopExpiryGuardHook(options: {
   return {
     id: "stale-loop-expiry-guard",
     priority: 425,
+    events: ["session.idle"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled || type !== "session.idle") {
         return

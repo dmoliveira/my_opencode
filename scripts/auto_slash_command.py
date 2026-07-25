@@ -376,18 +376,26 @@ def command_doctor(argv: list[str]) -> int:
 
     problems: list[str] = []
     warnings: list[str] = []
-    if missing_scripts:
-        problems.append(f"missing backend scripts for: {', '.join(missing_scripts)}")
-    if precision_report["precision"] < DOCTOR_PRECISION_TARGET:
-        problems.append(f"representative precision below {DOCTOR_PRECISION_TARGET:.2f} target")
-    if precision_report["unsafe_predictions"] > 0:
-        problems.append("unsafe predictions detected on no-command prompts")
-    if not state.get("enabled", True):
+    enabled = bool(state.get("enabled", True))
+    if enabled:
+        if missing_scripts:
+            problems.append(f"missing backend scripts for: {', '.join(missing_scripts)}")
+        if precision_report["precision"] < DOCTOR_PRECISION_TARGET:
+            problems.append(
+                f"representative precision below {DOCTOR_PRECISION_TARGET:.2f} target"
+            )
+        if precision_report["unsafe_predictions"] > 0:
+            problems.append("unsafe predictions detected on no-command prompts")
+    else:
         warnings.append("auto-slash detector is globally disabled")
+        if missing_scripts:
+            warnings.append(
+                f"disabled detector has missing backend scripts for: {', '.join(missing_scripts)}"
+            )
 
     payload = {
         "result": "PASS" if not problems else "FAIL",
-        "enabled": bool(state.get("enabled", True)),
+        "enabled": enabled,
         "preview_first": bool(state.get("preview_first", True)),
         "enabled_commands": enabled_commands,
         "config": str(write_path),

@@ -88,7 +88,7 @@ DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD = max(
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--include-generic --confirm-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -627,6 +627,14 @@ def _scan_runtime_stuck_sessions(
             )
             WHERE json_extract(pm.data,'$.role') = 'assistant'
               AND json_extract(pm.data,'$.error') IS NOT NULL
+              AND (
+                COALESCE(json_extract(pm.data,'$.error.name'),'') = 'MessageAbortedError'
+                OR COALESCE(
+                  json_extract(pm.data,'$.error.data.message'),
+                  json_extract(pm.data,'$.error.message'),
+                  ''
+                ) = 'The operation was aborted.'
+              )
               AND p.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
               AND c.time_updated <= (strftime('%s','now') * 1000 - (? * 1000))
               AND COALESCE(json_extract(pp.data,'$.type'),'') = 'tool'
@@ -1292,7 +1300,7 @@ def _repair_runtime_stuck_sessions(
     stale_seconds: int,
     apply_changes: bool,
     include_generic: bool,
-    session_id: str | None = None,
+    scope_session_id: str | None = None,
 ) -> dict:
     repairs: list[dict] = []
     repairable_issue_types = {
@@ -1311,24 +1319,48 @@ def _repair_runtime_stuck_sessions(
         ]
         if include_generic:
             current_candidates.extend(current_scan.get("generic_stale_findings") or [])
-        if session_id:
+        if scope_session_id:
             current_candidates = [
                 finding
                 for finding in current_candidates
-                if session_id
+                if scope_session_id
                 in {
                     str(finding.get("session_id") or ""),
                     str(finding.get("parent_session_id") or ""),
                     str(finding.get("child_session_id") or ""),
                 }
             ]
-        return current_candidates
+        deduplicated: dict[tuple[str, str, str, str], dict] = {}
+        parent_issue_types = {
+            "parent_child_mismatch",
+            "silent_parent_after_delegation_abort",
+            "stale_delegated_child_runtime_recovery_missed",
+        }
+        for finding in current_candidates:
+            issue_type = str(finding.get("issue_type") or "")
+            if issue_type in parent_issue_types:
+                key = (
+                    "parent",
+                    str(finding.get("parent_session_id") or ""),
+                    str(finding.get("parent_message_id") or ""),
+                    str(finding.get("parent_part_id") or ""),
+                )
+            else:
+                key = (
+                    "session",
+                    str(finding.get("session_id") or ""),
+                    str(finding.get("message_id") or ""),
+                    str(finding.get("part_id") or ""),
+                )
+            deduplicated.setdefault(key, finding)
+        return list(deduplicated.values())
 
     candidate_findings = collect_candidates(scan)
+    base_problems = [] if scope_session_id else scan["problems"]
     if not apply_changes or not candidate_findings or not db_path.exists():
         return {
             "warnings": scan["warnings"],
-            "problems": scan["problems"],
+            "problems": base_problems,
             "candidate_count": len(candidate_findings),
             "repaired_count": 0,
             "repairs": repairs,
@@ -1341,7 +1373,7 @@ def _repair_runtime_stuck_sessions(
     except sqlite3.DatabaseError as exc:
         return {
             "warnings": scan["warnings"],
-            "problems": [*scan["problems"], f"failed to back up runtime session database: {exc}"],
+            "problems": [*base_problems, f"failed to back up runtime session database: {exc}"],
             "candidate_count": len(candidate_findings),
             "repaired_count": 0,
             "repairs": repairs,
@@ -2094,7 +2126,7 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         "quick_fixes": []
         if apply_changes or not repair["candidate_count"]
         else [
-            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds}{' --include-generic' if include_generic else ''} --apply --json"
+            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds}{f' --session-id {shlex.quote(session_id)}' if session_id else ''}{' --include-generic --confirm-generic' if include_generic else ''} --apply --json"
         ],
     }
     return _emit(payload, json_output)

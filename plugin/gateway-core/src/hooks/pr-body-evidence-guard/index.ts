@@ -45,6 +45,7 @@ export function createPrBodyEvidenceGuardHook(options: {
   return {
     id: "pr-body-evidence-guard",
     priority: 442,
+    events: ["tool.execute.before"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled || type !== "tool.execute.before") {
         return

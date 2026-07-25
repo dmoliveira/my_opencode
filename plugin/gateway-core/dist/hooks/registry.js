@@ -4,6 +4,17 @@ export function hooksForEvent(hooks, eventType) {
 }
 // Resolves deterministic hook execution order.
 export function resolveHookOrder(hooks, order, disabled) {
+    const seenHookIds = new Set();
+    const duplicateHookIds = new Set();
+    for (const hook of hooks) {
+        if (seenHookIds.has(hook.id)) {
+            duplicateHookIds.add(hook.id);
+        }
+        seenHookIds.add(hook.id);
+    }
+    if (duplicateHookIds.size > 0) {
+        throw new Error(`duplicate gateway hook ids: ${[...duplicateHookIds].sort().join(", ")}`);
+    }
     const disabledSet = new Set(disabled);
     const orderMap = new Map(order.map((id, idx) => [id, idx]));
     const explicitOrder = order.length > 0;
