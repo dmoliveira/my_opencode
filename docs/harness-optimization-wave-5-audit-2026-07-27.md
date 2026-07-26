@@ -3,7 +3,7 @@
 Status: complete
 Date: 2026-07-27
 Branch: `perf/harness-optimization-wave-5`
-Validated code head: `3bcd99b45678344a0d33d4b21fc63f5ac5cb0169`
+Validated code head: `c07a10b493c38365da34093b5120ef87d53efcaf`
 Baseline: `fc7486a7903fa0257ceeeabb1f29c0328926a8e4`
 
 ## Objective
@@ -50,6 +50,11 @@ Python and Node delivery. Managed profiles remain external-free.
    - Temporarily refs the active timeout only when the explicit test flush waits
      for an unresolved exporter, then unrefs it during reset.
    - Preserves the hanging-child exit invariant and passes the full Node 22 suite.
+6. `c07a10b493c38365da34093b5120ef87d53efcaf` — schema-v2 workflow scenario proof.
+   - Runs the done-proof success scenario in a private committed git fixture.
+   - Correlates lint, test, and build evidence with unique call IDs, final
+     commands, and numeric exit metadata.
+   - Restores the CI workflow gate to `20/20` under Node 22 and the current Node runtime.
 
 ## External candidate decisions
 
@@ -73,15 +78,18 @@ worktree, and PTY plugins remain in force.
 - Audit benchmark, 25 isolated processes:
   - disabled candidate delta `-0.001414 ms`, below the allowed baseline delta.
   - enabled median ratio `1.215` and p95 ratio `1.210`, both below `1.25`.
-  - the final artifact is bound to validated code head `3bcd99b` and the exact
-    origin/candidate module hashes.
+  - the artifact is bound to gateway code head `3bcd99b` and exact
+    origin/candidate module hashes. The later `c07a10b` commit changes only the
+    workflow scenario; final validation confirms the gateway module hash is unchanged.
 - Evidence: `runtime/harness-wave-5/slice1-fingerprint-benchmark.json` and
   `runtime/harness-wave-5/audit-benchmark-final.json`.
 
 ## Exact-model configured-tuple proof
 
 `runtime/harness-wave-5/exact-model-e2e/report.json` records `PASS` against
-`openai/gpt-5.4-mini` at the validated code head.
+`openai/gpt-5.4-mini` at gateway code head `3bcd99b`. The later scenario-only
+commit leaves the report's candidate source and dist hashes unchanged, which the
+final validation rechecks.
 
 - Preflight, Python, and Node each recorded exactly one gateway bootstrap and
   observed no other model.
@@ -126,6 +134,7 @@ The tmux validation summary at
   `runtime/harness-wave-5/final-validation/ruff-full-comparison.log`.
 - `make validate` and `make selftest`.
 - `node scripts/gateway_workflow_scenario_report.mjs`.
+- Workflow scenario gate: `20/20` on Node 22 and the current Node runtime.
 - `make gateway-secret-redaction-smoke`.
 - Package dry-run and extracted default/routing/dist parity.
 - Direct and tuple runtime contract probes.
@@ -151,7 +160,8 @@ critical reviewer approved with no blocker or medium/high finding.
 
 ## Rollback
 
-- Revert `3bcd99b`, then the four slice commits in reverse order, and rebuild
+- Revert `c07a10b`, then `3bcd99b`, then the four slice commits in reverse order,
+  and rebuild
   `plugin/gateway-core/dist/**` after source rollback. Docs-only closure commits
   can be reverted independently.
 - Evidence schema v2 intentionally invalidates schema v1; rollback must not treat
