@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import json
-import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,18 +18,16 @@ from gateway_plugin_bridge import plugin_entry_spec  # type: ignore
 
 
 CONFIG_PATH = resolve_write_path()
-KNOWN_PLUGINS = {
+RETIRED_PLUGINS = {
     "notifier": "@mohak34/opencode-notifier@latest",
     "morph": "github:JRedeker/opencode-morph-fast-apply",
     "worktree": "github:kdcokenny/opencode-worktree",
 }
-PLUGIN_ORDER = ["notifier", "morph", "worktree"]
-STABLE_ALIASES = ["notifier"]
-EXPERIMENTAL_ALIASES = ["morph", "worktree"]
-PROFILE_MAP = {
-    "lean": ["notifier"],
-    "stable": ["notifier"],
-    "experimental": ["notifier", "morph", "worktree"],
+RETIRED_PLUGIN_ORDER = ["notifier", "morph", "worktree"]
+PROFILE_MAP: dict[str, list[str]] = {
+    "lean": [],
+    "stable": [],
+    "experimental": [],
 }
 
 
@@ -64,19 +60,20 @@ def set_plugins(data: dict, plugins: list[Any]) -> None:
 
 
 def compose_plugin_entries(
-    current_entries: list[Any], desired_known_packages: list[str]
+    current_entries: list[Any], desired_managed_packages: list[str]
 ) -> list[Any]:
-    known_packages = set(KNOWN_PLUGINS.values())
-    first_known_entry: dict[str, Any] = {}
+    managed_packages = set(RETIRED_PLUGINS.values())
+    first_managed_entry: dict[str, Any] = {}
     unknown_entries: list[Any] = []
     for entry in current_entries:
         spec = plugin_entry_spec(entry)
-        if spec in known_packages:
-            first_known_entry.setdefault(spec, entry)
+        if spec in managed_packages:
+            first_managed_entry.setdefault(spec, entry)
         else:
             unknown_entries.append(entry)
     selected = [
-        first_known_entry.get(package, package) for package in desired_known_packages
+        first_managed_entry.get(package, package)
+        for package in desired_managed_packages
     ]
     return selected + unknown_entries
 
@@ -85,83 +82,63 @@ def usage() -> int:
     print(
         "usage: /plugin status | /plugin doctor [--json] | /plugin setup-keys | /plugin profile <lean|stable|experimental> | /plugin enable <name|all> | /plugin disable <name|all>"
     )
-    print("names: notifier, morph, worktree")
-    print("note: 'all' applies stable plugins only: notifier")
-    print("note: morph/worktree may require manual setup depending on plugin resolver")
+    print("retired names (disable-only): notifier, morph, worktree")
+    print("policy: no curated third-party plugins are enabled by managed profiles")
     return 2
 
 
 def print_next_steps() -> None:
     print("\nnext:")
-    print("- /plugin enable notifier")
-    print("- /plugin enable morph")
-    print("- /plugin enable worktree")
-    print("- /plugin profile lean|stable|experimental")
+    print("- /plugin profile lean")
+    print("- /plugin disable all")
     print("- /plugin doctor")
+    print("- use /gateway status for the maintained local plugin")
+
+
+def retired_states(plugins: list[str]) -> dict[str, dict[str, str]]:
+    states: dict[str, dict[str, str]] = {}
+    for alias in RETIRED_PLUGIN_ORDER:
+        package = RETIRED_PLUGINS[alias]
+        states[alias] = {
+            "status": "present" if package in plugins else "absent",
+            "kind": "retired",
+            "package": package,
+        }
+    return states
 
 
 def print_status(plugins: list[str]) -> None:
-    for alias in PLUGIN_ORDER:
-        package = KNOWN_PLUGINS[alias]
-        state = "enabled" if package in plugins else "disabled"
-        kind = "stable" if alias in STABLE_ALIASES else "experimental"
-        print(f"{alias}: {state} [{kind}] ({package})")
+    print("curated external plugins: none")
+    for alias, state in retired_states(plugins).items():
+        print(f"{alias}: {state['status']} [retired] ({state['package']})")
+    print("maintained capabilities: gateway notifications, native edits, governed worktrees")
     print(f"config: {CONFIG_PATH}")
 
 
 def collect_doctor(plugins: list[str]) -> dict:
     problems: list[str] = []
-    warnings: list[str] = []
     quick_fixes: list[str] = []
-    plugin_states: dict[str, dict[str, str]] = {}
-
-    for alias in PLUGIN_ORDER:
-        package = KNOWN_PLUGINS[alias]
-        enabled = package in plugins
-        status = "enabled" if enabled else "disabled"
-        kind = "stable" if alias in STABLE_ALIASES else "experimental"
-        plugin_states[alias] = {
-            "status": status,
-            "kind": kind,
-            "package": package,
-        }
+    states = retired_states(plugins)
 
     if not CONFIG_PATH.exists():
         problems.append(f"missing config file: {CONFIG_PATH}")
 
-    if (
-        KNOWN_PLUGINS["morph"] in plugins
-        and not os.environ.get("MORPH_API_KEY", "").strip()
-    ):
-        warnings.append(
-            "morph enabled but MORPH_API_KEY is not set; morph commands stay unavailable until the key is configured"
+    present = [alias for alias, state in states.items() if state["status"] == "present"]
+    for alias in present:
+        problems.append(
+            f"retired curated plugin is still configured: {alias} ({RETIRED_PLUGINS[alias]})"
         )
-        quick_fixes.extend(
-            [
-                "set MORPH_API_KEY for morph plugin usage",
-                "disable unmet plugins with: /plugin disable morph",
-            ]
-        )
-
-    if KNOWN_PLUGINS["worktree"] in plugins and shutil.which("git") is None:
-        problems.append("worktree enabled but git command is not available")
-
-    if KNOWN_PLUGINS["morph"] in plugins or KNOWN_PLUGINS["worktree"] in plugins:
-        if shutil.which("bun") is None:
-            warnings.append(
-                "bun is not in PATH; some github: plugins may fail to resolve depending on OpenCode runtime"
-            )
-
-    cache_dir = Path("~/.cache/opencode/node_modules").expanduser()
-    if not cache_dir.exists():
-        warnings.append("plugin cache not found yet (~/.cache/opencode/node_modules)")
+        quick_fixes.append(f"disable with: /plugin disable {alias}")
+    if present:
+        quick_fixes.append("remove all retired curated plugins with: /plugin profile lean")
 
     return {
         "result": "PASS" if not problems else "FAIL",
         "config": str(CONFIG_PATH),
         "python": sys.executable,
-        "plugins": plugin_states,
-        "warnings": warnings,
+        "policy": "external-free",
+        "plugins": states,
+        "warnings": [],
         "problems": problems,
         "quick_fixes": quick_fixes,
     }
@@ -169,7 +146,6 @@ def collect_doctor(plugins: list[str]) -> dict:
 
 def print_doctor(plugins: list[str], json_output: bool = False) -> int:
     report = collect_doctor(plugins)
-
     if json_output:
         print(json.dumps(report, indent=2))
         return 0 if report["result"] == "PASS" else 1
@@ -178,66 +154,42 @@ def print_doctor(plugins: list[str], json_output: bool = False) -> int:
     print("-------------")
     print(f"config: {report['config']}")
     print(f"python: {report['python']}")
-
-    for alias in PLUGIN_ORDER:
+    print("policy: external-free")
+    for alias in RETIRED_PLUGIN_ORDER:
         state = report["plugins"][alias]
-        print(f"- {alias}: {state['status']} [{state['kind']}]")
-
-    if report["warnings"]:
-        print("\nwarnings:")
-        for item in report["warnings"]:
-            print(f"- {item}")
+        print(f"- {alias}: {state['status']} [retired]")
 
     if report["quick_fixes"]:
         print("\nquick fixes:")
         for item in report["quick_fixes"]:
             print(f"- {item}")
-
     if report["problems"]:
         print("\nproblems:")
         for item in report["problems"]:
             print(f"- {item}")
         print("\nresult: FAIL")
         return 1
-
     print("\nresult: PASS")
     return 0
 
 
-def print_setup_keys(plugins: list[str]) -> int:
+def print_setup_keys() -> int:
     print("setup keys")
     print("----------")
-
-    needs_morph = (
-        KNOWN_PLUGINS["morph"] in plugins
-        and not os.environ.get("MORPH_API_KEY", "").strip()
-    )
-
-    if not needs_morph:
-        print("all required keys are already configured for enabled plugins")
-        return 0
-
-    if needs_morph:
-        print("\n[morph]")
-        print("export MORPH_API_KEY='sk_your_key_here'")
-
-    print("\nthen run: /plugin doctor")
+    print("no curated third-party plugins are enabled; no plugin API keys are required")
     return 0
 
 
 def apply_profile(data: dict, current_entries: list[Any], profile: str) -> int:
     if profile not in PROFILE_MAP:
         return usage()
-
-    profile_aliases = PROFILE_MAP[profile]
-    profile_packages = [KNOWN_PLUGINS[a] for a in profile_aliases]
-    set_plugins(data, compose_plugin_entries(current_entries, profile_packages))
+    set_plugins(data, compose_plugin_entries(current_entries, []))
     save_config(data)
 
-    print(f"profile: {profile}")
-    print("enabled aliases:")
-    for alias in profile_aliases:
-        print(f"- {alias}")
+    print("profile: lean")
+    if profile != "lean":
+        print(f"requested profile '{profile}' is retired; applied external-free lean policy")
+    print("enabled curated aliases: none")
     print(f"config: {CONFIG_PATH}")
     return 0
 
@@ -251,63 +203,41 @@ def main(argv: list[str]) -> int:
         print_status(plugins)
         print_next_steps()
         return 0
-
     if argv[0] == "help":
         usage()
         print_next_steps()
         return 0
-
     if argv[0] == "doctor":
         json_output = len(argv) > 1 and argv[1] == "--json"
         if len(argv) > 1 and not json_output:
             return usage()
         return print_doctor(plugins, json_output=json_output)
-
     if argv[0] == "setup-keys":
-        return print_setup_keys(plugins)
-
+        return print_setup_keys()
     if argv[0] == "profile":
-        if len(argv) < 2:
+        if len(argv) != 2:
             return usage()
         return apply_profile(data, plugin_entries, argv[1])
-
-    if len(argv) < 2:
+    if len(argv) != 2:
         return usage()
 
-    action, target = argv[0], argv[1]
-    if action not in ("enable", "disable"):
+    action, target = argv
+    targets = RETIRED_PLUGIN_ORDER if target == "all" else [target]
+    if any(name not in RETIRED_PLUGINS for name in targets):
         return usage()
-
-    targets = STABLE_ALIASES if target == "all" else [target]
-    if any(name not in KNOWN_PLUGINS for name in targets):
-        return usage()
-
-    plugin_set = set(plugins)
-
     if action == "enable":
-        for alias in targets:
-            plugin_set.add(KNOWN_PLUGINS[alias])
-    else:
-        for alias in targets:
-            plugin_set.discard(KNOWN_PLUGINS[alias])
+        print("error: curated third-party plugins are retired and cannot be enabled")
+        print("use a reviewed, immutable spec in opencode.json only after explicit approval")
+        return 1
+    if action != "disable":
+        return usage()
 
-    ordered_known = [
-        KNOWN_PLUGINS[a] for a in PLUGIN_ORDER if KNOWN_PLUGINS[a] in plugin_set
-    ]
-    set_plugins(data, compose_plugin_entries(plugin_entries, ordered_known))
+    set_plugins(data, compose_plugin_entries(plugin_entries, []))
     save_config(data)
-
-    state = "enabled" if action == "enable" else "disabled"
     for alias in targets:
-        print(f"{alias}: {state}")
+        print(f"{alias}: absent [retired]")
     if target == "all":
-        print("applied profile: stable")
-    if action == "enable":
-        experimental_enabled = [a for a in targets if a in EXPERIMENTAL_ALIASES]
-        if experimental_enabled:
-            print(
-                "note: experimental plugin(s) enabled. If OpenCode fails to load them, disable with /plugin disable <name>."
-            )
+        print("applied profile: lean")
     print(f"config: {CONFIG_PATH}")
     return 0
 

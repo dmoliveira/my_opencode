@@ -16,6 +16,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import gateway_plugin_bridge
+import install_wizard
 import plugin_command
 
 
@@ -49,51 +50,160 @@ class PluginConfigEntriesTest(unittest.TestCase):
             self.assertIn(external, config["plugin"])
             self.assertIn(malformed, config["plugin"])
 
-    def test_profiles_preserve_unknown_and_selected_known_tuples(self) -> None:
-        notifier = [plugin_command.KNOWN_PLUGINS["notifier"], {"quiet": True}]
-        morph = [plugin_command.KNOWN_PLUGINS["morph"], {"tokenRef": "env:MORPH_API_KEY"}]
+    def test_external_free_composition_removes_retired_and_preserves_unknown(self) -> None:
+        notifier = [
+            plugin_command.RETIRED_PLUGINS["notifier"],
+            {"quiet": True},
+        ]
+        morph = [
+            plugin_command.RETIRED_PLUGINS["morph"],
+            {"tokenRef": "env:MORPH_API_KEY"},
+        ]
         external = ["@scope/external", {"mode": "safe"}]
         malformed = ["@scope/malformed", 3]
-        entries = [notifier, morph, external, malformed]
 
-        stable = plugin_command.compose_plugin_entries(
-            entries, [plugin_command.KNOWN_PLUGINS["notifier"]]
+        composed = plugin_command.compose_plugin_entries(
+            [notifier, morph, external, malformed], []
         )
-        self.assertEqual(notifier, stable[0])
-        self.assertNotIn(morph, stable)
-        self.assertEqual([external, malformed], stable[1:])
 
-    def test_plugin_profile_round_trip_keeps_tuple_options(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp) / "home"
-            home.mkdir()
-            config_path = Path(tmp) / "opencode.json"
-            notifier = [plugin_command.KNOWN_PLUGINS["notifier"], {"quiet": True}]
-            external = ["@scope/external", {"mode": "safe"}]
-            config_path.write_text(
-                json.dumps({"plugin": [notifier, external]}, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            env = os.environ.copy()
-            env.update(
-                {
+        self.assertEqual([external, malformed], composed)
+
+    def test_all_legacy_profiles_normalize_without_disclosing_tuple_options(self) -> None:
+        for profile in ("lean", "stable", "experimental"):
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp) / "home"
+                home.mkdir()
+                config_path = Path(tmp) / "opencode.json"
+                gateway = "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+                external = ["@scope/external", {"mode": "safe"}]
+                malformed = ["@scope/malformed", 3]
+                config_path.write_text(
+                    json.dumps(
+                        {
+                            "plugin": [
+                                [
+                                    plugin_command.RETIRED_PLUGINS["notifier"],
+                                    {"secret": "WAVE4_PRIVATE_PROFILE_OPTION"},
+                                ],
+                                plugin_command.RETIRED_PLUGINS["morph"],
+                                plugin_command.RETIRED_PLUGINS["worktree"],
+                                gateway,
+                                external,
+                                malformed,
+                            ]
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                env = {
+                    **os.environ,
                     "HOME": str(home),
                     "OPENCODE_CONFIG_PATH": str(config_path),
                     "CI": "true",
                 }
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(SCRIPTS_DIR / "plugin_command.py"),
+                        "profile",
+                        profile,
+                    ],
+                    cwd=REPO_ROOT,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertNotIn("WAVE4_PRIVATE_PROFILE_OPTION", result.stdout)
+                self.assertNotIn("WAVE4_PRIVATE_PROFILE_OPTION", result.stderr)
+                saved = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual([gateway, external, malformed], saved["plugin"])
+
+    def test_doctor_fails_retired_tuple_without_disclosing_options(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            home.mkdir()
+            config_path = Path(tmp) / "opencode.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "plugin": [
+                            [
+                                plugin_command.RETIRED_PLUGINS["notifier"],
+                                {"secret": "WAVE4_PRIVATE_DOCTOR_OPTION"},
+                            ]
+                        ]
+                    }
+                ),
+                encoding="utf-8",
             )
+            env = {
+                **os.environ,
+                "HOME": str(home),
+                "OPENCODE_CONFIG_PATH": str(config_path),
+                "CI": "true",
+            }
             result = subprocess.run(
-                [sys.executable, str(SCRIPTS_DIR / "plugin_command.py"), "profile", "stable"],
+                [sys.executable, str(SCRIPTS_DIR / "plugin_command.py"), "doctor", "--json"],
                 cwd=REPO_ROOT,
                 env=env,
                 text=True,
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(0, result.returncode, result.stderr)
-            saved = json.loads(config_path.read_text(encoding="utf-8"))
-            self.assertIn(notifier, saved["plugin"])
-            self.assertIn(external, saved["plugin"])
+
+            self.assertEqual(1, result.returncode)
+            report = json.loads(result.stdout)
+            self.assertEqual("FAIL", report["result"])
+            self.assertEqual("present", report["plugins"]["notifier"]["status"])
+            self.assertNotIn("WAVE4_PRIVATE_DOCTOR_OPTION", result.stdout)
+            self.assertNotIn("WAVE4_PRIVATE_DOCTOR_OPTION", result.stderr)
+
+    def test_enable_retired_plugin_rejects_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            home.mkdir()
+            config_path = Path(tmp) / "opencode.json"
+            original = json.dumps({"plugin": [["@scope/external", {"mode": "safe"}]]}, indent=2) + "\n"
+            config_path.write_text(original, encoding="utf-8")
+            env = {
+                **os.environ,
+                "HOME": str(home),
+                "OPENCODE_CONFIG_PATH": str(config_path),
+                "CI": "true",
+            }
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS_DIR / "plugin_command.py"), "enable", "notifier"],
+                cwd=REPO_ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(1, result.returncode)
+            self.assertIn("cannot be enabled", result.stdout)
+            self.assertEqual(original, config_path.read_text(encoding="utf-8"))
+
+    def test_installer_compatibility_profiles_normalize_without_enable_loop(self) -> None:
+        for profile in ("lean", "stable", "experimental", "custom"):
+            with self.subTest(profile=profile):
+                self.assertEqual(
+                    ("lean", []), install_wizard.normalize_plugin_profile(profile)
+                )
+
+        with patch.object(install_wizard, "run_repo_script", return_value=0) as run:
+            self.assertEqual(
+                0,
+                install_wizard.apply_plugin_profile(
+                    "custom", custom_aliases=["notifier"]
+                ),
+            )
+        run.assert_called_once_with("plugin_command.py", "profile", "lean")
 
     def test_blocked_gateway_enable_skips_compatibility_mutation(self) -> None:
         module = importlib.import_module("gateway_command")
