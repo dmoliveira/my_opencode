@@ -26,7 +26,7 @@ The live read-only runtime database held 9,195 sessions, 144,205 messages, and 6
 
 - Selected: official plugin options and tuple-safe mutation because the current behavior loses configuration and defeats explicit startup controls.
 - Selected: canonical chat adaptation because official user text is invisible to intended hooks.
-- Selected: indexed stale-session snapshots and successful loader-smoke caching because they target measured 22.6s and 9.3s doctor components.
+- Selected: bounded indexed stale-session queries and successful loader-smoke caching because they target measured 22.6s and 9.3s doctor components.
 - Rejected: further callback routing in this wave because measured dispatch cost is only about 20–23µs per call.
 - Rejected: new/default-on external plugins and MCPs because none beat local fixes without increasing trusted startup or egress surface. The existing pinned, isolated, disabled Playwright MCP remains sufficient; Playwright CLI requires a distinct future workflow benchmark.
 
@@ -41,7 +41,12 @@ The live read-only runtime database held 9,195 sessions, 144,205 messages, and 6
 
 ## Runtime diagnostic results
 
-Pending implementation.
+- Production diagnosis remains read-only and performs no schema/index migration. It checks index column prefixes, uses six bounded correlated queries when compatible, and emits an explicit warned legacy fallback otherwise. Every finding query returns at most 20 rows; the exact generic count uses a separate `COUNT(*)` query.
+- A frozen scan clock makes candidate/reference parity deterministic. Equal timestamps intentionally select descending ID; focused fixtures cover this correction, all issue types, fresh-child exclusion, missing/wrong-order fallback, arbitrary index names/supersets, and metadata-failure connection cleanup.
+- On the live database, one cold bounded run took 494.21ms and five warm runs took 63.61ms, 53.86ms, 52.79ms, 49.78ms, and 50.35ms. The 52.79ms warm median is 99.8% below the original 22.639s component baseline and well below the 1,000ms budget.
+- An owner-only `0600` compact snapshot held 9,208 sessions, 9,194 latest-message rows, and 37,719 latest-message parts. It had zero equal-latest-timestamp sessions; legacy and bounded queries returned equal counts and identical semantic SHA-256 `56b231c75a4f5f7ca5248cb2aad6e1a10cd6ac1f2a756efd6e2af88d7af02f9f`. The compact database was deleted after the comparison.
+- `EXPLAIN QUERY PLAN` for all six bounded queries used the session-parent, composite message, and part-message indexes with no full message/part scan or group materialization.
+- Before loader caching, full doctor runs dropped from the 29.280s baseline median to 8.779s median across three runs; direct-loader variability remains the next selected bottleneck.
 
 ## Browser and model-backed evidence
 
@@ -51,3 +56,4 @@ Pending implementation.
 
 - Contract slice: gateway lint passed; all 720 gateway tests passed on verification; focused Python tests passed; `make validate` and `make selftest` passed; built-plugin and actual host tuple probes passed in tmux.
 - Review pass 1 found one valid hidden-mutation blocker, which was fixed and regression-tested. A claimed sidecar issue was confirmed as established fail-closed policy. Changed-evidence re-review returned READY with no blocker findings.
+- Indexed-diagnostic review found unbounded Python materialization and a metadata-failure connection leak. The implementation was replaced with bounded queries and explicit cleanup; changed-evidence reviewer and verifier passes reported no blocker, and latest `make selftest` passed.

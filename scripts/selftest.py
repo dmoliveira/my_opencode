@@ -2328,6 +2328,10 @@ exit 0
                     data TEXT,
                     time_created INTEGER
                 );
+                CREATE INDEX selftest_session_parent_idx ON session(parent_id);
+                CREATE INDEX selftest_message_session_time_id_idx
+                  ON message(session_id, time_created, id);
+                CREATE INDEX selftest_part_message_idx ON part(message_id, id);
                 """
             )
             now_ms = int(time.time() * 1000)
@@ -2696,6 +2700,11 @@ exit 0
         expect(
             session_runtime_doctor_payload.get("generic_stale_count") == 2,
             "session doctor should count actionable generic stale assistant sessions tied to the latest assistant message",
+        )
+        expect(
+            session_runtime_doctor_payload.get("runtime_db_scan_mode")
+            == "indexed_snapshot",
+            "session doctor should use indexed stale-session snapshot when required indexes exist",
         )
         expect(
             not any(

@@ -469,6 +469,8 @@ def runtime_session_health_summary(
         "result": result,
         "runtime_db_path": str(db_path),
         "exists": db_path.exists(),
+        "runtime_db_scan_mode": runtime.get("runtime_db_scan_mode"),
+        "runtime_db_scan_duration_ms": runtime.get("runtime_db_scan_duration_ms"),
         "stale_seconds": stale_seconds,
         "generic_stale_problem_threshold": generic_stale_problem_threshold,
         "targeted_stuck_count": len(stuck_findings),
