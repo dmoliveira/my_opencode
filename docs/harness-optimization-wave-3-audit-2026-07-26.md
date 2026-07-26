@@ -46,14 +46,24 @@ The live read-only runtime database held 9,195 sessions, 144,205 messages, and 6
 - On the live database, one cold bounded run took 494.21ms and five warm runs took 63.61ms, 53.86ms, 52.79ms, 49.78ms, and 50.35ms. The 52.79ms warm median is 99.8% below the original 22.639s component baseline and well below the 1,000ms budget.
 - An owner-only `0600` compact snapshot held 9,208 sessions, 9,194 latest-message rows, and 37,719 latest-message parts. It had zero equal-latest-timestamp sessions; legacy and bounded queries returned equal counts and identical semantic SHA-256 `56b231c75a4f5f7ca5248cb2aad6e1a10cd6ac1f2a756efd6e2af88d7af02f9f`. The compact database was deleted after the comparison.
 - `EXPLAIN QUERY PLAN` for all six bounded queries used the session-parent, composite message, and part-message indexes with no full message/part scan or group materialization.
-- Before loader caching, full doctor runs dropped from the 29.280s baseline median to 8.779s median across three runs; direct-loader variability remains the next selected bottleneck.
+- Before loader caching, full doctor runs dropped from the 29.280s baseline median to 8.779s median across three runs; direct-loader variability remained the next selected bottleneck.
+
+## Loader cache and doctor results
+
+- Successful direct-loader results are fingerprinted across gateway command/cache schema, smoke script, plugin dist/package metadata, and resolved OpenCode binary/version/stat/platform. Only an allowlisted PASS summary is eligible; any corrupt, insecure, expired, future, mismatched, skipped, or failed record reruns live, and failures invalidate prior cached success.
+- The dedicated cache directory is `0700`, the atomically replaced file is `0600`, symlink paths are rejected, and retained JSON contains only schema, fingerprint, check time, result/reason/exit, and seven per-mode booleans/status fields. It contains no stdout, stderr, environment, plugin options, credentials, or temporary paths.
+- `/gateway doctor --fresh --json` bypassed cache reads and ran the real smoke in 8.201s. Five unchanged warm runs took 2.283s, 1.853s, 1.815s, 1.832s, and 1.786s; the 1.832s median is 93.74% below the original 29.280s doctor baseline and below the 5s exit target.
 
 ## Browser and model-backed evidence
 
-Pending implementation.
+- No browser MCP probe was repeated; Wave 2 already proved the pinned isolated integration and this wave added no browser dependency.
+- The reused projects-only harness preflighted and used exact `openai/gpt-5.4-mini` with the isolated OAuth symlink. Audit evidence recorded exactly one gateway bootstrap and only that model for preflight, Python, and Node runs.
+- Python started red, changed only `stats.py`, kept `test_stats.py` hash-identical, and finished green under `python3 -m unittest -v`. Node started red, changed only `slugify.mjs`, kept `slugify.test.mjs` hash-identical, and finished green under `node --test slugify.test.mjs`.
+- Candidate source/dist SHA-256 values were `608e1ca986bdb01b72ef10a5e1716ecd060f398aea0b630b816243fc912cd099` and `85eb207664c2d06b5a584f13cadeacb59717e8a0e3670fa3622d8bece08ba970`. Every sandbox used one project shim and no configured plugin entry; retained artifacts passed the credential scan.
 
 ## Validation and review
 
 - Contract slice: gateway lint passed; all 720 gateway tests passed on verification; focused Python tests passed; `make validate` and `make selftest` passed; built-plugin and actual host tuple probes passed in tmux.
 - Review pass 1 found one valid hidden-mutation blocker, which was fixed and regression-tested. A claimed sidecar issue was confirmed as established fail-closed policy. Changed-evidence re-review returned READY with no blocker findings.
 - Indexed-diagnostic review found unbounded Python materialization and a metadata-failure connection leak. The implementation was replaced with bounded queries and explicit cleanup; changed-evidence reviewer and verifier passes reported no blocker, and latest `make selftest` passed.
+- Cache/security review returned READY with no blocker. Five focused cache tests, all 26 stdlib tests, critical Ruff rules, `make validate`, and `make selftest` passed before exact-model closure.

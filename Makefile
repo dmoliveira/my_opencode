@@ -7,6 +7,7 @@ help: ## Show available targets
 
 validate: ## Validate scripts and JSON config
 	python3 -m py_compile scripts/*.py
+	python3 -m unittest discover -s tests -p 'test_*.py'
 	python3 -m json.tool opencode.json >/dev/null
 	python3 scripts/hygiene_drift_check.py
 	python3 scripts/command_doc_check.py
