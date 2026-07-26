@@ -118,6 +118,10 @@ test("pr-readiness-guard accepts validation evidence from another session in the
   const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
   try {
     execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    execSync("git config user.email pr-readiness@example.invalid", { cwd: directory })
+    execSync("git config user.name 'PR Readiness Test'", { cwd: directory })
+    writeFileSync(join(directory, ".gitignore"), ".opencode/*\n", "utf-8")
+    execSync("git add .gitignore && git commit -qm fixture", { cwd: directory })
     const plugin = GatewayCorePlugin({
       directory,
       config: {
@@ -143,13 +147,22 @@ test("pr-readiness-guard accepts validation evidence from another session in the
       },
     })
 
+    const callID = "pr-readiness-validation"
+    const validationOutput = {
+      args: { command: "node --test plugin/gateway-core/test/pr-readiness-guard-hook.test.mjs" },
+    }
     await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-pr-validation-a" },
-      { args: { command: "node --test plugin/gateway-core/test/pr-readiness-guard-hook.test.mjs" } },
+      { tool: "bash", sessionID: "session-pr-validation-a", callID },
+      validationOutput,
     )
     await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-pr-validation-a" },
-      { output: "tests passed" },
+      {
+        tool: "bash",
+        sessionID: "session-pr-validation-a",
+        callID,
+        args: { command: validationOutput.args.command },
+      },
+      { output: "tests passed", metadata: { exit: 0, output: "tests passed" } },
     )
 
     await plugin["tool.execute.before"](

@@ -1,9 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
-import { clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
-const VALIDATION_INVOCATION_ID_KEY = "validationEvidenceInvocationId";
-// Resolves stable session id across gateway payload variants.
+import { captureGitStateFingerprint, clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 function sessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId, payload.properties?.info?.id];
     for (const item of candidates) {
@@ -13,78 +11,34 @@ function sessionId(payload) {
     }
     return "";
 }
-function nextInvocationId(sessionIdValue, sequence) {
-    return `${sessionIdValue}:${sequence}`;
+function callId(payload) {
+    const candidates = [payload.input?.callID, payload.input?.callId];
+    for (const item of candidates) {
+        if (typeof item === "string" && item.trim()) {
+            return item.trim();
+        }
+    }
+    return "";
 }
-function readInvocationId(payload) {
-    const value = payload.output?.metadata?.[VALIDATION_INVOCATION_ID_KEY];
-    return typeof value === "string" ? value.trim() : "";
+function commandExitCode(payload) {
+    const metadata = payload.output?.metadata;
+    if (!metadata || typeof metadata !== "object") {
+        return null;
+    }
+    const value = metadata.exit;
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
-function readCommand(payload) {
-    return String(payload.output?.args?.command ?? "").trim();
+function directoryFor(payload, fallback) {
+    return typeof payload.directory === "string" && payload.directory.trim()
+        ? payload.directory
+        : fallback;
 }
-function normalizeMetadata(metadata) {
-    return metadata && typeof metadata === "object" ? { ...metadata } : {};
-}
-// Returns true when command output indicates failure.
-function commandFailed(output) {
-    const lower = output.toLowerCase();
-    if (/npm err!|command failed|traceback|exception|cannot find|not found|elifecycle|exit code \d+/i.test(lower)) {
-        return true;
-    }
-    if (/\bfailed\b/i.test(lower) && !/\b(?:0\s+failed|failed\s*:\s*0|failures?\s*:\s*0)\b/i.test(lower)) {
-        return true;
-    }
-    return false;
-}
-function outputText(output) {
-    if (typeof output === "string") {
-        return output;
-    }
-    if (!output || typeof output !== "object") {
-        return "";
-    }
-    const record = output;
-    const parts = [record.stdout, record.stderr, record.output, record.message]
-        .filter((item) => typeof item === "string" && item.trim().length > 0)
-        .map((item) => item.trim());
-    return parts.join("\n");
-}
-function hasUsableOutput(output) {
-    if (typeof output === "string") {
-        return true;
-    }
-    if (!output || typeof output !== "object") {
-        return false;
-    }
-    const record = output;
-    if (typeof record.stdout === "string" && record.stdout.trim()) {
-        return true;
-    }
-    if (typeof record.stderr === "string" && record.stderr.trim()) {
-        return true;
-    }
-    if (typeof record.output === "string" && record.output.trim()) {
-        return true;
-    }
-    if (typeof record.message === "string" && record.message.trim()) {
-        return true;
-    }
-    return record.exitCode === 0 || record.ok === true || record.success === true;
-}
-const VALIDATION_CATEGORY_BY_CHAR = {
-    L: "lint",
-    T: "test",
-    C: "typecheck",
-    B: "build",
-    S: "security",
-};
 function buildValidationInstruction() {
-    return "Classify only the sanitized shell command for validation evidence. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation.";
+    return "Classify only the sanitized standalone shell command for telemetry. L=lint, T=test, C=typecheck, B=build, S=security, N=not_validation. This decision cannot create validation evidence.";
 }
 function normalizeValidationCommand(command) {
-    const trimmed = command.trim();
-    return trimmed
+    return command
+        .trim()
         .replace(/<[^>]+>/g, " ")
         .replace(/\b(user|assistant|system|tool)\s*:/gi, " ")
         .replace(/\bactual command\s*:/gi, " ")
@@ -100,14 +54,60 @@ function normalizeValidationCommand(command) {
 function buildValidationContext(command) {
     return `command=${normalizeValidationCommand(command) || "(empty)"}`;
 }
-// Creates validation evidence ledger hook to track successful validation commands.
+async function recordLlmTelemetry(runtime, directory, sessionIdValue, command) {
+    const context = buildValidationContext(command);
+    const decision = await runtime.decide({
+        hookId: "validation-evidence-ledger",
+        sessionId: sessionIdValue,
+        templateId: "validation-command-classifier-v1",
+        instruction: buildValidationInstruction(),
+        context,
+        allowedChars: ["L", "T", "C", "B", "S", "N"],
+        decisionMeaning: {
+            L: "lint",
+            T: "test",
+            C: "typecheck",
+            B: "build",
+            S: "security",
+            N: "not_validation",
+        },
+        cacheKey: buildCompactDecisionCacheKey({ prefix: "validation-command", text: context }),
+    });
+    if (!decision.accepted) {
+        return;
+    }
+    writeDecisionComparisonAudit({
+        directory,
+        hookId: "validation-evidence-ledger",
+        sessionId: sessionIdValue,
+        mode: runtime.config.mode,
+        deterministicMeaning: "not_validation",
+        aiMeaning: decision.meaning || "unknown",
+        deterministicValue: "none",
+        aiValue: decision.char,
+    });
+    writeGatewayEventAudit(directory, {
+        hook: "validation-evidence-ledger",
+        stage: "state",
+        reason_code: "llm_validation_command_telemetry_only",
+        session_id: sessionIdValue,
+        llm_decision_char: decision.char,
+        llm_decision_meaning: decision.meaning,
+        llm_decision_mode: runtime.config.mode,
+    });
+}
 export function createValidationEvidenceLedgerHook(options) {
-    const pendingCommandsByInvocation = new Map();
-    const invocationSequenceBySession = new Map();
-    const pendingInvocationIdsBySession = new Map();
+    const pendingCommands = new Map();
     return {
         id: "validation-evidence-ledger",
         priority: 330,
+        events: [
+            "session.deleted",
+            "session.compacted",
+            "tool.execute.before",
+            "tool.execute.before.error",
+            "tool.execute.after",
+        ],
         async event(type, payload) {
             if (!options.enabled) {
                 return;
@@ -118,11 +118,9 @@ export function createValidationEvidenceLedgerHook(options) {
                 if (!sid) {
                     return;
                 }
-                invocationSequenceBySession.delete(sid);
-                pendingInvocationIdsBySession.delete(sid);
-                for (const key of pendingCommandsByInvocation.keys()) {
-                    if (key.startsWith(`${sid}:`)) {
-                        pendingCommandsByInvocation.delete(key);
+                for (const [key, pending] of pendingCommands.entries()) {
+                    if (pending.sessionId === sid) {
+                        pendingCommands.delete(key);
                     }
                 }
                 clearValidationEvidence(sid);
@@ -130,56 +128,31 @@ export function createValidationEvidenceLedgerHook(options) {
             }
             if (type === "tool.execute.before") {
                 const eventPayload = (payload ?? {});
-                const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-                if (tool !== "bash") {
+                if (String(eventPayload.input?.tool ?? "").toLowerCase() !== "bash") {
                     return;
                 }
                 const sid = sessionId(eventPayload);
-                if (!sid) {
-                    return;
-                }
+                const invocationId = callId(eventPayload);
                 const command = String(eventPayload.output?.args?.command ?? "").trim();
-                if (!command) {
+                if (!sid || !invocationId || !command) {
                     return;
                 }
-                const sequence = (invocationSequenceBySession.get(sid) ?? 0) + 1;
-                invocationSequenceBySession.set(sid, sequence);
-                const invocationId = nextInvocationId(sid, sequence);
-                const metadata = normalizeMetadata(eventPayload.output?.metadata);
-                metadata[VALIDATION_INVOCATION_ID_KEY] = invocationId;
-                if (eventPayload.output) {
-                    eventPayload.output.metadata = metadata;
-                }
-                pendingCommandsByInvocation.set(invocationId, {
+                const categories = classifyValidationCommand(command);
+                pendingCommands.set(invocationId, {
+                    callId: invocationId,
+                    sessionId: sid,
                     command,
-                    categories: classifyValidationCommand(command),
+                    categories,
+                    fingerprint: categories.length > 0
+                        ? captureGitStateFingerprint(directoryFor(eventPayload, options.directory))
+                        : null,
                 });
-                const queue = pendingInvocationIdsBySession.get(sid) ?? [];
-                queue.push(invocationId);
-                pendingInvocationIdsBySession.set(sid, queue);
                 return;
             }
             if (type === "tool.execute.before.error") {
-                const eventPayload = (payload ?? {});
-                const sid = sessionId(eventPayload);
-                if (!sid) {
-                    return;
-                }
-                const queue = pendingInvocationIdsBySession.get(sid) ?? [];
-                const command = readCommand(eventPayload);
-                const byCommand = command
-                    ? queue.filter((candidate) => pendingCommandsByInvocation.get(candidate)?.command === command)
-                    : [];
-                const invocationId = readInvocationId(eventPayload) || byCommand[0] || (queue.length === 1 ? queue[0] : "");
+                const invocationId = callId((payload ?? {}));
                 if (invocationId) {
-                    pendingCommandsByInvocation.delete(invocationId);
-                    const remaining = queue.filter((candidate) => candidate !== invocationId);
-                    if (remaining.length > 0) {
-                        pendingInvocationIdsBySession.set(sid, remaining);
-                    }
-                    else {
-                        pendingInvocationIdsBySession.delete(sid);
-                    }
+                    pendingCommands.delete(invocationId);
                 }
                 return;
             }
@@ -187,120 +160,43 @@ export function createValidationEvidenceLedgerHook(options) {
                 return;
             }
             const eventPayload = (payload ?? {});
-            const tool = String(eventPayload.input?.tool ?? "").toLowerCase();
-            if (tool !== "bash") {
+            if (String(eventPayload.input?.tool ?? "").toLowerCase() !== "bash") {
                 return;
+            }
+            const invocationId = callId(eventPayload);
+            const pending = invocationId ? pendingCommands.get(invocationId) : undefined;
+            if (invocationId) {
+                pendingCommands.delete(invocationId);
             }
             const sid = sessionId(eventPayload);
-            if (!sid) {
+            const finalCommand = String(eventPayload.input?.args?.command ?? "").trim();
+            if (!pending ||
+                !sid ||
+                pending.callId !== invocationId ||
+                pending.sessionId !== sid ||
+                pending.command !== finalCommand ||
+                commandExitCode(eventPayload) !== 0) {
                 return;
             }
-            const queue = pendingInvocationIdsBySession.get(sid) ?? [];
-            const commandFromAfter = readCommand(eventPayload);
-            const byCommand = commandFromAfter
-                ? queue.filter((candidate) => pendingCommandsByInvocation.get(candidate)?.command === commandFromAfter)
-                : [];
-            const invocationId = readInvocationId(eventPayload) || byCommand[0] || (queue.length === 1 ? queue[0] : "");
-            if (!invocationId && queue.length > 1) {
-                const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                    ? eventPayload.directory
-                    : options.directory;
+            const directory = directoryFor(eventPayload, options.directory);
+            if (pending.categories.length === 0) {
+                if (options.decisionRuntime) {
+                    await recordLlmTelemetry(options.decisionRuntime, directory, sid, pending.command);
+                }
+                return;
+            }
+            if (!pending.fingerprint) {
+                return;
+            }
+            const recorded = markValidationEvidence(sid, pending.categories, directory, pending.fingerprint);
+            if (!recorded.updatedAt) {
                 writeGatewayEventAudit(directory, {
                     hook: "validation-evidence-ledger",
                     stage: "skip",
-                    reason_code: "validation_evidence_ambiguous_pending_commands",
+                    reason_code: "validation_evidence_state_changed",
                     session_id: sid,
-                    pending_commands: queue.length,
                 });
-                for (const pendingId of queue) {
-                    pendingCommandsByInvocation.delete(pendingId);
-                }
-                pendingInvocationIdsBySession.delete(sid);
-                return;
             }
-            const pending = invocationId ? pendingCommandsByInvocation.get(invocationId) : undefined;
-            if (invocationId) {
-                pendingCommandsByInvocation.delete(invocationId);
-                const remaining = queue.filter((candidate) => candidate !== invocationId);
-                if (remaining.length > 0) {
-                    pendingInvocationIdsBySession.set(sid, remaining);
-                }
-                else {
-                    pendingInvocationIdsBySession.delete(sid);
-                }
-            }
-            if (!pending?.command) {
-                return;
-            }
-            if (!hasUsableOutput(eventPayload.output?.output)) {
-                return;
-            }
-            const command = pending.command;
-            const output = outputText(eventPayload.output?.output);
-            let categories = pending.categories;
-            if (categories.length === 0 && options.decisionRuntime) {
-                const decision = await options.decisionRuntime.decide({
-                    hookId: "validation-evidence-ledger",
-                    sessionId: sid,
-                    templateId: "validation-command-classifier-v1",
-                    instruction: buildValidationInstruction(),
-                    context: buildValidationContext(command),
-                    allowedChars: ["L", "T", "C", "B", "S", "N"],
-                    decisionMeaning: {
-                        L: "lint",
-                        T: "test",
-                        C: "typecheck",
-                        B: "build",
-                        S: "security",
-                        N: "not_validation",
-                    },
-                    cacheKey: buildCompactDecisionCacheKey({
-                        prefix: "validation-command",
-                        text: buildValidationContext(command),
-                    }),
-                });
-                if (decision.accepted) {
-                    const category = VALIDATION_CATEGORY_BY_CHAR[decision.char];
-                    if (category) {
-                        writeDecisionComparisonAudit({
-                            directory: options.directory,
-                            hookId: "validation-evidence-ledger",
-                            sessionId: sid,
-                            mode: options.decisionRuntime.config.mode,
-                            deterministicMeaning: "not_validation",
-                            aiMeaning: decision.meaning || category,
-                            deterministicValue: "none",
-                            aiValue: category,
-                        });
-                        const shadowDeferred = options.decisionRuntime.config.mode === "shadow";
-                        writeGatewayEventAudit(options.directory, {
-                            hook: "validation-evidence-ledger",
-                            stage: "state",
-                            reason_code: shadowDeferred
-                                ? "llm_validation_command_shadow_deferred"
-                                : "llm_validation_command_decision_recorded",
-                            session_id: sid,
-                            llm_decision_char: decision.char,
-                            llm_decision_meaning: decision.meaning,
-                            llm_decision_mode: options.decisionRuntime.config.mode,
-                            evidence: category,
-                        });
-                        if (!shadowDeferred) {
-                            categories = [category];
-                        }
-                    }
-                }
-            }
-            if (categories.length === 0) {
-                return;
-            }
-            if (commandFailed(output)) {
-                return;
-            }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
-            markValidationEvidence(sid, categories, directory);
         },
     };
 }

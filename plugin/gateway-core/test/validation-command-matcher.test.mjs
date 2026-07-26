@@ -30,3 +30,28 @@ test("validation-command-matcher ignores bare filenames that mention tool names"
   assert.deepEqual(classifyValidationCommand("ls eslint.config.js"), [])
   assert.equal(isValidationCommand("cat docs/jest-notes.md"), false)
 })
+
+test("validation-command-matcher rejects shell composition and swallowed failures", () => {
+  for (const command of [
+    "npm test || true",
+    "npm test && echo done",
+    "npm test; true",
+    "npm test | tee test.log",
+    "npm test > test.log",
+    "npm test 2>&1",
+    "npm test &",
+    "cd project && npm test",
+    "$(printf npm) test",
+    "`printf npm` test",
+  ]) {
+    assert.deepEqual(classifyValidationCommand(command), [], command)
+  }
+})
+
+test("validation-command-matcher accepts quoted metacharacters and environment prefixes", () => {
+  assert.deepEqual(classifyValidationCommand("CI=true npm test -- --name='a|b'"), ["test"])
+  assert.deepEqual(
+    classifyValidationCommand("OPENCODE_SESSION_ID='session-1' CI=true make validate"),
+    ["lint"],
+  )
+})

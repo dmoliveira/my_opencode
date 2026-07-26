@@ -118,6 +118,7 @@ from harness_wave2_task4_smoke import (  # type: ignore
     sanitize_text,
     write_project_fixture,
 )
+from completion_gates import git_state_fingerprint  # type: ignore
 from playwright_defaults import (  # type: ignore
     PLAYWRIGHT_BROWSER_ARGS,
     PLAYWRIGHT_MCP_COMMAND,
@@ -275,6 +276,58 @@ def run_oc_json(cwd: Path, *args: str) -> dict:
 def expect(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def initialize_validation_git_fixture(directory: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=directory, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "selftest@example.invalid"],
+        cwd=directory,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Selftest"], cwd=directory, check=True
+    )
+    (directory / ".gitignore").write_text(".opencode/*\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=directory, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=directory, check=True)
+
+
+def write_test_validation_evidence(
+    directory: Path, *, categories: tuple[str, ...]
+) -> None:
+    fingerprint = git_state_fingerprint(directory)
+    if not fingerprint:
+        raise AssertionError("validation fixture fingerprint is unavailable")
+    snapshot = {
+        "lint": "lint" in categories,
+        "test": "test" in categories,
+        "typecheck": "typecheck" in categories,
+        "build": "build" in categories,
+        "security": "security" in categories,
+        "updatedAt": "2026-02-13T00:00:03Z",
+    }
+    runtime = directory / ".opencode" / "runtime"
+    runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
+    runtime.chmod(0o700)
+    path = runtime / "validation-evidence.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "worktrees": {
+                    fingerprint["root"]: {
+                        "fingerprint": fingerprint,
+                        "evidence": snapshot,
+                    }
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
 
 
 def parse_json_output(text: str) -> dict:
@@ -18792,6 +18845,7 @@ version: 1
 
         completion_gate_dir = tmp / "autopilot_completion_gates"
         completion_gate_dir.mkdir(parents=True, exist_ok=True)
+        initialize_validation_git_fixture(completion_gate_dir)
         completion_gate_objective = {
             "goal": "Require validation before completion",
             "scope": "scripts/autopilot_runtime.py",
@@ -18825,28 +18879,7 @@ version: 1
             == "completion_gates_blocked",
             "autopilot completion gates should block completion when required validation evidence is missing",
         )
-        evidence_runtime_dir = completion_gate_dir / ".opencode" / "runtime"
-        evidence_runtime_dir.mkdir(parents=True, exist_ok=True)
-        (evidence_runtime_dir / "validation-evidence.json").write_text(
-            json.dumps(
-                {
-                    "sessions": {},
-                    "worktrees": {
-                        str(completion_gate_dir.resolve()): {
-                            "lint": False,
-                            "test": True,
-                            "typecheck": False,
-                            "build": False,
-                            "security": False,
-                            "updatedAt": "2026-02-13T00:00:03Z",
-                        }
-                    },
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        write_test_validation_evidence(completion_gate_dir, categories=("test",))
         completion_gate_complete = execute_cycle(
             config={"budget_runtime": {"profile": "balanced"}},
             write_path=config_path,
@@ -20559,6 +20592,7 @@ version: 1
             "- [ ] 1. finish gated plan\n",
             encoding="utf-8",
         )
+        initialize_validation_git_fixture(completion_gate_plan_dir)
         start_work_gate_fail = subprocess.run(
             [
                 sys.executable,
@@ -20587,27 +20621,8 @@ version: 1
             ),
             "start-work should surface deterministic completion-gate blocked violations",
         )
-        gate_evidence_dir = completion_gate_plan_dir / ".opencode" / "runtime"
-        gate_evidence_dir.mkdir(parents=True, exist_ok=True)
-        (gate_evidence_dir / "validation-evidence.json").write_text(
-            json.dumps(
-                {
-                    "sessions": {},
-                    "worktrees": {
-                        str(completion_gate_plan_dir.resolve()): {
-                            "lint": False,
-                            "test": True,
-                            "typecheck": False,
-                            "build": False,
-                            "security": False,
-                            "updatedAt": "2026-02-13T00:00:00Z",
-                        }
-                    },
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
+        write_test_validation_evidence(
+            completion_gate_plan_dir, categories=("test",)
         )
         start_work_gate_pass = subprocess.run(
             [
