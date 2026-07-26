@@ -420,6 +420,7 @@ Use these directly in OpenCode:
 /gateway disable
 /gateway doctor
 /gateway doctor --fresh --json
+/gateway doctor --deep --json
 /gateway watchdog status
 /gateway watchdog doctor
 /gateway watchdog set --warning-threshold-seconds 60 --tool-call-threshold 12 --reminder-cooldown-seconds 60
@@ -443,6 +444,7 @@ Notes:
 - `/gateway status --json` now includes `mistake_ledger` so operators can see whether validation deferrals are accumulating in `.opencode/mistake-ledger.jsonl`.
 - `/gateway doctor --json` includes `hook_diagnostics` and reuses a fingerprinted successful direct-loader smoke for up to 15 minutes; cache entries contain only allowlisted status fields.
 - `/gateway doctor --fresh --json` bypasses that cache and runs the real loader smoke once; use it after changing the OpenCode runtime or when diagnosing loader state.
+- `/gateway doctor --deep --json` runs uncached, loader-only direct and tuple contract probes in isolated temporary homes. It never runs legacy serve/model probes, never reads or changes the direct-loader cache, and returns only allowlisted status fields. `--deep` and `--fresh` are mutually exclusive.
 - `/gateway continuation report --json` summarizes recent `todo-continuation-enforcer` audit events so you can see reason codes, stages, and affected sessions quickly.
 - `/gateway continuation report --json` now also exposes `assistant_message_open_todo_events` so you can spot intermediate assistant replies that landed while todos were still open.
 - after a wrapped session, `/gateway continuation report` is the fastest check for recent `todo-continuation-enforcer` activity.

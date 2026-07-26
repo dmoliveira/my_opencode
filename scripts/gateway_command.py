@@ -89,7 +89,7 @@ GATEWAY_DOCTOR_SESSION_HEALTH_SAMPLE_LIMIT = max(
 # Prints usage for gateway command.
 def usage() -> int:
     print(
-        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--fresh] [--json] | /gateway concise <status|doctor|set|off|default|review|commit|compress> [mode] [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
+        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--fresh|--deep] [--json] | /gateway concise <status|doctor|set|off|default|review|commit|compress> [mode] [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
     )
     return 2
 
@@ -212,15 +212,86 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
                 print(f"  server_log: {server_log}")
 
 
-def _run_local_plugin_runtime_smoke_live() -> dict[str, Any]:
+def _safe_smoke_int(value: Any, fallback: int = 1) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_smoke_reason(value: Any, fallback: str) -> str:
+    reason = str(value or "").strip().lower()
+    return reason if re.fullmatch(r"[a-z0-9_]{1,128}", reason) else fallback
+
+
+def _project_smoke_payload(payload: Any) -> dict[str, Any]:
+    source = payload if isinstance(payload, dict) else {}
+    result = str(source.get("result") or "FAIL").strip().upper()
+    if result not in {"PASS", "FAIL", "SKIP"}:
+        result = "FAIL"
+    raw_results = source.get("results")
+    results: list[dict[str, Any]] = []
+    if isinstance(raw_results, list):
+        for item in raw_results:
+            if not isinstance(item, dict):
+                continue
+            item_result = str(item.get("result") or "FAIL").strip().upper()
+            if item_result not in {"PASS", "FAIL", "SKIP"}:
+                item_result = "FAIL"
+            results.append(
+                {
+                    "mode": str(item.get("mode") or "")[:32],
+                    "result": item_result,
+                    "run_exit": _safe_smoke_int(item.get("run_exit")),
+                    "audit_exists": bool(item.get("audit_exists")),
+                    "bootstrap_seen": bool(item.get("bootstrap_seen")),
+                    "plugin_install_failed": bool(
+                        item.get("plugin_install_failed")
+                    ),
+                    "plugin_resolve_failed": bool(
+                        item.get("plugin_resolve_failed")
+                    ),
+                }
+            )
+    return {
+        "result": result,
+        "reason": _safe_smoke_reason(source.get("reason"), "smoke_failed"),
+        "exit": _safe_smoke_int(source.get("exit")),
+        "results": results,
+    }
+
+
+def _smoke_results_pass(
+    results: list[dict[str, Any]], expected_modes: list[str]
+) -> bool:
+    if [str(item.get("mode") or "") for item in results] != expected_modes:
+        return False
+    return all(
+        item.get("result") == "PASS"
+        and int(item.get("run_exit") or 0) == 0
+        and item.get("audit_exists") is True
+        and item.get("bootstrap_seen") is True
+        and item.get("plugin_install_failed") is False
+        and item.get("plugin_resolve_failed") is False
+        for item in results
+    )
+
+
+def _run_local_plugin_runtime_smoke_live(
+    *, mode: str = "direct"
+) -> dict[str, Any]:
+    if mode not in {"direct", "contract"}:
+        raise ValueError(f"unsupported gateway smoke mode: {mode}")
     script = SCRIPT_DIR / "gateway_local_plugin_runtime_smoke.py"
     if not script.exists():
-        return {
-            "result": "SKIP",
-            "reason": "smoke_script_missing",
-            "path": str(script),
-            "results": [],
-        }
+        return _project_smoke_payload(
+            {
+                "result": "SKIP",
+                "reason": "smoke_script_missing",
+                "exit": 1,
+                "results": [],
+            }
+        )
     env = os.environ.copy()
     env.setdefault("CI", "true")
     env.setdefault("GIT_TERMINAL_PROMPT", "0")
@@ -229,17 +300,20 @@ def _run_local_plugin_runtime_smoke_live() -> dict[str, Any]:
     env.setdefault("PAGER", "cat")
     env.setdefault("GCM_INTERACTIVE", "never")
     try:
+        command = [
+            sys.executable,
+            str(script),
+            "--mode",
+            mode,
+            "--output",
+            "json",
+            "--run-timeout-seconds",
+            "45" if mode == "contract" else "90",
+        ]
+        if mode == "contract":
+            command.extend(["--aggregate-timeout-seconds", "100"])
         completed = subprocess.run(
-            [
-                sys.executable,
-                str(script),
-                "--mode",
-                "direct",
-                "--output",
-                "json",
-                "--run-timeout-seconds",
-                "90",
-            ],
+            command,
             cwd=REPO_ROOT,
             env=env,
             text=True,
@@ -248,73 +322,36 @@ def _run_local_plugin_runtime_smoke_live() -> dict[str, Any]:
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return {
-            "result": "FAIL",
-            "reason": "smoke_timeout",
-            "path": str(script),
-            "results": [],
-        }
+        return _project_smoke_payload(
+            {
+                "result": "FAIL",
+                "reason": "smoke_timeout",
+                "exit": 124,
+                "results": [],
+            }
+        )
     stdout = str(completed.stdout or "")
     try:
         payload = json.loads(stdout) if stdout.strip() else {}
     except json.JSONDecodeError:
-        return {
-            "result": "FAIL",
-            "reason": "smoke_invalid_json",
-            "path": str(script),
+        payload = {}
+    projected = _project_smoke_payload(
+        {
+            **(payload if isinstance(payload, dict) else {}),
             "exit": completed.returncode,
-            "stdout": stdout[-4000:],
-            "stderr": str(completed.stderr or "")[-4000:],
-            "results": [],
         }
-    results_any = payload.get("results") if isinstance(payload, dict) else []
-    results = results_any if isinstance(results_any, list) else []
-    if completed.returncode != 0:
-        return {
-            "result": "FAIL",
-            "reason": "smoke_nonzero_exit",
-            "path": str(script),
-            "exit": completed.returncode,
-            "stdout": stdout[-4000:],
-            "stderr": str(completed.stderr or "")[-4000:],
-            "results": results,
-        }
-    if not results:
-        return {
-            "result": "FAIL",
-            "reason": "smoke_empty_results",
-            "path": str(script),
-            "exit": completed.returncode,
-            "stdout": stdout[-4000:],
-            "stderr": str(completed.stderr or "")[-4000:],
-            "results": [],
-        }
-    failures = 0
-    for item in results:
-        if not isinstance(item, dict):
-            continue
-        item_result = str(item.get("result") or "").strip().upper()
-        run_exit = int(item.get("run_exit") or 0)
-        audit_exists = bool(item.get("audit_exists"))
-        bootstrap_seen = bool(item.get("bootstrap_seen"))
-        if (
-            item_result != "PASS"
-            or run_exit != 0
-            or not audit_exists
-            or not bootstrap_seen
-            or item.get("plugin_install_failed")
-            or item.get("plugin_resolve_failed")
-        ):
-            failures += 1
-    return {
-        "result": "PASS" if failures == 0 else "FAIL",
-        "reason": "local_plugin_runtime_loader_ok"
-        if failures == 0
-        else "local_plugin_runtime_loader_failed",
-        "path": str(script),
-        "exit": completed.returncode,
-        "results": results,
-    }
+    )
+    expected_modes = ["direct"] if mode == "direct" else ["direct", "tuple"]
+    passed = completed.returncode == 0 and _smoke_results_pass(
+        projected["results"], expected_modes
+    )
+    projected["result"] = "PASS" if passed else "FAIL"
+    projected["reason"] = (
+        "local_plugin_runtime_loader_ok"
+        if passed
+        else "local_plugin_runtime_loader_failed"
+    )
+    return projected
 
 
 GATEWAY_SMOKE_CACHE_SCHEMA = 1
@@ -364,8 +401,7 @@ def _gateway_smoke_checked_at() -> str:
     )
 
 
-def _gateway_smoke_fingerprint() -> str:
-    digest = hashlib.sha256()
+def _gateway_smoke_fingerprint_files() -> list[Path]:
     plugin_root = REPO_ROOT / "plugin" / "gateway-core"
     relevant_files = [
         Path(__file__).resolve(),
@@ -373,10 +409,17 @@ def _gateway_smoke_fingerprint() -> str:
         plugin_root / "package.json",
         plugin_root / "package-lock.json",
         plugin_root / "routing-profiles.data.json",
+        plugin_root / "config" / "default-gateway-core.config.json",
     ]
     dist_dir = plugin_root / "dist"
     if dist_dir.exists():
         relevant_files.extend(sorted(path for path in dist_dir.rglob("*") if path.is_file()))
+    return sorted(set(relevant_files), key=lambda item: str(item))
+
+
+def _gateway_smoke_fingerprint() -> str:
+    digest = hashlib.sha256()
+    relevant_files = _gateway_smoke_fingerprint_files()
     for path in sorted(set(relevant_files), key=lambda item: str(item)):
         relative = str(path.resolve(strict=False).relative_to(REPO_ROOT.resolve()))
         digest.update(relative.encode("utf-8"))
@@ -416,42 +459,20 @@ def _gateway_smoke_fingerprint() -> str:
 
 
 def _cacheable_smoke_summary(payload: dict[str, Any]) -> dict[str, Any] | None:
-    if str(payload.get("result") or "").upper() != "PASS":
+    projected = _project_smoke_payload(payload)
+    if projected["result"] != "PASS" or projected["exit"] != 0:
         return None
-    results_any = payload.get("results")
-    if not isinstance(results_any, list) or not results_any:
+    results = projected["results"]
+    if not _smoke_results_pass(results, ["direct"]):
         return None
-    results: list[dict[str, Any]] = []
-    for item in results_any:
-        if not isinstance(item, dict):
-            return None
-        result = str(item.get("result") or "").upper()
-        if result != "PASS":
-            return None
-        results.append(
-            {
-                "mode": str(item.get("mode") or "")[:32],
-                "result": result,
-                "run_exit": int(item.get("run_exit") or 0),
-                "audit_exists": bool(item.get("audit_exists")),
-                "bootstrap_seen": bool(item.get("bootstrap_seen")),
-                "plugin_install_failed": bool(item.get("plugin_install_failed")),
-                "plugin_resolve_failed": bool(item.get("plugin_resolve_failed")),
-            }
-        )
-    return {
-        "result": "PASS",
-        "reason": str(payload.get("reason") or "")[:128],
-        "exit": int(payload.get("exit") or 0),
-        "results": results,
-    }
+    return projected
 
 
 def _validated_cached_smoke_summary(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or set(value) != GATEWAY_SMOKE_CACHE_RESULT_KEYS:
         return None
     results = value.get("results")
-    if not isinstance(results, list) or not results:
+    if not isinstance(results, list) or len(results) != 1:
         return None
     if any(not isinstance(item, dict) or set(item) != GATEWAY_SMOKE_CACHE_ITEM_KEYS for item in results):
         return None
@@ -565,7 +586,24 @@ def _invalidate_gateway_smoke_cache(path: Path) -> None:
         return
 
 
-def run_local_plugin_runtime_smoke(*, force_fresh: bool = False) -> dict[str, Any]:
+def run_local_plugin_runtime_smoke(
+    *, cache_policy: str = "reuse", mode: str = "direct"
+) -> dict[str, Any]:
+    if cache_policy not in {"reuse", "refresh", "none"}:
+        raise ValueError(f"unsupported gateway smoke cache policy: {cache_policy}")
+    if cache_policy == "none":
+        live = _project_smoke_payload(
+            _run_local_plugin_runtime_smoke_live(mode=mode)
+        )
+        return {
+            **live,
+            "cached": False,
+            "cache_policy": "none",
+            "cache_stored": False,
+        }
+    if mode != "direct":
+        raise ValueError("cached gateway smoke only supports direct mode")
+
     cache_path = gateway_doctor_smoke_cache_path()
     ttl_seconds = gateway_doctor_smoke_cache_ttl_seconds()
     fingerprint: str | None = None
@@ -574,7 +612,7 @@ def run_local_plugin_runtime_smoke(*, force_fresh: bool = False) -> dict[str, An
     except (OSError, RuntimeError, subprocess.SubprocessError):
         fingerprint = None
 
-    if not force_fresh and fingerprint is not None:
+    if cache_policy == "reuse" and fingerprint is not None:
         cached = _load_gateway_smoke_cache(
             cache_path,
             fingerprint=fingerprint,
@@ -584,14 +622,16 @@ def run_local_plugin_runtime_smoke(*, force_fresh: bool = False) -> dict[str, An
             result, checked_at, age_seconds = cached
             return {
                 **result,
-                "path": str(SCRIPT_DIR / "gateway_local_plugin_runtime_smoke.py"),
                 "cached": True,
+                "cache_policy": cache_policy,
                 "cache_checked_at": checked_at,
                 "cache_age_seconds": age_seconds,
                 "cache_fingerprint": fingerprint,
             }
 
-    live = _run_local_plugin_runtime_smoke_live()
+    live = _project_smoke_payload(
+        _run_local_plugin_runtime_smoke_live(mode="direct")
+    )
     checked_at = _gateway_smoke_checked_at()
     cacheable = _cacheable_smoke_summary(live)
     if fingerprint is None or ttl_seconds <= 0 or cacheable is None:
@@ -599,6 +639,7 @@ def run_local_plugin_runtime_smoke(*, force_fresh: bool = False) -> dict[str, An
         return {
             **live,
             "cached": False,
+            "cache_policy": cache_policy,
             "cache_checked_at": checked_at,
             "cache_age_seconds": 0.0,
             "cache_fingerprint": fingerprint,
@@ -613,6 +654,7 @@ def run_local_plugin_runtime_smoke(*, force_fresh: bool = False) -> dict[str, An
     return {
         **live,
         "cached": False,
+        "cache_policy": cache_policy,
         "cache_checked_at": checked_at,
         "cache_age_seconds": 0.0,
         "cache_fingerprint": fingerprint,
@@ -2261,7 +2303,9 @@ def command_status(as_json: bool) -> int:
 
 
 # Runs gateway plugin diagnostics with quick fixes.
-def command_doctor(as_json: bool, *, fresh: bool = False) -> int:
+def command_doctor(
+    as_json: bool, *, fresh: bool = False, deep: bool = False
+) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
     status = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
@@ -2432,9 +2476,11 @@ def command_doctor(as_json: bool, *, fresh: bool = False) -> int:
             )
 
     local_plugin_runtime_smoke = run_local_plugin_runtime_smoke(
-        force_fresh=fresh
+        cache_policy="none" if deep else "refresh" if fresh else "reuse",
+        mode="contract" if deep else "direct",
     )
-    if local_plugin_runtime_smoke.get("result") == "FAIL":
+    smoke_result = str(local_plugin_runtime_smoke.get("result") or "").upper()
+    if smoke_result == "FAIL" or (deep and smoke_result != "PASS"):
         problems.append(
             "local gateway plugin runtime smoke failed; OpenCode could not reliably load the repo-local gateway plugin"
         )
@@ -2444,6 +2490,7 @@ def command_doctor(as_json: bool, *, fresh: bool = False) -> int:
 
     report = {
         "result": "PASS" if not problems else "FAIL",
+        "doctor_mode": "deep" if deep else "fresh" if fresh else "normal",
         "status": status,
         "warnings": warnings,
         "problems": problems,
@@ -2455,7 +2502,7 @@ def command_doctor(as_json: bool, *, fresh: bool = False) -> int:
             "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
             "run /autopilot report to inspect blockers and stale runtime status",
             "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode direct --output json",
-            "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode both --output json for optional package-loader compatibility evidence",
+            "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode contract --output json for uncached direct+tuple loader evidence",
         ]
         + [
             item
@@ -4134,6 +4181,7 @@ def main(argv: list[str]) -> int:
     reminder_cooldown_ms_set = False
     clear_cache = False
     fresh = False
+    deep = False
     if "--json" in args:
         args.remove("--json")
         as_json = True
@@ -4143,6 +4191,9 @@ def main(argv: list[str]) -> int:
     if "--fresh" in args:
         args.remove("--fresh")
         fresh = True
+    if "--deep" in args:
+        args.remove("--deep")
+        deep = True
     if "--apply" in args:
         args.remove("--apply")
         apply = True
@@ -4271,6 +4322,8 @@ def main(argv: list[str]) -> int:
         used_flags.add("--force")
     if fresh:
         used_flags.add("--fresh")
+    if deep:
+        used_flags.add("--deep")
     if apply:
         used_flags.add("--apply")
     if resume:
@@ -4438,9 +4491,11 @@ def main(argv: list[str]) -> int:
             return usage()
         return command_disable(as_json)
     if cmd == "doctor":
-        if not flags_allowed("--json", "--fresh"):
+        if deep and fresh:
             return usage()
-        return command_doctor(as_json, fresh=fresh)
+        if not flags_allowed("--json", "--fresh", "--deep"):
+            return usage()
+        return command_doctor(as_json, fresh=fresh, deep=deep)
     return usage()
 
 

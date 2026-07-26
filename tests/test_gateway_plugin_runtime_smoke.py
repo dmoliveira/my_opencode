@@ -47,6 +47,68 @@ class GatewayPluginRuntimeSmokeTest(unittest.TestCase):
             self.assertNotIn(sentinel, retained)
             self.assertNotIn(str(work_dir), retained)
 
+    def test_contract_probe_is_sanitized_bounded_and_cleans_outer_root(self) -> None:
+        module = importlib.import_module("gateway_local_plugin_runtime_smoke")
+        sentinel = "WAVE4_CONTRACT_PRIVATE_SENTINEL"
+
+        def fake_run(command, *, cwd, env, timeout):
+            self.assertLessEqual(timeout, 45)
+            audit_path = Path(env["MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH"])
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "reason_code": "gateway_runtime_bootstrap",
+                        "hooks_enabled": False,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, sentinel, "")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            outer_root = Path(tmp) / "contract-root"
+            runtime_root = Path(tmp) / "runtime-root-must-not-exist"
+            with (
+                patch.object(module.tempfile, "mkdtemp", return_value=str(outer_root)),
+                patch.object(module, "RUNTIME_ROOT", runtime_root),
+                patch.object(module, "run_command", side_effect=fake_run),
+            ):
+                results = module.collect_contract_results(45, 100)
+
+            self.assertFalse(outer_root.exists())
+            self.assertFalse(runtime_root.exists())
+            self.assertEqual(["direct", "tuple"], [item["mode"] for item in results])
+            self.assertTrue(all(item["result"] == "PASS" for item in results))
+            self.assertTrue(all(item["artifacts_cleaned"] for item in results))
+            retained = json.dumps(results)
+            self.assertNotIn(sentinel, retained)
+            self.assertNotIn(str(outer_root), retained)
+            self.assertNotIn("plugin_spec", retained)
+            self.assertNotIn("stdout", retained)
+            self.assertNotIn("stderr", retained)
+
+    def test_contract_probe_enforces_shared_aggregate_deadline(self) -> None:
+        module = importlib.import_module("gateway_local_plugin_runtime_smoke")
+        with tempfile.TemporaryDirectory() as tmp:
+            outer_root = Path(tmp) / "contract-timeout"
+            with (
+                patch.object(module.tempfile, "mkdtemp", return_value=str(outer_root)),
+                patch.object(module.time, "monotonic", side_effect=[0.0, 101.0, 101.0]),
+                patch.object(module, "collect_direct_result") as direct,
+                patch.object(module, "collect_tuple_result") as tuple_probe,
+            ):
+                results = module.collect_contract_results(45, 100)
+
+            direct.assert_not_called()
+            tuple_probe.assert_not_called()
+            self.assertFalse(outer_root.exists())
+            self.assertEqual(2, len(results))
+            self.assertTrue(all(item["result"] == "FAIL" for item in results))
+            self.assertTrue(
+                all(item["reason"] == "contract_aggregate_timeout" for item in results)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

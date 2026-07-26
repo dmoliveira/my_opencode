@@ -5,16 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import socket
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
 from typing import Any
-
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
@@ -30,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=("direct", "tuple", "path", "tarball", "both", "all"),
+        choices=("direct", "tuple", "contract", "path", "tarball", "both", "all"),
         default="direct",
         help="Plugin loading mode to test.",
     )
@@ -45,6 +44,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=90,
         help="Timeout for the attached run command.",
+    )
+    parser.add_argument(
+        "--aggregate-timeout-seconds",
+        type=int,
+        default=100,
+        help="Shared deadline for contract-mode probes.",
     )
     return parser.parse_args()
 
@@ -83,6 +88,43 @@ def coerce_text(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def safe_int(value: Any, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def safe_reason(value: Any, fallback: str) -> str:
+    reason = str(value or "").strip().lower()
+    return reason if re.fullmatch(r"[a-z0-9_]{1,128}", reason) else fallback
+
+
+def project_contract_result(
+    value: dict[str, Any], *, mode: str, artifacts_cleaned: bool
+) -> dict[str, Any]:
+    result = str(value.get("result") or "FAIL").strip().upper()
+    if result not in {"PASS", "FAIL", "SKIP"}:
+        result = "FAIL"
+    if not artifacts_cleaned:
+        result = "FAIL"
+    return {
+        "mode": mode,
+        "result": result,
+        "reason": (
+            "contract_artifact_cleanup_failed"
+            if not artifacts_cleaned
+            else safe_reason(value.get("reason"), "contract_probe_failed")
+        ),
+        "run_exit": safe_int(value.get("run_exit"), 1),
+        "audit_exists": bool(value.get("audit_exists")),
+        "bootstrap_seen": bool(value.get("bootstrap_seen")),
+        "plugin_install_failed": bool(value.get("plugin_install_failed")),
+        "plugin_resolve_failed": bool(value.get("plugin_resolve_failed")),
+        "artifacts_cleaned": artifacts_cleaned,
+    }
 
 
 def audit_has_reason_code(audit_log: str, reason_code: str) -> bool:
@@ -305,6 +347,59 @@ def collect_tuple_result(work_dir: Path, run_timeout: int) -> dict[str, Any]:
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
     return result
+
+
+def collect_contract_results(
+    run_timeout: int,
+    aggregate_timeout: int,
+) -> list[dict[str, Any]]:
+    outer_root = Path(
+        tempfile.mkdtemp(prefix="my-opencode-gateway-contract-")
+    ).resolve()
+    started_at = time.monotonic()
+    raw_results: list[tuple[str, dict[str, Any]]] = []
+    try:
+        for mode in ("direct", "tuple"):
+            remaining = float(aggregate_timeout) - (time.monotonic() - started_at)
+            if remaining < 1:
+                raw_results.append(
+                    (
+                        mode,
+                        {
+                            "result": "FAIL",
+                            "reason": "contract_aggregate_timeout",
+                            "run_exit": 124,
+                        },
+                    )
+                )
+                continue
+            timeout = max(1, min(max(1, run_timeout), int(remaining)))
+            work_dir = outer_root / mode
+            try:
+                result = (
+                    collect_direct_result(work_dir, timeout)
+                    if mode == "direct"
+                    else collect_tuple_result(work_dir, timeout)
+                )
+            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+                result = {
+                    "result": "FAIL",
+                    "reason": "contract_probe_exception",
+                    "run_exit": 1,
+                }
+            raw_results.append((mode, result))
+    finally:
+        shutil.rmtree(outer_root, ignore_errors=True)
+
+    artifacts_cleaned = not outer_root.exists()
+    return [
+        project_contract_result(
+            value,
+            mode=mode,
+            artifacts_cleaned=artifacts_cleaned,
+        )
+        for mode, value in raw_results
+    ]
 
 def prepare_home(base_dir: Path) -> Path:
     config_dir = base_dir / ".config" / "opencode"
@@ -547,23 +642,36 @@ def collect_result(
 
 def print_text(results: list[dict[str, Any]]) -> None:
     for result in results:
-        print(f"mode: {result['mode']}")
-        print(f"plugin_spec: {result['plugin_spec']}")
-        print(f"run_exit: {result['run_exit']}")
-        print(f"audit_exists: {result['audit_exists']}")
-        print(f"bootstrap_seen: {result['bootstrap_seen']}")
-        print(f"continuation_seen: {result['continuation_seen']}")
-        print(f"llm_continuation_seen: {result['llm_continuation_seen']}")
-        print(f"plugin_install_failed: {result['plugin_install_failed']}")
-        print(f"plugin_resolve_failed: {result['plugin_resolve_failed']}")
-        print(f"server_log: {result['server_log']}")
-        print(f"audit_log: {result['audit_log']}")
-        print(f"run_log: {result['run_log']}")
+        print(f"mode: {result.get('mode')}")
+        print(f"result: {result.get('result')}")
+        print(f"reason: {result.get('reason')}")
+        print(f"run_exit: {result.get('run_exit')}")
+        print(f"audit_exists: {result.get('audit_exists')}")
+        print(f"bootstrap_seen: {result.get('bootstrap_seen')}")
+        print(f"continuation_seen: {result.get('continuation_seen')}")
+        print(f"llm_continuation_seen: {result.get('llm_continuation_seen')}")
+        print(f"plugin_install_failed: {result.get('plugin_install_failed')}")
+        print(f"plugin_resolve_failed: {result.get('plugin_resolve_failed')}")
+        print(f"artifacts_cleaned: {result.get('artifacts_cleaned')}")
+        print(f"server_log: {result.get('server_log')}")
+        print(f"audit_log: {result.get('audit_log')}")
+        print(f"run_log: {result.get('run_log')}")
         print()
 
 
 def main() -> int:
     args = parse_args()
+    if args.mode == "contract":
+        results = collect_contract_results(
+            max(1, args.run_timeout_seconds),
+            max(1, args.aggregate_timeout_seconds),
+        )
+        if args.output == "json":
+            print(json.dumps({"results": results}, indent=2))
+        else:
+            print_text(results)
+        return 1 if any(item.get("result") != "PASS" for item in results) else 0
+
     RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
     work_dir = Path(tempfile.mkdtemp(prefix="smoke-", dir=RUNTIME_ROOT))
     if args.mode == "both":
