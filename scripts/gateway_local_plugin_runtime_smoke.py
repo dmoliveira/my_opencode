@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=("direct", "path", "tarball", "both", "all"),
+        choices=("direct", "tuple", "path", "tarball", "both", "all"),
         default="direct",
         help="Plugin loading mode to test.",
     )
@@ -210,6 +210,101 @@ def collect_direct_result(work_dir: Path, run_timeout: int) -> dict[str, Any]:
         ),
     }
 
+
+
+def collect_tuple_result(work_dir: Path, run_timeout: int) -> dict[str, Any]:
+    option_sentinel = "WAVE3_PRIVATE_PLUGIN_OPTION"
+    home_dir = work_dir / "home"
+    project_dir = work_dir / "project"
+    config_dir = home_dir / ".config" / "opencode"
+    audit_path = work_dir / "gateway-tuple-events.jsonl"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    dist_entry = (PLUGIN_DIR / "dist" / "index.js").resolve()
+    write_json(
+        config_dir / "opencode.json",
+        {
+            "$schema": "https://opencode.ai/config.json",
+            "plugin": [
+                [
+                    dist_entry.as_uri(),
+                    {
+                        "hooks": {"enabled": False},
+                        "wave3OptionSentinel": option_sentinel,
+                    },
+                ]
+            ],
+        },
+    )
+    result: dict[str, Any]
+    try:
+        try:
+            run_result = run_command(
+                ["opencode", "debug", "config", "--print-logs", "--log-level", "INFO"],
+                cwd=project_dir,
+                env=isolated_probe_env(home_dir, audit_path),
+                timeout=run_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            run_result = subprocess.CompletedProcess(
+                error.cmd,
+                124,
+                coerce_text(error.stdout),
+                coerce_text(error.stderr),
+            )
+        stdout = coerce_text(run_result.stdout)
+        stderr = coerce_text(run_result.stderr)
+        audit_log = (
+            audit_path.read_text(encoding="utf-8", errors="replace")
+            if audit_path.exists()
+            else ""
+        )
+        bootstrap_events: list[dict[str, Any]] = []
+        for raw_line in audit_log.splitlines():
+            try:
+                event = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(event, dict)
+                and event.get("reason_code") == "gateway_runtime_bootstrap"
+            ):
+                bootstrap_events.append(event)
+        bootstrap_seen = len(bootstrap_events) == 1
+        hooks_disabled = bootstrap_seen and bootstrap_events[0].get("hooks_enabled") is False
+        audit_is_sanitized = option_sentinel not in audit_log
+        shim_count = len(list(project_dir.glob(".opencode/plugins/*")))
+        passed = (
+            run_result.returncode == 0
+            and bootstrap_seen
+            and hooks_disabled
+            and audit_is_sanitized
+            and shim_count == 0
+        )
+        result = {
+            "mode": "tuple",
+            "plugin_spec": "candidate-dist",
+            "run_exit": run_result.returncode,
+            "audit_exists": audit_path.exists(),
+            "bootstrap_seen": bootstrap_seen,
+            "hooks_enabled": False if hooks_disabled else None,
+            "continuation_seen": False,
+            "llm_continuation_seen": False,
+            "plugin_install_failed": "failed to install plugin" in stderr,
+            "plugin_resolve_failed": "Cannot find module" in stderr,
+            "server_log": "",
+            "audit_log": "",
+            "run_log": "",
+            "shim_count": shim_count,
+            "raw_option_echo_seen": option_sentinel in stdout or option_sentinel in stderr,
+            "audit_sanitized": audit_is_sanitized,
+            "artifacts_cleaned": True,
+            "result": "PASS" if passed else "FAIL",
+            "reason": "tuple_options_applied" if passed else "tuple_options_probe_failed",
+        }
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    return result
 
 def prepare_home(base_dir: Path) -> Path:
     config_dir = base_dir / ".config" / "opencode"
@@ -474,7 +569,7 @@ def main() -> int:
     if args.mode == "both":
         modes = ["path", "tarball"]
     elif args.mode == "all":
-        modes = ["direct", "path", "tarball"]
+        modes = ["direct", "tuple", "path", "tarball"]
     else:
         modes = [args.mode]
     results: list[dict[str, Any]] = []
@@ -485,6 +580,14 @@ def main() -> int:
             ).resolve()
             results.append(
                 collect_direct_result(direct_work_dir, args.run_timeout_seconds)
+            )
+            continue
+        if mode == "tuple":
+            tuple_work_dir = Path(
+                tempfile.mkdtemp(prefix="my-opencode-gateway-tuple-")
+            ).resolve()
+            results.append(
+                collect_tuple_result(tuple_work_dir, args.run_timeout_seconds)
             )
             continue
         results.append(

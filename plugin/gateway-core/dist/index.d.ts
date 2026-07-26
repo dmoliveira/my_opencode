@@ -119,6 +119,7 @@ interface ChatMessageInput {
     }>;
 }
 interface ChatMessageOutput {
+    message?: unknown;
     parts?: Array<{
         type: string;
         text?: string;
@@ -148,7 +149,7 @@ interface TextCompleteInput {
 interface TextCompleteOutput {
     text: string;
 }
-export default function GatewayCorePlugin(ctx: GatewayContext): {
+export default function GatewayCorePlugin(ctx: GatewayContext, options?: Record<string, unknown>): {
     event(input: GatewayEventPayload): Promise<void>;
     "tool.execute.before"(input: ToolBeforeInput, output: ToolBeforeOutput): Promise<void>;
     "command.execute.before"(input: CommandBeforeInput, output: CommandBeforeOutput): Promise<void>;

@@ -123,6 +123,7 @@ function gatewayConfigLayerPaths(directory: string): Array<{
 export function loadGatewayConfigSourceWithMeta(
   directory: string,
   source: unknown,
+  override?: unknown,
 ): { source: Record<string, unknown>; meta: GatewayConfigSourceMeta } {
   const layers: GatewayConfigLayerMeta[] = [];
   let sidecar: Record<string, unknown> = {};
@@ -166,10 +167,13 @@ export function loadGatewayConfigSourceWithMeta(
     layers,
   };
 
-  if (!isRecord(source)) {
-    return { source: sidecar, meta };
+  let merged = sidecar;
+  for (const candidate of [source, override]) {
+    if (isRecord(candidate)) {
+      merged = deepMergeRecords(merged, candidate);
+    }
   }
-  return { source: deepMergeRecords(sidecar, source), meta };
+  return { source: merged, meta };
 }
 
 export function loadGatewayConfigSource(

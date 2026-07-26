@@ -351,6 +351,7 @@ interface ChatMessageInput {
 
 // Declares mutable chat message payload shape for prompt rewriting hooks.
 interface ChatMessageOutput {
+  message?: unknown;
   parts?: Array<{ type: string; text?: string }>;
 }
 
@@ -382,12 +383,19 @@ interface ResolvedGatewayRuntime {
   cfg: ReturnType<typeof loadGatewayConfig>;
 }
 
-function resolveGatewayRuntime(ctx: GatewayContext): ResolvedGatewayRuntime {
+function resolveGatewayRuntime(
+  ctx: GatewayContext,
+  options?: Record<string, unknown>,
+): ResolvedGatewayRuntime {
   const directory =
     typeof ctx.directory === "string" && ctx.directory.trim()
       ? ctx.directory
       : process.cwd();
-  const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config);
+  const loadedConfig = loadGatewayConfigSourceWithMeta(
+    directory,
+    ctx.config,
+    options,
+  );
   return {
     directory,
     loadedConfig,
@@ -429,6 +437,7 @@ function configuredHooks(
     todo_continuation_enforcer_enabled: cfg.todoContinuationEnforcer.enabled,
     llm_decision_enabled: cfg.llmDecisionRuntime.enabled,
     llm_decision_mode: cfg.llmDecisionRuntime.mode,
+    hooks_enabled: cfg.hooks.enabled,
     llm_decision_hook_modes: {
       taskResumeInfo:
         cfg.llmDecisionRuntime.hookModes[
@@ -440,6 +449,9 @@ function configuredHooks(
         ] ?? cfg.llmDecisionRuntime.mode,
     },
   });
+  if (!cfg.hooks.enabled) {
+    return [];
+  }
   if (
     cfg.todoContinuationEnforcer.enabled &&
     (!cfg.llmDecisionRuntime.enabled || cfg.llmDecisionRuntime.mode === "disabled")
@@ -1269,9 +1281,6 @@ function configuredHooks(
       }),
     ),
   ];
-  if (!cfg.hooks.enabled) {
-    return [];
-  }
   return resolveHookOrder(
     hooks.filter((hook): hook is GatewayHook => hook !== null),
     cfg.hooks.order,
@@ -1280,7 +1289,10 @@ function configuredHooks(
 }
 
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
-export default function GatewayCorePlugin(ctx: GatewayContext): {
+export default function GatewayCorePlugin(
+  ctx: GatewayContext,
+  options?: Record<string, unknown>,
+): {
   event(input: GatewayEventPayload): Promise<void>;
   "tool.execute.before"(
     input: ToolBeforeInput,
@@ -1338,7 +1350,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     output: TextCompleteOutput,
   ): Promise<void>;
 } {
-  const runtime = resolveGatewayRuntime(ctx);
+  const runtime = resolveGatewayRuntime(ctx, options);
   const { directory, cfg } = runtime;
   const providerBoundaryFinalizer =
     cfg.secretLeakGuard.enabled && cfg.secretLeakGuard.providerBoundaryEnabled
@@ -1568,6 +1580,23 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     input: ChatMessageInput,
     output?: ChatMessageOutput,
   ): Promise<void> {
+    const properties: ChatMessageInput = { ...input };
+    if (Array.isArray(output?.parts)) {
+      delete properties.prompt;
+      delete properties.message;
+      delete properties.text;
+      properties.parts = output.parts;
+      const canonicalPrompt = output.parts
+        .filter(
+          (part) => part?.type === "text" && typeof part.text === "string",
+        )
+        .map((part) => part.text?.trim() ?? "")
+        .filter(Boolean)
+        .join("\n");
+      if (canonicalPrompt) {
+        properties.prompt = canonicalPrompt;
+      }
+    }
     writeGatewayEventAudit(directory, {
       hook: "gateway-core",
       stage: "dispatch",
@@ -1583,9 +1612,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         hook,
         eventType: "chat.message",
         payload: {
-          properties: {
-            ...input,
-          },
+          properties,
           output,
           directory,
         },

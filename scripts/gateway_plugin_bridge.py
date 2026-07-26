@@ -42,6 +42,19 @@ def _resolve_file_plugin_path(spec: str, home: Path) -> Path | None:
         return path
 
 
+def plugin_entry_spec(item: Any) -> str | None:
+    if isinstance(item, str):
+        return item
+    if (
+        isinstance(item, (list, tuple))
+        and len(item) == 2
+        and isinstance(item[0], str)
+        and isinstance(item[1], dict)
+    ):
+        return item[0]
+    return None
+
+
 def _is_gateway_plugin_spec(spec: str, home: Path) -> bool:
     resolved = _resolve_file_plugin_path(spec, home)
     if resolved is None:
@@ -57,8 +70,9 @@ def gateway_plugin_entries(config: dict[str, Any], home: Path) -> list[str]:
     plugins = plugins_any if isinstance(plugins_any, list) else []
     entries: list[str] = []
     for item in plugins:
-        if isinstance(item, str) and _is_gateway_plugin_spec(item, home):
-            entries.append(item)
+        spec = plugin_entry_spec(item)
+        if spec is not None and _is_gateway_plugin_spec(spec, home):
+            entries.append(spec)
     return entries
 
 
@@ -70,15 +84,22 @@ def plugin_enabled(config: dict[str, Any], home: Path) -> bool:
 # Enables or disables gateway plugin spec in config plugin list.
 def set_plugin_enabled(config: dict[str, Any], home: Path, enabled: bool) -> None:
     plugins_any = config.get("plugin")
-    plugins = (
-        [item for item in plugins_any if isinstance(item, str)]
-        if isinstance(plugins_any, list)
-        else []
-    )
+    plugins = list(plugins_any) if isinstance(plugins_any, list) else []
     spec = gateway_plugin_spec(home)
-    filtered = [item for item in plugins if not _is_gateway_plugin_spec(item, home)]
+    matches = [
+        item
+        for item in plugins
+        if (entry_spec := plugin_entry_spec(item)) is not None
+        and _is_gateway_plugin_spec(entry_spec, home)
+    ]
+    filtered = [
+        item
+        for item in plugins
+        if (entry_spec := plugin_entry_spec(item)) is None
+        or not _is_gateway_plugin_spec(entry_spec, home)
+    ]
     if enabled:
-        filtered.insert(0, spec)
+        filtered.insert(0, matches[0] if matches else spec)
     config["plugin"] = filtered
 
 

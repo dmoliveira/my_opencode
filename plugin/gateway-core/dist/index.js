@@ -205,11 +205,11 @@ function dispatchSampleRate() {
     }
     return parsed;
 }
-function resolveGatewayRuntime(ctx) {
+function resolveGatewayRuntime(ctx, options) {
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
         ? ctx.directory
         : process.cwd();
-    const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config);
+    const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config, options);
     return {
         directory,
         loadedConfig,
@@ -245,11 +245,15 @@ function configuredHooks(ctx, runtime) {
         todo_continuation_enforcer_enabled: cfg.todoContinuationEnforcer.enabled,
         llm_decision_enabled: cfg.llmDecisionRuntime.enabled,
         llm_decision_mode: cfg.llmDecisionRuntime.mode,
+        hooks_enabled: cfg.hooks.enabled,
         llm_decision_hook_modes: {
             taskResumeInfo: cfg.llmDecisionRuntime.hookModes[GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.taskResumeInfo] ?? cfg.llmDecisionRuntime.mode,
             todoContinuationEnforcer: cfg.llmDecisionRuntime.hookModes[GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.todoContinuationEnforcer] ?? cfg.llmDecisionRuntime.mode,
         },
     });
+    if (!cfg.hooks.enabled) {
+        return [];
+    }
     if (cfg.todoContinuationEnforcer.enabled &&
         (!cfg.llmDecisionRuntime.enabled || cfg.llmDecisionRuntime.mode === "disabled")) {
         writeGatewayEventAudit(directory, {
@@ -837,14 +841,11 @@ function configuredHooks(ctx, runtime) {
             reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
         })),
     ];
-    if (!cfg.hooks.enabled) {
-        return [];
-    }
     return resolveHookOrder(hooks.filter((hook) => hook !== null), cfg.hooks.order, cfg.hooks.disabled);
 }
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
-export default function GatewayCorePlugin(ctx) {
-    const runtime = resolveGatewayRuntime(ctx);
+export default function GatewayCorePlugin(ctx, options) {
+    const runtime = resolveGatewayRuntime(ctx, options);
     const { directory, cfg } = runtime;
     const providerBoundaryFinalizer = cfg.secretLeakGuard.enabled && cfg.secretLeakGuard.providerBoundaryEnabled
         ? createProviderBoundarySecretFinalizer({
@@ -1040,6 +1041,21 @@ export default function GatewayCorePlugin(ctx) {
     }
     // Dispatches chat message lifecycle signal to ordered hooks.
     async function chatMessage(input, output) {
+        const properties = { ...input };
+        if (Array.isArray(output?.parts)) {
+            delete properties.prompt;
+            delete properties.message;
+            delete properties.text;
+            properties.parts = output.parts;
+            const canonicalPrompt = output.parts
+                .filter((part) => part?.type === "text" && typeof part.text === "string")
+                .map((part) => part.text?.trim() ?? "")
+                .filter(Boolean)
+                .join("\n");
+            if (canonicalPrompt) {
+                properties.prompt = canonicalPrompt;
+            }
+        }
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
             stage: "dispatch",
@@ -1054,9 +1070,7 @@ export default function GatewayCorePlugin(ctx) {
                 hook,
                 eventType: "chat.message",
                 payload: {
-                    properties: {
-                        ...input,
-                    },
+                    properties,
                     output,
                     directory,
                 },

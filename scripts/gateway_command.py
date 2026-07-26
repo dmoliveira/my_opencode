@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -1903,16 +1904,13 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
 def command_enable(as_json: bool, *, force: bool = False) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, cfg_path = load_config()
+    original_config = copy.deepcopy(config)
     set_plugin_enabled(config, home, True)
-    save_config(config, cfg_path)
     payload = status_payload(config, home, Path.cwd())
-    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
     payload["config"] = str(cfg_path)
     problems = enable_safety_problems(payload)
     if problems and not force:
-        set_plugin_enabled(config, home, False)
-        save_config(config, cfg_path)
-        fallback = status_payload(config, home, Path.cwd())
+        fallback = status_payload(original_config, home, Path.cwd())
         fallback["result"] = "FAIL"
         fallback["reason_code"] = "gateway_enable_blocked_for_safety"
         fallback["problems"] = problems
@@ -1924,6 +1922,8 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
         ]
         emit(fallback, as_json=as_json)
         return 1
+    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
+    save_config(config, cfg_path)
     emit(payload, as_json=as_json)
     return 0
 

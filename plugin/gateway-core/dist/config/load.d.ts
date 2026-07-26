@@ -13,7 +13,7 @@ export interface GatewayConfigSourceMeta {
     sidecarError?: string;
     layers: GatewayConfigLayerMeta[];
 }
-export declare function loadGatewayConfigSourceWithMeta(directory: string, source: unknown): {
+export declare function loadGatewayConfigSourceWithMeta(directory: string, source: unknown, override?: unknown): {
     source: Record<string, unknown>;
     meta: GatewayConfigSourceMeta;
 };

@@ -12733,8 +12733,8 @@ exit 0
         expect(
             gateway_enable_blocked.get("reason_code")
             == "gateway_enable_blocked_for_safety"
-            and gateway_enable_blocked.get("enabled") is False,
-            "gateway enable safety fallback should keep plugin disabled after failed preflight",
+            and gateway_enable_blocked.get("enabled") is True,
+            "gateway enable safety fallback should preserve the prior enabled state after failed preflight",
         )
 
         result = run_gateway("disable", "--json")
