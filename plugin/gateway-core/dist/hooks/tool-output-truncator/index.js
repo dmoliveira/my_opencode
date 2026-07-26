@@ -34,6 +34,7 @@ export function createToolOutputTruncatorHook(options) {
     return {
         id: "tool-output-truncator",
         priority: 250,
+        events: ["tool.execute.after"],
         async event(type, payload) {
             if (type !== "tool.execute.after") {
                 return;

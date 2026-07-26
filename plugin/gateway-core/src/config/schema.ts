@@ -398,8 +398,12 @@ export interface DangerousCommandGuardConfig {
 // Declares secret leak guard settings for output redaction.
 export interface SecretLeakGuardConfig {
   enabled: boolean;
+  providerBoundaryEnabled: boolean;
   redactionToken: string;
   patterns: string[];
+  maxDepth: number;
+  maxNodes: number;
+  maxChars: number;
 }
 
 // Declares workflow conformance guard settings.
@@ -687,8 +691,8 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     order: [
       "autopilot-loop",
       "continuation",
-      "tool-output-truncator",
       "semantic-output-summarizer",
+      "tool-output-truncator",
       "context-window-monitor",
       "preemptive-compaction",
       "global-process-pressure",
@@ -1151,7 +1155,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     maxLength: 30,
   },
   semanticOutputSummarizer: {
-    enabled: true,
+    enabled: false,
     minChars: 20000,
     minLines: 400,
     maxSummaryLines: 8,
@@ -1169,14 +1173,19 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   },
   secretLeakGuard: {
     enabled: true,
+    providerBoundaryEnabled: true,
     redactionToken: "[REDACTED_SECRET]",
     patterns: [
-      "sk-[A-Za-z0-9]{20,}",
+      "sk-[A-Za-z0-9_\\-]{20,}",
       "ghp_[A-Za-z0-9]{20,}",
+      "github_pat_[A-Za-z0-9_]{20,}",
       "AIza[0-9A-Za-z\\-_]{20,}",
-      "-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) KEY-----",
+      "(?s)-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----",
       "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
     ],
+    maxDepth: 12,
+    maxNodes: 20000,
+    maxChars: 2097152,
   },
   primaryWorktreeGuard: {
     enabled: true,

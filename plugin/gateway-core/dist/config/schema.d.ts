@@ -297,8 +297,12 @@ export interface DangerousCommandGuardConfig {
 }
 export interface SecretLeakGuardConfig {
     enabled: boolean;
+    providerBoundaryEnabled: boolean;
     redactionToken: string;
     patterns: string[];
+    maxDepth: number;
+    maxNodes: number;
+    maxChars: number;
 }
 export interface WorkflowConformanceGuardConfig {
     enabled: boolean;

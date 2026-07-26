@@ -167,6 +167,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         model: {
             providerID?: string;
             modelID?: string;
+            id?: string;
         };
         provider: {
             id?: string;
@@ -187,6 +188,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         model?: {
             providerID?: string;
             modelID?: string;
+            id?: string;
         };
     }, output: ChatSystemTransformOutput): Promise<void>;
     "experimental.text.complete"(input: TextCompleteInput, output: TextCompleteOutput): Promise<void>;

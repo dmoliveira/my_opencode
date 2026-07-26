@@ -11,7 +11,16 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
+)
+from config_layering import (
     save_config as save_config_file,
+)
+from playwright_defaults import (  # type: ignore
+    PLAYWRIGHT_MCP_CAPABILITIES,
+    PLAYWRIGHT_MCP_COMMAND,
+    inspect_playwright_invocation,
+    migrate_known_mcp_command,
+    parse_playwright_capabilities,
 )
 
 CONFIG_PATH = resolve_write_path()
@@ -27,21 +36,12 @@ TARGET_ALIASES = {
     "ghgrep": "gh_grep",
     "exa": "exa_search",
 }
-PLAYWRIGHT_MCP_CAPABILITIES = [
-    "testing",
-    "network",
-    "storage",
-    "vision",
-    "devtools",
-    "pdf",
-]
-PLAYWRIGHT_MCP_CAPS_FLAG = "--caps=" + ",".join(PLAYWRIGHT_MCP_CAPABILITIES)
 SERVER_DEFAULTS = {
     "context7": {"type": "remote", "url": "https://mcp.context7.com/mcp"},
     "gh_grep": {"type": "remote", "url": "https://mcp.grep.app"},
     "playwright": {
         "type": "local",
-        "command": ["npx", "-y", "@playwright/mcp@latest", PLAYWRIGHT_MCP_CAPS_FLAG],
+        "command": list(PLAYWRIGHT_MCP_COMMAND),
     },
     "exa_search": {"type": "remote", "url": "https://mcp.exa.ai/mcp"},
     "firecrawl": {"type": "local", "command": ["npx", "-y", "firecrawl-mcp"]},
@@ -87,14 +87,7 @@ def endpoint_label(entry: dict) -> str:
 
 
 def parse_capabilities(command: list[str]) -> list[str]:
-    capabilities: list[str] = []
-    for part in command:
-        text = str(part)
-        if text.startswith("--caps="):
-            capabilities.extend(
-                cap.strip() for cap in text.split("=", 1)[1].split(",") if cap.strip()
-            )
-    return list(dict.fromkeys(capabilities))
+    return parse_playwright_capabilities(command)
 
 
 def ensure_server_entry(mcp: dict, name: str) -> dict:
@@ -104,6 +97,8 @@ def ensure_server_entry(mcp: dict, name: str) -> dict:
     for key, value in defaults.items():
         if key not in entry:
             entry[key] = json.loads(json.dumps(value))
+    if name == "playwright" and isinstance(entry.get("command"), list):
+        entry["command"], _ = migrate_known_mcp_command(entry["command"])
     mcp[name] = entry
     return entry
 
@@ -174,6 +169,9 @@ def collect_doctor(mcp: dict) -> dict:
         command_value = entry.get("command")
         command = command_value if isinstance(command_value, list) else []
         capabilities = parse_capabilities(command)
+        playwright = (
+            inspect_playwright_invocation(command) if name == "playwright" else {}
+        )
         missing_capabilities = (
             [cap for cap in PLAYWRIGHT_MCP_CAPABILITIES if cap not in capabilities]
             if name == "playwright"
@@ -189,6 +187,7 @@ def collect_doctor(mcp: dict) -> dict:
             "capabilities": capabilities,
             "recommended_capabilities": PLAYWRIGHT_MCP_CAPABILITIES if name == "playwright" else [],
             "missing_capabilities": missing_capabilities,
+            **playwright,
         }
 
         if not isinstance(mcp.get(name), dict):
@@ -206,6 +205,21 @@ def collect_doctor(mcp: dict) -> dict:
                 warnings.append(
                     "playwright command missing recommended capabilities: " + ", ".join(missing_capabilities)
                 )
+            if name == "playwright":
+                if playwright.get("legacy_arguments"):
+                    warnings.append(
+                        "playwright command uses exact legacy @latest arguments; run a mutating /mcp command to migrate the bundled default"
+                    )
+                if not playwright.get("pinned"):
+                    warnings.append("playwright package is not pinned")
+                if not playwright.get("isolated"):
+                    warnings.append("playwright command is missing --isolated")
+                if not playwright.get("canonical") and not playwright.get(
+                    "known_legacy"
+                ):
+                    warnings.append(
+                        "playwright command is custom or noncanonical; doctor preserved it without rewriting"
+                    )
         elif kind:
             problems.append(f"{name} type is invalid: {kind}")
 
@@ -343,6 +357,6 @@ def main(argv: list[str]) -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main(sys.argv[1:]))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary normalizes failures.
         print(f"error: {exc}")
         raise SystemExit(1)

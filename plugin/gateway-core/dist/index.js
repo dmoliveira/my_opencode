@@ -62,6 +62,7 @@ import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js"
 import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
 import { createSecretCommitGuardHook } from "./hooks/secret-commit-guard/index.js";
 import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
+import { createProviderBoundarySecretFinalizer } from "./hooks/provider-boundary-secret-redactor/index.js";
 import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
@@ -204,13 +205,20 @@ function dispatchSampleRate() {
     }
     return parsed;
 }
-// Creates ordered hook list using gateway config and default hooks.
-function configuredHooks(ctx) {
+function resolveGatewayRuntime(ctx) {
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
         ? ctx.directory
         : process.cwd();
     const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config);
-    const cfg = loadGatewayConfig(loadedConfig.source);
+    return {
+        directory,
+        loadedConfig,
+        cfg: loadGatewayConfig(loadedConfig.source),
+    };
+}
+// Creates ordered hook list using one resolved gateway config snapshot.
+function configuredHooks(ctx, runtime) {
+    const { directory, loadedConfig, cfg } = runtime;
     if (isLlmDecisionChildProcess()) {
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
@@ -287,6 +295,11 @@ function configuredHooks(ctx) {
         },
         async event() { },
     };
+    const shouldCreateSemanticOutputSummarizer = cfg.hooks.enabled &&
+        cfg.semanticOutputSummarizer.enabled &&
+        !cfg.hooks.disabled.includes("semantic-output-summarizer") &&
+        (cfg.hooks.order.length === 0 ||
+            cfg.hooks.order.includes("semantic-output-summarizer"));
     const hooks = [
         safeHook("autopilot-loop", () => createAutopilotLoopHook({
             directory,
@@ -317,13 +330,15 @@ function configuredHooks(ctx) {
             maxLines: cfg.toolOutputTruncator.maxLines,
             tools: cfg.toolOutputTruncator.tools,
         })),
-        safeHook("semantic-output-summarizer", () => createSemanticOutputSummarizerHook({
-            directory,
-            enabled: cfg.semanticOutputSummarizer.enabled,
-            minChars: cfg.semanticOutputSummarizer.minChars,
-            minLines: cfg.semanticOutputSummarizer.minLines,
-            maxSummaryLines: cfg.semanticOutputSummarizer.maxSummaryLines,
-        })),
+        shouldCreateSemanticOutputSummarizer
+            ? safeHook("semantic-output-summarizer", () => createSemanticOutputSummarizerHook({
+                directory,
+                enabled: true,
+                minChars: cfg.semanticOutputSummarizer.minChars,
+                minLines: cfg.semanticOutputSummarizer.minLines,
+                maxSummaryLines: cfg.semanticOutputSummarizer.maxSummaryLines,
+            }))
+            : null,
         safeHook("context-window-monitor", () => createContextWindowMonitorHook({
             directory,
             client: ctx.client,
@@ -689,12 +704,19 @@ function configuredHooks(ctx) {
             enabled: cfg.dangerousCommandGuard.enabled,
             blockedPatterns: cfg.dangerousCommandGuard.blockedPatterns,
         })),
-        safeHook("secret-leak-guard", () => createSecretLeakGuardHook({
-            directory,
-            enabled: cfg.secretLeakGuard.enabled,
-            redactionToken: cfg.secretLeakGuard.redactionToken,
-            patterns: cfg.secretLeakGuard.patterns,
-        })),
+        cfg.secretLeakGuard.enabled
+            ? safeHook("secret-leak-guard", () => createSecretLeakGuardHook({
+                directory,
+                enabled: true,
+                redactionToken: cfg.secretLeakGuard.redactionToken,
+                patterns: cfg.secretLeakGuard.patterns,
+                limits: {
+                    maxDepth: cfg.secretLeakGuard.maxDepth,
+                    maxNodes: cfg.secretLeakGuard.maxNodes,
+                    maxChars: cfg.secretLeakGuard.maxChars,
+                },
+            }))
+            : null,
         safeHook("primary-worktree-guard", () => createPrimaryWorktreeGuardHook({
             directory,
             enabled: cfg.primaryWorktreeGuard.enabled,
@@ -822,12 +844,23 @@ function configuredHooks(ctx) {
 }
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx) {
-    const hooks = configuredHooks(ctx);
+    const runtime = resolveGatewayRuntime(ctx);
+    const { directory, cfg } = runtime;
+    const providerBoundaryFinalizer = cfg.secretLeakGuard.enabled && cfg.secretLeakGuard.providerBoundaryEnabled
+        ? createProviderBoundarySecretFinalizer({
+            directory,
+            redactionToken: cfg.secretLeakGuard.redactionToken,
+            patterns: cfg.secretLeakGuard.patterns,
+            limits: {
+                maxDepth: cfg.secretLeakGuard.maxDepth,
+                maxNodes: cfg.secretLeakGuard.maxNodes,
+                maxChars: cfg.secretLeakGuard.maxChars,
+            },
+        })
+        : null;
+    const hooks = configuredHooks(ctx, runtime);
     const noisyDispatchSampleCounters = new Map();
     const noisyDispatchSampleRate = dispatchSampleRate();
-    const directory = typeof ctx.directory === "string" && ctx.directory.trim()
-        ? ctx.directory
-        : process.cwd();
     function shouldWriteDispatchAudit(reasonCode, eventType) {
         if (!DISPATCH_NOISY_REASON_CODES.has(reasonCode)) {
             return true;
@@ -1036,7 +1069,7 @@ export default function GatewayCorePlugin(ctx) {
         unwrapAutoSlashCommandParts(output?.parts);
     }
     async function chatParams(input, output) {
-        const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID);
+        const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID ?? input.model?.id);
         const expected = expectedAgentModel(directory, input.agent);
         if (actualModel) {
             writeGatewayEventAudit(directory, {
@@ -1064,67 +1097,102 @@ export default function GatewayCorePlugin(ctx) {
         }
         output.maxOutputTokens = clampChatMaxOutputTokens({
             providerID: input.model?.providerID ?? input.provider?.id,
-            modelID: input.model?.modelID,
+            modelID: input.model?.modelID ?? input.model?.id,
             maxOutputTokens: output.maxOutputTokens,
         });
     }
     // Dispatches experimental chat transform lifecycle signal to ordered hooks.
     async function chatMessagesTransform(input, output) {
-        if (shouldWriteDispatchAudit("chat_messages_transform_dispatch", "experimental.chat.messages.transform")) {
-            writeGatewayEventAudit(directory, {
-                hook: "gateway-core",
-                stage: "dispatch",
-                reason_code: "chat_messages_transform_dispatch",
-                event_type: "experimental.chat.messages.transform",
-                has_session_id: typeof input.sessionID === "string" &&
-                    input.sessionID.trim().length > 0,
-                hook_count: hooks.length,
-            });
-        }
-        for (const hook of hooks) {
-            const result = await dispatchGatewayHookEvent({
-                hook,
-                eventType: "experimental.chat.messages.transform",
-                payload: {
-                    input,
-                    output,
+        const eventType = "experimental.chat.messages.transform";
+        const selectedHooks = hooksForEvent(hooks, eventType);
+        const auditDispatch = shouldWriteDispatchAudit("chat_messages_transform_dispatch", eventType);
+        let loopAttemptCount = 0;
+        try {
+            for (const hook of selectedHooks) {
+                loopAttemptCount += 1;
+                const result = await dispatchGatewayHookEvent({
+                    hook,
+                    eventType,
+                    payload: {
+                        input,
+                        output,
+                        directory,
+                    },
                     directory,
-                },
-                directory,
-            });
-            if (!result.ok && (result.critical || result.blocked)) {
-                throw result.error;
+                });
+                if (!result.ok && (result.critical || result.blocked)) {
+                    throw result.error;
+                }
+            }
+        }
+        finally {
+            if (auditDispatch) {
+                writeGatewayEventAudit(directory, {
+                    hook: "gateway-core",
+                    stage: "dispatch",
+                    reason_code: "chat_messages_transform_dispatch",
+                    event_type: eventType,
+                    has_session_id: typeof input.sessionID === "string" &&
+                        input.sessionID.trim().length > 0,
+                    hook_count: hooks.length,
+                    selected_hook_count: selectedHooks.length,
+                    loop_attempt_count: loopAttemptCount,
+                });
             }
         }
         unwrapAutoSlashCommandMessages(output.messages);
+        providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
     }
     async function chatSystemTransform(input, output) {
-        if (shouldWriteDispatchAudit("chat_system_transform_dispatch", "experimental.chat.system.transform")) {
+        const eventType = "experimental.chat.system.transform";
+        const actualModel = normalizeModelRef(input.model?.providerID, input.model?.modelID ?? input.model?.id);
+        if (actualModel) {
             writeGatewayEventAudit(directory, {
                 hook: "gateway-core",
-                stage: "dispatch",
-                reason_code: "chat_system_transform_dispatch",
-                event_type: "experimental.chat.system.transform",
-                has_session_id: typeof input.sessionID === "string" &&
-                    input.sessionID.trim().length > 0,
-                hook_count: hooks.length,
+                stage: "state",
+                reason_code: "agent_runtime_model_observed",
+                observation_source: eventType,
+                session_id: input.sessionID,
+                actual_model: actualModel,
             });
         }
-        for (const hook of hooks) {
-            const result = await dispatchGatewayHookEvent({
-                hook,
-                eventType: "experimental.chat.system.transform",
-                payload: {
-                    input,
-                    output,
+        const selectedHooks = hooksForEvent(hooks, eventType);
+        const auditDispatch = shouldWriteDispatchAudit("chat_system_transform_dispatch", eventType);
+        let loopAttemptCount = 0;
+        try {
+            for (const hook of selectedHooks) {
+                loopAttemptCount += 1;
+                const result = await dispatchGatewayHookEvent({
+                    hook,
+                    eventType,
+                    payload: {
+                        input,
+                        output,
+                        directory,
+                    },
                     directory,
-                },
-                directory,
-            });
-            if (!result.ok && (result.critical || result.blocked)) {
-                throw result.error;
+                });
+                if (!result.ok && (result.critical || result.blocked)) {
+                    throw result.error;
+                }
             }
         }
+        finally {
+            if (auditDispatch) {
+                writeGatewayEventAudit(directory, {
+                    hook: "gateway-core",
+                    stage: "dispatch",
+                    reason_code: "chat_system_transform_dispatch",
+                    event_type: eventType,
+                    has_session_id: typeof input.sessionID === "string" &&
+                        input.sessionID.trim().length > 0,
+                    hook_count: hooks.length,
+                    selected_hook_count: selectedHooks.length,
+                    loop_attempt_count: loopAttemptCount,
+                });
+            }
+        }
+        providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
     }
     async function textComplete(input, output) {
         writeGatewayEventAudit(directory, {

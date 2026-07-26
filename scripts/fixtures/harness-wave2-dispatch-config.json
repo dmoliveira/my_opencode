@@ -1,0 +1,45 @@
+{
+  "autoSlashCommand": {
+    "enabled": false
+  },
+  "conciseMode": {
+    "defaultMode": "lite",
+    "enabled": true
+  },
+  "directoryReadmeInjector": {
+    "enabled": false
+  },
+  "globalProcessPressure": {
+    "enabled": false
+  },
+  "hooks": {
+    "disabled": [
+      "dependency-risk-guard"
+    ]
+  },
+  "keywordDetector": {
+    "enabled": false
+  },
+  "llmDecisionRuntime": {
+    "allowStandaloneOpencode": false,
+    "cacheTtlMs": 300000,
+    "command": "opencode",
+    "enableCache": true,
+    "enabled": false,
+    "env": {},
+    "failureCooldownMs": 120000,
+    "hookModes": {
+      "auto-slash-command": "disabled"
+    },
+    "maxCacheEntries": 256,
+    "maxConcurrentDecisions": 1,
+    "maxContextChars": 2400,
+    "maxPromptChars": 1200,
+    "mode": "disabled",
+    "model": "openai/gpt-5.1-codex-mini",
+    "timeoutMs": 30000
+  },
+  "thinkMode": {
+    "enabled": false
+  }
+}

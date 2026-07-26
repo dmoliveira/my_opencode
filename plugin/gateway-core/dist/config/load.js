@@ -13,6 +13,17 @@ function stringList(value) {
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
 }
+function semanticSummarizerHookOrder(order, enabled) {
+    if (!enabled || order.length === 0) {
+        return order;
+    }
+    const summarizerId = "semantic-output-summarizer";
+    const truncatorId = "tool-output-truncator";
+    const normalized = order.filter((hookId) => hookId !== summarizerId);
+    const truncatorIndex = normalized.indexOf(truncatorId);
+    normalized.splice(truncatorIndex >= 0 ? truncatorIndex : 0, 0, summarizerId);
+    return normalized;
+}
 function stringRecord(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         return {};
@@ -539,13 +550,17 @@ export function loadGatewayConfig(raw) {
     const truncatorTools = truncatorSource.tools === undefined
         ? DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.tools
         : stringList(truncatorSource.tools);
+    const semanticOutputSummarizerEnabled = typeof semanticOutputSummarizerSource.enabled === "boolean"
+        ? semanticOutputSummarizerSource.enabled
+        : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled;
+    const hookOrder = semanticSummarizerHookOrder(stringList(hooksSource.order), semanticOutputSummarizerEnabled);
     return {
         hooks: {
             enabled: typeof hooksSource.enabled === "boolean"
                 ? hooksSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.hooks.enabled,
             disabled: stringList(hooksSource.disabled),
-            order: stringList(hooksSource.order),
+            order: hookOrder,
         },
         autopilotLoop: {
             enabled: typeof autopilotSource.enabled === "boolean"
@@ -1067,9 +1082,7 @@ export function loadGatewayConfig(raw) {
             maxLength: nonNegativeInt(questionLabelSource.maxLength, DEFAULT_GATEWAY_CONFIG.questionLabelTruncator.maxLength),
         },
         semanticOutputSummarizer: {
-            enabled: typeof semanticOutputSummarizerSource.enabled === "boolean"
-                ? semanticOutputSummarizerSource.enabled
-                : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled,
+            enabled: semanticOutputSummarizerEnabled,
             minChars: nonNegativeInt(semanticOutputSummarizerSource.minChars, DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.minChars),
             minLines: nonNegativeInt(semanticOutputSummarizerSource.minLines, DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.minLines),
             maxSummaryLines: nonNegativeInt(semanticOutputSummarizerSource.maxSummaryLines, DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.maxSummaryLines),
@@ -1086,6 +1099,9 @@ export function loadGatewayConfig(raw) {
             enabled: typeof secretLeakSource.enabled === "boolean"
                 ? secretLeakSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.enabled,
+            providerBoundaryEnabled: typeof secretLeakSource.providerBoundaryEnabled === "boolean"
+                ? secretLeakSource.providerBoundaryEnabled
+                : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerBoundaryEnabled,
             redactionToken: typeof secretLeakSource.redactionToken === "string" &&
                 secretLeakSource.redactionToken.trim().length > 0
                 ? secretLeakSource.redactionToken
@@ -1093,6 +1109,9 @@ export function loadGatewayConfig(raw) {
             patterns: secretLeakSource.patterns === undefined
                 ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
                 : stringList(secretLeakSource.patterns),
+            maxDepth: positiveInt(secretLeakSource.maxDepth, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxDepth),
+            maxNodes: positiveInt(secretLeakSource.maxNodes, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxNodes),
+            maxChars: positiveInt(secretLeakSource.maxChars, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxChars),
         },
         primaryWorktreeGuard: {
             enabled: typeof primaryWorktreeSource.enabled === "boolean"

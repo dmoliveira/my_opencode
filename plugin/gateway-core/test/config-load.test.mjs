@@ -82,6 +82,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.providerErrorClassifier.cooldownMs, 30000)
   assert.equal(config.codexHeaderInjector.enabled, true)
   assert.equal(config.planHandoffReminder.enabled, false)
+  assert.equal(config.semanticOutputSummarizer.enabled, false)
   assert.equal(config.primaryWorktreeGuard.enabled, true)
   assert.deepEqual(config.primaryWorktreeGuard.allowedBranches, ["main", "master"])
   assert.equal(config.primaryWorktreeGuard.blockEdits, true)
@@ -122,6 +123,50 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("loadGatewayConfig normalizes enabled summarizer ordering", () => {
+  const emptyOrder = loadGatewayConfig({
+    hooks: { order: [] },
+    semanticOutputSummarizer: { enabled: true },
+  })
+  assert.deepEqual(emptyOrder.hooks.order, [])
+  assert.equal(emptyOrder.semanticOutputSummarizer.enabled, true)
+
+  const legacyOrder = loadGatewayConfig({
+    hooks: {
+      order: [
+        "context-window-monitor",
+        "tool-output-truncator",
+        "semantic-output-summarizer",
+      ],
+    },
+    semanticOutputSummarizer: { enabled: true },
+  })
+  assert.deepEqual(legacyOrder.hooks.order, [
+    "context-window-monitor",
+    "semantic-output-summarizer",
+    "tool-output-truncator",
+  ])
+
+  const customOrder = loadGatewayConfig({
+    hooks: { order: ["context-window-monitor", "tool-output-truncator"] },
+    semanticOutputSummarizer: { enabled: true },
+  })
+  assert.deepEqual(customOrder.hooks.order, [
+    "context-window-monitor",
+    "semantic-output-summarizer",
+    "tool-output-truncator",
+  ])
+
+  const customWithoutTruncator = loadGatewayConfig({
+    hooks: { order: ["context-window-monitor"] },
+    semanticOutputSummarizer: { enabled: true },
+  })
+  assert.deepEqual(customWithoutTruncator.hooks.order, [
+    "semantic-output-summarizer",
+    "context-window-monitor",
+  ])
 })
 
 test("loadGatewayConfig normalizes adaptive outcome learner mode", () => {

@@ -34,7 +34,8 @@ export function createSemanticOutputSummarizerHook(options) {
     const maxSummaryLines = options.maxSummaryLines > 0 ? options.maxSummaryLines : 8;
     return {
         id: "semantic-output-summarizer",
-        priority: 260,
+        priority: 240,
+        events: ["tool.execute.after"],
         async event(type, payload) {
             if (!options.enabled || type !== "tool.execute.after") {
                 return;

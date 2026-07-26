@@ -33,7 +33,11 @@ Reference config shape:
       "playwright": {
         "enabled": true,
         "command": "npx",
-        "args": ["@playwright/mcp@latest"],
+        "args": [
+          "@playwright/mcp@0.0.78",
+          "--isolated",
+          "--caps=testing,network,storage,vision,devtools,pdf"
+        ],
         "doctor": {
           "required_binaries": ["node", "npx"],
           "install_hint": "npm i -D @playwright/mcp"
@@ -57,6 +61,9 @@ Reference config shape:
 
 - default selected provider: `playwright`
 - default enablement: selected provider enabled, non-selected provider disabled
+- default Playwright package: pinned `@playwright/mcp@0.0.78` with `--isolated`
+- default Playwright capabilities: `testing,network,storage,vision,devtools,pdf`
+- OpenCode's MCP server entry remains disabled until an explicit `/mcp` profile or enable action; browser-provider selection does not enable it
 - default failure mode: if selected provider dependencies are missing, keep selection but report exact install fixes
 
 ## Migration behavior
@@ -72,6 +79,8 @@ When legacy browser-related keys are found:
 - map known legacy keys to the new provider shape
 - keep unknown legacy keys untouched
 - emit a migration note in status/doctor output so users can verify effective settings
+- migrate only the exact bundled `@playwright/mcp@latest` invocations during explicit profile or ensure mutations
+- preserve custom commands and arguments; doctor reports pinning, isolation, legacy arguments, and capability coverage without rewriting them
 
 ## Validation requirements
 

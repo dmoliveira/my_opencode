@@ -8,8 +8,10 @@ import { createParallelWriterConflictGuardHook } from "../dist/hooks/parallel-wr
 import { createPostMergeSyncGuardHook } from "../dist/hooks/post-merge-sync-guard/index.js"
 import { createPrBodyEvidenceGuardHook } from "../dist/hooks/pr-body-evidence-guard/index.js"
 import { createPrReadinessGuardHook } from "../dist/hooks/pr-readiness-guard/index.js"
+import { createSemanticOutputSummarizerHook } from "../dist/hooks/semantic-output-summarizer/index.js"
 import { hooksForEvent, resolveHookOrder } from "../dist/hooks/registry.js"
 import { createStaleLoopExpiryGuardHook } from "../dist/hooks/stale-loop-expiry-guard/index.js"
+import { createToolOutputTruncatorHook } from "../dist/hooks/tool-output-truncator/index.js"
 
 function testHook(id, events) {
   return {
@@ -41,6 +43,30 @@ test("hooksForEvent preserves explicit subscriptions and legacy wildcards", () =
   assert.deepEqual(
     hooksForEvent(hooks, "session.idle").map((hook) => hook.id),
     ["wildcard", "idle"],
+  )
+})
+
+test("implicit priority runs semantic summarization before truncation", () => {
+  const directory = process.cwd()
+  const hooks = [
+    createToolOutputTruncatorHook({
+      directory,
+      enabled: true,
+      maxChars: 12000,
+      maxLines: 220,
+      tools: ["bash"],
+    }),
+    createSemanticOutputSummarizerHook({
+      directory,
+      enabled: true,
+      minChars: 20000,
+      minLines: 400,
+      maxSummaryLines: 8,
+    }),
+  ]
+  assert.deepEqual(
+    resolveHookOrder(hooks, [], []).map((hook) => hook.id),
+    ["semantic-output-summarizer", "tool-output-truncator"],
   )
 })
 
@@ -105,6 +131,20 @@ test("expensive workflow guards declare exact event subscriptions", () => {
       enforceMainSyncInline: true,
       reminderCommands: [],
     }),
+    createSemanticOutputSummarizerHook({
+      directory,
+      enabled: true,
+      minChars: 20000,
+      minLines: 400,
+      maxSummaryLines: 8,
+    }),
+    createToolOutputTruncatorHook({
+      directory,
+      enabled: true,
+      maxChars: 12000,
+      maxLines: 220,
+      tools: ["bash"],
+    }),
   ]
 
   assert.deepEqual(
@@ -118,6 +158,8 @@ test("expensive workflow guards declare exact event subscriptions", () => {
       "merge-readiness-guard": ["tool.execute.before"],
       "gh-checks-merge-guard": ["tool.execute.before"],
       "post-merge-sync-guard": ["tool.execute.before", "tool.execute.after"],
+      "semantic-output-summarizer": ["tool.execute.after"],
+      "tool-output-truncator": ["tool.execute.after"],
     },
   )
 })

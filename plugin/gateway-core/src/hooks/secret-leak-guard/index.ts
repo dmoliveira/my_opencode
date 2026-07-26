@@ -1,5 +1,10 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import {
+  createSecretRedactor,
+  type SecretRedactionLimits,
+  type SecretRedactionStats,
+} from "../shared/secret-redaction.js"
 
 interface ToolAfterPayload {
   input?: {
@@ -13,56 +18,72 @@ interface ToolAfterPayload {
   directory?: string
 }
 
-// Creates secret leak guard hook that redacts likely secrets from tool outputs.
+function mergeStats(target: SecretRedactionStats, source: SecretRedactionStats): void {
+  target.matches += source.matches
+  target.redactedFields += source.redactedFields
+  target.scannedChars += source.scannedChars
+  target.scannedNodes += source.scannedNodes
+}
+
+// Creates secret leak guard hook that redacts likely secrets from every tool output channel.
 export function createSecretLeakGuardHook(options: {
   directory: string
   enabled: boolean
   redactionToken: string
   patterns: string[]
+  limits: SecretRedactionLimits
 }): GatewayHook {
-  const compiled = options.patterns
-    .map((pattern) => {
-      try {
-        return new RegExp(pattern, "g")
-      } catch {
-        return null
-      }
-    })
-    .filter((value): value is RegExp => value !== null)
+  const redactor = createSecretRedactor(options)
   return {
     id: "secret-leak-guard",
     priority: 395,
+    events: ["tool.execute.after"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled || type !== "tool.execute.after") {
         return
       }
       const eventPayload = (payload ?? {}) as ToolAfterPayload
-      if (typeof eventPayload.output?.output !== "string") {
+      const mutableOutput = eventPayload.output
+      if (!mutableOutput) {
         return
       }
-      const directory =
-        typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-          ? eventPayload.directory
-          : options.directory
-      const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
-      let text = eventPayload.output.output
-      let redacted = false
-      for (const regex of compiled) {
-        const next = text.replace(regex, options.redactionToken)
-        if (next !== text) {
-          redacted = true
-          text = next
+      const rawOutput = mutableOutput.output
+      const stats: SecretRedactionStats = {
+        matches: 0,
+        redactedFields: 0,
+        scannedChars: 0,
+        scannedNodes: 0,
+      }
+      const outputShape = typeof rawOutput === "string" ? "string" : "structured"
+
+      if (typeof rawOutput === "string") {
+        const result = redactor.redactText(rawOutput)
+        mergeStats(stats, result.stats)
+        if (result.text !== rawOutput) {
+          mutableOutput.output = result.text
         }
-      }
-      if (!redacted) {
+      } else if (rawOutput && typeof rawOutput === "object") {
+        mergeStats(stats, redactor.redactMutableValue(rawOutput))
+      } else {
         return
       }
-      eventPayload.output.output = text
+
+      if (stats.matches === 0) {
+        return
+      }
+      const directory = eventPayload.directory?.trim() || options.directory
+      const sessionId = String(
+        eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "",
+      )
       writeGatewayEventAudit(directory, {
         hook: "secret-leak-guard",
         stage: "state",
         reason_code: "secret_output_redacted",
         session_id: sessionId,
+        match_count: stats.matches,
+        redacted_field_count: stats.redactedFields,
+        scanned_chars: stats.scannedChars,
+        output_shape: outputShape,
       })
     },
   }

@@ -15,25 +15,26 @@ if str(SCRIPT_DIR) not in sys.path:
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
+)
+from config_layering import (
     save_config as save_config_file,
+)
+from playwright_defaults import (  # type: ignore
+    PLAYWRIGHT_BROWSER_ARGS,
+    PLAYWRIGHT_BROWSER_COMMAND,
+    PLAYWRIGHT_MCP_CAPABILITIES,
+    inspect_playwright_invocation,
+    migrate_known_browser_invocation,
+    parse_playwright_capabilities,
 )
 
 SECTION = "browser"
 DEFAULT_PROVIDER = "playwright"
-PLAYWRIGHT_MCP_CAPABILITIES = [
-    "testing",
-    "network",
-    "storage",
-    "vision",
-    "devtools",
-    "pdf",
-]
-PLAYWRIGHT_MCP_CAPS_FLAG = "--caps=" + ",".join(PLAYWRIGHT_MCP_CAPABILITIES)
 PROVIDERS = {
     "playwright": {
         "enabled": True,
-        "command": "npx",
-        "args": ["@playwright/mcp@latest", PLAYWRIGHT_MCP_CAPS_FLAG],
+        "command": PLAYWRIGHT_BROWSER_COMMAND,
+        "args": list(PLAYWRIGHT_BROWSER_ARGS),
         "doctor": {
             "required_binaries": ["node", "npx"],
             "install_hint": "npm i -D @playwright/mcp",
@@ -115,11 +116,22 @@ def selected_provider(state: dict[str, Any]) -> str:
 
 
 def parse_capabilities(args: list[str]) -> list[str]:
-    capabilities: list[str] = []
-    for item in args:
-        if item.startswith("--caps="):
-            capabilities.extend(part.strip() for part in item.split("=", 1)[1].split(",") if part.strip())
-    return list(dict.fromkeys(capabilities))
+    return parse_playwright_capabilities(args)
+
+
+def migrate_playwright_provider(provider_cfg: dict[str, Any]) -> bool:
+    command = provider_cfg.get("command")
+    args = provider_cfg.get("args")
+    if not isinstance(args, list):
+        return False
+    migrated_command, migrated_args, migrated = migrate_known_browser_invocation(
+        command,
+        args,
+    )
+    if migrated:
+        provider_cfg["command"] = migrated_command
+        provider_cfg["args"] = migrated_args
+    return migrated
 
 
 def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
@@ -153,6 +165,11 @@ def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
     capabilities = parse_capabilities(args)
     recommended_capabilities = PLAYWRIGHT_MCP_CAPABILITIES if name == DEFAULT_PROVIDER else []
     missing_capabilities = [cap for cap in recommended_capabilities if cap not in capabilities]
+    playwright = (
+        inspect_playwright_invocation([provider_cfg.get("command"), *args])
+        if name == DEFAULT_PROVIDER
+        else {}
+    )
 
     return {
         "enabled": bool(provider_cfg.get("enabled", False)),
@@ -166,6 +183,7 @@ def provider_report(name: str, provider_cfg: Any) -> dict[str, Any]:
         "recommended_capabilities": recommended_capabilities,
         "missing_capabilities": missing_capabilities,
         "name": name,
+        **playwright,
     }
 
 
@@ -229,10 +247,12 @@ def command_profile(argv: list[str]) -> int:
         providers_cfg = {}
         state["providers"] = providers_cfg
 
-    for name in PROVIDERS:
+    for name, provider_default in PROVIDERS.items():
         current = providers_cfg.get(name)
         if not isinstance(current, dict):
-            current = json.loads(json.dumps(PROVIDERS[name]))
+            current = json.loads(json.dumps(provider_default))
+        if name == DEFAULT_PROVIDER:
+            migrate_playwright_provider(current)
         current["enabled"] = name == provider
         providers_cfg[name] = current
 
@@ -251,10 +271,12 @@ def _set_provider(state: dict[str, Any], provider: str) -> bool:
         state["providers"] = providers_cfg
 
     changed = selected_provider(state) != provider
-    for name in PROVIDERS:
+    for name, provider_default in PROVIDERS.items():
         current = providers_cfg.get(name)
         if not isinstance(current, dict):
-            current = json.loads(json.dumps(PROVIDERS[name]))
+            current = json.loads(json.dumps(provider_default))
+        if name == DEFAULT_PROVIDER:
+            migrate_playwright_provider(current)
         desired_enabled = name == provider
         if bool(current.get("enabled", False)) != desired_enabled:
             changed = True
@@ -380,6 +402,21 @@ def command_doctor(argv: list[str]) -> int:
             )
             quick_fixes.append("run /mcp profile playwright")
             quick_fixes.append("use playwright-cli for advanced canvas/game flows when MCP capability drift blocks the task")
+        if provider == DEFAULT_PROVIDER:
+            if selected.get("legacy_arguments"):
+                warnings.append(
+                    "selected provider uses exact legacy @latest arguments; run /browser profile playwright or /browser ensure to migrate the bundled default"
+                )
+            if not selected.get("pinned"):
+                warnings.append("selected Playwright package is not pinned")
+            if not selected.get("isolated"):
+                warnings.append("selected Playwright invocation is missing --isolated")
+            if not selected.get("canonical") and not selected.get(
+                "known_legacy"
+            ):
+                warnings.append(
+                    "selected Playwright invocation is custom or noncanonical; doctor preserved it without rewriting"
+                )
 
     report = {
         "result": "PASS" if not problems else "FAIL",
@@ -431,6 +468,6 @@ def main(argv: list[str]) -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main(sys.argv[1:]))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary normalizes failures.
         print(f"error: {exc}")
         raise SystemExit(1)
