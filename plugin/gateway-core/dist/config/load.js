@@ -1086,6 +1086,9 @@ export function loadGatewayConfig(raw) {
             enabled: typeof secretLeakSource.enabled === "boolean"
                 ? secretLeakSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.enabled,
+            providerBoundaryEnabled: typeof secretLeakSource.providerBoundaryEnabled === "boolean"
+                ? secretLeakSource.providerBoundaryEnabled
+                : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerBoundaryEnabled,
             redactionToken: typeof secretLeakSource.redactionToken === "string" &&
                 secretLeakSource.redactionToken.trim().length > 0
                 ? secretLeakSource.redactionToken
@@ -1093,6 +1096,9 @@ export function loadGatewayConfig(raw) {
             patterns: secretLeakSource.patterns === undefined
                 ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
                 : stringList(secretLeakSource.patterns),
+            maxDepth: positiveInt(secretLeakSource.maxDepth, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxDepth),
+            maxNodes: positiveInt(secretLeakSource.maxNodes, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxNodes),
+            maxChars: positiveInt(secretLeakSource.maxChars, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxChars),
         },
         primaryWorktreeGuard: {
             enabled: typeof primaryWorktreeSource.enabled === "boolean"

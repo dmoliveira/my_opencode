@@ -65,6 +65,7 @@ import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js"
 import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
 import { createSecretCommitGuardHook } from "./hooks/secret-commit-guard/index.js";
 import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
+import { createProviderBoundarySecretFinalizer } from "./hooks/provider-boundary-secret-redactor/index.js";
 import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
@@ -375,14 +376,31 @@ interface TextCompleteOutput {
   text: string;
 }
 
-// Creates ordered hook list using gateway config and default hooks.
-function configuredHooks(ctx: GatewayContext): GatewayHook[] {
+interface ResolvedGatewayRuntime {
+  directory: string;
+  loadedConfig: ReturnType<typeof loadGatewayConfigSourceWithMeta>;
+  cfg: ReturnType<typeof loadGatewayConfig>;
+}
+
+function resolveGatewayRuntime(ctx: GatewayContext): ResolvedGatewayRuntime {
   const directory =
     typeof ctx.directory === "string" && ctx.directory.trim()
       ? ctx.directory
       : process.cwd();
   const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config);
-  const cfg = loadGatewayConfig(loadedConfig.source);
+  return {
+    directory,
+    loadedConfig,
+    cfg: loadGatewayConfig(loadedConfig.source),
+  };
+}
+
+// Creates ordered hook list using one resolved gateway config snapshot.
+function configuredHooks(
+  ctx: GatewayContext,
+  runtime: ResolvedGatewayRuntime,
+): GatewayHook[] {
+  const { directory, loadedConfig, cfg } = runtime;
   if (isLlmDecisionChildProcess()) {
     writeGatewayEventAudit(directory, {
       hook: "gateway-core",
@@ -1062,14 +1080,21 @@ function configuredHooks(ctx: GatewayContext): GatewayHook[] {
         blockedPatterns: cfg.dangerousCommandGuard.blockedPatterns,
       }),
     ),
-    safeHook("secret-leak-guard", () =>
-      createSecretLeakGuardHook({
-        directory,
-        enabled: cfg.secretLeakGuard.enabled,
-        redactionToken: cfg.secretLeakGuard.redactionToken,
-        patterns: cfg.secretLeakGuard.patterns,
-      }),
-    ),
+    cfg.secretLeakGuard.enabled
+      ? safeHook("secret-leak-guard", () =>
+          createSecretLeakGuardHook({
+            directory,
+            enabled: true,
+            redactionToken: cfg.secretLeakGuard.redactionToken,
+            patterns: cfg.secretLeakGuard.patterns,
+            limits: {
+              maxDepth: cfg.secretLeakGuard.maxDepth,
+              maxNodes: cfg.secretLeakGuard.maxNodes,
+              maxChars: cfg.secretLeakGuard.maxChars,
+            },
+          }),
+        )
+      : null,
     safeHook("primary-worktree-guard", () =>
       createPrimaryWorktreeGuardHook({
         directory,
@@ -1305,13 +1330,24 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     output: TextCompleteOutput,
   ): Promise<void>;
 } {
-  const hooks = configuredHooks(ctx);
+  const runtime = resolveGatewayRuntime(ctx);
+  const { directory, cfg } = runtime;
+  const providerBoundaryFinalizer =
+    cfg.secretLeakGuard.enabled && cfg.secretLeakGuard.providerBoundaryEnabled
+      ? createProviderBoundarySecretFinalizer({
+          directory,
+          redactionToken: cfg.secretLeakGuard.redactionToken,
+          patterns: cfg.secretLeakGuard.patterns,
+          limits: {
+            maxDepth: cfg.secretLeakGuard.maxDepth,
+            maxNodes: cfg.secretLeakGuard.maxNodes,
+            maxChars: cfg.secretLeakGuard.maxChars,
+          },
+        })
+      : null;
+  const hooks = configuredHooks(ctx, runtime);
   const noisyDispatchSampleCounters = new Map<string, number>();
   const noisyDispatchSampleRate = dispatchSampleRate();
-  const directory =
-    typeof ctx.directory === "string" && ctx.directory.trim()
-      ? ctx.directory
-      : process.cwd();
 
   function shouldWriteDispatchAudit(
     reasonCode: string,
@@ -1646,6 +1682,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     }
 
     unwrapAutoSlashCommandMessages(output.messages);
+    providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
   }
 
   async function chatSystemTransform(
@@ -1687,6 +1724,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
         throw result.error;
       }
     }
+    providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
   }
 
   async function textComplete(

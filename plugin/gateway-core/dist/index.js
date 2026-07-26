@@ -62,6 +62,7 @@ import { createRetryBudgetGuardHook } from "./hooks/retry-budget-guard/index.js"
 import { createScopeDriftGuardHook } from "./hooks/scope-drift-guard/index.js";
 import { createSecretCommitGuardHook } from "./hooks/secret-commit-guard/index.js";
 import { createSecretLeakGuardHook } from "./hooks/secret-leak-guard/index.js";
+import { createProviderBoundarySecretFinalizer } from "./hooks/provider-boundary-secret-redactor/index.js";
 import { createSemanticOutputSummarizerHook } from "./hooks/semantic-output-summarizer/index.js";
 import { createSafetyHook } from "./hooks/safety/index.js";
 import { createSessionRecoveryHook } from "./hooks/session-recovery/index.js";
@@ -204,13 +205,20 @@ function dispatchSampleRate() {
     }
     return parsed;
 }
-// Creates ordered hook list using gateway config and default hooks.
-function configuredHooks(ctx) {
+function resolveGatewayRuntime(ctx) {
     const directory = typeof ctx.directory === "string" && ctx.directory.trim()
         ? ctx.directory
         : process.cwd();
     const loadedConfig = loadGatewayConfigSourceWithMeta(directory, ctx.config);
-    const cfg = loadGatewayConfig(loadedConfig.source);
+    return {
+        directory,
+        loadedConfig,
+        cfg: loadGatewayConfig(loadedConfig.source),
+    };
+}
+// Creates ordered hook list using one resolved gateway config snapshot.
+function configuredHooks(ctx, runtime) {
+    const { directory, loadedConfig, cfg } = runtime;
     if (isLlmDecisionChildProcess()) {
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
@@ -689,12 +697,19 @@ function configuredHooks(ctx) {
             enabled: cfg.dangerousCommandGuard.enabled,
             blockedPatterns: cfg.dangerousCommandGuard.blockedPatterns,
         })),
-        safeHook("secret-leak-guard", () => createSecretLeakGuardHook({
-            directory,
-            enabled: cfg.secretLeakGuard.enabled,
-            redactionToken: cfg.secretLeakGuard.redactionToken,
-            patterns: cfg.secretLeakGuard.patterns,
-        })),
+        cfg.secretLeakGuard.enabled
+            ? safeHook("secret-leak-guard", () => createSecretLeakGuardHook({
+                directory,
+                enabled: true,
+                redactionToken: cfg.secretLeakGuard.redactionToken,
+                patterns: cfg.secretLeakGuard.patterns,
+                limits: {
+                    maxDepth: cfg.secretLeakGuard.maxDepth,
+                    maxNodes: cfg.secretLeakGuard.maxNodes,
+                    maxChars: cfg.secretLeakGuard.maxChars,
+                },
+            }))
+            : null,
         safeHook("primary-worktree-guard", () => createPrimaryWorktreeGuardHook({
             directory,
             enabled: cfg.primaryWorktreeGuard.enabled,
@@ -822,12 +837,23 @@ function configuredHooks(ctx) {
 }
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx) {
-    const hooks = configuredHooks(ctx);
+    const runtime = resolveGatewayRuntime(ctx);
+    const { directory, cfg } = runtime;
+    const providerBoundaryFinalizer = cfg.secretLeakGuard.enabled && cfg.secretLeakGuard.providerBoundaryEnabled
+        ? createProviderBoundarySecretFinalizer({
+            directory,
+            redactionToken: cfg.secretLeakGuard.redactionToken,
+            patterns: cfg.secretLeakGuard.patterns,
+            limits: {
+                maxDepth: cfg.secretLeakGuard.maxDepth,
+                maxNodes: cfg.secretLeakGuard.maxNodes,
+                maxChars: cfg.secretLeakGuard.maxChars,
+            },
+        })
+        : null;
+    const hooks = configuredHooks(ctx, runtime);
     const noisyDispatchSampleCounters = new Map();
     const noisyDispatchSampleRate = dispatchSampleRate();
-    const directory = typeof ctx.directory === "string" && ctx.directory.trim()
-        ? ctx.directory
-        : process.cwd();
     function shouldWriteDispatchAudit(reasonCode, eventType) {
         if (!DISPATCH_NOISY_REASON_CODES.has(reasonCode)) {
             return true;
@@ -1097,6 +1123,7 @@ export default function GatewayCorePlugin(ctx) {
             }
         }
         unwrapAutoSlashCommandMessages(output.messages);
+        providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
     }
     async function chatSystemTransform(input, output) {
         if (shouldWriteDispatchAudit("chat_system_transform_dispatch", "experimental.chat.system.transform")) {
@@ -1125,6 +1152,7 @@ export default function GatewayCorePlugin(ctx) {
                 throw result.error;
             }
         }
+        providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
     }
     async function textComplete(input, output) {
         writeGatewayEventAudit(directory, {

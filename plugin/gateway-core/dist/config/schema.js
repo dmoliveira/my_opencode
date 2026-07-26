@@ -488,14 +488,19 @@ export const DEFAULT_GATEWAY_CONFIG = {
     },
     secretLeakGuard: {
         enabled: true,
+        providerBoundaryEnabled: true,
         redactionToken: "[REDACTED_SECRET]",
         patterns: [
-            "sk-[A-Za-z0-9]{20,}",
+            "sk-[A-Za-z0-9_\\-]{20,}",
             "ghp_[A-Za-z0-9]{20,}",
+            "github_pat_[A-Za-z0-9_]{20,}",
             "AIza[0-9A-Za-z\\-_]{20,}",
-            "-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) KEY-----",
+            "(?s)-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----",
             "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{12,}",
         ],
+        maxDepth: 12,
+        maxNodes: 20000,
+        maxChars: 2097152,
     },
     primaryWorktreeGuard: {
         enabled: true,
