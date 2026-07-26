@@ -75,7 +75,7 @@ function gatewayConfigLayerPaths(directory) {
     }
     return [{ kind: "bundled", path: resolveBundledGatewayConfigPath() }];
 }
-export function loadGatewayConfigSourceWithMeta(directory, source) {
+export function loadGatewayConfigSourceWithMeta(directory, source, override) {
     const layers = [];
     let sidecar = {};
     for (const layer of gatewayConfigLayerPaths(directory)) {
@@ -116,10 +116,13 @@ export function loadGatewayConfigSourceWithMeta(directory, source) {
         sidecarError: layerErrors.length > 0 ? layerErrors.join("; ") : undefined,
         layers,
     };
-    if (!isRecord(source)) {
-        return { source: sidecar, meta };
+    let merged = sidecar;
+    for (const candidate of [source, override]) {
+        if (isRecord(candidate)) {
+            merged = deepMergeRecords(merged, candidate);
+        }
     }
-    return { source: deepMergeRecords(sidecar, source), meta };
+    return { source: merged, meta };
 }
 export function loadGatewayConfigSource(directory, source) {
     return loadGatewayConfigSourceWithMeta(directory, source).source;

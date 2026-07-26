@@ -433,6 +433,7 @@ Use these directly in OpenCode:
 /gateway enable
 /gateway disable
 /gateway doctor
+/gateway doctor --fresh --json
 /gateway watchdog status
 /gateway watchdog doctor
 /gateway watchdog set --warning-threshold-seconds 60 --tool-call-threshold 12 --reminder-cooldown-seconds 60
@@ -445,7 +446,7 @@ Use these directly in OpenCode:
 
 Notes:
 - `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
-- `/gateway enable` now runs a safety preflight (bun + dist + required hook capabilities) and auto-reverts to disabled when preflight fails.
+- `/gateway enable` runs a safety preflight (bun + dist + required hook capabilities) and leaves the existing plugin configuration unchanged when preflight fails.
 - use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
 - `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
@@ -454,7 +455,8 @@ Notes:
 - `/gateway watchdog set --warning-threshold-seconds <n> --tool-call-threshold <n> [--reminder-cooldown-seconds <n>]` writes long-turn watchdog overrides to `gateway-core.config.json` without editing the main OpenCode config.
 - `/gateway watchdog enable` and `/gateway watchdog disable` toggle runtime progress pulse injection from the same sidecar config.
 - `/gateway status --json` now includes `mistake_ledger` so operators can see whether validation deferrals are accumulating in `.opencode/mistake-ledger.jsonl`.
-- `/gateway doctor --json` now includes `hook_diagnostics` and fails when gateway is enabled without a valid built hook surface.
+- `/gateway doctor --json` includes `hook_diagnostics` and reuses a fingerprinted successful direct-loader smoke for up to 15 minutes; cache entries contain only allowlisted status fields.
+- `/gateway doctor --fresh --json` bypasses that cache and runs the real loader smoke once; use it after changing the OpenCode runtime or when diagnosing loader state.
 - `/gateway continuation report --json` summarizes recent `todo-continuation-enforcer` audit events so you can see reason codes, stages, and affected sessions quickly.
 - `/gateway continuation report --json` now also exposes `assistant_message_open_todo_events` so you can spot intermediate assistant replies that landed while todos were still open.
 - after a wrapped session, `/gateway continuation report` is the fastest check for recent `todo-continuation-enforcer` activity.

@@ -20,8 +20,8 @@ test("think-mode appends structured reasoning hint for think-oriented prompts", 
   const directory = mkdtempSync(join(tmpdir(), "gateway-think-mode-"))
   try {
     const plugin = createPlugin(directory)
-    const output = { parts: [{ type: "text", text: "assistant draft" }] }
-    await plugin["chat.message"]({ sessionID: "session-think-1", prompt: "think step by step" }, output)
+    const output = { parts: [{ type: "text", text: "think step by step" }] }
+    await plugin["chat.message"]({ sessionID: "session-think-1" }, output)
     assert.match(String(output.parts[0]?.text), /\[think mode\]/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -32,10 +32,10 @@ test("think-mode does not repeat hint for same session until reset", async () =>
   const directory = mkdtempSync(join(tmpdir(), "gateway-think-mode-"))
   try {
     const plugin = createPlugin(directory)
-    const first = { parts: [{ type: "text", text: "first" }] }
-    await plugin["chat.message"]({ sessionID: "session-think-2", prompt: "reason about this" }, first)
-    const second = { parts: [{ type: "text", text: "second" }] }
-    await plugin["chat.message"]({ sessionID: "session-think-2", prompt: "analyze this too" }, second)
+    const first = { parts: [{ type: "text", text: "reason about this" }] }
+    await plugin["chat.message"]({ sessionID: "session-think-2" }, first)
+    const second = { parts: [{ type: "text", text: "analyze this too" }] }
+    await plugin["chat.message"]({ sessionID: "session-think-2" }, second)
 
     assert.match(String(first.parts[0]?.text), /\[think mode\]/)
     assert.doesNotMatch(String(second.parts[0]?.text), /\[think mode\]/)
@@ -48,12 +48,12 @@ test("think-mode resets dedupe after session.compacted", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-think-mode-"))
   try {
     const plugin = createPlugin(directory)
-    const first = { parts: [{ type: "text", text: "first" }] }
-    await plugin["chat.message"]({ sessionID: "session-think-3", prompt: "think through this" }, first)
+    const first = { parts: [{ type: "text", text: "think through this" }] }
+    await plugin["chat.message"]({ sessionID: "session-think-3" }, first)
     await plugin.event({ event: { type: "session.compacted", properties: { info: { id: "session-think-3" } } } })
 
-    const second = { parts: [{ type: "text", text: "second" }] }
-    await plugin["chat.message"]({ sessionID: "session-think-3", prompt: "think through this again" }, second)
+    const second = { parts: [{ type: "text", text: "think through this again" }] }
+    await plugin["chat.message"]({ sessionID: "session-think-3" }, second)
     assert.match(String(second.parts[0]?.text), /\[think mode\]/)
   } finally {
     rmSync(directory, { recursive: true, force: true })

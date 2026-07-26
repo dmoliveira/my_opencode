@@ -749,7 +749,7 @@ test("valid project config rebuilds state after malformed home config", () => {
   }
 })
 
-test("loadGatewayConfigSourceWithMeta fails closed on malformed project config", () => {
+test("malformed higher-precedence project config intentionally clears lower sidecar state", () => {
   const root = mkdtempSync(join(tmpdir(), "gateway-config-meta-error-"))
   const project = join(root, "project")
   const home = join(root, "home")
@@ -824,4 +824,22 @@ test("loadGatewayConfig normalizes maxIgnoredCompletionCycles to positive intege
     },
   })
   assert.equal(explicitConfig.autopilotLoop.maxIgnoredCompletionCycles, 5)
+})
+
+
+test("loadGatewayConfigSourceWithMeta applies official options after legacy config", () => {
+  const loaded = loadGatewayConfigSourceWithMeta(
+    process.cwd(),
+    {
+      hooks: { enabled: true, disabled: ["legacy-disabled"] },
+      thinkMode: { enabled: false },
+    },
+    {
+      hooks: { enabled: false, disabled: ["official-disabled"] },
+      thinkMode: { enabled: true },
+    },
+  )
+  assert.equal(loaded.source.hooks.enabled, false)
+  assert.deepEqual(loaded.source.hooks.disabled, ["official-disabled"])
+  assert.equal(loaded.source.thinkMode.enabled, true)
 })

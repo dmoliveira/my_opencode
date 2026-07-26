@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import os
+import platform
 import re
 import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -84,7 +89,7 @@ GATEWAY_DOCTOR_SESSION_HEALTH_SAMPLE_LIMIT = max(
 # Prints usage for gateway command.
 def usage() -> int:
     print(
-        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--json] | /gateway concise <status|doctor|set|off|default|review|commit|compress> [mode] [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
+        "usage: /gateway status [--json] | /gateway enable [--force] [--json] | /gateway disable [--json] | /gateway doctor [--fresh] [--json] | /gateway concise <status|doctor|set|off|default|review|commit|compress> [mode] [--json] | /gateway watchdog <status|doctor|enable|disable|set> [--warning-threshold-ms <n>] [--warning-threshold-seconds <n>] [--tool-call-threshold <n>] [--reminder-cooldown-ms <n>] [--reminder-cooldown-seconds <n>] [--json] | /gateway tune memory [--apply] [--json] | /gateway recover memory [--apply] [--resume] [--compress] [--continue-prompt] [--force-kill] [--watch] [--interval-seconds <n>] [--max-cycles <n>] [--json] | /gateway protection <status|enable|disable|report|cache> [--interval-seconds <n>] [--max-cycles <n>] [--limit <n>] [--clear] [--json]"
     )
     return 2
 
@@ -207,7 +212,7 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
                 print(f"  server_log: {server_log}")
 
 
-def run_local_plugin_runtime_smoke() -> dict[str, Any]:
+def _run_local_plugin_runtime_smoke_live() -> dict[str, Any]:
     script = SCRIPT_DIR / "gateway_local_plugin_runtime_smoke.py"
     if not script.exists():
         return {
@@ -309,6 +314,309 @@ def run_local_plugin_runtime_smoke() -> dict[str, Any]:
         "path": str(script),
         "exit": completed.returncode,
         "results": results,
+    }
+
+
+GATEWAY_SMOKE_CACHE_SCHEMA = 1
+GATEWAY_SMOKE_CACHE_TTL_SECONDS = 900
+GATEWAY_SMOKE_CACHE_FILENAME = "gateway-doctor-loader-smoke-v1.json"
+GATEWAY_SMOKE_CACHE_RESULT_KEYS = {"result", "reason", "exit", "results"}
+GATEWAY_SMOKE_CACHE_ITEM_KEYS = {
+    "mode",
+    "result",
+    "run_exit",
+    "audit_exists",
+    "bootstrap_seen",
+    "plugin_install_failed",
+    "plugin_resolve_failed",
+}
+
+
+def gateway_doctor_smoke_cache_path() -> Path:
+    home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
+    cache_root = Path(
+        os.environ.get("XDG_CACHE_HOME") or str(home / ".cache")
+    ).expanduser()
+    return cache_root / "my_opencode" / GATEWAY_SMOKE_CACHE_FILENAME
+
+
+def gateway_doctor_smoke_cache_ttl_seconds() -> int:
+    raw = os.environ.get(
+        "MY_OPENCODE_GATEWAY_DOCTOR_SMOKE_CACHE_TTL_SECONDS",
+        str(GATEWAY_SMOKE_CACHE_TTL_SECONDS),
+    )
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return GATEWAY_SMOKE_CACHE_TTL_SECONDS
+
+
+def _gateway_smoke_cache_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _gateway_smoke_checked_at() -> str:
+    return (
+        _gateway_smoke_cache_now()
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _gateway_smoke_fingerprint() -> str:
+    digest = hashlib.sha256()
+    plugin_root = REPO_ROOT / "plugin" / "gateway-core"
+    relevant_files = [
+        Path(__file__).resolve(),
+        SCRIPT_DIR / "gateway_local_plugin_runtime_smoke.py",
+        plugin_root / "package.json",
+        plugin_root / "package-lock.json",
+        plugin_root / "routing-profiles.data.json",
+    ]
+    dist_dir = plugin_root / "dist"
+    if dist_dir.exists():
+        relevant_files.extend(sorted(path for path in dist_dir.rglob("*") if path.is_file()))
+    for path in sorted(set(relevant_files), key=lambda item: str(item)):
+        relative = str(path.resolve(strict=False).relative_to(REPO_ROOT.resolve()))
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if path.is_symlink():
+            digest.update(os.readlink(path).encode("utf-8"))
+        else:
+            digest.update(path.read_bytes())
+        digest.update(b"\0")
+
+    opencode_binary = shutil.which("opencode")
+    if not opencode_binary:
+        raise RuntimeError("opencode binary unavailable")
+    resolved_binary = Path(opencode_binary).resolve(strict=True)
+    binary_stat = resolved_binary.stat()
+    version = subprocess.run(
+        [str(resolved_binary), "--version"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "CI": "true", "GIT_TERMINAL_PROMPT": "0"},
+        text=True,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    if version.returncode != 0:
+        raise RuntimeError("opencode version probe failed")
+    material = {
+        "binary": str(resolved_binary),
+        "binary_size": binary_stat.st_size,
+        "binary_mtime_ns": binary_stat.st_mtime_ns,
+        "version": version.stdout.strip(),
+        "platform": sys.platform,
+        "machine": platform.machine(),
+    }
+    digest.update(json.dumps(material, sort_keys=True).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _cacheable_smoke_summary(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if str(payload.get("result") or "").upper() != "PASS":
+        return None
+    results_any = payload.get("results")
+    if not isinstance(results_any, list) or not results_any:
+        return None
+    results: list[dict[str, Any]] = []
+    for item in results_any:
+        if not isinstance(item, dict):
+            return None
+        result = str(item.get("result") or "").upper()
+        if result != "PASS":
+            return None
+        results.append(
+            {
+                "mode": str(item.get("mode") or "")[:32],
+                "result": result,
+                "run_exit": int(item.get("run_exit") or 0),
+                "audit_exists": bool(item.get("audit_exists")),
+                "bootstrap_seen": bool(item.get("bootstrap_seen")),
+                "plugin_install_failed": bool(item.get("plugin_install_failed")),
+                "plugin_resolve_failed": bool(item.get("plugin_resolve_failed")),
+            }
+        )
+    return {
+        "result": "PASS",
+        "reason": str(payload.get("reason") or "")[:128],
+        "exit": int(payload.get("exit") or 0),
+        "results": results,
+    }
+
+
+def _validated_cached_smoke_summary(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict) or set(value) != GATEWAY_SMOKE_CACHE_RESULT_KEYS:
+        return None
+    results = value.get("results")
+    if not isinstance(results, list) or not results:
+        return None
+    if any(not isinstance(item, dict) or set(item) != GATEWAY_SMOKE_CACHE_ITEM_KEYS for item in results):
+        return None
+    sanitized = _cacheable_smoke_summary(value)
+    if sanitized != value:
+        return None
+    return sanitized
+
+
+def _load_gateway_smoke_cache(
+    path: Path,
+    *,
+    fingerprint: str,
+    ttl_seconds: int,
+) -> tuple[dict[str, Any], str, float] | None:
+    cache_dir = path.parent
+    if ttl_seconds <= 0 or cache_dir.is_symlink() or path.is_symlink():
+        return None
+    try:
+        if (
+            not cache_dir.is_dir()
+            or stat.S_IMODE(cache_dir.stat().st_mode) != 0o700
+            or not path.is_file()
+            or stat.S_IMODE(path.stat().st_mode) != 0o600
+        ):
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "schema",
+        "fingerprint",
+        "checked_at",
+        "result",
+    }:
+        return None
+    if payload.get("schema") != GATEWAY_SMOKE_CACHE_SCHEMA:
+        return None
+    if payload.get("fingerprint") != fingerprint:
+        return None
+    checked_at = payload.get("checked_at")
+    if not isinstance(checked_at, str):
+        return None
+    try:
+        checked = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if checked.tzinfo is None:
+        checked = checked.replace(tzinfo=UTC)
+    age_seconds = (_gateway_smoke_cache_now() - checked.astimezone(UTC)).total_seconds()
+    if age_seconds < 0 or age_seconds >= ttl_seconds:
+        return None
+    result = _validated_cached_smoke_summary(payload.get("result"))
+    if result is None:
+        return None
+    return result, checked_at, round(age_seconds, 3)
+
+
+def _write_gateway_smoke_cache(
+    path: Path,
+    *,
+    fingerprint: str,
+    checked_at: str,
+    result: dict[str, Any],
+) -> bool:
+    cache_dir = path.parent
+    temporary_path: Path | None = None
+    try:
+        if cache_dir.is_symlink() or path.is_symlink():
+            return False
+        cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if cache_dir.is_symlink() or not cache_dir.is_dir():
+            return False
+        cache_dir.chmod(0o700)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            dir=cache_dir,
+            text=True,
+        )
+        temporary_path = Path(temporary_name)
+        os.fchmod(descriptor, 0o600)
+        payload = {
+            "schema": GATEWAY_SMOKE_CACHE_SCHEMA,
+            "fingerprint": fingerprint,
+            "checked_at": checked_at,
+            "result": result,
+        }
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+        path.chmod(0o600)
+        return True
+    except OSError:
+        return False
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _invalidate_gateway_smoke_cache(path: Path) -> None:
+    try:
+        if path.is_symlink():
+            return
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        return
+
+
+def run_local_plugin_runtime_smoke(*, force_fresh: bool = False) -> dict[str, Any]:
+    cache_path = gateway_doctor_smoke_cache_path()
+    ttl_seconds = gateway_doctor_smoke_cache_ttl_seconds()
+    fingerprint: str | None = None
+    try:
+        fingerprint = _gateway_smoke_fingerprint()
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        fingerprint = None
+
+    if not force_fresh and fingerprint is not None:
+        cached = _load_gateway_smoke_cache(
+            cache_path,
+            fingerprint=fingerprint,
+            ttl_seconds=ttl_seconds,
+        )
+        if cached is not None:
+            result, checked_at, age_seconds = cached
+            return {
+                **result,
+                "path": str(SCRIPT_DIR / "gateway_local_plugin_runtime_smoke.py"),
+                "cached": True,
+                "cache_checked_at": checked_at,
+                "cache_age_seconds": age_seconds,
+                "cache_fingerprint": fingerprint,
+            }
+
+    live = _run_local_plugin_runtime_smoke_live()
+    checked_at = _gateway_smoke_checked_at()
+    cacheable = _cacheable_smoke_summary(live)
+    if fingerprint is None or ttl_seconds <= 0 or cacheable is None:
+        _invalidate_gateway_smoke_cache(cache_path)
+        return {
+            **live,
+            "cached": False,
+            "cache_checked_at": checked_at,
+            "cache_age_seconds": 0.0,
+            "cache_fingerprint": fingerprint,
+            "cache_stored": False,
+        }
+    stored = _write_gateway_smoke_cache(
+        cache_path,
+        fingerprint=fingerprint,
+        checked_at=checked_at,
+        result=cacheable,
+    )
+    return {
+        **live,
+        "cached": False,
+        "cache_checked_at": checked_at,
+        "cache_age_seconds": 0.0,
+        "cache_fingerprint": fingerprint,
+        "cache_stored": stored,
     }
 
 
@@ -468,6 +776,8 @@ def runtime_session_health_summary(
         "result": result,
         "runtime_db_path": str(db_path),
         "exists": db_path.exists(),
+        "runtime_db_scan_mode": runtime.get("runtime_db_scan_mode"),
+        "runtime_db_scan_duration_ms": runtime.get("runtime_db_scan_duration_ms"),
         "stale_seconds": stale_seconds,
         "generic_stale_problem_threshold": generic_stale_problem_threshold,
         "targeted_stuck_count": len(stuck_findings),
@@ -1903,16 +2213,13 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
 def command_enable(as_json: bool, *, force: bool = False) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, cfg_path = load_config()
+    original_config = copy.deepcopy(config)
     set_plugin_enabled(config, home, True)
-    save_config(config, cfg_path)
     payload = status_payload(config, home, Path.cwd())
-    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
     payload["config"] = str(cfg_path)
     problems = enable_safety_problems(payload)
     if problems and not force:
-        set_plugin_enabled(config, home, False)
-        save_config(config, cfg_path)
-        fallback = status_payload(config, home, Path.cwd())
+        fallback = status_payload(original_config, home, Path.cwd())
         fallback["result"] = "FAIL"
         fallback["reason_code"] = "gateway_enable_blocked_for_safety"
         fallback["problems"] = problems
@@ -1924,6 +2231,8 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
         ]
         emit(fallback, as_json=as_json)
         return 1
+    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
+    save_config(config, cfg_path)
     emit(payload, as_json=as_json)
     return 0
 
@@ -1952,7 +2261,7 @@ def command_status(as_json: bool) -> int:
 
 
 # Runs gateway plugin diagnostics with quick fixes.
-def command_doctor(as_json: bool) -> int:
+def command_doctor(as_json: bool, *, fresh: bool = False) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
     status = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
@@ -2122,7 +2431,9 @@ def command_doctor(as_json: bool) -> int:
                 + ", ".join(missing)
             )
 
-    local_plugin_runtime_smoke = run_local_plugin_runtime_smoke()
+    local_plugin_runtime_smoke = run_local_plugin_runtime_smoke(
+        force_fresh=fresh
+    )
     if local_plugin_runtime_smoke.get("result") == "FAIL":
         problems.append(
             "local gateway plugin runtime smoke failed; OpenCode could not reliably load the repo-local gateway plugin"
@@ -3822,12 +4133,16 @@ def main(argv: list[str]) -> int:
     reminder_cooldown_ms: int | None = None
     reminder_cooldown_ms_set = False
     clear_cache = False
+    fresh = False
     if "--json" in args:
         args.remove("--json")
         as_json = True
     if "--force" in args:
         args.remove("--force")
         force = True
+    if "--fresh" in args:
+        args.remove("--fresh")
+        fresh = True
     if "--apply" in args:
         args.remove("--apply")
         apply = True
@@ -3954,6 +4269,8 @@ def main(argv: list[str]) -> int:
         used_flags.add("--json")
     if force:
         used_flags.add("--force")
+    if fresh:
+        used_flags.add("--fresh")
     if apply:
         used_flags.add("--apply")
     if resume:
@@ -4121,9 +4438,9 @@ def main(argv: list[str]) -> int:
             return usage()
         return command_disable(as_json)
     if cmd == "doctor":
-        if not flags_allowed("--json"):
+        if not flags_allowed("--json", "--fresh"):
             return usage()
-        return command_doctor(as_json)
+        return command_doctor(as_json, fresh=fresh)
     return usage()
 
 

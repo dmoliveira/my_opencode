@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -15,6 +16,7 @@ from config_layering import (  # type: ignore
     resolve_write_path,
     save_config as save_config_file,
 )
+from gateway_plugin_bridge import plugin_entry_spec  # type: ignore
 
 
 CONFIG_PATH = resolve_write_path()
@@ -44,15 +46,39 @@ def save_config(data: dict) -> None:
     save_config_file(data, CONFIG_PATH)
 
 
-def get_plugins(data: dict) -> list[str]:
+def get_plugin_entries(data: dict) -> list[Any]:
     value = data.get("plugin")
-    if isinstance(value, list):
-        return [x for x in value if isinstance(x, str)]
-    return []
+    return list(value) if isinstance(value, list) else []
 
 
-def set_plugins(data: dict, plugins: list[str]) -> None:
+def get_plugins(data: dict) -> list[str]:
+    return [
+        spec
+        for entry in get_plugin_entries(data)
+        if (spec := plugin_entry_spec(entry)) is not None
+    ]
+
+
+def set_plugins(data: dict, plugins: list[Any]) -> None:
     data["plugin"] = plugins
+
+
+def compose_plugin_entries(
+    current_entries: list[Any], desired_known_packages: list[str]
+) -> list[Any]:
+    known_packages = set(KNOWN_PLUGINS.values())
+    first_known_entry: dict[str, Any] = {}
+    unknown_entries: list[Any] = []
+    for entry in current_entries:
+        spec = plugin_entry_spec(entry)
+        if spec in known_packages:
+            first_known_entry.setdefault(spec, entry)
+        else:
+            unknown_entries.append(entry)
+    selected = [
+        first_known_entry.get(package, package) for package in desired_known_packages
+    ]
+    return selected + unknown_entries
 
 
 def usage() -> int:
@@ -199,16 +225,13 @@ def print_setup_keys(plugins: list[str]) -> int:
     return 0
 
 
-def apply_profile(data: dict, current_plugins: list[str], profile: str) -> int:
+def apply_profile(data: dict, current_entries: list[Any], profile: str) -> int:
     if profile not in PROFILE_MAP:
         return usage()
 
     profile_aliases = PROFILE_MAP[profile]
     profile_packages = [KNOWN_PLUGINS[a] for a in profile_aliases]
-    known_packages = [KNOWN_PLUGINS[a] for a in PLUGIN_ORDER]
-    unknown_existing = [p for p in current_plugins if p not in known_packages]
-    updated = profile_packages + unknown_existing
-    set_plugins(data, updated)
+    set_plugins(data, compose_plugin_entries(current_entries, profile_packages))
     save_config(data)
 
     print(f"profile: {profile}")
@@ -221,6 +244,7 @@ def apply_profile(data: dict, current_plugins: list[str], profile: str) -> int:
 
 def main(argv: list[str]) -> int:
     data = load_config()
+    plugin_entries = get_plugin_entries(data)
     plugins = get_plugins(data)
 
     if not argv or argv[0] == "status":
@@ -245,7 +269,7 @@ def main(argv: list[str]) -> int:
     if argv[0] == "profile":
         if len(argv) < 2:
             return usage()
-        return apply_profile(data, plugins, argv[1])
+        return apply_profile(data, plugin_entries, argv[1])
 
     if len(argv) < 2:
         return usage()
@@ -258,7 +282,6 @@ def main(argv: list[str]) -> int:
     if any(name not in KNOWN_PLUGINS for name in targets):
         return usage()
 
-    known_packages = [KNOWN_PLUGINS[name] for name in PLUGIN_ORDER]
     plugin_set = set(plugins)
 
     if action == "enable":
@@ -268,13 +291,10 @@ def main(argv: list[str]) -> int:
         for alias in targets:
             plugin_set.discard(KNOWN_PLUGINS[alias])
 
-    unknown_existing = [p for p in plugins if p not in known_packages]
     ordered_known = [
         KNOWN_PLUGINS[a] for a in PLUGIN_ORDER if KNOWN_PLUGINS[a] in plugin_set
     ]
-    updated = ordered_known + unknown_existing
-
-    set_plugins(data, updated)
+    set_plugins(data, compose_plugin_entries(plugin_entries, ordered_known))
     save_config(data)
 
     state = "enabled" if action == "enable" else "disabled"
