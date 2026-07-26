@@ -9,7 +9,11 @@ import { createPostMergeSyncGuardHook } from "../dist/hooks/post-merge-sync-guar
 import { createPrBodyEvidenceGuardHook } from "../dist/hooks/pr-body-evidence-guard/index.js"
 import { createPrReadinessGuardHook } from "../dist/hooks/pr-readiness-guard/index.js"
 import { createSemanticOutputSummarizerHook } from "../dist/hooks/semantic-output-summarizer/index.js"
-import { hooksForEvent, resolveHookOrder } from "../dist/hooks/registry.js"
+import {
+  hooksForEvent,
+  resolveHookConstructionPlan,
+  resolveHookOrder,
+} from "../dist/hooks/registry.js"
 import { createStaleLoopExpiryGuardHook } from "../dist/hooks/stale-loop-expiry-guard/index.js"
 import { createToolOutputTruncatorHook } from "../dist/hooks/tool-output-truncator/index.js"
 
@@ -27,6 +31,50 @@ test("resolveHookOrder rejects duplicate hook ids before filtering", () => {
     () => resolveHookOrder([testHook("duplicate"), testHook("duplicate")], [], ["duplicate"]),
     /duplicate gateway hook ids: duplicate/,
   )
+})
+
+test("hook construction plan expands omitted stateful dependencies once", () => {
+  const continuation = resolveHookConstructionPlan(["continuation"], [])
+  assert.deepEqual(continuation.order, [
+    "stop-continuation-guard",
+    "keyword-detector",
+    "continuation",
+  ])
+  assert.deepEqual([...continuation.selected], continuation.order)
+  assert.deepEqual(continuation.blocked, [])
+
+  const explicit = resolveHookConstructionPlan(
+    ["stop-continuation-guard", "continuation", "global-process-pressure"],
+    [],
+  )
+  assert.deepEqual(explicit.order, [
+    "stop-continuation-guard",
+    "keyword-detector",
+    "continuation",
+    "global-process-pressure",
+  ])
+  assert.equal(
+    explicit.order.filter((id) => id === "stop-continuation-guard").length,
+    1,
+  )
+})
+
+test("hook construction plan excludes consumers with disabled dependencies", () => {
+  const plan = resolveHookConstructionPlan(
+    ["global-process-pressure", "think-mode", "todo-continuation-enforcer"],
+    ["stop-continuation-guard"],
+  )
+  assert.deepEqual(plan.order, ["think-mode"])
+  assert.deepEqual(plan.blocked, [
+    {
+      hookId: "global-process-pressure",
+      dependencyId: "stop-continuation-guard",
+    },
+    {
+      hookId: "todo-continuation-enforcer",
+      dependencyId: "stop-continuation-guard",
+    },
+  ])
 })
 
 test("hooksForEvent preserves explicit subscriptions and legacy wildcards", () => {

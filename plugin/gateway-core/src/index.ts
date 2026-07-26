@@ -101,7 +101,12 @@ import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-gu
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
 import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
-import { hooksForEvent, resolveHookOrder, type GatewayHook } from "./hooks/registry.js";
+import {
+  hooksForEvent,
+  resolveHookConstructionPlan,
+  resolveHookOrder,
+  type GatewayHook,
+} from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 import { resolveContextLimit } from "./hooks/shared/context-limit.js";
 import { normalizeModelRef } from "./hooks/shared/routing-profiles.js";
@@ -474,46 +479,52 @@ function configuredHooks(
         hookId,
       ),
     });
-  const safeHook = <T>(hookId: string, factory: () => T): T | null =>
-    safeCreateHook({
+  const hookPlan = resolveHookConstructionPlan(
+    cfg.hooks.order,
+    cfg.hooks.disabled,
+  );
+  const disabledHookIds = new Set(cfg.hooks.disabled);
+  const blockedHookIds = new Set(
+    hookPlan.blocked.map((blocked) => blocked.hookId),
+  );
+  for (const blocked of hookPlan.blocked) {
+    writeGatewayEventAudit(directory, {
+      hook: blocked.hookId,
+      stage: "skip",
+      reason_code: "hook_dependency_disabled",
+      dependency_hook: blocked.dependencyId,
+    });
+  }
+  const shouldCreateHook = (hookId: string): boolean =>
+    !disabledHookIds.has(hookId) &&
+    !blockedHookIds.has(hookId) &&
+    (hookPlan.selected === null || hookPlan.selected.has(hookId));
+  const safeHook = <T>(hookId: string, factory: () => T): T | null => {
+    if (!shouldCreateHook(hookId)) {
+      return null;
+    }
+    return safeCreateHook({
       directory,
       hookId,
       factory,
       critical: isCriticalGatewayHookId(hookId),
     });
+  };
   const stopGuard = safeHook("stop-continuation-guard", () =>
     createStopContinuationGuardHook({
       directory,
       enabled: cfg.stopContinuationGuard.enabled,
     }),
-  ) ?? {
-    id: "stop-continuation-guard",
-    priority: 295,
-    isStopped(): boolean {
-      return false;
-    },
-    forceStop(): void {},
-    async event(): Promise<void> {},
-  };
+  );
   const keywordDetector = safeHook("keyword-detector", () =>
     createKeywordDetectorHook({
       directory,
       enabled: cfg.keywordDetector.enabled,
     }),
-  ) ?? {
-    id: "keyword-detector",
-    priority: 296,
-    modeForSession(): null {
-      return null;
-    },
-    async event(): Promise<void> {},
-  };
+  );
   const shouldCreateSemanticOutputSummarizer =
-    cfg.hooks.enabled &&
     cfg.semanticOutputSummarizer.enabled &&
-    !cfg.hooks.disabled.includes("semantic-output-summarizer") &&
-    (cfg.hooks.order.length === 0 ||
-      cfg.hooks.order.includes("semantic-output-summarizer"));
+    shouldCreateHook("semantic-output-summarizer");
   const hooks: Array<GatewayHook | null> = [
     safeHook("autopilot-loop", () =>
       createAutopilotLoopHook({
@@ -531,8 +542,8 @@ function configuredHooks(
       createContinuationHook({
         directory,
         client: ctx.client,
-        stopGuard,
-        keywordDetector,
+        stopGuard: stopGuard ?? undefined,
+        keywordDetector: keywordDetector ?? undefined,
         bootstrapFromRuntime: cfg.autopilotLoop.bootstrapFromRuntimeOnIdle,
         maxIgnoredCompletionCycles:
           cfg.autopilotLoop.maxIgnoredCompletionCycles,
@@ -607,7 +618,7 @@ function configuredHooks(
     safeHook("global-process-pressure", () =>
       createGlobalProcessPressureHook({
         directory,
-        stopGuard,
+        stopGuard: stopGuard ?? undefined,
         enabled: cfg.globalProcessPressure.enabled,
         checkCooldownToolCalls:
           cfg.globalProcessPressure.checkCooldownToolCalls,
@@ -975,7 +986,7 @@ function configuredHooks(
         decisionRuntime: llmDecisionRuntimeForHook(
           GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.todoContinuationEnforcer,
         ),
-        stopGuard,
+        stopGuard: stopGuard ?? undefined,
         cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
         maxConsecutiveFailures:
           cfg.todoContinuationEnforcer.maxConsecutiveFailures,
@@ -1283,7 +1294,7 @@ function configuredHooks(
   ];
   return resolveHookOrder(
     hooks.filter((hook): hook is GatewayHook => hook !== null),
-    cfg.hooks.order,
+    hookPlan.order,
     cfg.hooks.disabled,
   );
 }

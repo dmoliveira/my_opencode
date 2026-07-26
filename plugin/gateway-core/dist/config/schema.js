@@ -22,7 +22,6 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "delegation-outcome-learner",
             "delegation-fallback-orchestrator",
             "agent-discoverability-injector",
-            "delegation-decision-audit",
             "agent-context-shaper",
             "subagent-lifecycle-supervisor",
             "subagent-telemetry-timeline",
