@@ -162,7 +162,8 @@
       "command": [
         "npx",
         "-y",
-        "@playwright/mcp@latest",
+        "@playwright/mcp@0.0.78",
+        "--isolated",
         "--caps=testing,network,storage,vision,devtools,pdf"
       ],
       "enabled": false

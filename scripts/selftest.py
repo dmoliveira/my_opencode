@@ -108,6 +108,21 @@ from gateway_live_relaunch_smoke import (  # type: ignore
     sync_dist_files,
 )
 from gateway_local_plugin_runtime_smoke import audit_has_reason_code  # type: ignore
+from harness_wave2_task4_smoke import (  # type: ignore
+    MCP_REQUIRED_TOOLS,
+    PROJECT_FIXTURES,
+    audit_summary,
+    evaluate_mcp_inventory,
+    fixture_hashes,
+    run_projects,
+    sanitize_text,
+    write_project_fixture,
+)
+from playwright_defaults import (  # type: ignore
+    PLAYWRIGHT_BROWSER_ARGS,
+    PLAYWRIGHT_MCP_COMMAND,
+    PLAYWRIGHT_MCP_PACKAGE_SPEC,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -362,6 +377,79 @@ exit 0
             shutil.copy2(agent_file, installed_agent_dir / agent_file.name)
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
+
+        complete_inventory = evaluate_mcp_inventory(
+            {"name": "Playwright"},
+            list(MCP_REQUIRED_TOOLS.values()),
+        )
+        expect(
+            complete_inventory.get("pass") is True,
+            "task4 MCP inventory evaluator should accept every capability representative",
+        )
+        incomplete_inventory = evaluate_mcp_inventory(
+            {"name": "Playwright"},
+            [MCP_REQUIRED_TOOLS["core"]],
+        )
+        expect(
+            incomplete_inventory.get("pass") is False,
+            "task4 MCP inventory evaluator should reject missing capability representatives",
+        )
+        sanitized, credential_detected = sanitize_text(
+            "prefix synthetic-credential-value suffix",
+            ["synthetic-credential-value"],
+        )
+        expect(
+            credential_detected is True
+            and "synthetic-credential-value" not in sanitized,
+            "task4 artifact sanitizer should detect and remove credential material",
+        )
+        spoof_audit = tmp / "task4-spoof-audit.jsonl"
+        spoof_audit.write_text(
+            json.dumps(
+                {
+                    "reason_code": "event_dispatch",
+                    "message": "message=stream providerID=openai modelID=gpt-5.4-mini",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        expect(
+            audit_summary(spoof_audit).get("observed_models") == [],
+            "task4 exact-model proof must ignore spoof-like unstructured text",
+        )
+        for fixture_name, fixture_spec in PROJECT_FIXTURES.items():
+            fixture_dir = tmp / f"task4-{fixture_name}-fixture"
+            write_project_fixture(fixture_dir, fixture_name)
+            initial_fixture_test = subprocess.run(
+                list(fixture_spec["test_command"]),
+                cwd=fixture_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            expect(
+                initial_fixture_test.returncode != 0,
+                f"task4 {fixture_name} fixture should begin with a failing native test",
+            )
+            hashes = fixture_hashes(fixture_dir)
+            expect(
+                fixture_spec["implementation"] in hashes
+                and fixture_spec["test_file"] in hashes,
+                f"task4 {fixture_name} fixture hashes should cover implementation and tests",
+            )
+        wrong_model = run_projects(
+            repo_root=REPO_ROOT,
+            output_dir=tmp / "task4-wrong-model",
+            model="openai/not-the-required-model",
+            timeout=1,
+            secrets=[],
+        )
+        expect(
+            wrong_model.get("result") == "BLOCKED"
+            and wrong_model.get("reason") == "exact_model_required",
+            "task4 project harness should block rather than substitute another model",
+        )
 
         source_dist = tmp / "source-dist"
         live_dist = tmp / "live-dist"
@@ -1800,6 +1888,16 @@ exit 0
             report.get("warnings", []) == [],
             "minimal MCP profile should not emit warnings",
         )
+        minimal_playwright = report.get("servers", {}).get("playwright", {})
+        expect(
+            minimal_playwright.get("status") == "disabled"
+            and minimal_playwright.get("package_spec")
+            == PLAYWRIGHT_MCP_PACKAGE_SPEC
+            and minimal_playwright.get("pinned") is True
+            and minimal_playwright.get("isolated") is True
+            and minimal_playwright.get("legacy_arguments") == [],
+            "minimal MCP profile should keep canonical pinned Playwright metadata while disabled",
+        )
 
         # MCP research should enable both servers and pass.
         result = run_script(MCP_SCRIPT, cfg, home, "profile", "research")
@@ -1865,6 +1963,61 @@ exit 0
         expect(
             report.get("servers", {}).get("exa_search", {}).get("status") == "disabled",
             "exa alias should disable exa_search",
+        )
+
+        legacy_mcp_cfg = tmp / "mcp-legacy.json"
+        legacy_mcp_payload = load_json_file(BASE_CONFIG)
+        legacy_mcp_payload["mcp"]["playwright"]["command"] = [
+            "npx",
+            "-y",
+            "@playwright/mcp@latest",
+            "--caps=testing,network,storage,vision,devtools,pdf",
+        ]
+        legacy_mcp_cfg.write_text(
+            json.dumps(legacy_mcp_payload, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        result = run_script(MCP_SCRIPT, legacy_mcp_cfg, home, "profile", "minimal")
+        expect(result.returncode == 0, "MCP legacy default migration should succeed")
+        expect(
+            load_json_file(legacy_mcp_cfg)["mcp"]["playwright"]["command"]
+            == list(PLAYWRIGHT_MCP_COMMAND),
+            "MCP profile mutation should migrate only the exact legacy Playwright default",
+        )
+
+        custom_mcp_cfg = tmp / "mcp-custom.json"
+        custom_mcp_payload = load_json_file(BASE_CONFIG)
+        custom_mcp_command = [
+            "custom-playwright-wrapper",
+            "@playwright/mcp@latest",
+            "--custom-mode",
+        ]
+        custom_mcp_payload["mcp"]["playwright"]["command"] = custom_mcp_command
+        custom_mcp_cfg.write_text(
+            json.dumps(custom_mcp_payload, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        result = run_script(MCP_SCRIPT, custom_mcp_cfg, home, "profile", "minimal")
+        expect(result.returncode == 0, "custom MCP profile mutation should succeed")
+        expect(
+            load_json_file(custom_mcp_cfg)["mcp"]["playwright"]["command"]
+            == custom_mcp_command,
+            "MCP profile mutation should preserve custom Playwright commands",
+        )
+        custom_mcp_before_doctor = custom_mcp_cfg.read_text(encoding="utf-8")
+        result = run_script(MCP_SCRIPT, custom_mcp_cfg, home, "doctor", "--json")
+        expect(result.returncode == 0, "custom MCP doctor should succeed with warnings")
+        custom_mcp_report = parse_json_output(result.stdout)
+        expect(
+            any(
+                "custom or noncanonical" in str(warning)
+                for warning in custom_mcp_report.get("warnings", [])
+            ),
+            "MCP doctor should warn about preserved custom Playwright commands",
+        )
+        expect(
+            custom_mcp_cfg.read_text(encoding="utf-8") == custom_mcp_before_doctor,
+            "MCP doctor must not rewrite custom Playwright commands",
         )
 
         # Layered config precedence: project override should beat user override.
@@ -18082,6 +18235,104 @@ jobs:
             "model routing resolution trace should remain deterministic for identical inputs",
         )
 
+        legacy_browser_cfg = tmp / "browser-legacy.json"
+        legacy_browser_payload = load_json_file(BASE_CONFIG)
+        legacy_browser_payload["browser"] = {
+            "provider": "playwright",
+            "providers": {
+                "playwright": {
+                    "enabled": True,
+                    "command": "npx",
+                    "args": ["@playwright/mcp@latest"],
+                }
+            },
+        }
+        legacy_browser_cfg.write_text(
+            json.dumps(legacy_browser_payload, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        legacy_browser_result = run_script(
+            BROWSER_SCRIPT,
+            legacy_browser_cfg,
+            home,
+            "profile",
+            "playwright",
+        )
+        expect(
+            legacy_browser_result.returncode == 0,
+            "browser legacy default migration should succeed",
+        )
+        migrated_browser = load_json_file(legacy_browser_cfg)["browser"]["providers"][
+            "playwright"
+        ]
+        expect(
+            migrated_browser.get("command") == "npx"
+            and migrated_browser.get("args") == list(PLAYWRIGHT_BROWSER_ARGS),
+            "browser profile mutation should migrate the exact historical default",
+        )
+
+        custom_browser_cfg = tmp / "browser-custom.json"
+        custom_browser_payload = load_json_file(BASE_CONFIG)
+        custom_browser_args = ["@playwright/mcp@latest", "--custom-mode"]
+        custom_browser_payload["browser"] = {
+            "provider": "playwright",
+            "providers": {
+                "playwright": {
+                    "enabled": True,
+                    "command": "custom-playwright-wrapper",
+                    "args": custom_browser_args,
+                }
+            },
+        }
+        custom_browser_cfg.write_text(
+            json.dumps(custom_browser_payload, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        custom_browser_result = run_script(
+            BROWSER_SCRIPT,
+            custom_browser_cfg,
+            home,
+            "profile",
+            "playwright",
+        )
+        expect(
+            custom_browser_result.returncode == 0,
+            "custom browser profile mutation should succeed",
+        )
+        custom_browser = load_json_file(custom_browser_cfg)["browser"]["providers"][
+            "playwright"
+        ]
+        expect(
+            custom_browser.get("command") == "custom-playwright-wrapper"
+            and custom_browser.get("args") == custom_browser_args,
+            "browser profile mutation should preserve custom Playwright invocation",
+        )
+        custom_browser_before_doctor = custom_browser_cfg.read_text(encoding="utf-8")
+        custom_browser_doctor = run_script(
+            BROWSER_SCRIPT,
+            custom_browser_cfg,
+            home,
+            "doctor",
+            "--json",
+        )
+        expect(
+            custom_browser_doctor.returncode == 0,
+            "custom browser doctor should succeed with warnings",
+        )
+        custom_browser_doctor_report = parse_json_output(custom_browser_doctor.stdout)
+        expect(
+            any(
+                "custom or noncanonical" in str(warning)
+                for warning in custom_browser_doctor_report.get("warnings", [])
+            ),
+            "browser doctor should warn about preserved custom Playwright invocation",
+        )
+        expect(
+            custom_browser_cfg.read_text(encoding="utf-8")
+            == custom_browser_before_doctor,
+            "browser doctor must not rewrite custom Playwright invocation",
+        )
+
         browser_status = subprocess.run(
             [sys.executable, str(BROWSER_SCRIPT), "status", "--json"],
             capture_output=True,
@@ -18212,6 +18463,14 @@ jobs:
             "--caps=testing,network,storage,vision,devtools,pdf"
             in playwright_provider_report.get("args", []),
             "browser doctor should expose the full Playwright MCP capability flag",
+        )
+        expect(
+            playwright_provider_report.get("package_spec")
+            == PLAYWRIGHT_MCP_PACKAGE_SPEC
+            and playwright_provider_report.get("pinned") is True
+            and playwright_provider_report.get("isolated") is True
+            and playwright_provider_report.get("legacy_arguments") == [],
+            "browser doctor should expose canonical pin and isolation metadata",
         )
         expect(
             playwright_provider_report.get("missing_capabilities", []) == [],
@@ -21884,6 +22143,13 @@ version: 1
             "--caps=testing,network,storage,vision,devtools,pdf"
             in playwright_server.get("command", []),
             "mcp doctor should expose the full Playwright MCP capability flag",
+        )
+        expect(
+            playwright_server.get("package_spec") == PLAYWRIGHT_MCP_PACKAGE_SPEC
+            and playwright_server.get("pinned") is True
+            and playwright_server.get("isolated") is True
+            and playwright_server.get("legacy_arguments") == [],
+            "mcp doctor should expose canonical pin and isolation metadata",
         )
         expect(
             playwright_server.get("missing_capabilities", []) == [],

@@ -1069,7 +1069,7 @@ export default function GatewayCorePlugin(ctx) {
         unwrapAutoSlashCommandParts(output?.parts);
     }
     async function chatParams(input, output) {
-        const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID);
+        const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID ?? input.model?.id);
         const expected = expectedAgentModel(directory, input.agent);
         if (actualModel) {
             writeGatewayEventAudit(directory, {
@@ -1097,7 +1097,7 @@ export default function GatewayCorePlugin(ctx) {
         }
         output.maxOutputTokens = clampChatMaxOutputTokens({
             providerID: input.model?.providerID ?? input.provider?.id,
-            modelID: input.model?.modelID,
+            modelID: input.model?.modelID ?? input.model?.id,
             maxOutputTokens: output.maxOutputTokens,
         });
     }
@@ -1145,6 +1145,17 @@ export default function GatewayCorePlugin(ctx) {
     }
     async function chatSystemTransform(input, output) {
         const eventType = "experimental.chat.system.transform";
+        const actualModel = normalizeModelRef(input.model?.providerID, input.model?.modelID ?? input.model?.id);
+        if (actualModel) {
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "state",
+                reason_code: "agent_runtime_model_observed",
+                observation_source: eventType,
+                session_id: input.sessionID,
+                actual_model: actualModel,
+            });
+        }
         const selectedHooks = hooksForEvent(hooks, eventType);
         const auditDispatch = shouldWriteDispatchAudit("chat_system_transform_dispatch", eventType);
         let loopAttemptCount = 0;

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select reservation-status install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -90,6 +90,9 @@ gateway-turn-watch: ## Stream long-turn alerts from gateway audit
 gateway-turn-watch-webhook: ## Stream long-turn alerts and POST to WEBHOOK_URL
 	@if [ -z "$(WEBHOOK_URL)" ]; then echo "WEBHOOK_URL is required"; exit 2; fi
 	python3 scripts/gateway_turn_watch.py --follow --json --webhook-url "$(WEBHOOK_URL)"
+
+harness-wave2-task4-smoke: ## Run pinned MCP and exact-model wave-2 smokes
+	python3 scripts/harness_wave2_task4_smoke.py all --repo-root "$(CURDIR)" --output-dir "$(CURDIR)/runtime/harness-wave-2/task4-live" --model openai/gpt-5.4-mini --json
 
 notify-icons-generate: ## Generate versioned notification icon candidates (OpenAI)
 	python3 scripts/notify_icon_generate.py --version "$${NOTIFY_ICON_VERSION:-v1}"

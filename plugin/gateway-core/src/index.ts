@@ -1310,7 +1310,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     input: {
       sessionID: string;
       agent: string;
-      model: { providerID?: string; modelID?: string };
+      model: { providerID?: string; modelID?: string; id?: string };
       provider: { id?: string };
       message: unknown;
     },
@@ -1329,7 +1329,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
   "experimental.chat.system.transform"(
     input: {
       sessionID?: string;
-      model?: { providerID?: string; modelID?: string };
+      model?: { providerID?: string; modelID?: string; id?: string };
     },
     output: ChatSystemTransformOutput,
   ): Promise<void>;
@@ -1603,7 +1603,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     input: {
       sessionID: string;
       agent: string;
-      model: { providerID?: string; modelID?: string };
+      model: { providerID?: string; modelID?: string; id?: string };
       provider: { id?: string };
       message: unknown;
     },
@@ -1617,7 +1617,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
   ): Promise<void> {
     const actualModel = normalizeModelRef(
       input.model?.providerID ?? input.provider?.id,
-      input.model?.modelID,
+      input.model?.modelID ?? input.model?.id,
     );
     const expected = expectedAgentModel(directory, input.agent);
     if (actualModel) {
@@ -1646,7 +1646,7 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     }
     output.maxOutputTokens = clampChatMaxOutputTokens({
       providerID: input.model?.providerID ?? input.provider?.id,
-      modelID: input.model?.modelID,
+      modelID: input.model?.modelID ?? input.model?.id,
       maxOutputTokens: output.maxOutputTokens,
     });
   }
@@ -1704,11 +1704,25 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
   async function chatSystemTransform(
     input: {
       sessionID?: string;
-      model?: { providerID?: string; modelID?: string };
+      model?: { providerID?: string; modelID?: string; id?: string };
     },
     output: ChatSystemTransformOutput,
   ): Promise<void> {
     const eventType = "experimental.chat.system.transform";
+    const actualModel = normalizeModelRef(
+      input.model?.providerID,
+      input.model?.modelID ?? input.model?.id,
+    );
+    if (actualModel) {
+      writeGatewayEventAudit(directory, {
+        hook: "gateway-core",
+        stage: "state",
+        reason_code: "agent_runtime_model_observed",
+        observation_source: eventType,
+        session_id: input.sessionID,
+        actual_model: actualModel,
+      });
+    }
     const selectedHooks = hooksForEvent(hooks, eventType);
     const auditDispatch = shouldWriteDispatchAudit(
       "chat_system_transform_dispatch",

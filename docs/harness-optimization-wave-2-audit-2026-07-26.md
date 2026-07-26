@@ -41,4 +41,10 @@ The fixture and config hashes were unchanged between measurements. The candidate
 
 ## Browser and model-backed evidence
 
-Pending task 4.
+- Central defaults now resolve to `npx -y @playwright/mcp@0.0.78 --isolated --caps=testing,network,storage,vision,devtools,pdf`; the OpenCode MCP remains disabled by default. Exact historical `@latest` defaults migrate only during explicit profile/ensure mutations, while custom commands remain unchanged and receive doctor warnings.
+- npm returned version `0.0.78`, Apache-2.0, integrity `sha512-XLTUeA6mEN9sQ+hJ4dfG8EIkDbxS0K3Trc2RBkUJuf02TgE2FQRNTMtq/aJfhyRMINsRl/Ybc4sxcWLtFn4/TQ==`, and git head `5f8fc00210b27b4407c375b59cda4838045d429c`.
+- The real stdio MCP probe negotiated protocol `2025-11-25` and listed 68 tools. Representative core, testing, network, storage, vision, devtools, and PDF tools were all present; no browser tool was invoked.
+- An isolated OAuth-backed preflight and both project fixtures used exact model `openai/gpt-5.4-mini`, an empty configured plugin list, and one project-local shim importing the candidate worktree `dist/index.js`. Every run recorded exactly one `gateway_runtime_bootstrap` event.
+- OpenCode 1.18.0 does not invoke the gateway's `chat.params` callback in this flow, so the system-transform boundary now writes the same structured `agent_runtime_model_observed` evidence from its typed model input. Free-form debug text is not accepted as model proof, and no fallback model is allowed.
+- The Python and Node fixtures started red, the build agent changed only `stats.py` and `slugify.mjs`, tests remained hash-identical, and `python3 -m unittest -v` plus `node --test slugify.test.mjs` finished green.
+- Candidate gateway source/dist SHA-256 values were `d17ea9a6f922a6a2eca3d67e7e9bbc017aea28fcc5d7df328460fda7bc57266d` and `40228b337430bf4dc41e63f7c66bc50aaec4ec60f461e8a7ab0efc3a70b90b0a`. Bounded process cleanup completed and retained artifacts contained no detected credential material.

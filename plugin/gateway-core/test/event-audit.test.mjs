@@ -85,6 +85,43 @@ test("chat transform audits total, selected, and attempted hook counts", async (
   }
 })
 
+test("chat system transform records a structured runtime model observation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-model-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false } },
+    })
+    await plugin["experimental.chat.system.transform"](
+      {
+        sessionID: "session-structured-model",
+        model: { providerID: "openai", id: "gpt-5.4-mini" },
+      },
+      { system: [] },
+    )
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const observation = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .find((entry) => entry.reason_code === "agent_runtime_model_observed")
+    assert.equal(observation?.actual_model, "openai/gpt-5.4-mini")
+    assert.equal(
+      observation?.observation_source,
+      "experimental.chat.system.transform",
+    )
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("disabled semantic summarizer is not constructed", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-disabled-"))
   const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
