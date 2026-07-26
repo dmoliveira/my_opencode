@@ -222,6 +222,7 @@ let otelEnvCache: OtelEnvCacheEntry | null = null;
 let otelInFlight = false;
 let otelGeneration = 0;
 let activeOtelController: AbortController | null = null;
+let activeOtelTimeout: ReturnType<typeof setTimeout> | null = null;
 let otelStats = emptyOtelStats();
 
 function emptyOtelStats(): MutableOtelExportStats {
@@ -959,7 +960,12 @@ async function sendOtelJob(
     controller?.abort();
     resolveTimeout?.({ kind: "timeout" });
   }, job.sink.timeoutMs);
-  timer.unref?.();
+  activeOtelTimeout = timer;
+  if (otelFlushWaiters.size > 0) {
+    timer.ref?.();
+  } else {
+    timer.unref?.();
+  }
 
   let requestPromise: Promise<Outcome>;
   try {
@@ -980,6 +986,9 @@ async function sendOtelJob(
 
   const outcome = await Promise.race([requestPromise, timeoutPromise]);
   clearTimeout(timer);
+  if (activeOtelTimeout === timer) {
+    activeOtelTimeout = null;
+  }
   if (generation !== otelGeneration) {
     return;
   }
@@ -1069,6 +1078,7 @@ export function flushGatewayEventAuditExportsForTest(): Promise<void> {
   }
   return new Promise<void>((resolve) => {
     otelFlushWaiters.add(resolve);
+    activeOtelTimeout?.ref?.();
   });
 }
 
@@ -1076,6 +1086,8 @@ export function resetGatewayEventAuditStateForTest(): void {
   otelGeneration += 1;
   activeOtelController?.abort();
   activeOtelController = null;
+  activeOtelTimeout?.unref?.();
+  activeOtelTimeout = null;
   otelQueue.splice(0, otelQueue.length);
   otelInFlight = false;
   otelStats = emptyOtelStats();
