@@ -7,6 +7,7 @@ import os
 import shutil
 import socket
 import sqlite3
+import stat
 import subprocess
 import tempfile
 import threading
@@ -24,6 +25,20 @@ USER_CONTROL = "wave2-user-control-marker"
 SYSTEM_CONTROL = "wave2-system-control-marker"
 REDACTION_TOKEN = "[REDACTED_SECRET]"
 FAKE_API_KEY = "wave2-local-fake-key"
+
+
+def prepare_private_output_dir(path: Path) -> None:
+    if path.is_symlink():
+        raise PermissionError("secret smoke output directory must not be a symlink")
+    path.mkdir(parents=True, mode=0o700, exist_ok=True)
+    metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid():
+        raise PermissionError("secret smoke output directory must be owner-controlled")
+    if stat.S_IMODE(metadata.st_mode) != 0o700:
+        path.chmod(0o700)
+        metadata = path.lstat()
+    if stat.S_IMODE(metadata.st_mode) != 0o700:
+        raise PermissionError("secret smoke output directory must be owner-only")
 
 
 def parse_args() -> argparse.Namespace:
@@ -236,7 +251,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         return {"result": "FAIL", "reason": "opencode_missing"}
 
     output_dir = args.output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    prepare_private_output_dir(output_dir)
     audit_path = output_dir / "gateway-events.jsonl"
     stdout_path = output_dir / "opencode.stdout.jsonl"
     stderr_path = output_dir / "opencode.stderr.log"
@@ -336,6 +351,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
 
         stdout_path.write_text(safe_artifact_text(stdout), encoding="utf-8")
         stderr_path.write_text(safe_artifact_text(stderr), encoding="utf-8")
+        stdout_path.chmod(0o600)
+        stderr_path.chmod(0o600)
         with state.lock:
             requests = list(state.requests)
             paths = list(state.paths)
