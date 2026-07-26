@@ -94,7 +94,7 @@ import { createWriteExistingFileGuardHook } from "./hooks/write-existing-file-gu
 import { createStaleLoopExpiryGuardHook } from "./hooks/stale-loop-expiry-guard/index.js";
 import { contextCollector } from "./hooks/context-injector/collector.js";
 import { createContextInjectorHook } from "./hooks/context-injector/index.js";
-import { hooksForEvent, resolveHookOrder } from "./hooks/registry.js";
+import { hooksForEvent, resolveHookConstructionPlan, resolveHookOrder, } from "./hooks/registry.js";
 import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "./llm-decision-bindings.js";
 import { resolveContextLimit } from "./hooks/shared/context-limit.js";
 import { normalizeModelRef } from "./hooks/shared/routing-profiles.js";
@@ -270,40 +270,41 @@ function configuredHooks(ctx, runtime) {
         directory,
         config: resolveLlmDecisionRuntimeConfigForHook(cfg.llmDecisionRuntime, hookId),
     });
-    const safeHook = (hookId, factory) => safeCreateHook({
-        directory,
-        hookId,
-        factory,
-        critical: isCriticalGatewayHookId(hookId),
-    });
+    const hookPlan = resolveHookConstructionPlan(cfg.hooks.order, cfg.hooks.disabled);
+    const disabledHookIds = new Set(cfg.hooks.disabled);
+    const blockedHookIds = new Set(hookPlan.blocked.map((blocked) => blocked.hookId));
+    for (const blocked of hookPlan.blocked) {
+        writeGatewayEventAudit(directory, {
+            hook: blocked.hookId,
+            stage: "skip",
+            reason_code: "hook_dependency_disabled",
+            dependency_hook: blocked.dependencyId,
+        });
+    }
+    const shouldCreateHook = (hookId) => !disabledHookIds.has(hookId) &&
+        !blockedHookIds.has(hookId) &&
+        (hookPlan.selected === null || hookPlan.selected.has(hookId));
+    const safeHook = (hookId, factory) => {
+        if (!shouldCreateHook(hookId)) {
+            return null;
+        }
+        return safeCreateHook({
+            directory,
+            hookId,
+            factory,
+            critical: isCriticalGatewayHookId(hookId),
+        });
+    };
     const stopGuard = safeHook("stop-continuation-guard", () => createStopContinuationGuardHook({
         directory,
         enabled: cfg.stopContinuationGuard.enabled,
-    })) ?? {
-        id: "stop-continuation-guard",
-        priority: 295,
-        isStopped() {
-            return false;
-        },
-        forceStop() { },
-        async event() { },
-    };
+    }));
     const keywordDetector = safeHook("keyword-detector", () => createKeywordDetectorHook({
         directory,
         enabled: cfg.keywordDetector.enabled,
-    })) ?? {
-        id: "keyword-detector",
-        priority: 296,
-        modeForSession() {
-            return null;
-        },
-        async event() { },
-    };
-    const shouldCreateSemanticOutputSummarizer = cfg.hooks.enabled &&
-        cfg.semanticOutputSummarizer.enabled &&
-        !cfg.hooks.disabled.includes("semantic-output-summarizer") &&
-        (cfg.hooks.order.length === 0 ||
-            cfg.hooks.order.includes("semantic-output-summarizer"));
+    }));
+    const shouldCreateSemanticOutputSummarizer = cfg.semanticOutputSummarizer.enabled &&
+        shouldCreateHook("semantic-output-summarizer");
     const hooks = [
         safeHook("autopilot-loop", () => createAutopilotLoopHook({
             directory,
@@ -318,8 +319,8 @@ function configuredHooks(ctx, runtime) {
         safeHook("continuation", () => createContinuationHook({
             directory,
             client: ctx.client,
-            stopGuard,
-            keywordDetector,
+            stopGuard: stopGuard ?? undefined,
+            keywordDetector: keywordDetector ?? undefined,
             bootstrapFromRuntime: cfg.autopilotLoop.bootstrapFromRuntimeOnIdle,
             maxIgnoredCompletionCycles: cfg.autopilotLoop.maxIgnoredCompletionCycles,
         })),
@@ -373,7 +374,7 @@ function configuredHooks(ctx, runtime) {
         })),
         safeHook("global-process-pressure", () => createGlobalProcessPressureHook({
             directory,
-            stopGuard,
+            stopGuard: stopGuard ?? undefined,
             enabled: cfg.globalProcessPressure.enabled,
             checkCooldownToolCalls: cfg.globalProcessPressure.checkCooldownToolCalls,
             reminderCooldownToolCalls: cfg.globalProcessPressure.reminderCooldownToolCalls,
@@ -625,7 +626,7 @@ function configuredHooks(ctx, runtime) {
             enabled: cfg.todoContinuationEnforcer.enabled,
             client: ctx.client,
             decisionRuntime: llmDecisionRuntimeForHook(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS.todoContinuationEnforcer),
-            stopGuard,
+            stopGuard: stopGuard ?? undefined,
             cooldownMs: cfg.todoContinuationEnforcer.cooldownMs,
             maxConsecutiveFailures: cfg.todoContinuationEnforcer.maxConsecutiveFailures,
         })),
@@ -841,7 +842,7 @@ function configuredHooks(ctx, runtime) {
             reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
         })),
     ];
-    return resolveHookOrder(hooks.filter((hook) => hook !== null), cfg.hooks.order, cfg.hooks.disabled);
+    return resolveHookOrder(hooks.filter((hook) => hook !== null), hookPlan.order, cfg.hooks.disabled);
 }
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx, options) {

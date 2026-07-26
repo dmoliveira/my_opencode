@@ -31,9 +31,6 @@ OPENCHAMBER_PACKAGE = os.environ.get(
     "MY_OPENCODE_OPENCHAMBER_PACKAGE", "@openchamber/web"
 )
 
-PLUGIN_ALIASES = ["notifier", "morph", "worktree"]
-
-
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -116,20 +113,18 @@ def ask_yes_no(question: str, default: bool, non_interactive: bool) -> bool:
 
 
 def apply_plugin_profile(profile: str, custom_aliases: list[str] | None = None) -> int:
-    if profile != "custom":
-        return run_repo_script("plugin_command.py", "profile", profile)
+    del custom_aliases
+    if profile != "lean":
+        print(f"Plugin profile '{profile}' is retired; applying external-free lean policy")
+    return run_repo_script("plugin_command.py", "profile", "lean")
 
-    selected = set(custom_aliases or [])
-    code = run_repo_script("plugin_command.py", "profile", "lean")
-    if code != 0:
-        return code
 
-    for alias in PLUGIN_ALIASES:
-        action = "enable" if alias in selected else "disable"
-        code = run_repo_script("plugin_command.py", action, alias)
-        if code != 0:
-            return code
-    return 0
+def normalize_plugin_profile(profile: str) -> tuple[str, list[str]]:
+    if profile != "lean":
+        print(
+            f"Plugin profile '{profile}' is retired; normalizing saved state to lean"
+        )
+    return "lean", []
 
 
 def install_opencode_nvim() -> int:
@@ -236,23 +231,15 @@ def main(argv: list[str]) -> int:
     else:
         print("mode: fresh or guided setup")
 
-    plugin_profile = args.plugin_profile or choose(
+    requested_plugin_profile = args.plugin_profile or choose(
         "Plugin profile",
-        ["lean", "stable", "experimental", "custom"],
-        prev_profiles.get("plugin", "lean"),
+        ["lean"],
+        "lean",
         args.non_interactive,
     )
-    custom_plugins: list[str] = []
-    if plugin_profile == "custom":
-        base_enabled = set(prev_profiles.get("custom_plugins", ["notifier"]))
-        for alias in PLUGIN_ALIASES:
-            selected = ask_yes_no(
-                f"Enable plugin '{alias}'",
-                alias in base_enabled,
-                args.non_interactive,
-            )
-            if selected:
-                custom_plugins.append(alias)
+    plugin_profile, custom_plugins = normalize_plugin_profile(
+        requested_plugin_profile
+    )
 
     mcp_profile = args.mcp_profile or choose(
         "MCP profile",

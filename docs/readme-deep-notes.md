@@ -480,16 +480,15 @@ Task 28.5 autopilot verification notes:
 - selftest now validates pause/resume/stop transitions through repeated `/autopilot status` checks after each lifecycle control action.
 - install smoke now exercises `/autopilot` objective lifecycle with both in-scope resume and explicit out-of-scope failure scenario (`|| true` guard) before stop/doctor checks.
 
-## Installed plugin stack 🔌
+## External plugin policy 🔌
 
-- `@mohak34/opencode-notifier@latest` - desktop and sound alerts for completion, errors, and permission prompts.
+Managed installs use only the maintained local `gateway-core` plugin. The former curated aliases are retired:
 
-### Experimental plugin options 🧪
+- `@mohak34/opencode-notifier@latest` duplicated gateway notifications and added another subprocess and timer policy surface.
+- `github:JRedeker/opencode-morph-fast-apply` introduced remote code egress and a second privileged write path.
+- `github:kdcokenny/opencode-worktree` lacked a packaged release and conflicted with the repository's governed worktree and PR lifecycle.
 
-- `github:kdcokenny/opencode-worktree` - git worktree automation with terminal spawning for isolated agent sessions.
-- `github:JRedeker/opencode-morph-fast-apply` - high-speed Morph Fast Apply edits for large or scattered code changes.
-
-These two can fail to auto-resolve on some setups and are disabled by default. Enable them only when you want to test them.
+`/plugin profile lean` removes those exact legacy string or tuple entries while preserving manually managed unknown plugins. Legacy `stable`, `experimental`, and installer `custom` selections normalize to the same external-free policy. No replacement plugin was selected because reviewed notifier, Morph, context-pruning, and PTY candidates overlapped existing gateway, Codememory, or tmux capabilities more than they improved the workflow.
 
 ## Installed instruction packs 📘
 

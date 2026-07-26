@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
 import test from "node:test"
 
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import {
   loadGatewayConfig,
@@ -600,9 +602,9 @@ test("loadGatewayConfigSourceWithMeta falls back to bundled default when no side
     assert.match(loaded.meta.sidecarPath, /plugin[\\/]gateway-core[\\/]config[\\/]default-gateway-core\.config\.json$/)
     assert.equal(loaded.meta.sidecarExists, true)
     assert.equal(loaded.meta.sidecarLoaded, true)
-    assert.equal(config.llmDecisionRuntime.enabled, true)
-    assert.equal(config.llmDecisionRuntime.mode, "assist")
-    assert.equal(config.llmDecisionRuntime.hookModes["todo-continuation-enforcer"], "assist")
+    assert.equal(config.llmDecisionRuntime.enabled, false)
+    assert.equal(config.llmDecisionRuntime.mode, "disabled")
+    assert.deepEqual(config.llmDecisionRuntime.hookModes, {})
   } finally {
     if (previousEnvPath === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_CONFIG_PATH
@@ -616,6 +618,18 @@ test("loadGatewayConfigSourceWithMeta falls back to bundled default when no side
     }
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("npm package includes bundled disabled gateway defaults", () => {
+  const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+  const output = execFileSync(
+    "npm",
+    ["pack", "--dry-run", "--json", "--ignore-scripts"],
+    { cwd: packageRoot, encoding: "utf8" },
+  )
+  const payload = JSON.parse(output)
+  const files = payload[0].files.map((item) => item.path)
+  assert.ok(files.includes("config/default-gateway-core.config.json"))
 })
 
 test("loadGatewayConfigSourceWithMeta uses home sidecar before bundled default", () => {

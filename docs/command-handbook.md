@@ -74,7 +74,7 @@ Profiles:
 
 ## Plugin control inside OpenCode 🎛️
 
-Use these directly in OpenCode:
+Managed profiles now enforce an external-free baseline around the maintained local `gateway-core` plugin:
 
 ```text
 /plugin status
@@ -83,31 +83,17 @@ Use these directly in OpenCode:
 /plugin doctor --json
 /plugin setup-keys
 /plugin profile lean
-/plugin profile stable
-/plugin profile experimental
-/plugin enable notifier
 /plugin disable notifier
-/plugin enable all
+/plugin disable morph
+/plugin disable worktree
 /plugin disable all
 ```
 
+`notifier`, `morph`, and `worktree` are retired, disable-only aliases. Plugin enable requests reject them instead of introducing an unpinned or privileged in-process dependency. Legacy `stable` and `experimental` profile arguments remain accepted but normalize to `lean`.
 
-Supported plugin names: `notifier`, `morph`, `worktree`.
+Applying a managed profile removes exact retired string or tuple entries while preserving gateway entries, manually managed unknown plugins, malformed entries, tuple options, and relative order. `/plugin doctor` fails while an exact retired entry remains and reports normalized package names only; option objects are never printed. `/plugin setup-keys` therefore requires no external plugin credentials.
 
-`all` applies only to the stable set: `notifier`.
-
-`/plugin doctor` checks the current plugin setup and reports missing prerequisites before you enable additional plugins.
-
-`/plugin doctor --json` prints machine-readable diagnostics for automation.
-
-`/plugin setup-keys` prints exact environment/file snippets for missing API keys.
-
-Profiles:
-- `lean` -> `notifier`
-- `stable` -> `notifier`
-- `experimental` -> `stable` + `morph`, `worktree`
-
-For Morph Fast Apply, set `MORPH_API_KEY` in your shell before enabling `morph`.
+Gateway-core already handles workflow notifications, native edits remain the governed write path, and repository worktree commands own branch and PR lifecycle. Add a third-party plugin only after reviewing and pinning an immutable release, its permissions, and any code or data egress.
 
 ## Concise / caveman mode
 
@@ -434,6 +420,7 @@ Use these directly in OpenCode:
 /gateway disable
 /gateway doctor
 /gateway doctor --fresh --json
+/gateway doctor --deep --json
 /gateway watchdog status
 /gateway watchdog doctor
 /gateway watchdog set --warning-threshold-seconds 60 --tool-call-threshold 12 --reminder-cooldown-seconds 60
@@ -457,6 +444,7 @@ Notes:
 - `/gateway status --json` now includes `mistake_ledger` so operators can see whether validation deferrals are accumulating in `.opencode/mistake-ledger.jsonl`.
 - `/gateway doctor --json` includes `hook_diagnostics` and reuses a fingerprinted successful direct-loader smoke for up to 15 minutes; cache entries contain only allowlisted status fields.
 - `/gateway doctor --fresh --json` bypasses that cache and runs the real loader smoke once; use it after changing the OpenCode runtime or when diagnosing loader state.
+- `/gateway doctor --deep --json` runs uncached, loader-only direct and tuple contract probes in isolated temporary homes. It never runs legacy serve/model probes, never reads or changes the direct-loader cache, and returns only allowlisted status fields. `--deep` and `--fresh` are mutually exclusive.
 - `/gateway continuation report --json` summarizes recent `todo-continuation-enforcer` audit events so you can see reason codes, stages, and affected sessions quickly.
 - `/gateway continuation report --json` now also exposes `assistant_message_open_todo_events` so you can spot intermediate assistant replies that landed while todos were still open.
 - after a wrapped session, `/gateway continuation report` is the fastest check for recent `todo-continuation-enforcer` activity.

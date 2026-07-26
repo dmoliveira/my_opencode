@@ -4,6 +4,7 @@ import importlib
 import json
 import os
 import stat
+import subprocess
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -40,6 +41,16 @@ class GatewayDoctorCacheTest(unittest.TestCase):
                     "server_log": "/temporary/private-server.log",
                 }
             ],
+        }
+
+    @classmethod
+    def _contract_pass(cls) -> dict:
+        direct = cls._live_pass()["results"][0]
+        return {
+            "result": "PASS",
+            "reason": "local_plugin_runtime_loader_ok",
+            "exit": 0,
+            "results": [direct, {**direct, "mode": "tuple"}],
         }
 
     def test_success_cache_is_owner_only_sanitized_and_reused(self) -> None:
@@ -144,7 +155,9 @@ class GatewayDoctorCacheTest(unittest.TestCase):
             with patch.object(module, "_gateway_smoke_fingerprint", return_value="b" * 64), patch.object(
                 module, "_run_local_plugin_runtime_smoke_live", return_value=failure
             ) as live:
-                fresh = module.run_local_plugin_runtime_smoke(force_fresh=True)
+                fresh = module.run_local_plugin_runtime_smoke(
+                    cache_policy="refresh"
+                )
                 self.assertEqual("FAIL", fresh["result"])
                 self.assertFalse(fresh["cached"])
                 self.assertEqual(1, live.call_count)
@@ -178,7 +191,104 @@ class GatewayDoctorCacheTest(unittest.TestCase):
         module = self._module()
         with patch.object(module, "command_doctor", return_value=7) as doctor:
             self.assertEqual(7, module.main(["doctor", "--fresh", "--json"]))
-        doctor.assert_called_once_with(True, fresh=True)
+        doctor.assert_called_once_with(True, fresh=True, deep=False)
+
+    def test_deep_cache_policy_never_reads_writes_or_invalidates_direct_cache(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+            os.environ,
+            {"HOME": tmp, "XDG_CACHE_HOME": str(Path(tmp) / "cache")},
+            clear=False,
+        ):
+            cache_path = module.gateway_doctor_smoke_cache_path()
+            cache_path.parent.mkdir(parents=True, mode=0o700)
+            cache_path.write_text("direct-cache-sentinel", encoding="utf-8")
+            cache_path.chmod(0o600)
+            with patch.object(
+                module,
+                "_run_local_plugin_runtime_smoke_live",
+                return_value=self._contract_pass(),
+            ) as live:
+                result = module.run_local_plugin_runtime_smoke(
+                    cache_policy="none", mode="contract"
+                )
+            self.assertEqual("PASS", result["result"])
+            self.assertEqual("none", result["cache_policy"])
+            self.assertEqual("direct-cache-sentinel", cache_path.read_text())
+            live.assert_called_once_with(mode="contract")
+
+            cache_path.unlink()
+            with patch.object(
+                module,
+                "_run_local_plugin_runtime_smoke_live",
+                return_value={"result": "FAIL", "reason": "probe_failed"},
+            ):
+                result = module.run_local_plugin_runtime_smoke(
+                    cache_policy="none", mode="contract"
+                )
+            self.assertEqual("FAIL", result["result"])
+            self.assertFalse(cache_path.exists())
+
+    def test_direct_cache_rejects_contract_or_duplicate_results(self) -> None:
+        module = self._module()
+        self.assertIsNone(module._cacheable_smoke_summary(self._contract_pass()))
+        duplicate = self._live_pass()
+        duplicate["results"].append(dict(duplicate["results"][0]))
+        self.assertIsNone(module._cacheable_smoke_summary(duplicate))
+
+    def test_fingerprint_includes_bundled_gateway_default(self) -> None:
+        module = self._module()
+        expected = (
+            module.REPO_ROOT
+            / "plugin"
+            / "gateway-core"
+            / "config"
+            / "default-gateway-core.config.json"
+        )
+        self.assertIn(expected, module._gateway_smoke_fingerprint_files())
+
+    def test_live_contract_requires_exact_modes_and_projects_failure(self) -> None:
+        module = self._module()
+        canary = "WAVE4_RAW_SMOKE_CANARY"
+        direct = self._live_pass()["results"][0]
+        completed = subprocess.CompletedProcess(
+            ["gateway-smoke"],
+            0,
+            json.dumps(
+                {
+                    "reason": canary,
+                    "results": [
+                        {
+                            **direct,
+                            "stdout": canary,
+                            "work_dir": f"/tmp/{canary}",
+                        }
+                    ]
+                }
+            ),
+            canary,
+        )
+        with patch.object(module.subprocess, "run", return_value=completed) as run:
+            result = module._run_local_plugin_runtime_smoke_live(
+                mode="contract"
+            )
+
+        self.assertEqual("FAIL", result["result"])
+        self.assertEqual(["direct"], [item["mode"] for item in result["results"]])
+        self.assertNotIn(canary, json.dumps(result))
+        command = run.call_args.args[0]
+        self.assertIn("contract", command)
+        self.assertIn("100", command)
+
+    def test_cli_forwards_deep_and_rejects_deep_fresh(self) -> None:
+        module = self._module()
+        with patch.object(module, "command_doctor", return_value=9) as doctor:
+            self.assertEqual(9, module.main(["doctor", "--deep", "--json"]))
+        doctor.assert_called_once_with(True, fresh=False, deep=True)
+
+        with patch.object(module, "command_doctor") as doctor:
+            self.assertEqual(2, module.main(["doctor", "--deep", "--fresh"]))
+        doctor.assert_not_called()
 
 
 if __name__ == "__main__":
