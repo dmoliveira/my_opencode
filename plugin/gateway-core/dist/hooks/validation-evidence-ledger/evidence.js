@@ -1,9 +1,9 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { chmodSync, closeSync, constants, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync, } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { captureGitStateFingerprint, sameGitState, } from "./git-state.js";
+const MAX_EVIDENCE_BYTES = 1024 * 1024;
 const evidenceBySession = new Map();
-const evidenceByWorktree = new Map();
-// Returns blank evidence snapshot.
 function emptyEvidence() {
     return {
         lint: false,
@@ -14,70 +14,178 @@ function emptyEvidence() {
         updatedAt: "",
     };
 }
-function evidenceFilePath(directory) {
-    const cwd = directory.trim() || process.cwd();
-    try {
-        const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-            cwd,
-            stdio: ["ignore", "pipe", "ignore"],
-        })
-            .toString("utf-8")
-            .trim();
-        return resolve(root || cwd, ".opencode", "runtime", "validation-evidence.json");
+function emptyPersistedEvidence() {
+    return { version: 2, worktrees: {} };
+}
+function evidenceFilePath(fingerprint) {
+    return resolve(fingerprint.root, ".opencode", "runtime", "validation-evidence.json");
+}
+function assertSafeDirectory(path, options) {
+    const state = lstatSync(path);
+    if (!state.isDirectory() || state.isSymbolicLink()) {
+        throw new Error(`unsafe validation evidence directory: ${path}`);
     }
-    catch {
-        return resolve(cwd, ".opencode", "runtime", "validation-evidence.json");
+    if (state.mode & 0o022) {
+        throw new Error(`writable validation evidence directory: ${path}`);
+    }
+    if (options.privateDirectory && state.mode & 0o077) {
+        chmodSync(path, 0o700);
     }
 }
-function readPersistedEvidence(directory) {
+function ensureEvidenceDirectory(filePath) {
+    const runtimeDirectory = dirname(filePath);
+    const opencodeDirectory = dirname(runtimeDirectory);
+    if (!existsSync(opencodeDirectory)) {
+        mkdirSync(opencodeDirectory, { mode: 0o700 });
+    }
+    assertSafeDirectory(opencodeDirectory, { privateDirectory: false });
+    if (!existsSync(runtimeDirectory)) {
+        mkdirSync(runtimeDirectory, { mode: 0o700 });
+    }
+    assertSafeDirectory(runtimeDirectory, { privateDirectory: true });
+}
+function safeEvidenceFileState(path, options) {
+    let state;
     try {
-        const payload = JSON.parse(readFileSync(evidenceFilePath(directory), "utf-8"));
-        return {
-            sessions: payload && typeof payload.sessions === "object" ? payload.sessions : {},
-            worktrees: payload && typeof payload.worktrees === "object" ? payload.worktrees : {},
-        };
+        state = lstatSync(path);
+    }
+    catch (error) {
+        const code = error.code;
+        if (code === "ENOENT") {
+            return null;
+        }
+        throw error;
+    }
+    if (!state.isFile() || state.isSymbolicLink() || state.nlink !== 1) {
+        throw new Error("unsafe validation evidence file");
+    }
+    if (options.requirePrivate && state.mode & 0o077) {
+        throw new Error("validation evidence file is not owner-only");
+    }
+    if (state.size > MAX_EVIDENCE_BYTES) {
+        throw new Error("validation evidence file exceeds size limit");
+    }
+    return state;
+}
+function isFingerprint(value) {
+    if (!value || typeof value !== "object") {
+        return false;
+    }
+    const item = value;
+    return (item.version === "git-state-v1" &&
+        typeof item.root === "string" &&
+        item.root.length > 0 &&
+        typeof item.head === "string" &&
+        /^[a-f0-9]{40,64}$/.test(item.head) &&
+        typeof item.index === "string" &&
+        /^[a-f0-9]{64}$/.test(item.index) &&
+        typeof item.worktree === "string" &&
+        /^[a-f0-9]{64}$/.test(item.worktree) &&
+        typeof item.digest === "string" &&
+        /^[a-f0-9]{64}$/.test(item.digest));
+}
+function isEvidenceSnapshot(value) {
+    if (!value || typeof value !== "object") {
+        return false;
+    }
+    const item = value;
+    return (typeof item.lint === "boolean" &&
+        typeof item.test === "boolean" &&
+        typeof item.typecheck === "boolean" &&
+        typeof item.build === "boolean" &&
+        typeof item.security === "boolean" &&
+        typeof item.updatedAt === "string");
+}
+function isEvidenceRecord(value) {
+    if (!value || typeof value !== "object") {
+        return false;
+    }
+    const item = value;
+    return isFingerprint(item.fingerprint) && isEvidenceSnapshot(item.evidence);
+}
+function readPersistedEvidence(fingerprint) {
+    const filePath = evidenceFilePath(fingerprint);
+    try {
+        const runtimeDirectory = dirname(filePath);
+        const opencodeDirectory = dirname(runtimeDirectory);
+        if (!existsSync(opencodeDirectory) || !existsSync(runtimeDirectory)) {
+            return emptyPersistedEvidence();
+        }
+        assertSafeDirectory(opencodeDirectory, { privateDirectory: false });
+        assertSafeDirectory(runtimeDirectory, { privateDirectory: false });
+        if (lstatSync(runtimeDirectory).mode & 0o077) {
+            return emptyPersistedEvidence();
+        }
+        const state = safeEvidenceFileState(filePath, { requirePrivate: true });
+        if (!state) {
+            return emptyPersistedEvidence();
+        }
+        const payload = JSON.parse(readFileSync(filePath, "utf-8"));
+        if (!payload || typeof payload !== "object") {
+            return emptyPersistedEvidence();
+        }
+        const source = payload;
+        if (source.version !== 2 || !source.worktrees || typeof source.worktrees !== "object") {
+            return emptyPersistedEvidence();
+        }
+        const worktrees = {};
+        for (const [key, value] of Object.entries(source.worktrees)) {
+            if (key && isEvidenceRecord(value)) {
+                worktrees[key] = value;
+            }
+        }
+        return { version: 2, worktrees };
     }
     catch {
-        return { sessions: {}, worktrees: {} };
+        return emptyPersistedEvidence();
     }
 }
-function writePersistedEvidence(directory) {
-    const filePath = evidenceFilePath(directory);
-    const persisted = readPersistedEvidence(directory);
-    const sessions = {
-        ...persisted.sessions,
-        ...Object.fromEntries(evidenceBySession.entries()),
-    };
-    const worktrees = {
-        ...persisted.worktrees,
-        ...Object.fromEntries(evidenceByWorktree.entries()),
-    };
-    mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, JSON.stringify({ sessions, worktrees }, null, 2) + "\n", "utf-8");
-}
-function evidenceScopeKey(directory) {
-    const cwd = directory.trim();
-    if (!cwd) {
-        return "";
-    }
+function syncDirectory(path) {
+    let descriptor = null;
     try {
-        const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-            cwd,
-            stdio: ["ignore", "pipe", "ignore"],
-        })
-            .toString("utf-8")
-            .trim();
-        const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-            cwd,
-            stdio: ["ignore", "pipe", "ignore"],
-        })
-            .toString("utf-8")
-            .trim();
-        return `${root}::${branch || cwd}`;
+        descriptor = openSync(path, constants.O_RDONLY);
+        fsyncSync(descriptor);
     }
     catch {
-        return cwd;
+        // The file fsync and atomic rename remain authoritative when directory fsync is unsupported.
     }
+    finally {
+        if (descriptor !== null) {
+            closeSync(descriptor);
+        }
+    }
+}
+function writePersistedEvidence(fingerprint, persisted) {
+    const filePath = evidenceFilePath(fingerprint);
+    ensureEvidenceDirectory(filePath);
+    safeEvidenceFileState(filePath, { requirePrivate: false });
+    const directory = dirname(filePath);
+    const temporaryPath = `${filePath}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+    const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0);
+    let descriptor = null;
+    try {
+        descriptor = openSync(temporaryPath, flags, 0o600);
+        writeFileSync(descriptor, `${JSON.stringify(persisted, null, 2)}\n`, "utf-8");
+        fsyncSync(descriptor);
+        closeSync(descriptor);
+        descriptor = null;
+        chmodSync(temporaryPath, 0o600);
+        renameSync(temporaryPath, filePath);
+        syncDirectory(directory);
+    }
+    finally {
+        if (descriptor !== null) {
+            closeSync(descriptor);
+        }
+        if (existsSync(temporaryPath)) {
+            unlinkSync(temporaryPath);
+        }
+    }
+}
+function evidenceForFingerprint(record, fingerprint) {
+    return record && sameGitState(record.fingerprint, fingerprint)
+        ? { ...record.evidence }
+        : emptyEvidence();
 }
 function mergeEvidence(sessionSnapshot, worktreeSnapshot) {
     return {
@@ -103,17 +211,12 @@ function computeMissing(snapshot, markers) {
             continue;
         }
         const category = markerCategory(normalized);
-        if (!category) {
-            missing.push(normalized);
-            continue;
-        }
-        if (!snapshot[category]) {
+        if (!category || !snapshot[category]) {
             missing.push(normalized);
         }
     }
     return missing;
 }
-// Resolves evidence category for marker token when supported.
 export function markerCategory(marker) {
     const value = marker.trim().toLowerCase();
     if (!value) {
@@ -139,100 +242,76 @@ export function markerCategory(marker) {
     }
     return null;
 }
-// Returns immutable snapshot for session evidence.
-export function validationEvidence(sessionId) {
-    if (!sessionId.trim()) {
-        return emptyEvidence();
-    }
-    const current = evidenceBySession.get(sessionId.trim());
-    if (!current) {
-        const persisted = readPersistedEvidence(process.cwd()).sessions[sessionId.trim()];
-        if (persisted) {
-            evidenceBySession.set(sessionId.trim(), persisted);
-            return { ...persisted };
-        }
-        return emptyEvidence();
-    }
-    return { ...current };
-}
-// Returns immutable snapshot for worktree/branch-scoped evidence.
-export function worktreeValidationEvidence(directory) {
-    const key = evidenceScopeKey(directory);
-    if (!key) {
-        return emptyEvidence();
-    }
-    const current = evidenceByWorktree.get(key);
-    if (!current) {
-        const persisted = readPersistedEvidence(directory).worktrees[key];
-        if (persisted) {
-            evidenceByWorktree.set(key, persisted);
-            return { ...persisted };
-        }
-        return emptyEvidence();
-    }
-    return { ...current };
-}
-// Marks one or more evidence categories as validated.
-export function markValidationEvidence(sessionId, categories, directory = "") {
+export function validationEvidence(sessionId, directory = "") {
     const key = sessionId.trim();
-    if (!key) {
+    const record = key ? evidenceBySession.get(key) : undefined;
+    if (!record) {
         return emptyEvidence();
     }
-    const next = {
-        ...validationEvidence(key),
-    };
+    if (!directory.trim()) {
+        return { ...record.evidence };
+    }
+    const fingerprint = captureGitStateFingerprint(directory);
+    return fingerprint ? evidenceForFingerprint(record, fingerprint) : emptyEvidence();
+}
+export function worktreeValidationEvidence(directory) {
+    const fingerprint = captureGitStateFingerprint(directory);
+    if (!fingerprint) {
+        return emptyEvidence();
+    }
+    const record = readPersistedEvidence(fingerprint).worktrees[fingerprint.root];
+    return evidenceForFingerprint(record, fingerprint);
+}
+export function markValidationEvidence(sessionId, categories, directory = "", expectedFingerprint) {
+    const key = sessionId.trim();
+    const fingerprint = captureGitStateFingerprint(directory);
+    if (!key || categories.length === 0 || !fingerprint || (expectedFingerprint && !sameGitState(expectedFingerprint, fingerprint))) {
+        return emptyEvidence();
+    }
+    const next = evidenceForFingerprint(evidenceBySession.get(key), fingerprint);
     for (const category of categories) {
         next[category] = true;
     }
     next.updatedAt = new Date().toISOString();
-    evidenceBySession.set(key, next);
-    const scopeKey = evidenceScopeKey(directory);
-    if (scopeKey) {
-        const scoped = {
-            ...worktreeValidationEvidence(directory),
-        };
-        for (const category of categories) {
-            scoped[category] = true;
-        }
-        scoped.updatedAt = next.updatedAt;
-        evidenceByWorktree.set(scopeKey, scoped);
+    const persisted = readPersistedEvidence(fingerprint);
+    const scoped = evidenceForFingerprint(persisted.worktrees[fingerprint.root], fingerprint);
+    for (const category of categories) {
+        scoped[category] = true;
     }
-    writePersistedEvidence(directory);
+    scoped.updatedAt = next.updatedAt;
+    persisted.worktrees[fingerprint.root] = { fingerprint, evidence: scoped };
+    writePersistedEvidence(fingerprint, persisted);
+    evidenceBySession.set(key, { fingerprint, evidence: next });
     return { ...next };
 }
-// Clears evidence state for one session.
 export function clearValidationEvidence(sessionId) {
     const key = sessionId.trim();
-    if (!key) {
-        return;
+    if (key) {
+        evidenceBySession.delete(key);
     }
-    evidenceBySession.delete(key);
-    const persisted = readPersistedEvidence(process.cwd());
-    delete persisted.sessions[key];
-    const filePath = evidenceFilePath(process.cwd());
-    mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, JSON.stringify(persisted, null, 2) + "\n", "utf-8");
 }
-// Returns missing marker list based on current ledger evidence.
-export function missingValidationMarkers(sessionId, markers) {
-    return computeMissing(validationEvidence(sessionId), markers);
+export function missingValidationMarkers(sessionId, markers, directory = "") {
+    return computeMissing(validationEvidence(sessionId, directory), markers);
 }
-// Returns validation status across session and optional worktree fallback.
 export function validationEvidenceStatus(sessionId, markers, directory = "") {
-    const sessionSnapshot = validationEvidence(sessionId);
+    const fingerprint = captureGitStateFingerprint(directory);
+    if (!fingerprint) {
+        return { missing: [...markers], source: "none" };
+    }
+    const sessionSnapshot = evidenceForFingerprint(evidenceBySession.get(sessionId.trim()), fingerprint);
     const sessionMissing = computeMissing(sessionSnapshot, markers);
     if (sessionMissing.length === 0) {
         return { missing: [], source: "session" };
     }
-    const worktreeSnapshot = worktreeValidationEvidence(directory);
+    const worktreeSnapshot = evidenceForFingerprint(readPersistedEvidence(fingerprint).worktrees[fingerprint.root], fingerprint);
     const worktreeMissing = computeMissing(worktreeSnapshot, markers);
-    if (worktreeMissing.length === 0 && directory.trim()) {
+    if (worktreeMissing.length === 0) {
         return { missing: [], source: "worktree" };
     }
     const merged = mergeEvidence(sessionSnapshot, worktreeSnapshot);
     const mergedMissing = computeMissing(merged, markers);
-    if (mergedMissing.length === 0 && directory.trim()) {
-        return { missing: [], source: "session+worktree" };
-    }
-    return { missing: mergedMissing, source: "none" };
+    return mergedMissing.length === 0
+        ? { missing: [], source: "session+worktree" }
+        : { missing: mergedMissing, source: "none" };
 }
+export { captureGitStateFingerprint, sameGitState };

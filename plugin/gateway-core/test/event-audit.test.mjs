@@ -180,7 +180,7 @@ test("gateway event audit writes command.execute.after dispatch entries", async 
       (item) => item.reason_code === "command_execute_after_dispatch",
     )
     assert.equal(dispatch?.event_type, "command.execute.after")
-    assert.equal(dispatch?.command, "gateway")
+    assert.equal(dispatch?.command, "[REDACTED]")
   } finally {
     if (previous === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

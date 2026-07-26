@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execSync } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -12,6 +12,10 @@ test("integration: delegated task completion, validation evidence, DONE proof, a
   const directory = mkdtempSync(join(tmpdir(), "gateway-delegated-pr-readiness-"))
   try {
     execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    execSync("git config user.email delegated@example.invalid", { cwd: directory })
+    execSync("git config user.name 'Delegated Test'", { cwd: directory })
+    writeFileSync(join(directory, ".gitignore"), ".opencode/*\n")
+    execSync("git add .gitignore && git commit -qm fixture", { cwd: directory })
 
     const plugin = GatewayCorePlugin({
       directory,
@@ -136,22 +140,28 @@ test("integration: delegated task completion, validation evidence, DONE proof, a
       /Missing validation evidence/i,
     )
 
+    const lintCallID = "delegated-lint"
+    const lintOutput = { args: { command: "npm run lint" } }
     await plugin["tool.execute.before"](
-      { tool: "bash", sessionID },
-      { args: { command: "npm run lint" } },
+      { tool: "bash", sessionID, callID: lintCallID },
+      lintOutput,
     )
     await plugin["tool.execute.after"](
-      { tool: "bash", sessionID },
-      { output: { stdout: "lint passed", stderr: "" } },
+      { tool: "bash", sessionID, callID: lintCallID, args: { command: lintOutput.args.command } },
+      { output: "lint passed", metadata: { exit: 0, output: "lint passed" } },
     )
 
+    const testCallID = "delegated-test"
+    const testOutput = {
+      args: { command: "node --test plugin/gateway-core/test/pr-readiness-guard-hook.test.mjs" },
+    }
     await plugin["tool.execute.before"](
-      { tool: "bash", sessionID },
-      { args: { command: "node --test plugin/gateway-core/test/pr-readiness-guard-hook.test.mjs" } },
+      { tool: "bash", sessionID, callID: testCallID },
+      testOutput,
     )
     await plugin["tool.execute.after"](
-      { tool: "bash", sessionID },
-      { output: { stdout: "tests passed", stderr: "" } },
+      { tool: "bash", sessionID, callID: testCallID, args: { command: testOutput.args.command } },
+      { output: "tests passed", metadata: { exit: 0, output: "tests passed" } },
     )
 
     const validatedDone = { output: { stdout: "ready\n<promise>DONE</promise>", stderr: "" } }

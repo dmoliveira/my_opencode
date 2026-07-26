@@ -78,6 +78,17 @@ def compose_plugin_entries(
     return selected + unknown_entries
 
 
+def remove_retired_plugin_entries(
+    current_entries: list[Any], aliases: list[str]
+) -> list[Any]:
+    target_specs = {RETIRED_PLUGINS[alias] for alias in aliases}
+    return [
+        entry
+        for entry in current_entries
+        if plugin_entry_spec(entry) not in target_specs
+    ]
+
+
 def usage() -> int:
     print(
         "usage: /plugin status | /plugin doctor [--json] | /plugin setup-keys | /plugin profile <lean|stable|experimental> | /plugin enable <name|all> | /plugin disable <name|all>"
@@ -232,8 +243,15 @@ def main(argv: list[str]) -> int:
     if action != "disable":
         return usage()
 
-    set_plugins(data, compose_plugin_entries(plugin_entries, []))
-    save_config(data)
+    if target == "all":
+        updated_entries = compose_plugin_entries(plugin_entries, [])
+        set_plugins(data, updated_entries)
+        save_config(data)
+    else:
+        updated_entries = remove_retired_plugin_entries(plugin_entries, targets)
+        if updated_entries != plugin_entries:
+            set_plugins(data, updated_entries)
+            save_config(data)
     for alias in targets:
         print(f"{alias}: absent [retired]")
     if target == "all":

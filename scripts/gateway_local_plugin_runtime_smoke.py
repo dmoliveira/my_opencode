@@ -9,6 +9,7 @@ import re
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import tempfile
 import time
@@ -21,6 +22,21 @@ DEFAULT_CONFIG_HOME = Path.home() / ".config" / "opencode"
 PLUGIN_DIR = REPO_ROOT / "plugin" / "gateway-core"
 WRAPPER = REPO_ROOT / "scripts" / "opencode_session.sh"
 RUNTIME_ROOT = REPO_ROOT / ".opencode" / "runtime-plugin-smoke"
+
+
+def ensure_private_directory(path: Path) -> None:
+    try:
+        path.mkdir(parents=True, mode=0o700, exist_ok=False)
+    except FileExistsError:
+        pass
+    metadata = path.lstat()
+    if (
+        path.is_symlink()
+        or not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+    ):
+        raise PermissionError("runtime smoke directory must be owner-only")
 
 
 def parse_args() -> argparse.Namespace:
@@ -182,6 +198,7 @@ def isolated_probe_env(home_dir: Path, audit_path: Path) -> dict[str, str]:
 
 
 def collect_direct_result(work_dir: Path, run_timeout: int) -> dict[str, Any]:
+    ensure_private_directory(work_dir)
     home_dir = work_dir / "home"
     project_dir = work_dir / "project"
     config_dir = home_dir / ".config" / "opencode"
@@ -256,6 +273,7 @@ def collect_direct_result(work_dir: Path, run_timeout: int) -> dict[str, Any]:
 
 def collect_tuple_result(work_dir: Path, run_timeout: int) -> dict[str, Any]:
     option_sentinel = "WAVE3_PRIVATE_PLUGIN_OPTION"
+    ensure_private_directory(work_dir)
     home_dir = work_dir / "home"
     project_dir = work_dir / "project"
     config_dir = home_dir / ".config" / "opencode"
@@ -356,6 +374,7 @@ def collect_contract_results(
     outer_root = Path(
         tempfile.mkdtemp(prefix="my-opencode-gateway-contract-")
     ).resolve()
+    ensure_private_directory(outer_root)
     started_at = time.monotonic()
     raw_results: list[tuple[str, dict[str, Any]]] = []
     try:

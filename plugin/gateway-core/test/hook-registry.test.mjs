@@ -13,6 +13,7 @@ import {
   hooksForEvent,
   resolveHookConstructionPlan,
   resolveHookOrder,
+  validateHookDependencyGraph,
 } from "../dist/hooks/registry.js"
 import { createStaleLoopExpiryGuardHook } from "../dist/hooks/stale-loop-expiry-guard/index.js"
 import { createToolOutputTruncatorHook } from "../dist/hooks/tool-output-truncator/index.js"
@@ -75,6 +76,68 @@ test("hook construction plan excludes consumers with disabled dependencies", () 
       dependencyId: "stop-continuation-guard",
     },
   ])
+})
+
+test("hook construction plan moves explicit later dependencies before consumers", () => {
+  const plan = resolveHookConstructionPlan(
+    [
+      "continuation",
+      "keyword-detector",
+      "stop-continuation-guard",
+      "done-proof-enforcer",
+      "pr-readiness-guard",
+      "pr-body-evidence-guard",
+      "validation-evidence-ledger",
+    ],
+    [],
+  )
+  assert.deepEqual(plan.order, [
+    "stop-continuation-guard",
+    "keyword-detector",
+    "continuation",
+    "validation-evidence-ledger",
+    "done-proof-enforcer",
+    "pr-readiness-guard",
+    "pr-body-evidence-guard",
+  ])
+  assert.equal(new Set(plan.order).size, plan.order.length)
+})
+
+test("hook construction plan blocks every validation evidence consumer", () => {
+  const plan = resolveHookConstructionPlan(
+    ["done-proof-enforcer", "pr-readiness-guard", "pr-body-evidence-guard"],
+    ["validation-evidence-ledger"],
+  )
+  assert.deepEqual(plan.order, [])
+  assert.deepEqual(plan.blocked, [
+    { hookId: "done-proof-enforcer", dependencyId: "validation-evidence-ledger" },
+    { hookId: "pr-readiness-guard", dependencyId: "validation-evidence-ledger" },
+    { hookId: "pr-body-evidence-guard", dependencyId: "validation-evidence-ledger" },
+  ])
+})
+
+test("implicit priority order moves only dependencies before consumers", () => {
+  const hooks = [
+    { ...testHook("continuation"), priority: 1 },
+    { ...testHook("think-mode"), priority: 2 },
+    { ...testHook("keyword-detector"), priority: 4 },
+    { ...testHook("stop-continuation-guard"), priority: 5 },
+  ]
+  assert.deepEqual(
+    resolveHookOrder(hooks, [], []).map((hook) => hook.id),
+    ["stop-continuation-guard", "keyword-detector", "continuation", "think-mode"],
+  )
+})
+
+test("hook dependency graph rejects unknown endpoints and cycles", () => {
+  assert.throws(
+    () => validateHookDependencyGraph({ a: ["missing"] }, ["a"]),
+    /unknown gateway hook dependency endpoint: a -> missing/,
+  )
+  assert.throws(
+    () => validateHookDependencyGraph({ a: ["b"], b: ["a"] }, ["a", "b"]),
+    /gateway hook dependency cycle detected/,
+  )
 })
 
 test("hooksForEvent preserves explicit subscriptions and legacy wildcards", () => {

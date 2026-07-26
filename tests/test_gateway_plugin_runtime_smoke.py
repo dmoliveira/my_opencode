@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import stat
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,7 @@ class GatewayPluginRuntimeSmokeTest(unittest.TestCase):
 
         def fake_run(command, *, cwd, env, timeout):
             audit_path = Path(env["MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH"])
+            self.assertEqual(0o700, stat.S_IMODE(audit_path.parent.stat().st_mode))
             audit_path.write_text(
                 json.dumps(
                     {
@@ -54,6 +56,7 @@ class GatewayPluginRuntimeSmokeTest(unittest.TestCase):
         def fake_run(command, *, cwd, env, timeout):
             self.assertLessEqual(timeout, 45)
             audit_path = Path(env["MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH"])
+            self.assertEqual(0o700, stat.S_IMODE(audit_path.parent.stat().st_mode))
             audit_path.write_text(
                 json.dumps(
                     {
@@ -108,6 +111,32 @@ class GatewayPluginRuntimeSmokeTest(unittest.TestCase):
             self.assertTrue(
                 all(item["reason"] == "contract_aggregate_timeout" for item in results)
             )
+
+    def test_private_probe_directory_rejects_permissive_parent(self) -> None:
+        module = importlib.import_module("gateway_local_plugin_runtime_smoke")
+        with tempfile.TemporaryDirectory() as tmp:
+            work_dir = Path(tmp) / "permissive"
+            work_dir.mkdir(mode=0o755)
+            work_dir.chmod(0o755)
+
+            with self.assertRaisesRegex(PermissionError, "owner-only"):
+                module.ensure_private_directory(work_dir)
+
+    def test_secret_smoke_hardens_owned_output_and_rejects_symlinks(self) -> None:
+        module = importlib.import_module("gateway_secret_redaction_live_smoke")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output = root / "output"
+            output.mkdir(mode=0o755)
+            output.chmod(0o755)
+
+            module.prepare_private_output_dir(output)
+
+            self.assertEqual(0o700, stat.S_IMODE(output.stat().st_mode))
+            linked = root / "linked"
+            linked.symlink_to(output, target_is_directory=True)
+            with self.assertRaisesRegex(PermissionError, "must not be a symlink"):
+                module.prepare_private_output_dir(linked)
 
 
 if __name__ == "__main__":

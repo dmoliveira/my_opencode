@@ -25,7 +25,8 @@ test("safe create hook returns null and audits factory failures", () => {
     const audit = readFileSync(gatewayEventAuditPath(directory), "utf8");
     assert.match(audit, /"hook":"failing-hook"/);
     assert.match(audit, /"reason_code":"hook_creation_failed"/);
-    assert.match(audit, /"error_message":"boom"/);
+    assert.match(audit, /"error_message":"\[REDACTED\]"/);
+    assert.doesNotMatch(audit, /boom/);
   } finally {
     process.stderr.write = previousWrite;
     if (previousAudit === undefined) {

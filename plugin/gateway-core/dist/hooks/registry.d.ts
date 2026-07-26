@@ -5,6 +5,7 @@ export interface GatewayHook {
     events?: readonly string[];
     event(type: string, payload: unknown): Promise<void>;
 }
+export declare function validateHookDependencyGraph(dependencies?: Readonly<Record<string, readonly string[]>>, knownHookIds?: readonly string[]): void;
 export interface HookDependencyBlock {
     hookId: string;
     dependencyId: string;

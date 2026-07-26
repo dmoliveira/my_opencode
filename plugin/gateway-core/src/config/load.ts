@@ -3,7 +3,20 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_GATEWAY_CONFIG, type GatewayConfig } from "./schema.js";
+import {
+  GATEWAY_LLM_DECISION_HOOK_IDS,
+  GATEWAY_LLM_DECISION_MODES,
+  type GatewayLlmDecisionMode,
+} from "../llm-decision-bindings.js";
+import {
+  DEFAULT_GATEWAY_CONFIG,
+  DEFAULT_GATEWAY_HOOK_ORDER,
+  type GatewayConfig,
+} from "./schema.js";
+
+const KNOWN_GATEWAY_HOOK_IDS = new Set(DEFAULT_GATEWAY_HOOK_ORDER);
+const LLM_DECISION_HOOK_IDS = new Set(GATEWAY_LLM_DECISION_HOOK_IDS);
+const LLM_DECISION_MODES = new Set<string>(GATEWAY_LLM_DECISION_MODES);
 
 // Coerces unknown value into a normalized string array.
 function stringList(value: unknown): string[] {
@@ -37,7 +50,10 @@ function stringRecord(value: unknown): Record<string, string> {
   }
   return Object.fromEntries(
     Object.entries(value)
-      .map(([key, entryValue]) => [String(key ?? "").trim(), String(entryValue ?? "").trim()])
+      .map(([key, entryValue]) => [
+        String(key ?? "").trim(),
+        String(entryValue ?? "").trim(),
+      ])
       .filter(([key, entryValue]) => key.length > 0 && entryValue.length > 0),
   );
 }
@@ -50,6 +66,44 @@ function recordValue(value: unknown): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function optionalConfigRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (value === undefined) {
+    return {};
+  }
+  if (!isRecord(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value;
+}
+
+function exactHookIdentityList(value: unknown, label: string): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be an array of exact gateway hook ids`);
+  }
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string" || !item || item !== item.trim()) {
+      throw new Error(`${label} contains a non-exact gateway hook id`);
+    }
+    if (!KNOWN_GATEWAY_HOOK_IDS.has(item)) {
+      throw new Error(`${label} contains unknown gateway hook id: ${item}`);
+    }
+    if (seen.has(item)) {
+      throw new Error(`${label} contains duplicate gateway hook id: ${item}`);
+    }
+    seen.add(item);
+    result.push(item);
+  }
+  return result;
 }
 
 function deepMergeRecords(
@@ -147,7 +201,9 @@ export function loadGatewayConfigSourceWithMeta(
         }
       } catch (error) {
         meta.error =
-          error instanceof Error ? error.message : String(error ?? "unknown_error");
+          error instanceof Error
+            ? error.message
+            : String(error ?? "unknown_error");
         sidecar = {};
       }
     }
@@ -338,17 +394,18 @@ function durationThreshold(value: unknown, fallback: string): string {
 
 function llmDecisionMode(
   value: unknown,
-  fallback: "disabled" | "shadow" | "assist" | "enforce",
-): "disabled" | "shadow" | "assist" | "enforce" {
-  if (
-    value === "disabled" ||
-    value === "shadow" ||
-    value === "assist" ||
-    value === "enforce"
-  ) {
-    return value;
+  fallback: GatewayLlmDecisionMode,
+  label = "llmDecisionRuntime.mode",
+): GatewayLlmDecisionMode {
+  if (value === undefined) {
+    return fallback;
   }
-  return fallback;
+  if (typeof value === "string" && LLM_DECISION_MODES.has(value)) {
+    return value as GatewayLlmDecisionMode;
+  }
+  throw new Error(
+    `${label} must be one of: ${GATEWAY_LLM_DECISION_MODES.join(", ")}`,
+  );
 }
 
 function outcomeLearnerMode(
@@ -363,17 +420,25 @@ function outcomeLearnerMode(
 
 function llmDecisionHookModes(
   value: unknown,
-): Record<string, "disabled" | "shadow" | "assist" | "enforce"> {
-  if (!value || typeof value !== "object") {
+): Record<string, GatewayLlmDecisionMode> {
+  if (value === undefined) {
     return {};
   }
-  const result: Record<string, "disabled" | "shadow" | "assist" | "enforce"> =
-    {};
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const mode = llmDecisionMode(raw, "disabled");
-    if (key.trim() && mode !== "disabled") {
-      result[key.trim()] = mode;
+  if (!isRecord(value)) {
+    throw new Error("llmDecisionRuntime.hookModes must be an object");
+  }
+  const result: Record<string, GatewayLlmDecisionMode> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!LLM_DECISION_HOOK_IDS.has(key)) {
+      throw new Error(
+        `llmDecisionRuntime.hookModes contains unknown LLM hook id: ${key}`,
+      );
     }
+    result[key] = llmDecisionMode(
+      raw,
+      "disabled",
+      `llmDecisionRuntime.hookModes.${key}`,
+    );
   }
   return result;
 }
@@ -382,10 +447,7 @@ function llmDecisionHookModes(
 export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source =
     raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const hooksSource =
-    source.hooks && typeof source.hooks === "object"
-      ? (source.hooks as Record<string, unknown>)
-      : {};
+  const hooksSource = optionalConfigRecord(source.hooks, "hooks");
   const autopilotSource =
     source.autopilotLoop && typeof source.autopilotLoop === "object"
       ? (source.autopilotLoop as Record<string, unknown>)
@@ -414,8 +476,7 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ? (source.compactionContextInjector as Record<string, unknown>)
       : {};
   const contextInjectorSource =
-    source.contextInjector &&
-    typeof source.contextInjector === "object"
+    source.contextInjector && typeof source.contextInjector === "object"
       ? (source.contextInjector as Record<string, unknown>)
       : {};
   const globalProcessPressureSource =
@@ -483,10 +544,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     typeof source.adaptiveDelegationPolicy === "object"
       ? (source.adaptiveDelegationPolicy as Record<string, unknown>)
       : {};
-  const llmDecisionRuntimeSource =
-    source.llmDecisionRuntime && typeof source.llmDecisionRuntime === "object"
-      ? (source.llmDecisionRuntime as Record<string, unknown>)
-      : {};
+  const llmDecisionRuntimeSource = optionalConfigRecord(
+    source.llmDecisionRuntime,
+    "llmDecisionRuntime",
+  );
   const validationEvidenceLedgerSource =
     source.validationEvidenceLedger &&
     typeof source.validationEvidenceLedger === "object"
@@ -778,8 +839,12 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ? semanticOutputSummarizerSource.enabled
       : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled;
   const hookOrder = semanticSummarizerHookOrder(
-    stringList(hooksSource.order),
+    exactHookIdentityList(hooksSource.order, "hooks.order"),
     semanticOutputSummarizerEnabled,
+  );
+  const disabledHooks = exactHookIdentityList(
+    hooksSource.disabled,
+    "hooks.disabled",
   );
 
   return {
@@ -788,7 +853,7 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof hooksSource.enabled === "boolean"
           ? hooksSource.enabled
           : DEFAULT_GATEWAY_CONFIG.hooks.enabled,
-      disabled: stringList(hooksSource.disabled),
+      disabled: disabledHooks,
       order: hookOrder,
     },
     autopilotLoop: {
@@ -1099,13 +1164,17 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? sessionRuntimeSystemContextSource.enabled
           : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.enabled,
       injectSessionIdContext:
-        typeof sessionRuntimeSystemContextSource.injectSessionIdContext === "boolean"
+        typeof sessionRuntimeSystemContextSource.injectSessionIdContext ===
+        "boolean"
           ? sessionRuntimeSystemContextSource.injectSessionIdContext
-          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdContext,
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext
+              .injectSessionIdContext,
       injectSessionIdWhenConciseModeOnly:
-        typeof sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly === "boolean"
+        typeof sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly ===
+        "boolean"
           ? sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly
-          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly,
+          : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext
+              .injectSessionIdWhenConciseModeOnly,
     },
     conciseMode: {
       enabled:

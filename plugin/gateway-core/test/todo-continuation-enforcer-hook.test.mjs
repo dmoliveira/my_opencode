@@ -1126,7 +1126,7 @@ test("todo-continuation-enforcer tolerates LLM runtime failures", async () => {
     const failed = events.find((entry) => entry.reason_code === "llm_todo_continuation_decision_failed")
     assert.ok(failed)
     assert.equal(failed.trace_id, "trace-error")
-    assert.match(String(failed.error ?? ""), /decision runtime unavailable/)
+    assert.equal(failed.error, "[REDACTED]")
   } finally {
     if (previousAudit === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

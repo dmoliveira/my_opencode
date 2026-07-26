@@ -75,6 +75,7 @@ interface GatewayContext {
 interface ToolBeforeInput {
     tool: string;
     sessionID?: string;
+    callID?: string;
 }
 interface ToolBeforeOutput {
     args?: {
@@ -84,6 +85,10 @@ interface ToolBeforeOutput {
 interface ToolAfterInput {
     tool: string;
     sessionID?: string;
+    callID?: string;
+    args?: {
+        command?: string;
+    };
 }
 interface CommandBeforeInput {
     command: string;

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process"
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -26,6 +27,35 @@ if (failBelow !== null && (!Number.isFinite(failBelow) || failBelow < 0 || failB
 }
 
 const results = []
+
+function createGitDirectory(prefix = "gateway-workflow-") {
+  const directory = mkdtempSync(join(tmpdir(), prefix))
+  execFileSync("git", ["init", "-q"], { cwd: directory })
+  execFileSync("git", ["config", "user.email", "gateway@example.invalid"], { cwd: directory })
+  execFileSync("git", ["config", "user.name", "Gateway Scenario"], { cwd: directory })
+  writeFileSync(join(directory, ".gitignore"), ".opencode/*\n")
+  writeFileSync(join(directory, "tracked.txt"), "baseline\n")
+  execFileSync("git", ["add", ".gitignore", "tracked.txt"], { cwd: directory })
+  execFileSync("git", ["commit", "-qm", "fixture"], { cwd: directory })
+  return directory
+}
+
+let validationCallSequence = 0
+
+async function executeValidation(target, sessionID, command, output = "") {
+  const callID = `workflow-validation-${++validationCallSequence}`
+  const beforeOutput = { args: { command } }
+  await target["tool.execute.before"]({ tool: "bash", sessionID, callID }, beforeOutput)
+  await target["tool.execute.after"](
+    {
+      tool: "bash",
+      sessionID,
+      callID,
+      args: { command: beforeOutput.args.command },
+    },
+    { output, metadata: { exit: 0, output, truncated: false } },
+  )
+}
 
 function decisionRuntime(char, meaning, mode = "assist") {
   return {
@@ -498,7 +528,7 @@ function decisionRuntime(char, meaning, mode = "assist") {
 }
 
 {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-"))
+  const directory = createGitDirectory()
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -508,15 +538,25 @@ function decisionRuntime(char, meaning, mode = "assist") {
         doneProofEnforcer: { enabled: true, requiredMarkers: ["lint", "test", "build"], requireLedgerEvidence: true, allowTextFallback: false },
       },
     })
-    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "workflow-done-2" }, { args: { command: "npm run lint" } })
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "workflow-done-2" }, { output: "Lint passed" })
-    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "workflow-done-2" }, { args: { command: "npm test" } })
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "workflow-done-2" }, { output: "All tests passed" })
-    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "workflow-done-2" }, { args: { command: "npm run build" } })
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "workflow-done-2" }, { output: "Build passed" })
-    await plugin["tool.execute.before"]({ tool: "bash", sessionID: "workflow-done-2" }, { args: { command: "git status" } })
+    await executeValidation(plugin, "workflow-done-2", "npm run lint", "Lint passed")
+    await executeValidation(plugin, "workflow-done-2", "npm test", "All tests passed")
+    await executeValidation(plugin, "workflow-done-2", "npm run build", "Build passed")
+    const doneCallID = `workflow-validation-${++validationCallSequence}`
+    const doneBeforeOutput = { args: { command: "git status" } }
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "workflow-done-2", callID: doneCallID },
+      doneBeforeOutput,
+    )
     const output = { output: "Ready to finish\n<promise>DONE</promise>" }
-    await plugin["tool.execute.after"]({ tool: "bash", sessionID: "workflow-done-2" }, output)
+    await plugin["tool.execute.after"](
+      {
+        tool: "bash",
+        sessionID: "workflow-done-2",
+        callID: doneCallID,
+        args: { command: doneBeforeOutput.args.command },
+      },
+      { ...output, metadata: { exit: 0, output: output.output, truncated: false } },
+    )
     results.push({ id: "done-proof-complete", workflow: "done-proof-enforcer", requestType: "complete_proof", description: "done promise after required validation evidence", expectedAction: "keep_done", actualAction: output.output.includes("PENDING_VALIDATION") ? "pending_validation" : "keep_done", correct: !output.output.includes("PENDING_VALIDATION") })
   } finally {
     rmSync(directory, { recursive: true, force: true })

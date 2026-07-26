@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { basename } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 export function resolveLlmDecisionRuntimeConfigForHook(config, hookId) {
-    const override = config.hookModes[String(hookId ?? "").trim()] || config.hookModes[String(hookId ?? "").trim().toLowerCase()];
+    const override = config.hookModes[hookId];
     if (!override || override === config.mode) {
         return config;
     }

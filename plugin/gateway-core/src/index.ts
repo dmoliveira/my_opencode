@@ -271,6 +271,7 @@ interface GatewayContext {
 interface ToolBeforeInput {
   tool: string;
   sessionID?: string;
+  callID?: string;
 }
 
 // Declares minimal slash command mutable output shape.
@@ -282,6 +283,8 @@ interface ToolBeforeOutput {
 interface ToolAfterInput {
   tool: string;
   sessionID?: string;
+  callID?: string;
+  args?: { command?: string };
 }
 
 // Declares minimal command execute before input shape.
@@ -1379,6 +1382,9 @@ export default function GatewayCorePlugin(
   const hooks = configuredHooks(ctx, runtime);
   const noisyDispatchSampleCounters = new Map<string, number>();
   const noisyDispatchSampleRate = dispatchSampleRate();
+  const validationEvidenceLedger = hooks.find(
+    (hook) => hook.id === "validation-evidence-ledger",
+  );
 
   function shouldWriteDispatchAudit(
     reasonCode: string,
@@ -1442,7 +1448,9 @@ export default function GatewayCorePlugin(
     const selectedHooks = hooksForEvent(hooks, "tool.execute.before");
     const executedHooks: GatewayHook[] = [];
     try {
-      for (const hook of selectedHooks) {
+      for (const hook of selectedHooks.filter(
+        (candidate) => candidate.id !== "validation-evidence-ledger",
+      )) {
         const result = await dispatchGatewayHookEvent({
           hook,
           eventType: "tool.execute.before",
@@ -1456,6 +1464,23 @@ export default function GatewayCorePlugin(
           continue;
         }
         executedHooks.push(hook);
+      }
+      if (
+        validationEvidenceLedger &&
+        selectedHooks.includes(validationEvidenceLedger)
+      ) {
+        const result = await dispatchGatewayHookEvent({
+          hook: validationEvidenceLedger,
+          eventType: "tool.execute.before",
+          payload: { input, output, directory },
+          directory,
+        });
+        if (!result.ok && (result.critical || result.blocked)) {
+          throw result.error;
+        }
+        if (result.ok) {
+          executedHooks.push(validationEvidenceLedger);
+        }
       }
     } catch (error) {
       writeGatewayEventAudit(directory, {
@@ -1560,7 +1585,24 @@ export default function GatewayCorePlugin(
       has_output:
         typeof output.output === "string" && output.output.trim().length > 0,
     });
-    for (const hook of hooksForEvent(hooks, "tool.execute.after")) {
+    const selectedHooks = hooksForEvent(hooks, "tool.execute.after");
+    if (
+      validationEvidenceLedger &&
+      selectedHooks.includes(validationEvidenceLedger)
+    ) {
+      const result = await dispatchGatewayHookEvent({
+        hook: validationEvidenceLedger,
+        eventType: "tool.execute.after",
+        payload: { input, output, directory },
+        directory,
+      });
+      if (!result.ok && (result.critical || result.blocked)) {
+        throw result.error;
+      }
+    }
+    for (const hook of selectedHooks.filter(
+      (candidate) => candidate.id !== "validation-evidence-ledger",
+    )) {
       const result = await dispatchGatewayHookEvent({
         hook,
         eventType: "tool.execute.after",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -6,6 +7,29 @@ import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
 import { createPrBodyEvidenceGuardHook } from "../dist/hooks/pr-body-evidence-guard/index.js"
+
+let validationCallSequence = 0
+
+function createGitDirectory() {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  execFileSync("git", ["init", "-q"], { cwd: directory })
+  execFileSync("git", ["config", "user.email", "pr-body@example.invalid"], { cwd: directory })
+  execFileSync("git", ["config", "user.name", "PR Body Test"], { cwd: directory })
+  writeFileSync(join(directory, ".gitignore"), ".opencode/*\n")
+  execFileSync("git", ["add", ".gitignore"], { cwd: directory })
+  execFileSync("git", ["commit", "-qm", "fixture"], { cwd: directory })
+  return directory
+}
+
+async function recordValidation(plugin, sessionID, command, output = "") {
+  const callID = `pr-body-validation-${++validationCallSequence}`
+  const before = { args: { command } }
+  await plugin["tool.execute.before"]({ tool: "bash", sessionID, callID }, before)
+  await plugin["tool.execute.after"](
+    { tool: "bash", sessionID, callID, args: { command: before.args.command } },
+    { output, metadata: { exit: 0, output, truncated: false } },
+  )
+}
 
 test("pr-body-evidence-guard blocks PR create when body is missing required sections", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
@@ -104,7 +128,7 @@ test("pr-body-evidence-guard inspects body file content", async () => {
 })
 
 test("pr-body-evidence-guard accepts node --test evidence from the ledger", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  const directory = createGitDirectory()
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -133,13 +157,11 @@ test("pr-body-evidence-guard accepts node --test evidence from the ledger", asyn
       },
     })
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-pr-body-node-test" },
-      { args: { command: "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs" } },
-    )
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-pr-body-node-test" },
-      { output: "tests passed" },
+    await recordValidation(
+      plugin,
+      "session-pr-body-node-test",
+      "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs",
+      "tests passed",
     )
 
     await plugin["tool.execute.before"](
@@ -152,7 +174,7 @@ test("pr-body-evidence-guard accepts node --test evidence from the ledger", asyn
 })
 
 test("pr-body-evidence-guard treats generic validation marker as satisfied by recorded test evidence", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  const directory = createGitDirectory()
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -181,13 +203,11 @@ test("pr-body-evidence-guard treats generic validation marker as satisfied by re
       },
     })
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-pr-body-validation-marker" },
-      { args: { command: "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs" } }
-    )
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-pr-body-validation-marker" },
-      { output: "tests passed" }
+    await recordValidation(
+      plugin,
+      "session-pr-body-validation-marker",
+      "node --test plugin/gateway-core/test/todoread-cadence-reminder-hook.test.mjs",
+      "tests passed",
     )
 
     await plugin["tool.execute.before"](
@@ -243,7 +263,7 @@ test("pr-body-evidence-guard applies the same body checks to gh api PR creation"
 })
 
 test("pr-body-evidence-guard accepts validation evidence from another session in the same worktree", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  const directory = createGitDirectory()
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -272,13 +292,11 @@ test("pr-body-evidence-guard accepts validation evidence from another session in
       },
     })
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-pr-body-a" },
-      { args: { command: "node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs" } },
-    )
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-pr-body-a" },
-      { output: "tests passed" },
+    await recordValidation(
+      plugin,
+      "session-pr-body-a",
+      "node --test plugin/gateway-core/test/pr-body-evidence-guard-hook.test.mjs",
+      "tests passed",
     )
 
     await plugin["tool.execute.before"](
@@ -291,7 +309,7 @@ test("pr-body-evidence-guard accepts validation evidence from another session in
 })
 
 test("pr-body-evidence-guard accepts make validate lint evidence from structured bash output", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  const directory = createGitDirectory()
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -320,13 +338,11 @@ test("pr-body-evidence-guard accepts make validate lint evidence from structured
       },
     })
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-pr-body-make-validate" },
-      { args: { command: "make validate" } },
-    )
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-pr-body-make-validate" },
-      { output: { stdout: "validate passed", stderr: "" } },
+    await recordValidation(
+      plugin,
+      "session-pr-body-make-validate",
+      "make validate",
+      "validate passed",
     )
 
     await plugin["tool.execute.before"](
@@ -339,7 +355,7 @@ test("pr-body-evidence-guard accepts make validate lint evidence from structured
 })
 
 test("pr-body-evidence-guard accepts uvx ruff lint evidence from structured bash output", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-body-"))
+  const directory = createGitDirectory()
   try {
     const plugin = GatewayCorePlugin({
       directory,
@@ -368,13 +384,11 @@ test("pr-body-evidence-guard accepts uvx ruff lint evidence from structured bash
       },
     })
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-pr-body-uvx-ruff" },
-      { args: { command: "uvx ruff check ." } },
-    )
-    await plugin["tool.execute.after"](
-      { tool: "bash", sessionID: "session-pr-body-uvx-ruff" },
-      { output: { stdout: "All checks passed!", stderr: "" } },
+    await recordValidation(
+      plugin,
+      "session-pr-body-uvx-ruff",
+      "uvx ruff check .",
+      "All checks passed!",
     )
 
     await plugin["tool.execute.before"](

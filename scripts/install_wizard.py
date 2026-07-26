@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
+import copy
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +38,41 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _assert_owned_by_current_user(state: os.stat_result, label: str) -> None:
+    if hasattr(os, "getuid") and state.st_uid != os.getuid():
+        raise OSError(f"{label} is not owned by the current user")
+
+
+def preflight_state_path(path: Path | None = None) -> os.stat_result | None:
+    target = path or STATE_PATH
+    parent = target.parent
+    try:
+        parent_state = parent.lstat()
+    except FileNotFoundError:
+        parent.mkdir(parents=True, mode=0o700)
+        parent_state = parent.lstat()
+    if not stat.S_ISDIR(parent_state.st_mode) or stat.S_ISLNK(parent_state.st_mode):
+        raise OSError(f"unsafe install state parent: {parent}")
+    _assert_owned_by_current_user(parent_state, "install state parent")
+    if stat.S_IMODE(parent_state.st_mode) & 0o022:
+        raise OSError(f"writable install state parent: {parent}")
+
+    try:
+        target_state = target.lstat()
+    except FileNotFoundError:
+        return None
+    if (
+        not stat.S_ISREG(target_state.st_mode)
+        or stat.S_ISLNK(target_state.st_mode)
+        or target_state.st_nlink != 1
+    ):
+        raise OSError(f"unsafe install state file: {target}")
+    _assert_owned_by_current_user(target_state, "install state file")
+    if stat.S_IMODE(target_state.st_mode) & 0o022:
+        raise OSError(f"writable install state file: {target}")
+    return target_state
+
+
 def run_step(
     args: list[str], *, env: dict | None = None, cwd: Path | None = None
 ) -> int:
@@ -58,19 +96,75 @@ def run_repo_script(name: str, *args: str) -> int:
 
 
 def load_state() -> dict:
-    if not STATE_PATH.exists():
+    state = preflight_state_path()
+    if state is None:
         return {"managed": {}, "profiles": {}}
-    return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(STATE_PATH, flags)
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or opened.st_dev != state.st_dev
+            or opened.st_ino != state.st_ino
+        ):
+            raise OSError(f"install state changed during validation: {STATE_PATH}")
+        _assert_owned_by_current_user(opened, "install state file")
+        if stat.S_IMODE(opened.st_mode) & 0o022:
+            raise OSError(f"writable install state file: {STATE_PATH}")
+        with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+            descriptor = -1
+            payload = json.load(handle)
+            after_read = os.fstat(handle.fileno())
+            if (
+                after_read.st_dev != opened.st_dev
+                or after_read.st_ino != opened.st_ino
+                or after_read.st_nlink != opened.st_nlink
+                or after_read.st_mode != opened.st_mode
+                or after_read.st_size != opened.st_size
+                or after_read.st_mtime_ns != opened.st_mtime_ns
+                or after_read.st_ctime_ns != opened.st_ctime_ns
+            ):
+                raise OSError(f"install state changed while reading: {STATE_PATH}")
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if not isinstance(payload, dict):
+        raise ValueError("install state must be a JSON object")
+    return payload
 
 
 def save_state(data: dict) -> None:
-    payload = {
-        "updated_at": now_iso(),
-        "profiles": data.get("profiles", {}),
-        "managed": data.get("managed", {}),
-    }
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    preflight_state_path()
+    payload = dict(data)
+    payload["updated_at"] = now_iso()
+    payload["profiles"] = data.get("profiles", {})
+    payload["managed"] = data.get("managed", {})
+    encoded = (json.dumps(payload, indent=2) + "\n").encode("utf-8")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{STATE_PATH.name}.", suffix=".tmp", dir=STATE_PATH.parent
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = -1
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        preflight_state_path()
+        os.replace(temporary_path, STATE_PATH)
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        directory_descriptor = os.open(STATE_PATH.parent, directory_flags)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        temporary_path.unlink(missing_ok=True)
 
 
 def choose(
@@ -220,9 +314,20 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    state = load_state()
-    prev_profiles = state.get("profiles", {})
-    managed = state.get("managed", {})
+    try:
+        state = load_state()
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: install state preflight failed: {exc}")
+        return 1
+    raw_profiles = state.get("profiles", {})
+    raw_managed = state.get("managed", {})
+    prev_profiles = copy.deepcopy(raw_profiles) if isinstance(raw_profiles, dict) else {}
+    profiles = copy.deepcopy(prev_profiles)
+    managed = copy.deepcopy(raw_managed) if isinstance(raw_managed, dict) else {}
+
+    def is_managed_installed(name: str) -> bool:
+        value = managed.get(name, {})
+        return isinstance(value, dict) and bool(value.get("installed"))
 
     print("my_opencode install wizard")
     print("-------------------------")
@@ -291,97 +396,126 @@ def main(argv: list[str]) -> int:
         opencode_nvim_action = args.opencode_nvim or choose(
             "opencode.nvim integration",
             ["install", "uninstall", "skip"],
-            "install" if managed.get("opencode_nvim", {}).get("installed") else "skip",
+            "install" if is_managed_installed("opencode_nvim") else "skip",
             args.non_interactive,
         )
         openchamber_action = args.openchamber or choose(
             "OpenChamber integration",
             ["install", "uninstall", "skip"],
-            "install" if managed.get("openchamber", {}).get("installed") else "skip",
+            "install" if is_managed_installed("openchamber") else "skip",
             args.non_interactive,
         )
 
     print("\nApplying configuration...")
     failures: list[str] = []
 
-    if apply_plugin_profile(plugin_profile, custom_aliases=custom_plugins) != 0:
-        failures.append("plugin profile")
-    if run_repo_script("mcp_command.py", "profile", mcp_profile) != 0:
-        failures.append("mcp profile")
-    if run_repo_script("policy_command.py", "profile", policy_profile) != 0:
-        failures.append("policy profile")
-    if notify_profile != "skip":
-        if run_repo_script("notify_command.py", "profile", notify_profile) != 0:
-            failures.append("notify profile")
-    if run_repo_script("telemetry_command.py", "profile", telemetry_profile) != 0:
-        failures.append("telemetry profile")
-    if run_repo_script("model_routing_command.py", "set-category", model_profile) != 0:
-        failures.append("model routing profile")
-    if run_repo_script("browser_command.py", "profile", browser_profile) != 0:
-        failures.append("browser profile")
+    def record_failure(label: str) -> None:
+        if label not in failures:
+            failures.append(label)
 
+    plugin_result = apply_plugin_profile(
+        plugin_profile, custom_aliases=custom_plugins
+    )
+    if plugin_result == 0:
+        profiles["plugin"] = plugin_profile
+        profiles["custom_plugins"] = custom_plugins
+    else:
+        record_failure("plugin profile")
+
+    if run_repo_script("mcp_command.py", "profile", mcp_profile) == 0:
+        profiles["mcp"] = mcp_profile
+    else:
+        record_failure("mcp profile")
+    if run_repo_script("policy_command.py", "profile", policy_profile) == 0:
+        profiles["policy"] = policy_profile
+    else:
+        record_failure("policy profile")
+    if notify_profile != "skip":
+        if run_repo_script("notify_command.py", "profile", notify_profile) == 0:
+            profiles["notify"] = notify_profile
+        else:
+            record_failure("notify profile")
+    if run_repo_script("telemetry_command.py", "profile", telemetry_profile) == 0:
+        profiles["telemetry"] = telemetry_profile
+    else:
+        record_failure("telemetry profile")
+    if run_repo_script("model_routing_command.py", "set-category", model_profile) == 0:
+        profiles["model_routing"] = model_profile
+    else:
+        record_failure("model routing profile")
+    if run_repo_script("browser_command.py", "profile", browser_profile) == 0:
+        profiles["browser"] = browser_profile
+    else:
+        record_failure("browser profile")
+
+    post_results: list[int] = []
     if post_profile == "disabled":
-        if run_repo_script("post_session_command.py", "disable") != 0:
-            failures.append("post-session disable")
+        post_results.append(run_repo_script("post_session_command.py", "disable"))
     elif post_profile == "manual-validate":
-        if run_repo_script("post_session_command.py", "enable") != 0:
-            failures.append("post-session enable")
-        if (
+        post_results.append(run_repo_script("post_session_command.py", "enable"))
+        post_results.append(
             run_repo_script(
                 "post_session_command.py", "set", "command", "make validate"
             )
-            != 0
-        ):
-            failures.append("post-session command")
-        if run_repo_script("post_session_command.py", "set", "run-on", "manual") != 0:
-            failures.append("post-session run-on")
+        )
+        post_results.append(
+            run_repo_script(
+                "post_session_command.py", "set", "run-on", "manual"
+            )
+        )
     elif post_profile == "exit-selftest":
-        if run_repo_script("post_session_command.py", "enable") != 0:
-            failures.append("post-session enable")
-        if (
+        post_results.append(run_repo_script("post_session_command.py", "enable"))
+        post_results.append(
             run_repo_script(
                 "post_session_command.py", "set", "command", "make selftest"
             )
-            != 0
-        ):
-            failures.append("post-session command")
-        if (
+        )
+        post_results.append(
             run_repo_script(
                 "post_session_command.py",
                 "set",
                 "run-on",
                 "exit,manual",
             )
-            != 0
-        ):
-            failures.append("post-session run-on")
+        )
+    if post_results and all(result == 0 for result in post_results):
+        profiles["post_session"] = post_profile
+    else:
+        record_failure("post-session profile")
 
     if not args.skip_extras:
         if opencode_nvim_action == "install":
-            if install_opencode_nvim() == 0:
-                if (
-                    run_repo_script("nvim_integration_command.py", "install", "minimal")
-                    != 0
-                ):
-                    failures.append("opencode.nvim integration profile")
+            nvim_results = [install_opencode_nvim()]
+            if nvim_results[0] == 0:
+                nvim_results.append(
+                    run_repo_script(
+                        "nvim_integration_command.py", "install", "minimal"
+                    )
+                )
+            if all(result == 0 for result in nvim_results):
                 managed["opencode_nvim"] = {
                     "installed": True,
                     "path": str(OPENCODE_NVIM_PATH),
                     "repo": OPENCODE_NVIM_REPO,
                 }
+                profiles["opencode_nvim"] = opencode_nvim_action
             else:
-                failures.append("opencode.nvim install")
+                record_failure("opencode.nvim profile")
         elif opencode_nvim_action == "uninstall":
-            if managed.get("opencode_nvim", {}).get("installed"):
-                if run_repo_script("nvim_integration_command.py", "uninstall") != 0:
-                    failures.append("opencode.nvim integration uninstall")
-                if uninstall_opencode_nvim() == 0:
+            nvim_state = managed.get("opencode_nvim", {})
+            if isinstance(nvim_state, dict) and nvim_state.get("installed"):
+                nvim_results = [
+                    run_repo_script("nvim_integration_command.py", "uninstall"),
+                    uninstall_opencode_nvim(),
+                ]
+                if all(result == 0 for result in nvim_results):
                     managed["opencode_nvim"] = {
                         "installed": False,
                         "path": str(OPENCODE_NVIM_PATH),
                     }
+                    profiles["opencode_nvim"] = opencode_nvim_action
                 else:
-                    failures.append("opencode.nvim uninstall")
+                    record_failure("opencode.nvim profile")
             else:
                 print("Skipping opencode.nvim uninstall (not wizard-managed)")
 
@@ -393,12 +527,16 @@ def main(argv: list[str]) -> int:
                     "package": OPENCHAMBER_PACKAGE,
                     "manager": manager,
                 }
+                profiles["openchamber"] = openchamber_action
             else:
-                failures.append("OpenChamber install")
+                record_failure("OpenChamber profile")
         elif openchamber_action == "uninstall":
-            if managed.get("openchamber", {}).get("installed"):
+            openchamber_state = managed.get("openchamber", {})
+            if isinstance(openchamber_state, dict) and openchamber_state.get(
+                "installed"
+            ):
                 chosen_manager = (
-                    managed.get("openchamber", {}).get("manager") or manager or ""
+                    openchamber_state.get("manager") or manager or ""
                 )
                 if uninstall_openchamber(chosen_manager) == 0:
                     managed["openchamber"] = {
@@ -406,28 +544,22 @@ def main(argv: list[str]) -> int:
                         "package": OPENCHAMBER_PACKAGE,
                         "manager": chosen_manager,
                     }
+                    profiles["openchamber"] = openchamber_action
                 else:
-                    failures.append("OpenChamber uninstall")
+                    record_failure("OpenChamber profile")
             else:
                 print("Skipping OpenChamber uninstall (not wizard-managed)")
 
-    state["profiles"] = {
-        "plugin": plugin_profile,
-        "custom_plugins": custom_plugins,
-        "mcp": mcp_profile,
-        "policy": policy_profile,
-        "notify": notify_profile,
-        "telemetry": telemetry_profile,
-        "post_session": post_profile,
-        "model_routing": model_profile,
-        "browser": browser_profile,
-        "opencode_nvim": opencode_nvim_action,
-        "openchamber": openchamber_action,
-    }
-    state["managed"] = managed
-    save_state(state)
+    next_state = dict(state)
+    next_state["profiles"] = profiles
+    next_state["managed"] = managed
+    try:
+        save_state(next_state)
+        print(f"\nState saved: {STATE_PATH}")
+    except (OSError, TypeError, ValueError) as exc:
+        print(f"error: install state save failed: {exc}")
+        record_failure("install state")
 
-    print(f"\nState saved: {STATE_PATH}")
     if failures:
         print("Wizard completed with issues:")
         for item in failures:

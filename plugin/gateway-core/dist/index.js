@@ -863,6 +863,7 @@ export default function GatewayCorePlugin(ctx, options) {
     const hooks = configuredHooks(ctx, runtime);
     const noisyDispatchSampleCounters = new Map();
     const noisyDispatchSampleRate = dispatchSampleRate();
+    const validationEvidenceLedger = hooks.find((hook) => hook.id === "validation-evidence-ledger");
     function shouldWriteDispatchAudit(reasonCode, eventType) {
         if (!DISPATCH_NOISY_REASON_CODES.has(reasonCode)) {
             return true;
@@ -916,7 +917,7 @@ export default function GatewayCorePlugin(ctx, options) {
         const selectedHooks = hooksForEvent(hooks, "tool.execute.before");
         const executedHooks = [];
         try {
-            for (const hook of selectedHooks) {
+            for (const hook of selectedHooks.filter((candidate) => candidate.id !== "validation-evidence-ledger")) {
                 const result = await dispatchGatewayHookEvent({
                     hook,
                     eventType: "tool.execute.before",
@@ -930,6 +931,21 @@ export default function GatewayCorePlugin(ctx, options) {
                     continue;
                 }
                 executedHooks.push(hook);
+            }
+            if (validationEvidenceLedger &&
+                selectedHooks.includes(validationEvidenceLedger)) {
+                const result = await dispatchGatewayHookEvent({
+                    hook: validationEvidenceLedger,
+                    eventType: "tool.execute.before",
+                    payload: { input, output, directory },
+                    directory,
+                });
+                if (!result.ok && (result.critical || result.blocked)) {
+                    throw result.error;
+                }
+                if (result.ok) {
+                    executedHooks.push(validationEvidenceLedger);
+                }
             }
         }
         catch (error) {
@@ -1022,7 +1038,20 @@ export default function GatewayCorePlugin(ctx, options) {
             hook_count: hooks.length,
             has_output: typeof output.output === "string" && output.output.trim().length > 0,
         });
-        for (const hook of hooksForEvent(hooks, "tool.execute.after")) {
+        const selectedHooks = hooksForEvent(hooks, "tool.execute.after");
+        if (validationEvidenceLedger &&
+            selectedHooks.includes(validationEvidenceLedger)) {
+            const result = await dispatchGatewayHookEvent({
+                hook: validationEvidenceLedger,
+                eventType: "tool.execute.after",
+                payload: { input, output, directory },
+                directory,
+            });
+            if (!result.ok && (result.critical || result.blocked)) {
+                throw result.error;
+            }
+        }
+        for (const hook of selectedHooks.filter((candidate) => candidate.id !== "validation-evidence-ledger")) {
             const result = await dispatchGatewayHookEvent({
                 hook,
                 eventType: "tool.execute.after",

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import gatewayCorePlugin from "../dist/index.js";
-import { GATEWAY_LLM_DECISION_RUNTIME_BINDINGS } from "../dist/llm-decision-bindings.js";
+import {
+  GATEWAY_LLM_DECISION_HOOK_IDS,
+  GATEWAY_LLM_DECISION_MODES,
+  GATEWAY_LLM_DECISION_RUNTIME_BINDINGS,
+} from "../dist/llm-decision-bindings.js";
 
 test("gateway plugin entrypoint exports only the default plugin factory", async () => {
   const entrypoint = await import("../dist/index.js");
@@ -26,4 +30,14 @@ test("gateway llm decision runtime bindings stay aligned to hook ids", () => {
     doneProofEnforcer: "done-proof-enforcer",
     prBodyEvidenceGuard: "pr-body-evidence-guard",
   });
+  assert.deepEqual(GATEWAY_LLM_DECISION_MODES, [
+    "disabled",
+    "shadow",
+    "assist",
+    "enforce",
+  ]);
+  assert.deepEqual(
+    GATEWAY_LLM_DECISION_HOOK_IDS,
+    Object.values(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS),
+  );
 });

@@ -5,36 +5,67 @@ const TEST_COMMAND = /^(npm(?:\s+--prefix\s+\S+)?\s+(run\s+)?test\b|pnpm(?:\s+(?
 const TYPECHECK_COMMAND = /^(tsc\b|npm(?:\s+--prefix\s+\S+)?\s+run\s+typecheck\b|pnpm(?:\s+(?:--filter\s+\S+)*)?\s+(?:run\s+)?typecheck\b|yarn\s+(?:run\s+)?typecheck\b|pyright\b|mypy\b|cargo\s+check\b|go\s+vet\b)/i;
 const BUILD_COMMAND = /^(npm(?:\s+--prefix\s+\S+)?\s+run\s+build\b|pnpm(?:\s+(?:--filter\s+\S+)*)?\s+(?:run\s+)?build\b|yarn\s+(?:run\s+)?build\b|vite\s+build\b|next\s+build\b|cargo\s+build\b|go\s+build\b)/i;
 const SECURITY_COMMAND = /^(npm\s+audit\b|pnpm\s+audit\b|yarn\s+audit\b|cargo\s+audit\b|semgrep\b|codeql\b|snyk\b)/i;
-function commandSegments(command) {
-    return command
-        .split(/&&|\|\||;/)
-        .map((segment) => segment.trim())
-        .filter(Boolean)
-        .map((segment) => segment.replace(LEADING_ENV_ASSIGNMENTS, "").trim())
-        .filter(Boolean);
+function hasShellControlSyntax(command) {
+    let quote = null;
+    for (let index = 0; index < command.length; index += 1) {
+        const char = command[index];
+        const next = command[index + 1] ?? "";
+        if (quote) {
+            if (char === quote) {
+                quote = null;
+            }
+            else if (char === "\\" && quote === '"') {
+                index += 1;
+            }
+            else if (char === "`" || (char === "$" && next === "(")) {
+                return true;
+            }
+            continue;
+        }
+        if (char === "'" || char === '"') {
+            quote = char;
+            continue;
+        }
+        if (char === "\\") {
+            index += 1;
+            continue;
+        }
+        if ([";", "&", "|", "<", ">", "`", "\n", "\r"].includes(char)) {
+            return true;
+        }
+        if (char === "$" && next === "(") {
+            return true;
+        }
+    }
+    return quote !== null;
+}
+function standaloneCommand(command) {
+    const trimmed = command.trim();
+    if (!trimmed || hasShellControlSyntax(trimmed)) {
+        return "";
+    }
+    return trimmed.replace(LEADING_ENV_ASSIGNMENTS, "").trim();
 }
 export function classifyValidationCommand(command) {
-    const segments = commandSegments(command);
-    if (segments.length === 0) {
+    const candidate = standaloneCommand(command);
+    if (!candidate || /^cd(?:\s|$)/i.test(candidate)) {
         return [];
     }
     const categories = new Set();
-    for (const segment of segments) {
-        if (LINT_COMMAND.test(segment)) {
-            categories.add("lint");
-        }
-        if (TEST_COMMAND.test(segment)) {
-            categories.add("test");
-        }
-        if (TYPECHECK_COMMAND.test(segment)) {
-            categories.add("typecheck");
-        }
-        if (BUILD_COMMAND.test(segment)) {
-            categories.add("build");
-        }
-        if (SECURITY_COMMAND.test(segment)) {
-            categories.add("security");
-        }
+    if (LINT_COMMAND.test(candidate)) {
+        categories.add("lint");
+    }
+    if (TEST_COMMAND.test(candidate)) {
+        categories.add("test");
+    }
+    if (TYPECHECK_COMMAND.test(candidate)) {
+        categories.add("typecheck");
+    }
+    if (BUILD_COMMAND.test(candidate)) {
+        categories.add("build");
+    }
+    if (SECURITY_COMMAND.test(candidate)) {
+        categories.add("security");
     }
     return [...categories];
 }

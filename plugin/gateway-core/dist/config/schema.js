@@ -644,3 +644,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         },
     },
 };
+/** Canonical manifest for every configurable gateway hook identity. */
+export const DEFAULT_GATEWAY_HOOK_ORDER = Object.freeze([
+    ...DEFAULT_GATEWAY_CONFIG.hooks.order,
+]);

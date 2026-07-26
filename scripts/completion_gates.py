@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
 
 VALIDATION_CATEGORIES = {"lint", "test", "typecheck", "build", "security", "custom"}
 EVIDENCE_MODES = {"ledger_only", "text_fallback", "hybrid"}
+FINGERPRINT_VERSION = "git-state-v1"
+EVIDENCE_RELATIVE_PATH = b".opencode/runtime/validation-evidence.json"
+MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024
+MAX_UNTRACKED_FILES = 2_048
+MAX_UNTRACKED_FILE_BYTES = 4 * 1024 * 1024
+MAX_UNTRACKED_TOTAL_BYTES = 16 * 1024 * 1024
+MAX_EVIDENCE_BYTES = 1024 * 1024
 
 
 def _split_tokens(raw: Any) -> list[str]:
@@ -91,61 +101,227 @@ def normalize_completion_gates(
     }
 
 
-def validation_evidence_path(directory: Path) -> Path:
-    storage_root = directory.resolve()
+def _git_bytes(directory: Path, args: list[str]) -> bytes:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=str(directory),
+        capture_output=True,
+        check=True,
+    )
+    if len(completed.stdout) > MAX_GIT_OUTPUT_BYTES:
+        raise ValueError("git output exceeds fingerprint budget")
+    return completed.stdout
+
+
+def _frame(digest: Any, label: str, value: bytes | str) -> None:
+    payload = value if isinstance(value, bytes) else value.encode("utf-8")
+    digest.update(label.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(str(len(payload)).encode("ascii"))
+    digest.update(b"\0")
+    digest.update(payload)
+
+
+def _sha256(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _read_regular_file_no_follow(path: Path, expected_size: int) -> bytes:
+    if expected_size > MAX_UNTRACKED_FILE_BYTES:
+        raise ValueError("untracked file exceeds fingerprint budget")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
     try:
-        root = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=str(storage_root),
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        if root:
-            storage_root = Path(root)
-    except Exception:
-        pass
-    return storage_root / ".opencode" / "runtime" / "validation-evidence.json"
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_size != expected_size:
+            raise ValueError("untracked file changed during fingerprinting")
+        chunks: list[bytes] = []
+        remaining = expected_size
+        while remaining:
+            chunk = os.read(descriptor, min(remaining, 1024 * 1024))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        content = b"".join(chunks)
+        if len(content) != expected_size:
+            raise ValueError("untracked file changed during fingerprinting")
+        return content
+    finally:
+        os.close(descriptor)
+
+
+def _contained_path(root: Path, raw_path: bytes) -> tuple[Path, str]:
+    relative_text = raw_path.decode("utf-8", errors="strict")
+    if relative_text.encode("utf-8") != raw_path:
+        raise ValueError("git path is not canonical UTF-8")
+    relative_path = Path(relative_text)
+    if not relative_text or relative_path.is_absolute() or ".." in relative_path.parts:
+        raise ValueError("git path is outside the worktree")
+    absolute = Path(os.path.abspath(root / relative_path))
+    if os.path.commonpath((str(root), str(absolute))) != str(root):
+        raise ValueError("git path is outside the worktree")
+    return absolute, relative_text
+
+
+def git_state_fingerprint(directory: Path) -> dict[str, str] | None:
+    try:
+        root_text = _git_bytes(directory, ["rev-parse", "--show-toplevel"]).decode(
+            "utf-8", errors="strict"
+        ).strip()
+        root = Path(root_text).resolve()
+        head = _git_bytes(root, ["rev-parse", "--verify", "HEAD"]).decode(
+            "ascii", errors="strict"
+        ).strip().lower()
+        if not root_text or len(head) not in {40, 64} or any(
+            char not in "0123456789abcdef" for char in head
+        ):
+            return None
+        staged = _git_bytes(
+            root,
+            [
+                "diff",
+                "--cached",
+                "--binary",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-renames",
+                "HEAD",
+                "--",
+                ".",
+                ":(exclude).opencode/runtime/validation-evidence.json",
+            ],
+        )
+        tracked = _git_bytes(
+            root,
+            [
+                "diff",
+                "--binary",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-renames",
+                "--",
+                ".",
+                ":(exclude).opencode/runtime/validation-evidence.json",
+            ],
+        )
+        untracked = sorted(
+            entry
+            for entry in _git_bytes(
+                root, ["ls-files", "--others", "--exclude-standard", "-z"]
+            ).split(b"\0")
+            if entry and entry != EVIDENCE_RELATIVE_PATH
+        )
+        if len(untracked) > MAX_UNTRACKED_FILES:
+            raise ValueError("untracked file count exceeds fingerprint budget")
+        worktree_digest = hashlib.sha256()
+        _frame(worktree_digest, "tracked", tracked)
+        total_bytes = 0
+        for raw_path in untracked:
+            absolute, _ = _contained_path(root, raw_path)
+            state = os.lstat(absolute)
+            if stat.S_ISLNK(state.st_mode):
+                kind = "symlink"
+                content = os.readlink(os.fsencode(absolute))
+                if isinstance(content, str):
+                    content = os.fsencode(content)
+            elif stat.S_ISREG(state.st_mode):
+                kind = "file"
+                content = _read_regular_file_no_follow(absolute, state.st_size)
+            else:
+                raise ValueError("unsupported untracked file type")
+            total_bytes += len(content)
+            if (
+                len(content) > MAX_UNTRACKED_FILE_BYTES
+                or total_bytes > MAX_UNTRACKED_TOTAL_BYTES
+            ):
+                raise ValueError("untracked content exceeds fingerprint budget")
+            _frame(worktree_digest, "path", raw_path)
+            _frame(worktree_digest, "type", kind)
+            _frame(worktree_digest, "executable", "1" if state.st_mode & 0o111 else "0")
+            _frame(worktree_digest, "size", str(len(content)))
+            _frame(worktree_digest, "content-sha256", _sha256(content))
+        index_digest = _sha256(staged)
+        worktree_value = worktree_digest.hexdigest()
+        final = hashlib.sha256()
+        _frame(final, "version", FINGERPRINT_VERSION)
+        _frame(final, "root", str(root))
+        _frame(final, "head", head)
+        _frame(final, "index", index_digest)
+        _frame(final, "worktree", worktree_value)
+        return {
+            "version": FINGERPRINT_VERSION,
+            "root": str(root),
+            "head": head,
+            "index": index_digest,
+            "worktree": worktree_value,
+            "digest": final.hexdigest(),
+        }
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
+        return None
+
+
+def validation_evidence_path(directory: Path) -> Path:
+    fingerprint = git_state_fingerprint(directory)
+    root = Path(fingerprint["root"]) if fingerprint else directory.resolve()
+    return root / ".opencode" / "runtime" / "validation-evidence.json"
 
 
 def worktree_evidence_key(directory: Path) -> str:
-    cwd = str(directory.resolve())
+    fingerprint = git_state_fingerprint(directory)
+    return fingerprint["root"] if fingerprint else ""
+
+
+def _safe_evidence_file(path: Path) -> bool:
     try:
-        root = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        branch = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        return f"{root}::{branch or cwd}"
-    except Exception:
-        return cwd
+        runtime_state = os.lstat(path.parent)
+        opencode_state = os.lstat(path.parent.parent)
+        file_state = os.lstat(path)
+    except OSError:
+        return False
+    return bool(
+        stat.S_ISDIR(runtime_state.st_mode)
+        and not stat.S_ISLNK(runtime_state.st_mode)
+        and runtime_state.st_mode & 0o077 == 0
+        and stat.S_ISDIR(opencode_state.st_mode)
+        and not stat.S_ISLNK(opencode_state.st_mode)
+        and opencode_state.st_mode & 0o022 == 0
+        and stat.S_ISREG(file_state.st_mode)
+        and not stat.S_ISLNK(file_state.st_mode)
+        and file_state.st_nlink == 1
+        and file_state.st_mode & 0o077 == 0
+        and file_state.st_size <= MAX_EVIDENCE_BYTES
+    )
 
 
 def load_validation_snapshot(directory: Path) -> dict[str, Any]:
-    path = validation_evidence_path(directory)
-    if not path.exists():
+    fingerprint = git_state_fingerprint(directory)
+    if not fingerprint:
+        return {}
+    path = Path(fingerprint["root"]) / ".opencode" / "runtime" / "validation-evidence.json"
+    if not _safe_evidence_file(path):
         return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload.get("version") != 2:
         return {}
-    key = worktree_evidence_key(directory)
     worktrees = payload.get("worktrees")
     if not isinstance(worktrees, dict):
         return {}
-    snapshot = worktrees.get(key)
-    return snapshot if isinstance(snapshot, dict) else {}
+    record = worktrees.get(fingerprint["root"])
+    if not isinstance(record, dict) or record.get("fingerprint") != fingerprint:
+        return {}
+    snapshot = record.get("evidence")
+    if not isinstance(snapshot, dict):
+        return {}
+    if not all(
+        isinstance(snapshot.get(category), bool)
+        for category in ("lint", "test", "typecheck", "build", "security")
+    ) or not isinstance(snapshot.get("updatedAt"), str):
+        return {}
+    return snapshot
 
 
 def _missing_validation(
