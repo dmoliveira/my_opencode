@@ -1,4 +1,7 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import {
+  sanitizeGatewayAuditText,
+  writeGatewayEventAudit,
+} from "../../audit/event-audit.js";
 import type { GatewayHook } from "../registry.js";
 import {
   describeHookFailure,
@@ -31,20 +34,24 @@ export async function dispatchGatewayHookEvent(input: {
   } catch (error) {
     const critical = isCriticalGatewayHookId(input.hook.id);
     const blocked = isIntentionalHookBlock(error);
-    const failure = describeHookFailure(error);
-    writeGatewayEventAudit(input.directory, {
-      hook: input.hook.id,
-      stage: "dispatch",
-      reason_code: blocked
-        ? "hook_execution_blocked"
-        : critical
-          ? "critical_hook_execution_failed"
-          : "hook_execution_failed",
-      event_type: input.eventType,
-      critical,
-      blocked,
-      error_message: failure,
-    });
+    const failure = sanitizeGatewayAuditText(describeHookFailure(error));
+    try {
+      writeGatewayEventAudit(input.directory, {
+        hook: input.hook.id,
+        stage: "dispatch",
+        reason_code: blocked
+          ? "hook_execution_blocked"
+          : critical
+            ? "critical_hook_execution_failed"
+            : "hook_execution_failed",
+        event_type: input.eventType,
+        critical,
+        blocked,
+        error_message: failure,
+      });
+    } catch {
+      // Audit isolation is defense-in-depth; hook outcomes remain authoritative.
+    }
     if (!blocked) {
       surfaceGatewayHookFailure(
         `${critical ? "critical " : ""}hook ${input.hook.id} failed during ${input.eventType}: ${failure}`,
