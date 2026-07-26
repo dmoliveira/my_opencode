@@ -496,6 +496,12 @@ function configuredHooks(
     },
     async event(): Promise<void> {},
   };
+  const shouldCreateSemanticOutputSummarizer =
+    cfg.hooks.enabled &&
+    cfg.semanticOutputSummarizer.enabled &&
+    !cfg.hooks.disabled.includes("semantic-output-summarizer") &&
+    (cfg.hooks.order.length === 0 ||
+      cfg.hooks.order.includes("semantic-output-summarizer"));
   const hooks: Array<GatewayHook | null> = [
     safeHook("autopilot-loop", () =>
       createAutopilotLoopHook({
@@ -535,15 +541,17 @@ function configuredHooks(
         tools: cfg.toolOutputTruncator.tools,
       }),
     ),
-    safeHook("semantic-output-summarizer", () =>
-      createSemanticOutputSummarizerHook({
-        directory,
-        enabled: cfg.semanticOutputSummarizer.enabled,
-        minChars: cfg.semanticOutputSummarizer.minChars,
-        minLines: cfg.semanticOutputSummarizer.minLines,
-        maxSummaryLines: cfg.semanticOutputSummarizer.maxSummaryLines,
-      }),
-    ),
+    shouldCreateSemanticOutputSummarizer
+      ? safeHook("semantic-output-summarizer", () =>
+          createSemanticOutputSummarizerHook({
+            directory,
+            enabled: true,
+            minChars: cfg.semanticOutputSummarizer.minChars,
+            minLines: cfg.semanticOutputSummarizer.minLines,
+            maxSummaryLines: cfg.semanticOutputSummarizer.maxSummaryLines,
+          }),
+        )
+      : null,
     safeHook("context-window-monitor", () =>
       createContextWindowMonitorHook({
         directory,
@@ -1648,36 +1656,44 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     input: { sessionID?: string },
     output: ChatMessagesTransformOutput,
   ): Promise<void> {
-    if (
-      shouldWriteDispatchAudit(
-        "chat_messages_transform_dispatch",
-        "experimental.chat.messages.transform",
-      )
-    ) {
-      writeGatewayEventAudit(directory, {
-        hook: "gateway-core",
-        stage: "dispatch",
-        reason_code: "chat_messages_transform_dispatch",
-        event_type: "experimental.chat.messages.transform",
-        has_session_id:
-          typeof input.sessionID === "string" &&
-          input.sessionID.trim().length > 0,
-        hook_count: hooks.length,
-      });
-    }
-    for (const hook of hooks) {
-      const result = await dispatchGatewayHookEvent({
-        hook,
-        eventType: "experimental.chat.messages.transform",
-        payload: {
-          input,
-          output,
+    const eventType = "experimental.chat.messages.transform";
+    const selectedHooks = hooksForEvent(hooks, eventType);
+    const auditDispatch = shouldWriteDispatchAudit(
+      "chat_messages_transform_dispatch",
+      eventType,
+    );
+    let loopAttemptCount = 0;
+    try {
+      for (const hook of selectedHooks) {
+        loopAttemptCount += 1;
+        const result = await dispatchGatewayHookEvent({
+          hook,
+          eventType,
+          payload: {
+            input,
+            output,
+            directory,
+          },
           directory,
-        },
-        directory,
-      });
-      if (!result.ok && (result.critical || result.blocked)) {
-        throw result.error;
+        });
+        if (!result.ok && (result.critical || result.blocked)) {
+          throw result.error;
+        }
+      }
+    } finally {
+      if (auditDispatch) {
+        writeGatewayEventAudit(directory, {
+          hook: "gateway-core",
+          stage: "dispatch",
+          reason_code: "chat_messages_transform_dispatch",
+          event_type: eventType,
+          has_session_id:
+            typeof input.sessionID === "string" &&
+            input.sessionID.trim().length > 0,
+          hook_count: hooks.length,
+          selected_hook_count: selectedHooks.length,
+          loop_attempt_count: loopAttemptCount,
+        });
       }
     }
 
@@ -1692,36 +1708,44 @@ export default function GatewayCorePlugin(ctx: GatewayContext): {
     },
     output: ChatSystemTransformOutput,
   ): Promise<void> {
-    if (
-      shouldWriteDispatchAudit(
-        "chat_system_transform_dispatch",
-        "experimental.chat.system.transform",
-      )
-    ) {
-      writeGatewayEventAudit(directory, {
-        hook: "gateway-core",
-        stage: "dispatch",
-        reason_code: "chat_system_transform_dispatch",
-        event_type: "experimental.chat.system.transform",
-        has_session_id:
-          typeof input.sessionID === "string" &&
-          input.sessionID.trim().length > 0,
-        hook_count: hooks.length,
-      });
-    }
-    for (const hook of hooks) {
-      const result = await dispatchGatewayHookEvent({
-        hook,
-        eventType: "experimental.chat.system.transform",
-        payload: {
-          input,
-          output,
+    const eventType = "experimental.chat.system.transform";
+    const selectedHooks = hooksForEvent(hooks, eventType);
+    const auditDispatch = shouldWriteDispatchAudit(
+      "chat_system_transform_dispatch",
+      eventType,
+    );
+    let loopAttemptCount = 0;
+    try {
+      for (const hook of selectedHooks) {
+        loopAttemptCount += 1;
+        const result = await dispatchGatewayHookEvent({
+          hook,
+          eventType,
+          payload: {
+            input,
+            output,
+            directory,
+          },
           directory,
-        },
-        directory,
-      });
-      if (!result.ok && (result.critical || result.blocked)) {
-        throw result.error;
+        });
+        if (!result.ok && (result.critical || result.blocked)) {
+          throw result.error;
+        }
+      }
+    } finally {
+      if (auditDispatch) {
+        writeGatewayEventAudit(directory, {
+          hook: "gateway-core",
+          stage: "dispatch",
+          reason_code: "chat_system_transform_dispatch",
+          event_type: eventType,
+          has_session_id:
+            typeof input.sessionID === "string" &&
+            input.sessionID.trim().length > 0,
+          hook_count: hooks.length,
+          selected_hook_count: selectedHooks.length,
+          loop_attempt_count: loopAttemptCount,
+        });
       }
     }
     providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });

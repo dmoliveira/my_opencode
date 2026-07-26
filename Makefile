@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select reservation-status install-test release-check release
+.PHONY: help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-turn-watch gateway-turn-watch-webhook notify-icons-generate notify-icons-select reservation-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -80,6 +80,9 @@ gateway-disable: ## Disable gateway plugin file entry
 
 gateway-doctor: ## Run gateway plugin diagnostics
 	python3 scripts/gateway_command.py doctor --json
+
+gateway-secret-redaction-smoke: ## Verify provider-boundary redaction against localhost
+	python3 scripts/gateway_secret_redaction_live_smoke.py --repo-root "$(CURDIR)" --json
 
 gateway-turn-watch: ## Stream long-turn alerts from gateway audit
 	python3 scripts/gateway_turn_watch.py --follow --json

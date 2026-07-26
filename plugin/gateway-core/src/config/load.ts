@@ -16,6 +16,21 @@ function stringList(value: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
+function semanticSummarizerHookOrder(
+  order: string[],
+  enabled: boolean,
+): string[] {
+  if (!enabled || order.length === 0) {
+    return order;
+  }
+  const summarizerId = "semantic-output-summarizer";
+  const truncatorId = "tool-output-truncator";
+  const normalized = order.filter((hookId) => hookId !== summarizerId);
+  const truncatorIndex = normalized.indexOf(truncatorId);
+  normalized.splice(truncatorIndex >= 0 ? truncatorIndex : 0, 0, summarizerId);
+  return normalized;
+}
+
 function stringRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -754,6 +769,14 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     truncatorSource.tools === undefined
       ? DEFAULT_GATEWAY_CONFIG.toolOutputTruncator.tools
       : stringList(truncatorSource.tools);
+  const semanticOutputSummarizerEnabled =
+    typeof semanticOutputSummarizerSource.enabled === "boolean"
+      ? semanticOutputSummarizerSource.enabled
+      : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled;
+  const hookOrder = semanticSummarizerHookOrder(
+    stringList(hooksSource.order),
+    semanticOutputSummarizerEnabled,
+  );
 
   return {
     hooks: {
@@ -762,7 +785,7 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? hooksSource.enabled
           : DEFAULT_GATEWAY_CONFIG.hooks.enabled,
       disabled: stringList(hooksSource.disabled),
-      order: stringList(hooksSource.order),
+      order: hookOrder,
     },
     autopilotLoop: {
       enabled:
@@ -1646,10 +1669,7 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       ),
     },
     semanticOutputSummarizer: {
-      enabled:
-        typeof semanticOutputSummarizerSource.enabled === "boolean"
-          ? semanticOutputSummarizerSource.enabled
-          : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled,
+      enabled: semanticOutputSummarizerEnabled,
       minChars: nonNegativeInt(
         semanticOutputSummarizerSource.minChars,
         DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.minChars,

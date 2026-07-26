@@ -6,8 +6,8 @@ export const DEFAULT_GATEWAY_CONFIG = {
         order: [
             "autopilot-loop",
             "continuation",
-            "tool-output-truncator",
             "semantic-output-summarizer",
+            "tool-output-truncator",
             "context-window-monitor",
             "preemptive-compaction",
             "global-process-pressure",
@@ -470,7 +470,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         maxLength: 30,
     },
     semanticOutputSummarizer: {
-        enabled: true,
+        enabled: false,
         minChars: 20000,
         minLines: 400,
         maxSummaryLines: 8,

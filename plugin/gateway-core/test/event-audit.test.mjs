@@ -33,6 +33,96 @@ test("gateway event audit writes dispatch entries when enabled", async () => {
   }
 })
 
+test("chat transform audits total, selected, and attempted hook counts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-transform-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["tool-output-truncator", "semantic-output-summarizer"],
+          disabled: [],
+        },
+        semanticOutputSummarizer: { enabled: true },
+      },
+    })
+    await plugin["experimental.chat.messages.transform"](
+      { sessionID: "session-transform-counts" },
+      { messages: [] },
+    )
+    await plugin["experimental.chat.system.transform"](
+      { sessionID: "session-transform-counts" },
+      { system: [] },
+    )
+
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const dispatches = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) =>
+        [
+          "chat_messages_transform_dispatch",
+          "chat_system_transform_dispatch",
+        ].includes(entry.reason_code),
+      )
+    assert.equal(dispatches.length, 2)
+    for (const dispatch of dispatches) {
+      assert.equal(dispatch.hook_count, 2)
+      assert.equal(dispatch.selected_hook_count, 0)
+      assert.equal(dispatch.loop_attempt_count, 0)
+    }
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("disabled semantic summarizer is not constructed", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-disabled-"))
+  const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["semantic-output-summarizer"],
+          disabled: [],
+        },
+      },
+    })
+    await plugin["experimental.chat.messages.transform"](
+      { sessionID: "session-disabled-summarizer" },
+      { messages: [] },
+    )
+    const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
+    const dispatch = readFileSync(auditPath, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .find((entry) => entry.reason_code === "chat_messages_transform_dispatch")
+    assert.equal(dispatch?.hook_count, 0)
+    assert.equal(dispatch?.selected_hook_count, 0)
+    assert.equal(dispatch?.loop_attempt_count, 0)
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previous
+    }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("gateway event audit writes command.execute.after dispatch entries", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
   const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
