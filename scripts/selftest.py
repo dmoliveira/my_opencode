@@ -2023,8 +2023,8 @@ exit 0
         result = run_script_layered(PLUGIN_SCRIPT, home, project_dir, "status")
         expect(result.returncode == 0, f"plugin layered status failed: {result.stderr}")
         expect(
-            "morph: enabled" in result.stdout,
-            "project layered config should enable morph",
+            "morph: present [retired]" in result.stdout,
+            "project layered config should surface retired morph presence",
         )
         expect(
             "config: " in result.stdout
