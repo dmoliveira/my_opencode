@@ -2,8 +2,9 @@ import { spawn } from "node:child_process"
 import { basename } from "node:path"
 
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import type { GatewayLlmDecisionMode } from "../../llm-decision-bindings.js"
 
-export type LlmDecisionMode = "disabled" | "shadow" | "assist" | "enforce"
+export type LlmDecisionMode = GatewayLlmDecisionMode
 
 export interface LlmDecisionRuntimeConfig {
   enabled: boolean
@@ -71,7 +72,7 @@ export function resolveLlmDecisionRuntimeConfigForHook(
   config: LlmDecisionRuntimeConfig,
   hookId: string,
 ): LlmDecisionRuntimeConfig {
-  const override = config.hookModes[String(hookId ?? "").trim()] || config.hookModes[String(hookId ?? "").trim().toLowerCase()]
+  const override = config.hookModes[hookId]
   if (!override || override === config.mode) {
     return config
   }

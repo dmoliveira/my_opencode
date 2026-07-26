@@ -1,3 +1,5 @@
+export declare const GATEWAY_LLM_DECISION_MODES: readonly ["disabled", "shadow", "assist", "enforce"];
+export type GatewayLlmDecisionMode = (typeof GATEWAY_LLM_DECISION_MODES)[number];
 export declare const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS: {
     readonly agentDeniedToolEnforcer: "agent-denied-tool-enforcer";
     readonly agentModelResolver: "agent-model-resolver";
@@ -11,3 +13,4 @@ export declare const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS: {
     readonly doneProofEnforcer: "done-proof-enforcer";
     readonly prBodyEvidenceGuard: "pr-body-evidence-guard";
 };
+export declare const GATEWAY_LLM_DECISION_HOOK_IDS: readonly string[];

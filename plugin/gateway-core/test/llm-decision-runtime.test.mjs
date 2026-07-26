@@ -46,25 +46,27 @@ test("shouldAuditDecisionDisagreement only reports real semantic differences", (
 })
 
 test("resolveLlmDecisionRuntimeConfigForHook applies per-hook mode overrides", () => {
-  const config = resolveLlmDecisionRuntimeConfigForHook(
-    {
-      enabled: true,
-      mode: "shadow",
-      hookModes: { "auto-slash-command": "assist" },
-      command: "opencode",
-      model: "github-copilot/gpt-5-mini",
-      env: {},
-      timeoutMs: 1000,
-      failureCooldownMs: 10000,
-      maxPromptChars: 200,
-      maxContextChars: 200,
-      enableCache: true,
-      cacheTtlMs: 10000,
-      maxCacheEntries: 8,
+  const config = {
+    enabled: true,
+    mode: "shadow",
+    hookModes: {
+      "auto-slash-command": "assist",
+      "todo-continuation-enforcer": "disabled",
     },
-    "auto-slash-command",
-  )
-  assert.equal(config.mode, "assist")
+    command: "opencode",
+    model: "github-copilot/gpt-5-mini",
+    env: {},
+    timeoutMs: 1000,
+    failureCooldownMs: 10000,
+    maxPromptChars: 200,
+    maxContextChars: 200,
+    enableCache: true,
+    cacheTtlMs: 10000,
+    maxCacheEntries: 8,
+  }
+  assert.equal(resolveLlmDecisionRuntimeConfigForHook(config, "auto-slash-command").mode, "assist")
+  assert.equal(resolveLlmDecisionRuntimeConfigForHook(config, "todo-continuation-enforcer").mode, "disabled")
+  assert.equal(resolveLlmDecisionRuntimeConfigForHook(config, " auto-slash-command").mode, "shadow")
 })
 
 test("llm decision runtime accepts valid JSON text output", async () => {

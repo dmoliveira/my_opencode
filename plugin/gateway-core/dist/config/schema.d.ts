@@ -1,3 +1,4 @@
+import type { GatewayLlmDecisionMode } from "../llm-decision-bindings.js";
 export type CompletionMode = "promise" | "objective";
 export type QualityProfile = "off" | "fast" | "strict";
 export interface AutopilotLoopConfig {
@@ -159,8 +160,8 @@ export interface AdaptiveDelegationPolicyConfig {
 }
 export interface LlmDecisionRuntimeConfig {
     enabled: boolean;
-    mode: "disabled" | "shadow" | "assist" | "enforce";
-    hookModes: Record<string, "disabled" | "shadow" | "assist" | "enforce">;
+    mode: GatewayLlmDecisionMode;
+    hookModes: Record<string, GatewayLlmDecisionMode>;
     command: string;
     model: string;
     env: Record<string, string>;
@@ -530,3 +531,5 @@ export interface GatewayConfig {
     quality: QualityConfig;
 }
 export declare const DEFAULT_GATEWAY_CONFIG: GatewayConfig;
+/** Canonical manifest for every configurable gateway hook identity. */
+export declare const DEFAULT_GATEWAY_HOOK_ORDER: readonly string[];

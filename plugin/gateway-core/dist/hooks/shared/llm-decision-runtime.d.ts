@@ -1,4 +1,5 @@
-export type LlmDecisionMode = "disabled" | "shadow" | "assist" | "enforce";
+import type { GatewayLlmDecisionMode } from "../../llm-decision-bindings.js";
+export type LlmDecisionMode = GatewayLlmDecisionMode;
 export interface LlmDecisionRuntimeConfig {
     enabled: boolean;
     mode: LlmDecisionMode;

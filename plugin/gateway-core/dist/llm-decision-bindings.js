@@ -1,3 +1,9 @@
+export const GATEWAY_LLM_DECISION_MODES = [
+    "disabled",
+    "shadow",
+    "assist",
+    "enforce",
+];
 export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
     agentDeniedToolEnforcer: "agent-denied-tool-enforcer",
     agentModelResolver: "agent-model-resolver",
@@ -11,3 +17,4 @@ export const GATEWAY_LLM_DECISION_RUNTIME_BINDINGS = {
     doneProofEnforcer: "done-proof-enforcer",
     prBodyEvidenceGuard: "pr-body-evidence-guard",
 };
+export const GATEWAY_LLM_DECISION_HOOK_IDS = Object.freeze(Object.values(GATEWAY_LLM_DECISION_RUNTIME_BINDINGS));

@@ -220,3 +220,25 @@ test("disabled required dependency excludes consumer with sanitized audit", asyn
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test("host plugin loader fails closed on a misspelled hook identity", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-invalid-hook-id-"))
+  try {
+    assert.throws(
+      () =>
+        GatewayCorePlugin(
+          { directory },
+          {
+            hooks: {
+              enabled: true,
+              order: ["dangerous-command-gaurd"],
+              disabled: [],
+            },
+          },
+        ),
+      /hooks\.order contains unknown gateway hook id: dangerous-command-gaurd/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

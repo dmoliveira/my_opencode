@@ -1,3 +1,5 @@
+import { DEFAULT_GATEWAY_HOOK_ORDER } from "../config/schema.js"
+
 // Declares hook handler contract for gateway events.
 export interface GatewayHook {
   id: string
@@ -11,7 +13,61 @@ const HOOK_DEPENDENCIES: Readonly<Record<string, readonly string[]>> = {
   continuation: ["stop-continuation-guard", "keyword-detector"],
   "global-process-pressure": ["stop-continuation-guard"],
   "todo-continuation-enforcer": ["stop-continuation-guard"],
+  "done-proof-enforcer": ["validation-evidence-ledger"],
+  "pr-readiness-guard": ["validation-evidence-ledger"],
+  "pr-body-evidence-guard": ["validation-evidence-ledger"],
 }
+
+export function validateHookDependencyGraph(
+  dependencies: Readonly<Record<string, readonly string[]>> = HOOK_DEPENDENCIES,
+  knownHookIds: readonly string[] = DEFAULT_GATEWAY_HOOK_ORDER,
+): void {
+  const known = new Set(knownHookIds)
+  if (known.size !== knownHookIds.length) {
+    throw new Error("duplicate gateway hook id in canonical manifest")
+  }
+  for (const [hookId, hookDependencies] of Object.entries(dependencies)) {
+    if (!known.has(hookId)) {
+      throw new Error(`unknown gateway hook dependency consumer: ${hookId}`)
+    }
+    const seen = new Set<string>()
+    for (const dependencyId of hookDependencies) {
+      if (!known.has(dependencyId)) {
+        throw new Error(
+          `unknown gateway hook dependency endpoint: ${hookId} -> ${dependencyId}`,
+        )
+      }
+      if (seen.has(dependencyId)) {
+        throw new Error(
+          `duplicate gateway hook dependency endpoint: ${hookId} -> ${dependencyId}`,
+        )
+      }
+      seen.add(dependencyId)
+    }
+  }
+
+  const visiting = new Set<string>()
+  const visited = new Set<string>()
+  const visit = (hookId: string): void => {
+    if (visited.has(hookId)) {
+      return
+    }
+    if (visiting.has(hookId)) {
+      throw new Error(`gateway hook dependency cycle detected at: ${hookId}`)
+    }
+    visiting.add(hookId)
+    for (const dependencyId of dependencies[hookId] ?? []) {
+      visit(dependencyId)
+    }
+    visiting.delete(hookId)
+    visited.add(hookId)
+  }
+  for (const hookId of Object.keys(dependencies)) {
+    visit(hookId)
+  }
+}
+
+validateHookDependencyGraph()
 
 export interface HookDependencyBlock {
   hookId: string
@@ -47,29 +103,45 @@ export function resolveHookConstructionPlan(
     return { order: [], selected: null, blocked }
   }
 
-  const explicitlyOrdered = new Set(order)
   const added = new Set<string>()
+  const unavailable = new Set<string>()
   const effectiveOrder: string[] = []
-  for (const hookId of order) {
-    if (disabledSet.has(hookId) || added.has(hookId)) {
-      continue
+  const blockedKeys = new Set<string>()
+  const block = (hookId: string, dependencyId: string): void => {
+    const key = `${hookId}\u0000${dependencyId}`
+    if (!blockedKeys.has(key)) {
+      blocked.push({ hookId, dependencyId })
+      blockedKeys.add(key)
+    }
+    unavailable.add(hookId)
+  }
+  const addWithDependencies = (hookId: string): boolean => {
+    if (added.has(hookId)) {
+      return true
+    }
+    if (disabledSet.has(hookId) || unavailable.has(hookId)) {
+      return false
     }
     const dependencies = HOOK_DEPENDENCIES[hookId] ?? []
     const disabledDependency = dependencies.find((dependencyId) =>
       disabledSet.has(dependencyId),
     )
     if (disabledDependency) {
-      blocked.push({ hookId, dependencyId: disabledDependency })
-      continue
+      block(hookId, disabledDependency)
+      return false
     }
     for (const dependencyId of dependencies) {
-      if (!explicitlyOrdered.has(dependencyId) && !added.has(dependencyId)) {
-        effectiveOrder.push(dependencyId)
-        added.add(dependencyId)
+      if (!addWithDependencies(dependencyId)) {
+        block(hookId, dependencyId)
+        return false
       }
     }
     effectiveOrder.push(hookId)
     added.add(hookId)
+    return true
+  }
+  for (const hookId of order) {
+    addWithDependencies(hookId)
   }
   return {
     order: effectiveOrder,
@@ -79,7 +151,10 @@ export function resolveHookConstructionPlan(
 }
 
 /** Selects hooks for an event while retaining legacy wildcard compatibility. */
-export function hooksForEvent(hooks: GatewayHook[], eventType: string): GatewayHook[] {
+export function hooksForEvent(
+  hooks: GatewayHook[],
+  eventType: string,
+): GatewayHook[] {
   return hooks.filter((hook) => !hook.events || hook.events.includes(eventType))
 }
 
@@ -105,7 +180,7 @@ export function resolveHookOrder(
   const disabledSet = new Set(disabled)
   const orderMap = new Map(order.map((id, idx) => [id, idx]))
   const explicitOrder = order.length > 0
-  return hooks
+  const baseline = hooks
     .filter((hook) => !disabledSet.has(hook.id))
     .filter((hook) => !explicitOrder || orderMap.has(hook.id))
     .sort((a, b) => {
@@ -119,4 +194,28 @@ export function resolveHookOrder(
       }
       return a.id.localeCompare(b.id)
     })
+  if (explicitOrder) {
+    return baseline
+  }
+
+  const hookById = new Map(baseline.map((hook) => [hook.id, hook]))
+  const added = new Set<string>()
+  const effectiveOrder: GatewayHook[] = []
+  const addWithDependencies = (hook: GatewayHook): void => {
+    if (added.has(hook.id)) {
+      return
+    }
+    for (const dependencyId of HOOK_DEPENDENCIES[hook.id] ?? []) {
+      const dependency = hookById.get(dependencyId)
+      if (dependency) {
+        addWithDependencies(dependency)
+      }
+    }
+    effectiveOrder.push(hook)
+    added.add(hook.id)
+  }
+  for (const hook of baseline) {
+    addWithDependencies(hook)
+  }
+  return effectiveOrder
 }

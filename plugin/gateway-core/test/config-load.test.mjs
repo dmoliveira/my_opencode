@@ -424,7 +424,7 @@ test("loadGatewayConfig normalizes invalid guard marker and verbosity values", (
   assert.equal(config.planHandoffReminder.enabled, false)
 })
 
-test("loadGatewayConfig normalizes llm hook mode overrides", () => {
+test("loadGatewayConfig preserves exact llm hook mode overrides", () => {
   const config = loadGatewayConfig({
     llmDecisionRuntime: {
       enabled: true,
@@ -432,7 +432,7 @@ test("loadGatewayConfig normalizes llm hook mode overrides", () => {
       hookModes: {
         "auto-slash-command": "assist",
         "provider-error-classifier": "assist",
-        ignored: "invalid",
+        "todo-continuation-enforcer": "disabled",
       },
     },
   })
@@ -440,7 +440,46 @@ test("loadGatewayConfig normalizes llm hook mode overrides", () => {
   assert.deepEqual(config.llmDecisionRuntime.hookModes, {
     "auto-slash-command": "assist",
     "provider-error-classifier": "assist",
+    "todo-continuation-enforcer": "disabled",
   })
+})
+
+test("loadGatewayConfig rejects unknown, duplicate, and non-exact hook ids", () => {
+  assert.throws(
+    () => loadGatewayConfig({ hooks: { order: ["dangerous-command-gaurd"] } }),
+    /hooks\.order contains unknown gateway hook id: dangerous-command-gaurd/,
+  )
+  assert.throws(
+    () => loadGatewayConfig({ hooks: { disabled: ["safety", "safety"] } }),
+    /hooks\.disabled contains duplicate gateway hook id: safety/,
+  )
+  assert.throws(
+    () => loadGatewayConfig({ hooks: { order: [" safety"] } }),
+    /hooks\.order contains a non-exact gateway hook id/,
+  )
+  assert.throws(
+    () => loadGatewayConfig({ hooks: { disabled: "safety" } }),
+    /hooks\.disabled must be an array of exact gateway hook ids/,
+  )
+})
+
+test("loadGatewayConfig rejects invalid llm mode identities", () => {
+  assert.throws(
+    () => loadGatewayConfig({ llmDecisionRuntime: { hookModes: { continuation: "assist" } } }),
+    /unknown LLM hook id: continuation/,
+  )
+  assert.throws(
+    () => loadGatewayConfig({ llmDecisionRuntime: { hookModes: { "auto-slash-command ": "assist" } } }),
+    /unknown LLM hook id: auto-slash-command /,
+  )
+  assert.throws(
+    () => loadGatewayConfig({ llmDecisionRuntime: { hookModes: { "auto-slash-command": "automatic" } } }),
+    /hookModes\.auto-slash-command must be one of/,
+  )
+  assert.throws(
+    () => loadGatewayConfig({ llmDecisionRuntime: { mode: "automatic" } }),
+    /llmDecisionRuntime\.mode must be one of/,
+  )
 })
 
 test("loadGatewayConfigSource merges sidecar config with runtime source", () => {
@@ -499,11 +538,11 @@ test("loadGatewayConfigSource layers home, project, and explicit runtime config"
       homeSidecar,
       JSON.stringify({
         globalProcessPressure: { enabled: false },
-        hooks: { disabled: ["home-only"] },
+        hooks: { disabled: ["think-mode"] },
         llmDecisionRuntime: {
           enabled: true,
           mode: "shadow",
-          hookModes: { "home-hook": "shadow" },
+          hookModes: { "auto-slash-command": "shadow" },
         },
       }),
       "utf-8",
@@ -512,10 +551,10 @@ test("loadGatewayConfigSource layers home, project, and explicit runtime config"
       projectSidecar,
       JSON.stringify({
         conciseMode: { enabled: true, defaultMode: "lite" },
-        hooks: { disabled: ["project-only"] },
+        hooks: { disabled: ["safety"] },
         llmDecisionRuntime: {
           mode: "disabled",
-          hookModes: { "project-hook": "assist" },
+          hookModes: { "provider-error-classifier": "assist" },
         },
       }),
       "utf-8",
@@ -533,12 +572,12 @@ test("loadGatewayConfigSource layers home, project, and explicit runtime config"
     assert.equal(loaded.meta.sidecarPath, projectSidecar)
     assert.equal(config.globalProcessPressure.enabled, false)
     assert.equal(config.conciseMode.defaultMode, "lite")
-    assert.deepEqual(config.hooks.disabled, ["project-only"])
+    assert.deepEqual(config.hooks.disabled, ["safety"])
     assert.equal(config.llmDecisionRuntime.enabled, true)
     assert.equal(config.llmDecisionRuntime.mode, "disabled")
     assert.deepEqual(config.llmDecisionRuntime.hookModes, {
-      "home-hook": "shadow",
-      "project-hook": "assist",
+      "auto-slash-command": "shadow",
+      "provider-error-classifier": "assist",
     })
     assert.equal(config.llmDecisionRuntime.timeoutMs, 4321)
   } finally {
