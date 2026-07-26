@@ -3,7 +3,7 @@
 Status: complete
 Date: 2026-07-27
 Branch: `perf/harness-optimization-wave-5`
-Validated code head: `b39cf2a9b266113f77cb4d9f28d2a58738f44a94`
+Validated code head: `3bcd99b45678344a0d33d4b21fc63f5ac5cb0169`
 Baseline: `fc7486a7903fa0257ceeeabb1f29c0328926a8e4`
 
 ## Objective
@@ -45,6 +45,11 @@ Python and Node delivery. Managed profiles remain external-free.
    - Uses one tuple selecting only `noninteractive-shell-guard` while retaining built-in OAuth support.
    - Adds focused Python and Node fixture, auth, deadline, cleanup, and artifact-safety coverage.
    - Requires owner-only audit parents in exact-model, contract, and secret-redaction sandboxes.
+5. `3bcd99b45678344a0d33d4b21fc63f5ac5cb0169` — deterministic Node 22 audit flush.
+   - Keeps production OTLP timeout handles unref'd.
+   - Temporarily refs the active timeout only when the explicit test flush waits
+     for an unresolved exporter, then unrefs it during reset.
+   - Preserves the hanging-child exit invariant and passes the full Node 22 suite.
 
 ## External candidate decisions
 
@@ -66,14 +71,12 @@ worktree, and PTY plugins remain in force.
   - candidate: median `31.501 ms`, p95 `36.321 ms`.
   - candidate p95 remained below the `300 ms` gate.
 - Audit benchmark, 25 isolated processes:
-  - disabled candidate median `0.000662 ms`, below the allowed baseline delta.
-  - enabled median ratio `1.204` and p95 ratio `1.212`, both below `1.25`.
-- The retained audit benchmark was collected at committed head `1d81e6b` with
-  the uncommitted Slice 2 source built into dist. It is Slice 2 performance
-  evidence, not a final-head rerun; later slices did not change the benchmarked
-  audit or dispatch implementation.
+  - disabled candidate delta `-0.001414 ms`, below the allowed baseline delta.
+  - enabled median ratio `1.215` and p95 ratio `1.210`, both below `1.25`.
+  - the final artifact is bound to validated code head `3bcd99b` and the exact
+    origin/candidate module hashes.
 - Evidence: `runtime/harness-wave-5/slice1-fingerprint-benchmark.json` and
-  `runtime/harness-wave-5/audit-benchmark.json`.
+  `runtime/harness-wave-5/audit-benchmark-final.json`.
 
 ## Exact-model configured-tuple proof
 
@@ -112,6 +115,7 @@ The tmux validation summary at
 - `git diff --check origin/main...HEAD`.
 - `CI=true npm --prefix plugin/gateway-core test`: `744/744`; count retained in
   `runtime/harness-wave-5/final-validation/gateway-tests.log`.
+- The same `744/744` gateway suite on the CI Node 22 runtime.
 - `npm --prefix plugin/gateway-core run lint`.
 - `python3 -m unittest discover -s tests -p 'test_*.py'`: `60/60`; count retained
   in `runtime/harness-wave-5/final-validation/python-tests.log`.
@@ -128,9 +132,10 @@ The tmux validation summary at
 - `pre-commit run --all-files`.
 - Committed-clone `make install-test`.
 - Exact-model configured-tuple E2E and retained-artifact scan.
+- Final-head audit benchmark evidence.
 - Clean tracked tree after gateway build, pre-commit, and final validation.
 
-Four changed-evidence review/fix passes met the high-risk budget. The latest
+Five changed-evidence review/fix passes met the high-risk budget. The latest
 critical reviewer approved with no blocker or medium/high finding.
 
 ## Residual risks
@@ -146,8 +151,9 @@ critical reviewer approved with no blocker or medium/high finding.
 
 ## Rollback
 
-- Revert the four commits in reverse order and rebuild
-  `plugin/gateway-core/dist/**` after source rollback.
+- Revert `3bcd99b`, then the four slice commits in reverse order, and rebuild
+  `plugin/gateway-core/dist/**` after source rollback. Docs-only closure commits
+  can be reverted independently.
 - Evidence schema v2 intentionally invalidates schema v1; rollback must not treat
   mixed-schema records as trusted.
 - OTLP is opt-in. Disabling export does not affect core hook dispatch.
