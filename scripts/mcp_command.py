@@ -24,14 +24,17 @@ from playwright_defaults import (  # type: ignore
 )
 
 CONFIG_PATH = resolve_write_path()
-SUPPORTED = (
+ACTIVE_SERVERS = (
     "context7",
     "gh_grep",
     "playwright",
     "exa_search",
-    "firecrawl",
     "github",
 )
+RETIRED_SERVERS = {
+    "firecrawl": "retired_disable_only",
+}
+REPORT_SERVERS = (*ACTIVE_SERVERS, *RETIRED_SERVERS)
 TARGET_ALIASES = {
     "ghgrep": "gh_grep",
     "exa": "exa_search",
@@ -44,7 +47,6 @@ SERVER_DEFAULTS = {
         "command": list(PLAYWRIGHT_MCP_COMMAND),
     },
     "exa_search": {"type": "remote", "url": "https://mcp.exa.ai/mcp"},
-    "firecrawl": {"type": "local", "command": ["npx", "-y", "firecrawl-mcp"]},
     "github": {"type": "remote", "url": "https://api.githubcopilot.com/mcp/"},
 }
 PROFILE_MAP = {
@@ -54,10 +56,9 @@ PROFILE_MAP = {
     "ghgrep": ["gh_grep"],
     "playwright": ["playwright"],
     "exa": ["exa_search"],
-    "firecrawl": ["firecrawl"],
     "github": ["github"],
-    "web": ["playwright", "exa_search", "firecrawl"],
-    "all": list(SUPPORTED),
+    "web": ["playwright", "exa_search"],
+    "all": list(ACTIVE_SERVERS),
 }
 
 
@@ -69,8 +70,9 @@ def profile_names_text() -> str:
     return "|".join(PROFILE_MAP)
 
 
-def target_names_text() -> str:
-    return "|".join((*SUPPORTED, *TARGET_ALIASES, "all"))
+def target_names_text(*, include_retired: bool) -> str:
+    retired = tuple(RETIRED_SERVERS) if include_retired else ()
+    return "|".join((*ACTIVE_SERVERS, *retired, *TARGET_ALIASES, "all"))
 
 
 def endpoint_label(entry: dict) -> str:
@@ -103,6 +105,16 @@ def ensure_server_entry(mcp: dict, name: str) -> dict:
     return entry
 
 
+def disable_retired_entry(mcp: dict, name: str) -> bool:
+    current = mcp.get(name)
+    if not isinstance(current, dict) or current.get("enabled") is False:
+        return False
+    entry = dict(current)
+    entry["enabled"] = False
+    mcp[name] = entry
+    return True
+
+
 def load_config() -> dict:
     data, _ = load_layered_config()
     return data
@@ -127,8 +139,8 @@ def usage() -> int:
     print(
         "usage: /mcp status | /mcp help | /mcp doctor [--json] | "
         f"/mcp profile <{profile_names_text()}> | "
-        f"/mcp enable <{target_names_text()}> | "
-        f"/mcp disable <{target_names_text()}>"
+        f"/mcp enable <{target_names_text(include_retired=False)}> | "
+        f"/mcp disable <{target_names_text(include_retired=True)}>"
     )
     return 2
 
@@ -140,20 +152,25 @@ def print_next_steps() -> None:
     print("- /mcp enable context7")
     print("- /mcp enable gh_grep")
     print("- /mcp enable exa_search")
-    print("- /mcp enable firecrawl")
     print("- /mcp enable github")
     print("- /mcp profile all")
     print("- /mcp disable all")
+    print("- /mcp disable firecrawl  # retired compatibility target")
     print(f"- /mcp profile {profile_names_text()}")
     print("- /mcp doctor")
 
 
 def print_status(mcp: dict) -> None:
-    for name in SUPPORTED:
+    for name in ACTIVE_SERVERS:
         entry = mcp.get(name, {}) if isinstance(mcp.get(name), dict) else {}
         state = status_line(entry)
         endpoint = endpoint_label(entry)
         print(f"{name}: {state}" + (f" ({endpoint})" if endpoint else ""))
+    for name, reason in RETIRED_SERVERS.items():
+        configured = isinstance(mcp.get(name), dict)
+        entry = mcp[name] if configured else {}
+        state = status_line(entry) if configured else "absent"
+        print(f"{name}: {state} [retired: {reason}]")
     print(f"config: {CONFIG_PATH}")
 
 
@@ -162,7 +179,7 @@ def collect_doctor(mcp: dict) -> dict:
     warnings: list[str] = []
     servers: dict[str, dict[str, object]] = {}
 
-    for name in SUPPORTED:
+    for name in ACTIVE_SERVERS:
         entry = mcp.get(name, {}) if isinstance(mcp.get(name), dict) else {}
         kind = str(entry.get("type") or "") if isinstance(entry, dict) else ""
         url = entry.get("url", "") if isinstance(entry.get("url"), str) else ""
@@ -223,6 +240,21 @@ def collect_doctor(mcp: dict) -> dict:
         elif kind:
             problems.append(f"{name} type is invalid: {kind}")
 
+    for name, reason in RETIRED_SERVERS.items():
+        configured = isinstance(mcp.get(name), dict)
+        entry = mcp[name] if configured else {}
+        state = status_line(entry) if configured else "absent"
+        servers[name] = {
+            "name": name,
+            "configured": "true" if configured else "false",
+            "status": state,
+            "reason": reason,
+        }
+        if state == "enabled":
+            warnings.append(
+                f"{name} is retired and still enabled; run /mcp disable {name}"
+            )
+
     return {
         "result": "PASS" if not problems else "FAIL",
         "config": str(CONFIG_PATH),
@@ -249,8 +281,14 @@ def print_doctor(mcp: dict, json_output: bool = False) -> int:
     print("mcp doctor")
     print("----------")
     print(f"config: {report['config']}")
-    for name in SUPPORTED:
+    for name in REPORT_SERVERS:
         item = report["servers"][name]
+        if name in RETIRED_SERVERS:
+            print(
+                f"- {name}: {item['status']} "
+                f"[retired: {item['reason']}]"
+            )
+            continue
         command = item.get("command")
         command_parts = command if isinstance(command, list) else []
         endpoint = item.get("url") or " ".join(str(part) for part in command_parts)
@@ -280,9 +318,11 @@ def apply_profile(data: dict, mcp: dict, profile: str) -> int:
         return usage()
 
     enable_set = set(PROFILE_MAP[profile])
-    for name in SUPPORTED:
+    for name in ACTIVE_SERVERS:
         entry = ensure_server_entry(mcp, name)
         entry["enabled"] = name in enable_set
+    for name in RETIRED_SERVERS:
+        disable_retired_entry(mcp, name)
 
     data["mcp"] = mcp
     save_config(data)
@@ -290,7 +330,7 @@ def apply_profile(data: dict, mcp: dict, profile: str) -> int:
     print(f"profile: {profile}")
     print("enabled servers:")
     if enable_set:
-        for name in SUPPORTED:
+        for name in ACTIVE_SERVERS:
             if name in enable_set:
                 print(f"- {name}")
     else:
@@ -301,20 +341,41 @@ def apply_profile(data: dict, mcp: dict, profile: str) -> int:
 
 def set_enabled(data: dict, mcp: dict, action: str, target: str) -> int:
     normalized = normalized_target(target)
-    targets = SUPPORTED if normalized == "all" else (normalized,)
-    if any(name not in SUPPORTED for name in targets):
+    if normalized in RETIRED_SERVERS:
+        if action == "enable":
+            print(f"error: {normalized} is retired and cannot be enabled")
+            return 1
+        changed = disable_retired_entry(mcp, normalized)
+        if changed:
+            data["mcp"] = mcp
+            save_config(data)
+            print(f"{normalized}: disabled")
+            print(f"config: {CONFIG_PATH}")
+        else:
+            print(f"{normalized}: absent or already disabled (no change)")
+        return 0
+
+    targets = ACTIVE_SERVERS if normalized == "all" else (normalized,)
+    if any(name not in ACTIVE_SERVERS for name in targets):
         return usage()
 
     value = action == "enable"
     for name in targets:
         entry = ensure_server_entry(mcp, name)
         entry["enabled"] = value
+    retired_disabled: list[str] = []
+    if normalized == "all" and action == "disable":
+        for name in RETIRED_SERVERS:
+            if disable_retired_entry(mcp, name):
+                retired_disabled.append(name)
 
     data["mcp"] = mcp
     save_config(data)
     state = "enabled" if value else "disabled"
     for name in targets:
         print(f"{name}: {state}")
+    for name in retired_disabled:
+        print(f"{name}: disabled (retired)")
     print(f"config: {CONFIG_PATH}")
     return 0
 

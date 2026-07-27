@@ -1967,7 +1967,6 @@ exit 0
             "gh_grep",
             "playwright",
             "exa_search",
-            "firecrawl",
             "github",
         ):
             expect(
@@ -1975,6 +1974,12 @@ exit 0
                 == "enabled",
                 f"{server_name} should be enabled in all profile",
             )
+        retired_firecrawl = report.get("servers", {}).get("firecrawl", {})
+        expect(
+            retired_firecrawl.get("status") in {"absent", "disabled"}
+            and retired_firecrawl.get("reason") == "retired_disable_only",
+            "all profile should keep Firecrawl absent or disabled as a retired target",
+        )
 
         # MCP alias should resolve to canonical target names.
         result = run_script(MCP_SCRIPT, cfg, home, "disable", "exa")

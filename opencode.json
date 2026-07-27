@@ -173,15 +173,6 @@
       "url": "https://mcp.exa.ai/mcp",
       "enabled": false
     },
-    "firecrawl": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "firecrawl-mcp"
-      ],
-      "enabled": false
-    },
     "github": {
       "type": "remote",
       "url": "https://api.githubcopilot.com/mcp/",
