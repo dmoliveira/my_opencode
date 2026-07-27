@@ -35,8 +35,10 @@ outside, or unsafe paths without changing victims.
 Gateway TypeScript and Python state writers share a private lock protocol,
 validate plan-time and commit-time identities, and preserve sibling and unknown
 domains. Shared configuration changes use stable descriptor-anchored locks,
-alias-safe provisioning, and compare-and-swap publication. Multi-file failures
-report exactly which destinations committed instead of claiming rollback.
+alias-safe provisioning, retained staging descriptors, and compare-and-swap
+publication. Retained descriptors prevent swapped stage names from becoming
+cleanup victims even under immediate inode reuse. Multi-file failures report
+exactly which destinations committed instead of claiming rollback.
 
 ### Developer-tool policy
 
@@ -55,14 +57,14 @@ a read-only doctor that rehashes the binary on every call.
 ## Validation evidence
 
 The authoritative owner-host run executed from committed candidate
-`feabc6fbfd57b5748e04af00269248d57d08ea78` against
+`8cb7aeb220b1f13d585767bbd58bb88bc7835c42` against
 `origin/main` `f1a529732a16567b813c1939a89041d37832a870` in tmux session
 `ai-oc-hardening-wave8`. The host was Darwin arm64 `25.4.0`, Python `3.14.6`.
-The run completed at `2026-07-27T21:15:38Z` (`2026-07-28` local time).
+The run completed at `2026-07-27T22:12:32Z` (`2026-07-28` local time).
 
 The full closure matrix passed:
 
-- `make validate`: `210` tests passed with one expected opt-in live-cell skip;
+- `make validate`: `213` tests passed with one expected opt-in live-cell skip;
 - two consecutive `make selftest` runs, `make install-test`, and
   `pre-commit run --all-files` passed;
 - gateway lint, build, and all `783/783` tests passed on Node `26.5.0` and
@@ -75,6 +77,9 @@ The full closure matrix passed:
   produced only safe audit evidence;
 - direct and configured-tuple gateway contracts both passed and cleaned their
   artifacts;
+- a read-only Python `3.11` Linux arm64 container passed `62` focused ast-grep,
+  `/devtools`, and shared-configuration transaction tests with the expected
+  Darwin-only live-cell skip;
 - the sandbox-confined ast-grep owner-host cell observed the exact release URL,
   redirects, archive profile, hashes, child environment and descriptors, native
   no-clobber publication, successful doctor rehash, zero survivors, a
@@ -87,33 +92,46 @@ The full closure matrix passed:
 
 Every core, Node 26, Node 22, integration, and exact-model bundle recorded the
 same tracked-file manifest SHA-256
-`f8555458b9c052e8c833d4cd1298f26849df66ce3546979a4dd2e7a8dad8f0b4`
+`29d1a84e4ba4e4347165ade6afbb7a4314e9f219a6ff807410db819d320196eb`
 before and after execution; status and diff artifacts were empty. No validation
 command required tracked-file restoration.
 
 Sanitized machine-readable evidence is ignored under
-`runtime/harness-wave-8/task47/run-600dcfbdaa924be88c5cefde87f6e2ae/`.
+`runtime/harness-wave-8/task47/run-a62e68e0e8db4673bcf8a1eb99bf7976/`.
 Important evidence hashes:
 
 | Evidence | SHA-256 | Classification |
 | --- | --- | --- |
-| Closure summary | `27d005a04122a6e8bae030109d752373a2e14aff7dc1de7255407fdf729c3a40` | owner-host aggregate |
-| Exact-model report | `e0409d017cb9753572510de4e9b52fb3eec97d04a9e7f651f3b8bb9b4ac2f8a2` | credential-backed owner-host |
-| ast-grep owner-host report | `d84fe11567582b839c87bf658093c6dbaa8351b923383c53c1dafed55bcb7545` | networked Darwin-arm64 owner-host |
+| Closure summary | `88a0787f7f3359991b60b132d3eb6f9c6a5ef3d4510cf35c1054c5b6372592ad` | owner-host aggregate |
+| Exact-model report | `73c0957da46304e2b479227cfce6ab56c1a487c94e81a0701191bec03830efbc` | credential-backed owner-host |
+| ast-grep owner-host report | `a96dcb165d2ad9421a74a1905153e159c404a85b4dd9f026c82a6586034b2ead` | networked Darwin-arm64 owner-host |
 | Package parity report | `33ad44aaf281e640c3ef5bca9b4d229b426ec2cf45a44e0d105098c0dc32e15f` | CI-reproducible |
-| Provider secret-smoke report | `5f530b324a87640b4736305c3956920d538edb40bd9aedafbfcbf678ea1d8027` | local-runtime owner-host |
+| Provider secret-smoke report | `24c702b7e8f2b0748314722725fc4b26f6504b96f211e876158a7e991c8fd2ab` | local-runtime owner-host |
 | Direct/tuple contract report | `e101283c35362d2cebc5698d94a5f14c0b20f511b4106ad0c49c88a754d0da33` | local-runtime owner-host |
-| Executed command log | `fd6e8013680c61985436558380b6d047f4116d39d11a084e9ae4387a987cb078` | sanitized owner-host |
+| Python 3.11 Linux focused log | `868c2bb14ee5c3f0839da98fb72e585a4eee4c11552fa897221bf635bcc9449c` | container-reproducible |
+| Executed command log | `e6e5dcf10c22527dfea8dbc797324898a392d71151ae418ed4790a6749bdbeb3` | sanitized owner-host |
 
 Core tests, dual-Node tests, scenarios, package parity, and static checks are
-CI-reproducible. The exact-model OAuth cell, live ast-grep download, and local
-OpenCode runtime probes remain owner-host gates.
+CI-reproducible. The Python 3.11 Linux container additionally exercises the
+portable staging and victim-safety regressions. The exact-model OAuth cell,
+live ast-grep download, and local OpenCode runtime probes remain owner-host
+gates.
 
 The first closure-wrapper run parsed the contract report as if it had a
 top-level `result`; the report correctly stores separate direct and tuple
 results. The assertion was corrected, and the entire matrix was rerun from the
 beginning. The authoritative run above passed without reusing the failed run's
 state.
+
+Hosted CI then exposed two Linux-specific assumptions that the first owner-host
+run could not reproduce: executing a staged binary while its write descriptor
+remained open (`ETXTBSY`), and immediate inode-number reuse after a malicious
+stage-name swap. The installer now retains only a read descriptor before
+execution and treats zombie-only process groups as reaped after direct-child
+collection. Shared configuration transactions retain each stage descriptor
+through replacement and cleanup, so pathname reuse cannot transfer ownership.
+Both fixes have direct regressions. Final GitHub Actions run `30309232927`
+passed the Python-minimum and full validation jobs at candidate `8cb7aeb`.
 
 ## Review record
 
@@ -123,7 +141,7 @@ implementation reviews. Findings tightened root and destination authority,
 transaction attribution, directory durability, process-group teardown,
 descriptor cleanup, managed-doctor semantics, and measured owner-host evidence.
 The latest implementation and operator-guidance reviews reported no blocker,
-and the full matrix passed on that committed candidate.
+hosted CI was green, and the full matrix passed on that committed candidate.
 
 ## Residual risks
 
@@ -141,8 +159,9 @@ and the full matrix passed on that committed candidate.
 
 ## Rollback
 
-Revert `feabc6f`, `f6dd93a`, `b8692f5`, `682964d`, `f74a437`, and `86dd087` in
-reverse delivery order. Rebuild `plugin/gateway-core/dist/**` after reverting
-gateway source. The planning commit `37ebcfd` and this closure audit can be
-reverted independently. Rollback must not overwrite primary-main user
-configuration or treat an unattested executable as managed.
+Revert `8cb7aeb`, `26f1184`, `feabc6f`, `f6dd93a`, `b8692f5`, `682964d`,
+`f74a437`, and `86dd087` in reverse delivery order. Rebuild
+`plugin/gateway-core/dist/**` after reverting gateway source. The planning
+commit `37ebcfd` and closure-audit commits can be reverted independently.
+Rollback must not overwrite primary-main user configuration or treat an
+unattested executable as managed.
