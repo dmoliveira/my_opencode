@@ -39,9 +39,10 @@ def _parse_iso(value: str | None) -> datetime | None:
     if not isinstance(value, str) or not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
 
 
 def _repo_root(cwd: Path) -> str:
@@ -394,7 +395,7 @@ def update_memory_links(
 
 def active_memory_records(conn: sqlite3.Connection) -> list[MemoryRecord]:
     rows = conn.execute(
-        "SELECT * FROM memories WHERE archived = 0 ORDER BY updated_at DESC, created_at DESC"
+        "SELECT * FROM memories WHERE archived = 0 ORDER BY julianday(updated_at) DESC, julianday(created_at) DESC, updated_at DESC"
     ).fetchall()
     return [_row_to_record(row) for row in rows]
 
@@ -769,7 +770,7 @@ def find_memories(
             FROM memory_fts
             JOIN memories AS m ON m.rowid = memory_fts.rowid
             WHERE memory_fts MATCH ? AND {" AND ".join(filters)}
-            ORDER BY lexical_score ASC, m.updated_at DESC
+            ORDER BY lexical_score ASC, julianday(m.updated_at) DESC, m.updated_at DESC
             LIMIT ?
             """,
             tuple(params),
@@ -822,7 +823,7 @@ def _find_memories_like(
         FROM memories
         WHERE (title LIKE ? OR summary LIKE ? OR content LIKE ? OR source_ref LIKE ? OR tags_text LIKE ?)
           AND {" AND ".join(filters)}
-        ORDER BY pinned DESC, updated_at DESC, confidence DESC
+        ORDER BY pinned DESC, julianday(updated_at) DESC, updated_at DESC, confidence DESC
         LIMIT ?
         """,
         tuple(params),
@@ -860,7 +861,7 @@ def recall_memories(
         SELECT rowid, *
         FROM memories
         WHERE {" AND ".join(filters)}
-        ORDER BY pinned DESC, updated_at DESC, confidence DESC
+        ORDER BY pinned DESC, julianday(updated_at) DESC, updated_at DESC, confidence DESC
         LIMIT ?
         """,
         tuple(params),

@@ -33,9 +33,10 @@ def _parse_iso(value: str | None) -> datetime | None:
         return None
     normalized = value.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
 
 
 def _utc_now() -> datetime:
@@ -162,6 +163,11 @@ def _event_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _session_timestamp_sort_key(session: dict[str, Any]) -> tuple[bool, float]:
+    parsed = _parse_iso(str(session.get("last_event_at") or ""))
+    return (parsed is not None, parsed.timestamp() if parsed is not None else 0.0)
+
+
 def _prune_sessions(
     sessions: list[dict[str, Any]], policy: dict[str, int]
 ) -> list[dict[str, Any]]:
@@ -171,7 +177,7 @@ def _prune_sessions(
         parsed = _parse_iso(str(session.get("last_event_at") or ""))
         if parsed is None or parsed >= cutoff:
             kept.append(session)
-    kept.sort(key=lambda item: str(item.get("last_event_at") or ""), reverse=True)
+    kept.sort(key=_session_timestamp_sort_key, reverse=True)
     return kept[: policy["max_sessions"]]
 
 

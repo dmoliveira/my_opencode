@@ -9,7 +9,7 @@ import sqlite3
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -156,12 +156,25 @@ def _load_index(path: Path) -> dict:
     }
 
 
+def _session_row_timestamp_sort_key(row: dict) -> tuple[bool, float]:
+    value = row.get("last_event_at")
+    if not isinstance(value, str) or not value:
+        return (False, 0.0)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return (False, 0.0)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return (True, parsed.timestamp())
+
+
 def _session_rows(index: dict) -> list[dict]:
     rows: list[dict] = []
     for item in index.get("sessions", []):
         if isinstance(item, dict):
             rows.append(item)
-    rows.sort(key=lambda row: str(row.get("last_event_at") or ""), reverse=True)
+    rows.sort(key=_session_row_timestamp_sort_key, reverse=True)
     return rows
 
 
