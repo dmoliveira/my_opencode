@@ -1,5 +1,5 @@
 ---
-status: doing
+status: done
 priority: high
 updated: 2026-07-27
 ---
@@ -55,7 +55,7 @@ Privacy and status contract:
 - Legacy rows are not rewritten or deleted, but gateway status never returns their private fields.
 - Status reads at most a `256 KiB` tail and at most `500` complete records. It reports `window_entry_count`, `window_category_counts`, `invalid_lines`, `truncated`, and a last entry containing only `{ts, category}`. Window counts are never presented as lifetime totals.
 - The no-path/no-session/content guarantee applies to the `mistake_ledger` status subtree; broader gateway status redaction remains deferred.
-- Victim-unchanged tests cover an ordinary workspace file, payload-directory escape, final and parent symlinks, hardlinks, FIFO/non-regular targets, unsafe modes, unsupported ownership/no-follow checks, and a large legacy canary ledger.
+- Victim-unchanged tests cover an ordinary workspace file, payload-directory escape, final and parent symlinks, hardlinks, FIFO/non-regular targets, unsafe modes, an ownership mismatch, and a large legacy canary ledger.
 
 ### 2. Share-safe session redaction (`task_35`, completing `task_15`)
 
