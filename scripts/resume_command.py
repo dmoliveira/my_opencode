@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import sys
 from pathlib import Path
@@ -48,9 +49,17 @@ def _load_runtime() -> tuple[dict[str, Any], dict[str, Any], Path]:
 
 
 def _save_runtime(
-    config: dict[str, Any], write_path: Path, runtime: dict[str, Any]
+    config: dict[str, Any],
+    write_path: Path,
+    runtime: dict[str, Any],
+    expected_runtime: dict[str, Any],
 ) -> None:
-    save_plan_execution_state(config, write_path, runtime)
+    save_plan_execution_state(
+        config,
+        write_path,
+        runtime,
+        expected_runtime=expected_runtime,
+    )
 
 
 def _default_interruption_class(runtime: dict[str, Any]) -> str:
@@ -221,6 +230,7 @@ def command_now(args: list[str]) -> int:
         return 1
 
     interruption = interruption_class or _default_interruption_class(runtime)
+    expected_runtime = copy.deepcopy(runtime)
     resume_result = execute_resume(
         runtime,
         interruption,
@@ -230,7 +240,7 @@ def command_now(args: list[str]) -> int:
 
     next_runtime = resume_result.get("runtime")
     if isinstance(next_runtime, dict):
-        _save_runtime(config, write_path, next_runtime)
+        _save_runtime(config, write_path, next_runtime, expected_runtime)
 
     reason_code = str(
         resume_result.get("reason_code") or "resume_missing_runtime_artifacts"
@@ -284,13 +294,14 @@ def command_disable(args: list[str]) -> int:
     json_output = "--json" in args
 
     config, runtime, write_path = _load_runtime()
+    expected_runtime = copy.deepcopy(runtime)
     resume_any = runtime.get("resume")
     resume = dict(resume_any) if isinstance(resume_any, dict) else {}
     resume["enabled"] = False
     runtime["resume"] = resume
     if not runtime.get("status"):
         runtime["status"] = "idle"
-    _save_runtime(config, write_path, runtime)
+    _save_runtime(config, write_path, runtime, expected_runtime)
 
     report = {
         "result": "PASS",

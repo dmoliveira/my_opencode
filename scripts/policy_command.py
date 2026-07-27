@@ -11,9 +11,10 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 
 
@@ -125,35 +126,6 @@ def default_policy() -> dict:
     }
 
 
-def save_policy(data: dict) -> None:
-    global LAYERED_WRITE_PATH
-    LAYERED_WRITE_PATH = resolve_write_path()
-
-    if POLICY_ENV_SET:
-        POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        POLICY_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        return
-
-    config, _ = load_layered_config()
-    config[POLICY_SECTION] = data
-    save_config_file(config, LAYERED_WRITE_PATH)
-
-
-def save_notify_config(profile_name: str) -> None:
-    cfg = PROFILE_MAP[profile_name]["notify"]
-    global LAYERED_WRITE_PATH
-    LAYERED_WRITE_PATH = resolve_write_path()
-
-    if NOTIFY_ENV_SET:
-        NOTIFY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        NOTIFY_PATH.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
-        return
-
-    config, _ = load_layered_config()
-    config[NOTIFY_SECTION] = cfg
-    save_config_file(config, LAYERED_WRITE_PATH)
-
-
 def print_status(policy: dict) -> int:
     current = policy.get("current", "balanced")
     print(f"profile: {current}")
@@ -167,17 +139,43 @@ def print_status(policy: dict) -> int:
 
 
 def apply_profile(name: str) -> int:
+    global LAYERED_WRITE_PATH
     if name not in PROFILE_MAP:
         return usage()
 
-    save_notify_config(name)
     policy = {
         "current": name,
         "description": PROFILE_MAP[name]["description"],
         "updated_at": now_iso(),
         "notify_config": str(NOTIFY_PATH if NOTIFY_ENV_SET else LAYERED_WRITE_PATH),
     }
-    save_policy(policy)
+    notify = json.loads(json.dumps(PROFILE_MAP[name]["notify"]))
+    participants: list[ConfigFileParticipant] = []
+
+    def replace_policy(data: dict) -> None:
+        data.clear()
+        data.update(policy)
+
+    def replace_notify(data: dict) -> None:
+        data.clear()
+        data.update(notify)
+
+    if POLICY_ENV_SET:
+        participants.append(ConfigFileParticipant(POLICY_PATH, replace_policy))
+    if NOTIFY_ENV_SET:
+        participants.append(ConfigFileParticipant(NOTIFY_PATH, replace_notify))
+
+    def mutate_layered(config: dict) -> None:
+        if not POLICY_ENV_SET:
+            config[POLICY_SECTION] = policy
+        if not NOTIFY_ENV_SET:
+            config[NOTIFY_SECTION] = notify
+
+    result = edit_layered_config(
+        mutate_layered,
+        direct_participants=tuple(participants),
+    )
+    LAYERED_WRITE_PATH = result.files[0].path
 
     print(f"profile: {name}")
     print(f"description: {PROFILE_MAP[name]['description']}")

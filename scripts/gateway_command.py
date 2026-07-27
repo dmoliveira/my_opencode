@@ -36,7 +36,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
+from config_layering import ConfigFileParticipant, edit_layered_config, load_layered_config, resolve_write_path  # type: ignore
 from concise_mode_runtime import (  # type: ignore
     VALID_CONCISE_MODES,
     current_session_id,
@@ -998,8 +998,16 @@ def load_gateway_sidecar_only(cwd: Path) -> tuple[dict[str, Any], Path]:
 
 
 def save_gateway_sidecar_only(path: Path, config: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    replacement = copy.deepcopy(config)
+
+    def replace(current: dict[str, Any]) -> None:
+        current.clear()
+        current.update(replacement)
+
+    edit_layered_config(
+        lambda _config: None,
+        direct_participants=(ConfigFileParticipant(path, replace),),
+    )
 
 
 def parse_positive_int_flag(raw: str) -> int | None:
@@ -1155,21 +1163,26 @@ def command_watchdog_update(
     tool_call_threshold: int | None = None,
     reminder_cooldown_ms: int | None = None,
 ) -> int:
-    sidecar_config, sidecar_path = load_gateway_sidecar_only(Path.cwd())
-    current_any = sidecar_config.get("longTurnWatchdog")
-    current = dict(current_any) if isinstance(current_any, dict) else {}
+    sidecar_path = resolve_gateway_sidecar_path(Path.cwd())
 
-    if enabled is not None:
-        current["enabled"] = enabled
-    if warning_threshold_ms is not None:
-        current["warningThresholdMs"] = warning_threshold_ms
-    if tool_call_threshold is not None:
-        current["toolCallWarningThreshold"] = tool_call_threshold
-    if reminder_cooldown_ms is not None:
-        current["reminderCooldownMs"] = reminder_cooldown_ms
+    def mutate(sidecar_config: dict[str, Any]) -> None:
+        current_any = sidecar_config.get("longTurnWatchdog")
+        current = dict(current_any) if isinstance(current_any, dict) else {}
+        if enabled is not None:
+            current["enabled"] = enabled
+        if warning_threshold_ms is not None:
+            current["warningThresholdMs"] = warning_threshold_ms
+        if tool_call_threshold is not None:
+            current["toolCallWarningThreshold"] = tool_call_threshold
+        if reminder_cooldown_ms is not None:
+            current["reminderCooldownMs"] = reminder_cooldown_ms
+        sidecar_config["longTurnWatchdog"] = current
 
-    sidecar_config["longTurnWatchdog"] = current
-    save_gateway_sidecar_only(sidecar_path, sidecar_config)
+    result = edit_layered_config(
+        lambda _config: None,
+        direct_participants=(ConfigFileParticipant(sidecar_path, mutate),),
+    )
+    sidecar_path = result.files[-1].path
 
     root_config, _ = load_config()
     merged = long_turn_watchdog_section(root_config)
@@ -2410,8 +2423,26 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
         ]
         emit(fallback, as_json=as_json)
         return 1
-    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
-    save_config(config, cfg_path)
+    committed_config: dict[str, Any] = {}
+
+    def mutate(current: dict[str, Any]) -> None:
+        nonlocal committed_config
+        set_plugin_enabled(current, home, True)
+        committed_config = copy.deepcopy(current)
+
+    result = edit_layered_config(mutate)
+    cfg_path = result.files[0].path
+    payload = status_payload(committed_config, home, Path.cwd())
+    payload["config"] = str(cfg_path)
+    try:
+        payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
+    except OSError as cause:
+        payload["result"] = "WARN"
+        payload["compat"] = {
+            "applied": False,
+            "reason": "config_committed_compat_failed",
+            "error": type(cause).__name__,
+        }
     emit(payload, as_json=as_json)
     return 0
 
@@ -2419,10 +2450,16 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
 # Disables gateway plugin spec in opencode config.
 def command_disable(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
-    config, cfg_path = load_config()
-    set_plugin_enabled(config, home, False)
-    save_config(config, cfg_path)
-    payload = status_payload(config, home, Path.cwd())
+    committed_config: dict[str, Any] = {}
+
+    def mutate(current: dict[str, Any]) -> None:
+        nonlocal committed_config
+        set_plugin_enabled(current, home, False)
+        committed_config = copy.deepcopy(current)
+
+    result = edit_layered_config(mutate)
+    cfg_path = result.files[0].path
+    payload = status_payload(committed_config, home, Path.cwd())
     payload["config"] = str(cfg_path)
     emit(payload, as_json=as_json)
     return 0
@@ -2870,13 +2907,19 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
     }
     if apply:
         applied_sections: list[str] = []
-        for section, values in recommended.items():
-            current_section = config.get(section)
-            merged = dict(current_section) if isinstance(current_section, dict) else {}
-            merged.update(values)
-            config[section] = merged
-            applied_sections.append(section)
-        save_config(config, config_path)
+
+        def mutate(current_config: dict[str, Any]) -> None:
+            for section, values in recommended.items():
+                current_section = current_config.get(section)
+                merged = (
+                    dict(current_section) if isinstance(current_section, dict) else {}
+                )
+                merged.update(values)
+                current_config[section] = merged
+                applied_sections.append(section)
+
+        result = edit_layered_config(mutate)
+        config_path = result.files[0].path
         payload["applied"] = {
             "config_path": str(config_path),
             "sections": applied_sections,

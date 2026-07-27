@@ -512,7 +512,7 @@ class PluginConfigEntriesTest(unittest.TestCase):
                     side_effect=[staged_status, {"enabled": False}],
                 ),
                 patch.object(module, "ensure_file_plugin_compat") as compat,
-                patch.object(module, "save_config") as save,
+                patch.object(module, "edit_layered_config") as save,
                 patch.object(module, "emit"),
             ):
                 self.assertEqual(1, module.command_enable(as_json=True))

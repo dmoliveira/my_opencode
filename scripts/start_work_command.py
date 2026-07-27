@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -339,10 +340,16 @@ def save_state(
     write_path: Path,
     state: dict[str, Any],
     *,
+    expected_state: dict[str, Any],
     snapshot_source: str = "step_boundary",
     command_outcomes: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    save_plan_execution_state(config, write_path, state)
+    save_plan_execution_state(
+        config,
+        write_path,
+        state,
+        expected_runtime=expected_state,
+    )
     snapshot_result = write_snapshot(
         write_path,
         state,
@@ -705,6 +712,7 @@ def command_start(args: list[str]) -> int:
         config,
         write_path,
         run_state,
+        expected_state=existing_runtime,
         snapshot_source="step_boundary",
         command_outcomes=[
             {
@@ -1032,6 +1040,7 @@ def command_recover(args: list[str]) -> int:
         if isinstance(raw_metadata, dict):
             actor = str(raw_metadata.get("owner") or actor)
 
+    expected_runtime = copy.deepcopy(runtime)
     result = execute_resume(
         runtime,
         interruption_class,
@@ -1087,6 +1096,7 @@ def command_recover(args: list[str]) -> int:
             config,
             write_path,
             next_runtime,
+            expected_state=expected_runtime,
             snapshot_source=(
                 "step_boundary" if result.get("result") == "PASS" else "error_boundary"
             ),

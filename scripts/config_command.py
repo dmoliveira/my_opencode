@@ -11,7 +11,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import layering_report  # type: ignore
+from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    _load_json_or_jsonc,
+    edit_config_batch,
+    layering_report,
+)
 
 
 CONFIG_DIR = Path(
@@ -79,46 +84,63 @@ def command_sanitize(argv: list[str]) -> int:
     findings: list[dict[str, object]] = []
     removed_total = 0
 
-    for file_path in files:
-        try:
-            payload = json.loads(file_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+    if apply_changes:
+        removed_by_path: dict[Path, list[str]] = {}
+        participants: list[ConfigFileParticipant] = []
+
+        for file_path in files:
+            def make_mutator(path: Path):
+                def mutate(payload: dict) -> None:
+                    removed_keys = sorted(
+                        key for key in UNSUPPORTED_TOP_LEVEL_KEYS if key in payload
+                    )
+                    removed_by_path[path] = removed_keys
+                    for key in removed_keys:
+                        payload.pop(key, None)
+
+                return mutate
+
+            participants.append(
+                ConfigFileParticipant(file_path, make_mutator(file_path))
+            )
+        if participants:
+            edit_config_batch(tuple(participants))
+        for file_path in files:
+            removed_keys = removed_by_path.get(file_path, [])
+            removed_total += len(removed_keys)
             findings.append(
                 {
                     "file": str(file_path),
-                    "result": "invalid_json",
-                    "error": str(exc),
-                    "removed_keys": [],
+                    "result": "updated" if removed_keys else "ok",
+                    "removed_keys": removed_keys,
                 }
             )
-            continue
+    else:
+        for file_path in files:
+            try:
+                payload = _load_json_or_jsonc(file_path)
+            except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
+                findings.append(
+                    {
+                        "file": str(file_path),
+                        "result": "invalid_json",
+                        "error": str(exc),
+                        "removed_keys": [],
+                    }
+                )
+                continue
 
-        if not isinstance(payload, dict):
+            removed_keys = sorted(
+                [key for key in UNSUPPORTED_TOP_LEVEL_KEYS if key in payload]
+            )
+            removed_total += len(removed_keys)
             findings.append(
                 {
                     "file": str(file_path),
-                    "result": "not_object",
-                    "removed_keys": [],
+                    "result": "ok",
+                    "removed_keys": removed_keys,
                 }
             )
-            continue
-
-        removed_keys = sorted(
-            [key for key in UNSUPPORTED_TOP_LEVEL_KEYS if key in payload]
-        )
-        if removed_keys and apply_changes:
-            for key in removed_keys:
-                payload.pop(key, None)
-            file_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-        removed_total += len(removed_keys)
-        findings.append(
-            {
-                "file": str(file_path),
-                "result": "updated" if removed_keys and apply_changes else "ok",
-                "removed_keys": removed_keys,
-            }
-        )
 
     result = "PASS"
     payload = {
@@ -262,13 +284,29 @@ def command_restore(argv: list[str]) -> int:
         return 1
 
     restored = []
+    participants: list[ConfigFileParticipant] = []
     for file_name in match.get("files", []):
         src = source_dir / file_name
         if not src.exists():
-            continue
+            print(f"error: backup member missing: {src}")
+            return 1
         dst = CONFIG_DIR / file_name
-        shutil.copy2(src, dst)
+        replacement = _load_json_or_jsonc(src)
+
+        def make_replacement(payload: dict):
+            def replace(current: dict) -> None:
+                current.clear()
+                current.update(json.loads(json.dumps(payload)))
+
+            return replace
+
+        participants.append(
+            ConfigFileParticipant(dst, make_replacement(replacement))
+        )
         restored.append(file_name)
+
+    if participants:
+        edit_config_batch(tuple(participants))
 
     print(f"restored: {backup_id}")
     print(f"files: {', '.join(restored) if restored else '(none)'}")

@@ -169,26 +169,79 @@ Normative Python/TypeScript protocol:
 
 ### 4. Transactional shared config (`task_44`)
 
-- Introduce `edit_layered_config(mutator)`. It locks the logical config namespace
-  before target selection, re-resolves the target after lock acquisition,
-  reloads every layer, applies the mutation, stages and flushes a `0600` regular
-  file, revalidates the snapshot, atomically replaces the resolved target while
-  preserving an intended symlink, and syncs the parent.
-- For symlinks, capture link and target identity, acquire the canonical target
-  lock, then re-resolve. Release and retry if link or target identity changed.
+- Introduce `edit_layered_config(mutator)`. It acquires one stable per-user
+  layered-config namespace lock before candidate discovery, then acquires
+  deduplicated canonical-target locks in sorted order. All acquisition and
+  pre-mutation retries share one validated finite monotonic deadline. Locks use
+  private owner tokens, are released in reverse order, and are never reclaimed
+  automatically.
+- Snapshot every candidate's presence or absence, every loaded layer, the full
+  symlink chain (identity plus raw link text), canonical parent identity, and the
+  final target. A lexically present broken or unsafe higher-priority candidate
+  fails closed rather than falling through. Re-resolve after target locking;
+  release target locks and retry if canonical lock identities changed. Invoke a
+  non-reentrant mutator exactly once only after a stable re-resolution, and do
+  not rerun it after any post-mutation stale-snapshot failure.
+- The single-file API passes one deep-copied merged effective configuration to
+  an in-place mutator that returns `None`; successful candidate/lock retries
+  happen before that exactly-once call. It persists the resulting effective
+  configuration to the selected write layer, matching existing behavior.
+  `edit_config_batch(participants)` declares direct-file participants and their
+  in-place mutators up front. It resolves and locks every participant before
+  invoking mutators in declaration order, stages all changed files, replaces in
+  sorted canonical-path order, stops after the first replacement/sync failure,
+  and returns an ordered per-file result. The layered wrapper may include direct
+  sidecars in the same coordinator; a sidecar alias of the layered write target
+  is rejected before any mutator runs.
+- Read through verified descriptors with strict UTF-8 and byte bounds. JSONC
+  removal preserves token separation and rejects unterminated comments,
+  duplicate keys, non-finite or unsafe numbers, non-object roots, and malformed
+  input. A changed JSONC file may normalize to strict JSON; an exact semantic
+  no-op preserves bytes, inode, mode, and timestamps and creates no target or
+  stage.
+- Config input and serialized output are capped at 4 MiB. Integers outside
+  `[-9007199254740991, 9007199254740991]`, non-finite numbers, and integral
+  floats outside that range are rejected.
+- Stage and flush a unique `O_EXCL` `0600` regular file in each canonical target
+  parent, revalidate the entire discovery/layer/link/target snapshot, atomically
+  replace the canonical target while preserving intentional symlinks, and sync
+  each unique parent directory.
 - Reject hardlinks, non-regular targets, unsafe parents, ownership mismatches,
   malformed current config, and stale snapshots.
 - Inventory writers by destination path, not import syntax. Every writer that
   can resolve to a shared OpenCode config candidate must migrate. Exempt state
-  files use a checked static allowlist; a partial migration fails the slice.
+  files use a checked static allowlist; canonical aliases cannot bypass the
+  transaction. Provisioning symlink writers are explicitly classified and use
+  the same namespace serialization. A checked static inventory fails on partial
+  migration.
+- The closed production manifest names `auto_slash`, `browser`, `budget`,
+  `config`, `gateway`, `hooks`, `keyword_mode`, `kvforge_discovery`, `mcp`, `notify`,
+  `plan_execution_runtime`, `plugin`, `policy`, `post_session`, `quality`,
+  `rules`, `stack_profile`, `telemetry`, and `tmux` as transactional writers;
+  `setup_dual_opencode.sh` and `setup_local_dev_symlinks.sh` are serialized
+  provisioners. `model_routing` and gateway sidecar writers use direct-file
+  transaction participants and reject aliases of the layered target. Exact
+  fixture/state/sidecar exemptions are callsite-scoped.
+  Static discovery must equal this manifest and fails on any unmatched shared
+  candidate sink.
 - Replacement is the commit point. A directory-sync failure after replacement
-  reports `committed_durability_uncertain`, never generic rollback.
+  reports `committed_durability_uncertain`, never generic rollback. Errors carry
+  stable reason, phase, committed, durability, lock-release, cause, and secondary
+  reason fields.
 - Multi-file operations acquire canonical locks in sorted order, stage every
-  file first, and provide isolation plus per-file atomicity, not crash atomicity.
-  Failure injection returns an explicit `partial_commit` outcome.
+  changed file first, and compose duplicate direct participants in declaration
+  order on one shared object before staging. Layer discovery deduplicates
+  canonical aliases while preserving the highest-precedence lexical layer; this
+  explicitly supports the shipped user `opencode.json` -> bundled repository
+  `opencode.json` symlink topology without replacing either symlink. Incompatible
+  layered/direct aliases fail before mutation. Multi-file operations
+  provide serializable isolation among participating writers plus per-file
+  atomicity, not crash atomicity or lock-free-reader atomicity. Results include
+  per-file commit/durability state; a strict replaced subset is `partial_commit`.
 - Deterministic multiprocessing tests cover disjoint nested updates, deletion
   versus update, same-key serialization, crash-before-replace, malformed state,
-  symlink changes, victim safety, and no-op byte stability.
+  symlink-chain and priority changes, reverse lock order, victim safety, finite
+  deadlines, release failures, partial commits, and no-op byte stability.
 
 ### 5. Retire unnecessary devtools (`task_45`)
 

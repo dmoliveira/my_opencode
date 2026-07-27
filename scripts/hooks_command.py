@@ -14,9 +14,10 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    append_exempt_text_line,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from hook_actions import (  # type: ignore
     continuation_reminder,
@@ -64,14 +65,24 @@ def load_hook_settings() -> tuple[dict[str, Any], dict[str, Any], Path]:
     return data, settings, write_path
 
 
-def save_hook_settings(
-    data: dict[str, Any], settings: dict[str, Any], path: Path
-) -> None:
-    data[HOOK_SECTION] = {
+def persisted_hook_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    return {
         "enabled": bool(settings.get("enabled", False)),
         "disabled": list(settings.get("disabled", [])),
     }
-    save_config_file(data, path)
+
+
+def edit_hook_settings(mutator) -> tuple[dict[str, Any], Path]:
+    settings: dict[str, Any] = {}
+
+    def mutate(data: dict[str, Any]) -> None:
+        nonlocal settings
+        settings = normalize_hook_settings(data.get(HOOK_SECTION))
+        mutator(settings)
+        data[HOOK_SECTION] = persisted_hook_settings(settings)
+
+    result = edit_layered_config(mutate)
+    return settings, result.files[0].path
 
 
 def hook_allowed(hook_id: str, settings: dict[str, Any]) -> tuple[bool, str | None]:
@@ -94,9 +105,7 @@ def _safe_audit_payload(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_audit_log(record: dict[str, Any]) -> None:
-    HOOK_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with HOOK_LOG_PATH.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record) + "\n")
+    append_exempt_text_line(HOOK_LOG_PATH, json.dumps(record))
 
 
 def usage() -> int:
@@ -136,18 +145,18 @@ def command_status() -> int:
 
 
 def command_enable() -> int:
-    data, settings, write_path = load_hook_settings()
-    settings["enabled"] = True
-    save_hook_settings(data, settings, write_path)
+    _settings, write_path = edit_hook_settings(
+        lambda settings: settings.update({"enabled": True})
+    )
     print("hooks: enabled")
     print(f"config: {write_path}")
     return 0
 
 
 def command_disable() -> int:
-    data, settings, write_path = load_hook_settings()
-    settings["enabled"] = False
-    save_hook_settings(data, settings, write_path)
+    _settings, write_path = edit_hook_settings(
+        lambda settings: settings.update({"enabled": False})
+    )
     print("hooks: disabled")
     print(f"config: {write_path}")
     return 0
@@ -159,12 +168,13 @@ def command_disable_hook(argv: list[str]) -> int:
     hook_id = argv[0]
     if hook_id not in HOOK_IDS:
         return usage()
-    data, settings, write_path = load_hook_settings()
-    disabled = list(settings.get("disabled", []))
-    if hook_id not in disabled:
-        disabled.append(hook_id)
-    settings["disabled"] = disabled
-    save_hook_settings(data, settings, write_path)
+    def mutate(settings: dict[str, Any]) -> None:
+        disabled = list(settings.get("disabled", []))
+        if hook_id not in disabled:
+            disabled.append(hook_id)
+        settings["disabled"] = disabled
+
+    _settings, write_path = edit_hook_settings(mutate)
     print(f"hook disabled: {hook_id}")
     print(f"config: {write_path}")
     return 0
@@ -176,9 +186,15 @@ def command_enable_hook(argv: list[str]) -> int:
     hook_id = argv[0]
     if hook_id not in HOOK_IDS:
         return usage()
-    data, settings, write_path = load_hook_settings()
-    settings["disabled"] = [x for x in settings.get("disabled", []) if x != hook_id]
-    save_hook_settings(data, settings, write_path)
+    _settings, write_path = edit_hook_settings(
+        lambda settings: settings.update(
+            {
+                "disabled": [
+                    item for item in settings.get("disabled", []) if item != hook_id
+                ]
+            }
+        )
+    )
     print(f"hook enabled: {hook_id}")
     print(f"config: {write_path}")
     return 0

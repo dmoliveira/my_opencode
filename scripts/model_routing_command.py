@@ -6,7 +6,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -14,6 +13,8 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
 )
@@ -92,18 +93,16 @@ def _load_json_file(path: Path) -> dict[str, Any] | None:
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile(
-        "w",
-        encoding="utf-8",
-        dir=str(path.parent),
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        delete=False,
-    ) as tmp:
-        tmp.write(json.dumps(payload, indent=2) + "\n")
-        tmp_path = Path(tmp.name)
-    tmp_path.replace(path)
+    replacement = json.loads(json.dumps(payload))
+
+    def replace(data: dict[str, Any]) -> None:
+        data.clear()
+        data.update(replacement)
+
+    edit_layered_config(
+        lambda _config: None,
+        direct_participants=(ConfigFileParticipant(path, replace),),
+    )
 
 
 def load_state_snapshot(
@@ -142,6 +141,34 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
         return
 
     _write_json_atomic(CONFIG_PATH, payload)
+
+
+def edit_state(mutator) -> tuple[dict[str, Any], Path]:
+    seed = _merged_state({})
+    state: dict[str, Any] = {}
+
+    def inspect_layered(config: dict[str, Any]) -> None:
+        nonlocal seed
+        seed = _merged_state(config.get(SECTION))
+
+    def mutate_sidecar(data: dict[str, Any]) -> None:
+        nonlocal state
+        state = _merged_state(data if data else seed)
+        mutator(state)
+        data.clear()
+        data.update(
+            {
+                "active_category": state.get("active_category", "balanced"),
+                "system_defaults": state.get("system_defaults", {}),
+                "latest_trace": state.get("latest_trace", {}),
+            }
+        )
+
+    result = edit_layered_config(
+        inspect_layered,
+        direct_participants=(ConfigFileParticipant(CONFIG_PATH, mutate_sidecar),),
+    )
+    return state, result.files[-1].path
 
 
 def active_config_path(write_path: Path) -> Path:
@@ -430,9 +457,9 @@ def command_set_category(argv: list[str]) -> int:
     categories = schema.get("categories", {})
     if category not in categories:
         return usage()
-    config, state, write_path = load_state()
-    state["active_category"] = category
-    save_state(config, state, write_path)
+    state, write_path = edit_state(
+        lambda current: current.update({"active_category": category})
+    )
     print(f"active_category: {category}")
     print(f"config: {active_config_path(write_path)}")
     return 0
@@ -449,8 +476,9 @@ def command_resolve(argv: list[str]) -> int:
 
     resolution_trace = report.get("resolution_trace")
     if isinstance(resolution_trace, dict):
-        state["latest_trace"] = resolution_trace
-        save_state(config, state, write_path)
+        state, write_path = edit_state(
+            lambda current: current.update({"latest_trace": resolution_trace})
+        )
 
     if json_output:
         print(json.dumps(report, indent=2))
@@ -542,8 +570,15 @@ def command_recommend(argv: list[str]) -> int:
             return 1
         config, state, write_path = load_state()
         if apply_change:
-            state["active_category"] = report.get("recommended_category", "balanced")
-            save_state(config, state, write_path)
+            state, write_path = edit_state(
+                lambda current: current.update(
+                    {
+                        "active_category": report.get(
+                            "recommended_category", "balanced"
+                        )
+                    }
+                )
+            )
             report["applied"] = True
             report["active_category"] = state.get("active_category")
             report["config"] = str(active_config_path(write_path))

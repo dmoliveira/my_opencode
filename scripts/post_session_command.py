@@ -10,9 +10,10 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 
 
@@ -87,18 +88,46 @@ def load_config_from_post_section(post: dict) -> dict:
     return config
 
 
-def save_config(config: dict) -> None:
+def edit_config(mutator) -> tuple[dict, Path]:
     global LAYERED_WRITE_PATH
     LAYERED_WRITE_PATH = resolve_write_path()
+    config: dict = {}
 
     if LEGACY_ENV_SET:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-        return
+        def mutate_legacy(data: dict) -> None:
+            nonlocal config
+            post = data.get(SECTION)
+            config = load_config_from_post_section(post if isinstance(post, dict) else {})
+            mutator(config)
+            data.clear()
+            data.update(config)
 
-    data, _ = load_layered_config()
-    data[SECTION] = config[SECTION]
-    save_config_file(data, LAYERED_WRITE_PATH)
+        result = edit_layered_config(
+            lambda _data: None,
+            direct_participants=(ConfigFileParticipant(CONFIG_PATH, mutate_legacy),),
+        )
+        return config, result.files[-1].path
+
+    def mutate_layered(data: dict) -> None:
+        nonlocal config
+        post = data.get(SECTION)
+        config = load_config_from_post_section(post if isinstance(post, dict) else {})
+        mutator(config)
+        data[SECTION] = config[SECTION]
+
+    result = edit_layered_config(mutate_layered)
+    LAYERED_WRITE_PATH = result.files[0].path
+    return config, LAYERED_WRITE_PATH
+
+
+def save_config(config: dict) -> None:
+    replacement = json.loads(json.dumps(config))
+
+    def replace(current: dict) -> None:
+        current.clear()
+        current.update(replacement)
+
+    edit_config(replace)
 
 
 def usage() -> int:
@@ -130,7 +159,6 @@ def parse_run_on(value: str) -> list[str] | None:
 
 def main(argv: list[str]) -> int:
     config = load_config()
-    post = config["post_session"]
 
     if not argv or argv[0] == "status":
         return print_status(config)
@@ -139,15 +167,17 @@ def main(argv: list[str]) -> int:
         return usage()
 
     if argv[0] == "enable":
-        post["enabled"] = True
-        save_config(config)
+        _config, _path = edit_config(
+            lambda current: current["post_session"].update({"enabled": True})
+        )
         print("post-session: enabled")
         print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] == "disable":
-        post["enabled"] = False
-        save_config(config)
+        _config, _path = edit_config(
+            lambda current: current["post_session"].update({"enabled": False})
+        )
         print("post-session: disabled")
         print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
@@ -159,8 +189,9 @@ def main(argv: list[str]) -> int:
         key = argv[1]
         if key == "command":
             command = " ".join(argv[2:]).strip()
-            post["command"] = command
-            save_config(config)
+            _config, _path = edit_config(
+                lambda current: current["post_session"].update({"command": command})
+            )
             print("command: updated")
             print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
             return 0
@@ -174,8 +205,11 @@ def main(argv: list[str]) -> int:
             if timeout <= 0:
                 print("error: timeout must be greater than zero")
                 return 1
-            post["timeout_ms"] = timeout
-            save_config(config)
+            _config, _path = edit_config(
+                lambda current: current["post_session"].update(
+                    {"timeout_ms": timeout}
+                )
+            )
             print(f"timeout_ms: {timeout}")
             print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
             return 0
@@ -186,8 +220,9 @@ def main(argv: list[str]) -> int:
             if not run_on:
                 print("error: run-on must be a comma-list using exit,manual,idle")
                 return 1
-            post["run_on"] = run_on
-            save_config(config)
+            _config, _path = edit_config(
+                lambda current: current["post_session"].update({"run_on": run_on})
+            )
             print(f"run_on: {','.join(run_on)}")
             print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
             return 0

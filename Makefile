@@ -25,6 +25,7 @@ validate: ## Validate scripts and JSON config
 	$(PYTHON) scripts/active_doc_script_ref_check.py
 	$(PYTHON) scripts/script_reachability_check.py
 	$(PYTHON) scripts/layered_config_hygiene_check.py
+	$(PYTHON) scripts/check_config_writer_inventory.py
 	$(PYTHON) scripts/docs_automation_sync_check.py
 	$(PYTHON) scripts/release_note_validation_check.py
 	$(PYTHON) scripts/plan_hygiene_check.py --json

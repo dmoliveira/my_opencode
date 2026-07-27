@@ -214,7 +214,12 @@ def command_restore(args: list[str]) -> int:
         )
         return 1
 
-    runtime_path = save_plan_execution_state(config, write_path, runtime_state)
+    runtime_path = save_plan_execution_state(
+        config,
+        write_path,
+        runtime_state,
+        expected_runtime=current_runtime,
+    )
     report = {
         "result": "PASS",
         "reason_code": "checkpoint_restored",

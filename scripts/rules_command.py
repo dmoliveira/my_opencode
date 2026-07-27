@@ -13,9 +13,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from rules_engine import discover_rules, resolve_effective_rules  # type: ignore
 
@@ -39,9 +39,7 @@ def normalize_id(raw: str) -> str:
     return raw.strip().lower()
 
 
-def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
-    config, _ = load_layered_config()
-    write_path = resolve_write_path()
+def state_from_config(config: dict[str, Any]) -> dict[str, Any]:
     state = config.get(SECTION)
     merged = dict(DEFAULT_STATE)
     if isinstance(state, dict):
@@ -60,11 +58,11 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
             merged["extra_paths"] = [
                 str(item) for item in extra_paths if isinstance(item, str)
             ]
-    return config, merged, write_path
+    return merged
 
 
-def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
-    config[SECTION] = {
+def persisted_state(state: dict[str, Any]) -> dict[str, Any]:
+    return {
         "enabled": bool(state.get("enabled", True)),
         "disabled_ids": sorted(
             {
@@ -79,7 +77,24 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
             if isinstance(item, str) and str(item).strip()
         ],
     }
-    save_config_file(config, write_path)
+
+
+def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
+    config, _ = load_layered_config()
+    return config, state_from_config(config), resolve_write_path()
+
+
+def edit_state(mutator) -> tuple[dict[str, Any], Path]:
+    state: dict[str, Any] = {}
+
+    def mutate(config: dict[str, Any]) -> None:
+        nonlocal state
+        state = state_from_config(config)
+        mutator(state)
+        config[SECTION] = persisted_state(state)
+
+    result = edit_layered_config(mutate)
+    return state, result.files[0].path
 
 
 def serialize_rule(rule: dict[str, Any]) -> dict[str, Any]:
@@ -218,18 +233,19 @@ def command_set_disabled_id(argv: list[str], disable: bool) -> int:
     rule_id = normalize_id(argv[0])
     if not rule_id:
         return usage()
-    config, state, write_path = load_state()
-    disabled = {
-        normalize_id(item)
-        for item in state.get("disabled_ids", [])
-        if isinstance(item, str)
-    }
-    if disable:
-        disabled.add(rule_id)
-    else:
-        disabled.discard(rule_id)
-    state["disabled_ids"] = sorted(disabled)
-    save_state(config, state, write_path)
+    def mutate(state: dict[str, Any]) -> None:
+        disabled = {
+            normalize_id(item)
+            for item in state.get("disabled_ids", [])
+            if isinstance(item, str)
+        }
+        if disable:
+            disabled.add(rule_id)
+        else:
+            disabled.discard(rule_id)
+        state["disabled_ids"] = sorted(disabled)
+
+    state, write_path = edit_state(mutate)
     print(f"rule_id: {rule_id}")
     print(f"disabled: {'yes' if disable else 'no'}")
     print(f"disabled_ids: {','.join(state['disabled_ids']) or '(none)'}")

@@ -11,7 +11,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
+from config_layering import edit_layered_config, load_layered_config, resolve_write_path  # type: ignore
 
 
 PROFILES: dict[str, dict[str, Any]] = {
@@ -89,10 +89,10 @@ def command_profile(args: list[str]) -> int:
     if profile not in PROFILES:
         return usage()
 
-    config, _ = load_layered_config()
-    config["quality"] = PROFILES[profile]
-    write_path = resolve_write_path()
-    save_config(config, write_path)
+    result = edit_layered_config(
+        lambda config: config.update({"quality": PROFILES[profile]})
+    )
+    write_path = result.files[0].path
 
     emit(
         {

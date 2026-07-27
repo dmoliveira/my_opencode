@@ -76,8 +76,12 @@ fi
 mkdir -p "$OPENCODE_CONFIG_DIR"
 mkdir -p "$OPENCODE_CONFIG_DIR/agent"
 
-ln -sfn "$MY_OPENCODE_REPO" "$OPENCODE_CONFIG_DIR/my_opencode"
-ln -sfn "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json" "$OPENCODE_CONFIG_DIR/opencode.json"
+python3 "$SCRIPT_DIR/config_layering.py" provision-link \
+	--link "$OPENCODE_CONFIG_DIR/my_opencode" \
+	--target "$MY_OPENCODE_REPO"
+python3 "$SCRIPT_DIR/config_layering.py" provision-link \
+	--link "$OPENCODE_CONFIG_DIR/opencode.json" \
+	--target "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"
 ln -sfn "$AGENTS_LINK_TARGET" "$MY_OPENCODE_REPO/AGENTS.md"
 
 if [[ -d "$MY_OPENCODE_REPO/agent" ]]; then

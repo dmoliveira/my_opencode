@@ -1,0 +1,2761 @@
+[
+  {
+    "language": "python",
+    "file": "agent_pool_command.py",
+    "function": "save_pool",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "agent_pool_command.py",
+    "function": "save_pool",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "audit_command.py",
+    "function": "cmd_export",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "audit_command.py",
+    "function": "cmd_export",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "auto_slash_command.py",
+    "function": "_append_audit",
+    "kind": "helper.append_exempt_text_line",
+    "destination": "AUDIT_DEFAULT",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "autopilot_runtime.py",
+    "function": "save_runtime",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "autopilot_runtime.py",
+    "function": "save_runtime",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_atomic_write_json",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_atomic_write_json",
+    "kind": "path.replace",
+    "destination": "Path(temp_name)",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_atomic_write_json",
+    "kind": "tempfile.NamedTemporaryFile",
+    "destination": "str(path.parent)",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_run_single_job",
+    "kind": "path.mkdir",
+    "destination": "log_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_run_single_job",
+    "kind": "path.open",
+    "destination": "log_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "cleanup_jobs",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "ensure_store",
+    "kind": "path.mkdir",
+    "destination": "BG_ROOT",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "ensure_store",
+    "kind": "path.mkdir",
+    "destination": "RUNS_DIR",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "locked_jobs",
+    "kind": "path.open",
+    "destination": "LOCK_PATH",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "build_agents.py",
+    "function": "build_agents",
+    "kind": "path.mkdir",
+    "destination": "OUTPUT_DIR",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "build_agents.py",
+    "function": "build_agents",
+    "kind": "path.write_text",
+    "destination": "out_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "checkpoint_snapshot_manager.py",
+    "function": "_atomic_write_json",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "checkpoint_snapshot_manager.py",
+    "function": "_atomic_write_json",
+    "kind": "path.replace",
+    "destination": "Path(tmp.name)",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "checkpoint_snapshot_manager.py",
+    "function": "prune_snapshots",
+    "kind": "path.open",
+    "destination": "gzip",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "checkpoint_snapshot_manager.py",
+    "function": "prune_snapshots",
+    "kind": "path.unlink",
+    "destination": "item",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "checkpoint_snapshot_manager.py",
+    "function": "prune_snapshots",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "claims_command.py",
+    "function": "save_agent_pool",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "claims_command.py",
+    "function": "save_agent_pool",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "claims_command.py",
+    "function": "save_state",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "claims_command.py",
+    "function": "save_state",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "completion_gates.py",
+    "function": "_read_regular_file_no_follow",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "concise_mode_runtime.py",
+    "function": "save_json",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "concise_mode_runtime.py",
+    "function": "save_json",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "config_command.py",
+    "function": "command_backup",
+    "kind": "path.mkdir",
+    "destination": "target_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "config_command.py",
+    "function": "command_backup",
+    "kind": "shutil.copy2",
+    "destination": "dst",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "config_command.py",
+    "function": "ensure_manifest",
+    "kind": "path.mkdir",
+    "destination": "BACKUP_DIR",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "config_command.py",
+    "function": "ensure_manifest",
+    "kind": "path.write_text",
+    "destination": "MANIFEST_PATH",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "config_command.py",
+    "function": "save_manifest",
+    "kind": "path.write_text",
+    "destination": "MANIFEST_PATH",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_acquire_lock",
+    "kind": "os.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_acquire_lock",
+    "kind": "os.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_acquire_lock",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_acquire_lock",
+    "kind": "os.open",
+    "destination": "path / LOCK_OWNER_TOKEN",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_cleanup_partial_lock",
+    "kind": "path.rmdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_cleanup_partial_lock",
+    "kind": "path.unlink",
+    "destination": "token",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_commit_staged_configs",
+    "kind": "os.replace",
+    "destination": "plan.snapshot.canonical_path.name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_ensure_write_parent",
+    "kind": "os.chmod",
+    "destination": "candidate",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_ensure_write_parent",
+    "kind": "os.mkdir",
+    "destination": "candidate",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_ensure_write_parent",
+    "kind": "os.open",
+    "destination": "current",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_inspect_lock",
+    "kind": "os.open",
+    "destination": "LOCK_OWNER_TOKEN",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_inspect_lock",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_lock_registry",
+    "kind": "os.chmod",
+    "destination": "root",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_main",
+    "kind": "helper.append_exempt_text_line",
+    "destination": "Path(args.path)",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_main",
+    "kind": "helper.provision_config_json",
+    "destination": "Path(args.path)",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_main",
+    "kind": "helper.provision_config_move",
+    "destination": "Path(args.source)",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_main",
+    "kind": "helper.provision_config_symlink",
+    "destination": "Path(args.link)",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_read_snapshot_config",
+    "kind": "os.open",
+    "destination": "snapshot.canonical_path",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_release_lock",
+    "kind": "os.open",
+    "destination": "LOCK_OWNER_TOKEN",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_release_lock",
+    "kind": "os.open",
+    "destination": "lock.path.name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_release_lock",
+    "kind": "os.open",
+    "destination": "lock.path.parent",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_release_lock",
+    "kind": "os.rmdir",
+    "destination": "lock.path.name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_release_lock",
+    "kind": "os.unlink",
+    "destination": "LOCK_OWNER_TOKEN",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_remove_owned_stage",
+    "kind": "os.unlink",
+    "destination": "plan.stage_name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_stage_configs",
+    "kind": "os.open",
+    "destination": "parent",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "_stage_configs",
+    "kind": "os.open",
+    "destination": "plan.stage_name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "append_exempt_text_line",
+    "kind": "os.open",
+    "destination": "snapshot.canonical_path.name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "append_exempt_text_line",
+    "kind": "os.open",
+    "destination": "snapshot.canonical_path.parent",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_move",
+    "kind": "os.open",
+    "destination": "source_parent",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_move",
+    "kind": "os.open",
+    "destination": "target_parent",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_move",
+    "kind": "os.replace",
+    "destination": "target.canonical_path.name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_symlink",
+    "kind": "os.open",
+    "destination": "parent",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_symlink",
+    "kind": "os.replace",
+    "destination": "logical_link.name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_symlink",
+    "kind": "os.symlink",
+    "destination": "stage_name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "config_layering.py",
+    "function": "provision_config_symlink",
+    "kind": "os.unlink",
+    "destination": "stage_name",
+    "count": 1,
+    "classification": "transaction_engine"
+  },
+  {
+    "language": "python",
+    "file": "daemon_command.py",
+    "function": "save_state",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "daemon_command.py",
+    "function": "save_state",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "delivery_command.py",
+    "function": "save_state",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "delivery_command.py",
+    "function": "save_state",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "_prepare_private_directory",
+    "kind": "path.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "_prepare_private_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "_write_attestation",
+    "kind": "os.replace",
+    "destination": "destination",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "_write_attestation",
+    "kind": "path.chmod",
+    "destination": "temporary",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "_write_attestation",
+    "kind": "path.write_text",
+    "destination": "temporary",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "prepare_playwright_cli_cache",
+    "kind": "path.chmod",
+    "destination": "config",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "devtools_command.py",
+    "function": "prepare_playwright_cli_cache",
+    "kind": "path.write_text",
+    "destination": "config",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "doctor_command.py",
+    "function": "command_reason_codes",
+    "kind": "path.mkdir",
+    "destination": "write_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "doctor_command.py",
+    "function": "command_reason_codes",
+    "kind": "path.write_text",
+    "destination": "write_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_invalidate_gateway_smoke_cache",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_write_gateway_smoke_cache",
+    "kind": "os.replace",
+    "destination": "path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_write_gateway_smoke_cache",
+    "kind": "path.chmod",
+    "destination": "cache_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_write_gateway_smoke_cache",
+    "kind": "path.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_write_gateway_smoke_cache",
+    "kind": "path.mkdir",
+    "destination": "cache_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_write_gateway_smoke_cache",
+    "kind": "path.unlink",
+    "destination": "temporary_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "_write_gateway_smoke_cache",
+    "kind": "tempfile.mkstemp",
+    "destination": "cache_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_protection",
+    "kind": "path.mkdir",
+    "destination": "launch_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_protection",
+    "kind": "path.mkdir",
+    "destination": "log_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_protection",
+    "kind": "path.mkdir",
+    "destination": "pane_cache_path.parent",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_protection",
+    "kind": "path.write_text",
+    "destination": "pane_cache_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_protection",
+    "kind": "path.write_text",
+    "destination": "plist_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_recover_memory/save_pane_session_cache",
+    "kind": "path.mkdir",
+    "destination": "pane_session_cache_path.parent",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_recover_memory/save_pane_session_cache",
+    "kind": "path.write_text",
+    "destination": "pane_session_cache_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_recover_memory_watch/save_state",
+    "kind": "path.mkdir",
+    "destination": "runtime_dir",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "command_recover_memory_watch/save_state",
+    "kind": "path.write_text",
+    "destination": "state_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "ensure_file_plugin_compat",
+    "kind": "path.mkdir",
+    "destination": "alias_path.parent",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "ensure_file_plugin_compat",
+    "kind": "path.mkdir",
+    "destination": "cache_plugin_path.parent",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "ensure_file_plugin_compat",
+    "kind": "path.symlink_to",
+    "destination": "alias_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "ensure_file_plugin_compat",
+    "kind": "path.symlink_to",
+    "destination": "cache_plugin_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "ensure_file_plugin_compat",
+    "kind": "path.unlink",
+    "destination": "alias_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "ensure_file_plugin_compat",
+    "kind": "path.unlink",
+    "destination": "cache_plugin_path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_command.py",
+    "function": "gateway_mistake_ledger_summary",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "output_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "output_dir / 'parallel-relaunch-hashes.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "run_smoke",
+    "kind": "path.open",
+    "destination": "stderr_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "run_smoke",
+    "kind": "path.open",
+    "destination": "stdout_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_direct_result",
+    "kind": "path.mkdir",
+    "destination": "config_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_direct_result",
+    "kind": "path.mkdir",
+    "destination": "plugin_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_direct_result",
+    "kind": "path.write_text",
+    "destination": "log_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_direct_result",
+    "kind": "path.write_text",
+    "destination": "run_log",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_direct_result",
+    "kind": "path.write_text",
+    "destination": "shim_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_result",
+    "kind": "path.write_text",
+    "destination": "run_log",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_tuple_result",
+    "kind": "path.mkdir",
+    "destination": "config_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "collect_tuple_result",
+    "kind": "path.mkdir",
+    "destination": "project_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "ensure_private_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "RUNTIME_ROOT",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "os.symlink",
+    "destination": "config_dir / 'my_opencode'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "os.symlink",
+    "destination": "config_dir / 'node_modules'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "os.symlink",
+    "destination": "gateway_core",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "os.symlink",
+    "destination": "gateway_latest",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "path.mkdir",
+    "destination": "config_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "path.mkdir",
+    "destination": "plugin_root",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "prepare_home",
+    "kind": "shutil.copy2",
+    "destination": "config_dir / name",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "run_attached_session",
+    "kind": "path.write_text",
+    "destination": "run_log",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "start_server",
+    "kind": "path.open",
+    "destination": "log_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_local_plugin_runtime_smoke.py",
+    "function": "write_json",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "prepare_private_output_dir",
+    "kind": "path.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "prepare_private_output_dir",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.chmod",
+    "destination": "stderr_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.chmod",
+    "destination": "stdout_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.mkdir",
+    "destination": "config_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.mkdir",
+    "destination": "project",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.write_text",
+    "destination": "config_dir / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.write_text",
+    "destination": "project / 'AGENTS.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.write_text",
+    "destination": "stderr_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_secret_redaction_live_smoke.py",
+    "function": "run_probe",
+    "kind": "path.write_text",
+    "destination": "stdout_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_acquire_lock",
+    "kind": "os.mkdir",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_acquire_lock",
+    "kind": "os.open",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_acquire_lock",
+    "kind": "os.open",
+    "destination": "OWNER_TOKEN_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_cleanup_partial_owned_lock",
+    "kind": "os.open",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_cleanup_partial_owned_lock",
+    "kind": "os.rmdir",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_cleanup_partial_owned_lock",
+    "kind": "os.unlink",
+    "destination": "OWNER_TOKEN_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_commit_state",
+    "kind": "os.open",
+    "destination": "stage_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_commit_state",
+    "kind": "os.replace",
+    "destination": "STATE_FILE_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_inspect_existing_lock",
+    "kind": "os.open",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_inspect_existing_lock",
+    "kind": "os.open",
+    "destination": "OWNER_TOKEN_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_open_verified_directory",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_read_state",
+    "kind": "os.open",
+    "destination": "STATE_FILE_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_release_lock",
+    "kind": "os.open",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_release_lock",
+    "kind": "os.open",
+    "destination": "OWNER_TOKEN_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_release_lock",
+    "kind": "os.rmdir",
+    "destination": "LOCK_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_release_lock",
+    "kind": "os.unlink",
+    "destination": "OWNER_TOKEN_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_remove_owned_stage",
+    "kind": "os.unlink",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_state_authority",
+    "kind": "os.mkdir",
+    "destination": "STATE_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_state_protocol.py",
+    "function": "_state_authority",
+    "kind": "os.open",
+    "destination": "STATE_DIRECTORY_NAME",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_turn_watch.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_turn_watch.py",
+    "function": "main",
+    "kind": "path.touch",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "governance_policy.py",
+    "function": "save_policy",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "governance_policy.py",
+    "function": "save_policy",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "_open_owned_directory",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "_read_regular_file_no_follow",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "_scan_bounded_tree",
+    "kind": "os.open",
+    "destination": "entry.name",
+    "count": 2,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "_scan_bounded_tree",
+    "kind": "os.open",
+    "destination": "root",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "_workspace_artifact_bytes",
+    "kind": "os.open",
+    "destination": "component",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "_workspace_artifact_bytes",
+    "kind": "os.open",
+    "destination": "relative_path.parts[-1]",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "copy_auth_store",
+    "kind": "path.chmod",
+    "destination": "destination",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "copy_auth_store",
+    "kind": "path.mkdir",
+    "destination": "destination.parent",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "copy_auth_store",
+    "kind": "path.write_bytes",
+    "destination": "destination",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "ensure_private_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "npm_provenance",
+    "kind": "path.write_text",
+    "destination": "output_dir / 'npm-provenance.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_model_sandbox",
+    "kind": "path.mkdir",
+    "destination": "project",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_output_directory",
+    "kind": "os.mkdir",
+    "destination": "leaf",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_output_directory",
+    "kind": "os.open",
+    "destination": "'runtime'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_output_directory",
+    "kind": "os.open",
+    "destination": "OUTPUT_MARKER_NAME",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_output_directory",
+    "kind": "os.open",
+    "destination": "component",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_output_directory",
+    "kind": "os.open",
+    "destination": "leaf",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_playwright_npm_sandbox",
+    "kind": "path.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "prepare_playwright_npm_sandbox",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_cli_probe",
+    "kind": "path.mkdir",
+    "destination": "artifacts_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_cli_probe",
+    "kind": "path.mkdir",
+    "destination": "logs_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_cli_probe",
+    "kind": "path.mkdir",
+    "destination": "output_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_cli_probe",
+    "kind": "path.write_bytes",
+    "destination": "retained_screenshot",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_cli_probe",
+    "kind": "path.write_bytes",
+    "destination": "retained_snapshot",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_cli_probe",
+    "kind": "path.write_text",
+    "destination": "retained_final",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_mcp_probe",
+    "kind": "path.mkdir",
+    "destination": "output_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_mcp_probe",
+    "kind": "path.write_text",
+    "destination": "output_dir / 'mcp-inventory.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "run_projects",
+    "kind": "path.mkdir",
+    "destination": "output_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_opencode_config",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_opencode_config",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_project_fixture",
+    "kind": "path.mkdir",
+    "destination": "project",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_project_fixture",
+    "kind": "path.write_text",
+    "destination": "project / 'AGENTS.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_project_fixture",
+    "kind": "path.write_text",
+    "destination": "project / relative",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_safe_report",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_safe_text",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_safe_text",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "harness_wave2_task4_smoke.py",
+    "function": "write_todo_fixture",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "health_score_collector.py",
+    "function": "persist_health_snapshot",
+    "kind": "path.mkdir",
+    "destination": "runtime_dir",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "health_score_collector.py",
+    "function": "persist_health_snapshot",
+    "kind": "path.open",
+    "destination": "history_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "health_score_collector.py",
+    "function": "persist_health_snapshot",
+    "kind": "path.write_text",
+    "destination": "latest_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "health_score_collector.py",
+    "function": "save_health_state",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "health_score_collector.py",
+    "function": "save_health_state",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hook_learning_command.py",
+    "function": "save_state",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hook_learning_command.py",
+    "function": "save_state",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hooks_command.py",
+    "function": "write_audit_log",
+    "kind": "helper.append_exempt_text_line",
+    "destination": "HOOK_LOG_PATH",
+    "count": 1,
+    "classification": "checked_config_writer_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hotfix_command.py",
+    "function": "command_postmortem",
+    "kind": "path.mkdir",
+    "destination": "write_path_arg.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hotfix_command.py",
+    "function": "command_postmortem",
+    "kind": "path.write_text",
+    "destination": "write_path_arg",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hotfix_runtime.py",
+    "function": "save_runtime",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "hotfix_runtime.py",
+    "function": "save_runtime",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "clear_output_location",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "clear_preference",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "command_generate",
+    "kind": "path.mkdir",
+    "destination": "output_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "command_generate",
+    "kind": "path.write_bytes",
+    "destination": "output_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "command_generate",
+    "kind": "shutil.copy2",
+    "destination": "output_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "set_output_location",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "set_output_location",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "set_preference",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "set_preference",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "image_command.py",
+    "function": "write_sidecar",
+    "kind": "path.write_text",
+    "destination": "image_path.with_suffix('.json')",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "init_deep_command.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "agents_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "install_opencode_nvim",
+    "kind": "path.mkdir",
+    "destination": "OPENCODE_NVIM_PATH.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "load_state",
+    "kind": "os.open",
+    "destination": "STATE_PATH",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "preflight_state_path",
+    "kind": "path.mkdir",
+    "destination": "parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "save_state",
+    "kind": "os.open",
+    "destination": "STATE_PATH.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "save_state",
+    "kind": "os.replace",
+    "destination": "STATE_PATH",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "save_state",
+    "kind": "path.unlink",
+    "destination": "temporary_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "install_wizard.py",
+    "function": "save_state",
+    "kind": "tempfile.mkstemp",
+    "destination": "STATE_PATH.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "knowledge_capture_pipeline.py",
+    "function": "save_entries",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "knowledge_capture_pipeline.py",
+    "function": "save_entries",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "lsp_command.py",
+    "function": "_apply_renamefile_operations",
+    "kind": "path.mkdir",
+    "destination": "new_resolved.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "lsp_command.py",
+    "function": "_apply_renamefile_operations",
+    "kind": "path.rename",
+    "destination": "old_resolved",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "lsp_command.py",
+    "function": "command_code_actions",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "lsp_command.py",
+    "function": "command_rename",
+    "kind": "path.rename",
+    "destination": "client",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "lsp_command.py",
+    "function": "command_rename",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "cmd_export",
+    "kind": "path.mkdir",
+    "destination": "target.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "cmd_export",
+    "kind": "path.write_text",
+    "destination": "target",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "cmd_import",
+    "kind": "path.write_text",
+    "destination": "backup_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "save_store",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "save_store",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_generate.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "manifest_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_generate.py",
+    "function": "main",
+    "kind": "path.write_bytes",
+    "destination": "target_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_generate.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "manifest_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_generate.py",
+    "function": "write_bytes",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_generate.py",
+    "function": "write_bytes",
+    "kind": "path.write_bytes",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_select.py",
+    "function": "main",
+    "kind": "path.write_bytes",
+    "destination": "target",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "notify_icon_select.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "manifest_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "ensure_init_link",
+    "kind": "path.mkdir",
+    "destination": "INIT_FILE.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "ensure_init_link",
+    "kind": "path.write_text",
+    "destination": "INIT_FILE",
+    "count": 2,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "install_profile",
+    "kind": "path.mkdir",
+    "destination": "INTEGRATION_FILE.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "install_profile",
+    "kind": "path.write_text",
+    "destination": "INTEGRATION_FILE",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "remove_init_link",
+    "kind": "path.unlink",
+    "destination": "INIT_FILE",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "remove_init_link",
+    "kind": "path.write_text",
+    "destination": "INIT_FILE",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "nvim_integration_command.py",
+    "function": "uninstall_profile",
+    "kind": "path.unlink",
+    "destination": "INTEGRATION_FILE",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "release_train_command.py",
+    "function": "command_publish/emit_with_summary",
+    "kind": "path.mkdir",
+    "destination": "write_summary.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "release_train_command.py",
+    "function": "command_publish/emit_with_summary",
+    "kind": "path.write_text",
+    "destination": "write_summary",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "release_train_command.py",
+    "function": "command_rollup",
+    "kind": "path.mkdir",
+    "destination": "write_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "release_train_command.py",
+    "function": "command_rollup",
+    "kind": "path.write_text",
+    "destination": "write_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "reservation_command.py",
+    "function": "write_state",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "reservation_command.py",
+    "function": "write_state",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "review_command.py",
+    "function": "command_apply_checklist",
+    "kind": "path.mkdir",
+    "destination": "write_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "review_command.py",
+    "function": "command_apply_checklist",
+    "kind": "path.write_text",
+    "destination": "write_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_audit.py",
+    "function": "save_audit",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_audit.py",
+    "function": "save_audit",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_command.py",
+    "function": "_backup_runtime_database",
+    "kind": "path.unlink",
+    "destination": "backup_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_digest.py",
+    "function": "write_digest",
+    "kind": "path.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_digest.py",
+    "function": "write_digest",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_digest.py",
+    "function": "write_digest",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_atomic_write_json",
+    "kind": "os.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_atomic_write_json",
+    "kind": "os.open",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_atomic_write_json",
+    "kind": "os.replace",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_atomic_write_json",
+    "kind": "path.unlink",
+    "destination": "temporary_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_atomic_write_json",
+    "kind": "tempfile.mkstemp",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_index_write_lock",
+    "kind": "path.open",
+    "destination": "lock_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_update_session_index_unlocked",
+    "kind": "path.mkdir",
+    "destination": "index_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "update_session_index",
+    "kind": "path.mkdir",
+    "destination": "index_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "shared_memory_runtime.py",
+    "function": "connect",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "_atomic_write_json",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "_atomic_write_json",
+    "kind": "path.replace",
+    "destination": "Path(tmp.name)",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "with_locked_state",
+    "kind": "path.mkdir",
+    "destination": "lock.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "with_locked_state",
+    "kind": "path.open",
+    "destination": "lock",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "update_docs_automation_summary.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "summary_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "update_release_index.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "output",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "update_wave_completion_doc.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "output_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "update_wave_completion_doc.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "output_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "workflow_command.py",
+    "function": "cmd_template",
+    "kind": "path.mkdir",
+    "destination": "DEFAULT_TEMPLATE_DIR",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "workflow_command.py",
+    "function": "save_json_file",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "workflow_command.py",
+    "function": "save_json_file",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "opencode_session.sh",
+    "command": "if ! command -v opencode >/dev/null 2>&1; then",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "opencode_session.sh",
+    "command": "python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason \"$DIGEST_REASON_ON_EXIT\" --path \"$DIGEST_OUTPUT_PATH\" --run-post --hook \"$DIGEST_HOOK\" >/dev/null 2>&1 || true",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "opencode_session.sh",
+    "command": "python3 \"$HOME/.config/opencode/my_opencode/scripts/session_digest.py\" run --reason \"$DIGEST_REASON_ON_EXIT\" --path \"$DIGEST_OUTPUT_PATH\" --run-post >/dev/null 2>&1 || true",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "ln -sfn \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core\" \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "mkdir -p \"$OHMY_CONFIG_HOME/opencode\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "mkdir -p \"$OPENCODE_CONFIG_DIR\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-json --path \"$OHMY_CONFIG_HOME/opencode/oh-my-opencode.json\" --content '{\"$schema\":\"https://raw.githubusercontent.com/code-yeongyu/oh-my-opencode/dev/assets/oh-my-opencode.schema.json\"}'",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-json --path \"$OHMY_CONFIG_HOME/opencode/oh-my-opencode.json\" --source \"$OPENCODE_CONFIG_DIR/oh-my-opencode.json\"",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-json --path \"$OHMY_CONFIG_HOME/opencode/opencode.json\" --content '{\"$schema\":\"https://opencode.ai/config.json\",\"plugin\":[\"oh-my-opencode@latest\"]}'",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-line --path \"$ZSHRC_FILE\" --line \"$ALIAS_LINE\" --if-missing",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-link --link \"$OPENCODE_CONFIG_DIR/my_opencode\" --target \"$MY_OPENCODE_REPO\"",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-link --link \"$OPENCODE_CONFIG_DIR/opencode.json\" --target \"$OPENCODE_CONFIG_DIR/my_opencode/opencode.json\"",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_dual_opencode.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-move --source \"$OPENCODE_CONFIG_DIR/my_opencode/runtime/plan_execution.json\" --target \"$MY_OPENCODE_REPO/runtime/plan_execution.json\"",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "ln -sfn \"$AGENTS_LINK_TARGET\" \"$MY_OPENCODE_REPO/AGENTS.md\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "ln -sfn \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core\" \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "ln -sfn \"$agent_file\" \"$OPENCODE_CONFIG_DIR/agent/$(basename \"$agent_file\")\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "mkdir -p \"$OPENCODE_CONFIG_DIR\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "mkdir -p \"$OPENCODE_CONFIG_DIR/agent\"",
+    "count": 1,
+    "classification": "shell_non_config_exemption"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-link --link \"$OPENCODE_CONFIG_DIR/my_opencode\" --target \"$MY_OPENCODE_REPO\"",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  },
+  {
+    "language": "shell",
+    "file": "setup_local_dev_symlinks.sh",
+    "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-link --link \"$OPENCODE_CONFIG_DIR/opencode.json\" --target \"$OPENCODE_CONFIG_DIR/my_opencode/opencode.json\"",
+    "count": 1,
+    "classification": "serialized_provisioner"
+  }
+]

@@ -10,9 +10,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from gateway_plugin_bridge import plugin_entry_spec  # type: ignore
 
@@ -36,10 +36,10 @@ def load_config() -> dict:
     return data
 
 
-def save_config(data: dict) -> None:
+def edit_config(mutator) -> None:
     global CONFIG_PATH
-    CONFIG_PATH = resolve_write_path()
-    save_config_file(data, CONFIG_PATH)
+    result = edit_layered_config(mutator)
+    CONFIG_PATH = result.files[0].path
 
 
 def get_plugin_entries(data: dict) -> list[Any]:
@@ -191,11 +191,14 @@ def print_setup_keys() -> int:
     return 0
 
 
-def apply_profile(data: dict, current_entries: list[Any], profile: str) -> int:
+def apply_profile(profile: str) -> int:
     if profile not in PROFILE_MAP:
         return usage()
-    set_plugins(data, compose_plugin_entries(current_entries, []))
-    save_config(data)
+    def mutate(data: dict) -> None:
+        current_entries = get_plugin_entries(data)
+        set_plugins(data, compose_plugin_entries(current_entries, []))
+
+    edit_config(mutate)
 
     print("profile: lean")
     if profile != "lean":
@@ -228,7 +231,7 @@ def main(argv: list[str]) -> int:
     if argv[0] == "profile":
         if len(argv) != 2:
             return usage()
-        return apply_profile(data, plugin_entries, argv[1])
+        return apply_profile(argv[1])
     if len(argv) != 2:
         return usage()
 
@@ -244,14 +247,20 @@ def main(argv: list[str]) -> int:
         return usage()
 
     if target == "all":
-        updated_entries = compose_plugin_entries(plugin_entries, [])
-        set_plugins(data, updated_entries)
-        save_config(data)
+        edit_config(
+            lambda current: set_plugins(
+                current,
+                compose_plugin_entries(get_plugin_entries(current), []),
+            )
+        )
     else:
-        updated_entries = remove_retired_plugin_entries(plugin_entries, targets)
-        if updated_entries != plugin_entries:
-            set_plugins(data, updated_entries)
-            save_config(data)
+        def mutate(current: dict) -> None:
+            current_entries = get_plugin_entries(current)
+            updated_entries = remove_retired_plugin_entries(current_entries, targets)
+            if updated_entries != current_entries:
+                set_plugins(current, updated_entries)
+
+        edit_config(mutate)
     for alias in targets:
         print(f"{alias}: absent [retired]")
     if target == "all":

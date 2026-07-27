@@ -18141,15 +18141,41 @@ jobs:
             cwd=REPO_ROOT,
         )
         expect(
+            model_routing_resolve.returncode != 0,
+            "model-routing resolve should fail closed on malformed persisted state",
+        )
+        expect(
+            model_routing_state_path.read_bytes() == b"",
+            "model-routing failure should preserve malformed persisted bytes",
+        )
+        model_routing_state_path.write_text("{}\n", encoding="utf-8")
+        model_routing_resolve = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "resolve",
+                "--override-model",
+                "openai/nonexistent",
+                "--available-models",
+                "openai/gpt-5.4-mini,openai/gpt-5.4",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
             model_routing_resolve.returncode == 0,
-            "model-routing resolve should recover from empty persisted state",
+            "model-routing resolve should recover from a valid empty object",
         )
         model_routing_report = parse_json_output(model_routing_resolve.stdout)
         expect(
             model_routing_report.get("category") == "balanced"
             and model_routing_report.get("settings", {}).get("model")
             == "openai/gpt-5.4",
-            "model-routing resolve should recover from empty state by falling back to defaults and applying model fallback",
+            "model-routing resolve should recover from a valid empty object by falling back to defaults and applying model fallback",
         )
         expect(
             isinstance(model_routing_report.get("resolution_trace"), dict),

@@ -13,11 +13,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-)
-from config_layering import (
-    save_config as save_config_file,
 )
 from playwright_defaults import (  # type: ignore
     PLAYWRIGHT_BROWSER_ARGS,
@@ -105,9 +103,17 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
     return config, state, write_path
 
 
-def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
-    config[SECTION] = state
-    save_config_file(config, write_path)
+def edit_state(mutator) -> tuple[dict[str, Any], Path]:
+    state: dict[str, Any] = {}
+
+    def mutate(config: dict[str, Any]) -> None:
+        nonlocal state
+        state = normalize_state(config.get(SECTION))
+        mutator(state)
+        config[SECTION] = state
+
+    result = edit_layered_config(mutate)
+    return state, result.files[0].path
 
 
 def selected_provider(state: dict[str, Any]) -> str:
@@ -241,23 +247,7 @@ def command_profile(argv: list[str]) -> int:
     if provider not in PROVIDERS:
         return usage()
 
-    config, state, write_path = load_state()
-    providers_cfg = state.get("providers")
-    if not isinstance(providers_cfg, dict):
-        providers_cfg = {}
-        state["providers"] = providers_cfg
-
-    for name, provider_default in PROVIDERS.items():
-        current = providers_cfg.get(name)
-        if not isinstance(current, dict):
-            current = json.loads(json.dumps(provider_default))
-        if name == DEFAULT_PROVIDER:
-            migrate_playwright_provider(current)
-        current["enabled"] = name == provider
-        providers_cfg[name] = current
-
-    state["provider"] = provider
-    save_state(config, state, write_path)
+    _state, write_path = edit_state(lambda state: _set_provider(state, provider))
 
     print(f"provider: {provider}")
     print(f"config: {write_path}")
@@ -291,11 +281,15 @@ def command_ensure(argv: list[str]) -> int:
         return usage()
     json_output = "--json" in argv
 
-    config, state, write_path = load_state()
-    original_provider = selected_provider(state)
-    provider_changed = _set_provider(state, DEFAULT_PROVIDER)
-    if provider_changed:
-        save_state(config, state, write_path)
+    original_provider = ""
+    provider_changed = False
+
+    def mutate(state: dict[str, Any]) -> None:
+        nonlocal original_provider, provider_changed
+        original_provider = selected_provider(state)
+        provider_changed = _set_provider(state, DEFAULT_PROVIDER)
+
+    state, write_path = edit_state(mutate)
 
     payload = build_status_payload(state, write_path)
     selected = payload["providers"].get(DEFAULT_PROVIDER, {})
