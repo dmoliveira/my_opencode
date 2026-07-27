@@ -1172,75 +1172,152 @@ def command_watchdog_update(
     return 0
 
 
+MISTAKE_LEDGER_RELATIVE_PATH = Path(".opencode") / "mistake-ledger.jsonl"
+MISTAKE_LEDGER_TAIL_BYTES = 256 * 1024
+MISTAKE_LEDGER_MAX_RECORDS = 500
+MISTAKE_LEDGER_CATEGORIES = {"completion_without_validation"}
+
+
 def gateway_mistake_ledger_path(cwd: Path) -> Path:
-    raw = os.environ.get("MY_OPENCODE_MISTAKE_LEDGER_PATH", "").strip()
-    if raw:
-        return Path(raw).expanduser()
-    root_config, _ = load_config()
-    gateway_config = load_gateway_sidecar_config(cwd, root_config)
-    mistake_config = gateway_config.get("mistakeLedger")
-    if isinstance(mistake_config, dict):
-        configured = str(mistake_config.get("path") or "").strip()
-        if configured:
-            return (
-                (cwd / configured).expanduser().resolve()
-                if not Path(configured).expanduser().is_absolute()
-                else Path(configured).expanduser()
-            )
-    return cwd / ".opencode" / "mistake-ledger.jsonl"
+    """Return the fixed workspace-local ledger path shared with gateway-core."""
+    return cwd / MISTAKE_LEDGER_RELATIVE_PATH
+
+
+def _empty_mistake_ledger_summary(*, exists: bool) -> dict[str, Any]:
+    return {
+        "exists": exists,
+        "window_entry_count": 0,
+        "window_category_counts": {},
+        "invalid_lines": 0,
+        "truncated": False,
+        "last_entry": None,
+    }
+
+
+def _safe_mistake_ledger_timestamp(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > 64:
+        return None
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return value
+
+
+def _safe_mistake_ledger_category(value: Any) -> str:
+    category = str(value or "").strip()
+    return category if category in MISTAKE_LEDGER_CATEGORIES else "unknown"
+
+
+def _mistake_ledger_error(error_code: str) -> dict[str, Any]:
+    summary = _empty_mistake_ledger_summary(exists=True)
+    summary["error_code"] = error_code
+    return summary
+
+
+def _read_mistake_ledger_tail(descriptor: int, size: int) -> tuple[bytes, bool]:
+    start = max(0, size - MISTAKE_LEDGER_TAIL_BYTES)
+    os.lseek(descriptor, start, os.SEEK_SET)
+    remaining = min(size, MISTAKE_LEDGER_TAIL_BYTES)
+    chunks: list[bytes] = []
+    while remaining > 0:
+        chunk = os.read(descriptor, min(64 * 1024, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    data = b"".join(chunks)
+    truncated = start > 0
+    if truncated:
+        _, separator, data = data.partition(b"\n")
+        if not separator:
+            data = b""
+    return data, truncated
 
 
 def gateway_mistake_ledger_summary(cwd: Path) -> dict[str, Any]:
     path = gateway_mistake_ledger_path(cwd)
-    if not path.exists():
-        return {
-            "path": str(path),
-            "exists": False,
-            "total_entries": 0,
-            "invalid_lines": 0,
-            "recent_categories": {},
-            "last_entry": None,
-        }
-    total_entries = 0
-    invalid_lines = 0
-    recent_categories: dict[str, int] = {}
-    last_entry: dict[str, Any] | None = None
     try:
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                invalid_lines += 1
-                continue
-            if isinstance(entry, dict):
-                total_entries += 1
-                category = str(entry.get("category") or "unknown").strip() or "unknown"
-                recent_categories[category] = recent_categories.get(category, 0) + 1
-                last_entry = {
-                    "ts": entry.get("ts"),
-                    "category": category,
-                    "summary": entry.get("summary"),
-                    "sessionId": entry.get("sessionId"),
-                }
+        path_state = path.lstat()
+    except FileNotFoundError:
+        return _empty_mistake_ledger_summary(exists=False)
     except OSError:
-        return {
-            "path": str(path),
-            "exists": True,
-            "error": "read_failed",
-            "total_entries": 0,
-            "invalid_lines": 0,
-            "recent_categories": {},
-            "last_entry": None,
+        return _mistake_ledger_error("mistake_ledger_read_failed")
+
+    try:
+        parent_state = path.parent.lstat()
+    except OSError:
+        return _mistake_ledger_error("mistake_ledger_unsafe_directory")
+    if not stat.S_ISDIR(parent_state.st_mode) or stat.S_ISLNK(parent_state.st_mode):
+        return _mistake_ledger_error("mistake_ledger_unsafe_directory")
+    if parent_state.st_mode & 0o022:
+        return _mistake_ledger_error("mistake_ledger_unsafe_directory")
+    if not stat.S_ISREG(path_state.st_mode) or stat.S_ISLNK(path_state.st_mode) or path_state.st_nlink != 1:
+        return _mistake_ledger_error("mistake_ledger_unsafe_file")
+    if path_state.st_mode & 0o077:
+        return _mistake_ledger_error("mistake_ledger_unsafe_permissions")
+    if not hasattr(os, "getuid") or not hasattr(os, "O_NOFOLLOW"):
+        return _mistake_ledger_error("mistake_ledger_unsupported_platform")
+    current_uid = os.getuid()
+    if parent_state.st_uid != current_uid or path_state.st_uid != current_uid:
+        return _mistake_ledger_error("mistake_ledger_ownership_mismatch")
+
+    descriptor: int | None = None
+    try:
+        flags = os.O_RDONLY | os.O_NOFOLLOW
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or opened.st_uid != current_uid
+            or opened.st_dev != path_state.st_dev
+            or opened.st_ino != path_state.st_ino
+            or opened.st_mode & 0o077
+        ):
+            return _mistake_ledger_error("mistake_ledger_target_changed")
+        data, truncated = _read_mistake_ledger_tail(descriptor, opened.st_size)
+    except OSError:
+        return _mistake_ledger_error("mistake_ledger_read_failed")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+    raw_lines = data.decode("utf-8", errors="replace").splitlines()
+    if len(raw_lines) > MISTAKE_LEDGER_MAX_RECORDS:
+        raw_lines = raw_lines[-MISTAKE_LEDGER_MAX_RECORDS:]
+        truncated = True
+    window_entry_count = 0
+    invalid_lines = 0
+    window_category_counts: dict[str, int] = {}
+    last_entry: dict[str, Any] | None = None
+    for raw_line in raw_lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            invalid_lines += 1
+            continue
+        if not isinstance(entry, dict):
+            invalid_lines += 1
+            continue
+        window_entry_count += 1
+        category = _safe_mistake_ledger_category(entry.get("category"))
+        window_category_counts[category] = window_category_counts.get(category, 0) + 1
+        last_entry = {
+            "ts": _safe_mistake_ledger_timestamp(entry.get("ts")),
+            "category": category,
         }
     return {
-        "path": str(path),
         "exists": True,
-        "total_entries": total_entries,
+        "window_entry_count": window_entry_count,
+        "window_category_counts": window_category_counts,
         "invalid_lines": invalid_lines,
-        "recent_categories": recent_categories,
+        "truncated": truncated,
         "last_entry": last_entry,
     }
 
