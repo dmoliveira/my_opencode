@@ -208,18 +208,30 @@ class DevtoolsPlaywrightCliTest(unittest.TestCase):
 
                 with (
                     patch.object(devtools, "install_playwright_cli") as cli_install,
+                    patch.object(
+                        devtools,
+                        "install_ast_grep",
+                        return_value={
+                            "changed": False,
+                            "path": "/managed/bin/ast-grep",
+                        },
+                    ) as ast_install,
                     patch.object(devtools.shutil, "which", return_value=None),
                     patch.object(devtools.subprocess, "run", side_effect=run),
                     redirect_stdout(io.StringIO()),
                 ):
                     self.assertEqual(expected, devtools.install_tools(targets))
                 cli_install.assert_not_called()
+                if targets in ([], ["all"]):
+                    ast_install.assert_called_once_with()
+                else:
+                    ast_install.assert_not_called()
                 self.assertFalse(
                     any(Path(command[0]).name in forbidden for command in commands)
                 )
 
     def test_unmanaged_host_targets_are_manual_only(self) -> None:
-        for target in devtools.TOOLS:
+        for target in set(devtools.TOOLS) - {"ast-grep"}:
             with self.subTest(target=target), patch.object(
                 devtools.shutil, "which", return_value=None
             ), patch.object(
@@ -234,6 +246,7 @@ class DevtoolsPlaywrightCliTest(unittest.TestCase):
         retired = {"gh-dash", "ripgrep-all", "tree-sitter-cli", "lefthook"}
         with redirect_stdout(io.StringIO()) as usage_output:
             self.assertEqual(2, devtools.usage())
+        self.assertIn("OPENCODE_DEVTOOLS_BIN_ROOT", usage_output.getvalue())
         for name in retired:
             self.assertNotIn(name, usage_output.getvalue())
 
@@ -245,6 +258,16 @@ class DevtoolsPlaywrightCliTest(unittest.TestCase):
                 clear=False,
             ),
             patch.object(devtools.shutil, "which", return_value=None),
+            patch.object(
+                devtools,
+                "ast_grep_status",
+                return_value={
+                    "managed": True,
+                    "ready": False,
+                    "state": "missing",
+                    "path": "/managed/ast-grep",
+                },
+            ),
             patch.object(
                 devtools.subprocess,
                 "run",
@@ -363,6 +386,40 @@ class DevtoolsPlaywrightCliTest(unittest.TestCase):
         self.assertFalse(report["optional"]["playwright-cli"]["ready"])
         self.assertEqual(1, len(commands))
         self.assertIn("node", commands[0][0])
+
+    def test_doctor_fails_closed_for_managed_ast_grep_drift(self) -> None:
+        status = {
+            name: {
+                "installed": name != "ast-grep",
+                "binary": data["bin"],
+                "path": None if name == "ast-grep" else f"/fake/{data['bin']}",
+                **(
+                    {
+                        "managed": {
+                            "managed": True,
+                            "ready": False,
+                            "state": "drift",
+                            "reason_code": "ast_grep_binary_drift",
+                        }
+                    }
+                    if name == "ast-grep"
+                    else {}
+                ),
+            }
+            for name, data in devtools.TOOLS.items()
+        }
+        with patch.object(devtools, "list_status", return_value=status), patch.object(
+            devtools,
+            "playwright_cli_status",
+            return_value={"ready": True},
+        ), redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(1, devtools.print_doctor(json_output=True))
+        report = json.loads(output.getvalue())
+        self.assertEqual("FAIL", report["result"])
+        self.assertEqual(
+            ["ast-grep managed state requires recovery: drift"],
+            report["managed_failures"],
+        )
 
 
 if __name__ == "__main__":

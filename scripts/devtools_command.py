@@ -9,6 +9,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ast_grep_installer import (
+    AstGrepInstallError,
+    ast_grep_binary_path,
+    ast_grep_status,
+    install_ast_grep,
+)
 from playwright_defaults import (
     PLAYWRIGHT_CLI_COMMAND,
     PLAYWRIGHT_CLI_INTEGRITY,
@@ -27,7 +33,7 @@ from playwright_defaults import (
 )
 
 TOOLS = {
-    "ast-grep": {"bin": "sg"},
+    "ast-grep": {"bin": "ast-grep", "managed": True},
     "direnv": {"bin": "direnv"},
     "ripgrep": {"bin": "rg"},
     "pre-commit": {"bin": "pre-commit"},
@@ -39,6 +45,10 @@ PLAYWRIGHT_CLI_CACHE_ENV = "OPENCODE_DEVTOOLS_CACHE_ROOT"
 PLAYWRIGHT_CLI_ATTESTATION = "provenance.json"
 PLAYWRIGHT_CLI_COMMAND_TIMEOUT = 180
 HOOK_INSTALL_TIMEOUT_SECONDS = 30
+AST_GREP_ROOT_GUIDANCE = (
+    "set OPENCODE_DEVTOOLS_CACHE_ROOT and OPENCODE_DEVTOOLS_BIN_ROOT to "
+    "pre-existing absolute current-user-owned mode-0700 directories"
+)
 
 
 def usage() -> int:
@@ -46,15 +56,19 @@ def usage() -> int:
         "usage: /devtools status | /devtools help | /devtools doctor [--json] | /devtools install [all|playwright-cli|<tool> ...] | /devtools hooks-install"
     )
     print(
-        "observed tools: ast-grep, direnv, ripgrep, pre-commit, tmux, watchexec; optional exact installer: playwright-cli"
+        "managed exact tool: ast-grep; observed host tools: direnv, ripgrep, pre-commit, tmux, watchexec; optional exact installer: playwright-cli"
     )
     print(
-        "notes: host tools are managed manually; install all is observation-only; playwright-cli requires an explicit exact install"
+        "notes: install all manages exact ast-grep only; other host tools are manual; playwright-cli requires an explicit exact install"
     )
+    print(f"ast-grep setup: {AST_GREP_ROOT_GUIDANCE}")
     return 2
 
 
 def installed_path(name: str) -> str | None:
+    if name == "ast-grep":
+        status = ast_grep_status()
+        return str(ast_grep_binary_path()) if status.get("ready") else None
     return shutil.which(TOOLS[name]["bin"])
 
 
@@ -65,6 +79,15 @@ def tool_installed(name: str) -> bool:
 def list_status() -> dict:
     result = {}
     for name in TOOLS:
+        if name == "ast-grep":
+            managed = ast_grep_status()
+            result[name] = {
+                "installed": bool(managed.get("ready")),
+                "binary": TOOLS[name]["bin"],
+                "path": managed.get("path") if managed.get("ready") else None,
+                "managed": managed,
+            }
+            continue
         path = installed_path(name)
         result[name] = {
             "installed": tool_installed(name),
@@ -226,6 +249,8 @@ def print_status() -> int:
             print(f"{name}: installed ({data['path']})")
         else:
             print(f"{name}: missing")
+        if name == "ast-grep" and isinstance(data.get("managed"), dict):
+            print(f"  managed state: {data['managed'].get('state')}")
     cli = playwright_cli_status()
     print(
         f"{PLAYWRIGHT_CLI_TARGET}: "
@@ -236,11 +261,14 @@ def print_status() -> int:
     if cli["missing_binaries"]:
         print(f"  missing binaries: {', '.join(cli['missing_binaries'])}")
     missing = [name for name, data in status.items() if not data["installed"]]
-    if missing:
+    manual_missing = [name for name in missing if name != "ast-grep"]
+    if manual_missing:
         print("manual guidance:")
-        for name in missing:
+        for name in manual_missing:
             print(f"- install {name} with your trusted host package workflow and expose {TOOLS[name]['bin']} on PATH")
     print("next:")
+    if not status["ast-grep"]["installed"]:
+        print("- /devtools install ast-grep")
     print("- /devtools doctor --json")
     if not cli["ready"]:
         print("- /devtools install playwright-cli")
@@ -252,6 +280,9 @@ def print_doctor(json_output: bool) -> int:
     status = list_status()
     cli = playwright_cli_status()
     missing = [name for name, data in status.items() if not data["installed"]]
+    ast_managed = status.get("ast-grep", {}).get("managed")
+    ast_state = ast_managed.get("state") if isinstance(ast_managed, dict) else None
+    managed_failure = ast_state not in {None, "verified", "missing", "unsupported"}
     optional_warnings = []
     if not cli["ready"]:
         optional_warnings.append(
@@ -260,14 +291,26 @@ def print_doctor(json_output: bool) -> int:
     manual_guidance = [
         f"install {name} manually and expose {TOOLS[name]['bin']} on PATH"
         for name in missing
+        if name != "ast-grep"
     ]
+    managed_guidance = (
+        [f"{AST_GREP_ROOT_GUIDANCE}, then run /devtools install ast-grep on Darwin arm64"]
+        if "ast-grep" in missing
+        else []
+    )
     report = {
-        "result": "PASS",
+        "result": "FAIL" if managed_failure else "PASS",
         "tools": status,
         "optional": {PLAYWRIGHT_CLI_TARGET: cli},
         "missing": missing,
-        "warnings": [*manual_guidance, *optional_warnings],
+        "warnings": [*managed_guidance, *manual_guidance, *optional_warnings],
+        "managed_failures": (
+            [f"ast-grep managed state requires recovery: {ast_state}"]
+            if managed_failure
+            else []
+        ),
         "quick_fixes": [
+            *managed_guidance,
             *manual_guidance,
             "run /devtools hooks-install after pre-commit is available",
             'enable direnv hook in your shell: eval "$(direnv hook zsh)"',
@@ -294,8 +337,10 @@ def print_doctor(json_output: bool) -> int:
             print("quick_fixes:")
             for item in report["quick_fixes"]:
                 print(f"- {item}")
+        for item in report["managed_failures"]:
+            print(f"error: {item}")
 
-    return 0
+    return 1 if managed_failure else 0
 
 
 def _parse_metadata(stdout: str) -> dict[str, Any]:
@@ -411,6 +456,23 @@ def install_tools(targets: list[str]) -> int:
         names = [name for name in names if name != PLAYWRIGHT_CLI_TARGET]
     if not names:
         return 0
+    if "ast-grep" in names:
+        try:
+            installed = install_ast_grep()
+        except AstGrepInstallError as error:
+            print(json.dumps(error.as_dict(), sort_keys=True))
+            if error.reason_code in {
+                "ast_grep_root_unavailable",
+                "ast_grep_root_unsafe",
+            }:
+                print(f"ast-grep setup: {AST_GREP_ROOT_GUIDANCE}")
+            return 1
+        print(
+            "ast-grep: "
+            + ("installed" if installed.get("changed") else "already verified")
+            + f" ({installed.get('path')})"
+        )
+        names = [name for name in names if name != "ast-grep"]
     missing = []
     for name in names:
         if tool_installed(name):

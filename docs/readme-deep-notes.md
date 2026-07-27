@@ -609,6 +609,7 @@ Use these directly in OpenCode:
 /devtools status
 /devtools help
 /devtools install all
+/devtools install ast-grep
 /devtools install playwright-cli
 /devtools doctor
 /devtools doctor --json
@@ -633,8 +634,9 @@ direnv allow
 ```
 
 Notes:
-- `/devtools` observes host-managed tools and gives manual guidance; it does not invoke a host package manager. `/devtools install all` is observation-only.
-- `playwright-cli` is the only exact opt-in install in this slice and is never included in `install all`.
+- On Darwin arm64, `/devtools install ast-grep` and `install all` can install pinned `ast-grep 0.45.0` into pre-existing absolute owner-only (`0700`) roots selected with `OPENCODE_DEVTOOLS_CACHE_ROOT` and `OPENCODE_DEVTOOLS_BIN_ROOT`. Deprecated `sg` is never installed.
+- `/devtools` observes all other host-managed tools and gives manual guidance without invoking a host package manager.
+- `playwright-cli` remains an exact explicit install and is never included in `install all`.
 - `.pre-commit-config.yaml` is the canonical local hook configuration; `/devtools hooks-install` invokes the resolved local `pre-commit` executable with a finite deadline.
 - Browser-use and Context7 remain manual/opt-in because they need SDK/API-key or CLI-specific setup outside the default host-tool path.
 - Prefer tmux session names with an AI/OpenCode prefix such as `ai-oc-<task>` so cleanup and resume targeting stay obvious.

@@ -107,6 +107,7 @@ INTENT_RULES = {
         "keywords": {
             "devtools",
             "tooling",
+            "ast-grep",
             "pre-commit",
             "direnv",
             "ripgrep",
@@ -310,6 +311,7 @@ def _resolve_args(command: str, tokens: set[str], prompt_lower: str) -> list[str
             targets = [
                 name
                 for name in [
+                    "ast-grep",
                     "direnv",
                     "ripgrep",
                     "pre-commit",

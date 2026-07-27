@@ -2757,5 +2757,104 @@
     "command": "python3 \"$SCRIPT_DIR/config_layering.py\" provision-link --link \"$OPENCODE_CONFIG_DIR/opencode.json\" --target \"$OPENCODE_CONFIG_DIR/my_opencode/opencode.json\"",
     "count": 1,
     "classification": "serialized_provisioner"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_download_child.py",
+    "function": "download_to_fd",
+    "kind": "path.open",
+    "destination": "active_opener",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_acquire_lock",
+    "kind": "os.open",
+    "destination": "LOCK_NAME",
+    "count": 3,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_cleanup_recovery_temps",
+    "kind": "os.unlink",
+    "destination": "name",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_create_archive_stage",
+    "kind": "os.open",
+    "destination": "ARCHIVE_STAGE_NAME",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_create_json_stage",
+    "kind": "os.open",
+    "destination": "name",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_extract_binary_stage",
+    "kind": "os.open",
+    "destination": "BINARY_STAGE_NAME",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_extract_binary_stage",
+    "kind": "path.open",
+    "destination": "archive",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_open_regular_at",
+    "kind": "os.open",
+    "destination": "name",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_open_root",
+    "kind": "os.open",
+    "destination": "root",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_remove_archive_stage",
+    "kind": "os.unlink",
+    "destination": "ARCHIVE_STAGE_NAME",
+    "count": 1,
+    "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "ast_grep_installer.py",
+    "function": "_remove_journal",
+    "kind": "os.unlink",
+    "destination": "JOURNAL_NAME",
+    "count": 1,
+    "classification": "supply_chain_installer"
   }
 ]

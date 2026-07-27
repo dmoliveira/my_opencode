@@ -1,7 +1,7 @@
 ---
 status: doing
 priority: high
-updated: 2026-07-27
+updated: 2026-07-28
 ---
 
 # OpenCode Hardening Wave 8
@@ -259,26 +259,105 @@ Normative Python/TypeScript protocol:
 
 - `/devtools install ast-grep` and `install all` support only Darwin arm64 in
   this slice. Unsupported tuples fail before creating cache, bin, or attestation
-  paths.
+  paths. Installation refuses root/elevated execution and requires pre-existing
+  absolute injected cache/bin roots with `uid == euid != 0`; roots must be
+  current-user-owned, mode `0700`, non-symlink directories. Root
+  descriptors use `O_DIRECTORY|O_NOFOLLOW`, stay open through commit, and are
+  rechecked for pathname identity, ownership, and mode before every
+  download, extraction, execution, and publication boundary. Link count `1`
+  applies to regular files, not directories.
 - Use exact asset name/URL plus hard-coded archive and binary SHA-256 values.
-  Enforce an allowlist for redirect hosts; send no cookies, authorization,
-  proxies, or credential-bearing environment.
+  A stdlib-only `python -I -B -S` child receives only a pre-opened archive FD,
+  uses no proxies/cookies/authorization or credential-bearing environment, and
+  permits at most three HTTPS/443 redirects across exact `github.com` and
+  `release-assets.githubusercontent.com` hosts. A 60-second parent deadline
+  bounds the child; socket operations use a 10-second timeout.
 - Bound archive bytes, entry count, compressed/uncompressed size, compression
   ratio, and download time. Reject duplicate, encrypted, absolute, traversal,
-  symlink, hardlink, device, socket, and other special entries.
-- Extract only `ast-grep`. Verify exact version before installation.
+  symlink, device, socket, and other special entries. The exact pinned archive
+  profile contains ordered regular entries `sg` and `ast-grep`, is at most 10
+  MiB, expands to at most 64 MiB total/per member, and has a maximum ratio of
+  10. Core ZIP has no portable hardlink type, so hardlink safety is by
+  construction: never call extraction APIs, stream only `ast-grep` into a fresh
+  `O_EXCL` regular file, and require `st_nlink == 1`.
+- Extract only `ast-grep`; never install or execute deprecated `sg`. Verify the
+  staged binary hash, exact `ast-grep 0.45.0` output under a minimal environment,
+  and a second post-execution hash before installation. The executable stage is
+  adjacent to the destination in the retained bin root, created
+  `O_EXCL|O_NOFOLLOW` as `0600`; ordering is write, hash, `fchmod(0700)`, `fstat`,
+  `fsync(stage_fd)`, then execute and publish. Version execution
+  has a 10-second process-group deadline, bounded 64 KiB stdout/stderr capture,
+  TERM/KILL/reap/drain handling, and a zero-survivor requirement. The retained
+  stage FD and pathname identity must match before and after execution and again
+  immediately before publication. Active malicious same-UID mutation remains
+  outside the supported threat boundary.
 - Refuse existing symlink, hardlink, non-regular, unmanaged, or unattested
   executables. Do not replace a user-managed `ast-grep`.
 - Reject symlinked or identity-changed cache/bin roots before download,
   extraction, attestation, or installation.
-- Install atomically into injected owner-controlled cache/bin roots. Attestation
-  is evidence, not the trust anchor; doctor rehashes the installed executable
-  against the hard-coded binary digest.
+- Installer, recovery, idempotence checks, and doctor coordinate through one
+  stable `0600` lock inode using a bounded advisory lock; the lock is never the
+  removable journal. Doctor performs no write and reports `busy` if the lock is
+  unavailable. Before first install, an absent-lock doctor verifies all fixed
+  install names absent, rechecks lock absence, and returns `missing`; a lock that
+  appears yields retry/`busy`. Before staging, create and sync a separate fixed-name `0600`
+  transaction journal whose schema never supplies paths. Publish
+  with fd-relative Darwin `renameatx_np(..., RENAME_EXCL)` only; unsupported
+  filesystems fail closed with no `os.replace` fallback. Sync the bin directory,
+  publish/sync a strict `0600` attestation with the same exclusive primitive,
+  then remove/sync the transaction journal. A valid journal supports crash
+  finalization; fixed basenames are always authoritative. Any failure after
+  executable publication reports separate `committed`, `complete` or
+  `recovery_required`, and `durability` fields rather than rollback.
+- The recovery table is explicit: no binary/attestation/journal is fresh; exact
+  binary plus exact attestation is an offline write-free no-op; journal plus no
+  binary resumes pre-publication; journal plus exact binary and no attestation
+  finalizes; journal plus exact binary and exact attestation removes the journal.
+  Every other combination, malformed/oversized journal, or destination or
+  attestation appearing during install is an exclusive-publication refusal.
+  Unmanaged or unattested binaries are never adopted solely because bytes match.
+  Archive, executable-stage, and attestation-stage files use fixed temporary
+  basenames. Under the stable lock, a valid journal authorizes validation plus
+  cleanup/restart of only those names followed by directory sync. Without a
+  valid journal, any fixed temporary artifact is unmanaged and causes refusal.
+- Attestation is evidence, not the trust anchor. Doctor never downloads or
+  executes the binary; it opens binary/attestation through retained root FDs,
+  validates bounded schema/ownership/mode/link/identity state, and rehashes the
+  installed executable against the hard-coded binary digest on every call.
 - Tests use a local fixture archive and subprocess-level write audit with all
   roots injected into a temporary directory. PATH sentinels prove brew, gh, npm,
-  and npx were never invoked. No host-global write is allowed.
+  and npx were never invoked. No host-global write is allowed. Fault injection
+  covers redirects, archive bounds/types, root and destination swaps, exclusive
+  publication, every sync boundary, stable-lock/journal races, transaction
+  recovery, concurrent installer/doctor barriers, offline idempotence, staged
+  execution hangs/output floods/substitution, first-install absent-lock doctor
+  barriers, every journal/temporary-artifact combination, and doctor tampering
+  during hash.
 - Replay the recorded fixture precision/rewrite checks and a bounded performance
-  smoke. Performance is informational outside the recorded host.
+  smoke. The Darwin-arm64 owner-host cell performs a fresh production download
+  into temporary injected roots, measures secret-environment forwarding and
+  surviving processes, verifies a second offline idempotent install, and proves
+  cleanup. It records the literal asset URL, redirect hosts/count, exact archive
+  profile and hashes, documented inherited FDs only, zero synthetic secret
+  names/values in the child environment, successful doctor rehash, zero
+  surviving PIDs, and no writes outside injected roots. The second install runs
+  with network disabled and must preserve inode/bytes with no child, execution,
+  or write. Performance is informational; exact two-vs-four precision and
+  isolated rewrite behavior are the value pass criteria.
+
+The exact archive manifest is part of the gate, not only a set of loose limits:
+ordered `sg` then `ast-grep`; Unix regular mode `0100755`; deflate method `8`;
+flags `0`; no comments; exact reviewed extra bytes; `sg` size/compressed/CRC
+`413008`/`172629`/`0x8d0a6976`; `ast-grep` size/compressed/CRC
+`52074976`/`7938787`/`0xabd6d0af`; aggregate uncompressed/compressed bytes
+`52487984`/`8111416`. Ratio checks use integer arithmetic and streamed byte/CRC
+and hash checks confirm metadata claims.
+
+Implementation slices are policy/root/lock gates, downloader/archive authority,
+bounded staged execution, exclusive publication/recovery, doctor/idempotence,
+and owner-host replay. Adoption edits stay uncommitted until the final gate. If
+any slice or live cell fails or remains blocked, restore the task-45 baseline and
+record `DEFERRED` with no installer, guidance, managed binary, or attestation.
 
 `task_46` has two terminal outcomes:
 
@@ -289,6 +368,12 @@ Normative Python/TypeScript protocol:
   verifies tasks 41-45 and confirms no new managed executable exists.
 
 A `BLOCKED` cell can never count as `ADOPTED`.
+
+Task 46 outcome: **ADOPTED** on 2026-07-28. The deterministic authority suite,
+native Darwin `RENAME_EXCL` checks, sandbox-confined production download, and
+network-denied offline owner-host replay passed. Sanitized evidence is recorded
+at `runtime/harness-wave-8/task46/owner-host-report.json` during validation; the
+runtime artifact is intentionally ignored and is re-created by the live gate.
 
 ## Slice Gates
 

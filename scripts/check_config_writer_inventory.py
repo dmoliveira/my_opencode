@@ -20,6 +20,7 @@ GLOBAL_SINK_CLASSIFICATIONS = {
     "isolated_fixture_exemption",
     "serialized_provisioner",
     "shell_non_config_exemption",
+    "supply_chain_installer",
 }
 HELPER_SINK_APIS = {
     "append_exempt_text_line",
