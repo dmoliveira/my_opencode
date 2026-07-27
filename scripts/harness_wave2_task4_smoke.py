@@ -9,12 +9,13 @@ import hashlib
 import http.server
 import json
 import os
-import queue
 import re
+import selectors
 import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -67,6 +68,21 @@ SENSITIVE_ENV_MARKERS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "AUTH")
 CLI_LOG_BYTES = 128 * 1024
 CLI_SNAPSHOT_BYTES = 1024 * 1024
 CLI_SCREENSHOT_BYTES = 5 * 1024 * 1024
+PROCESS_STDOUT_BYTES = 4 * 1024 * 1024
+PROCESS_STDERR_BYTES = 2 * 1024 * 1024
+MCP_LINE_BYTES = 2 * 1024 * 1024
+MCP_QUEUE_ITEMS = 128
+MCP_QUEUE_BYTES = 4 * 1024 * 1024
+READ_CHUNK_BYTES = 64 * 1024
+ARTIFACT_MAX_ENTRIES = 4096
+ARTIFACT_MAX_FILES = 2048
+ARTIFACT_MAX_DEPTH = 32
+ARTIFACT_MAX_PATH_BYTES = 4096
+ARTIFACT_MAX_FILE_BYTES = 8 * 1024 * 1024
+ARTIFACT_MAX_TOTAL_BYTES = 64 * 1024 * 1024
+OUTPUT_MARKER_NAME = ".my-opencode-harness-output"
+OUTPUT_MARKER_CONTENT = b"my_opencode:harness-output:v1\n"
+SUPPORTED_PROCESS_PLATFORMS = {"darwin", "linux"}
 
 PROJECT_FIXTURES: dict[str, dict[str, Any]] = {
     "python": {
@@ -138,7 +154,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=REPO_ROOT / "runtime" / "harness-wave-5" / "exact-model-e2e",
+        default=None,
     )
     parser.add_argument("--model", default=EXACT_MODEL)
     parser.add_argument("--scenario-label", default="wave6")
@@ -153,8 +169,299 @@ def selected_components(mode: str) -> tuple[str, ...]:
     return (mode,)
 
 
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _require_supported_process_platform() -> None:
+    if sys.platform not in SUPPORTED_PROCESS_PLATFORMS:
+        raise RuntimeError(
+            "harness process containment supports only Darwin and Linux"
+        )
+
+
+def _directory_flags() -> int:
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+
+
+def _regular_file_flags() -> int:
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+
+
+def _validate_owned_directory(metadata: os.stat_result, label: str) -> None:
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise PermissionError(f"{label} must be a directory")
+    if metadata.st_uid != os.geteuid():
+        raise PermissionError(f"{label} must be owned by the current user")
+    if stat.S_IMODE(metadata.st_mode) & 0o022:
+        raise PermissionError(f"{label} must not be group/world writable")
+
+
+def _open_owned_directory(path: Path, label: str) -> int:
+    before = path.lstat()
+    _validate_owned_directory(before, label)
+    descriptor = os.open(path, _directory_flags())
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise PermissionError(f"{label} changed during validation")
+        _validate_owned_directory(opened, label)
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def prepare_output_directory(
+    repo_root: Path, requested_output: Path | None
+) -> tuple[Path, dict[str, Any]]:
+    """Allocate one owner-only output directory under the selected runtime root."""
+    _require_supported_process_platform()
+    selected_repo = Path(os.path.abspath(repo_root.expanduser()))
+    resolved_repo = repo_root.expanduser().resolve(strict=True)
+    runtime_root = resolved_repo / "runtime"
+    raw_output = requested_output
+    if raw_output is None:
+        raw_output = runtime_root / f"harness-wave-8-{uuid.uuid4().hex}"
+    if ".." in raw_output.parts:
+        raise ValueError("output directory must not contain '..'")
+    if raw_output.is_absolute():
+        requested_absolute = Path(os.path.abspath(raw_output))
+        try:
+            requested_relative = requested_absolute.relative_to(selected_repo)
+        except ValueError:
+            candidate = requested_absolute
+        else:
+            candidate = resolved_repo / requested_relative
+    else:
+        candidate = Path(os.path.abspath(resolved_repo / raw_output))
+    try:
+        relative = candidate.relative_to(runtime_root)
+    except ValueError as error:
+        raise ValueError(
+            "output directory must be a strict descendant of repository runtime"
+        ) from error
+    if not relative.parts:
+        raise ValueError(
+            "output directory must be a strict descendant of repository runtime"
+        )
+
+    repo_descriptor = _open_owned_directory(resolved_repo, "repository root")
+    runtime_descriptor = -1
+    try:
+        runtime_metadata = os.stat(
+            "runtime", dir_fd=repo_descriptor, follow_symlinks=False
+        )
+        _validate_owned_directory(runtime_metadata, "repository runtime root")
+        runtime_descriptor = os.open(
+            "runtime", _directory_flags(), dir_fd=repo_descriptor
+        )
+        opened_runtime = os.fstat(runtime_descriptor)
+        if (opened_runtime.st_dev, opened_runtime.st_ino) != (
+            runtime_metadata.st_dev,
+            runtime_metadata.st_ino,
+        ):
+            raise PermissionError("repository runtime root changed during validation")
+        _validate_owned_directory(opened_runtime, "repository runtime root")
+
+        parent_descriptor = os.dup(runtime_descriptor)
+        try:
+            for index, component in enumerate(relative.parts[:-1], start=1):
+                metadata = os.stat(
+                    component,
+                    dir_fd=parent_descriptor,
+                    follow_symlinks=False,
+                )
+                _validate_owned_directory(
+                    metadata, f"output ancestor {'/'.join(relative.parts[:index])}"
+                )
+                child_descriptor = os.open(
+                    component, _directory_flags(), dir_fd=parent_descriptor
+                )
+                opened = os.fstat(child_descriptor)
+                if (opened.st_dev, opened.st_ino) != (
+                    metadata.st_dev,
+                    metadata.st_ino,
+                ):
+                    os.close(child_descriptor)
+                    raise PermissionError("output ancestor changed during validation")
+                os.close(parent_descriptor)
+                parent_descriptor = child_descriptor
+
+            leaf = relative.parts[-1]
+            try:
+                os.stat(leaf, dir_fd=parent_descriptor, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                raise FileExistsError("output directory must not already exist")
+            os.mkdir(leaf, mode=0o700, dir_fd=parent_descriptor)
+            output_descriptor = os.open(
+                leaf, _directory_flags(), dir_fd=parent_descriptor
+            )
+            try:
+                os.fchmod(output_descriptor, 0o700)
+                created = os.fstat(output_descriptor)
+                _validate_owned_directory(created, "created output directory")
+                marker_flags = (
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0)
+                    | getattr(os, "O_CLOEXEC", 0)
+                )
+                marker_descriptor = os.open(
+                    OUTPUT_MARKER_NAME,
+                    marker_flags,
+                    0o600,
+                    dir_fd=output_descriptor,
+                )
+                try:
+                    os.fchmod(marker_descriptor, 0o600)
+                    remaining = memoryview(OUTPUT_MARKER_CONTENT)
+                    while remaining:
+                        remaining = remaining[os.write(marker_descriptor, remaining) :]
+                    os.fsync(marker_descriptor)
+                    marker_metadata = os.fstat(marker_descriptor)
+                    if (
+                        not stat.S_ISREG(marker_metadata.st_mode)
+                        or marker_metadata.st_nlink != 1
+                        or stat.S_IMODE(marker_metadata.st_mode) != 0o600
+                        or marker_metadata.st_size != len(OUTPUT_MARKER_CONTENT)
+                    ):
+                        raise PermissionError("output ownership marker is unsafe")
+                finally:
+                    os.close(marker_descriptor)
+                os.fsync(output_descriptor)
+                visible = candidate.lstat()
+                if (visible.st_dev, visible.st_ino) != (
+                    created.st_dev,
+                    created.st_ino,
+                ):
+                    raise PermissionError(
+                        "created output directory changed before use"
+                    )
+            finally:
+                os.close(output_descriptor)
+        finally:
+            os.close(parent_descriptor)
+    finally:
+        if runtime_descriptor >= 0:
+            os.close(runtime_descriptor)
+        os.close(repo_descriptor)
+    return candidate, {
+        "marker": OUTPUT_MARKER_NAME,
+        "marker_version": OUTPUT_MARKER_CONTENT.decode("ascii").strip(),
+        "runtime_created": False,
+    }
+
+
+class _BoundedCapture:
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.total_bytes = 0
+        self._retained = bytearray()
+        self.truncated = False
+        self.eof = False
+
+    def append(self, chunk: bytes) -> None:
+        self.total_bytes += len(chunk)
+        self._retained.extend(chunk)
+        if len(self._retained) > self.limit:
+            del self._retained[: len(self._retained) - self.limit]
+            self.truncated = True
+
+    def mark_incomplete(self) -> None:
+        if not self.eof:
+            self.truncated = True
+
+    def text(self) -> str:
+        return bytes(self._retained).decode("utf-8", errors="replace")
+
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "total_bytes": self.total_bytes,
+            "retained_bytes": len(self._retained),
+            "truncated": self.truncated,
+            "eof": self.eof,
+        }
+
+
+def _register_process_streams(
+    process: subprocess.Popen[bytes],
+    *,
+    stdout_limit: int,
+    stderr_limit: int,
+) -> tuple[selectors.BaseSelector, dict[str, _BoundedCapture]]:
+    selector = selectors.DefaultSelector()
+    captures = {
+        "stdout": _BoundedCapture(stdout_limit),
+        "stderr": _BoundedCapture(stderr_limit),
+    }
+    for name in ("stdout", "stderr"):
+        stream = getattr(process, name)
+        if stream is None:
+            captures[name].mark_incomplete()
+            continue
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, selectors.EVENT_READ, name)
+    return selector, captures
+
+
+def _read_process_streams(
+    selector: selectors.BaseSelector,
+    captures: dict[str, _BoundedCapture],
+    timeout: float,
+    stdout_consumer: Any | None = None,
+) -> None:
+    for key, _mask in selector.select(max(0.0, timeout)):
+        stream = key.fileobj
+        name = str(key.data)
+        capture = captures[name]
+        try:
+            chunk = os.read(stream.fileno(), READ_CHUNK_BYTES)
+        except BlockingIOError:
+            continue
+        if chunk:
+            capture.append(chunk)
+            if name == "stdout" and stdout_consumer is not None:
+                stdout_consumer(chunk)
+            continue
+        capture.eof = True
+        selector.unregister(stream)
+        stream.close()
+
+
+def _close_process_streams(
+    selector: selectors.BaseSelector,
+    captures: dict[str, _BoundedCapture],
+) -> None:
+    for key in list(selector.get_map().values()):
+        name = str(key.data)
+        captures[name].mark_incomplete()
+        try:
+            selector.unregister(key.fileobj)
+        except KeyError:
+            pass
+        try:
+            key.fileobj.close()
+        except OSError:
+            pass
+    selector.close()
+
+
+def _signal_process_group(process_group: int, signal_number: signal.Signals) -> bool:
+    try:
+        os.killpg(process_group, signal_number)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 def run_process(
@@ -162,9 +469,15 @@ def run_process(
     *,
     cwd: Path,
     env: dict[str, str],
-    timeout: int,
+    timeout: float,
+    stdout_limit: int = PROCESS_STDOUT_BYTES,
+    stderr_limit: int = PROCESS_STDERR_BYTES,
 ) -> dict[str, Any]:
+    _require_supported_process_platform()
     started = time.monotonic()
+    deadline = started + max(0.1, float(timeout))
+    shutdown_reserve = min(1.0, max(0.2, float(timeout) * 0.2))
+    execution_deadline = max(started, deadline - shutdown_reserve)
     process = subprocess.Popen(
         command,
         cwd=cwd,
@@ -172,50 +485,330 @@ def run_process(
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        text=False,
+        bufsize=0,
         start_new_session=True,
+    )
+    selector, captures = _register_process_streams(
+        process,
+        stdout_limit=stdout_limit,
+        stderr_limit=stderr_limit,
     )
     timed_out = False
     process_group = process.pid
+    signals_sent: list[str] = []
+    stage = "running"
+    stage_deadline = execution_deadline
+    parent_exited_at: float | None = None
     try:
-        stdout, stderr = process.communicate(timeout=max(1, timeout))
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        try:
-            os.killpg(process_group, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            stdout, stderr = process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process_group, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            stdout, stderr = process.communicate()
+        while time.monotonic() < deadline:
+            now = time.monotonic()
+            _read_process_streams(
+                selector,
+                captures,
+                min(0.05, max(0.0, stage_deadline - now)),
+            )
+            returncode = process.poll()
+            streams_open = bool(selector.get_map())
+            capture_failed = any(item.truncated for item in captures.values())
+            if returncode is not None and not streams_open:
+                break
+            now = time.monotonic()
+            if stage == "running" and returncode is not None:
+                if parent_exited_at is None:
+                    parent_exited_at = now
+                if streams_open and now - parent_exited_at >= 0.05:
+                    timed_out = True
+                    if _signal_process_group(process_group, signal.SIGTERM):
+                        signals_sent.append("TERM")
+                    stage = "term"
+                    stage_deadline = min(deadline, now + shutdown_reserve / 2)
+                    continue
+            if stage == "running" and (capture_failed or now >= execution_deadline):
+                timed_out = now >= execution_deadline
+                if _signal_process_group(process_group, signal.SIGTERM):
+                    signals_sent.append("TERM")
+                stage = "term"
+                stage_deadline = min(deadline, now + shutdown_reserve / 2)
+                continue
+            if stage == "term" and now >= stage_deadline:
+                if _signal_process_group(process_group, signal.SIGKILL):
+                    signals_sent.append("KILL")
+                stage = "kill"
+                stage_deadline = deadline
+        if process.poll() is None or selector.get_map():
+            if _signal_process_group(process_group, signal.SIGKILL):
+                signals_sent.append("KILL")
+            while time.monotonic() < deadline and (
+                process.poll() is None or selector.get_map()
+            ):
+                _read_process_streams(
+                    selector,
+                    captures,
+                    min(0.02, max(0.0, deadline - time.monotonic())),
+                )
+    finally:
+        _close_process_streams(selector, captures)
+        if process.poll() is None:
+            _signal_process_group(process_group, signal.SIGKILL)
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining:
+                try:
+                    process.wait(timeout=remaining)
+                except subprocess.TimeoutExpired:
+                    pass
+    stream_metadata = {
+        name: capture.metadata() for name, capture in captures.items()
+    }
+    capture_failed = any(
+        item["truncated"] or not item["eof"] for item in stream_metadata.values()
+    )
+    process_returncode = process.poll()
+    public_returncode = (
+        124
+        if timed_out
+        else 125
+        if capture_failed
+        else process_returncode
+        if process_returncode is not None
+        else 124
+    )
     return {
         "command": command,
-        "returncode": 124 if timed_out else process.returncode,
-        "stdout": stdout or "",
-        "stderr": stderr or "",
+        "returncode": public_returncode,
+        "process_returncode": process_returncode,
+        "stdout": captures["stdout"].text(),
+        "stderr": captures["stderr"].text(),
+        "stdout_total_bytes": stream_metadata["stdout"]["total_bytes"],
+        "stdout_truncated": stream_metadata["stdout"]["truncated"],
+        "stderr_total_bytes": stream_metadata["stderr"]["total_bytes"],
+        "stderr_truncated": stream_metadata["stderr"]["truncated"],
+        "stream_metadata": stream_metadata,
         "timed_out": timed_out,
         "duration_seconds": round(time.monotonic() - started, 3),
         "process_pid": process.pid,
         "process_group": process_group,
+        "signals_sent": signals_sent,
     }
 
 
+def _read_regular_file_no_follow(path: Path, maximum_bytes: int) -> bytes:
+    before = path.lstat()
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or before.st_size > maximum_bytes
+    ):
+        raise RuntimeError("artifact must be a bounded single-link regular file")
+    descriptor = os.open(path, _regular_file_flags())
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or (opened.st_dev, opened.st_ino, opened.st_size)
+            != (before.st_dev, before.st_ino, before.st_size)
+        ):
+            raise RuntimeError("artifact changed while opening")
+        chunks: list[bytes] = []
+        total = 0
+        while total <= maximum_bytes:
+            chunk = os.read(
+                descriptor, min(READ_CHUNK_BYTES, maximum_bytes + 1 - total)
+            )
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        after = os.fstat(descriptor)
+        if (
+            total > maximum_bytes
+            or total != before.st_size
+            or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            != (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+        ):
+            raise RuntimeError("artifact changed while reading")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _scan_bounded_tree(
+    root: Path,
+    *,
+    max_entries: int = ARTIFACT_MAX_ENTRIES,
+    max_files: int = ARTIFACT_MAX_FILES,
+    max_depth: int = ARTIFACT_MAX_DEPTH,
+    max_file_bytes: int = ARTIFACT_MAX_FILE_BYTES,
+    max_total_bytes: int = ARTIFACT_MAX_TOTAL_BYTES,
+    forbidden_values: Iterable[str] = (),
+) -> dict[str, Any]:
+    root_metadata = root.lstat()
+    if not stat.S_ISDIR(root_metadata.st_mode):
+        raise RuntimeError("artifact root must be a non-symlink directory")
+    root_descriptor = os.open(root, _directory_flags())
+    opened_root = os.fstat(root_descriptor)
+    if (opened_root.st_dev, opened_root.st_ino) != (
+        root_metadata.st_dev,
+        root_metadata.st_ino,
+    ):
+        os.close(root_descriptor)
+        raise RuntimeError("artifact root changed while opening")
+    stack: list[tuple[int, tuple[str, ...], int]] = [(root_descriptor, (), 0)]
+    records: list[dict[str, Any]] = []
+    top_level: set[str] = set()
+    entry_count = 0
+    total_bytes = 0
+    forbidden = [value.encode("utf-8") for value in forbidden_values if value]
+    try:
+        while stack:
+            descriptor, prefix, depth = stack.pop()
+            try:
+                with os.scandir(descriptor) as entries:
+                    for entry in entries:
+                        entry_count += 1
+                        if entry_count > max_entries:
+                            raise RuntimeError("artifact entry count exceeded")
+                        parts = (*prefix, entry.name)
+                        if depth == 0:
+                            top_level.add(entry.name)
+                        relative = "/".join(parts)
+                        if len(relative.encode("utf-8")) > ARTIFACT_MAX_PATH_BYTES:
+                            raise RuntimeError("artifact path length exceeded")
+                        metadata = entry.stat(follow_symlinks=False)
+                        if stat.S_ISDIR(metadata.st_mode):
+                            if depth + 1 > max_depth:
+                                raise RuntimeError("artifact tree depth exceeded")
+                            child = os.open(
+                                entry.name, _directory_flags(), dir_fd=descriptor
+                            )
+                            opened = os.fstat(child)
+                            if (opened.st_dev, opened.st_ino) != (
+                                metadata.st_dev,
+                                metadata.st_ino,
+                            ):
+                                os.close(child)
+                                raise RuntimeError(
+                                    "artifact directory changed while opening"
+                                )
+                            stack.append((child, parts, depth + 1))
+                            continue
+                        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                            raise RuntimeError(
+                                "artifact tree contains a symlink, hardlink, or special file"
+                            )
+                        if metadata.st_size > max_file_bytes:
+                            raise RuntimeError("artifact file size exceeded")
+                        if len(records) + 1 > max_files:
+                            raise RuntimeError("artifact file count exceeded")
+                        if total_bytes + metadata.st_size > max_total_bytes:
+                            raise RuntimeError("artifact aggregate size exceeded")
+                        file_descriptor = os.open(
+                            entry.name, _regular_file_flags(), dir_fd=descriptor
+                        )
+                        try:
+                            opened = os.fstat(file_descriptor)
+                            if (
+                                not stat.S_ISREG(opened.st_mode)
+                                or opened.st_nlink != 1
+                                or (
+                                    opened.st_dev,
+                                    opened.st_ino,
+                                    opened.st_size,
+                                )
+                                != (
+                                    metadata.st_dev,
+                                    metadata.st_ino,
+                                    metadata.st_size,
+                                )
+                            ):
+                                raise RuntimeError(
+                                    "artifact file changed while opening"
+                                )
+                            chunks: list[bytes] = []
+                            observed = 0
+                            while observed <= max_file_bytes:
+                                chunk = os.read(
+                                    file_descriptor,
+                                    min(
+                                        READ_CHUNK_BYTES,
+                                        max_file_bytes + 1 - observed,
+                                    ),
+                                )
+                                if not chunk:
+                                    break
+                                chunks.append(chunk)
+                                observed += len(chunk)
+                            content = b"".join(chunks)
+                            after = os.fstat(file_descriptor)
+                            if (
+                                observed != metadata.st_size
+                                or observed > max_file_bytes
+                                or (
+                                    after.st_dev,
+                                    after.st_ino,
+                                    after.st_size,
+                                    after.st_mtime_ns,
+                                )
+                                != (
+                                    metadata.st_dev,
+                                    metadata.st_ino,
+                                    metadata.st_size,
+                                    metadata.st_mtime_ns,
+                                )
+                            ):
+                                raise RuntimeError(
+                                    "artifact file changed while reading"
+                                )
+                        finally:
+                            os.close(file_descriptor)
+                        if any(value in content for value in forbidden):
+                            raise RuntimeError("artifact tree contains forbidden material")
+                        total_bytes += observed
+                        records.append(
+                            {
+                                "path": relative,
+                                "size": observed,
+                                "sha256": hashlib.sha256(content).hexdigest(),
+                                "content": content,
+                            }
+                        )
+            finally:
+                os.close(descriptor)
+    except BaseException:
+        for descriptor, _prefix, _depth in stack:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        raise
+    records.sort(key=lambda item: str(item["path"]))
+    return {
+        "entry_count": entry_count,
+        "file_count": len(records),
+        "total_bytes": total_bytes,
+        "top_level": sorted(top_level),
+        "files": records,
+    }
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(
+        _read_regular_file_no_follow(path, ARTIFACT_MAX_FILE_BYTES)
+    ).hexdigest()
+
+
 def sha256_tree(root: Path) -> tuple[str, int]:
+    scan = _scan_bounded_tree(root)
     digest = hashlib.sha256()
-    files = [path for path in sorted(root.rglob("*")) if path.is_file()]
-    for path in files:
-        relative = path.relative_to(root).as_posix().encode("utf-8")
-        content = path.read_bytes()
+    for record in scan["files"]:
+        relative = str(record["path"]).encode("utf-8")
+        content = record["content"]
         digest.update(len(relative).to_bytes(8, "big"))
         digest.update(relative)
         digest.update(len(content).to_bytes(8, "big"))
         digest.update(content)
-    return digest.hexdigest(), len(files)
+    return digest.hexdigest(), int(scan["file_count"])
 
 
 def remaining_timeout(deadline: float, maximum: int) -> int:
@@ -299,6 +892,12 @@ def verify_committed_candidate(
         "candidate_paths_clean_after_build": not candidate_status[
             "stdout"
         ].strip(),
+        "stream_metadata": {
+            "build": _result_stream_metadata(build),
+            "head": _result_stream_metadata(head),
+            "tracked_status": _result_stream_metadata(tracked_status),
+            "candidate_status": _result_stream_metadata(candidate_status),
+        },
         "source": {
             "path": "plugin/gateway-core/src",
             "sha256": source_sha256,
@@ -571,7 +1170,8 @@ def read_audit(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     entries: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    content = _read_regular_file_no_follow(path, ARTIFACT_MAX_FILE_BYTES)
+    for line in content.decode("utf-8", errors="replace").splitlines():
         if not line.strip():
             continue
         try:
@@ -613,16 +1213,13 @@ def audit_summary(path: Path) -> dict[str, Any]:
 
 
 def fixture_hashes(project: Path) -> dict[str, str]:
-    hashes: dict[str, str] = {}
-    for path in sorted(project.rglob("*")):
-        if (
-            not path.is_file()
-            or "__pycache__" in path.parts
-            or path.suffix == ".pyc"
-        ):
-            continue
-        hashes[str(path.relative_to(project))] = sha256_file(path)
-    return hashes
+    scan = _scan_bounded_tree(project)
+    return {
+        str(record["path"]): str(record["sha256"])
+        for record in scan["files"]
+        if "__pycache__" not in Path(str(record["path"])).parts
+        and Path(str(record["path"])).suffix != ".pyc"
+    }
 
 
 def write_project_fixture(project: Path, name: str) -> dict[str, Any]:
@@ -757,7 +1354,9 @@ def run_model_preflight(
     retained_audit = output_dir / "preflight.gateway-events.jsonl"
     credential_detected |= write_safe_text(
         retained_audit,
-        audit_path.read_text(encoding="utf-8", errors="replace")
+        _read_regular_file_no_follow(
+            audit_path, ARTIFACT_MAX_FILE_BYTES
+        ).decode("utf-8", errors="replace")
         if audit_path.exists()
         else "",
         secrets,
@@ -793,6 +1392,7 @@ def run_model_preflight(
         "reason": reason,
         "returncode": result["returncode"],
         "timed_out": result["timed_out"],
+        "stream_metadata": _result_stream_metadata(result),
         "marker_seen": marker_seen,
         "audit": audit,
         "observed_models": audit["observed_models"],
@@ -888,7 +1488,9 @@ def run_project_fixture(
         )
     audit = audit_summary(audit_path)
     audit_text = (
-        audit_path.read_text(encoding="utf-8", errors="replace")
+        _read_regular_file_no_follow(
+            audit_path, ARTIFACT_MAX_FILE_BYTES
+        ).decode("utf-8", errors="replace")
         if audit_path.exists()
         else ""
     )
@@ -933,6 +1535,11 @@ def run_project_fixture(
         "model_returncode": model_run["returncode"],
         "model_timed_out": model_run["timed_out"],
         "final_test_returncode": final_test["returncode"],
+        "stream_metadata": {
+            "initial_test": _result_stream_metadata(initial_test),
+            "model": _result_stream_metadata(model_run),
+            "final_test": _result_stream_metadata(final_test),
+        },
         "changed_files": changed_files,
         "test_hash_unchanged": test_hash_unchanged,
         "audit": audit,
@@ -964,68 +1571,178 @@ def _append_bounded_line(lines: deque[str], line: str, retained_bytes: int) -> i
     return retained_bytes
 
 
-def read_stream(
-    stream: Any,
-    sink: queue.Queue[str | None] | None,
-    lines: deque[str],
-    stop: threading.Event,
-) -> None:
-    retained_bytes = 0
-    try:
-        for line in iter(stream.readline, ""):
-            retained_bytes = _append_bounded_line(lines, line, retained_bytes)
-            if sink is None:
+class _JsonLineDecoder:
+    def __init__(
+        self,
+        *,
+        max_line_bytes: int = MCP_LINE_BYTES,
+        max_queue_items: int = MCP_QUEUE_ITEMS,
+        max_queue_bytes: int = MCP_QUEUE_BYTES,
+    ) -> None:
+        self.max_line_bytes = max_line_bytes
+        self.max_queue_items = max_queue_items
+        self.max_queue_bytes = max_queue_bytes
+        self.pending = bytearray()
+        self.messages: deque[tuple[dict[str, Any], int]] = deque()
+        self.queued_bytes = 0
+        self.error = ""
+        self.eof = False
+
+    def _fail(self, message: str) -> None:
+        if not self.error:
+            self.error = message
+
+    def _append_line(self, line: bytes, retained_bytes: int) -> None:
+        if len(line) > self.max_line_bytes:
+            self._fail("MCP stdout line exceeded its byte limit")
+            return
+        try:
+            text = line.decode("utf-8", errors="strict")
+            payload = json.loads(text)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._fail("MCP stdout emitted invalid UTF-8 JSON")
+            return
+        if not isinstance(payload, dict):
+            self._fail("MCP stdout JSON messages must be objects")
+            return
+        if (
+            len(self.messages) >= self.max_queue_items
+            or self.queued_bytes + retained_bytes > self.max_queue_bytes
+        ):
+            self._fail("MCP stdout message queue exceeded its byte limit")
+            return
+        self.messages.append((payload, retained_bytes))
+        self.queued_bytes += retained_bytes
+
+    def feed(self, chunk: bytes) -> None:
+        if self.error or self.eof:
+            return
+        self.pending.extend(chunk)
+        while not self.error:
+            newline = self.pending.find(b"\n")
+            if newline < 0:
+                if len(self.pending) > self.max_line_bytes:
+                    self._fail("MCP stdout line exceeded its byte limit")
+                return
+            wire_line = bytes(self.pending[:newline])
+            line = wire_line.removesuffix(b"\r")
+            del self.pending[: newline + 1]
+            self._append_line(line, len(wire_line) + 1)
+
+    def finish(self) -> None:
+        if self.eof:
+            return
+        self.eof = True
+        if self.pending and not self.error:
+            self._fail("MCP stdout closed with a partial JSON line")
+
+    def response(self, response_id: int) -> dict[str, Any] | None:
+        for item in tuple(self.messages):
+            payload, retained_bytes = item
+            if payload.get("id") != response_id:
                 continue
-            while not stop.is_set():
-                try:
-                    sink.put(line, timeout=0.05)
-                    break
-                except queue.Full:
-                    continue
-    finally:
-        if sink is not None:
-            try:
-                sink.put_nowait(None)
-            except queue.Full:
-                pass
+            self.messages.remove(item)
+            self.queued_bytes -= retained_bytes
+            return payload
+        return None
 
 
-def stop_process_group(process: subprocess.Popen[str]) -> None:
-    if process.stdin and not process.stdin.closed:
-        process.stdin.close()
-    try:
-        process.wait(timeout=3)
-        return
-    except subprocess.TimeoutExpired:
-        pass
-    os.killpg(process.pid, signal.SIGTERM)
-    try:
-        process.wait(timeout=3)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.wait(timeout=3)
-
-
-def wait_for_response(
-    messages: queue.Queue[str | None],
+def _wait_for_mcp_response(
+    *,
+    process: subprocess.Popen[bytes],
+    selector: selectors.BaseSelector,
+    captures: dict[str, _BoundedCapture],
+    decoder: _JsonLineDecoder,
     response_id: int,
     deadline: float,
 ) -> dict[str, Any]:
     while time.monotonic() < deadline:
-        remaining = max(0.1, deadline - time.monotonic())
-        try:
-            line = messages.get(timeout=remaining)
-        except queue.Empty as error:
-            raise TimeoutError(f"MCP response {response_id} timed out") from error
-        if line is None:
+        response = decoder.response(response_id)
+        if response is not None:
+            return response
+        if decoder.error:
+            raise RuntimeError(decoder.error)
+        if captures["stdout"].truncated or captures["stderr"].truncated:
+            raise RuntimeError("MCP process output exceeded its capture limit")
+        _read_process_streams(
+            selector,
+            captures,
+            min(0.05, max(0.0, deadline - time.monotonic())),
+            decoder.feed,
+        )
+        if captures["stdout"].eof:
+            decoder.finish()
+        if process.poll() is not None and captures["stdout"].eof:
+            if decoder.error:
+                raise RuntimeError(decoder.error)
             raise RuntimeError(f"MCP stdout closed before response {response_id}")
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise RuntimeError("MCP stdout emitted invalid JSON") from error
-        if payload.get("id") == response_id:
-            return payload
     raise TimeoutError(f"MCP response {response_id} timed out")
+
+
+def _write_pipe_with_deadline(stream: Any, payload: bytes, deadline: float) -> None:
+    descriptor = stream.fileno()
+    os.set_blocking(descriptor, False)
+    view = memoryview(payload)
+    while view and time.monotonic() < deadline:
+        try:
+            written = os.write(descriptor, view)
+        except BlockingIOError:
+            time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
+            continue
+        view = view[written:]
+    if view:
+        raise TimeoutError("MCP stdin write exceeded the process deadline")
+
+
+def _shutdown_mcp_process(
+    *,
+    process: subprocess.Popen[bytes],
+    selector: selectors.BaseSelector,
+    captures: dict[str, _BoundedCapture],
+    decoder: _JsonLineDecoder,
+    deadline: float,
+) -> list[str]:
+    signals_sent: list[str] = []
+    if process.stdin is not None and not process.stdin.closed:
+        process.stdin.close()
+    remaining = max(0.0, deadline - time.monotonic())
+    term_deadline = time.monotonic() + min(0.25, remaining / 2)
+    if process.poll() is None or selector.get_map():
+        if _signal_process_group(process.pid, signal.SIGTERM):
+            signals_sent.append("TERM")
+    while time.monotonic() < term_deadline and (
+        process.poll() is None or selector.get_map()
+    ):
+        _read_process_streams(
+            selector,
+            captures,
+            min(0.02, max(0.0, term_deadline - time.monotonic())),
+            decoder.feed,
+        )
+    if process.poll() is None or selector.get_map():
+        if _signal_process_group(process.pid, signal.SIGKILL):
+            signals_sent.append("KILL")
+    while time.monotonic() < deadline and (
+        process.poll() is None or selector.get_map()
+    ):
+        _read_process_streams(
+            selector,
+            captures,
+            min(0.02, max(0.0, deadline - time.monotonic())),
+            decoder.feed,
+        )
+    if captures["stdout"].eof:
+        decoder.finish()
+    _close_process_streams(selector, captures)
+    if process.poll() is None:
+        _signal_process_group(process.pid, signal.SIGKILL)
+        remaining = max(0.0, deadline - time.monotonic())
+        if remaining:
+            try:
+                process.wait(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                pass
+    return signals_sent
 
 
 def evaluate_mcp_inventory(
@@ -1115,6 +1832,7 @@ def npm_provenance(
     return {
         "result": "PASS" if passed else "FAIL",
         **safe_payload,
+        "stream_metadata": _result_stream_metadata(result),
         "credential_material_detected": detected,
     }
 
@@ -1204,38 +1922,40 @@ def start_todo_server(
 
 
 def sandbox_inventory(root: Path) -> dict[str, Any]:
+    scan = _scan_bounded_tree(root)
     digest = hashlib.sha256()
-    file_count = 0
-    total_bytes = 0
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
-        relative = path.relative_to(root).as_posix()
-        size = path.stat().st_size
+    for record in scan["files"]:
+        relative = str(record["path"])
+        size = int(record["size"])
         digest.update(relative.encode("utf-8"))
         digest.update(size.to_bytes(8, "big"))
-        file_count += 1
-        total_bytes += size
     return {
-        "file_count": file_count,
-        "total_bytes": total_bytes,
+        "file_count": scan["file_count"],
+        "total_bytes": scan["total_bytes"],
         "metadata_sha256": digest.hexdigest(),
-        "top_level": sorted(path.name for path in root.iterdir()),
+        "top_level": scan["top_level"],
     }
 
 
-def tracked_worktree_fingerprint(repo_root: Path) -> str:
-    result = subprocess.run(
+def tracked_worktree_fingerprint(
+    repo_root: Path, deadline: float | None = None
+) -> str:
+    if deadline is not None and deadline <= time.monotonic():
+        return "unavailable"
+    timeout = (
+        5.0
+        if deadline is None
+        else max(0.1, min(5.0, deadline - time.monotonic()))
+    )
+    result = run_process(
         ["git", "status", "--porcelain=v1", "--untracked-files=no"],
         cwd=repo_root,
         env=isolated_env(repo_root),
-        capture_output=True,
-        text=True,
-        check=False,
+        timeout=timeout,
     )
-    if result.returncode != 0:
+    if result["returncode"] != 0:
         return "unavailable"
-    return hashlib.sha256(result.stdout.encode("utf-8")).hexdigest()
+    return hashlib.sha256(result["stdout"].encode("utf-8")).hexdigest()
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
@@ -1253,16 +1973,101 @@ def _bounded_text(text: str) -> str:
     return encoded[-CLI_LOG_BYTES:].decode("utf-8", errors="replace")
 
 
-def _workspace_artifact(
+def _result_stream_metadata(result: dict[str, Any]) -> dict[str, Any]:
+    metadata = result.get("stream_metadata")
+    if isinstance(metadata, dict):
+        return metadata
+    return {
+        name: {
+            "total_bytes": len(str(result.get(name) or "").encode("utf-8")),
+            "retained_bytes": len(str(result.get(name) or "").encode("utf-8")),
+            "truncated": False,
+            "eof": True,
+        }
+        for name in ("stdout", "stderr")
+    }
+
+
+def _workspace_artifact_bytes(
     workspace: Path, relative: str, maximum_bytes: int
-) -> Path:
-    candidate = (workspace / relative).resolve()
-    root = workspace.resolve()
-    if not candidate.is_relative_to(root) or not candidate.is_file():
+) -> bytes:
+    relative_path = Path(relative)
+    if (
+        not relative
+        or relative_path.is_absolute()
+        or ".." in relative_path.parts
+        or not relative_path.parts
+    ):
         raise RuntimeError("Playwright CLI emitted an unsafe artifact path")
-    if candidate.stat().st_size > maximum_bytes:
-        raise RuntimeError("Playwright CLI artifact exceeded its size limit")
-    return candidate
+    descriptor = _open_owned_directory(workspace, "Playwright CLI workspace")
+    try:
+        for component in relative_path.parts[:-1]:
+            metadata = os.stat(
+                component, dir_fd=descriptor, follow_symlinks=False
+            )
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise RuntimeError("Playwright CLI artifact parent is unsafe")
+            child = os.open(component, _directory_flags(), dir_fd=descriptor)
+            opened = os.fstat(child)
+            if (opened.st_dev, opened.st_ino) != (
+                metadata.st_dev,
+                metadata.st_ino,
+            ):
+                os.close(child)
+                raise RuntimeError("Playwright CLI artifact parent changed")
+            os.close(descriptor)
+            descriptor = child
+        metadata = os.stat(
+            relative_path.parts[-1],
+            dir_fd=descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or metadata.st_size > maximum_bytes
+        ):
+            raise RuntimeError("Playwright CLI artifact is unsafe or oversized")
+        file_descriptor = os.open(
+            relative_path.parts[-1], _regular_file_flags(), dir_fd=descriptor
+        )
+        try:
+            opened = os.fstat(file_descriptor)
+            if (
+                opened.st_nlink != 1
+                or (opened.st_dev, opened.st_ino, opened.st_size)
+                != (metadata.st_dev, metadata.st_ino, metadata.st_size)
+            ):
+                raise RuntimeError("Playwright CLI artifact changed while opening")
+            chunks: list[bytes] = []
+            total = 0
+            while total <= maximum_bytes:
+                chunk = os.read(
+                    file_descriptor,
+                    min(READ_CHUNK_BYTES, maximum_bytes + 1 - total),
+                )
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+            after = os.fstat(file_descriptor)
+            if (
+                total != metadata.st_size
+                or total > maximum_bytes
+                or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+                != (
+                    metadata.st_dev,
+                    metadata.st_ino,
+                    metadata.st_size,
+                    metadata.st_mtime_ns,
+                )
+            ):
+                raise RuntimeError("Playwright CLI artifact changed while reading")
+            return b"".join(chunks)
+        finally:
+            os.close(file_descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _process_alive(pid: int) -> bool:
@@ -1275,38 +2080,56 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
-def _process_identity(pid: int) -> str | None:
+def _process_identity(pid: int, deadline: float | None = None) -> str | None:
     if not _process_alive(pid):
         return None
-    result = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "pid=,lstart=,comm="],
-        capture_output=True,
-        text=True,
-        check=False,
+    if deadline is not None and deadline <= time.monotonic():
+        return None
+    timeout = (
+        2.0
+        if deadline is None
+        else max(0.1, min(2.0, deadline - time.monotonic()))
     )
-    identity = " ".join(result.stdout.split())
-    if result.returncode != 0 or not identity.startswith(f"{pid} "):
+    result = run_process(
+        ["ps", "-p", str(pid), "-o", "pid=,lstart=,comm="],
+        cwd=REPO_ROOT,
+        env=isolated_env(REPO_ROOT),
+        timeout=timeout,
+    )
+    identity = " ".join(result["stdout"].split())
+    if result["returncode"] != 0 or not identity.startswith(f"{pid} "):
         return None
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
-def _identity_alive(pid: int, identity: str) -> bool:
-    return _process_identity(pid) == identity
+def _identity_alive(
+    pid: int, identity: str, deadline: float | None = None
+) -> bool:
+    return _process_identity(pid, deadline) == identity
 
 
-def _process_group_members(group: int) -> set[int]:
+def _process_group_members(
+    group: int, deadline: float | None = None
+) -> set[int]:
     if group <= 0:
         return set()
-    result = subprocess.run(
+    if deadline is not None and deadline <= time.monotonic():
+        return {-1}
+    timeout = (
+        2.0
+        if deadline is None
+        else max(0.1, min(2.0, deadline - time.monotonic()))
+    )
+    result = run_process(
         ["ps", "-axo", "pid=,pgid="],
-        capture_output=True,
-        text=True,
-        check=False,
+        cwd=REPO_ROOT,
+        env=isolated_env(REPO_ROOT),
+        timeout=timeout,
     )
     members: set[int] = set()
-    if result.returncode != 0:
+    if result["returncode"] != 0:
         return members
-    for line in result.stdout.splitlines():
+    for line in result["stdout"].splitlines():
         parts = line.split()
         if len(parts) != 2:
             continue
@@ -1320,13 +2143,17 @@ def _process_group_members(group: int) -> set[int]:
 
 
 def _terminate_owned_processes(
-    identities: dict[int, str], groups: set[int]
+    identities: dict[int, str], groups: set[int], deadline: float | None = None
 ) -> None:
+    lifecycle_deadline = deadline or (time.monotonic() + 3)
     own_group = os.getpgrp()
     for group in sorted(groups):
-        members = _process_group_members(group)
+        if time.monotonic() >= lifecycle_deadline:
+            break
+        members = _process_group_members(group, lifecycle_deadline)
         group_is_owned = bool(members) and all(
-            pid in identities and _identity_alive(pid, identities[pid])
+            pid in identities
+            and _identity_alive(pid, identities[pid], lifecycle_deadline)
             for pid in members
         )
         if group == own_group or not group_is_owned:
@@ -1335,13 +2162,16 @@ def _terminate_owned_processes(
             os.killpg(group, signal.SIGTERM)
         except ProcessLookupError:
             continue
-    deadline = time.monotonic() + 3
-    while time.monotonic() < deadline and any(
-        _identity_alive(pid, identity) for pid, identity in identities.items()
+    term_deadline = min(lifecycle_deadline, time.monotonic() + 0.25)
+    while time.monotonic() < term_deadline and any(
+        _identity_alive(pid, identity, lifecycle_deadline)
+        for pid, identity in identities.items()
     ):
         time.sleep(0.05)
     for pid, identity in sorted(identities.items()):
-        if not _identity_alive(pid, identity):
+        if time.monotonic() >= lifecycle_deadline:
+            break
+        if not _identity_alive(pid, identity, lifecycle_deadline):
             continue
         try:
             os.kill(pid, signal.SIGKILL)
@@ -1402,14 +2232,17 @@ def run_cli_probe(
         env = playwright_cli_npm_environment(sandbox)
         before_inventory = sandbox_inventory(sandbox)
         private_values = [str(sandbox)]
-        deadline = time.monotonic() + max(30, timeout)
+        lifecycle_started = time.monotonic()
+        deadline = lifecycle_started + max(1, timeout)
+        cleanup_reserve = min(10.0, max(2.0, float(timeout) * 0.1))
+        operation_deadline = max(lifecycle_started, deadline - cleanup_reserve)
         open_attempted = False
         server: http.server.ThreadingHTTPServer | None = None
         server_thread: threading.Thread | None = None
         base_url = ""
 
         def capture_identity(pid: int) -> bool:
-            identity = _process_identity(pid)
+            identity = _process_identity(pid, deadline)
             if identity is None:
                 return False
             owned_pids.add(pid)
@@ -1420,9 +2253,9 @@ def run_cli_probe(
             nonlocal credential_detected
             try:
                 command_timeout = (
-                    min(20, max(1, timeout))
+                    remaining_timeout(deadline, min(20, max(1, timeout)))
                     if cleanup
-                    else remaining_timeout(deadline, max(1, timeout))
+                    else remaining_timeout(operation_deadline, max(1, timeout))
                 )
                 result = run_process(
                     command,
@@ -1445,7 +2278,7 @@ def run_cli_probe(
                 owned_pids.add(pid)
             if isinstance(group, int) and group > 0:
                 owned_groups.add(group)
-                members = _process_group_members(group)
+                members = _process_group_members(group, deadline)
                 captured_group_member = False
                 for member in members:
                     captured_group_member |= capture_identity(member)
@@ -1479,6 +2312,7 @@ def run_cli_probe(
                     "returncode": result.get("returncode"),
                     "timed_out": bool(result.get("timed_out")),
                     "duration_seconds": result.get("duration_seconds"),
+                    "stream_metadata": _result_stream_metadata(result),
                     "stdout_artifact": stdout_path.relative_to(output_dir).as_posix(),
                     "stderr_artifact": stderr_path.relative_to(output_dir).as_posix(),
                 }
@@ -1545,7 +2379,7 @@ def run_cli_probe(
                 if daemon_group > 0:
                     owned_groups.add(daemon_group)
                     live_owned_groups.add(daemon_group)
-                    for member in _process_group_members(daemon_group):
+                    for member in _process_group_members(daemon_group, deadline):
                         capture_identity(member)
             snapshot_info = (open_payload.get("result") or {}).get("snapshot", {})
             snapshot_relative = (
@@ -1553,10 +2387,10 @@ def run_cli_probe(
             )
             if not isinstance(snapshot_relative, str) or not snapshot_relative:
                 raise RuntimeError("Playwright CLI open snapshot missing")
-            open_snapshot = _workspace_artifact(
+            open_snapshot = _workspace_artifact_bytes(
                 workspace, snapshot_relative, CLI_SNAPSHOT_BYTES
             )
-            snapshot_text = open_snapshot.read_text(encoding="utf-8")
+            snapshot_text = open_snapshot.decode("utf-8")
             textbox_match = re.search(
                 r'textbox "New todo"[^\n]*\[ref=(e\d+)\]', snapshot_text
             )
@@ -1564,7 +2398,7 @@ def run_cli_probe(
             if textbox_match is None or button_match is None:
                 raise RuntimeError("Playwright CLI Todo element references missing")
             retained_snapshot = artifacts_dir / "open-snapshot.yml"
-            shutil.copyfile(open_snapshot, retained_snapshot)
+            retained_snapshot.write_bytes(open_snapshot)
             artifact_paths.add(retained_snapshot.relative_to(output_dir).as_posix())
 
             flow = (
@@ -1624,11 +2458,11 @@ def run_cli_probe(
             )
             if screenshot_match is None:
                 raise RuntimeError("Playwright CLI screenshot artifact missing")
-            screenshot = _workspace_artifact(
+            screenshot = _workspace_artifact_bytes(
                 workspace, screenshot_match.group(1), CLI_SCREENSHOT_BYTES
             )
             retained_screenshot = artifacts_dir / "todo.png"
-            shutil.copyfile(screenshot, retained_screenshot)
+            retained_screenshot.write_bytes(screenshot)
             artifact_paths.add(retained_screenshot.relative_to(output_dir).as_posix())
             if not all(assertions.values()):
                 raise RuntimeError("Playwright CLI Todo assertions failed")
@@ -1656,37 +2490,41 @@ def run_cli_probe(
                 server.shutdown()
                 server.server_close()
             if server_thread is not None:
-                server_thread.join(timeout=3)
+                server_thread.join(
+                    timeout=max(0.0, min(3.0, deadline - time.monotonic()))
+                )
             for group in live_owned_groups:
-                for member in _process_group_members(group):
+                for member in _process_group_members(group, deadline):
                     capture_identity(member)
-            wait_deadline = time.monotonic() + 5
+            wait_deadline = min(deadline, time.monotonic() + 1)
             while time.monotonic() < wait_deadline and any(
-                _identity_alive(pid, identity)
+                _identity_alive(pid, identity, deadline)
                 for pid, identity in owned_identities.items()
             ):
                 time.sleep(0.05)
             surviving = {
                 pid
                 for pid, identity in owned_identities.items()
-                if _identity_alive(pid, identity)
+                if _identity_alive(pid, identity, deadline)
             }
             if surviving:
-                _terminate_owned_processes(owned_identities, live_owned_groups)
+                _terminate_owned_processes(
+                    owned_identities, live_owned_groups, deadline
+                )
                 surviving = {
                     pid
                     for pid, identity in owned_identities.items()
-                    if _identity_alive(pid, identity)
+                    if _identity_alive(pid, identity, deadline)
                 }
             unverified_group_members = {
                 pid
                 for group in live_owned_groups
-                for pid in _process_group_members(group)
+                for pid in _process_group_members(group, deadline)
                 if pid not in owned_identities
-                or not _identity_alive(pid, owned_identities[pid])
+                or not _identity_alive(pid, owned_identities[pid], deadline)
             }
             after_inventory = sandbox_inventory(sandbox)
-            repo_after = tracked_worktree_fingerprint(repo_root)
+            repo_after = tracked_worktree_fingerprint(repo_root, deadline)
             sandbox_only_writes = repo_before != "unavailable" and repo_before == repo_after
 
         passed = all(
@@ -1736,6 +2574,7 @@ def run_cli_probe(
 def run_mcp_probe(
     *, output_dir: Path, timeout: int, secrets: list[str]
 ) -> dict[str, Any]:
+    _require_supported_process_platform()
     output_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="wave2-playwright-mcp-") as raw_tmp:
         sandbox = Path(raw_tmp)
@@ -1762,37 +2601,31 @@ def run_mcp_probe(
                     "credential_material_detected", False
                 ),
             }
-        process = subprocess.Popen(
+        started = time.monotonic()
+        deadline = started + max(0.1, float(timeout))
+        shutdown_reserve = min(1.0, max(0.2, float(timeout) * 0.2))
+        protocol_deadline = max(started, deadline - shutdown_reserve)
+        process: subprocess.Popen[bytes] = subprocess.Popen(
             command,
             cwd=sandbox,
             env=npm_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            text=False,
+            bufsize=0,
             start_new_session=True,
         )
-        stdout_lines: deque[str] = deque()
-        stderr_lines: deque[str] = deque()
-        messages: queue.Queue[str | None] = queue.Queue(maxsize=128)
-        stream_stop = threading.Event()
-        stdout_thread = threading.Thread(
-            target=read_stream,
-            args=(process.stdout, messages, stdout_lines, stream_stop),
-            daemon=True,
+        selector, captures = _register_process_streams(
+            process,
+            stdout_limit=MCP_QUEUE_BYTES,
+            stderr_limit=PROCESS_STDERR_BYTES,
         )
-        stderr_thread = threading.Thread(
-            target=read_stream,
-            args=(process.stderr, None, stderr_lines, stream_stop),
-            daemon=True,
-        )
-        stdout_thread.start()
-        stderr_thread.start()
+        decoder = _JsonLineDecoder()
         error = ""
         initialize: dict[str, Any] = {}
         tools_response: dict[str, Any] = {}
-        deadline = time.monotonic() + max(10, timeout)
+        signals_sent: list[str] = []
         try:
             assert process.stdin is not None
             initialize_request = {
@@ -1808,19 +2641,28 @@ def run_mcp_probe(
                     },
                 },
             }
-            process.stdin.write(
-                json.dumps(initialize_request, separators=(",", ":")) + "\n"
+            _write_pipe_with_deadline(
+                process.stdin,
+                (
+                    json.dumps(initialize_request, separators=(",", ":")) + "\n"
+                ).encode("utf-8"),
+                protocol_deadline,
             )
-            process.stdin.flush()
-            initialize = wait_for_response(messages, 1, deadline)
-            process.stdin.write(
+            initialize = _wait_for_mcp_response(
+                process=process,
+                selector=selector,
+                captures=captures,
+                decoder=decoder,
+                response_id=1,
+                deadline=protocol_deadline,
+            )
+            followup = (
                 json.dumps(
                     {"jsonrpc": "2.0", "method": "notifications/initialized"},
                     separators=(",", ":"),
                 )
                 + "\n"
-            )
-            process.stdin.write(
+                +
                 json.dumps(
                     {
                         "jsonrpc": "2.0",
@@ -1832,15 +2674,40 @@ def run_mcp_probe(
                 )
                 + "\n"
             )
-            process.stdin.flush()
-            tools_response = wait_for_response(messages, 2, deadline)
+            _write_pipe_with_deadline(
+                process.stdin, followup.encode("utf-8"), protocol_deadline
+            )
+            tools_response = _wait_for_mcp_response(
+                process=process,
+                selector=selector,
+                captures=captures,
+                decoder=decoder,
+                response_id=2,
+                deadline=protocol_deadline,
+            )
         except (AssertionError, BrokenPipeError, RuntimeError, TimeoutError) as exc:
             error = str(exc)
         finally:
-            stop_process_group(process)
-            stream_stop.set()
-            stdout_thread.join(timeout=2)
-            stderr_thread.join(timeout=2)
+            signals_sent = _shutdown_mcp_process(
+                process=process,
+                selector=selector,
+                captures=captures,
+                decoder=decoder,
+                deadline=deadline,
+            )
+        stream_metadata = {
+            name: capture.metadata() for name, capture in captures.items()
+        }
+        if not error and decoder.error:
+            error = decoder.error
+        if not error and any(
+            metadata["truncated"] or not metadata["eof"]
+            for metadata in stream_metadata.values()
+        ):
+            error = "MCP process output was truncated or did not reach EOF"
+        stdout_text = captures["stdout"].text()
+        stderr_text = captures["stderr"].text()
+        process_returncode = process.poll()
 
     initialize_result = initialize.get("result", {})
     tools_result = tools_response.get("result", {})
@@ -1863,13 +2730,13 @@ def run_mcp_probe(
     )
     credential_detected = write_safe_text(
         output_dir / "mcp.stdout.jsonl",
-        _bounded_text("".join(stdout_lines)),
+        _bounded_text(stdout_text),
         secrets,
         [str(sandbox)],
     )
     credential_detected |= write_safe_text(
         output_dir / "mcp.stderr.log",
-        _bounded_text("".join(stderr_lines)),
+        _bounded_text(stderr_text),
         secrets,
         [str(sandbox)],
     )
@@ -1902,6 +2769,9 @@ def run_mcp_probe(
         "inventory": inventory,
         "provenance": provenance,
         "error": error,
+        "process_returncode": process_returncode,
+        "stream_metadata": stream_metadata,
+        "signals_sent": signals_sent,
         "credential_material_detected": credential_detected,
     }
 
@@ -2043,31 +2913,45 @@ def retained_artifacts_safe(
     secrets: list[str],
     forbidden_values: Iterable[str] = (),
 ) -> bool:
-    forbidden = [value for value in forbidden_values if value]
-    for path in output_dir.rglob("*"):
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        if any(secret and secret in text for secret in secrets) or any(
-            value in text for value in forbidden
-        ):
-            return False
+    try:
+        _scan_bounded_tree(
+            output_dir,
+            forbidden_values=(*secrets, *forbidden_values),
+        )
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        return False
     return True
 
 
 def main() -> int:
     args = parse_args()
-    repo_root = args.repo_root.resolve()
-    output_dir = args.output_dir.resolve()
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        repo_root = args.repo_root.expanduser().resolve(strict=True)
+        output_dir, output_authority = prepare_output_directory(
+            repo_root, args.output_dir
+        )
+    except (FileExistsError, OSError, RuntimeError, ValueError) as error:
+        report = {
+            "result": "FAIL",
+            "reason": "unsafe_output_directory",
+            "error": str(error),
+            "mode": args.mode,
+            "model": args.model,
+            "scenario_label": args.scenario_label,
+        }
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"harness Wave 8 configured-tuple proof: {report['result']}")
+            print(f"reason: {report['reason']}")
+        return 2
     secrets = credential_values(host_auth_path())
     forbidden_values: list[str] = []
     report: dict[str, Any] = {
         "mode": args.mode,
         "model": args.model,
         "scenario_label": args.scenario_label,
+        "output_authority": output_authority,
     }
     components = selected_components(args.mode)
     if "cli" in components:

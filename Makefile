@@ -103,7 +103,7 @@ gateway-turn-watch-webhook: ## Stream long-turn alerts and POST to WEBHOOK_URL
 	$(PYTHON) scripts/gateway_turn_watch.py --follow --json --webhook-url "$(WEBHOOK_URL)"
 
 harness-wave2-task4-smoke: ## Run pinned MCP and exact-model wave-2 smokes
-	$(PYTHON) scripts/harness_wave2_task4_smoke.py all --repo-root "$(CURDIR)" --output-dir "$(CURDIR)/runtime/harness-wave-2/task4-live" --model openai/gpt-5.4-mini --json
+	$(PYTHON) scripts/harness_wave2_task4_smoke.py all --repo-root "$(CURDIR)" --model openai/gpt-5.4-mini --json
 
 notify-icons-generate: ## Generate versioned notification icon candidates (OpenAI)
 	$(PYTHON) scripts/notify_icon_generate.py --version "$${NOTIFY_ICON_VERSION:-v1}"
