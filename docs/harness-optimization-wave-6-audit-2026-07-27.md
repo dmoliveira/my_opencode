@@ -90,8 +90,11 @@ not clear the safety, overlap, or measured-value threshold.
 
 ## Validation evidence
 
-All required cells passed on committed candidate `d947683` in tmux session
-`ai-oc-harness-wave6`:
+All implementation cells passed on committed code candidate `d947683` in tmux
+session `ai-oc-harness-wave6`. Closure commit `9a66ae1` added this audit and
+moved the approved plan to `done`; `make validate`, pre-commit, and diff checks
+passed on that closure head. The follow-up closure correction changes only plan
+status and this provenance wording, not executable surfaces:
 
 - Python `3.14.6`: unittest discovery `93/93`, critical Ruff rules,
   `py_compile`, `make validate`, and `make selftest`.

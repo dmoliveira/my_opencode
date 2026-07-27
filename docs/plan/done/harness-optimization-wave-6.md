@@ -1,6 +1,6 @@
 # Harness Optimization Wave 6
 
-Status: doing
+Status: done
 
 Depth: large
 
