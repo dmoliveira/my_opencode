@@ -1,0 +1,332 @@
+---
+status: doing
+priority: high
+updated: 2026-07-27
+---
+
+# OpenCode Hardening Wave 8
+
+Date: 2026-07-27
+Runtime session: `ses_067d2e945ffe5mebe04ifDBZTc`
+Branch: `perf/opencode-hardening-wave-8`
+Codememory: `epic_3`, discovery `task_40`, planned implementation `task_41` through `task_47`
+Tmux sandbox: `ai-oc-hardening-wave8`
+
+## Objective
+
+Run one evidence-led iteration across validation hermeticity, model-harness
+containment, gateway state durability, shared configuration transactions, and
+managed developer tooling. Adopt no new plugin or MCP. Add one exact-pinned
+local CLI only if its independent supply-chain slice passes every authority and
+isolation gate. Prove the final stack on realistic Python and Node projects with
+exact `openai/gpt-5.4-mini`.
+
+## Classification And Review Budget
+
+- Depth: `large`.
+- Risk: `high` because the slice changes shared config persistence, cross-runtime
+  state writes, process termination, output-directory authority, and executable
+  supply-chain policy.
+- Review budget: three to five changed-evidence review/fix passes. Stop only when
+  every required check is green and the latest critical review has no blocker.
+- Execution: one writer. Read-only discovery, verification, and review may fan
+  out to at most two subagents.
+
+## Alignment And Baseline
+
+- `origin/main` and the worktree started at `f1a5297`; no open PR or issue
+  overlapped the work.
+- Primary-main user overrides remain outside this branch and must be preserved.
+- Baseline in tmux passed: Python `128/128`; gateway `761/761`; lint, build,
+  `make validate`, and `make selftest` all exited zero.
+- Baseline exposed a hermeticity defect: `make selftest` changed only
+  `docs/plan/docs-automation-summary.md` by replacing its timestamp.
+- `docs/plan/current-roadmap-tracker.md` contained committed merge markers. The
+  planning slice preserves the deduplicated union of both task lists and adds
+  one Wave 8 pointer.
+- Owner-local evidence is under `runtime/harness-wave-8/`. Live downloads and
+  model-backed evidence are owner-host evidence, not ordinary CI evidence.
+
+## External Tool Decision
+
+Official OpenCode documentation and the current ecosystem were reviewed on
+2026-07-27. Community plugins remain unsandboxed and receive broad client,
+workspace, and shell authority.
+
+- Reject/defer DCP, Morph, PTY, notifier, background-agent, worktree, Braintrust,
+  and WakaTime plugins. They fail authority, egress, mutable dependency,
+  maintenance, overlap, or measured-value gates.
+- Keep hosted MCPs disabled. Keep exact-pinned Playwright disabled and on demand.
+- Retire `gh-dash`, `ripgrep-all`, `tree-sitter-cli`, and Lefthook from the
+  managed required/automatic devtool surface. They are interactive, redundant,
+  corpus-specific, parser-authoring-specific, or duplicate `pre-commit`.
+- `ast-grep 0.45.0` is the sole adoption candidate. The Apple Silicon release
+  archive SHA-256
+  `ec2e3680f4f84c68b48420bcca01d21389787c7318b52083dde6f46ac12ad946`
+  and extracted `ast-grep` SHA-256
+  `92b5c91bad81864bc2f9ee223e9cf8579abc201fe4d1027b092b0227c472977b`
+  are locally recorded integrity anchors. Source tag commit
+  `5d439d9bb92d5ba9e7dba8343348c4597e7a1fbc` is separate source metadata;
+  absent a vendor signature or reproducible-build proof, it does not attest
+  binary-to-source correspondence.
+- On one Apple Silicon host, a recorded 20-run warm trial observed about 96 ms
+  p95 on the recorded corpus. The trial also found two AST matches versus four
+  text matches, isolated one rewrite, left tracked query state unchanged,
+  forwarded no host-sensitive environment, and left zero survivors. This is
+  value evidence, not a cross-host performance or provenance guarantee.
+- The deprecated `sg` launcher is not adopted; only `ast-grep` is eligible.
+
+Primary external references:
+
+- <https://opencode.ai/docs/ecosystem/>
+- <https://opencode.ai/docs/plugins/>
+- <https://opencode.ai/docs/tools/>
+- <https://github.com/ast-grep/ast-grep/releases/tag/0.45.0>
+- <https://ast-grep.github.io/guide/quick-start.html>
+
+## Dependency Sequence
+
+```text
+task_40 reviewed plan
+  -> task_41 hermetic validation
+  -> task_42 contained model harness
+  -> task_43 atomic gateway state
+  -> task_44 transactional shared config
+  -> task_45 devtool retirement
+  -> task_46 exact ast-grep supply-chain slice
+  -> task_47 full validation, audit, PR, merge, and cleanup
+```
+
+Each implementation task gets a focused validated commit before the next starts.
+The ast-grep slice has the explicit terminal outcomes defined below and may be
+deferred without weakening tasks 41-45.
+
+## Decisions
+
+### 1. Hermetic validation (`task_41`)
+
+- Add fixture-root support to the release-index generator.
+- Run release-index and docs-summary generation only against a disposable
+  fixture in selftest. Keep the real repository sync check read-only.
+- Inject a fixed generation timestamp in fixture tests and require two repeated
+  generations to be byte-identical.
+- Never restore generated files after selftest as proof. Two consecutive
+  selftests must leave tracked status and a tracked-file hash manifest unchanged.
+- Resolve roadmap merge markers by retaining the deduplicated union.
+
+### 2. Contained model harness (`task_42`)
+
+Output authority:
+
+- The selected output path must be absent and a strict descendant of the
+  selected repository's `runtime/` directory. Each invocation creates it as
+  `0700` and writes a fixed marker. The harness never recursively replaces or
+  deletes a caller-selected existing path.
+- Reject repository root, runtime root, outside paths, existing paths, symlinks,
+  and unsafe ancestors before creation. Victims remain unchanged.
+- The marker is an accidental-deletion/ownership guard, not protection against
+  a malicious concurrent same-UID process.
+
+Process and artifact bounds:
+
+- Replace `communicate()` and line-based readers with fixed-chunk byte capture.
+- Record per-stream `total_bytes` and `truncated` fields. Protocol and JSON
+  consumers fail closed whenever required output was truncated.
+- One monotonic deadline covers wait, TERM, KILL, post-exit drain, descriptor
+  close, and thread join. Inherited pipe holders cannot extend the deadline.
+- Artifact inspection uses no-follow metadata checks and explicit file-count,
+  per-file, and aggregate byte limits; symlinks and special files fail closed.
+- Process-group containment is supported on Darwin/Linux. Unsupported platforms
+  fail before spawning until a separate implementation exists.
+- Tests include no-newline floods, TERM-resistant children, inherited open
+  pipes, path attacks, and zero surviving owned processes.
+
+### 3. Atomic gateway state (`task_43`)
+
+Normative Python/TypeScript protocol:
+
+- Fixed state path `.opencode/gateway-core.state.json`; fixed adjacent lock
+  directory `.opencode/gateway-core.state.json.lock`.
+- Acquire with atomic `mkdir`, require `0700`, write a unique owner token, poll
+  to one shared monotonic timeout, and never reclaim stale locks automatically.
+  Release only after token and lock identity still match.
+- Bypass caches and read raw JSON only after lock acquisition. Malformed or
+  non-object state fails before mutation.
+- Update only the writer-owned domain while value-preserving `activeLoop`,
+  `conciseMode`, unknown top-level fields, and unknown nested domain keys.
+- Reject unsafe parent directories, symlinks, hardlinks, non-regular targets,
+  ownership mismatches, and stale locks without changing victims.
+- Stage a unique `O_EXCL` `0600` regular file, flush it, atomically replace the
+  state, and sync the directory. Replacement is the commit point; a later sync
+  error reports `committed_durability_uncertain`.
+- Supported hosts are Darwin/Linux. Other platforms fail closed.
+- Gateway doctor reports lock presence or acquisition timeout plus manual
+  remove-after-owner-stop guidance; it does not claim PID-authoritative
+  staleness. Automatic recovery and PID authority remain deferred.
+- A real Node/Python barrier test repeatedly updates disjoint domains, retains
+  unknown sentinels, observes only valid JSON, leaves no lock, and finishes
+  within a fixed deadline.
+
+### 4. Transactional shared config (`task_44`)
+
+- Introduce `edit_layered_config(mutator)`. It locks the logical config namespace
+  before target selection, re-resolves the target after lock acquisition,
+  reloads every layer, applies the mutation, stages and flushes a `0600` regular
+  file, revalidates the snapshot, atomically replaces the resolved target while
+  preserving an intended symlink, and syncs the parent.
+- For symlinks, capture link and target identity, acquire the canonical target
+  lock, then re-resolve. Release and retry if link or target identity changed.
+- Reject hardlinks, non-regular targets, unsafe parents, ownership mismatches,
+  malformed current config, and stale snapshots.
+- Inventory writers by destination path, not import syntax. Every writer that
+  can resolve to a shared OpenCode config candidate must migrate. Exempt state
+  files use a checked static allowlist; a partial migration fails the slice.
+- Replacement is the commit point. A directory-sync failure after replacement
+  reports `committed_durability_uncertain`, never generic rollback.
+- Multi-file operations acquire canonical locks in sorted order, stage every
+  file first, and provide isolation plus per-file atomicity, not crash atomicity.
+  Failure injection returns an explicit `partial_commit` outcome.
+- Deterministic multiprocessing tests cover disjoint nested updates, deletion
+  versus update, same-key serialization, crash-before-replace, malformed state,
+  symlink changes, victim safety, and no-op byte stability.
+
+### 5. Retire unnecessary devtools (`task_45`)
+
+- Remove mutable automated Homebrew and GitHub-extension installation. Unmanaged
+  host tools become observation-only with manual guidance.
+- Remove `gh-dash`, `ripgrep-all`, `tree-sitter-cli`, and Lefthook from doctor,
+  install-all, usage, and current operator guidance.
+- Canonical hook installation uses exact local `pre-commit` only with a finite
+  deadline. Historical Lefthook files may remain compatibility artifacts but
+  are no longer required or invoked.
+- Playwright CLI remains exact, explicit, and outside `install all`.
+- Tests prove no call to `brew`, `gh`, npm, or npx from the retired/all paths.
+
+### 6. Exact ast-grep (`task_46`)
+
+- `/devtools install ast-grep` and `install all` support only Darwin arm64 in
+  this slice. Unsupported tuples fail before creating cache, bin, or attestation
+  paths.
+- Use exact asset name/URL plus hard-coded archive and binary SHA-256 values.
+  Enforce an allowlist for redirect hosts; send no cookies, authorization,
+  proxies, or credential-bearing environment.
+- Bound archive bytes, entry count, compressed/uncompressed size, compression
+  ratio, and download time. Reject duplicate, encrypted, absolute, traversal,
+  symlink, hardlink, device, socket, and other special entries.
+- Extract only `ast-grep`. Verify exact version before installation.
+- Refuse existing symlink, hardlink, non-regular, unmanaged, or unattested
+  executables. Do not replace a user-managed `ast-grep`.
+- Reject symlinked or identity-changed cache/bin roots before download,
+  extraction, attestation, or installation.
+- Install atomically into injected owner-controlled cache/bin roots. Attestation
+  is evidence, not the trust anchor; doctor rehashes the installed executable
+  against the hard-coded binary digest.
+- Tests use a local fixture archive and subprocess-level write audit with all
+  roots injected into a temporary directory. PATH sentinels prove brew, gh, npm,
+  and npx were never invoked. No host-global write is allowed.
+- Replay the recorded fixture precision/rewrite checks and a bounded performance
+  smoke. Performance is informational outside the recorded host.
+
+`task_46` has two terminal outcomes:
+
+- **ADOPTED:** every deterministic authority test and the required Darwin-arm64
+  owner-host cell pass. Ast-grep-specific closure gates apply.
+- **DEFERRED:** any authority/value cell fails or remains blocked. No ast-grep
+  installer, managed binary, attestation, or adoption guidance lands. Closure
+  verifies tasks 41-45 and confirms no new managed executable exists.
+
+A `BLOCKED` cell can never count as `ADOPTED`.
+
+## Slice Gates
+
+| Slice | Task | Primary checks |
+| --- | --- | --- |
+| Reviewed plan | `task_40` | second critical plan review; zero conflict markers; `git diff --check`; `oc plan doctor` |
+| Hermetic validation | `task_41` | fixed-clock generator fixtures; two clean selftests; Python compile |
+| Model harness | `task_42` | path attack matrix; chunk flood/kill/drain tests; realistic projects smoke |
+| Gateway state | `task_43` | TS/Python focused tests; real cross-runtime barrier probe; lint/build/full gateway tests |
+| Shared config | `task_44` | destination writer inventory; transaction attack/concurrency matrix; representative commands |
+| Devtool retirement | `task_45` | focused policy tests; no mutable installer calls; docs checks |
+| Exact ast-grep | `task_46` | conditional terminal gate: ADOPTED requires local archive authority tests, isolated installer/doctor, and owner-host benchmark replay; otherwise DEFERRED leaves no adoption artifacts |
+| Closure | `task_47` | complete matrix below; final critical review; remote overlap check |
+
+## Full Closure Matrix
+
+```bash
+git diff --check origin/main...HEAD
+git status --porcelain=v1 --untracked-files=all
+python3 -m py_compile scripts/update_release_index.py scripts/selftest.py scripts/harness_wave2_task4_smoke.py scripts/gateway_plugin_bridge.py scripts/config_layering.py scripts/devtools_command.py
+make validate
+make selftest
+make selftest
+make install-test
+npm --prefix plugin/gateway-core run lint
+npm --prefix plugin/gateway-core run build
+npm --prefix plugin/gateway-core test
+pre-commit run --all-files
+```
+
+Also require:
+
+- a tracked-file hash manifest before and after each full validation bundle;
+- gateway lint/build/tests and workflow scenarios on Node `26.5.0` and
+  `22.23.1`;
+- corrected plugin-scoped npm package dry-run and package parity;
+- provider-boundary secret smoke;
+- if `task_46` is ADOPTED, exact ast-grep local archive/installer/doctor and
+  owner-host benchmark replay; if DEFERRED, proof that no ast-grep adoption
+  artifact or managed executable landed;
+- direct and tuple local gateway contract probes;
+- projects-only exact `openai/gpt-5.4-mini` E2E in a fresh unique output path:
+  Python and Node pass, only implementation files change, test hashes remain
+  unchanged, captures stay bounded/sanitized, and cleanup is confirmed;
+- a tracked closure audit outside `runtime/` containing sanitized evidence hashes,
+  commands, result freshness, OS/architecture, and owner-host/CI classification.
+
+Browser/MCP E2E is not required because no browser, MCP, or hosted runtime is
+adopted or enabled.
+
+## Acceptance Gates
+
+- No validation command writes tracked files or requires a restoration command.
+- Harness rejects every existing or unauthorized output path and returns within
+  one bounded deadline without surviving tracked process-group members or
+  harness-owned reader threads/pipes. Deliberately detached same-UID descendants
+  are outside this process-group contract.
+- Cross-runtime gateway state updates preserve all sibling and unknown domains.
+- Concurrent config mutations preserve updates or fail before replacement;
+  multi-file partial commits are explicit; victims never change.
+- Managed plugin and MCP inventories remain unchanged and external-free.
+- Mutable devtool installers and unnecessary required tools are retired.
+- If ADOPTED, exact ast-grep is the only new managed executable and passes
+  independent integrity, install-authority, isolation, functionality, and
+  cleanup gates. If DEFERRED, no new managed executable exists.
+- Latest critical review reports no blocker and all local/CI checks pass.
+
+## Explicitly Deferred
+
+- Gateway recovery PID/start-time authority and automatic stale-lock reclamation.
+- Broad redacted gateway/MCP status and support-export schemas.
+- New OpenCode plugins, hosted MCPs, telemetry exporters, PTY listeners, or
+  browser defaults.
+- DCP, Morph, notifier, worktree, background-agent, Braintrust, WakaTime,
+  gh-dash, ripgrep-all, tree-sitter CLI, and Lefthook adoption.
+- Automatic ast-grep rewrites, LSP integration, non-Darwin-arm64 assets, and
+  parser-authoring workflows.
+- JSONC formatting preservation.
+
+## Delivery And Cleanup
+
+- Deliver through a reviewed PR only.
+- Before merge: fetch `origin`, inspect open PR paths, and require green CI.
+- Exact-model and live-download cells return `BLOCKED`, not a false pass, when
+  trusted OAuth, supported platform, or network availability is missing.
+  Exact-model `BLOCKED` stops closure; ast-grep `BLOCKED` forces the DEFERRED
+  terminal outcome and cannot authorize adoption.
+- Before deleting the worktree: replay/export the Wave 8 graph to the durable
+  main store; run `oc plan doctor`; create a `0600` checksummed export outside
+  the worktree; import it into an empty store; and compare entity IDs, statuses,
+  dependency edges, counts, and content hashes. Any mismatch leaves the
+  worktree and tmux sandbox intact.
+- After merge: preserve primary-main user overrides, sync `main`, remove the
+  branch/worktree/tmux sandbox, and verify no Wave 8 process or branch remains.
