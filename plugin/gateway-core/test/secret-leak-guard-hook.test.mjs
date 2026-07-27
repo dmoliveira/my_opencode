@@ -118,7 +118,15 @@ test("provider finalizer redacts runtime-shaped mutable content and preserves pr
         },
         parts: [
           { type: "text", text: "api_key=TextSecret_123456" },
-          { type: "reasoning", text: "secret=ReasoningSecret_123456" },
+          {
+            type: "reasoning",
+            text: "secret=ReasoningSecret_123456",
+            metadata: {
+              openai: {
+                itemId: "fc_0123456789abcdef0123456789abcdef0123456789abcdef",
+              },
+            },
+          },
           {
             type: "tool",
             tool: "bash",
@@ -150,6 +158,10 @@ test("provider finalizer redacts runtime-shaped mutable content and preserves pr
     assert.equal(messages[0].parts[2].callID, "call-safe-id")
     assert.equal(messages[0].parts[3].url, "https://example.invalid/safe")
     assert.equal(messages[0].info.metadata.trace, "safe-trace")
+    assert.equal(
+      messages[0].parts[1].metadata.openai.itemId,
+      "fc_0123456789abcdef0123456789abcdef0123456789abcdef",
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -211,6 +223,10 @@ test("immutable and unknown provider fields block without leaking canaries to au
     const audit = readFileSync(auditPath, "utf8")
     assert.match(audit, /provider_boundary_secret_dispatch_blocked/)
     assert.doesNotMatch(audit, new RegExp(canary))
+    const urlBlock = JSON.parse(audit.trim().split("\n").at(-1))
+    assert.equal(urlBlock.match_target, "value")
+    assert.equal(urlBlock.pattern_index, 1)
+    assert.equal(urlBlock.location_code, "immutable_protocol_field")
 
     const unknown = [
       {
@@ -222,6 +238,95 @@ test("immutable and unknown provider fields block without leaking canaries to au
       plugin["experimental.chat.messages.transform"]({}, { messages: unknown }),
       /immutable_match/,
     )
+  } finally {
+    if (previousAudit === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    if (previousPath === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
+    else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = previousPath
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("provider block diagnostics expose only allowlisted structural fields", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-diagnostics-"))
+  const auditPath = join(directory, "gateway-events.jsonl")
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousPath = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = auditPath
+  try {
+    const plugin = pluginFor(directory)
+    const valueCanary = "sk-provider-metadata-canary-1234567890"
+    const valueMessages = [
+      {
+        info: { role: "assistant" },
+        parts: [
+          {
+            type: "reasoning",
+            metadata: { openai: { encryptedContent: valueCanary } },
+          },
+        ],
+      },
+    ]
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"]({}, { messages: valueMessages }),
+      (error) => {
+        assert.equal(error.code, "immutable_match")
+        assert.equal(error.matchTarget, "value")
+        assert.equal(error.patternIndex, 0)
+        assert.equal(error.locationCode, "provider_metadata_openai_other")
+        assert.doesNotMatch(String(error), new RegExp(valueCanary))
+        return true
+      },
+    )
+
+    const keyCanary = "token=ProviderKeyCanary_123456"
+    const keyMessages = [
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "future-part", [keyCanary]: "safe" }],
+      },
+    ]
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"]({}, { messages: keyMessages }),
+      (error) => {
+        assert.equal(error.code, "immutable_match")
+        assert.equal(error.matchTarget, "key")
+        assert.equal(error.patternIndex, 1)
+        assert.equal(error.locationCode, "unknown_field")
+        assert.doesNotMatch(String(error), new RegExp(keyCanary))
+        return true
+      },
+    )
+
+    const audit = readFileSync(auditPath, "utf8")
+    const rows = audit
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((row) => row.reason_code === "provider_boundary_secret_dispatch_blocked")
+    assert.deepEqual(
+      rows.map((row) => ({
+        match_target: row.match_target,
+        pattern_index: row.pattern_index,
+        location_code: row.location_code,
+      })),
+      [
+        {
+          match_target: "value",
+          pattern_index: 0,
+          location_code: "provider_metadata_openai_other",
+        },
+        {
+          match_target: "key",
+          pattern_index: 1,
+          location_code: "unknown_field",
+        },
+      ],
+    )
+    assert.doesNotMatch(audit, new RegExp(valueCanary))
+    assert.doesNotMatch(audit, new RegExp(keyCanary))
+    assert.doesNotMatch(audit, /sk-\[A-Za-z/)
   } finally {
     if (previousAudit === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
     else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit

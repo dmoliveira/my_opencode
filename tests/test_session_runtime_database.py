@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -370,6 +372,273 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                     for item in result["generic_stale_findings"]
                 )
             )
+
+    def test_scan_enforces_query_only_snapshot_and_budget(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            self._create_runtime_fixture(db_path, now_ms=now_ms)
+            result = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+        self.assertTrue(result["runtime_db_query_only"])
+        self.assertTrue(result["runtime_db_snapshot_started"])
+        self.assertTrue(result["runtime_db_scan_complete"])
+        self.assertLessEqual(
+            result["runtime_db_busy_timeout_ms"],
+            result["runtime_db_scan_timeout_ms"],
+        )
+        self.assertNotIn("runtime_query_only_unavailable", result["remediation_codes"])
+
+    def test_scan_budget_sets_timeout_flag_only_after_deadline(self) -> None:
+        module = self._module()
+        with patch.object(module.time, "monotonic", side_effect=[10.0, 10.0005, 10.002]):
+            budget = module._RuntimeScanBudget(1)
+            self.assertEqual(0, budget.progress())
+            self.assertFalse(budget.timed_out)
+            self.assertEqual(1, budget.progress())
+            self.assertTrue(budget.timed_out)
+
+    def test_open_failure_has_distinct_remediation_code(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            db_path.touch()
+            with patch.object(
+                module,
+                "_connect_runtime_database_readonly",
+                side_effect=sqlite3.OperationalError("open denied"),
+            ):
+                result = module._scan_runtime_stuck_sessions(db_path, 300)
+        self.assertIn("runtime_db_open_failed", result["remediation_codes"])
+        self.assertNotIn("runtime_query_failed", result["remediation_codes"])
+        self.assertFalse(result["runtime_db_snapshot_started"])
+        self.assertEqual([], result["stuck_findings"])
+
+    def test_query_only_verification_failure_skips_scan(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            db_path.touch()
+            connection = MagicMock()
+            connection.in_transaction = False
+            connection.execute.return_value.fetchone.return_value = (0,)
+            with patch.object(
+                module,
+                "_connect_runtime_database_readonly",
+                return_value=connection,
+            ):
+                result = module._scan_runtime_stuck_sessions(db_path, 300)
+        self.assertIn("runtime_query_only_unavailable", result["remediation_codes"])
+        self.assertFalse(result["runtime_db_snapshot_started"])
+        self.assertFalse(result["runtime_db_scan_complete"])
+        self.assertEqual([], result["stuck_findings"])
+        connection.close.assert_called_once_with()
+        self.assertFalse(
+            any(call.args and call.args[0] == "BEGIN" for call in connection.execute.call_args_list)
+        )
+
+    def test_missing_schema_and_json1_are_distinct_from_open_failure(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            schema_path = Path(tmp) / "schema.db"
+            sqlite3.connect(schema_path).execute("CREATE TABLE marker(value TEXT)").connection.close()
+            schema_result = module._scan_runtime_stuck_sessions(schema_path, 300, now_ms=now_ms)
+            self.assertIn("runtime_schema_incompatible", schema_result["remediation_codes"])
+            self.assertNotIn("runtime_db_open_failed", schema_result["remediation_codes"])
+            self.assertEqual("incompatible", schema_result["runtime_db_scan_mode"])
+            self.assertEqual([], schema_result["stuck_findings"])
+
+            json_path = Path(tmp) / "json.db"
+            self._create_runtime_fixture(json_path, now_ms=now_ms)
+            real_connection = module._connect_runtime_database_readonly(json_path)
+
+            class Json1MissingProxy:
+                def __init__(self, connection: sqlite3.Connection) -> None:
+                    self.connection = connection
+
+                @property
+                def row_factory(self):
+                    return self.connection.row_factory
+
+                @row_factory.setter
+                def row_factory(self, value) -> None:
+                    self.connection.row_factory = value
+
+                @property
+                def in_transaction(self) -> bool:
+                    return self.connection.in_transaction
+
+                def execute(self, sql: str, *args):
+                    if "json_valid" in sql:
+                        raise sqlite3.OperationalError("no such function: json_valid")
+                    return self.connection.execute(sql, *args)
+
+                def create_function(self, *args, **kwargs):
+                    return self.connection.create_function(*args, **kwargs)
+
+                def set_progress_handler(self, *args, **kwargs):
+                    return self.connection.set_progress_handler(*args, **kwargs)
+
+                def rollback(self) -> None:
+                    self.connection.rollback()
+
+                def close(self) -> None:
+                    self.connection.close()
+
+            with patch.object(
+                module,
+                "_connect_runtime_database_readonly",
+                return_value=Json1MissingProxy(real_connection),
+            ):
+                json_result = module._scan_runtime_stuck_sessions(json_path, 300, now_ms=now_ms)
+            self.assertIn("runtime_json1_unavailable", json_result["remediation_codes"])
+            self.assertNotIn("runtime_db_open_failed", json_result["remediation_codes"])
+            self.assertNotIn("runtime_query_failed", json_result["remediation_codes"])
+            self.assertEqual("incompatible", json_result["runtime_db_scan_mode"])
+            self.assertFalse(json_result["runtime_db_scan_complete"])
+            self.assertEqual([], json_result["stuck_findings"])
+
+    def test_interrupted_query_is_timeout_only_when_budget_fired(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            self._create_runtime_fixture(db_path, now_ms=now_ms)
+
+            timed_out_budget = MagicMock()
+            timed_out_budget.timed_out = True
+            timed_out_budget.progress.return_value = 1
+            with (
+                patch.object(module, "_RuntimeScanBudget", return_value=timed_out_budget),
+                patch.object(
+                    module,
+                    "_scan_runtime_stuck_sessions_indexed_queries",
+                    side_effect=sqlite3.OperationalError("interrupted"),
+                ),
+            ):
+                timeout_result = module._scan_runtime_stuck_sessions(
+                    db_path, 300, now_ms=now_ms
+                )
+            self.assertIn("runtime_scan_timeout", timeout_result["remediation_codes"])
+            self.assertNotIn("runtime_query_failed", timeout_result["remediation_codes"])
+            self.assertEqual("timeout", timeout_result["runtime_db_scan_mode"])
+            self.assertEqual([], timeout_result["stuck_findings"])
+
+            interrupted_budget = MagicMock()
+            interrupted_budget.timed_out = False
+            interrupted_budget.progress.return_value = 0
+            with (
+                patch.object(module, "_RuntimeScanBudget", return_value=interrupted_budget),
+                patch.object(
+                    module,
+                    "_scan_runtime_stuck_sessions_indexed_queries",
+                    side_effect=sqlite3.OperationalError("interrupted"),
+                ),
+            ):
+                query_result = module._scan_runtime_stuck_sessions(
+                    db_path, 300, now_ms=now_ms
+                )
+            self.assertIn("runtime_query_failed", query_result["remediation_codes"])
+            self.assertNotIn("runtime_scan_timeout", query_result["remediation_codes"])
+            self.assertEqual("query_failed", query_result["runtime_db_scan_mode"])
+
+    def test_concurrent_wal_commit_does_not_mix_reader_snapshot(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            self._create_runtime_fixture(db_path, now_ms=now_ms)
+            setup = sqlite3.connect(db_path)
+            setup.execute("PRAGMA journal_mode=WAL")
+            initial_count = int(setup.execute("SELECT COUNT(*) FROM session").fetchone()[0])
+            setup.close()
+
+            reader_ready = threading.Barrier(2, timeout=5)
+            writer_done = threading.Barrier(2, timeout=5)
+            observed_counts: list[int] = []
+            original_scan = module._scan_runtime_stuck_sessions_indexed_queries
+
+            def wrapped_scan(connection, *, stale_seconds: int, now_ms: int):
+                reader_ready.wait()
+                writer_done.wait()
+                observed_counts.append(
+                    int(connection.execute("SELECT COUNT(*) FROM session").fetchone()[0])
+                )
+                return original_scan(
+                    connection,
+                    stale_seconds=stale_seconds,
+                    now_ms=now_ms,
+                )
+
+            def writer() -> None:
+                connection = sqlite3.connect(db_path)
+                try:
+                    reader_ready.wait()
+                    connection.execute(
+                        "INSERT INTO session VALUES (?, ?, ?, ?, ?)",
+                        ("writer-after-snapshot", None, "writer", now_ms, now_ms),
+                    )
+                    connection.commit()
+                    writer_done.wait()
+                finally:
+                    connection.close()
+
+            writer_thread = threading.Thread(target=writer)
+            writer_thread.start()
+            try:
+                with patch.object(
+                    module,
+                    "_scan_runtime_stuck_sessions_indexed_queries",
+                    side_effect=wrapped_scan,
+                ):
+                    result = module._scan_runtime_stuck_sessions(
+                        db_path, 300, now_ms=now_ms
+                    )
+            finally:
+                writer_thread.join(timeout=5)
+            self.assertFalse(writer_thread.is_alive())
+            self.assertEqual([initial_count], observed_counts)
+            self.assertTrue(result["runtime_db_scan_complete"])
+            outside = sqlite3.connect(db_path)
+            try:
+                self.assertEqual(
+                    initial_count + 1,
+                    int(outside.execute("SELECT COUNT(*) FROM session").fetchone()[0]),
+                )
+            finally:
+                outside.close()
+
+    def test_quiescent_scan_leaves_database_bytes_schema_and_rows_unchanged(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            self._create_runtime_fixture(db_path, now_ms=now_ms)
+
+            def snapshot() -> tuple[str, list[tuple], dict[str, int], str]:
+                digest = hashlib.sha256(db_path.read_bytes()).hexdigest()
+                connection = sqlite3.connect(db_path)
+                try:
+                    schema = connection.execute(
+                        "SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name"
+                    ).fetchall()
+                    counts = {
+                        table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                        for table in ("session", "message", "part")
+                    }
+                    journal = str(connection.execute("PRAGMA journal_mode").fetchone()[0])
+                finally:
+                    connection.close()
+                return digest, schema, counts, journal
+
+            before = snapshot()
+            result = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+            after = snapshot()
+            self.assertEqual(before, after)
+            self.assertTrue(result["runtime_db_query_only"])
+            self.assertTrue(result["runtime_db_scan_complete"])
+            self.assertFalse(Path(f"{db_path}-wal").exists())
 
     def test_index_prefix_detection_accepts_arbitrary_names_and_supersets(self) -> None:
         module = self._module()

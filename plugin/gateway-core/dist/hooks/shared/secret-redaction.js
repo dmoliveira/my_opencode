@@ -1,9 +1,15 @@
 export class SecretRedactionError extends Error {
     code;
-    constructor(code, detail = "") {
+    matchTarget;
+    patternIndex;
+    locationCode;
+    constructor(code, detail = "", diagnostics = null) {
         super(`secret redaction blocked: ${code}${detail ? ` (${detail})` : ""}`);
         this.name = "SecretRedactionError";
         this.code = code;
+        this.matchTarget = diagnostics?.matchTarget ?? null;
+        this.patternIndex = diagnostics?.patternIndex ?? null;
+        this.locationCode = diagnostics?.locationCode ?? null;
     }
 }
 const MUTABLE_CONTENT_KEYS = new Set([
@@ -84,14 +90,37 @@ export function createSecretRedactor(options) {
             throw new SecretRedactionError("text_limit");
         }
         let next = text;
-        for (const pattern of patterns) {
+        let firstPatternIndex = null;
+        for (const [patternIndex, pattern] of patterns.entries()) {
             const regex = new RegExp(pattern.source, pattern.flags);
             next = next.replace(regex, () => {
+                firstPatternIndex ??= patternIndex;
                 stats.matches += 1;
                 return options.redactionToken;
             });
         }
-        return next;
+        return { text: next, firstPatternIndex };
+    }
+    function locationCode(key, parentKey, grandparentKey) {
+        if (parentKey === "openai" && grandparentKey === "metadata") {
+            return key === "itemId"
+                ? "provider_metadata_openai_item_id"
+                : "provider_metadata_openai_other";
+        }
+        if (typeof key === "string" && IMMUTABLE_PROTOCOL_KEYS.has(key)) {
+            return "immutable_protocol_field";
+        }
+        return "unknown_field";
+    }
+    function immutableMatchError(options) {
+        if (options.patternIndex === null) {
+            return new SecretRedactionError("unexpected_failure");
+        }
+        return new SecretRedactionError("immutable_match", "", {
+            matchTarget: options.matchTarget,
+            patternIndex: options.patternIndex,
+            locationCode: locationCode(options.key, options.parentKey, options.grandparentKey),
+        });
     }
     function assignValue(parent, key, value) {
         if (parent === null || key === null) {
@@ -128,7 +157,7 @@ export function createSecretRedactor(options) {
         const stats = emptyStats();
         const active = new WeakSet();
         const visited = new WeakSet();
-        function visit(value, parent, key, mode, depth) {
+        function visit(value, parent, key, mode, depth, parentKey, grandparentKey) {
             stats.scannedNodes += 1;
             if (stats.scannedNodes > limits.maxNodes) {
                 throw new SecretRedactionError("node_limit");
@@ -137,14 +166,20 @@ export function createSecretRedactor(options) {
                 throw new SecretRedactionError("depth_limit");
             }
             if (typeof value === "string") {
-                const next = applyPatterns(value, stats);
-                if (next === value) {
+                const applied = applyPatterns(value, stats);
+                if (applied.text === value) {
                     return;
                 }
                 if (mode === "scan") {
-                    throw new SecretRedactionError("immutable_match");
+                    throw immutableMatchError({
+                        matchTarget: "value",
+                        patternIndex: applied.firstPatternIndex,
+                        key,
+                        parentKey,
+                        grandparentKey,
+                    });
                 }
-                assignValue(parent, key, next);
+                assignValue(parent, key, applied.text);
                 stats.redactedFields += 1;
                 return;
             }
@@ -160,24 +195,30 @@ export function createSecretRedactor(options) {
             active.add(value);
             if (Array.isArray(value)) {
                 for (let index = 0; index < value.length; index += 1) {
-                    visit(value[index], value, index, mode, depth + 1);
+                    visit(value[index], value, index, mode, depth + 1, key, parentKey);
                 }
             }
             else {
                 const record = value;
                 for (const childKey of Object.keys(record)) {
                     const keyProbe = applyPatterns(childKey, stats);
-                    if (keyProbe !== childKey) {
-                        throw new SecretRedactionError("immutable_match");
+                    if (keyProbe.text !== childKey) {
+                        throw immutableMatchError({
+                            matchTarget: "key",
+                            patternIndex: keyProbe.firstPatternIndex,
+                            key: childKey,
+                            parentKey: key,
+                            grandparentKey: parentKey,
+                        });
                     }
-                    visit(record[childKey], record, childKey, childMode(mode, childKey), depth + 1);
+                    visit(record[childKey], record, childKey, childMode(mode, childKey), depth + 1, key, parentKey);
                 }
             }
             active.delete(value);
             visited.add(value);
         }
         try {
-            visit(root, null, null, initialMode, 0);
+            visit(root, null, null, initialMode, 0, null, null);
             return stats;
         }
         catch (error) {
@@ -191,10 +232,10 @@ export function createSecretRedactor(options) {
         redactText(text) {
             const stats = emptyStats();
             const redacted = applyPatterns(text, stats);
-            if (redacted !== text) {
+            if (redacted.text !== text) {
                 stats.redactedFields = 1;
             }
-            return { text: redacted, stats };
+            return { text: redacted.text, stats };
         },
         redactMutableValue(value) {
             return traverse(value, "redact");

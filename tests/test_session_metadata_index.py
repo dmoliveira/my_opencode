@@ -5,8 +5,10 @@ import json
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -58,6 +60,55 @@ class SessionMetadataIndexTest(unittest.TestCase):
             self.assertEqual("FAIL", result["result"])
             self.assertIn("malformed", result["error"])
             self.assertEqual("{not json", path.read_text(encoding="utf-8"))
+
+    def test_pruning_interprets_legacy_naive_timestamps_as_utc(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        sessions = [
+            {"session_id": "naive", "last_event_at": "2026-07-26T12:00:00"},
+            {"session_id": "earlier-offset", "last_event_at": "2026-07-27T01:00:00+02:00"},
+            {"session_id": "later-utc", "last_event_at": "2026-07-26T23:30:00+00:00"},
+            {"session_id": "invalid", "last_event_at": "not-a-timestamp"},
+            {"session_id": "expired", "last_event_at": "2026-07-01T00:00:00"},
+        ]
+        with patch.object(
+            module,
+            "_utc_now",
+            return_value=datetime(2026, 7, 27, 0, 0, tzinfo=UTC),
+        ):
+            result = module._prune_sessions(
+                sessions,
+                {"max_age_days": 7, "max_sessions": 10},
+            )
+        self.assertEqual(
+            ["later-utc", "earlier-offset", "naive", "invalid"],
+            [item["session_id"] for item in result],
+        )
+        self.assertEqual(UTC, module._parse_iso("2026-07-26T12:00:00").tzinfo)
+        self.assertEqual(
+            datetime.fromisoformat("2026-07-26T12:00:00+10:00").utcoffset(),
+            module._parse_iso("2026-07-26T12:00:00+10:00").utcoffset(),
+        )
+
+    def test_session_command_orders_mixed_offsets_chronologically(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_command"))
+        rows = module._session_rows(
+            {
+                "sessions": [
+                    {"session_id": "earlier-offset", "last_event_at": "2026-07-27T01:00:00+02:00"},
+                    {"session_id": "later-utc", "last_event_at": "2026-07-26T23:30:00+00:00"},
+                    {"session_id": "legacy-naive", "last_event_at": "2026-07-26T23:15:00"},
+                    {"session_id": "invalid", "last_event_at": "not-a-timestamp"},
+                ]
+            }
+        )
+        self.assertEqual(
+            ["later-utc", "legacy-naive", "earlier-offset", "invalid"],
+            [row["session_id"] for row in rows],
+        )
 
     def test_fallback_identity_is_process_unique(self) -> None:
         if str(SCRIPTS_DIR) not in sys.path:

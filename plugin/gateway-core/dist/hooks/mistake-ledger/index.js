@@ -1,27 +1,136 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync, writeSync, } from "node:fs";
+import { join } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { readCombinedToolAfterOutputText } from "../shared/tool-after-output.js";
 const DONE_PROOF_MARKER = "[done-proof-enforcer] Completion token deferred";
 const PENDING_VALIDATION_MARKER = "<promise>PENDING_VALIDATION</promise>";
+const MISTAKE_LEDGER_RELATIVE_PATH = ".opencode/mistake-ledger.jsonl";
 function resolveSessionId(payload) {
     const value = payload.input?.sessionID ?? payload.input?.sessionId ?? "";
     return typeof value === "string" ? value.trim() : "";
 }
-function ledgerPath(rootDirectory, relativePath) {
-    return resolve(rootDirectory, relativePath);
+function currentUid() {
+    if (typeof process.getuid !== "function") {
+        throw new Error("mistake ledger unsupported: current-user ownership checks unavailable");
+    }
+    return process.getuid();
 }
-function summarize(text) {
-    const compact = text.replace(/\s+/g, " ").trim();
-    return compact.length > 240 ? `${compact.slice(0, 237)}...` : compact;
+function noFollowFlag() {
+    const flag = constants.O_NOFOLLOW;
+    if (typeof flag !== "number" || flag === 0) {
+        throw new Error("mistake ledger unsupported: no-follow file opens unavailable");
+    }
+    return flag;
+}
+function assertCurrentUserOwner(state, label) {
+    if (state.uid !== currentUid()) {
+        throw new Error(`unsafe mistake ledger ${label}: ownership mismatch`);
+    }
+}
+function assertSafeDirectoryState(state, label) {
+    if (!state.isDirectory() || state.isSymbolicLink()) {
+        throw new Error(`unsafe mistake ledger ${label}: expected a real directory`);
+    }
+    assertCurrentUserOwner(state, label);
+    if (state.mode & 0o022) {
+        throw new Error(`unsafe mistake ledger ${label}: directory is group/world writable`);
+    }
+}
+function ensureSafeLedgerDirectory(rootDirectory) {
+    assertSafeDirectoryState(lstatSync(rootDirectory), "workspace");
+    const directory = join(rootDirectory, ".opencode");
+    let state;
+    try {
+        state = lstatSync(directory);
+    }
+    catch (error) {
+        if (error.code !== "ENOENT") {
+            throw error;
+        }
+        mkdirSync(directory, { mode: 0o700 });
+        state = lstatSync(directory);
+    }
+    assertSafeDirectoryState(state, "directory");
+    return directory;
+}
+function safeExistingLedgerState(path) {
+    let state;
+    try {
+        state = lstatSync(path);
+    }
+    catch (error) {
+        if (error.code === "ENOENT") {
+            return null;
+        }
+        throw error;
+    }
+    if (!state.isFile() || state.isSymbolicLink() || state.nlink !== 1) {
+        throw new Error("unsafe mistake ledger file: expected a regular single-link file");
+    }
+    assertCurrentUserOwner(state, "file");
+    return state;
+}
+function openSafeLedger(path) {
+    const expected = safeExistingLedgerState(path);
+    const baseFlags = constants.O_WRONLY | constants.O_APPEND | noFollowFlag();
+    let descriptor;
+    let created = false;
+    try {
+        descriptor = openSync(path, baseFlags);
+    }
+    catch (error) {
+        if (error.code !== "ENOENT") {
+            throw error;
+        }
+        descriptor = openSync(path, baseFlags | constants.O_CREAT | constants.O_EXCL, 0o600);
+        created = true;
+    }
+    try {
+        const opened = fstatSync(descriptor);
+        if (!opened.isFile() || opened.nlink !== 1) {
+            throw new Error("unsafe opened mistake ledger file");
+        }
+        assertCurrentUserOwner(opened, "file");
+        if (expected && (opened.dev !== expected.dev || opened.ino !== expected.ino)) {
+            throw new Error("unsafe mistake ledger file: target changed during validation");
+        }
+        fchmodSync(descriptor, 0o600);
+        return { descriptor, created };
+    }
+    catch (error) {
+        closeSync(descriptor);
+        throw error;
+    }
+}
+function appendLedgerEntry(path, entry) {
+    const opened = openSafeLedger(path);
+    try {
+        writeSync(opened.descriptor, `${JSON.stringify(entry)}
+`, null, "utf-8");
+        fsyncSync(opened.descriptor);
+    }
+    finally {
+        closeSync(opened.descriptor);
+    }
+}
+function resolveLedgerStorage(options) {
+    if (options.path !== MISTAKE_LEDGER_RELATIVE_PATH) {
+        throw new Error(`mistake ledger path must be ${MISTAKE_LEDGER_RELATIVE_PATH}`);
+    }
+    currentUid();
+    noFollowFlag();
+    const directory = realpathSync(options.directory);
+    const ledgerDirectory = ensureSafeLedgerDirectory(directory);
+    return { directory, path: join(ledgerDirectory, "mistake-ledger.jsonl") };
 }
 export function createMistakeLedgerHook(options) {
+    const storage = options.enabled ? resolveLedgerStorage(options) : null;
     return {
         id: "mistake-ledger",
         priority: 331,
         async event(type, payload) {
-            if (!options.enabled || type !== "tool.execute.after") {
+            if (!options.enabled || !storage || type !== "tool.execute.after") {
                 return;
             }
             const eventPayload = (payload ?? {});
@@ -29,9 +138,7 @@ export function createMistakeLedgerHook(options) {
             if (!text) {
                 return;
             }
-            const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
-                ? eventPayload.directory
-                : options.directory;
+            const directory = storage.directory;
             const sessionId = resolveSessionId(eventPayload);
             let shouldRecord = text.includes(DONE_PROOF_MARKER);
             if (!shouldRecord && text.includes(PENDING_VALIDATION_MARKER) && sessionId && options.decisionRuntime) {
@@ -90,16 +197,11 @@ export function createMistakeLedgerHook(options) {
             if (!shouldRecord) {
                 return;
             }
-            const path = ledgerPath(directory, options.path);
-            mkdirSync(dirname(path), { recursive: true });
-            appendFileSync(path, `${JSON.stringify({
+            appendLedgerEntry(storage.path, {
                 ts: new Date().toISOString(),
-                sessionId,
-                tool: String(eventPayload.input?.tool ?? ""),
                 category: "completion_without_validation",
                 sourceHook: "done-proof-enforcer",
-                summary: summarize(text),
-            })}\n`, "utf-8");
+            });
             writeGatewayEventAudit(directory, {
                 hook: "mistake-ledger",
                 stage: "state",

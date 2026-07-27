@@ -9,6 +9,7 @@ import sqlite3
 import sys
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +74,11 @@ RUNTIME_DB_SIZE_WARN_BYTES = max(
 RUNTIME_DB_SCAN_WARN_MS = max(
     1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SCAN_WARN_MS", "1000"))
 )
-RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
+RUNTIME_DB_SCAN_TIMEOUT_MS = max(
+    1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SCAN_TIMEOUT_MS", "5000"))
+)
+RUNTIME_DB_BUSY_TIMEOUT_MS = min(5_000, RUNTIME_DB_SCAN_TIMEOUT_MS)
+RUNTIME_DB_PROGRESS_OPCODES = 1_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
     60,
@@ -155,12 +160,25 @@ def _load_index(path: Path) -> dict:
     }
 
 
+def _session_row_timestamp_sort_key(row: dict) -> tuple[bool, float]:
+    value = row.get("last_event_at")
+    if not isinstance(value, str) or not value:
+        return (False, 0.0)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return (False, 0.0)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return (True, parsed.timestamp())
+
+
 def _session_rows(index: dict) -> list[dict]:
     rows: list[dict] = []
     for item in index.get("sessions", []):
         if isinstance(item, dict):
             rows.append(item)
-    rows.sort(key=lambda row: str(row.get("last_event_at") or ""), reverse=True)
+    rows.sort(key=_session_row_timestamp_sort_key, reverse=True)
     return rows
 
 
@@ -244,6 +262,27 @@ def _emit(payload: dict, json_output: bool) -> int:
     if json_output:
         print(json.dumps(payload, indent=2))
         return 0 if payload.get("result") == "PASS" else 1
+    command = payload.get("command")
+    if payload.get("redacted") is True and command in {"search", "handoff"}:
+        if payload.get("result") != "PASS":
+            print(f"error_code: {payload.get('error_code', 'session_redacted_failure')}")
+            return 1
+        print(f"session {command} (redacted)")
+        print("--------------------------")
+        if command == "search":
+            print(f"count: {payload.get('count', 0)}")
+            for row in payload.get("sessions", []):
+                print(
+                    "- "
+                    f"started={row.get('started_at')} "
+                    f"last={row.get('last_event_at')} "
+                    f"events={row.get('event_count')}"
+                )
+        else:
+            print(f"started_at: {payload.get('started_at')}")
+            print(f"last_event_at: {payload.get('last_event_at')}")
+            print(f"event_count: {payload.get('event_count')}")
+        return 0
     if payload.get("command") == "current":
         row = payload.get("session", {})
         print(f"session_id: {row.get('session_id')}")
@@ -415,6 +454,18 @@ def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
     connection.execute(f"PRAGMA busy_timeout = {RUNTIME_DB_BUSY_TIMEOUT_MS}")
     return connection
+
+
+class _RuntimeScanBudget:
+    def __init__(self, timeout_ms: int) -> None:
+        self.deadline = time.monotonic() + (max(1, timeout_ms) / 1000.0)
+        self.timed_out = False
+
+    def progress(self) -> int:
+        if time.monotonic() < self.deadline:
+            return 0
+        self.timed_out = True
+        return 1
 
 
 
@@ -1062,32 +1113,62 @@ def _scan_runtime_stuck_sessions(
     scan_now_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
     warnings: list[str] = []
     problems: list[str] = []
+    remediation_codes: list[str] = []
     runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     runtime_db_wal_path = Path(f"{db_path}-wal")
-    runtime_db_wal_bytes = runtime_db_wal_path.stat().st_size if runtime_db_wal_path.exists() else 0
+    runtime_db_wal_bytes = (
+        runtime_db_wal_path.stat().st_size if runtime_db_wal_path.exists() else 0
+    )
     if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
         warnings.append(
             f"runtime database footprint exceeds configured budget {RUNTIME_DB_SIZE_WARN_BYTES} bytes"
         )
+        remediation_codes.append("runtime_storage_budget_exceeded")
+
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
+    generic_stale_count = 0
     runtime_db_journal_mode: str | None = None
     runtime_db_sqlite_version: str | None = None
     runtime_db_missing_tables: list[str] = []
     runtime_db_json1_available = False
+    runtime_db_json1_checked = False
     runtime_db_indexes: dict[str, list[str]] = {}
     runtime_db_index_columns: dict[str, dict[str, list[str]]] = {}
     runtime_db_scan_mode = "unavailable"
-    if not db_path.exists():
-        warnings.append("runtime session database does not exist yet")
+    runtime_db_query_only = False
+    runtime_db_snapshot_started = False
+    runtime_db_scan_complete = False
+
+    def add_remediation(code: str) -> None:
+        if code not in remediation_codes:
+            remediation_codes.append(code)
+
+    def result() -> dict:
+        runtime_db_scan_duration_ms = round(
+            (time.perf_counter() - started_at) * 1000, 2
+        )
+        latency_warning = (
+            f"runtime diagnostic scan exceeds configured latency budget {RUNTIME_DB_SCAN_WARN_MS} ms"
+        )
+        if (
+            runtime_db_scan_duration_ms >= RUNTIME_DB_SCAN_WARN_MS
+            and latency_warning not in warnings
+        ):
+            warnings.append(latency_warning)
         return {
             "warnings": warnings,
             "problems": problems,
+            "remediation_codes": remediation_codes,
             "stuck_findings": findings,
             "generic_stale_findings": generic_stale_findings,
-            "generic_stale_count": 0,
+            "generic_stale_count": generic_stale_count,
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
             "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+            "runtime_db_scan_timeout_ms": RUNTIME_DB_SCAN_TIMEOUT_MS,
+            "runtime_db_query_only": runtime_db_query_only,
+            "runtime_db_snapshot_started": runtime_db_snapshot_started,
+            "runtime_db_scan_complete": runtime_db_scan_complete,
             "runtime_db_journal_mode": runtime_db_journal_mode,
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
@@ -1098,21 +1179,51 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
         }
 
-    conn: sqlite3.Connection | None = None
+    if not db_path.exists():
+        warnings.append("runtime session database does not exist yet")
+        return result()
+
+    budget: _RuntimeScanBudget | None = None
     try:
         conn = _connect_runtime_database_readonly(db_path)
+    except Exception as exc:
+        problems.append(f"failed to open runtime session database: {exc}")
+        add_remediation("runtime_db_open_failed")
+        return result()
+
+    try:
+        try:
+            conn.execute("PRAGMA query_only = ON")
+            query_only_row = conn.execute("PRAGMA query_only").fetchone()
+            runtime_db_query_only = bool(
+                query_only_row is not None and int(query_only_row[0]) == 1
+            )
+        except Exception as exc:
+            problems.append(f"failed to enable query-only runtime diagnosis: {exc}")
+            add_remediation("runtime_query_only_unavailable")
+            return result()
+        if not runtime_db_query_only:
+            problems.append("runtime database query-only mode could not be verified")
+            add_remediation("runtime_query_only_unavailable")
+            return result()
+
+        budget = _RuntimeScanBudget(RUNTIME_DB_SCAN_TIMEOUT_MS)
+        conn.set_progress_handler(budget.progress, RUNTIME_DB_PROGRESS_OPCODES)
+        conn.execute("BEGIN")
+        runtime_db_snapshot_started = True
         conn.row_factory = sqlite3.Row
-        journal_row = conn.execute("PRAGMA journal_mode").fetchone()
-        runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
-        version_row = conn.execute("SELECT sqlite_version()").fetchone()
-        runtime_db_sqlite_version = str(version_row[0]) if version_row else None
+
         tables = {
             str(row[0])
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
+        journal_row = conn.execute("PRAGMA journal_mode").fetchone()
+        runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
+        version_row = conn.execute("SELECT sqlite_version()").fetchone()
+        runtime_db_sqlite_version = str(version_row[0]) if version_row else None
         runtime_db_missing_tables = sorted({"session", "message", "part"} - tables)
         runtime_db_indexes = {
             table: [str(row[1]) for row in conn.execute(f"PRAGMA index_list({table})")]
@@ -1130,69 +1241,82 @@ def _scan_runtime_stuck_sessions(
             lambda: scan_now_ms,
             deterministic=True,
         )
-        runtime_db_json1_available = bool(
-            conn.execute("SELECT json_valid('{}')").fetchone()[0]
-        )
+        try:
+            json1_row = conn.execute("SELECT json_valid('{}')").fetchone()
+            runtime_db_json1_checked = True
+            runtime_db_json1_available = bool(json1_row and json1_row[0])
+        except sqlite3.OperationalError as exc:
+            if "no such function" not in str(exc).lower() or "json_valid" not in str(exc).lower():
+                raise
+            runtime_db_json1_checked = True
+            runtime_db_json1_available = False
+
         if runtime_db_missing_tables:
             problems.append(
                 "runtime session database is missing required table(s): "
                 + ", ".join(runtime_db_missing_tables)
             )
-        if not runtime_db_json1_available:
+            add_remediation("runtime_schema_incompatible")
+        if runtime_db_json1_checked and not runtime_db_json1_available:
             problems.append("runtime session database SQLite build lacks JSON1 support")
-    except Exception as exc:
-        if conn is not None:
-            conn.close()
-        problems.append(f"failed to open runtime session database: {exc}")
-        return {
-            "warnings": warnings,
-            "problems": problems,
-            "stuck_findings": findings,
-            "generic_stale_findings": generic_stale_findings,
-            "generic_stale_count": 0,
-            "generic_stale_problem_threshold": generic_stale_problem_threshold,
-            "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
-            "runtime_db_journal_mode": runtime_db_journal_mode,
-            "runtime_db_sqlite_version": runtime_db_sqlite_version,
-            "runtime_db_missing_tables": runtime_db_missing_tables,
-            "runtime_db_json1_available": runtime_db_json1_available,
-            "runtime_db_indexes": runtime_db_indexes,
-            "runtime_db_index_columns": runtime_db_index_columns,
-            "runtime_db_scan_mode": runtime_db_scan_mode,
-            "runtime_db_size_bytes": runtime_db_size_bytes,
-            "runtime_db_wal_bytes": runtime_db_wal_bytes,
-            "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
-        }
+            add_remediation("runtime_json1_unavailable")
 
-    try:
-        missing_index_prefixes = _missing_runtime_index_prefixes(
-            runtime_db_index_columns
-        )
-        if missing_index_prefixes:
-            runtime_db_scan_mode = "legacy_fallback"
-            warnings.append(
-                "runtime diagnostic indexed snapshot unavailable; using compatibility scan "
-                f"(missing index prefixes: {', '.join(missing_index_prefixes)})"
-            )
-            findings, generic_stale_findings, generic_stale_count = (
-                _scan_runtime_stuck_sessions_legacy_queries(conn, stale_seconds)
-            )
+        if runtime_db_missing_tables or not runtime_db_json1_available:
+            runtime_db_scan_mode = "incompatible"
         else:
-            runtime_db_scan_mode = "indexed_snapshot"
-            findings, generic_stale_findings, generic_stale_count = (
-                _scan_runtime_stuck_sessions_indexed_queries(
-                    conn,
-                    stale_seconds=stale_seconds,
-                    now_ms=scan_now_ms,
-                )
+            missing_index_prefixes = _missing_runtime_index_prefixes(
+                runtime_db_index_columns
             )
+            if missing_index_prefixes:
+                runtime_db_scan_mode = "legacy_fallback"
+                warnings.append(
+                    "runtime diagnostic indexed snapshot unavailable; using compatibility scan "
+                    f"(missing index prefixes: {', '.join(missing_index_prefixes)})"
+                )
+                findings, generic_stale_findings, generic_stale_count = (
+                    _scan_runtime_stuck_sessions_legacy_queries(conn, stale_seconds)
+                )
+            else:
+                runtime_db_scan_mode = "indexed_snapshot"
+                findings, generic_stale_findings, generic_stale_count = (
+                    _scan_runtime_stuck_sessions_indexed_queries(
+                        conn,
+                        stale_seconds=stale_seconds,
+                        now_ms=scan_now_ms,
+                    )
+                )
+            runtime_db_scan_complete = True
     except sqlite3.DatabaseError as exc:
-        problems.append(f"failed to query runtime session database: {exc}")
+        findings = []
         generic_stale_findings = []
         generic_stale_count = 0
+        if budget is not None and budget.timed_out:
+            runtime_db_scan_mode = "timeout"
+            problems.append(
+                f"runtime session database scan exceeded {RUNTIME_DB_SCAN_TIMEOUT_MS} ms execution budget"
+            )
+            add_remediation("runtime_scan_timeout")
+        else:
+            runtime_db_scan_mode = "query_failed"
+            problems.append(f"failed to query runtime session database: {exc}")
+            add_remediation("runtime_query_failed")
+    except Exception as exc:
+        findings = []
+        generic_stale_findings = []
+        generic_stale_count = 0
+        runtime_db_scan_mode = "query_failed"
+        problems.append(f"failed to query runtime session database: {exc}")
+        add_remediation("runtime_query_failed")
     finally:
-        conn.close()
+        try:
+            conn.set_progress_handler(None, 0)
+        except Exception:
+            pass
+        try:
+            if conn.in_transaction:
+                conn.rollback()
+        finally:
+            conn.close()
 
     findings = _annotate_stale_findings(findings)
     generic_stale_findings = _annotate_stale_findings(generic_stale_findings)
@@ -1207,11 +1331,11 @@ def _scan_runtime_stuck_sessions(
     findings = findings[:MAX_RUNTIME_STALE_FINDINGS]
     generic_stale_findings = generic_stale_findings[:MAX_RUNTIME_STALE_FINDINGS]
 
-    if findings:
+    if runtime_db_scan_complete and findings:
         problems.append(
             f"detected {len(findings)} stuck session health finding(s) older than {stale_seconds}s"
         )
-    elif generic_stale_count > 0:
+    elif runtime_db_scan_complete and generic_stale_count > 0:
         generic_stale_message = f"detected {generic_stale_count} stale incomplete assistant session(s) older than {stale_seconds}s"
         if generic_stale_count >= generic_stale_problem_threshold:
             problems.append(
@@ -1220,38 +1344,7 @@ def _scan_runtime_stuck_sessions(
         else:
             warnings.append(generic_stale_message)
 
-    runtime_db_scan_duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-    if runtime_db_scan_duration_ms >= RUNTIME_DB_SCAN_WARN_MS:
-        warnings.append(f"runtime diagnostic scan exceeds configured latency budget {RUNTIME_DB_SCAN_WARN_MS} ms")
-    remediation_codes = []
-    if runtime_db_missing_tables:
-        remediation_codes.append("runtime_schema_incompatible")
-    if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
-        remediation_codes.append("runtime_storage_budget_exceeded")
-    if not runtime_db_json1_available:
-        remediation_codes.append("runtime_json1_unavailable")
-    return {
-        "warnings": warnings,
-        "problems": problems,
-        "remediation_codes": remediation_codes,
-        "stuck_findings": findings,
-        "generic_stale_findings": generic_stale_findings,
-        "generic_stale_count": generic_stale_count,
-        "generic_stale_problem_threshold": generic_stale_problem_threshold,
-        "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
-        "runtime_db_journal_mode": runtime_db_journal_mode,
-        "runtime_db_sqlite_version": runtime_db_sqlite_version,
-        "runtime_db_missing_tables": runtime_db_missing_tables,
-        "runtime_db_json1_available": runtime_db_json1_available,
-        "runtime_db_indexes": runtime_db_indexes,
-        "runtime_db_index_columns": runtime_db_index_columns,
-        "runtime_db_scan_mode": runtime_db_scan_mode,
-        "runtime_db_size_bytes": runtime_db_size_bytes,
-        "runtime_db_wal_bytes": runtime_db_wal_bytes,
-        "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-        "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
-    }
-
+    return result()
 
 def _repair_message_and_tool(
     conn: sqlite3.Connection,
@@ -2085,30 +2178,64 @@ def _command_show(argv: list[str], index_path: Path) -> int:
     )
 
 
+def _redaction_enabled(argv: list[str]) -> bool:
+    return "--redact" in argv or os.environ.get(
+        "MY_OPENCODE_SESSION_REDACT_DEFAULT", ""
+    ).lower() in {"1", "true", "yes"}
+
+
+def _redacted_timestamp(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > 64:
+        return None
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return value
+
+
+def _redacted_event_count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
 def _redact_session_record(record: dict) -> dict:
-    omitted = {
-        item.strip()
-        for item in os.environ.get("MY_OPENCODE_SESSION_REDACT_FIELDS", "").split(",")
-        if item.strip()
-    }
     return {
-        key: record.get(key)
-        for key in ("session_id", "started_at", "last_event_at", "event_count")
-        if key not in omitted
+        "started_at": _redacted_timestamp(record.get("started_at")),
+        "last_event_at": _redacted_timestamp(record.get("last_event_at")),
+        "event_count": _redacted_event_count(record.get("event_count")),
+    }
+
+
+def _redacted_failure(command: str, error_code: str) -> dict:
+    return {
+        "result": "FAIL",
+        "command": command,
+        "redacted": True,
+        "error_code": error_code,
     }
 
 
 def _command_search(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
+    redact = _redaction_enabled(argv)
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     if not args:
+        if redact:
+            return _emit(
+                _redacted_failure("search", "session_search_query_required"),
+                json_output,
+            )
         return _usage()
     query = args[0].strip().lower()
     try:
         limit = _parse_limit(argv)
         rows = _session_rows(_load_index(index_path))
     except Exception as exc:
+        if redact:
+            return _emit(
+                _redacted_failure("search", "session_index_unavailable"),
+                json_output,
+            )
         return _emit(
             {
                 "result": "FAIL",
@@ -2125,6 +2252,17 @@ def _command_search(argv: list[str], index_path: Path) -> int:
         or query in str(row.get("cwd", "")).lower()
         or query in str(row.get("last_reason", "")).lower()
     ][:limit]
+    if redact:
+        return _emit(
+            {
+                "result": "PASS",
+                "command": "search",
+                "redacted": True,
+                "count": len(matches),
+                "sessions": [_redact_session_record(row) for row in matches],
+            },
+            json_output,
+        )
     return _emit(
         {
             "result": "PASS",
@@ -2132,8 +2270,8 @@ def _command_search(argv: list[str], index_path: Path) -> int:
             "index_path": str(index_path),
             "query": query,
             "count": len(matches),
-            "redacted": redact,
-            "sessions": [_redact_session_record(row) for row in matches] if redact else matches,
+            "redacted": False,
+            "sessions": matches,
         },
         json_output,
     )
@@ -2185,6 +2323,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                     "generic_stale_problem_threshold"
                 ],
                 "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+                "runtime_db_scan_timeout_ms": runtime["runtime_db_scan_timeout_ms"],
+                "runtime_db_query_only": runtime["runtime_db_query_only"],
+                "runtime_db_snapshot_started": runtime["runtime_db_snapshot_started"],
+                "runtime_db_scan_complete": runtime["runtime_db_scan_complete"],
                 "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
                 "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
                 "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
@@ -2255,6 +2397,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "generic_stale_problem_threshold"
             ],
             "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+            "runtime_db_scan_timeout_ms": runtime["runtime_db_scan_timeout_ms"],
+            "runtime_db_query_only": runtime["runtime_db_query_only"],
+            "runtime_db_snapshot_started": runtime["runtime_db_snapshot_started"],
+            "runtime_db_scan_complete": runtime["runtime_db_scan_complete"],
             "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
             "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
             "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
@@ -2282,7 +2428,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
 
 def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
+    redact = _redaction_enabled(argv)
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     target_id: str | None = None
     launch_cwd: str | None = None
@@ -2292,12 +2438,26 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         token = args[cursor]
         if token == "--id":
             if cursor + 1 >= len(args):
+                if redact:
+                    return _emit(
+                        _redacted_failure(
+                            "handoff", "session_handoff_arguments_invalid"
+                        ),
+                        json_output,
+                    )
                 return _usage()
             target_id = args[cursor + 1]
             cursor += 2
             continue
         if token == "--launch-cwd":
             if cursor + 1 >= len(args):
+                if redact:
+                    return _emit(
+                        _redacted_failure(
+                            "handoff", "session_handoff_arguments_invalid"
+                        ),
+                        json_output,
+                    )
                 return _usage()
             launch_cwd = args[cursor + 1]
             cursor += 2
@@ -2306,11 +2466,21 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             fork = True
             cursor += 1
             continue
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_handoff_arguments_invalid"),
+                json_output,
+            )
         return _usage()
 
     try:
         rows = _session_rows(_load_index(index_path))
     except Exception as exc:
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_index_unavailable"),
+                json_output,
+            )
         return _emit(
             {
                 "result": "FAIL",
@@ -2322,6 +2492,11 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         )
 
     if not rows and not target_id:
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_index_empty"),
+                json_output,
+            )
         return _emit(
             {
                 "result": "FAIL",
@@ -2338,6 +2513,11 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             None,
         )
         if not isinstance(selected_match, dict):
+            if redact:
+                return _emit(
+                    _redacted_failure("handoff", "session_not_found"),
+                    json_output,
+                )
             return _emit(
                 {
                     "result": "FAIL",
@@ -2350,6 +2530,11 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         selected = selected_match
     else:
         if source == "env_only":
+            if redact:
+                return _emit(
+                    _redacted_failure("handoff", "session_not_indexed"),
+                    json_output,
+                )
             return _emit(
                 {
                     "result": "FAIL",
@@ -2361,6 +2546,18 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             )
         if not isinstance(selected, dict):
             selected = rows[0] if rows else {}
+
+    if redact:
+        projected = _redact_session_record(selected)
+        return _emit(
+            {
+                "result": "PASS",
+                "command": "handoff",
+                "redacted": True,
+                **projected,
+            },
+            json_output,
+        )
 
     digest = _load_digest(DEFAULT_DIGEST_PATH)
     raw_git = digest.get("git")
@@ -2388,24 +2585,17 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         next_actions.insert(0, launch_command)
         next_actions.insert(1, resume_command)
 
-    if redact:
-        resolved_launch_cwd = None
-        launch_command = ""
-        resume_command = ""
-        next_actions = ["/doctor run", "/session show <session_id> --json"]
-        git = {}
-
     payload = {
         "result": "PASS",
         "command": "handoff",
-        "redacted": redact,
+        "redacted": False,
         "session_id": selected.get("session_id"),
         "cwd": selected.get("cwd"),
         "launch_cwd": resolved_launch_cwd,
         "started_at": selected.get("started_at"),
         "last_event_at": selected.get("last_event_at"),
         "event_count": selected.get("event_count"),
-        "last_reason": None if redact else selected.get("last_reason"),
+        "last_reason": selected.get("last_reason"),
         "digest_path": str(DEFAULT_DIGEST_PATH),
         "git_branch": git.get("branch"),
         "git_status_count": git.get("status_count"),
@@ -2416,7 +2606,6 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         "next_actions": next_actions,
     }
     return _emit(payload, json_output)
-
 
 def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     del index_path

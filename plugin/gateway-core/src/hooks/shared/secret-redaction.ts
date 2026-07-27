@@ -8,13 +8,37 @@ export type SecretRedactionErrorCode =
   | "mutation_failed"
   | "unexpected_failure"
 
+export type SecretRedactionMatchTarget = "key" | "value"
+
+export type SecretRedactionLocationCode =
+  | "provider_metadata_openai_item_id"
+  | "provider_metadata_openai_other"
+  | "immutable_protocol_field"
+  | "unknown_field"
+
+interface SecretRedactionMatchDiagnostics {
+  matchTarget: SecretRedactionMatchTarget
+  patternIndex: number
+  locationCode: SecretRedactionLocationCode
+}
+
 export class SecretRedactionError extends Error {
   readonly code: SecretRedactionErrorCode
+  readonly matchTarget: SecretRedactionMatchTarget | null
+  readonly patternIndex: number | null
+  readonly locationCode: SecretRedactionLocationCode | null
 
-  constructor(code: SecretRedactionErrorCode, detail = "") {
+  constructor(
+    code: SecretRedactionErrorCode,
+    detail = "",
+    diagnostics: SecretRedactionMatchDiagnostics | null = null,
+  ) {
     super(`secret redaction blocked: ${code}${detail ? ` (${detail})` : ""}`)
     this.name = "SecretRedactionError"
     this.code = code
+    this.matchTarget = diagnostics?.matchTarget ?? null
+    this.patternIndex = diagnostics?.patternIndex ?? null
+    this.locationCode = diagnostics?.locationCode ?? null
   }
 }
 
@@ -34,6 +58,11 @@ export interface SecretRedactionStats {
 interface CompiledPattern {
   source: string
   flags: string
+}
+
+interface PatternApplication {
+  text: string
+  firstPatternIndex: number | null
 }
 
 type VisitMode = "redact" | "scan"
@@ -126,20 +155,55 @@ export function createSecretRedactor(options: {
     maxChars: normalizedLimit(options.limits.maxChars, 2 * 1024 * 1024),
   }
 
-  function applyPatterns(text: string, stats: SecretRedactionStats): string {
+  function applyPatterns(text: string, stats: SecretRedactionStats): PatternApplication {
     stats.scannedChars += text.length
     if (stats.scannedChars > limits.maxChars) {
       throw new SecretRedactionError("text_limit")
     }
     let next = text
-    for (const pattern of patterns) {
+    let firstPatternIndex: number | null = null
+    for (const [patternIndex, pattern] of patterns.entries()) {
       const regex = new RegExp(pattern.source, pattern.flags)
       next = next.replace(regex, () => {
+        firstPatternIndex ??= patternIndex
         stats.matches += 1
         return options.redactionToken
       })
     }
-    return next
+    return { text: next, firstPatternIndex }
+  }
+
+  function locationCode(
+    key: string | number | null,
+    parentKey: string | number | null,
+    grandparentKey: string | number | null,
+  ): SecretRedactionLocationCode {
+    if (parentKey === "openai" && grandparentKey === "metadata") {
+      return key === "itemId"
+        ? "provider_metadata_openai_item_id"
+        : "provider_metadata_openai_other"
+    }
+    if (typeof key === "string" && IMMUTABLE_PROTOCOL_KEYS.has(key)) {
+      return "immutable_protocol_field"
+    }
+    return "unknown_field"
+  }
+
+  function immutableMatchError(options: {
+    matchTarget: SecretRedactionMatchTarget
+    patternIndex: number | null
+    key: string | number | null
+    parentKey: string | number | null
+    grandparentKey: string | number | null
+  }): SecretRedactionError {
+    if (options.patternIndex === null) {
+      return new SecretRedactionError("unexpected_failure")
+    }
+    return new SecretRedactionError("immutable_match", "", {
+      matchTarget: options.matchTarget,
+      patternIndex: options.patternIndex,
+      locationCode: locationCode(options.key, options.parentKey, options.grandparentKey),
+    })
   }
 
   function assignValue(
@@ -187,6 +251,8 @@ export function createSecretRedactor(options: {
       key: string | number | null,
       mode: VisitMode,
       depth: number,
+      parentKey: string | number | null,
+      grandparentKey: string | number | null,
     ): void {
       stats.scannedNodes += 1
       if (stats.scannedNodes > limits.maxNodes) {
@@ -197,14 +263,20 @@ export function createSecretRedactor(options: {
       }
 
       if (typeof value === "string") {
-        const next = applyPatterns(value, stats)
-        if (next === value) {
+        const applied = applyPatterns(value, stats)
+        if (applied.text === value) {
           return
         }
         if (mode === "scan") {
-          throw new SecretRedactionError("immutable_match")
+          throw immutableMatchError({
+            matchTarget: "value",
+            patternIndex: applied.firstPatternIndex,
+            key,
+            parentKey,
+            grandparentKey,
+          })
         }
-        assignValue(parent, key, next)
+        assignValue(parent, key, applied.text)
         stats.redactedFields += 1
         return
       }
@@ -221,14 +293,20 @@ export function createSecretRedactor(options: {
 
       if (Array.isArray(value)) {
         for (let index = 0; index < value.length; index += 1) {
-          visit(value[index], value, index, mode, depth + 1)
+          visit(value[index], value, index, mode, depth + 1, key, parentKey)
         }
       } else {
         const record = value as Record<string, unknown>
         for (const childKey of Object.keys(record)) {
           const keyProbe = applyPatterns(childKey, stats)
-          if (keyProbe !== childKey) {
-            throw new SecretRedactionError("immutable_match")
+          if (keyProbe.text !== childKey) {
+            throw immutableMatchError({
+              matchTarget: "key",
+              patternIndex: keyProbe.firstPatternIndex,
+              key: childKey,
+              parentKey: key,
+              grandparentKey: parentKey,
+            })
           }
           visit(
             record[childKey],
@@ -236,6 +314,8 @@ export function createSecretRedactor(options: {
             childKey,
             childMode(mode, childKey),
             depth + 1,
+            key,
+            parentKey,
           )
         }
       }
@@ -244,7 +324,7 @@ export function createSecretRedactor(options: {
     }
 
     try {
-      visit(root, null, null, initialMode, 0)
+      visit(root, null, null, initialMode, 0, null, null)
       return stats
     } catch (error) {
       if (error instanceof SecretRedactionError) {
@@ -258,10 +338,10 @@ export function createSecretRedactor(options: {
     redactText(text: string): { text: string; stats: SecretRedactionStats } {
       const stats = emptyStats()
       const redacted = applyPatterns(text, stats)
-      if (redacted !== text) {
+      if (redacted.text !== text) {
         stats.redactedFields = 1
       }
-      return { text: redacted, stats }
+      return { text: redacted.text, stats }
     },
     redactMutableValue(value: unknown): SecretRedactionStats {
       return traverse(value, "redact")

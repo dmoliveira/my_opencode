@@ -37,7 +37,7 @@ Purpose: keep a single, explicit record of intentional differences so parity aud
 | `atlas` runtime hook, `no-sisyphus-gpt`, `no-hephaestus-non-gpt` | `intentional-divergence` | Upstream Atlas-specific tool-time behavior injection and persona-specific model guards are not applied end-to-end locally; `task-resume-info` now mirrors a small post-task verification/reminder slice and `agent-context-shaper` adds pre-task focus shaping, but local orchestration still relies on canonical orchestrator policy plus gateway guards instead of full Atlas semantics. |
 | `start-work` | `local-equivalent` | Implemented as command/runtime flow (`scripts/start_work_command.py`) instead of same-named plugin hook. |
 | `anthropic-effort` | `intentional-divergence` | Local model-routing controls own effort/category policy (`/model-routing`). |
-| `auto-update-checker` | `intentional-divergence` | Keep update behavior explicit via install/update workflows; no runtime auto-check hook. |
+| `auto-update-checker` | `intentional-divergence` | Use OpenCode native `autoupdate: "notify"` for operator-visible availability while keeping installation explicit; no custom runtime auto-update hook. |
 
 ## Plugin and command surface
 
@@ -46,6 +46,7 @@ Purpose: keep a single, explicit record of intentional differences so parity aud
 | Gateway-core as canonical plugin runtime | `intentional-divergence` | `docs/plugin-gateway-plan.md` |
 | Python command bridge for slash commands | `intentional-divergence` | `docs/plugin-gateway-plan.md`, `scripts/*_command.py` |
 | Multi-level parity tracking and hook expansion | `local-equivalent` | `docs/parity-injection-tracker.md`, `plugin/gateway-core/src/config/schema.ts` |
+| Hosted MCP/plugin expansion | `intentional-divergence` | Keep hosted MCPs disabled and the managed plugin inventory local-only; Wave 7 adopted no external candidate without immutable provenance, bounded authority, non-overlap, and measured value. Exact-pinned Playwright remains available on demand. |
 
 ## Deferred scope
 

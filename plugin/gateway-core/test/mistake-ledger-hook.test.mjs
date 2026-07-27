@@ -1,13 +1,35 @@
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import {
+  chmodSync,
+  constants,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
+import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+const LEDGER_STORAGE_SUPPORTED =
+  typeof process.getuid === "function" &&
+  typeof constants.O_NOFOLLOW === "number" &&
+  constants.O_NOFOLLOW !== 0
+
+function ledgerTest(name, fn) {
+  return test(name, { skip: !LEDGER_STORAGE_SUPPORTED }, fn)
+}
+
 import GatewayCorePlugin from "../dist/index.js"
 import { createMistakeLedgerHook } from "../dist/hooks/mistake-ledger/index.js"
 
-test("mistake-ledger records done-proof validation deferrals", async () => {
+ledgerTest("mistake-ledger records done-proof validation deferrals", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   try {
     const hook = createMistakeLedgerHook({
@@ -30,15 +52,16 @@ test("mistake-ledger records done-proof validation deferrals", async () => {
     const lines = readFileSync(ledgerPath, "utf-8").trim().split("\n")
     assert.equal(lines.length, 1)
     const entry = JSON.parse(lines[0])
-    assert.equal(entry.sessionId, "session-mistake-1")
+    assert.deepEqual(Object.keys(entry).sort(), ["category", "sourceHook", "ts"])
     assert.equal(entry.category, "completion_without_validation")
     assert.equal(entry.sourceHook, "done-proof-enforcer")
+    assert.equal(JSON.stringify(entry).includes("session-mistake-1"), false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-test("mistake-ledger records done-proof deferrals in default execution order", async () => {
+ledgerTest("mistake-ledger records done-proof deferrals in default execution order", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   try {
     const hook = createMistakeLedgerHook({
@@ -61,14 +84,14 @@ test("mistake-ledger records done-proof deferrals in default execution order", a
     const lines = readFileSync(ledgerPath, "utf-8").trim().split("\n")
     assert.equal(lines.length, 1)
     const entry = JSON.parse(lines[0])
-    assert.equal(entry.sessionId, "session-mistake-2")
     assert.equal(entry.category, "completion_without_validation")
+    assert.equal(Object.hasOwn(entry, "sessionId"), false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-test("mistake-ledger records structured output deferrals", async () => {
+ledgerTest("mistake-ledger records structured output deferrals", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   try {
     const hook = createMistakeLedgerHook({
@@ -90,7 +113,9 @@ test("mistake-ledger records structured output deferrals", async () => {
     const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
     assert.equal(existsSync(ledgerPath), true)
     const entry = JSON.parse(readFileSync(ledgerPath, "utf-8").trim())
-    assert.equal(entry.sessionId, "session-mistake-structured")
+    assert.equal(entry.category, "completion_without_validation")
+    assert.equal(Object.hasOwn(entry, "sessionId"), false)
+    assert.equal(Object.hasOwn(entry, "summary"), false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -147,7 +172,7 @@ function createPlugin(directory, decisionRuntime) {
   })
 }
 
-test("mistake-ledger uses LLM fallback for ambiguous deferral wording", async () => {
+ledgerTest("mistake-ledger uses LLM fallback for ambiguous deferral wording", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
@@ -170,8 +195,9 @@ test("mistake-ledger uses LLM fallback for ambiguous deferral wording", async ()
     const ledgerPath = join(directory, ".opencode", "mistake-ledger.jsonl")
     assert.equal(existsSync(ledgerPath), true)
     const entry = JSON.parse(readFileSync(ledgerPath, "utf-8").trim())
-    assert.equal(entry.sessionId, "session-mistake-llm-1")
     assert.equal(entry.category, "completion_without_validation")
+    assert.equal(Object.hasOwn(entry, "sessionId"), false)
+    assert.equal(Object.hasOwn(entry, "summary"), false)
     const events = readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
       .trim()
       .split("\n")
@@ -190,7 +216,7 @@ test("mistake-ledger uses LLM fallback for ambiguous deferral wording", async ()
   }
 })
 
-test("mistake-ledger shadow mode defers semantic recording", async () => {
+ledgerTest("mistake-ledger shadow mode defers semantic recording", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
@@ -230,7 +256,7 @@ test("mistake-ledger shadow mode defers semantic recording", async () => {
   }
 })
 
-test("mistake-ledger plugin wiring honors shadow mode without writing ledger entries", async () => {
+ledgerTest("mistake-ledger plugin wiring honors shadow mode without writing ledger entries", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
   const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
@@ -269,6 +295,197 @@ test("mistake-ledger plugin wiring honors shadow mode without writing ledger ent
     } else {
       process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
     }
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger rejects custom paths without touching workspace files", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const victimPath = join(directory, "victim.txt")
+  try {
+    writeFileSync(victimPath, "victim-sentinel", "utf-8")
+    assert.throws(
+      () =>
+        createMistakeLedgerHook({
+          directory,
+          enabled: true,
+          path: "victim.txt",
+        }),
+      /mistake ledger path must be \.opencode\/mistake-ledger\.jsonl/,
+    )
+    assert.equal(readFileSync(victimPath, "utf-8"), "victim-sentinel")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger ignores payload directory as storage authority", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const escapedDirectory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-escape-"))
+  try {
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "payload-directory-canary" },
+      output: {
+        output: "[done-proof-enforcer] Completion token deferred",
+      },
+      directory: escapedDirectory,
+    })
+    assert.equal(existsSync(join(directory, ".opencode", "mistake-ledger.jsonl")), true)
+    assert.equal(existsSync(join(escapedDirectory, ".opencode", "mistake-ledger.jsonl")), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+    rmSync(escapedDirectory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger repairs safe existing file mode to owner-only", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  try {
+    const ledgerDirectory = join(directory, ".opencode")
+    const ledgerPath = join(ledgerDirectory, "mistake-ledger.jsonl")
+    mkdirSync(ledgerDirectory, { mode: 0o755 })
+    writeFileSync(ledgerPath, "", { mode: 0o644 })
+    chmodSync(ledgerPath, 0o644)
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+    })
+    await hook.event("tool.execute.after", {
+      input: { tool: "bash", sessionID: "mode-canary" },
+      output: { output: "[done-proof-enforcer] Completion token deferred" },
+      directory,
+    })
+    assert.equal(statSync(ledgerPath).mode & 0o777, 0o600)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger refuses final symlinks and preserves the victim", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  try {
+    const ledgerDirectory = join(directory, ".opencode")
+    const ledgerPath = join(ledgerDirectory, "mistake-ledger.jsonl")
+    const victimPath = join(directory, "victim.txt")
+    mkdirSync(ledgerDirectory)
+    writeFileSync(victimPath, "victim-sentinel", "utf-8")
+    symlinkSync(victimPath, ledgerPath)
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+    })
+    await assert.rejects(
+      hook.event("tool.execute.after", {
+        input: { tool: "bash", sessionID: "symlink-canary" },
+        output: { output: "[done-proof-enforcer] Completion token deferred" },
+      }),
+      /unsafe mistake ledger file/,
+    )
+    assert.equal(readFileSync(victimPath, "utf-8"), "victim-sentinel")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger refuses parent symlinks", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  const targetDirectory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-parent-"))
+  try {
+    symlinkSync(targetDirectory, join(directory, ".opencode"))
+    assert.throws(
+      () =>
+        createMistakeLedgerHook({
+          directory,
+          enabled: true,
+          path: ".opencode/mistake-ledger.jsonl",
+        }),
+      /unsafe mistake ledger directory/,
+    )
+    assert.equal(existsSync(join(targetDirectory, "mistake-ledger.jsonl")), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+    rmSync(targetDirectory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger refuses hardlinks and preserves the victim", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  try {
+    const ledgerDirectory = join(directory, ".opencode")
+    const ledgerPath = join(ledgerDirectory, "mistake-ledger.jsonl")
+    const victimPath = join(directory, "victim.txt")
+    mkdirSync(ledgerDirectory)
+    writeFileSync(victimPath, "victim-sentinel", "utf-8")
+    linkSync(victimPath, ledgerPath)
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+    })
+    await assert.rejects(
+      hook.event("tool.execute.after", {
+        input: { tool: "bash", sessionID: "hardlink-canary" },
+        output: { output: "[done-proof-enforcer] Completion token deferred" },
+      }),
+      /regular single-link file/,
+    )
+    assert.equal(readFileSync(victimPath, "utf-8"), "victim-sentinel")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger refuses FIFO targets", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  try {
+    const ledgerDirectory = join(directory, ".opencode")
+    const ledgerPath = join(ledgerDirectory, "mistake-ledger.jsonl")
+    mkdirSync(ledgerDirectory)
+    const created = spawnSync("mkfifo", [ledgerPath], { encoding: "utf-8" })
+    if (created.status !== 0) {
+      context.skip("mkfifo unavailable")
+      return
+    }
+    const hook = createMistakeLedgerHook({
+      directory,
+      enabled: true,
+      path: ".opencode/mistake-ledger.jsonl",
+    })
+    await assert.rejects(
+      hook.event("tool.execute.after", {
+        input: { tool: "bash", sessionID: "fifo-canary" },
+        output: { output: "[done-proof-enforcer] Completion token deferred" },
+      }),
+      /regular single-link file/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+ledgerTest("mistake-ledger refuses group-writable parent directories", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-mistake-ledger-"))
+  try {
+    const ledgerDirectory = join(directory, ".opencode")
+    mkdirSync(ledgerDirectory, { mode: 0o700 })
+    chmodSync(ledgerDirectory, 0o770)
+    assert.throws(
+      () =>
+        createMistakeLedgerHook({
+          directory,
+          enabled: true,
+          path: ".opencode/mistake-ledger.jsonl",
+        }),
+      /directory is group\/world writable/,
+    )
+  } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })

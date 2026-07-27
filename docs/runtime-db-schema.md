@@ -113,7 +113,7 @@ For runtime history, use an isolated copy to test a query or restoration path be
 
 ## Operator dashboard fields
 
-Use `/doctor run --json` for the consolidated session and shared-memory checks. The session check exposes `runtime_db_path`, `runtime_db_size_bytes`, `runtime_db_scan_duration_ms`, journal mode, SQLite version, JSON1 support, required-table compatibility, and stale finding counts. The shared-memory check reports its store path and active/archive counts. Session-index update output reports its path, retention policy, and pruning totals. These fields are designed for automation-safe dashboards; do not scrape human-formatted output.
+Use `/doctor run --json` for the consolidated session and shared-memory checks. The session check exposes `runtime_db_path`, `runtime_db_size_bytes`, `runtime_db_scan_duration_ms`, `runtime_db_scan_timeout_ms`, query-only verification, snapshot/scan completion, remediation codes, journal mode, SQLite version, JSON1 support, required-table compatibility, and stale finding counts. Missing schema or JSON1 support skips stale queries instead of returning partial findings. The shared-memory check reports its store path and active/archive counts. Session-index update output reports its path, retention policy, and pruning totals. These fields are designed for automation-safe dashboards; do not scrape human-formatted output.
 
 ## Backup retention policy
 
@@ -153,7 +153,7 @@ A local incident bundle should contain machine-readable doctor output, store pat
 
 ## Support export
 
-Before sharing diagnostics, enable `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`, run the consolidated doctor JSON, inspect it locally, and remove any store path or identifier not required for the support case. Share only the redacted incident bundle and checksums; never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
+Only `/session search --redact` and `/session handoff --redact` (or those commands with `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`) have a share-safe output contract. The consolidated doctor output remains local and sensitive: it can contain store paths and runtime identifiers, so do not share it directly. Build support artifacts from the allowlisted redacted search/handoff fields, inspect them locally, and remove anything not required for the case. Never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
 
 ## Storage telemetry history
 
@@ -165,7 +165,7 @@ Performance fixtures should include realistic session/message/part cardinalities
 
 ## WAL and concurrent-writer fixtures
 
-Test diagnostics against a live WAL database with a writer transaction, a read-only doctor connection, configured busy timeout, WAL growth measurement, and no diagnostic mutation. Include contention, timeout, and recovery cases on each supported platform.
+Test diagnostics against a live WAL database with deterministic barriers: establish the query-only reader snapshot first, commit a writer transaction second, then prove metadata and findings stay on the same pre-commit snapshot. Keep the busy timeout at or below the SQLite progress budget. Assert main-database bytes, schema, and row counts only in a separate quiescent fixture; WAL/SHM bytes can legitimately change while a writer is active.
 
 ## Interrupted-backup fixtures
 
@@ -177,7 +177,7 @@ Create malformed and conflicting export fixtures that fail before, during, and a
 
 ## Compatibility matrix
 
-Supported runtime diagnostics require SQLite with JSON1 and window-function support; shared memory additionally uses WAL, FTS5 when available, foreign keys, and a compatible schema version. Doctor output is authoritative for the installed runtime’s version, JSON1, journal mode, FTS status, and schema compatibility. Treat unsupported features as warnings/failures rather than attempting in-place upgrades of an upstream OpenCode database.
+Supported runtime diagnostics require verifiable SQLite query-only mode, JSON1, and window-function support; shared memory additionally uses WAL, FTS5 when available, foreign keys, and a compatible schema version. Runtime scans execute inside one explicit read transaction with a bounded progress handler and always roll back before close. Doctor output is authoritative for the installed runtime’s version, capability, snapshot, completion, journal, FTS, and schema state. Treat unsupported features as explicit remediation codes rather than attempting in-place upgrades of an upstream OpenCode database.
 
 ## Session-history archival
 
