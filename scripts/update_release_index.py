@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
@@ -72,8 +73,23 @@ def _build_index(milestones: dict[str, str], notes: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
-    repo_root = Path(__file__).resolve().parent.parent
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Regenerate the v0.4 release index")
+    parser.add_argument("--repo-root", type=Path, help="Override repository root for testing")
+    return parser.parse_args(argv)
+
+
+def _resolve_repo_root(override: Path | None) -> Path:
+    repo_root = (override or Path(__file__).resolve().parent.parent).resolve()
+    plan_dir = (repo_root / "docs" / "plan").resolve()
+    if not repo_root.is_dir() or not plan_dir.is_dir() or not plan_dir.is_relative_to(repo_root):
+        raise SystemExit("--repo-root must contain a repository-scoped docs/plan directory")
+    return repo_root
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    repo_root = _resolve_repo_root(args.repo_root)
     plan_dir = repo_root / "docs" / "plan"
     output = plan_dir / "v0.4-release-index.md"
 
