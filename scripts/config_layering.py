@@ -362,6 +362,7 @@ class _StagedConfig:
     payload: bytes | None = None
     stage_name: str | None = None
     stage_identity: _FileIdentity | None = None
+    stage_fd: int = -1
     parent_fd: int = -1
     committed: bool = False
     durability: Durability = "not_committed"
@@ -1408,16 +1409,17 @@ def _remove_owned_stage(plan: _StagedConfig) -> None:
     if (
         plan.parent_fd < 0
         or plan.stage_name is None
-        or plan.stage_identity is None
+        or plan.stage_fd < 0
     ):
         return
     try:
+        opened = os.fstat(plan.stage_fd)
         metadata = os.stat(
             plan.stage_name,
             dir_fd=plan.parent_fd,
             follow_symlinks=False,
         )
-        if _same_object(_identity(metadata), plan.stage_identity):
+        if (metadata.st_dev, metadata.st_ino) == (opened.st_dev, opened.st_ino):
             os.unlink(plan.stage_name, dir_fd=plan.parent_fd)
     except OSError:
         return
@@ -1462,43 +1464,41 @@ def _stage_configs(
                 PRIVATE_FILE_MODE,
                 dir_fd=plan.parent_fd,
             )
-            try:
-                os.fchmod(stage_fd, PRIVATE_FILE_MODE)
-                stage_metadata = os.fstat(stage_fd)
-                if (
-                    not stat.S_ISREG(stage_metadata.st_mode)
-                    or stage_metadata.st_uid != os.geteuid()
-                    or stage_metadata.st_nlink != 1
-                    or stat.S_IMODE(stage_metadata.st_mode) != PRIVATE_FILE_MODE
-                ):
-                    raise _transaction_error(
-                        "config_stage_unsafe",
-                        "config stage file is unsafe",
-                        phase="stage",
-                    )
-                view = memoryview(plan.payload)
-                while view:
-                    written = os.write(stage_fd, view)
-                    if written <= 0:
-                        raise OSError("short config stage write")
-                    view = view[written:]
-                os.fsync(stage_fd)
-                staged_metadata = os.fstat(stage_fd)
-                if (
-                    not stat.S_ISREG(staged_metadata.st_mode)
-                    or staged_metadata.st_uid != os.geteuid()
-                    or staged_metadata.st_nlink != 1
-                    or stat.S_IMODE(staged_metadata.st_mode) != PRIVATE_FILE_MODE
-                    or staged_metadata.st_size != len(plan.payload)
-                ):
-                    raise _transaction_error(
-                        "config_stage_unsafe",
-                        "config stage file changed while staging",
-                        phase="stage",
-                    )
-                plan.stage_identity = _identity(staged_metadata)
-            finally:
-                os.close(stage_fd)
+            plan.stage_fd = stage_fd
+            os.fchmod(stage_fd, PRIVATE_FILE_MODE)
+            stage_metadata = os.fstat(stage_fd)
+            if (
+                not stat.S_ISREG(stage_metadata.st_mode)
+                or stage_metadata.st_uid != os.geteuid()
+                or stage_metadata.st_nlink != 1
+                or stat.S_IMODE(stage_metadata.st_mode) != PRIVATE_FILE_MODE
+            ):
+                raise _transaction_error(
+                    "config_stage_unsafe",
+                    "config stage file is unsafe",
+                    phase="stage",
+                )
+            view = memoryview(plan.payload)
+            while view:
+                written = os.write(stage_fd, view)
+                if written <= 0:
+                    raise OSError("short config stage write")
+                view = view[written:]
+            os.fsync(stage_fd)
+            staged_metadata = os.fstat(stage_fd)
+            if (
+                not stat.S_ISREG(staged_metadata.st_mode)
+                or staged_metadata.st_uid != os.geteuid()
+                or staged_metadata.st_nlink != 1
+                or stat.S_IMODE(staged_metadata.st_mode) != PRIVATE_FILE_MODE
+                or staged_metadata.st_size != len(plan.payload)
+            ):
+                raise _transaction_error(
+                    "config_stage_unsafe",
+                    "config stage file changed while staging",
+                    phase="stage",
+                )
+            plan.stage_identity = _identity(staged_metadata)
             if failure_injector is not None:
                 failure_injector("after_stage_fsync")
                 failure_injector(
@@ -1529,7 +1529,12 @@ def _file_results(plans: Sequence[_StagedConfig]) -> tuple[ConfigFileCommitResul
 
 
 def _validate_replace_inputs(plan: _StagedConfig) -> None:
-    if plan.parent_fd < 0 or plan.stage_name is None or plan.stage_identity is None:
+    if (
+        plan.parent_fd < 0
+        or plan.stage_name is None
+        or plan.stage_identity is None
+        or plan.stage_fd < 0
+    ):
         raise _transaction_error(
             "config_stage_changed",
             "config stage is unavailable before replacement",
@@ -1548,6 +1553,7 @@ def _validate_replace_inputs(plan: _StagedConfig) -> None:
             phase="replace",
         )
     try:
+        opened_stage_metadata = os.fstat(plan.stage_fd)
         stage_metadata = os.stat(
             plan.stage_name,
             dir_fd=plan.parent_fd,
@@ -1560,7 +1566,10 @@ def _validate_replace_inputs(plan: _StagedConfig) -> None:
             phase="replace",
             cause=cause,
         )
-    if _identity(stage_metadata) != plan.stage_identity:
+    if (
+        _identity(opened_stage_metadata) != plan.stage_identity
+        or _identity(stage_metadata) != plan.stage_identity
+    ):
         raise _transaction_error(
             "config_stage_changed",
             "config stage identity changed before replacement",
@@ -1687,6 +1696,9 @@ def _commit_staged_configs(
     finally:
         for plan in changed:
             _remove_owned_stage(plan)
+            if plan.stage_fd >= 0:
+                os.close(plan.stage_fd)
+                plan.stage_fd = -1
             if plan.parent_fd >= 0:
                 os.close(plan.parent_fd)
                 plan.parent_fd = -1

@@ -17,6 +17,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+import config_layering as layering  # noqa: E402
 from config_layering import (  # noqa: E402
     LOCK_OWNER_TOKEN,
     MAX_SAFE_INTEGER,
@@ -410,6 +411,101 @@ class LayeredConfigTransactionTest(unittest.TestCase):
             self.assertEqual({"value": 1}, json.loads(config.read_text()))
             assert swapped_stage is not None
             self.assertTrue(swapped_stage.exists())
+
+    def test_stage_descriptors_close_on_success_failure_and_partial_commit(self) -> None:
+        with self.isolated() as (root, _home, _project):
+            success = root / "success.json"
+            failure = root / "failure.json"
+            first = root / "first.json"
+            second = root / "second.json"
+            for path in (success, failure, first, second):
+                _write_config(path, {"value": 1})
+
+            real_open = layering.os.open
+            real_close = layering.os.close
+            stage_opens: list[int] = []
+            stage_closes: list[int] = []
+            active_stage_fds: set[int] = set()
+
+            def tracked_open(path, *args, **kwargs):
+                descriptor = real_open(path, *args, **kwargs)
+                if isinstance(path, str) and path.startswith(STAGE_PREFIX):
+                    stage_opens.append(descriptor)
+                    active_stage_fds.add(descriptor)
+                return descriptor
+
+            def tracked_close(descriptor: int) -> None:
+                if descriptor in active_stage_fds:
+                    stage_closes.append(descriptor)
+                    active_stage_fds.remove(descriptor)
+                real_close(descriptor)
+
+            with mock.patch.object(
+                layering.os,
+                "open",
+                side_effect=tracked_open,
+            ), mock.patch.object(
+                layering.os,
+                "close",
+                side_effect=tracked_close,
+            ):
+                self.assertTrue(
+                    edit_config_batch(
+                        (
+                            ConfigFileParticipant(
+                                success,
+                                lambda data: data.update({"value": 2}),
+                            ),
+                        )
+                    ).committed
+                )
+
+                def fail_before_replace(phase: str) -> None:
+                    if phase == "before_replace":
+                        raise RuntimeError("injected pre-replace failure")
+
+                with self.assertRaises(ConfigTransactionError):
+                    edit_config_batch(
+                        (
+                            ConfigFileParticipant(
+                                failure,
+                                lambda data: data.update({"value": 2}),
+                            ),
+                        ),
+                        _failure_injector=fail_before_replace,
+                    )
+
+                replaced = 0
+
+                def fail_after_first_replace(phase: str) -> None:
+                    nonlocal replaced
+                    if phase == "after_replace":
+                        replaced += 1
+                        if replaced == 1:
+                            raise RuntimeError("injected partial commit")
+
+                with self.assertRaises(ConfigTransactionError) as partial:
+                    edit_config_batch(
+                        (
+                            ConfigFileParticipant(
+                                first,
+                                lambda data: data.update({"value": 2}),
+                            ),
+                            ConfigFileParticipant(
+                                second,
+                                lambda data: data.update({"value": 2}),
+                            ),
+                        ),
+                        _failure_injector=fail_after_first_replace,
+                    )
+                self.assertEqual("partial_commit", partial.exception.reason_code)
+
+            self.assertEqual(4, len(stage_opens))
+            self.assertEqual(stage_opens, stage_closes)
+            self.assertEqual(set(), active_stage_fds)
+            self.assertFalse(
+                any(item.name.startswith(STAGE_PREFIX) for item in root.iterdir())
+            )
 
     def test_malformed_state_fails_closed_and_bool_number_change_commits(self) -> None:
         with self.isolated() as (root, _home, _project):
