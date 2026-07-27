@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
-import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
+import { getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
+import { DELEGATION_HOOK_EVENTS } from "../shared/delegation-terminal-dispatch.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function matchingSessionDelegationKeys(activeByDelegation, sid, subagentType) {
     const matches = [];
@@ -178,6 +179,7 @@ export function createDelegationConcurrencyGuardHook(options) {
     return {
         id: "delegation-concurrency-guard",
         priority: 294,
+        events: DELEGATION_HOOK_EVENTS,
         async event(type, payload) {
             if (!options.enabled) {
                 return;
@@ -235,7 +237,7 @@ export function createDelegationConcurrencyGuardHook(options) {
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
-                    const childLink = clearDelegationChildSessionLink(sid);
+                    const childLink = getDelegationChildSessionLink(sid);
                     if (childLink) {
                         releaseLinkedDelegation({
                             parentSessionId: childLink.parentSessionId,

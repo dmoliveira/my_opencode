@@ -102,6 +102,42 @@ export function getDelegationChildSessionLink(
   return childSessionLinks.get(String(childSessionId).trim()) ?? null
 }
 
+export function delegationTerminalChildSessionId(
+  eventType: string,
+  payload: unknown,
+): string {
+  const source = payload && typeof payload === "object"
+    ? payload as {
+        properties?: {
+          info?: {
+            id?: unknown
+            role?: unknown
+            sessionID?: unknown
+            sessionId?: unknown
+            error?: unknown
+            time?: { completed?: unknown }
+          }
+        }
+      }
+    : {}
+  const info = source.properties?.info
+  if (eventType === "session.deleted") {
+    return String(info?.id ?? "").trim()
+  }
+  if (eventType !== "message.updated") {
+    return ""
+  }
+  if (String(info?.role ?? "").toLowerCase().trim() !== "assistant") {
+    return ""
+  }
+  const completed = Number.isFinite(Number(info?.time?.completed ?? Number.NaN))
+  const failed = info?.error !== undefined && info?.error !== null
+  if (!completed && !failed) {
+    return ""
+  }
+  return String(info?.sessionID ?? info?.sessionId ?? "").trim()
+}
+
 export function clearDelegationChildSessionLink(
   childSessionId: string,
 ): DelegationChildSessionLink | null {

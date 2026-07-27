@@ -18,5 +18,6 @@ export interface DelegationChildSessionLink {
 }
 export declare function registerDelegationChildSession(payload: SessionCreatedLike): DelegationChildSessionLink | null;
 export declare function getDelegationChildSessionLink(childSessionId: string): DelegationChildSessionLink | null;
+export declare function delegationTerminalChildSessionId(eventType: string, payload: unknown): string;
 export declare function clearDelegationChildSessionLink(childSessionId: string): DelegationChildSessionLink | null;
 export {};

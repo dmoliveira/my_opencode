@@ -1,6 +1,7 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { readToolAfterOutputText } from "../shared/tool-after-output.js";
 import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
+import { DELEGATION_HOOK_EVENTS } from "../shared/delegation-terminal-dispatch.js";
 import { clearActiveDelegation, clearDelegationSession, configureDelegationRuntimeState, registerDelegationOutcome, registerDelegationStart, } from "../shared/delegation-runtime-state.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
@@ -24,6 +25,7 @@ export function createSubagentTelemetryTimelineHook(options) {
     return {
         id: "subagent-telemetry-timeline",
         priority: 296,
+        events: DELEGATION_HOOK_EVENTS,
         async event(type, payload) {
             if (!options.enabled) {
                 return;
@@ -91,7 +93,6 @@ export function createSubagentTelemetryTimelineHook(options) {
                 if (!record) {
                     return;
                 }
-                clearDelegationChildSessionLink(childSessionId);
                 const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                     ? eventPayload.directory
                     : options.directory;
@@ -112,7 +113,7 @@ export function createSubagentTelemetryTimelineHook(options) {
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
-                    const childLink = clearDelegationChildSessionLink(sid);
+                    const childLink = getDelegationChildSessionLink(sid);
                     if (childLink) {
                         const record = registerDelegationOutcome({
                             sessionId: childLink.parentSessionId,

@@ -94,6 +94,12 @@ import {
 } from "./hooks/shared/llm-decision-runtime.js";
 import { safeCreateHook } from "./hooks/shared/safe-create-hook.js";
 import { dispatchGatewayHookEvent } from "./hooks/shared/hook-dispatch.js";
+import {
+  clearDelegationChildSessionLink,
+  delegationTerminalChildSessionId,
+  getDelegationChildSessionLink,
+} from "./hooks/shared/delegation-child-session.js";
+import { dispatchDelegationTerminalHooks } from "./hooks/shared/delegation-terminal-dispatch.js";
 import { isCriticalGatewayHookId } from "./hooks/shared/hook-failure.js";
 import { loadAgentMetadata } from "./hooks/shared/agent-metadata.js";
 import { createWorkflowConformanceGuardHook } from "./hooks/workflow-conformance-guard/index.js";
@@ -1404,23 +1410,49 @@ export default function GatewayCorePlugin(
 
   // Dispatches plugin lifecycle event to all enabled hooks in order.
   async function event(input: GatewayEventPayload): Promise<void> {
-    if (shouldWriteDispatchAudit("event_dispatch", input.event.type)) {
+    const eventType = input.event.type;
+    const payload = {
+      properties: input.event.properties,
+      directory,
+    };
+    if (shouldWriteDispatchAudit("event_dispatch", eventType)) {
       writeGatewayEventAudit(directory, {
         hook: "gateway-core",
         stage: "dispatch",
         reason_code: "event_dispatch",
-        event_type: input.event.type,
+        event_type: eventType,
         hook_count: hooks.length,
       });
     }
-    for (const hook of hooksForEvent(hooks, input.event.type)) {
+    const selectedHooks = hooksForEvent(hooks, eventType);
+    const terminalChildSessionId = delegationTerminalChildSessionId(
+      eventType,
+      payload,
+    );
+    const terminalChildLink = terminalChildSessionId
+      ? getDelegationChildSessionLink(terminalChildSessionId)
+      : null;
+    if (terminalChildLink) {
+      await dispatchDelegationTerminalHooks({
+        hooks: selectedHooks,
+        dispatch: (hook) =>
+          dispatchGatewayHookEvent({
+            hook,
+            eventType,
+            payload,
+            directory,
+          }),
+        cleanup: () => {
+          clearDelegationChildSessionLink(terminalChildSessionId);
+        },
+      });
+      return;
+    }
+    for (const hook of selectedHooks) {
       const result = await dispatchGatewayHookEvent({
         hook,
-        eventType: input.event.type,
-        payload: {
-          properties: input.event.properties,
-          directory,
-        },
+        eventType,
+        payload,
         directory,
       });
       if (!result.ok && (result.critical || result.blocked)) {

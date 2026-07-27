@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
-import { clearDelegationChildSessionLink, getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
+import { getDelegationChildSessionLink, registerDelegationChildSession, } from "../shared/delegation-child-session.js";
+import { DELEGATION_HOOK_EVENTS } from "../shared/delegation-terminal-dispatch.js";
 import { annotateDelegationMetadata, extractDelegationChildRunId, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function fallbackDelegationKey(sid, args) {
     const subagentType = String(args?.subagent_type ?? "").toLowerCase().trim();
@@ -306,6 +307,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
     return {
         id: "subagent-lifecycle-supervisor",
         priority: 295,
+        events: DELEGATION_HOOK_EVENTS,
         async event(type, payload) {
             if (!options.enabled) {
                 return;
@@ -493,7 +495,7 @@ export function createSubagentLifecycleSupervisorHook(options) {
             if (type === "session.deleted") {
                 const sid = sessionId((payload ?? {}));
                 if (sid) {
-                    const childLink = clearDelegationChildSessionLink(sid);
+                    const childLink = getDelegationChildSessionLink(sid);
                     if (childLink) {
                         finalizeLinkedLifecycle({
                             parentSessionId: childLink.parentSessionId,
