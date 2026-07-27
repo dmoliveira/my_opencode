@@ -187,14 +187,16 @@ Protected branches (`main`, `master`) in the primary project folder are edit-blo
 
 Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, `docs/operator-playbook.md` for canonical operator flows, and `docs/parallel-wt-playbook.md` for the worktree-first execution checklist.
 
-Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
+Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`.
+
+`firecrawl` is a retired, disable-only compatibility target. `/mcp disable firecrawl` safely disables an existing custom entry without creating or replacing one.
 
 Aliases: `ghgrep` -> `gh_grep`, `exa` -> `exa_search`.
 
 Profiles:
 - `minimal` -> disable all managed MCPs
 - `research` -> `context7`, `gh_grep`
-- `web` -> `playwright`, `exa_search`, `firecrawl`
+- `web` -> `playwright`, `exa_search`
 - `all` -> enable all managed MCPs
 
 ## Repo layout 📦

@@ -110,6 +110,7 @@ from gateway_live_relaunch_smoke import (  # type: ignore
 from gateway_local_plugin_runtime_smoke import audit_has_reason_code  # type: ignore
 from harness_wave2_task4_smoke import (  # type: ignore
     MCP_REQUIRED_TOOLS,
+    MCP_REQUIRED_TOOL_COUNT,
     PROJECT_FIXTURES,
     audit_summary,
     evaluate_mcp_inventory,
@@ -431,13 +432,18 @@ exit 0
         cfg = tmp / "opencode.json"
         shutil.copy2(BASE_CONFIG, cfg)
 
+        representative_tools = list(MCP_REQUIRED_TOOLS.values())
         complete_inventory = evaluate_mcp_inventory(
             {"name": "Playwright"},
-            list(MCP_REQUIRED_TOOLS.values()),
+            representative_tools
+            + [
+                f"synthetic_playwright_tool_{index}"
+                for index in range(MCP_REQUIRED_TOOL_COUNT - len(representative_tools))
+            ],
         )
         expect(
             complete_inventory.get("pass") is True,
-            "task4 MCP inventory evaluator should accept every capability representative",
+            "task4 MCP inventory evaluator should accept exactly 68 tools and every capability representative",
         )
         incomplete_inventory = evaluate_mcp_inventory(
             {"name": "Playwright"},
@@ -1961,7 +1967,6 @@ exit 0
             "gh_grep",
             "playwright",
             "exa_search",
-            "firecrawl",
             "github",
         ):
             expect(
@@ -1969,6 +1974,12 @@ exit 0
                 == "enabled",
                 f"{server_name} should be enabled in all profile",
             )
+        retired_firecrawl = report.get("servers", {}).get("firecrawl", {})
+        expect(
+            retired_firecrawl.get("status") in {"absent", "disabled"}
+            and retired_firecrawl.get("reason") == "retired_disable_only",
+            "all profile should keep Firecrawl absent or disabled as a retired target",
+        )
 
         # MCP alias should resolve to canonical target names.
         result = run_script(MCP_SCRIPT, cfg, home, "disable", "exa")

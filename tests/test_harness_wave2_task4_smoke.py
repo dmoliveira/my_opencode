@@ -16,6 +16,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import harness_wave2_task4_smoke as harness
+import playwright_defaults as playwright
 
 
 def process_result(returncode: int, stdout: str = "", stderr: str = "") -> dict:
@@ -27,6 +28,21 @@ def process_result(returncode: int, stdout: str = "", stderr: str = "") -> dict:
         "timed_out": False,
         "duration_seconds": 0.01,
     }
+
+
+def playwright_cli_metadata(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "version": playwright.PLAYWRIGHT_CLI_VERSION,
+        "license": playwright.PLAYWRIGHT_CLI_LICENSE,
+        "engines": {"node": playwright.PLAYWRIGHT_CLI_NODE_RANGE},
+        "dist": {
+            "integrity": playwright.PLAYWRIGHT_CLI_INTEGRITY,
+            "shasum": playwright.PLAYWRIGHT_CLI_SHASUM,
+        },
+        "scripts": {"test": "playwright test"},
+    }
+    payload.update(overrides)
+    return payload
 
 
 def write_successful_audit(path: Path) -> None:
@@ -51,6 +67,243 @@ def write_successful_audit(path: Path) -> None:
 
 
 class HarnessWave2Task4SmokeTest(unittest.TestCase):
+    def test_cli_mode_is_explicit_and_all_keeps_legacy_components(self) -> None:
+        args = harness.parse_args(["cli", "--scenario-label", "wave6-check"])
+        self.assertEqual("cli", args.mode)
+        self.assertEqual("wave6-check", args.scenario_label)
+        self.assertEqual(("cli",), harness.selected_components("cli"))
+        self.assertEqual(("mcp", "projects"), harness.selected_components("all"))
+
+    def test_mcp_inventory_requires_exact_tool_count_and_representatives(self) -> None:
+        representatives = list(harness.MCP_REQUIRED_TOOLS.values())
+        filler = [
+            f"synthetic_tool_{index}"
+            for index in range(harness.MCP_REQUIRED_TOOL_COUNT - len(representatives))
+        ]
+        exact = representatives + filler
+        self.assertTrue(
+            harness.evaluate_mcp_inventory({"name": "Playwright"}, exact)["pass"]
+        )
+        self.assertFalse(
+            harness.evaluate_mcp_inventory({"name": "Playwright"}, exact[:-1])["pass"]
+        )
+        self.assertFalse(
+            harness.evaluate_mcp_inventory(
+                {"name": "Playwright"}, exact + ["one_too_many"]
+            )["pass"]
+        )
+        self.assertFalse(
+            harness.evaluate_mcp_inventory(
+                {"name": "Playwright"}, exact[1:] + ["replacement"]
+            )["pass"]
+        )
+
+    def test_mcp_lifecycle_drift_fails_before_package_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            captured_env: dict[str, str] = {}
+
+            def fake_process(command, **kwargs):
+                captured_env.update(kwargs["env"])
+                return process_result(
+                    0,
+                    json.dumps(
+                        {
+                            "version": harness.PLAYWRIGHT_VERSION,
+                            "license": harness.PLAYWRIGHT_LICENSE,
+                            "dist": {"integrity": harness.PLAYWRIGHT_INTEGRITY},
+                            "gitHead": harness.PLAYWRIGHT_GIT_HEAD,
+                            "scripts": {"postinstall": "curl example.invalid"},
+                        }
+                    ),
+                )
+
+            with (
+                patch.object(harness, "run_process", side_effect=fake_process),
+                patch.object(harness.subprocess, "Popen") as popen,
+            ):
+                report = harness.run_mcp_probe(
+                    output_dir=Path(raw_tmp) / "evidence",
+                    timeout=30,
+                    secrets=[],
+                )
+
+        self.assertEqual("FAIL", report["result"])
+        self.assertEqual(["postinstall"], report["provenance"]["lifecycle_scripts"])
+        self.assertEqual("true", captured_env["npm_config_ignore_scripts"])
+        self.assertTrue(captured_env["npm_config_userconfig"].endswith("user.npmrc"))
+        self.assertNotIn("OPENAI_API_KEY", captured_env)
+        popen.assert_not_called()
+
+    def test_mcp_log_tail_is_byte_bounded(self) -> None:
+        lines = harness.deque()
+        retained = harness._append_bounded_line(
+            lines, "x" * (harness.CLI_LOG_BYTES * 2), 0
+        )
+        self.assertLessEqual(retained, harness.CLI_LOG_BYTES)
+        self.assertLessEqual(
+            len("".join(lines).encode("utf-8")), harness.CLI_LOG_BYTES
+        )
+
+    def test_process_identity_change_is_not_treated_as_owned(self) -> None:
+        with patch.object(harness, "_process_identity", return_value="new-identity"):
+            self.assertFalse(harness._identity_alive(42, "old-identity"))
+        with (
+            patch.object(harness, "_process_group_members", return_value={42}),
+            patch.object(harness, "_process_identity", return_value="new-identity"),
+            patch.object(harness.os, "killpg") as kill_group,
+            patch.object(harness.os, "kill") as kill_pid,
+        ):
+            harness._terminate_owned_processes({42: "old-identity"}, {42})
+        kill_group.assert_not_called()
+        kill_pid.assert_not_called()
+
+    def test_cli_provenance_mismatch_prevents_package_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = Path(raw_tmp)
+            calls: list[list[str]] = []
+
+            def fake_process(command, **_kwargs):
+                command = list(command)
+                calls.append(command)
+                if command == ["node", "--version"]:
+                    return process_result(0, "v22.0.0\n")
+                if command[:2] == ["npm", "view"]:
+                    return process_result(
+                        0,
+                        json.dumps(playwright_cli_metadata(version="0.1.18")),
+                    )
+                raise AssertionError("package code must not run after metadata drift")
+
+            with (
+                patch.object(harness.shutil, "which", return_value="/fake/tool"),
+                patch.object(harness, "run_process", side_effect=fake_process),
+                patch.object(
+                    harness, "tracked_worktree_fingerprint", return_value="stable"
+                ),
+            ):
+                report = harness.run_cli_probe(
+                    repo_root=REPO_ROOT,
+                    output_dir=root / "evidence",
+                    scenario_label="wave6",
+                    timeout=30,
+                    secrets=[],
+                )
+
+        self.assertEqual("FAIL", report["result"])
+        self.assertFalse(report["provenance"]["verified"])
+        self.assertEqual(["node-version", "npm-view"], [item["label"] for item in report["commands"]])
+        self.assertTrue(report["sandbox_cleanup_confirmed"])
+        self.assertFalse(any(command[0] == "npx" for command in calls))
+
+    def test_cli_todo_flow_uses_unique_session_scoped_close_and_bounded_artifacts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = Path(raw_tmp)
+            calls: list[list[str]] = []
+
+            def fake_process(command, *, cwd, **_kwargs):
+                command = list(command)
+                calls.append(command)
+                if command == ["node", "--version"]:
+                    return process_result(0, "v22.0.0\n")
+                if command[:2] == ["npm", "view"]:
+                    return process_result(0, json.dumps(playwright_cli_metadata()))
+                if command[-1] == "--version":
+                    return process_result(0, f"{playwright.PLAYWRIGHT_CLI_VERSION}\n")
+                session_arg = next(item for item in command if item.startswith("-s="))
+                session = session_arg.removeprefix("-s=")
+                if "open" in command:
+                    snapshot = cwd / ".playwright-cli" / "open.yml"
+                    snapshot.parent.mkdir(parents=True, exist_ok=True)
+                    snapshot.write_text(
+                        '- textbox "New todo" [ref=e4]\n- button "Add" [ref=e5]\n',
+                        encoding="utf-8",
+                    )
+                    return process_result(
+                        0,
+                        json.dumps(
+                            {
+                                "session": session,
+                                "result": {
+                                    "snapshot": {
+                                        "file": ".playwright-cli/open.yml"
+                                    }
+                                },
+                            }
+                        ),
+                    )
+                if "snapshot" in command:
+                    return process_result(
+                        0,
+                        json.dumps(
+                            {"snapshot": "status: 1 items\nlistitem: Ship Wave 6"}
+                        ),
+                    )
+                if "screenshot" in command:
+                    screenshot = cwd / ".playwright-cli" / "todo.png"
+                    screenshot.write_bytes(b"synthetic-png")
+                    return process_result(
+                        0,
+                        json.dumps(
+                            {
+                                "result": "- [Screenshot](.playwright-cli/todo.png)"
+                            }
+                        ),
+                    )
+                if "close" in command:
+                    return process_result(
+                        0, json.dumps({"session": session, "status": "closed"})
+                    )
+                if "fill" in command or "click" in command:
+                    return process_result(0, "{}")
+                raise AssertionError(f"unexpected command: {command}")
+
+            with (
+                patch.object(harness.shutil, "which", return_value="/fake/tool"),
+                patch.object(harness, "run_process", side_effect=fake_process),
+                patch.object(
+                    harness, "tracked_worktree_fingerprint", return_value="stable"
+                ),
+            ):
+                report = harness.run_cli_probe(
+                    repo_root=REPO_ROOT,
+                    output_dir=root / "evidence",
+                    scenario_label="wave6",
+                    timeout=30,
+                    secrets=[],
+                )
+
+            self.assertEqual("PASS", report["result"])
+            self.assertTrue(report["session"].startswith("wave6-"))
+            self.assertTrue(report["scoped_close"])
+            self.assertEqual([], report["surviving_owned_pids"])
+            self.assertTrue(report["sandbox_only_writes"])
+            self.assertTrue(report["sandbox_cleanup_confirmed"])
+            self.assertEqual(
+                [
+                    "node-version",
+                    "npm-view",
+                    "version",
+                    "open",
+                    "fill",
+                    "click",
+                    "snapshot",
+                    "screenshot",
+                    "close",
+                ],
+                [item["label"] for item in report["commands"]],
+            )
+            self.assertTrue(all(not path.startswith("/") for path in report["artifact_paths"]))
+            cli_commands = [command for command in calls if command[0] == "npx"]
+            session_args = {
+                item for command in cli_commands for item in command if item.startswith("-s=")
+            }
+            self.assertEqual({f"-s={report['session']}"}, session_args)
+            flattened = " ".join(item for command in cli_commands for item in command)
+            self.assertNotIn("close-all", flattened)
+            self.assertNotIn("kill-all", flattened)
+
     def test_config_uses_one_exact_tuple_and_no_project_shim(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

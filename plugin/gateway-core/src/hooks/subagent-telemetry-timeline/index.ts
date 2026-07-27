@@ -6,6 +6,7 @@ import {
   getDelegationChildSessionLink,
   registerDelegationChildSession,
 } from "../shared/delegation-child-session.js"
+import { DELEGATION_HOOK_EVENTS } from "../shared/delegation-terminal-dispatch.js"
 import {
   clearActiveDelegation,
   clearDelegationSession,
@@ -115,6 +116,7 @@ export function createSubagentTelemetryTimelineHook(options: {
   return {
     id: "subagent-telemetry-timeline",
     priority: 296,
+    events: DELEGATION_HOOK_EVENTS,
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled) {
         return
@@ -188,7 +190,6 @@ export function createSubagentTelemetryTimelineHook(options: {
         if (!record) {
           return
         }
-        clearDelegationChildSessionLink(childSessionId)
         const directory =
           typeof eventPayload.directory === "string" && eventPayload.directory.trim()
             ? eventPayload.directory
@@ -210,7 +211,7 @@ export function createSubagentTelemetryTimelineHook(options: {
       if (type === "session.deleted") {
         const sid = sessionId((payload ?? {}) as SessionDeletedPayload)
         if (sid) {
-          const childLink = clearDelegationChildSessionLink(sid)
+          const childLink = getDelegationChildSessionLink(sid)
           if (childLink) {
             const record = registerDelegationOutcome(
               {

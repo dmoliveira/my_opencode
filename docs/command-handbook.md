@@ -17,7 +17,6 @@ Use these directly in OpenCode:
 /mcp profile ghgrep
 /mcp profile playwright
 /mcp profile exa
-/mcp profile firecrawl
 /mcp profile github
 /mcp profile web
 /mcp profile all
@@ -29,7 +28,6 @@ Use these directly in OpenCode:
 /mcp disable playwright
 /mcp enable exa_search
 /mcp disable exa_search
-/mcp enable firecrawl
 /mcp disable firecrawl
 /mcp enable github
 /mcp disable github
@@ -37,7 +35,24 @@ Use these directly in OpenCode:
 /mcp disable all
 ```
 
-For browser-first work, start with:
+For browser-first coding-agent work, start with:
+
+```text
+/devtools install playwright-cli
+npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
+```
+
+The devtools command verifies the exact package version, license, integrity, Node requirement, and lifecycle-script posture before it executes package code. It uses an isolated npm config and owner-only cache; `install all` never includes this optional target.
+
+Reuse the same session for each command, then close only that session:
+
+```text
+npx --yes @playwright/cli@0.1.17 -s=<unique-session> close
+```
+
+Use `close-all` or `kill-all` only in a disposable sandbox with a fully owned `HOME`, cache, and process group. Do not install external CLI skill bundles.
+
+Choose the MCP path when its integrated tool surface is useful:
 
 ```text
 /browser ensure --json
@@ -49,12 +64,14 @@ For browser-first work, start with:
 The default Playwright MCP profile is configured with capability flags for `testing`, `network`, `storage`, `vision`, `devtools`, and `pdf` so the browser tool surface stays broad enough for assertions, auth-state control, canvas fallback, and evidence capture.
 
 Advanced posture:
-- Use Playwright MCP first for standard website and application UX audits.
-- Use `playwright-cli` first for advanced canvas, WebGL, browser-gaming, or long exploratory loops.
-- Install local CLI skills with `playwright-cli install --skills` when you want the agent to discover the advanced CLI command surface directly.
+- Use the verified `playwright-cli` path first for standard website/application audits and token-efficient repeated interactions.
+- Keep sessions unique and use scoped `close` cleanup.
+- Use Playwright MCP for flows that need integrated network, storage, assertion, vision, or host-managed browser tools.
 - Treat `/browser ensure --json` as the main readiness/remediation step; use `/browser doctor --json` and `/mcp doctor --json` to inspect config, capability coverage, and warnings.
 
-Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `firecrawl`, `github`.
+Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`.
+
+`firecrawl` is retired and disable-only. `/mcp disable firecrawl` changes only `enabled` on an existing custom entry; it does not create a default or print the custom command or URL. Enable requests fail without rewriting the config.
 
 Default posture: all managed MCPs start disabled until you enable a targeted profile or individual server.
 
@@ -67,9 +84,8 @@ Profiles:
 - `ghgrep` -> `gh_grep`
 - `playwright` -> `playwright`
 - `exa` -> `exa_search`
-- `firecrawl` -> `firecrawl`
 - `github` -> `github`
-- `web` -> `playwright`, `exa_search`, `firecrawl`
+- `web` -> `playwright`, `exa_search`
 - `all` -> enables all managed MCPs
 
 ## Plugin control inside OpenCode 🎛️

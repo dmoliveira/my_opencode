@@ -4,16 +4,17 @@ Use this guide when the agent should turn a broad “test the UX” request into
 
 ## Operating split
 
-- **Playwright MCP first** for normal websites, SPAs, dashboards, forms, and responsive UX passes.
-- **`playwright-cli` first** for advanced canvas, WebGL, browser-gaming, or longer exploratory loops where token efficiency and persistent sessions matter.
+- **Verified `playwright-cli` first** for normal websites, SPAs, dashboards, forms, responsive checks, and longer exploratory loops.
+- **Playwright MCP** when integrated network, storage, assertion, vision, or host-managed browser tools materially simplify the flow.
+- Run `/devtools install playwright-cli` before the CLI path, use a unique session, and close only that session.
 
 ## Scenario matrix
 
 | Scenario | Default path | Why |
 | --- | --- | --- |
-| Marketing site / docs / landing page | MCP | Fast snapshots, assertions, responsive checks |
-| Product flow / dashboard / settings | MCP | Deterministic state checks, network/storage controls |
-| Login / auth / returning session | MCP | Storage-state and network-aware validation |
+| Marketing site / docs / landing page | `playwright-cli` | Compact snapshots and repeated interactions |
+| Product flow / dashboard / settings | `playwright-cli` | Persistent, token-efficient coding-agent flow |
+| Login / auth / returning session | `playwright-cli` or MCP | CLI state reuse; MCP when integrated storage control is needed |
 | Offline / retry / degraded backend | MCP | Route mocking and network-state control |
 | Canvas / WebGL / browser game | `playwright-cli` | Coordinate and session-heavy exploration |
 | Long bug reproduction / walkthrough evidence | `playwright-cli` or MCP+video | Lower token cost and better long-session ergonomics |
@@ -62,6 +63,9 @@ Use this guide when the agent should turn a broad “test the UX” request into
 
 ## Tool-selection rules
 
+- Verify the exact CLI package with `/devtools install playwright-cli` before use.
+- Use a unique `-s=<session>` value for each owned flow and finish with scoped `close`.
+- Do not install external CLI skill bundles. Use `close-all` or `kill-all` only in a fully owned disposable sandbox.
 - Prefer accessibility snapshots and refs first.
 - Prefer assertions over screenshots for pass/fail claims.
 - Use screenshots when refs are missing or you need visual evidence.

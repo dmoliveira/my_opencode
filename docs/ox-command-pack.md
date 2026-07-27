@@ -79,15 +79,16 @@ Examples:
 Recommended first step for browser-first work:
 
 ```text
-/browser ensure --json
-/mcp profile playwright
+/devtools install playwright-cli
+npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
 ```
 
-This removes the common first-run friction where the agent only says Playwright/browser tooling is unavailable. `ensure` normalizes the selected provider back to `playwright`, reports exact missing binaries, and points to the next remediation command instead of leaving the workflow stuck.
+The install target verifies the exact package provenance in an isolated npm environment. Reuse the unique session for the audit and end it with `npx --yes @playwright/cli@0.1.17 -s=<unique-session> close`.
 
 Execution split:
-- Use Playwright MCP for standard browser-first site and app audits.
-- Use `playwright-cli` first for advanced canvas, WebGL, browser-game, or long persistent exploratory loops.
+- Use the verified `playwright-cli` path first for standard browser-first site/app audits and long persistent exploratory loops.
+- Use `/browser ensure --json` and `/mcp profile playwright` when integrated MCP network, storage, assertion, or vision tools are the better fit.
+- Do not install external CLI skill bundles; use scoped `close`. Reserve `close-all` and `kill-all` for a fully owned disposable sandbox.
 - Keep `/ox-ux` as the routing contract either way so the agent still frames the work as a full UX audit instead of ad hoc browser poking.
 
 Detailed scenario templates: `docs/playwright-ux-scenarios.md`

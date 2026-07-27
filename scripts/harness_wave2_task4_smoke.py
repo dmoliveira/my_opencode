@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Run pinned Playwright MCP and configured-tuple Wave 5 model smokes."""
+"""Run verified Playwright CLI/MCP and configured-tuple model smokes."""
 
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
+import http.server
 import json
 import os
 import queue
+import re
 import shutil
 import signal
 import stat
@@ -15,27 +18,41 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
+from collections import deque
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from playwright_defaults import (
+    PLAYWRIGHT_CLI_COMMAND,
+    PLAYWRIGHT_CLI_LIFECYCLE_SCRIPTS,
+    PLAYWRIGHT_CLI_METADATA_FIELDS,
+    PLAYWRIGHT_CLI_MIN_NODE_MAJOR,
+    PLAYWRIGHT_CLI_PACKAGE_SPEC,
+    PLAYWRIGHT_CLI_VERSION_COMMAND,
+    PLAYWRIGHT_CLI_VERSION_OUTPUT,
     PLAYWRIGHT_MCP_CAPABILITIES,
     PLAYWRIGHT_MCP_COMMAND,
+    PLAYWRIGHT_MCP_GIT_HEAD,
+    PLAYWRIGHT_MCP_INTEGRITY,
+    PLAYWRIGHT_MCP_LICENSE,
     PLAYWRIGHT_MCP_PACKAGE_SPEC,
+    PLAYWRIGHT_MCP_TOOL_COUNT,
+    PLAYWRIGHT_MCP_VERSION,
+    inspect_playwright_cli_metadata,
+    playwright_cli_npm_environment,
 )
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 EXACT_MODEL = "openai/gpt-5.4-mini"
 MCP_PROTOCOL_VERSION = "2025-11-25"
-PLAYWRIGHT_VERSION = "0.0.78"
-PLAYWRIGHT_LICENSE = "Apache-2.0"
-PLAYWRIGHT_INTEGRITY = (
-    "sha512-XLTUeA6mEN9sQ+hJ4dfG8EIkDbxS0K3Trc2RBkUJuf02TgE2FQRNTMtq/"
-    "aJfhyRMINsRl/Ybc4sxcWLtFn4/TQ=="
-)
-PLAYWRIGHT_GIT_HEAD = "5f8fc00210b27b4407c375b59cda4838045d429c"
+PLAYWRIGHT_VERSION = PLAYWRIGHT_MCP_VERSION
+PLAYWRIGHT_LICENSE = PLAYWRIGHT_MCP_LICENSE
+PLAYWRIGHT_INTEGRITY = PLAYWRIGHT_MCP_INTEGRITY
+PLAYWRIGHT_GIT_HEAD = PLAYWRIGHT_MCP_GIT_HEAD
+MCP_REQUIRED_TOOL_COUNT = PLAYWRIGHT_MCP_TOOL_COUNT
 SELECTED_GATEWAY_HOOK = "noninteractive-shell-guard"
 MCP_REQUIRED_TOOLS = {
     "core": "browser_navigate",
@@ -47,6 +64,9 @@ MCP_REQUIRED_TOOLS = {
     "pdf": "browser_pdf_save",
 }
 SENSITIVE_ENV_MARKERS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "AUTH")
+CLI_LOG_BYTES = 128 * 1024
+CLI_SNAPSHOT_BYTES = 1024 * 1024
+CLI_SCREENSHOT_BYTES = 5 * 1024 * 1024
 
 PROJECT_FIXTURES: dict[str, dict[str, Any]] = {
     "python": {
@@ -109,10 +129,10 @@ test("collapses separators and trims their edges", () => {
 }
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "mode", choices=("mcp", "projects", "all"), nargs="?", default="all"
+        "mode", choices=("cli", "mcp", "projects", "all"), nargs="?", default="all"
     )
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument(
@@ -121,9 +141,16 @@ def parse_args() -> argparse.Namespace:
         default=REPO_ROOT / "runtime" / "harness-wave-5" / "exact-model-e2e",
     )
     parser.add_argument("--model", default=EXACT_MODEL)
+    parser.add_argument("--scenario-label", default="wave6")
     parser.add_argument("--timeout-seconds", type=int, default=240)
     parser.add_argument("--json", action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def selected_components(mode: str) -> tuple[str, ...]:
+    if mode == "all":
+        return ("mcp", "projects")
+    return (mode,)
 
 
 def sha256_file(path: Path) -> str:
@@ -149,15 +176,22 @@ def run_process(
         start_new_session=True,
     )
     timed_out = False
+    process_group = process.pid
     try:
         stdout, stderr = process.communicate(timeout=max(1, timeout))
     except subprocess.TimeoutExpired:
         timed_out = True
-        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            os.killpg(process_group, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
         try:
             stdout, stderr = process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            try:
+                os.killpg(process_group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             stdout, stderr = process.communicate()
     return {
         "command": command,
@@ -166,6 +200,8 @@ def run_process(
         "stderr": stderr or "",
         "timed_out": timed_out,
         "duration_seconds": round(time.monotonic() - started, 3),
+        "process_pid": process.pid,
+        "process_group": process_group,
     }
 
 
@@ -909,13 +945,49 @@ def run_project_fixture(
     }
 
 
-def read_stream(stream: Any, sink: queue.Queue[str | None], lines: list[str]) -> None:
+def _append_bounded_line(lines: deque[str], line: str, retained_bytes: int) -> int:
+    encoded = line.encode("utf-8", errors="replace")
+    if len(encoded) > CLI_LOG_BYTES:
+        encoded = encoded[-CLI_LOG_BYTES:]
+        line = encoded.decode("utf-8", errors="replace")
+    lines.append(line)
+    retained_bytes += len(encoded)
+    while retained_bytes > CLI_LOG_BYTES and lines:
+        overflow = retained_bytes - CLI_LOG_BYTES
+        first = lines[0].encode("utf-8", errors="replace")
+        if len(first) <= overflow:
+            lines.popleft()
+            retained_bytes -= len(first)
+            continue
+        lines[0] = first[overflow:].decode("utf-8", errors="replace")
+        retained_bytes -= overflow
+    return retained_bytes
+
+
+def read_stream(
+    stream: Any,
+    sink: queue.Queue[str | None] | None,
+    lines: deque[str],
+    stop: threading.Event,
+) -> None:
+    retained_bytes = 0
     try:
         for line in iter(stream.readline, ""):
-            lines.append(line)
-            sink.put(line)
+            retained_bytes = _append_bounded_line(lines, line, retained_bytes)
+            if sink is None:
+                continue
+            while not stop.is_set():
+                try:
+                    sink.put(line, timeout=0.05)
+                    break
+                except queue.Full:
+                    continue
     finally:
-        sink.put(None)
+        if sink is not None:
+            try:
+                sink.put_nowait(None)
+            except queue.Full:
+                pass
 
 
 def stop_process_group(process: subprocess.Popen[str]) -> None:
@@ -967,14 +1039,19 @@ def evaluate_mcp_inventory(
     return {
         "server_name": server_info.get("name"),
         "tool_count": len(tool_names),
+        "required_tool_count": MCP_REQUIRED_TOOL_COUNT,
         "required_tools": MCP_REQUIRED_TOOLS,
         "missing_required_tools": missing,
-        "pass": server_info.get("name") == "Playwright" and not missing,
+        "pass": (
+            server_info.get("name") == "Playwright"
+            and len(tool_names) == MCP_REQUIRED_TOOL_COUNT
+            and not missing
+        ),
     }
 
 
 def npm_provenance(
-    *, cwd: Path, home: Path, timeout: int, secrets: list[str], output_dir: Path
+    *, cwd: Path, sandbox: Path, timeout: int, secrets: list[str], output_dir: Path
 ) -> dict[str, Any]:
     command = [
         "npm",
@@ -984,11 +1061,20 @@ def npm_provenance(
         "license",
         "dist.integrity",
         "gitHead",
+        "scripts",
         "--json",
     ]
-    result = run_process(command, cwd=cwd, env=isolated_env(home), timeout=timeout)
+    result = run_process(
+        command,
+        cwd=cwd,
+        env=playwright_cli_npm_environment(sandbox),
+        timeout=timeout,
+    )
     detected = write_safe_text(
-        output_dir / "npm-view.stderr.log", result["stderr"], secrets
+        output_dir / "npm-view.stderr.log",
+        _bounded_text(result["stderr"]),
+        secrets,
+        [str(sandbox)],
     )
     try:
         payload = json.loads(result["stdout"])
@@ -996,6 +1082,11 @@ def npm_provenance(
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
+    scripts = payload.get("scripts")
+    script_map = scripts if isinstance(scripts, dict) else {}
+    lifecycle_scripts = sorted(
+        name for name in PLAYWRIGHT_CLI_LIFECYCLE_SCRIPTS if script_map.get(name)
+    )
     safe_payload = {
         "version": payload.get("version"),
         "license": payload.get("license"),
@@ -1005,6 +1096,7 @@ def npm_provenance(
             else payload.get("dist.integrity")
         ),
         "gitHead": payload.get("gitHead"),
+        "lifecycle_scripts": lifecycle_scripts,
     }
     (output_dir / "npm-provenance.json").write_text(
         json.dumps(safe_payload, indent=2) + "\n", encoding="utf-8"
@@ -1016,6 +1108,7 @@ def npm_provenance(
             safe_payload["license"] == PLAYWRIGHT_LICENSE,
             safe_payload["integrity"] == PLAYWRIGHT_INTEGRITY,
             safe_payload["gitHead"] == PLAYWRIGHT_GIT_HEAD,
+            safe_payload["lifecycle_scripts"] == [],
             not detected,
         )
     )
@@ -1026,26 +1119,653 @@ def npm_provenance(
     }
 
 
+class _QuietTodoHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, _format: str, *_args: object) -> None:
+        return
+
+
+def prepare_playwright_npm_sandbox(sandbox: Path) -> None:
+    ensure_private_directory(sandbox)
+    for name in (
+        "home",
+        "tmp",
+        "xdg-cache",
+        "xdg-config",
+        "npm-cache",
+        "npm-prefix",
+        "s",
+    ):
+        ensure_private_directory(sandbox / name)
+    for name in ("user.npmrc", "global.npmrc"):
+        path = sandbox / name
+        path.write_text("", encoding="utf-8")
+        path.chmod(0o600)
+
+
+def prepare_playwright_cli_sandbox(sandbox: Path) -> tuple[Path, Path]:
+    prepare_playwright_npm_sandbox(sandbox)
+    for name in ("workspace", "site"):
+        ensure_private_directory(sandbox / name)
+    return sandbox / "workspace", sandbox / "site"
+
+
+def write_todo_fixture(site: Path) -> Path:
+    path = site / "index.html"
+    path.write_text(
+        """<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Wave 6 Todo</title></head>
+<body>
+  <main>
+    <h1>Wave 6 Todo</h1>
+    <form id="todo-form">
+      <label for="new-todo">New todo</label>
+      <input id="new-todo" aria-label="New todo">
+      <button type="submit">Add</button>
+    </form>
+    <p role="status" id="status">0 items</p>
+    <ul aria-label="Todo items" id="items"></ul>
+  </main>
+  <script>
+    document.querySelector('#todo-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const input = document.querySelector('#new-todo');
+      if (!input.value.trim()) return;
+      const item = document.createElement('li');
+      item.textContent = input.value.trim();
+      document.querySelector('#items').append(item);
+      document.querySelector('#status').textContent =
+        `${document.querySelectorAll('#items li').length} items`;
+      input.value = '';
+    });
+  </script>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def start_todo_server(
+    site: Path,
+) -> tuple[http.server.ThreadingHTTPServer, threading.Thread, str]:
+    handler = functools.partial(_QuietTodoHandler, directory=str(site))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server.daemon_threads = True
+    thread = threading.Thread(
+        target=server.serve_forever,
+        name="wave6-todo-server",
+        daemon=True,
+    )
+    thread.start()
+    port = int(server.server_address[1])
+    return server, thread, f"http://127.0.0.1:{port}/"
+
+
+def sandbox_inventory(root: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    file_count = 0
+    total_bytes = 0
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = path.relative_to(root).as_posix()
+        size = path.stat().st_size
+        digest.update(relative.encode("utf-8"))
+        digest.update(size.to_bytes(8, "big"))
+        file_count += 1
+        total_bytes += size
+    return {
+        "file_count": file_count,
+        "total_bytes": total_bytes,
+        "metadata_sha256": digest.hexdigest(),
+        "top_level": sorted(path.name for path in root.iterdir()),
+    }
+
+
+def tracked_worktree_fingerprint(repo_root: Path) -> str:
+    result = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+        cwd=repo_root,
+        env=isolated_env(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return "unavailable"
+    return hashlib.sha256(result.stdout.encode("utf-8")).hexdigest()
+
+
+def _parse_json_object(text: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _bounded_text(text: str) -> str:
+    encoded = text.encode("utf-8", errors="replace")
+    if len(encoded) <= CLI_LOG_BYTES:
+        return text
+    return encoded[-CLI_LOG_BYTES:].decode("utf-8", errors="replace")
+
+
+def _workspace_artifact(
+    workspace: Path, relative: str, maximum_bytes: int
+) -> Path:
+    candidate = (workspace / relative).resolve()
+    root = workspace.resolve()
+    if not candidate.is_relative_to(root) or not candidate.is_file():
+        raise RuntimeError("Playwright CLI emitted an unsafe artifact path")
+    if candidate.stat().st_size > maximum_bytes:
+        raise RuntimeError("Playwright CLI artifact exceeded its size limit")
+    return candidate
+
+
+def _process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except (OSError, ProcessLookupError):
+        return False
+    return True
+
+
+def _process_identity(pid: int) -> str | None:
+    if not _process_alive(pid):
+        return None
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "pid=,lstart=,comm="],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    identity = " ".join(result.stdout.split())
+    if result.returncode != 0 or not identity.startswith(f"{pid} "):
+        return None
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def _identity_alive(pid: int, identity: str) -> bool:
+    return _process_identity(pid) == identity
+
+
+def _process_group_members(group: int) -> set[int]:
+    if group <= 0:
+        return set()
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,pgid="],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    members: set[int] = set()
+    if result.returncode != 0:
+        return members
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            pid, pgid = (int(part) for part in parts)
+        except ValueError:
+            continue
+        if pgid == group:
+            members.add(pid)
+    return members
+
+
+def _terminate_owned_processes(
+    identities: dict[int, str], groups: set[int]
+) -> None:
+    own_group = os.getpgrp()
+    for group in sorted(groups):
+        members = _process_group_members(group)
+        group_is_owned = bool(members) and all(
+            pid in identities and _identity_alive(pid, identities[pid])
+            for pid in members
+        )
+        if group == own_group or not group_is_owned:
+            continue
+        try:
+            os.killpg(group, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and any(
+        _identity_alive(pid, identity) for pid, identity in identities.items()
+    ):
+        time.sleep(0.05)
+    for pid, identity in sorted(identities.items()):
+        if not _identity_alive(pid, identity):
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def _safe_error(error: str, secrets: list[str], private_values: list[str]) -> tuple[str, bool]:
+    sanitized, detected = sanitize_text(error, secrets)
+    for private in sorted(private_values, key=len, reverse=True):
+        if private:
+            sanitized = sanitized.replace(private, "[PRIVATE_VALUE_REMOVED]")
+    return sanitized, detected
+
+
+def run_cli_probe(
+    *,
+    repo_root: Path,
+    output_dir: Path,
+    scenario_label: str,
+    timeout: int,
+    secrets: list[str],
+) -> dict[str, Any]:
+    missing = [name for name in ("node", "npm", "npx") if shutil.which(name) is None]
+    if missing:
+        return {
+            "result": "BLOCKED",
+            "reason": "playwright_cli_runtime_missing",
+            "missing_binaries": missing,
+        }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir = output_dir / "logs"
+    artifacts_dir = output_dir / "artifacts"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    label = re.sub(r"[^a-zA-Z0-9_-]+", "-", scenario_label).strip("-") or "wave6"
+    session = f"{label}-{uuid.uuid4().hex[:10]}"
+    commands: list[dict[str, Any]] = []
+    artifact_paths: set[str] = set()
+    owned_pids: set[int] = set()
+    owned_groups: set[int] = set()
+    owned_identities: dict[int, str] = {}
+    live_owned_groups: set[int] = set()
+    credential_detected = False
+    provenance: dict[str, Any] = {"verified": False, "mismatches": ["not_run"]}
+    assertions = {"item_count": False, "added_text": False}
+    error = ""
+    scoped_close = False
+    version_verified = False
+    repo_before = tracked_worktree_fingerprint(repo_root)
+    sandbox_cleanup_confirmed = False
+
+    with tempfile.TemporaryDirectory(prefix="wave6-playwright-cli-") as raw_tmp:
+        sandbox = Path(raw_tmp)
+        workspace, site = prepare_playwright_cli_sandbox(sandbox)
+        write_todo_fixture(site)
+        env = playwright_cli_npm_environment(sandbox)
+        before_inventory = sandbox_inventory(sandbox)
+        private_values = [str(sandbox)]
+        deadline = time.monotonic() + max(30, timeout)
+        open_attempted = False
+        server: http.server.ThreadingHTTPServer | None = None
+        server_thread: threading.Thread | None = None
+        base_url = ""
+
+        def capture_identity(pid: int) -> bool:
+            identity = _process_identity(pid)
+            if identity is None:
+                return False
+            owned_pids.add(pid)
+            owned_identities[pid] = identity
+            return True
+
+        def execute(label_name: str, command: list[str], *, cleanup: bool = False) -> dict[str, Any]:
+            nonlocal credential_detected
+            try:
+                command_timeout = (
+                    min(20, max(1, timeout))
+                    if cleanup
+                    else remaining_timeout(deadline, max(1, timeout))
+                )
+                result = run_process(
+                    command,
+                    cwd=workspace,
+                    env=env,
+                    timeout=command_timeout,
+                )
+            except (OSError, TimeoutError) as execution_error:
+                result = {
+                    "command": command,
+                    "returncode": 124 if isinstance(execution_error, TimeoutError) else 1,
+                    "stdout": "",
+                    "stderr": str(execution_error),
+                    "timed_out": isinstance(execution_error, TimeoutError),
+                    "duration_seconds": 0.0,
+                }
+            pid = result.get("process_pid")
+            group = result.get("process_group")
+            if isinstance(pid, int) and pid > 0:
+                owned_pids.add(pid)
+            if isinstance(group, int) and group > 0:
+                owned_groups.add(group)
+                members = _process_group_members(group)
+                captured_group_member = False
+                for member in members:
+                    captured_group_member |= capture_identity(member)
+                if captured_group_member:
+                    live_owned_groups.add(group)
+            stdout_path = logs_dir / f"{label_name}.stdout.log"
+            stderr_path = logs_dir / f"{label_name}.stderr.log"
+            credential_detected |= write_safe_text(
+                stdout_path,
+                _bounded_text(str(result.get("stdout") or "")),
+                secrets,
+                private_values,
+            )
+            credential_detected |= write_safe_text(
+                stderr_path,
+                _bounded_text(str(result.get("stderr") or "")),
+                secrets,
+                private_values,
+            )
+            artifact_paths.update(
+                {
+                    stdout_path.relative_to(output_dir).as_posix(),
+                    stderr_path.relative_to(output_dir).as_posix(),
+                }
+            )
+            safe_command = ["[TODO_URL]" if item == base_url else item for item in command]
+            commands.append(
+                {
+                    "label": label_name,
+                    "command": safe_command,
+                    "returncode": result.get("returncode"),
+                    "timed_out": bool(result.get("timed_out")),
+                    "duration_seconds": result.get("duration_seconds"),
+                    "stdout_artifact": stdout_path.relative_to(output_dir).as_posix(),
+                    "stderr_artifact": stderr_path.relative_to(output_dir).as_posix(),
+                }
+            )
+            return result
+
+        try:
+            node_result = execute("node-version", ["node", "--version"])
+            node_output = str(node_result.get("stdout") or "").strip()
+            try:
+                node_major = int(node_output.removeprefix("v").split(".", 1)[0])
+            except (ValueError, IndexError):
+                node_major = 0
+            if (
+                node_result.get("returncode") != 0
+                or node_major < PLAYWRIGHT_CLI_MIN_NODE_MAJOR
+            ):
+                raise RuntimeError("Playwright CLI requires Node 18+")
+
+            metadata_result = execute(
+                "npm-view",
+                [
+                    "npm",
+                    "view",
+                    PLAYWRIGHT_CLI_PACKAGE_SPEC,
+                    *PLAYWRIGHT_CLI_METADATA_FIELDS,
+                    "--json",
+                ],
+            )
+            provenance = inspect_playwright_cli_metadata(
+                _parse_json_object(str(metadata_result.get("stdout") or ""))
+            )
+            if metadata_result.get("returncode") != 0 or not provenance["verified"]:
+                raise RuntimeError("Playwright CLI provenance verification failed")
+
+            version_result = execute("version", list(PLAYWRIGHT_CLI_VERSION_COMMAND))
+            version_verified = all(
+                (
+                    version_result.get("returncode") == 0,
+                    str(version_result.get("stdout") or "").strip()
+                    == PLAYWRIGHT_CLI_VERSION_OUTPUT,
+                )
+            )
+            if not version_verified:
+                raise RuntimeError("Playwright CLI exact version check failed")
+
+            server, server_thread, base_url = start_todo_server(site)
+            private_values.append(base_url)
+            open_attempted = True
+            open_result = execute(
+                "open",
+                [*PLAYWRIGHT_CLI_COMMAND, f"-s={session}", "open", base_url, "--json"],
+            )
+            if open_result.get("returncode") != 0:
+                raise RuntimeError("Playwright CLI open failed")
+            open_payload = _parse_json_object(str(open_result.get("stdout") or ""))
+            daemon_pid = open_payload.get("pid")
+            if isinstance(daemon_pid, int) and daemon_pid > 0:
+                capture_identity(daemon_pid)
+                try:
+                    daemon_group = os.getpgid(daemon_pid)
+                except ProcessLookupError:
+                    daemon_group = 0
+                if daemon_group > 0:
+                    owned_groups.add(daemon_group)
+                    live_owned_groups.add(daemon_group)
+                    for member in _process_group_members(daemon_group):
+                        capture_identity(member)
+            snapshot_info = (open_payload.get("result") or {}).get("snapshot", {})
+            snapshot_relative = (
+                snapshot_info.get("file") if isinstance(snapshot_info, dict) else ""
+            )
+            if not isinstance(snapshot_relative, str) or not snapshot_relative:
+                raise RuntimeError("Playwright CLI open snapshot missing")
+            open_snapshot = _workspace_artifact(
+                workspace, snapshot_relative, CLI_SNAPSHOT_BYTES
+            )
+            snapshot_text = open_snapshot.read_text(encoding="utf-8")
+            textbox_match = re.search(
+                r'textbox "New todo"[^\n]*\[ref=(e\d+)\]', snapshot_text
+            )
+            button_match = re.search(r'button "Add"[^\n]*\[ref=(e\d+)\]', snapshot_text)
+            if textbox_match is None or button_match is None:
+                raise RuntimeError("Playwright CLI Todo element references missing")
+            retained_snapshot = artifacts_dir / "open-snapshot.yml"
+            shutil.copyfile(open_snapshot, retained_snapshot)
+            artifact_paths.add(retained_snapshot.relative_to(output_dir).as_posix())
+
+            flow = (
+                (
+                    "fill",
+                    [
+                        *PLAYWRIGHT_CLI_COMMAND,
+                        f"-s={session}",
+                        "fill",
+                        textbox_match.group(1),
+                        "Ship Wave 6",
+                        "--json",
+                    ],
+                ),
+                (
+                    "click",
+                    [
+                        *PLAYWRIGHT_CLI_COMMAND,
+                        f"-s={session}",
+                        "click",
+                        button_match.group(1),
+                        "--json",
+                    ],
+                ),
+                (
+                    "snapshot",
+                    [*PLAYWRIGHT_CLI_COMMAND, f"-s={session}", "snapshot", "--json"],
+                ),
+                (
+                    "screenshot",
+                    [*PLAYWRIGHT_CLI_COMMAND, f"-s={session}", "screenshot", "--json"],
+                ),
+            )
+            flow_results: dict[str, dict[str, Any]] = {}
+            for flow_label, flow_command in flow:
+                flow_result = execute(flow_label, flow_command)
+                flow_results[flow_label] = flow_result
+                if flow_result.get("returncode") != 0:
+                    raise RuntimeError(f"Playwright CLI {flow_label} failed")
+            snapshot_payload = _parse_json_object(
+                str(flow_results["snapshot"].get("stdout") or "")
+            )
+            final_snapshot = str(snapshot_payload.get("snapshot") or "")
+            assertions = {
+                "item_count": "1 items" in final_snapshot,
+                "added_text": "Ship Wave 6" in final_snapshot,
+            }
+            retained_final = artifacts_dir / "todo-snapshot.txt"
+            retained_final.write_text(final_snapshot, encoding="utf-8")
+            artifact_paths.add(retained_final.relative_to(output_dir).as_posix())
+
+            screenshot_payload = _parse_json_object(
+                str(flow_results["screenshot"].get("stdout") or "")
+            )
+            screenshot_match = re.search(
+                r"\(([^)]+\.png)\)", str(screenshot_payload.get("result") or "")
+            )
+            if screenshot_match is None:
+                raise RuntimeError("Playwright CLI screenshot artifact missing")
+            screenshot = _workspace_artifact(
+                workspace, screenshot_match.group(1), CLI_SCREENSHOT_BYTES
+            )
+            retained_screenshot = artifacts_dir / "todo.png"
+            shutil.copyfile(screenshot, retained_screenshot)
+            artifact_paths.add(retained_screenshot.relative_to(output_dir).as_posix())
+            if not all(assertions.values()):
+                raise RuntimeError("Playwright CLI Todo assertions failed")
+        except (OSError, RuntimeError, TimeoutError) as execution_error:
+            error, detected = _safe_error(str(execution_error), secrets, private_values)
+            credential_detected |= detected
+        finally:
+            if open_attempted:
+                close_result = execute(
+                    "close",
+                    [*PLAYWRIGHT_CLI_COMMAND, f"-s={session}", "close", "--json"],
+                    cleanup=True,
+                )
+                close_payload = _parse_json_object(
+                    str(close_result.get("stdout") or "")
+                )
+                scoped_close = all(
+                    (
+                        close_result.get("returncode") == 0,
+                        close_payload.get("session") == session,
+                        close_payload.get("status") == "closed",
+                    )
+                )
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+            if server_thread is not None:
+                server_thread.join(timeout=3)
+            for group in live_owned_groups:
+                for member in _process_group_members(group):
+                    capture_identity(member)
+            wait_deadline = time.monotonic() + 5
+            while time.monotonic() < wait_deadline and any(
+                _identity_alive(pid, identity)
+                for pid, identity in owned_identities.items()
+            ):
+                time.sleep(0.05)
+            surviving = {
+                pid
+                for pid, identity in owned_identities.items()
+                if _identity_alive(pid, identity)
+            }
+            if surviving:
+                _terminate_owned_processes(owned_identities, live_owned_groups)
+                surviving = {
+                    pid
+                    for pid, identity in owned_identities.items()
+                    if _identity_alive(pid, identity)
+                }
+            unverified_group_members = {
+                pid
+                for group in live_owned_groups
+                for pid in _process_group_members(group)
+                if pid not in owned_identities
+                or not _identity_alive(pid, owned_identities[pid])
+            }
+            after_inventory = sandbox_inventory(sandbox)
+            repo_after = tracked_worktree_fingerprint(repo_root)
+            sandbox_only_writes = repo_before != "unavailable" and repo_before == repo_after
+
+        passed = all(
+            (
+                provenance.get("verified") is True,
+                version_verified,
+                not error,
+                all(assertions.values()),
+                scoped_close,
+                not surviving,
+                not unverified_group_members,
+                sandbox_only_writes,
+                not credential_detected,
+            )
+        )
+        report = {
+            "result": "PASS" if passed else "FAIL",
+            "reason": "playwright_cli_todo_green" if passed else "playwright_cli_failed",
+            "session": session,
+            "package_spec": PLAYWRIGHT_CLI_PACKAGE_SPEC,
+            "provenance": provenance,
+            "version_verified": version_verified,
+            "commands": commands,
+            "assertions": assertions,
+            "scoped_close": scoped_close,
+            "close_all_used": False,
+            "kill_all_used": False,
+            "owned_child_pids": sorted(owned_pids),
+            "owned_process_groups": sorted(owned_groups),
+            "surviving_owned_pids": sorted(surviving),
+            "unverified_owned_group_pids": sorted(unverified_group_members),
+            "sandbox_inventory_before": before_inventory,
+            "sandbox_inventory_after": after_inventory,
+            "sandbox_only_writes": sandbox_only_writes,
+            "artifact_paths": sorted(artifact_paths),
+            "credential_material_detected": credential_detected,
+            "error": error,
+        }
+    sandbox_cleanup_confirmed = not sandbox.exists()
+    report["sandbox_cleanup_confirmed"] = sandbox_cleanup_confirmed
+    if not sandbox_cleanup_confirmed:
+        report["result"] = "FAIL"
+        report["reason"] = "playwright_cli_sandbox_cleanup_failed"
+    return report
+
+
 def run_mcp_probe(
     *, output_dir: Path, timeout: int, secrets: list[str]
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="wave2-playwright-mcp-") as raw_tmp:
         sandbox = Path(raw_tmp)
-        home = sandbox / "home"
-        home.mkdir(parents=True)
+        prepare_playwright_npm_sandbox(sandbox)
+        npm_env = playwright_cli_npm_environment(sandbox)
         provenance = npm_provenance(
             cwd=sandbox,
-            home=home,
+            sandbox=sandbox,
             timeout=timeout,
             secrets=secrets,
             output_dir=output_dir,
         )
         command = list(PLAYWRIGHT_MCP_COMMAND)
+        if provenance["result"] != "PASS":
+            return {
+                "result": "FAIL",
+                "command": command,
+                "capabilities": list(PLAYWRIGHT_MCP_CAPABILITIES),
+                "protocol_version": None,
+                "inventory": evaluate_mcp_inventory({}, []),
+                "provenance": provenance,
+                "error": "Playwright MCP provenance verification failed",
+                "credential_material_detected": provenance.get(
+                    "credential_material_detected", False
+                ),
+            }
         process = subprocess.Popen(
             command,
             cwd=sandbox,
-            env=isolated_env(home),
+            env=npm_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1053,18 +1773,18 @@ def run_mcp_probe(
             bufsize=1,
             start_new_session=True,
         )
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
-        messages: queue.Queue[str | None] = queue.Queue()
+        stdout_lines: deque[str] = deque()
+        stderr_lines: deque[str] = deque()
+        messages: queue.Queue[str | None] = queue.Queue(maxsize=128)
+        stream_stop = threading.Event()
         stdout_thread = threading.Thread(
             target=read_stream,
-            args=(process.stdout, messages, stdout_lines),
+            args=(process.stdout, messages, stdout_lines, stream_stop),
             daemon=True,
         )
-        stderr_queue: queue.Queue[str | None] = queue.Queue()
         stderr_thread = threading.Thread(
             target=read_stream,
-            args=(process.stderr, stderr_queue, stderr_lines),
+            args=(process.stderr, None, stderr_lines, stream_stop),
             daemon=True,
         )
         stdout_thread.start()
@@ -1118,6 +1838,7 @@ def run_mcp_probe(
             error = str(exc)
         finally:
             stop_process_group(process)
+            stream_stop.set()
             stdout_thread.join(timeout=2)
             stderr_thread.join(timeout=2)
 
@@ -1141,16 +1862,23 @@ def run_mcp_probe(
         else None
     )
     credential_detected = write_safe_text(
-        output_dir / "mcp.stdout.jsonl", "".join(stdout_lines), secrets
+        output_dir / "mcp.stdout.jsonl",
+        _bounded_text("".join(stdout_lines)),
+        secrets,
+        [str(sandbox)],
     )
     credential_detected |= write_safe_text(
-        output_dir / "mcp.stderr.log", "".join(stderr_lines), secrets
+        output_dir / "mcp.stderr.log",
+        _bounded_text("".join(stderr_lines)),
+        secrets,
+        [str(sandbox)],
     )
     inventory_artifact = {
         "command": command,
         "protocol_version": protocol_version,
         "server_info": server_info,
         "tool_count": len(tool_names),
+        "required_tool_count": MCP_REQUIRED_TOOL_COUNT,
         "tool_names": tool_names,
         "required_tools": MCP_REQUIRED_TOOLS,
     }
@@ -1339,14 +2067,24 @@ def main() -> int:
     report: dict[str, Any] = {
         "mode": args.mode,
         "model": args.model,
+        "scenario_label": args.scenario_label,
     }
-    if args.mode in ("mcp", "all"):
+    components = selected_components(args.mode)
+    if "cli" in components:
+        report["cli"] = run_cli_probe(
+            repo_root=repo_root,
+            output_dir=output_dir / "cli",
+            scenario_label=args.scenario_label,
+            timeout=args.timeout_seconds,
+            secrets=secrets,
+        )
+    if "mcp" in components:
         report["mcp"] = run_mcp_probe(
             output_dir=output_dir / "mcp",
             timeout=args.timeout_seconds,
             secrets=secrets,
         )
-    if args.mode in ("projects", "all"):
+    if "projects" in components:
         report["projects"] = run_projects(
             repo_root=repo_root,
             output_dir=output_dir / "projects",
@@ -1358,7 +2096,7 @@ def main() -> int:
     component_results = [
         component.get("result")
         for key, component in report.items()
-        if key in ("mcp", "projects") and isinstance(component, dict)
+        if key in ("cli", "mcp", "projects") and isinstance(component, dict)
     ]
     report["retained_artifacts_safe"] = False
     report["result"] = (
@@ -1397,7 +2135,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, indent=2))
     else:
-        print(f"harness Wave 5 configured-tuple proof: {report['result']}")
+        print(f"harness Wave 6 configured-tuple proof: {report['result']}")
         print(f"artifacts: {output_dir}")
     return 0 if report["result"] == "PASS" else 2
 
