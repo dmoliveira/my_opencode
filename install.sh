@@ -84,8 +84,15 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 if ! command -v python3 >/dev/null 2>&1; then
-	printf "Error: python3 is required but not installed.\n" >&2
+	printf "Error: Python 3.11+ is required but python3 is not installed.\n" >&2
 	exit 1
+fi
+
+PYTHON_BIN="$(command -v python3)"
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 2)'; then
+	PYTHON_VERSION="$("$PYTHON_BIN" --version 2>&1 || printf unknown)"
+	printf "Error: Python 3.11+ is required; selected %s (%s). Fix PATH so python3 resolves to a supported runtime.\n" "$PYTHON_BIN" "$PYTHON_VERSION" >&2
+	exit 2
 fi
 
 mkdir -p "$CONFIG_DIR"
