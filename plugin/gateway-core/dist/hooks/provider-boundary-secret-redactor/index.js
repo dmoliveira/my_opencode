@@ -39,6 +39,13 @@ export function createProviderBoundarySecretFinalizer(options) {
     const redactor = createSecretRedactor(options);
     function blockAudit(directory, surface, sessionId, error) {
         const code = error instanceof SecretRedactionError ? error.code : "unexpected_failure";
+        const matchDiagnostics = error instanceof SecretRedactionError && error.code === "immutable_match"
+            ? {
+                match_target: error.matchTarget,
+                pattern_index: error.patternIndex,
+                location_code: error.locationCode,
+            }
+            : {};
         writeGatewayEventAudit(directory, {
             hook: "provider-boundary-secret-redactor",
             stage: "guard",
@@ -46,6 +53,7 @@ export function createProviderBoundarySecretFinalizer(options) {
             surface,
             session_id: sessionId,
             error_code: code,
+            ...matchDiagnostics,
         });
         if (error instanceof SecretRedactionError) {
             throw error;
