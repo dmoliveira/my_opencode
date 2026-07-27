@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import errno
+import fcntl
 import hashlib
 import io
 import json
 import os
 import platform
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -549,6 +551,45 @@ class AstGrepInstallerTest(unittest.TestCase):
             finally:
                 os.close(fd)
 
+    def test_extracted_stage_retains_only_a_read_descriptor(self) -> None:
+        archive_bytes, artifact = fixture_artifact()
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            _cache, bin_root = self.roots(root)
+            archive_path = root / "archive.zip"
+            archive_path.write_bytes(archive_bytes)
+            archive_path.chmod(0o600)
+            archive_fd = os.open(archive_path, os.O_RDONLY | os.O_NOFOLLOW)
+            authority = installer._open_root(bin_root)
+            binary_fd = -1
+            archive = source = None
+            try:
+                archive, entry, source, _profile = installer._validate_archive(
+                    archive_fd,
+                    artifact,
+                )
+                binary_fd, identity = installer._extract_binary_stage(
+                    archive,
+                    entry,
+                    authority,
+                    artifact,
+                )
+                self.assertEqual(
+                    os.O_RDONLY,
+                    fcntl.fcntl(binary_fd, fcntl.F_GETFL) & os.O_ACCMODE,
+                )
+                metadata = os.fstat(binary_fd)
+                self.assertEqual(identity, (metadata.st_dev, metadata.st_ino))
+            finally:
+                if binary_fd >= 0:
+                    os.close(binary_fd)
+                if archive is not None:
+                    archive.close()
+                if source is not None:
+                    source.close()
+                os.close(archive_fd)
+                os.close(authority.fd)
+
     def test_version_hang_and_output_flood_fail_closed(self) -> None:
         cases = {
             "hang": b"#!/bin/sh\nsleep 5\n",
@@ -569,13 +610,26 @@ class AstGrepInstallerTest(unittest.TestCase):
     def test_bounded_process_kills_descendants_after_leader_exit(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            pid_path = root / "child.pid"
+            heartbeat_path = root / "heartbeat"
+            child_program = "\n".join(
+                (
+                    "import pathlib,signal,time",
+                    "signal.signal(signal.SIGTERM, signal.SIG_IGN)",
+                    f"path=pathlib.Path({str(heartbeat_path)!r})",
+                    "path.write_text('ready')",
+                    "for _ in range(1500):",
+                    "    with path.open('a') as stream:",
+                    "        stream.write('.')",
+                    "    time.sleep(0.02)",
+                )
+            )
             program = "\n".join(
                 (
-                    "import pathlib, subprocess, sys",
-                    "child = subprocess.Popen([sys.executable, '-c', "
-                    "'import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)'])",
-                    f"pathlib.Path({str(pid_path)!r}).write_text(str(child.pid))",
+                    "import pathlib, subprocess, sys, time",
+                    f"child = subprocess.Popen([sys.executable, '-c', {child_program!r}])",
+                    f"heartbeat = pathlib.Path({str(heartbeat_path)!r})",
+                    "deadline = time.monotonic() + 2",
+                    "while not heartbeat.exists() and time.monotonic() < deadline: time.sleep(0.005)",
                     "print('leader exited')",
                 )
             )
@@ -585,12 +639,44 @@ class AstGrepInstallerTest(unittest.TestCase):
                     cwd=root,
                     env={"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"},
                 )
-            child_pid = int(pid_path.read_text())
             self.assertTrue(report["timed_out"])
             self.assertTrue(report["survivor"])
             self.assertEqual(0, report["surviving_processes"])
-            with self.assertRaises(ProcessLookupError):
-                os.kill(child_pid, 0)
+            heartbeat = heartbeat_path.read_bytes()
+            time.sleep(0.15)
+            self.assertEqual(heartbeat, heartbeat_path.read_bytes())
+
+    def test_zombie_only_group_does_not_override_reaped_leader(self) -> None:
+        class ReapedLeader:
+            pid = 424_242
+
+            def __init__(self) -> None:
+                self.reaped = False
+
+            def poll(self):
+                return 0 if self.reaped else None
+
+            def wait(self, timeout):
+                self.reaped = True
+                return 0
+
+        process = ReapedLeader()
+        with mock.patch.object(
+            installer,
+            "_process_group_exists",
+            return_value=True,
+        ), mock.patch.object(installer, "_signal_process_group") as signal_group, mock.patch.object(
+            installer,
+            "_wait_process_group_gone",
+            return_value=False,
+        ) as settle:
+            self.assertTrue(installer._terminate_process_group(process))
+        self.assertTrue(process.reaped)
+        self.assertEqual(
+            [signal.SIGTERM, signal.SIGKILL],
+            [call.args[1] for call in signal_group.call_args_list],
+        )
+        settle.assert_called_once_with(process.pid, 1.0)
 
     def test_binary_only_journal_recovers_without_download(self) -> None:
         archive_bytes, artifact = fixture_artifact()

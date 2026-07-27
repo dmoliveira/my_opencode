@@ -1113,10 +1113,12 @@ def _extract_binary_stage(
     bin_root: RootAuthority,
     artifact: AstGrepArtifact,
 ) -> tuple[int, tuple[int, int]]:
+    write_fd = -1
+    read_fd = -1
     try:
-        fd = os.open(
+        write_fd = os.open(
             BINARY_STAGE_NAME,
-            os.O_RDWR
+            os.O_WRONLY
             | os.O_CREAT
             | os.O_EXCL
             | getattr(os, "O_NOFOLLOW", 0)
@@ -1124,7 +1126,7 @@ def _extract_binary_stage(
             PRIVATE_FILE_MODE,
             dir_fd=bin_root.fd,
         )
-        os.fchmod(fd, PRIVATE_FILE_MODE)
+        os.fchmod(write_fd, PRIVATE_FILE_MODE)
         digest = hashlib.sha256()
         total = 0
         with archive.open(entry, "r") as source:
@@ -1140,15 +1142,15 @@ def _extract_binary_stage(
                         phase="extract",
                     )
                 digest.update(chunk)
-                _write_all(fd, chunk)
+                _write_all(write_fd, chunk)
         if total != artifact.binary_size or digest.hexdigest() != artifact.binary_sha256:
             raise AstGrepInstallError(
                 "ast_grep_binary_hash_mismatch",
                 "managed ast-grep extracted binary mismatched its pin",
                 phase="extract",
             )
-        os.fchmod(fd, EXECUTABLE_MODE)
-        metadata = os.fstat(fd)
+        os.fchmod(write_fd, EXECUTABLE_MODE)
+        metadata = os.fstat(write_fd)
         _validate_regular(
             metadata,
             mode=EXECUTABLE_MODE,
@@ -1162,15 +1164,39 @@ def _extract_binary_stage(
                 "managed ast-grep stage size changed",
                 phase="extract",
             )
-        os.fsync(fd)
-        return fd, (metadata.st_dev, metadata.st_ino)
+        os.fsync(write_fd)
+        identity = (metadata.st_dev, metadata.st_ino)
+        read_fd, reopened = _open_regular_at(
+            bin_root,
+            BINARY_STAGE_NAME,
+            mode=EXECUTABLE_MODE,
+            max_bytes=MAX_MEMBER_BYTES,
+            phase="extract",
+            label="binary stage",
+        )
+        if (reopened.st_dev, reopened.st_ino) != identity:
+            raise AstGrepInstallError(
+                "ast_grep_stage_changed",
+                "managed ast-grep stage changed while reopening read-only",
+                phase="extract",
+            )
+        closing_fd = write_fd
+        write_fd = -1
+        os.close(closing_fd)
+        result_fd = read_fd
+        read_fd = -1
+        return result_fd, identity
     except AstGrepInstallError:
-        if "fd" in locals():
-            os.close(fd)
+        if read_fd >= 0:
+            os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError) as error:
-        if "fd" in locals():
-            os.close(fd)
+        if read_fd >= 0:
+            os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
         raise AstGrepInstallError(
             "ast_grep_extract_failed",
             "unable to extract managed ast-grep binary",
@@ -1232,15 +1258,9 @@ def _terminate_process_group(
         process.wait(timeout=term_timeout)
     except subprocess.TimeoutExpired:
         survivor_detected = True
-    if _process_group_exists(process_group):
+    if process.poll() is None or _process_group_exists(process_group):
         survivor_detected = True
         _signal_process_group(process_group, signal.SIGKILL)
-        if not _wait_process_group_gone(process_group, kill_timeout):
-            raise AstGrepInstallError(
-                "ast_grep_process_survivor",
-                "managed ast-grep process group survived forced termination",
-                phase="execute",
-            )
     if process.poll() is None:
         try:
             process.wait(timeout=kill_timeout)
@@ -1251,6 +1271,10 @@ def _terminate_process_group(
                 phase="execute",
                 cause=error,
             ) from error
+    # killpg(..., 0) also reports zombie-only groups on Linux. The direct leader
+    # is reaped above and SIGKILL has stopped executable descendants, so group
+    # disappearance is best-effort evidence rather than a correctness gate.
+    _wait_process_group_gone(process_group, kill_timeout)
     return survivor_detected
 
 
@@ -1289,6 +1313,7 @@ def _bounded_process(command: list[str], *, cwd: Path, env: dict[str, str]) -> d
     failed_bound = False
     survivor_detected = False
     timed_out = False
+    teardown_attempted = False
     try:
         while time.monotonic() < deadline:
             for key, _mask in selector.select(0.05):
@@ -1305,6 +1330,7 @@ def _bounded_process(command: list[str], *, cwd: Path, env: dict[str, str]) -> d
                 break
         timed_out = process.poll() is None or bool(selector.get_map())
         if timed_out or failed_bound:
+            teardown_attempted = True
             survivor_detected = _terminate_process_group(process)
         drain_deadline = time.monotonic() + 1
         while selector.get_map() and time.monotonic() < drain_deadline:
@@ -1316,7 +1342,8 @@ def _bounded_process(command: list[str], *, cwd: Path, env: dict[str, str]) -> d
                     selector.unregister(key.fileobj)
                     key.fileobj.close()
         returncode = process.wait(timeout=1)
-        if _process_group_exists(process.pid):
+        if not teardown_attempted and _process_group_exists(process.pid):
+            teardown_attempted = True
             survivor_detected = _terminate_process_group(process) or True
     finally:
         for key in list(selector.get_map().values()):
@@ -1326,7 +1353,10 @@ def _bounded_process(command: list[str], *, cwd: Path, env: dict[str, str]) -> d
                 pass
             key.fileobj.close()
         selector.close()
-        if process.poll() is None or _process_group_exists(process.pid):
+        if not teardown_attempted and (
+            process.poll() is None or _process_group_exists(process.pid)
+        ):
+            teardown_attempted = True
             survivor_detected = _terminate_process_group(process) or survivor_detected
     return {
         "returncode": returncode,
