@@ -7,7 +7,11 @@ import test from "node:test"
 import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
 import { createSessionRuntimeSystemContextHook, stablePromptFingerprint } from "../dist/hooks/session-runtime-system-context/index.js"
-import { saveGatewayState, nowIso } from "../dist/state/storage.js"
+import { saveGatewayConciseMode, nowIso } from "../dist/state/storage.js"
+
+function saveConciseState(directory, conciseMode) {
+  saveGatewayConciseMode(directory, conciseMode, { lastUpdatedAt: nowIso() })
+}
 
 test("session-runtime-system-context injects hidden system session id", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
@@ -127,16 +131,12 @@ test("session-runtime-system-context injects active concise mode from gateway st
       "---\nname: concise-mode\n---\nRespond terse. Keep technical terms exact.\n",
       "utf-8",
     )
-    saveGatewayState(directory, {
-      activeLoop: null,
-      conciseMode: {
+    saveConciseState(directory, {
         mode: "full",
         source: "test",
         sessionId: "session-hidden-4",
         activatedAt: nowIso(),
         updatedAt: nowIso(),
-      },
-      lastUpdatedAt: nowIso(),
     })
     const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const output = { system: ["baseline"] }
@@ -158,16 +158,12 @@ test("session-runtime-system-context reloads changed concise skill body on later
     mkdirSync(join(directory, "skills", "concise-mode"), { recursive: true })
     const skillPath = join(directory, "skills", "concise-mode", "SKILL.md")
     writeFileSync(skillPath, "---\nname: concise-mode\n---\nFirst concise rules.\n", "utf-8")
-    saveGatewayState(directory, {
-      activeLoop: null,
-      conciseMode: {
+    saveConciseState(directory, {
         mode: "full",
         source: "test",
         sessionId: "session-hidden-4b",
         activatedAt: nowIso(),
         updatedAt: nowIso(),
-      },
-      lastUpdatedAt: nowIso(),
     })
     const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const first = { system: ["baseline"] }
@@ -195,16 +191,12 @@ test("session-runtime-system-context reloads changed concise skill body on later
 test("session-runtime-system-context ignores concise mode from a different session", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {
-    saveGatewayState(directory, {
-      activeLoop: null,
-      conciseMode: {
+    saveConciseState(directory, {
         mode: "review",
         source: "test",
         sessionId: "session-other",
         activatedAt: nowIso(),
         updatedAt: nowIso(),
-      },
-      lastUpdatedAt: nowIso(),
     })
     const hook = createSessionRuntimeSystemContextHook({ directory, enabled: true, injectSessionIdContext: true, conciseModeEnabled: false, conciseDefaultMode: "off" })
     const output = { system: ["baseline"] }
@@ -291,16 +283,12 @@ test("session-runtime-system-context audits stale context removal under concise-
 test("session-runtime-system-context concise-only scope injects when concise is active", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {
-    saveGatewayState(directory, {
-      activeLoop: null,
-      conciseMode: {
+    saveConciseState(directory, {
         mode: "lite",
         source: "test",
         sessionId: "session-hidden-7",
         activatedAt: nowIso(),
         updatedAt: nowIso(),
-      },
-      lastUpdatedAt: nowIso(),
     })
     const hook = createSessionRuntimeSystemContextHook({
       directory,

@@ -11,7 +11,7 @@ import {
 } from "../../bridge/commands.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import { REASON_CODES } from "../../bridge/reason-codes.js"
-import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
+import { nowIso, saveGatewayState, transactGatewayStateDomain } from "../../state/storage.js"
 import type { GatewayState } from "../../state/types.js"
 import type { GatewayHook } from "../registry.js"
 import type { ContextCollector } from "../context-injector/collector.js"
@@ -176,31 +176,41 @@ export function createAutopilotLoopHook(options: {
       }
 
       if (action === "stop") {
-        const previousState = loadGatewayState(scopedDir)
-        const previousLoop = previousState?.activeLoop
         const pauseMode = isPauseCommand(parsed.name, parsed.args)
-        const nextLoop =
-          previousLoop && previousLoop.sessionId === sessionId
-            ? {
-                ...previousLoop,
-                active: false,
-              }
-            : {
-                active: false,
-                sessionId,
-                objective: "stop requested",
-                completionMode: options.defaults.completionMode,
-                completionPromise: options.defaults.completionPromise,
-                iteration: 1,
-                maxIterations: options.defaults.maxIterations,
-                startedAt: nowIso(),
-              }
-        const state: GatewayState = {
-          activeLoop: nextLoop,
-          lastUpdatedAt: nowIso(),
-          source: REASON_CODES.LOOP_STOPPED,
+        const stopped = transactGatewayStateDomain(scopedDir, "activeLoop", (current) => {
+          const previousLoop =
+            current && typeof current === "object" && !Array.isArray(current)
+              ? (current as Record<string, unknown>)
+              : null
+          if (previousLoop && String(previousLoop.sessionId ?? "") !== sessionId) {
+            return null
+          }
+          return {
+            value: previousLoop
+              ? { active: false }
+              : {
+                  active: false,
+                  sessionId,
+                  objective: "stop requested",
+                  completionMode: options.defaults.completionMode,
+                  completionPromise: options.defaults.completionPromise,
+                  iteration: 1,
+                  maxIterations: options.defaults.maxIterations,
+                  startedAt: nowIso(),
+                },
+            mode: previousLoop ? "patch" : "replace",
+            rootUpdates: { lastUpdatedAt: nowIso(), source: REASON_CODES.LOOP_STOPPED },
+          }
+        })
+        if (!stopped.changed) {
+          writeGatewayEventAudit(scopedDir, {
+            hook: "autopilot-loop",
+            stage: "skip",
+            reason_code: "session_mismatch",
+            session_id: sessionId,
+          })
+          return
         }
-        saveGatewayState(scopedDir, state)
         writeGatewayEventAudit(scopedDir, {
           hook: "autopilot-loop",
           stage: "state",
@@ -224,18 +234,25 @@ export function createAutopilotLoopHook(options: {
 
       const resumeMode = isResumeCommand(parsed.name, parsed.args)
       if (resumeMode && !hasExplicitGoalArg(parsed.args)) {
-        const previousState = loadGatewayState(scopedDir)
-        const previousLoop = previousState?.activeLoop
-        if (previousLoop && previousLoop.sessionId === sessionId && previousLoop.active !== true) {
-          const resumedState: GatewayState = {
-            activeLoop: {
-              ...previousLoop,
-              active: true,
-            },
-            lastUpdatedAt: nowIso(),
-            source: REASON_CODES.LOOP_STARTED,
+        const resumed = transactGatewayStateDomain(scopedDir, "activeLoop", (current) => {
+          const previousLoop =
+            current && typeof current === "object" && !Array.isArray(current)
+              ? (current as Record<string, unknown>)
+              : null
+          if (
+            !previousLoop ||
+            String(previousLoop.sessionId ?? "") !== sessionId ||
+            previousLoop.active === true
+          ) {
+            return null
           }
-          saveGatewayState(scopedDir, resumedState)
+          return {
+            value: { active: true },
+            mode: "patch",
+            rootUpdates: { lastUpdatedAt: nowIso(), source: REASON_CODES.LOOP_STARTED },
+          }
+        })
+        if (resumed.changed) {
           writeGatewayEventAudit(scopedDir, {
             hook: "autopilot-loop",
             stage: "state",
@@ -246,6 +263,7 @@ export function createAutopilotLoopHook(options: {
           })
           return
         }
+        return
       }
 
       const completionMode =

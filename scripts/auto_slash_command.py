@@ -15,9 +15,10 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from auto_slash_schema import COMMANDS, detect_intent, evaluate_precision  # type: ignore
 from config_layering import (  # type: ignore
+    append_exempt_text_line,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from keyword_mode_command import main as keyword_mode_main  # type: ignore
 
@@ -73,9 +74,7 @@ def normalize_enabled_commands(raw: Any) -> list[str]:
     return normalized if normalized else sorted(COMMANDS.keys())
 
 
-def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
-    config, _ = load_layered_config()
-    write_path = resolve_write_path()
+def state_from_config(config: dict[str, Any]) -> dict[str, Any]:
     merged = default_state()
     state = config.get(SECTION)
     if isinstance(state, dict):
@@ -92,11 +91,11 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
         )
         if isinstance(state.get("last_detection"), dict):
             merged["last_detection"] = dict(state["last_detection"])
-    return config, merged, write_path
+    return merged
 
 
-def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
-    config[SECTION] = {
+def persisted_state(state: dict[str, Any]) -> dict[str, Any]:
+    return {
         "enabled": bool(state.get("enabled", True)),
         "preview_first": bool(state.get("preview_first", True)),
         "min_confidence": float(state.get("min_confidence", DEFAULT_MIN_CONFIDENCE)),
@@ -104,7 +103,24 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
         "enabled_commands": normalize_enabled_commands(state.get("enabled_commands")),
         "last_detection": state.get("last_detection"),
     }
-    save_config_file(config, write_path)
+
+
+def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
+    config, _ = load_layered_config()
+    return config, state_from_config(config), resolve_write_path()
+
+
+def edit_state(mutator) -> tuple[dict[str, Any], Path]:
+    state: dict[str, Any] = {}
+
+    def mutate(config: dict[str, Any]) -> None:
+        nonlocal state
+        state = state_from_config(config)
+        mutator(state)
+        config[SECTION] = persisted_state(state)
+
+    result = edit_layered_config(mutate)
+    return state, result.files[0].path
 
 
 def now_iso() -> str:
@@ -147,9 +163,10 @@ def _render_action(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def _append_audit(entry: dict[str, Any]) -> None:
-    AUDIT_DEFAULT.parent.mkdir(parents=True, exist_ok=True)
-    with AUDIT_DEFAULT.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
+    append_exempt_text_line(
+        AUDIT_DEFAULT,
+        json.dumps(entry, ensure_ascii=True),
+    )
 
 
 def _undo_hint(command: str) -> str:
@@ -193,9 +210,7 @@ def command_status(argv: list[str]) -> int:
 def command_toggle(argv: list[str], enabled: bool) -> int:
     if argv:
         return usage()
-    config, state, write_path = load_state()
-    state["enabled"] = enabled
-    save_state(config, state, write_path)
+    _state, write_path = edit_state(lambda state: state.update({"enabled": enabled}))
     print(f"enabled: {'yes' if enabled else 'no'}")
     print(f"config: {write_path}")
     return 0
@@ -207,14 +222,17 @@ def command_toggle_per_command(argv: list[str], enable: bool) -> int:
     target = argv[0].strip().lower()
     if target not in COMMANDS:
         return usage()
-    config, state, write_path = load_state()
-    enabled_commands = set(normalize_enabled_commands(state.get("enabled_commands")))
-    if enable:
-        enabled_commands.add(target)
-    else:
-        enabled_commands.discard(target)
-    state["enabled_commands"] = sorted(enabled_commands)
-    save_state(config, state, write_path)
+    def mutate(state: dict[str, Any]) -> None:
+        enabled_commands = set(
+            normalize_enabled_commands(state.get("enabled_commands"))
+        )
+        if enable:
+            enabled_commands.add(target)
+        else:
+            enabled_commands.discard(target)
+        state["enabled_commands"] = sorted(enabled_commands)
+
+    state, write_path = edit_state(mutate)
     print(f"command: {target}")
     print(f"enabled: {'yes' if enable else 'no'}")
     print(f"enabled_commands: {','.join(state['enabled_commands']) or '(none)'}")
@@ -228,8 +246,22 @@ def command_detect(argv: list[str], *, persist: bool) -> int:
     if prompt is None:
         return usage()
 
-    config, state, write_path = load_state()
+    _, state, write_path = load_state()
     report = _run_detection(state, prompt)
+    if persist:
+        def mutate(current: dict[str, Any]) -> None:
+            nonlocal state, report
+            state = current
+            report = _run_detection(state, prompt)
+            state["last_detection"] = {
+                "timestamp": now_iso(),
+                "prompt": prompt,
+                "result": report.get("result"),
+                "reason": report.get("reason"),
+                "selected": report.get("selected"),
+            }
+
+        state, write_path = edit_state(mutate)
     action = _render_action(report)
     payload = {
         "result": report.get("result"),
@@ -244,14 +276,6 @@ def command_detect(argv: list[str], *, persist: bool) -> int:
     }
 
     if persist:
-        state["last_detection"] = {
-            "timestamp": now_iso(),
-            "prompt": prompt,
-            "result": payload["result"],
-            "reason": payload["reason"],
-            "selected": payload["selected"],
-        }
-        save_state(config, state, write_path)
         payload["config"] = str(write_path)
 
     if json_output:

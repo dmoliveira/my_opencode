@@ -37,10 +37,32 @@ def format_reason_groups(reason_groups: dict[str, dict[str, object]]) -> str:
     return ", ".join(parts)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Regenerate docs automation summary artifact")
     parser.add_argument("--repo-root", type=Path, help="Override repository root for testing")
-    return parser.parse_args()
+    parser.add_argument(
+        "--generated-at",
+        help="Use a fixed UTC timestamp for deterministic fixture generation",
+    )
+    return parser.parse_args(argv)
+
+
+def _resolve_repo_root(override: Path | None) -> Path:
+    repo_root = (override or Path(__file__).resolve().parent.parent).resolve()
+    required_paths = (
+        repo_root / "docs" / "plan" / "v0.4-release-index.md",
+        repo_root / "docs" / "plan" / "docs-automation-summary.md",
+        repo_root / "docs" / "pages" / "index.html",
+        repo_root / ".github" / "workflows" / "docs-automation.yml",
+    )
+    if not repo_root.is_dir() or any(
+        not path.resolve().is_relative_to(repo_root) or not path.is_file()
+        for path in required_paths
+    ):
+        raise SystemExit(
+            "--repo-root must contain the repository docs automation layout"
+        )
+    return repo_root
 
 
 def render_summary(
@@ -92,9 +114,9 @@ def render_summary(
     return "\n".join(lines)
 
 
-def main() -> int:
-    args = parse_args()
-    repo_root = (args.repo_root or Path(__file__).resolve().parent.parent).resolve()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    repo_root = _resolve_repo_root(args.repo_root)
     plan_dir = repo_root / "docs" / "plan"
     index_path = plan_dir / "v0.4-release-index.md"
     summary_path = plan_dir / "docs-automation-summary.md"
@@ -111,7 +133,13 @@ def main() -> int:
         "pages_artifact_path": "docs/pages" in workflow_text,
     }
     covered_targets = sum(1 for value in target_signals.values() if value)
-    generated_at = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    generated_at = args.generated_at or datetime.now(tz=UTC).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    try:
+        datetime.strptime(generated_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError as error:
+        raise SystemExit("--generated-at must use YYYY-MM-DDTHH:MM:SSZ") from error
 
     initial_status = collect_docs_automation_status(repo_root)
     provisional_summary = render_summary(

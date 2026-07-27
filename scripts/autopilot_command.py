@@ -27,6 +27,7 @@ from gateway_plugin_bridge import (  # type: ignore
     cleanup_orphan_loop,
     gateway_loop_state_path,
 )
+from gateway_state_protocol import GatewayStateProtocolError  # type: ignore
 from task_graph_bridge import task_graph_runtime_path, task_graph_status_snapshot  # type: ignore
 
 
@@ -160,7 +161,12 @@ def gateway_runtime_status(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
 
 
 def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
-    cleanup_path, changed, reason = cleanup_orphan_loop(cwd)
+    cleanup_error: dict[str, Any] | None = None
+    try:
+        cleanup_path, changed, reason = cleanup_orphan_loop(cwd)
+    except GatewayStateProtocolError as error:
+        cleanup_path, changed, reason = None, False, error.reason_code
+        cleanup_error = error.as_dict()
     gateway_status = gateway_runtime_status(cwd, config)
     return {
         "gateway_runtime_mode": gateway_status.get("runtime_mode"),
@@ -177,6 +183,7 @@ def gateway_state_snapshot(cwd: Path, config: dict[str, Any]) -> dict[str, Any]:
             "changed": changed,
             "reason": reason,
             "state_path": str(cleanup_path) if cleanup_path else None,
+            "error": cleanup_error,
         },
     }
 
@@ -1091,7 +1098,7 @@ def command_doctor(args: list[str]) -> int:
     return 0 if report["result"] == "PASS" else 1
 
 
-def main(argv: list[str]) -> int:
+def _main(argv: list[str]) -> int:
     argv = normalize_args(list(argv))
     debug_command = pop_flag(argv, "--debug-command")
     if debug_command:
@@ -1133,6 +1140,22 @@ def main(argv: list[str]) -> int:
         return command_go(argv)
     goal_tokens = [token for token in argv if token != "--json"]
     return command_go(["--goal", " ".join(goal_tokens), "--json"])
+
+
+def main(argv: list[str]) -> int:
+    try:
+        return _main(argv)
+    except GatewayStateProtocolError as error:
+        emit(
+            {
+                "result": "FAIL",
+                "reason_code": error.reason_code,
+                "gateway_state_error": error.as_dict(),
+                "gateway_loop_state_path": str(gateway_loop_state_path(Path.cwd())),
+            },
+            as_json="--json" in argv,
+        )
+        return 1
 
 
 if __name__ == "__main__":

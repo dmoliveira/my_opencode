@@ -18,6 +18,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import devtools_command as devtools
+import auto_slash_schema
 from playwright_defaults import (
     PLAYWRIGHT_CLI_INTEGRITY,
     PLAYWRIGHT_CLI_LICENSE,
@@ -187,15 +188,163 @@ class DevtoolsPlaywrightCliTest(unittest.TestCase):
                     self.assertEqual(1, devtools.install_playwright_cli())
                 self.assertFalse(any(command[0] == "npx" for command in calls))
 
-    def test_install_all_remains_homebrew_only(self) -> None:
+    def test_all_and_retired_targets_never_run_package_managers(self) -> None:
+        forbidden = {"brew", "gh", "npm", "npx"}
+        cases = [
+            ([], 0),
+            (["all"], 0),
+            (["gh-dash"], 2),
+            (["ripgrep-all"], 2),
+            (["tree-sitter-cli"], 2),
+            (["lefthook"], 2),
+        ]
+        for targets, expected in cases:
+            with self.subTest(targets=targets):
+                commands: list[list[str]] = []
+
+                def run(command, **_kwargs):
+                    commands.append(list(command))
+                    return completed(list(command))
+
+                with (
+                    patch.object(devtools, "install_playwright_cli") as cli_install,
+                    patch.object(
+                        devtools,
+                        "install_ast_grep",
+                        return_value={
+                            "changed": False,
+                            "path": "/managed/bin/ast-grep",
+                        },
+                    ) as ast_install,
+                    patch.object(devtools.shutil, "which", return_value=None),
+                    patch.object(devtools.subprocess, "run", side_effect=run),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    self.assertEqual(expected, devtools.install_tools(targets))
+                cli_install.assert_not_called()
+                if targets in ([], ["all"]):
+                    ast_install.assert_called_once_with()
+                else:
+                    ast_install.assert_not_called()
+                self.assertFalse(
+                    any(Path(command[0]).name in forbidden for command in commands)
+                )
+
+    def test_unmanaged_host_targets_are_manual_only(self) -> None:
+        for target in set(devtools.TOOLS) - {"ast-grep"}:
+            with self.subTest(target=target), patch.object(
+                devtools.shutil, "which", return_value=None
+            ), patch.object(
+                devtools.subprocess,
+                "run",
+                side_effect=AssertionError("host tool install must not execute a command"),
+            ), redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(1, devtools.install_tools([target]))
+                self.assertIn("manage it manually", output.getvalue())
+
+    def test_usage_and_doctor_exclude_retired_tools(self) -> None:
+        retired = {"gh-dash", "ripgrep-all", "tree-sitter-cli", "lefthook"}
+        with redirect_stdout(io.StringIO()) as usage_output:
+            self.assertEqual(2, devtools.usage())
+        self.assertIn("OPENCODE_DEVTOOLS_BIN_ROOT", usage_output.getvalue())
+        for name in retired:
+            self.assertNotIn(name, usage_output.getvalue())
+
         with (
-            patch.object(devtools, "install_playwright_cli") as cli_install,
-            patch.object(devtools, "tool_installed", return_value=True),
-            patch.object(devtools.shutil, "which", return_value="/fake/brew"),
-            patch.object(devtools, "print_status", return_value=0),
+            tempfile.TemporaryDirectory() as raw_tmp,
+            patch.dict(
+                os.environ,
+                {devtools.PLAYWRIGHT_CLI_CACHE_ENV: raw_tmp},
+                clear=False,
+            ),
+            patch.object(devtools.shutil, "which", return_value=None),
+            patch.object(
+                devtools,
+                "ast_grep_status",
+                return_value={
+                    "managed": True,
+                    "ready": False,
+                    "state": "missing",
+                    "path": "/managed/ast-grep",
+                },
+            ),
+            patch.object(
+                devtools.subprocess,
+                "run",
+                side_effect=AssertionError("doctor must remain observation-only"),
+            ),
+            redirect_stdout(io.StringIO()) as doctor_output,
         ):
-            self.assertEqual(0, devtools.install_tools(["all"]))
-        cli_install.assert_not_called()
+            self.assertEqual(0, devtools.print_doctor(json_output=True))
+        report = json.loads(doctor_output.getvalue())
+        self.assertEqual("PASS", report["result"])
+        self.assertEqual(set(devtools.TOOLS), set(report["tools"]))
+        self.assertTrue(retired.isdisjoint(report["tools"]))
+
+    def test_auto_slash_schema_excludes_retired_install_targets(self) -> None:
+        retired = {"gh-dash", "ripgrep-all", "tree-sitter-cli", "lefthook"}
+        devtools_rules = auto_slash_schema.INTENT_RULES["devtools"]
+        self.assertTrue(retired.isdisjoint(devtools_rules["keywords"]))
+        for name in retired:
+            args = auto_slash_schema._resolve_args(
+                "devtools",
+                {"install", name},
+                f"install {name}",
+            )
+            self.assertEqual(["install", "all"], args)
+
+    def test_hooks_install_uses_exact_pre_commit_with_timeout(self) -> None:
+        calls: list[tuple[list[str], dict[str, object]]] = []
+        pre_commit = "/trusted/venv/bin/pre-commit"
+
+        def run(command, **kwargs):
+            calls.append((list(command), dict(kwargs)))
+            return completed(list(command))
+
+        with (
+            patch.object(
+                devtools.shutil,
+                "which",
+                side_effect=lambda name: pre_commit if name == "pre-commit" else None,
+            ),
+            patch.object(devtools.subprocess, "run", side_effect=run),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(0, devtools.hooks_install())
+        self.assertEqual([[pre_commit, "install"]], [item[0] for item in calls])
+        self.assertGreater(calls[0][1]["timeout"], 0)
+        self.assertEqual(devtools.HOOK_INSTALL_TIMEOUT_SECONDS, calls[0][1]["timeout"])
+
+    def test_hooks_install_timeout_fails_closed(self) -> None:
+        pre_commit = "/trusted/venv/bin/pre-commit"
+        with (
+            patch.object(devtools.shutil, "which", return_value=pre_commit),
+            patch.object(
+                devtools.subprocess,
+                "run",
+                side_effect=subprocess.TimeoutExpired(
+                    [pre_commit, "install"],
+                    devtools.HOOK_INSTALL_TIMEOUT_SECONDS,
+                ),
+            ),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(1, devtools.hooks_install())
+        self.assertIn("timed out", output.getvalue())
+
+    def test_hooks_install_os_error_fails_closed(self) -> None:
+        pre_commit = "/trusted/venv/bin/pre-commit"
+        with (
+            patch.object(devtools.shutil, "which", return_value=pre_commit),
+            patch.object(
+                devtools.subprocess,
+                "run",
+                side_effect=OSError("execution denied"),
+            ),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(1, devtools.hooks_install())
+        self.assertIn("unable to run pre-commit", output.getvalue())
 
     def test_doctor_treats_optional_absence_as_warning_without_running_package(self) -> None:
         commands: list[list[str]] = []
@@ -237,6 +386,40 @@ class DevtoolsPlaywrightCliTest(unittest.TestCase):
         self.assertFalse(report["optional"]["playwright-cli"]["ready"])
         self.assertEqual(1, len(commands))
         self.assertIn("node", commands[0][0])
+
+    def test_doctor_fails_closed_for_managed_ast_grep_drift(self) -> None:
+        status = {
+            name: {
+                "installed": name != "ast-grep",
+                "binary": data["bin"],
+                "path": None if name == "ast-grep" else f"/fake/{data['bin']}",
+                **(
+                    {
+                        "managed": {
+                            "managed": True,
+                            "ready": False,
+                            "state": "drift",
+                            "reason_code": "ast_grep_binary_drift",
+                        }
+                    }
+                    if name == "ast-grep"
+                    else {}
+                ),
+            }
+            for name, data in devtools.TOOLS.items()
+        }
+        with patch.object(devtools, "list_status", return_value=status), patch.object(
+            devtools,
+            "playwright_cli_status",
+            return_value={"ready": True},
+        ), redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(1, devtools.print_doctor(json_output=True))
+        report = json.loads(output.getvalue())
+        self.assertEqual("FAIL", report["result"])
+        self.assertEqual(
+            ["ast-grep managed state requires recovery: drift"],
+            report["managed_failures"],
+        )
 
 
 if __name__ == "__main__":

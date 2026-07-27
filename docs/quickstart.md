@@ -41,6 +41,8 @@ For browser UX work, use the verified CLI path first:
 - Use `/browser ensure --json` plus `/mcp profile playwright` when integrated MCP network, storage, assertion, or vision tools are the better fit.
 - See `docs/playwright-ux-scenarios.md` for both paths. Do not install external CLI skill bundles.
 
+On Darwin arm64, `/devtools install ast-grep` installs only pinned `ast-grep 0.45.0` after archive, binary, and version verification. First set `OPENCODE_DEVTOOLS_CACHE_ROOT` and `OPENCODE_DEVTOOLS_BIN_ROOT` to pre-existing absolute owner-only (`0700`) directories; see `docs/command-handbook.md` for the setup commands. Other host tools remain observation/manual-only, and Playwright CLI remains an explicit install outside `install all`.
+
 Exploratory examples after startup is healthy: [h:9e27aaf8]
  [h:e0a80255]
 ```text [h:f71fe560]

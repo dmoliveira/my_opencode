@@ -12747,6 +12747,50 @@ exit 0
             is False,
             "gateway status should persist inactive loop after orphan cleanup",
         )
+        expect(
+            stale_loop_state_path.stat().st_mode & 0o777 == 0o600,
+            "gateway state mutation should migrate legacy state files to owner-only mode",
+        )
+
+        gateway_state_lock = Path(str(stale_loop_state_path) + ".lock")
+        gateway_state_lock.mkdir(mode=0o700)
+        gateway_state_lock_token = gateway_state_lock / "owner-token"
+        gateway_state_lock_token.write_text("a" * 64 + "\n", encoding="ascii")
+        gateway_state_lock_token.chmod(0o600)
+        result = run_gateway("status", "--json")
+        expect(
+            result.returncode == 0,
+            f"gateway status lock diagnostics failed: {result.stderr}",
+        )
+        gateway_status_locked = parse_json_output(result.stdout)
+        expect(
+            gateway_status_locked.get("gateway_state_lock", {}).get("present")
+            is True
+            and gateway_status_locked.get("gateway_state_lock", {}).get("safe")
+            is True,
+            "gateway status should report safe lock presence without stale/PID claims",
+        )
+        expect(
+            gateway_status_locked.get("orphan_cleanup", {}).get("reason")
+            == "gateway_state_lock_timeout"
+            and any(
+                item.get("reason_code") == "gateway_state_lock_timeout"
+                for item in gateway_status_locked.get("state_protocol_errors", [])
+                if isinstance(item, dict)
+            ),
+            "gateway status should surface lock timeout as structured state protocol telemetry",
+        )
+        expect(
+            "stop the gateway state owner"
+            in str(
+                gateway_status_locked.get("gateway_state_lock", {}).get(
+                    "recovery_guidance"
+                )
+            ),
+            "gateway lock diagnostics should require owner stop before manual removal",
+        )
+        gateway_state_lock_token.unlink()
+        gateway_state_lock.rmdir()
 
         result = run_gateway(
             "enable",
@@ -12802,6 +12846,12 @@ exit 0
         expect(
             isinstance(gateway_doctor.get("status", {}).get("hook_diagnostics"), dict),
             "gateway doctor should include hook diagnostics in status",
+        )
+        expect(
+            isinstance(
+                gateway_doctor.get("status", {}).get("gateway_state_lock"), dict
+            ),
+            "gateway doctor should include gateway state lock diagnostics",
         )
 
         gateway_runtime_db_path = tmp / "gateway-doctor-runtime.db"
@@ -14428,8 +14478,47 @@ index 3333333..4444444 100644
             "release-rollup doctor should confirm command availability",
         )
 
+        docs_update_fixture = tmp / "docs_update_fixture"
+        fixture_plan_dir = docs_update_fixture / "docs" / "plan"
+        fixture_workflow_dir = docs_update_fixture / ".github" / "workflows"
+        fixture_pages_dir = docs_update_fixture / "docs" / "pages"
+        fixture_plan_dir.mkdir(parents=True, exist_ok=True)
+        fixture_workflow_dir.mkdir(parents=True, exist_ok=True)
+        fixture_pages_dir.mkdir(parents=True, exist_ok=True)
+        tracked_release_index_path = (
+            REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
+        )
+        tracked_docs_summary_path = (
+            REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
+        )
+        tracked_release_index_before = tracked_release_index_path.read_bytes()
+        tracked_docs_summary_before = tracked_docs_summary_path.read_bytes()
+        for pattern in (
+            "v0.4.*-flow-milestones-changelog.md",
+            "release-notes-*-v0-4-*.md",
+        ):
+            for source in (REPO_ROOT / "docs" / "plan").glob(pattern):
+                shutil.copy2(source, fixture_plan_dir / source.name)
+        shutil.copy2(
+            REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md",
+            fixture_plan_dir / "docs-automation-summary.md",
+        )
+        shutil.copy2(
+            REPO_ROOT / ".github" / "workflows" / "docs-automation.yml",
+            fixture_workflow_dir / "docs-automation.yml",
+        )
+        shutil.copy2(
+            REPO_ROOT / "docs" / "pages" / "index.html",
+            fixture_pages_dir / "index.html",
+        )
+
         release_index_update = subprocess.run(
-            [sys.executable, str(RELEASE_INDEX_UPDATE_SCRIPT)],
+            [
+                sys.executable,
+                str(RELEASE_INDEX_UPDATE_SCRIPT),
+                "--repo-root",
+                str(docs_update_fixture),
+            ],
             capture_output=True,
             text=True,
             env=refactor_env,
@@ -14441,7 +14530,7 @@ index 3333333..4444444 100644
             "release index update helper should regenerate index without errors",
         )
         release_index_text = (
-            REPO_ROOT / "docs" / "plan" / "v0.4-release-index.md"
+            fixture_plan_dir / "v0.4-release-index.md"
         ).read_text(encoding="utf-8")
         release_index_lines = [
             line
@@ -14460,9 +14549,22 @@ index 3333333..4444444 100644
             latest_release_token.startswith("v0.4."),
             "release index update helper should preserve the latest v0.4.x index entry",
         )
+        expect(
+            tracked_release_index_path.read_bytes() == tracked_release_index_before,
+            "release index fixture generation should not mutate the tracked repository index",
+        )
 
+        fixed_docs_generated_at = "2026-07-27T00:00:00Z"
+        docs_automation_summary_command = [
+            sys.executable,
+            str(DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT),
+            "--repo-root",
+            str(docs_update_fixture),
+            "--generated-at",
+            fixed_docs_generated_at,
+        ]
         docs_automation_summary_update = subprocess.run(
-            [sys.executable, str(DOCS_AUTOMATION_SUMMARY_UPDATE_SCRIPT)],
+            docs_automation_summary_command,
             capture_output=True,
             text=True,
             env=refactor_env,
@@ -14474,7 +14576,7 @@ index 3333333..4444444 100644
             "docs automation summary updater should regenerate summary without errors",
         )
         docs_automation_summary_text = (
-            REPO_ROOT / "docs" / "plan" / "docs-automation-summary.md"
+            fixture_plan_dir / "docs-automation-summary.md"
         ).read_text(encoding="utf-8")
         expect(
             bool(latest_release_token)
@@ -14483,18 +14585,45 @@ index 3333333..4444444 100644
             "docs automation summary should include latest indexed release marker",
         )
         expect(
-            "generated_at_utc:" in docs_automation_summary_text
+            f"generated_at_utc: {fixed_docs_generated_at}"
+            in docs_automation_summary_text
             and "publication_target_coverage:" in docs_automation_summary_text,
-            "docs automation summary should include generation timestamp and publication coverage fields",
+            "docs automation summary should honor the fixed generation timestamp and include publication coverage",
         )
         expect(
             "## Remediation Summary" in docs_automation_summary_text
             and "summary_status: ok" in docs_automation_summary_text,
             "docs automation summary should include top-level remediation summary status",
         )
+        expect(
+            tracked_docs_summary_path.read_bytes() == tracked_docs_summary_before,
+            "docs summary fixture generation should not mutate the tracked repository summary",
+        )
+
+        docs_automation_summary_repeat = subprocess.run(
+            docs_automation_summary_command,
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            docs_automation_summary_repeat.returncode == 0
+            and (fixture_plan_dir / "docs-automation-summary.md").read_text(
+                encoding="utf-8"
+            )
+            == docs_automation_summary_text,
+            "docs automation summary generation should be byte-identical with a fixed timestamp",
+        )
 
         docs_automation_sync_check = subprocess.run(
-            [sys.executable, str(DOCS_AUTOMATION_SYNC_CHECK_SCRIPT)],
+            [
+                sys.executable,
+                str(DOCS_AUTOMATION_SYNC_CHECK_SCRIPT),
+                "--repo-root",
+                str(docs_update_fixture),
+            ],
             capture_output=True,
             text=True,
             env=refactor_env,
@@ -18012,15 +18141,41 @@ jobs:
             cwd=REPO_ROOT,
         )
         expect(
+            model_routing_resolve.returncode != 0,
+            "model-routing resolve should fail closed on malformed persisted state",
+        )
+        expect(
+            model_routing_state_path.read_bytes() == b"",
+            "model-routing failure should preserve malformed persisted bytes",
+        )
+        model_routing_state_path.write_text("{}\n", encoding="utf-8")
+        model_routing_resolve = subprocess.run(
+            [
+                sys.executable,
+                str(MODEL_ROUTING_SCRIPT),
+                "resolve",
+                "--override-model",
+                "openai/nonexistent",
+                "--available-models",
+                "openai/gpt-5.4-mini,openai/gpt-5.4",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=refactor_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
             model_routing_resolve.returncode == 0,
-            "model-routing resolve should recover from empty persisted state",
+            "model-routing resolve should recover from a valid empty object",
         )
         model_routing_report = parse_json_output(model_routing_resolve.stdout)
         expect(
             model_routing_report.get("category") == "balanced"
             and model_routing_report.get("settings", {}).get("model")
             == "openai/gpt-5.4",
-            "model-routing resolve should recover from empty state by falling back to defaults and applying model fallback",
+            "model-routing resolve should recover from a valid empty object by falling back to defaults and applying model fallback",
         )
         expect(
             isinstance(model_routing_report.get("resolution_trace"), dict),

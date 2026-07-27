@@ -12,9 +12,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from keyword_mode_schema import (  # type: ignore
     KEYWORDS,
@@ -43,9 +43,7 @@ def parse_value(argv: list[str], flag: str) -> str | None:
     return argv[idx + 1]
 
 
-def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
-    config, _ = load_layered_config()
-    write_path = resolve_write_path()
+def state_from_config(config: dict[str, Any]) -> dict[str, Any]:
     state = config.get(SECTION)
     merged = default_state()
     if isinstance(state, dict):
@@ -64,11 +62,11 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
             merged["effective_flags"] = dict(effective_flags)
         if isinstance(state.get("last_prompt"), str):
             merged["last_prompt"] = state.get("last_prompt")
-    return config, merged, write_path
+    return merged
 
 
-def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
-    config[SECTION] = {
+def persisted_state(state: dict[str, Any]) -> dict[str, Any]:
+    return {
         "enabled": bool(state.get("enabled", True)),
         "disabled_keywords": sorted(
             normalize_disabled_keywords(state.get("disabled_keywords"))
@@ -77,7 +75,24 @@ def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) 
         "effective_flags": state.get("effective_flags", {}),
         "last_prompt": state.get("last_prompt"),
     }
-    save_config_file(config, write_path)
+
+
+def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
+    config, _ = load_layered_config()
+    return config, state_from_config(config), resolve_write_path()
+
+
+def edit_state(mutator) -> tuple[dict[str, Any], Path]:
+    state: dict[str, Any] = {}
+
+    def mutate(config: dict[str, Any]) -> None:
+        nonlocal state
+        state = state_from_config(config)
+        mutator(state)
+        config[SECTION] = persisted_state(state)
+
+    result = edit_layered_config(mutate)
+    return state, result.files[0].path
 
 
 def resolve_from_prompt(state: dict[str, Any], prompt: str) -> dict[str, Any]:
@@ -108,9 +123,7 @@ def parse_keyword(argv: list[str]) -> str | None:
 def command_enable(argv: list[str], enabled: bool) -> int:
     if argv:
         return usage()
-    config, state, write_path = load_state()
-    state["enabled"] = enabled
-    save_state(config, state, write_path)
+    _state, write_path = edit_state(lambda state: state.update({"enabled": enabled}))
     print(f"enabled: {'yes' if enabled else 'no'}")
     print(f"config: {write_path}")
     return 0
@@ -120,14 +133,15 @@ def command_disable_keyword(argv: list[str], disable: bool) -> int:
     keyword = parse_keyword(argv)
     if not keyword:
         return usage()
-    config, state, write_path = load_state()
-    disabled_keywords = normalize_disabled_keywords(state.get("disabled_keywords"))
-    if disable:
-        disabled_keywords.add(keyword)
-    else:
-        disabled_keywords.discard(keyword)
-    state["disabled_keywords"] = sorted(disabled_keywords)
-    save_state(config, state, write_path)
+    def mutate(state: dict[str, Any]) -> None:
+        disabled_keywords = normalize_disabled_keywords(state.get("disabled_keywords"))
+        if disable:
+            disabled_keywords.add(keyword)
+        else:
+            disabled_keywords.discard(keyword)
+        state["disabled_keywords"] = sorted(disabled_keywords)
+
+    state, write_path = edit_state(mutate)
     print(f"keyword: {keyword}")
     print(f"disabled: {'yes' if disable else 'no'}")
     print(f"disabled_keywords: {','.join(state['disabled_keywords']) or '(none)'}")
@@ -227,12 +241,16 @@ def command_apply(argv: list[str]) -> int:
     prompt = parse_value([arg for arg in argv if arg != "--json"], "--prompt")
     if prompt is None:
         return usage()
-    config, state, write_path = load_state()
-    report = resolve_from_prompt(state, prompt)
-    state["active_modes"] = report.get("matched_keywords", [])
-    state["effective_flags"] = report.get("effective_flags", {})
-    state["last_prompt"] = prompt
-    save_state(config, state, write_path)
+    report: dict[str, Any] = {}
+
+    def mutate(state: dict[str, Any]) -> None:
+        nonlocal report
+        report = resolve_from_prompt(state, prompt)
+        state["active_modes"] = report.get("matched_keywords", [])
+        state["effective_flags"] = report.get("effective_flags", {})
+        state["last_prompt"] = prompt
+
+    _state, write_path = edit_state(mutate)
 
     payload = dict(report)
     payload["config"] = str(write_path)

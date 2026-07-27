@@ -36,7 +36,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import load_layered_config, resolve_write_path, save_config  # type: ignore
+from config_layering import ConfigFileParticipant, edit_layered_config, load_layered_config, resolve_write_path  # type: ignore
 from concise_mode_runtime import (  # type: ignore
     VALID_CONCISE_MODES,
     current_session_id,
@@ -62,6 +62,10 @@ from gateway_plugin_bridge import (  # type: ignore
     load_gateway_loop_state,
     plugin_enabled,
     set_plugin_enabled,
+)
+from gateway_state_protocol import (  # type: ignore
+    GatewayStateProtocolError,
+    gateway_state_lock_status,
 )
 from session_command import (  # type: ignore
     DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
@@ -112,6 +116,20 @@ def print_gateway_doctor_human(report: dict[str, Any]) -> None:
     print(f"runtime_mode: {status.get('runtime_mode')}")
     print(f"runtime_reason_code: {status.get('runtime_reason_code')}")
     print(f"plugin_enabled: {'yes' if status.get('enabled') else 'no'}")
+    state_lock_any = status.get("gateway_state_lock")
+    state_lock = state_lock_any if isinstance(state_lock_any, dict) else {}
+    if state_lock:
+        print(
+            "gateway_state_lock: "
+            + f"present={bool(state_lock.get('present'))} "
+            + f"safe={bool(state_lock.get('safe'))} "
+            + f"state={state_lock.get('state') or 'unknown'}"
+        )
+        if state_lock.get("present") is True:
+            print(
+                "gateway_state_lock_recovery: "
+                + str(state_lock.get("recovery_guidance") or "inspect lock owner")
+            )
     concise_mode = status.get("concise_mode") if isinstance(status, dict) else {}
     if isinstance(concise_mode, dict):
         print(
@@ -980,8 +998,16 @@ def load_gateway_sidecar_only(cwd: Path) -> tuple[dict[str, Any], Path]:
 
 
 def save_gateway_sidecar_only(path: Path, config: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    replacement = copy.deepcopy(config)
+
+    def replace(current: dict[str, Any]) -> None:
+        current.clear()
+        current.update(replacement)
+
+    edit_layered_config(
+        lambda _config: None,
+        direct_participants=(ConfigFileParticipant(path, replace),),
+    )
 
 
 def parse_positive_int_flag(raw: str) -> int | None:
@@ -1137,21 +1163,26 @@ def command_watchdog_update(
     tool_call_threshold: int | None = None,
     reminder_cooldown_ms: int | None = None,
 ) -> int:
-    sidecar_config, sidecar_path = load_gateway_sidecar_only(Path.cwd())
-    current_any = sidecar_config.get("longTurnWatchdog")
-    current = dict(current_any) if isinstance(current_any, dict) else {}
+    sidecar_path = resolve_gateway_sidecar_path(Path.cwd())
 
-    if enabled is not None:
-        current["enabled"] = enabled
-    if warning_threshold_ms is not None:
-        current["warningThresholdMs"] = warning_threshold_ms
-    if tool_call_threshold is not None:
-        current["toolCallWarningThreshold"] = tool_call_threshold
-    if reminder_cooldown_ms is not None:
-        current["reminderCooldownMs"] = reminder_cooldown_ms
+    def mutate(sidecar_config: dict[str, Any]) -> None:
+        current_any = sidecar_config.get("longTurnWatchdog")
+        current = dict(current_any) if isinstance(current_any, dict) else {}
+        if enabled is not None:
+            current["enabled"] = enabled
+        if warning_threshold_ms is not None:
+            current["warningThresholdMs"] = warning_threshold_ms
+        if tool_call_threshold is not None:
+            current["toolCallWarningThreshold"] = tool_call_threshold
+        if reminder_cooldown_ms is not None:
+            current["reminderCooldownMs"] = reminder_cooldown_ms
+        sidecar_config["longTurnWatchdog"] = current
 
-    sidecar_config["longTurnWatchdog"] = current
-    save_gateway_sidecar_only(sidecar_path, sidecar_config)
+    result = edit_layered_config(
+        lambda _config: None,
+        direct_participants=(ConfigFileParticipant(sidecar_path, mutate),),
+    )
+    sidecar_path = result.files[-1].path
 
     root_config, _ = load_config()
     merged = long_turn_watchdog_section(root_config)
@@ -2084,6 +2115,8 @@ def hook_diagnostics(pdir: Path) -> dict[str, Any]:
         pdir / "dist" / "hooks" / "continuation" / "index.js",
         pdir / "dist" / "hooks" / "safety" / "index.js",
     ]
+    src_state_protocol = pdir / "src" / "state" / "protocol.ts"
+    dist_state_protocol = pdir / "dist" / "state" / "protocol.js"
 
     content = ""
     if dist_index.exists():
@@ -2119,8 +2152,10 @@ def hook_diagnostics(pdir: Path) -> dict[str, Any]:
     return {
         "source_index_exists": src_index.exists(),
         "source_hooks_exist": all(path.exists() for path in src_hook_files),
+        "source_state_protocol_exists": src_state_protocol.exists(),
         "dist_index_exists": dist_index.exists(),
         "dist_hooks_exist": all(path.exists() for path in dist_hook_files),
+        "dist_state_protocol_exists": dist_state_protocol.exists(),
         "dist_exposes_tool_execute_before": '"tool.execute.before"' in content,
         "dist_exposes_command_execute_before": '"command.execute.before"' in content,
         "dist_exposes_command_execute_after": '"command.execute.after"' in content,
@@ -2163,6 +2198,7 @@ def gateway_runtime_mode(
         "dist_continuation_handles_session_idle",
         "dist_safety_handles_session_deleted",
         "dist_safety_handles_session_error",
+        "dist_state_protocol_exists",
     ]
     missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
     plugin_ready = (
@@ -2209,17 +2245,32 @@ def status_payload(
 ) -> dict[str, Any]:
     pdir = plugin_dir(home)
     cleanup: dict[str, Any] | None = None
+    state_protocol_errors: list[dict[str, Any]] = []
     if cleanup_orphans:
-        cleanup_path, changed, reason = cleanup_orphan_loop(
-            cwd, max_age_hours=orphan_max_age_hours
-        )
-        cleanup = {
-            "attempted": True,
-            "changed": changed,
-            "reason": reason,
-            "state_path": str(cleanup_path) if cleanup_path else None,
-        }
-    loop_state = load_gateway_loop_state(cwd)
+        try:
+            cleanup_path, changed, reason = cleanup_orphan_loop(
+                cwd, max_age_hours=orphan_max_age_hours
+            )
+            cleanup = {
+                "attempted": True,
+                "changed": changed,
+                "reason": reason,
+                "state_path": str(cleanup_path) if cleanup_path else None,
+            }
+        except GatewayStateProtocolError as error:
+            state_protocol_errors.append(error.as_dict())
+            cleanup = {
+                "attempted": True,
+                "changed": False,
+                "reason": error.reason_code,
+                "state_path": None,
+                "error": error.as_dict(),
+            }
+    try:
+        loop_state = load_gateway_loop_state(cwd)
+    except GatewayStateProtocolError as error:
+        state_protocol_errors.append(error.as_dict())
+        loop_state = {}
     enabled = plugin_enabled(config, home)
     bun_available = bun_runtime_available()
     hooks = hook_diagnostics(pdir)
@@ -2228,7 +2279,21 @@ def status_payload(
         bun_available=bun_available,
         hooks=hooks,
     )
-    concise_mode = effective_concise_mode(cwd)
+    try:
+        concise_mode = effective_concise_mode(cwd)
+    except GatewayStateProtocolError as error:
+        state_protocol_errors.append(error.as_dict())
+        concise_mode = {
+            "effective_mode": "off",
+            "effective_source": "state_error",
+            "state_path": str(gateway_loop_state_path(cwd)),
+            "state_exists": gateway_loop_state_path(cwd).exists(),
+            "active_state": None,
+            "stored_active_state": None,
+            "session_match": False,
+            "error": error.as_dict(),
+        }
+    state_lock = gateway_state_lock_status(cwd)
     filtered_loop_state, loop_state_reason = mode_loop_state(
         runtime_mode["mode"], loop_state
     )
@@ -2255,6 +2320,8 @@ def status_payload(
         "loop_state_path": str(gateway_loop_state_path(cwd)),
         "loop_state": filtered_loop_state,
         "loop_state_reason_code": loop_state_reason,
+        "gateway_state_lock": state_lock,
+        "state_protocol_errors": state_protocol_errors,
         "event_audit_enabled": gateway_event_audit_enabled(),
         "event_audit_path": str(gateway_event_audit_path(cwd)),
         "event_audit_exists": gateway_event_audit_path(cwd).exists(),
@@ -2323,6 +2390,7 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
         "dist_continuation_handles_session_idle",
         "dist_safety_handles_session_deleted",
         "dist_safety_handles_session_error",
+        "dist_state_protocol_exists",
     ]
     missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
     if missing:
@@ -2355,8 +2423,26 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
         ]
         emit(fallback, as_json=as_json)
         return 1
-    payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
-    save_config(config, cfg_path)
+    committed_config: dict[str, Any] = {}
+
+    def mutate(current: dict[str, Any]) -> None:
+        nonlocal committed_config
+        set_plugin_enabled(current, home, True)
+        committed_config = copy.deepcopy(current)
+
+    result = edit_layered_config(mutate)
+    cfg_path = result.files[0].path
+    payload = status_payload(committed_config, home, Path.cwd())
+    payload["config"] = str(cfg_path)
+    try:
+        payload["compat"] = ensure_file_plugin_compat(home, plugin_dir(home))
+    except OSError as cause:
+        payload["result"] = "WARN"
+        payload["compat"] = {
+            "applied": False,
+            "reason": "config_committed_compat_failed",
+            "error": type(cause).__name__,
+        }
     emit(payload, as_json=as_json)
     return 0
 
@@ -2364,10 +2450,16 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
 # Disables gateway plugin spec in opencode config.
 def command_disable(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
-    config, cfg_path = load_config()
-    set_plugin_enabled(config, home, False)
-    save_config(config, cfg_path)
-    payload = status_payload(config, home, Path.cwd())
+    committed_config: dict[str, Any] = {}
+
+    def mutate(current: dict[str, Any]) -> None:
+        nonlocal committed_config
+        set_plugin_enabled(current, home, False)
+        committed_config = copy.deepcopy(current)
+
+    result = edit_layered_config(mutate)
+    cfg_path = result.files[0].path
+    payload = status_payload(committed_config, home, Path.cwd())
     payload["config"] = str(cfg_path)
     emit(payload, as_json=as_json)
     return 0
@@ -2414,6 +2506,24 @@ def command_doctor(
             problems.append(message)
         else:
             warnings.append(message)
+
+    state_lock_any = status.get("gateway_state_lock")
+    state_lock = state_lock_any if isinstance(state_lock_any, dict) else {}
+    if state_lock.get("safe") is False:
+        problems.append(
+            "gateway state lock metadata is unsafe; stop the owner and inspect the lock before manual removal"
+        )
+    elif state_lock.get("present") is True:
+        warnings.append(
+            "gateway state lock is present; it may be active. Stop the owner before manually removing the lock directory"
+        )
+    state_errors_any = status.get("state_protocol_errors")
+    state_errors = state_errors_any if isinstance(state_errors_any, list) else []
+    for item in state_errors:
+        if not isinstance(item, dict):
+            continue
+        reason_code = str(item.get("reason_code") or "gateway_state_io_failed")
+        problems.append(f"gateway state protocol error: {reason_code}")
 
     runtime_stale_any = status.get("runtime_staleness")
     runtime_stale = runtime_stale_any if isinstance(runtime_stale_any, dict) else {}
@@ -2549,6 +2659,7 @@ def command_doctor(
             "dist_continuation_handles_session_idle",
             "dist_safety_handles_session_deleted",
             "dist_safety_handles_session_error",
+            "dist_state_protocol_exists",
         ]
         missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
         if missing:
@@ -2583,6 +2694,7 @@ def command_doctor(
             "install bun if file plugins must auto-install",
             "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
             "run /autopilot report to inspect blockers and stale runtime status",
+            "stop the gateway state owner, then manually remove .opencode/gateway-core.state.json.lock only when the owner is stopped",
             "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode direct --output json",
             "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode contract --output json for uncached direct+tuple loader evidence",
         ]
@@ -2795,13 +2907,19 @@ def command_tune_memory(as_json: bool, *, apply: bool = False) -> int:
     }
     if apply:
         applied_sections: list[str] = []
-        for section, values in recommended.items():
-            current_section = config.get(section)
-            merged = dict(current_section) if isinstance(current_section, dict) else {}
-            merged.update(values)
-            config[section] = merged
-            applied_sections.append(section)
-        save_config(config, config_path)
+
+        def mutate(current_config: dict[str, Any]) -> None:
+            for section, values in recommended.items():
+                current_section = current_config.get(section)
+                merged = (
+                    dict(current_section) if isinstance(current_section, dict) else {}
+                )
+                merged.update(values)
+                current_config[section] = merged
+                applied_sections.append(section)
+
+        result = edit_layered_config(mutate)
+        config_path = result.files[0].path
         payload["applied"] = {
             "config_path": str(config_path),
             "sections": applied_sections,
@@ -4237,7 +4355,7 @@ def command_protection(
 
 
 # Dispatches gateway command subcommands.
-def main(argv: list[str]) -> int:
+def _main(argv: list[str]) -> int:
     args = list(argv)
     as_json = False
     force = False
@@ -4579,6 +4697,25 @@ def main(argv: list[str]) -> int:
             return usage()
         return command_doctor(as_json, fresh=fresh, deep=deep)
     return usage()
+
+
+def main(argv: list[str]) -> int:
+    try:
+        return _main(argv)
+    except GatewayStateProtocolError as error:
+        emit(
+            {
+                "result": "FAIL",
+                "reason_code": error.reason_code,
+                "gateway_state_error": error.as_dict(),
+                "quick_fixes": [
+                    "run /gateway doctor --json",
+                    "stop the gateway state owner before manually removing .opencode/gateway-core.state.json.lock",
+                ],
+            },
+            as_json="--json" in argv,
+        )
+        return 1
 
 
 if __name__ == "__main__":

@@ -13,9 +13,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from plan_execution_runtime import load_plan_execution_state  # type: ignore
 from execution_budget_runtime import (  # type: ignore
@@ -59,11 +59,6 @@ def _section(config: dict[str, Any]) -> dict[str, Any]:
         "updated_by": "system",
         "override_reason": None,
     }
-
-
-def _save(config: dict[str, Any], write_path: Path, section: dict[str, Any]) -> None:
-    config[SECTION] = section
-    save_config_file(config, write_path)
 
 
 def _parse_positive_int(raw: str) -> int | None:
@@ -118,13 +113,16 @@ def command_profile(args: list[str]) -> int:
     if profile not in PROFILE_LIMITS:
         return usage()
 
-    config, write_path = _load()
-    section = _section(config)
-    section["profile"] = profile
-    section["updated_at"] = now_iso()
-    section["updated_by"] = "budget profile"
-    section.setdefault("overrides", {})
-    _save(config, write_path, section)
+    def mutate(config: dict[str, Any]) -> None:
+        section = _section(config)
+        section["profile"] = profile
+        section["updated_at"] = now_iso()
+        section["updated_by"] = "budget profile"
+        section.setdefault("overrides", {})
+        config[SECTION] = section
+
+    result = edit_layered_config(mutate)
+    write_path = result.files[0].path
 
     print(f"profile: {profile}")
     print(f"limits: {json.dumps(PROFILE_LIMITS[profile])}")
@@ -182,20 +180,25 @@ def command_override(args: list[str]) -> int:
     if not clear and not updates and reason is None:
         return usage()
 
-    config, write_path = _load()
-    section = _section(config)
-    if clear:
-        section["overrides"] = {}
-    else:
-        current = section.get("overrides")
-        overrides = current if isinstance(current, dict) else {}
-        for key, value in updates.items():
-            overrides[key] = value
-        section["overrides"] = overrides
-    section["override_reason"] = reason
-    section["updated_at"] = now_iso()
-    section["updated_by"] = "budget override"
-    _save(config, write_path, section)
+    section: dict[str, Any] = {}
+
+    def mutate(config: dict[str, Any]) -> None:
+        nonlocal section
+        section = _section(config)
+        if clear:
+            section["overrides"] = {}
+        else:
+            current = section.get("overrides")
+            overrides = dict(current) if isinstance(current, dict) else {}
+            overrides.update(updates)
+            section["overrides"] = overrides
+        section["override_reason"] = reason
+        section["updated_at"] = now_iso()
+        section["updated_by"] = "budget override"
+        config[SECTION] = section
+
+    result = edit_layered_config(mutate)
+    write_path = result.files[0].path
 
     report = {
         "result": "PASS",

@@ -18,7 +18,8 @@ Tracks the active `my_opencode` improvement wave so any AI can recover context q
 
 ## Active PRs
 
-None for this wave right now. Most recent merges are `#406`, `#409`, and `#414`.
+GitHub is authoritative for active PR state. The Done Recently table records
+merged milestones without duplicating a second, easily stale PR list here.
 
 ## Current Epics
 
@@ -176,6 +177,7 @@ Remaining:
 
 | Item | Status | Notes |
 |---|---|---|
+| OpenCode hardening Wave 8 | done | Completed `task_40` through `task_47`; the reviewed plan is under `docs/plan/done/`, and `docs/opencode-hardening-wave-8-audit-2026-07-28.md` records the hermetic validation, model-harness containment, durable gateway/config writes, devtool retirement, exact ast-grep adoption, and closure evidence. |
 | Reconstructed current initiative from git/OpenCode history | done | Reviewed reflog, prompt history, logs, and checkpoints. |
 | Merged model routing entrypoint PR | done | `#406` merged after refresh-from-main and CI pass. |
 | Merged selftest follow-up PR | done | `#409` merged after refresh-from-main and CI pass. |
@@ -197,22 +199,15 @@ Remaining:
 
 ## Next Tasks
 
-<<<<<<< HEAD
-1. Continue post-merge verification for protected-main guard behavior in real operator flows.
-2. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
-3. Keep active docs canonical-first as new command/runtime slices land.
-4. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer`, `task-resume-info`, `mistake-ledger`, and `validation-evidence-ledger` in shadow until then.
-5. Expand the semantic decision inventory so every ambiguous classification path is tracked by `done` / `doing` / `pending` status band.
-6. Decide whether direct-work discipline should remain warn-first by default or gain a broader escalation policy.
-7. Convert the AI-native autopilot design into a first execution slice, starting with completion-gate unification plus machine-readable task ownership.
-8. Keep this tracker and the CLI todo list synchronized at each task handoff.
-=======
 1. Continue E7/E13 by strengthening lane-level lease identity/ownership guarantees before broadening write-capable parallelism beyond the tiny implement-lane allowlist.
 2. Continue post-merge verification for protected-main guard behavior in real operator flows.
 3. Monitor branch-freshness guard fallbacks in live PR merge/update workflows.
 4. Keep active docs canonical-first as new command/runtime slices land.
-5. Keep this tracker and the CLI todo list synchronized at each task handoff.
->>>>>>> 551182d (Build local shared-memory and swarm execution foundation)
+5. Accumulate a fresh live disagreement window, then rerun rollout reporting before promoting `delegation-fallback-orchestrator`; keep `todo-continuation-enforcer`, `task-resume-info`, `mistake-ledger`, and `validation-evidence-ledger` in shadow until then.
+6. Expand the semantic decision inventory so every ambiguous classification path is tracked by `done` / `doing` / `pending` status band.
+7. Decide whether direct-work discipline should remain warn-first by default or gain a broader escalation policy.
+8. Convert the AI-native autopilot design into a first execution slice, starting with completion-gate unification plus machine-readable task ownership.
+9. Keep this tracker and the CLI todo list synchronized at each task handoff.
 
 ## Handoff Notes
 

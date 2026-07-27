@@ -2,8 +2,8 @@
 
 import json
 import os
-import subprocess
 import sys
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,9 +12,16 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
+)
+from model_routing_command import CONFIG_PATH as MODEL_ROUTING_PATH, _merged_state  # type: ignore
+from policy_command import PROFILE_MAP as POLICY_PROFILES  # type: ignore
+from telemetry_command import (  # type: ignore
+    PROFILE_MAP as TELEMETRY_PROFILES,
+    load_state_from_dict as load_telemetry_state,
 )
 
 
@@ -115,6 +122,35 @@ PROFILES = {
     },
 }
 
+PROFILE_OUTCOMES = {
+    "focus": {
+        "telemetry": "off",
+        "post_session": {"enabled": False},
+        "policy": "strict",
+        "model_routing": "deep",
+    },
+    "research": {
+        "telemetry": "local",
+        "post_session": {
+            "enabled": True,
+            "command": "make selftest",
+            "run_on": ["exit", "manual"],
+        },
+        "policy": "balanced",
+        "model_routing": "deep",
+    },
+    "quiet-ci": {
+        "telemetry": "off",
+        "post_session": {
+            "enabled": True,
+            "command": "make validate",
+            "run_on": ["manual"],
+        },
+        "policy": "strict",
+        "model_routing": "quick",
+    },
+}
+
 
 def usage() -> int:
     print("usage: /stack status | /stack help | /stack apply <focus|research|quiet-ci>")
@@ -143,7 +179,7 @@ def load_state() -> dict:
     return {"current": None, "updated_at": None, "description": None}
 
 
-def save_state(profile: str, description: str) -> None:
+def apply_state(profile: str, description: str) -> None:
     global LAYERED_WRITE_PATH
     LAYERED_WRITE_PATH = resolve_write_path()
     payload = {
@@ -152,14 +188,116 @@ def save_state(profile: str, description: str) -> None:
         "updated_at": now_iso(),
     }
 
-    if LEGACY_ENV_SET:
-        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        return
+    outcome = PROFILE_OUTCOMES[profile]
+    participants: list[ConfigFileParticipant] = []
+    telemetry_path_raw = os.environ.get("OPENCODE_TELEMETRY_PATH", "").strip()
+    post_path_raw = os.environ.get("MY_OPENCODE_SESSION_CONFIG_PATH", "").strip()
+    policy_path_raw = os.environ.get("MY_OPENCODE_POLICY_PATH", "").strip()
+    notify_path_raw = os.environ.get("OPENCODE_NOTIFICATIONS_PATH", "").strip()
+    telemetry_path = Path(telemetry_path_raw).expanduser() if telemetry_path_raw else None
+    post_path = Path(post_path_raw).expanduser() if post_path_raw else None
+    policy_path = Path(policy_path_raw).expanduser() if policy_path_raw else None
+    notify_path = Path(notify_path_raw).expanduser() if notify_path_raw else None
+    telemetry_profile = TELEMETRY_PROFILES[outcome["telemetry"]]
+    policy_name = outcome["policy"]
+    policy_profile = POLICY_PROFILES[policy_name]
+    notify_payload = copy.deepcopy(policy_profile["notify"])
+    policy_payload = {
+        "current": policy_name,
+        "description": policy_profile["description"],
+        "updated_at": now_iso(),
+        "notify_config": str(notify_path or resolve_write_path()),
+    }
 
-    config, _ = load_layered_config()
-    config[SECTION] = payload
-    save_config_file(config, LAYERED_WRITE_PATH)
+    def mutate_routing(data: dict) -> None:
+        state = _merged_state(data)
+        state["active_category"] = outcome["model_routing"]
+        data.clear()
+        data.update(
+            {
+                "active_category": state.get("active_category", "balanced"),
+                "system_defaults": state.get("system_defaults", {}),
+                "latest_trace": state.get("latest_trace", {}),
+            }
+        )
+
+    participants.append(ConfigFileParticipant(MODEL_ROUTING_PATH, mutate_routing))
+
+    def mutate_telemetry(data: dict) -> None:
+        telemetry = load_telemetry_state(data)
+        telemetry["enabled"] = telemetry_profile["enabled"]
+        telemetry["events"] = copy.deepcopy(telemetry_profile["events"])
+        data.clear()
+        data.update(telemetry)
+
+    def mutate_post(data: dict) -> None:
+        post = data.get("post_session")
+        post_state = dict(post) if isinstance(post, dict) else {
+            "enabled": False,
+            "command": "",
+            "timeout_ms": 120000,
+            "run_on": ["exit"],
+        }
+        post_state.update(copy.deepcopy(outcome["post_session"]))
+        data.clear()
+        data["post_session"] = post_state
+
+    def replace_policy(data: dict) -> None:
+        data.clear()
+        data.update(policy_payload)
+
+    def replace_notify(data: dict) -> None:
+        data.clear()
+        data.update(copy.deepcopy(notify_payload))
+
+    if telemetry_path is not None:
+        participants.append(ConfigFileParticipant(telemetry_path, mutate_telemetry))
+    if post_path is not None:
+        participants.append(ConfigFileParticipant(post_path, mutate_post))
+    if policy_path is not None:
+        participants.append(ConfigFileParticipant(policy_path, replace_policy))
+    if notify_path is not None:
+        participants.append(ConfigFileParticipant(notify_path, replace_notify))
+    if LEGACY_ENV_SET:
+        def replace_stack_state(data: dict) -> None:
+            data.clear()
+            data.update(payload)
+
+        participants.append(
+            ConfigFileParticipant(STATE_PATH, replace_stack_state)
+        )
+
+    def mutate_layered(config: dict) -> None:
+        if telemetry_path is None:
+            telemetry_raw = config.get("telemetry")
+            telemetry = load_telemetry_state(
+                telemetry_raw if isinstance(telemetry_raw, dict) else {}
+            )
+            telemetry["enabled"] = telemetry_profile["enabled"]
+            telemetry["events"] = copy.deepcopy(telemetry_profile["events"])
+            config["telemetry"] = telemetry
+        if post_path is None:
+            post = config.get("post_session")
+            post_state = dict(post) if isinstance(post, dict) else {
+                "enabled": False,
+                "command": "",
+                "timeout_ms": 120000,
+                "run_on": ["exit"],
+            }
+            post_state.update(copy.deepcopy(outcome["post_session"]))
+            config["post_session"] = post_state
+        if notify_path is None:
+            config["notify"] = copy.deepcopy(notify_payload)
+        if policy_path is None:
+            config["policy"] = policy_payload
+        if not LEGACY_ENV_SET:
+            config[SECTION] = payload
+
+    result = edit_layered_config(
+        mutate_layered,
+        direct_participants=tuple(participants),
+    )
+    LAYERED_WRITE_PATH = result.files[0].path
 
 
 def print_status() -> int:
@@ -176,24 +314,7 @@ def apply_profile(profile: str) -> int:
     if not entry:
         return usage()
 
-    for step in entry["steps"]:
-        result = subprocess.run(
-            step,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=os.environ.copy(),
-            cwd=REPO_ROOT,
-        )
-        if result.returncode != 0:
-            print(f"error: step failed: {' '.join(step)}")
-            if result.stdout.strip():
-                print(result.stdout.strip())
-            if result.stderr.strip():
-                print(result.stderr.strip())
-            return result.returncode
-
-    save_state(profile, entry["description"])
+    apply_state(profile, entry["description"])
     print(f"profile: {profile}")
     print(f"description: {entry['description']}")
     print(f"state_path: {STATE_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")

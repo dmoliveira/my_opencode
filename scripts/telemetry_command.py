@@ -12,9 +12,10 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 
 
@@ -111,18 +112,47 @@ def load_state_from_dict(data: dict) -> dict:
     return state
 
 
-def save_state(state: dict) -> None:
+def edit_state(mutator) -> tuple[dict, Path]:
     global LAYERED_WRITE_PATH
     LAYERED_WRITE_PATH = resolve_write_path()
+    state: dict = {}
 
     if LEGACY_ENV_SET:
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-        return
+        def mutate_legacy(data: dict) -> None:
+            nonlocal state
+            state = load_state_from_dict(data)
+            mutator(state)
+            data.clear()
+            data.update(state)
 
-    data, _ = load_layered_config()
-    data[SECTION] = state
-    save_config_file(data, LAYERED_WRITE_PATH)
+        result = edit_layered_config(
+            lambda _config: None,
+            direct_participants=(ConfigFileParticipant(CONFIG_PATH, mutate_legacy),),
+        )
+        return state, next(
+            item.path for item in result.files if item.path == CONFIG_PATH.absolute()
+        )
+
+    def mutate_layered(data: dict) -> None:
+        nonlocal state
+        raw = data.get(SECTION)
+        state = load_state_from_dict(raw if isinstance(raw, dict) else {})
+        mutator(state)
+        data[SECTION] = state
+
+    result = edit_layered_config(mutate_layered)
+    LAYERED_WRITE_PATH = result.files[0].path
+    return state, LAYERED_WRITE_PATH
+
+
+def save_state(state: dict) -> None:
+    replacement = json.loads(json.dumps(state))
+
+    def replace(current: dict) -> None:
+        current.clear()
+        current.update(replacement)
+
+    edit_state(replace)
 
 
 def usage() -> int:
@@ -323,30 +353,45 @@ def main(argv: list[str]) -> int:
     if argv[0] == "profile":
         if len(argv) < 2:
             return usage()
-        code = apply_profile(state, argv[1])
+        code = 0
+
+        def mutate(current: dict) -> None:
+            nonlocal code
+            code = apply_profile(current, argv[1])
+
+        state, _path = edit_state(mutate)
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] in ("enable", "disable"):
         if len(argv) < 2:
             return usage()
-        code = toggle(state, argv[0], argv[1])
+        code = 0
+
+        def mutate(current: dict) -> None:
+            nonlocal code
+            code = toggle(current, argv[0], argv[1])
+
+        state, _path = edit_state(mutate)
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 
     if argv[0] == "set":
         if len(argv) < 3:
             return usage()
-        code = set_value(state, argv[1], argv[2])
+        code = 0
+
+        def mutate(current: dict) -> None:
+            nonlocal code
+            code = set_value(current, argv[1], argv[2])
+
+        state, _path = edit_state(mutate)
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {CONFIG_PATH if LEGACY_ENV_SET else LAYERED_WRITE_PATH}")
         return 0
 

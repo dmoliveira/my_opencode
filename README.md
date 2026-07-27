@@ -79,7 +79,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 - ⏱️ Built-in `/budget` command for execution budget profile, override, and diagnostics.
 - 🧠 Custom runtime agents: `orchestrator` (Tab-visible primary), plus hidden specialists such as `explore`, `librarian`, `oracle`, `verifier`, `reviewer`, `release-scribe`, `experience-designer`, `strategic-planner`, `ambiguity-analyst`, and `plan-critic`.
 - 🧠 Built-in `/nvim` command to install and validate deeper `opencode.nvim` keymap integration.
-- 🧰 Built-in `/devtools` command to manage external productivity tooling.
+- 🧰 Built-in `/devtools` command to observe host tooling and explicitly install only provenance-checked optional targets.
 - 🧭 Built-in `/auto-slash` command to map natural-language intent to safe slash command previews.
 - 🧩 Built-in `/ox` + `/ox-*` prompt-pack commands for reusable automation expansions such as UX audits, design concepting, review/improve loops, ship readiness, and wrap-up handoffs.
 - 🎨 Built-in `/image` command for repo-native design artifact prompts and OpenAI-backed generation under `artifacts/design/`.
@@ -245,7 +245,6 @@ Profiles:
 - `install.sh` - one-step installer/updater
 - `Makefile` - common maintenance commands (`make help`)
 - `.pre-commit-config.yaml` - pre-commit hook definitions
-- `lefthook.yml` - fast git hook runner config
 - `.envrc.example` - direnv template for local environment variables
 - `.github/workflows/ci.yml` - CI checks and installer smoke test
 

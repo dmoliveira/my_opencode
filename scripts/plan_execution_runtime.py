@@ -7,7 +7,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from config_layering import save_config as save_config_file
+from config_layering import (
+    ConfigFileParticipant,
+    ConfigTransactionError,
+    edit_layered_config,
+)
 
 
 SECTION = "plan_execution"
@@ -48,20 +52,66 @@ def load_plan_execution_state(
 
 
 def save_plan_execution_state(
-    config: dict[str, Any], write_path: Path, runtime: dict[str, Any]
+    config: dict[str, Any],
+    write_path: Path,
+    runtime: dict[str, Any],
+    *,
+    expected_runtime: dict[str, Any],
 ) -> Path:
     runtime_path = _runtime_path(write_path)
-    runtime_path.parent.mkdir(parents=True, exist_ok=True)
-    runtime_path.write_text(json.dumps(runtime, indent=2) + "\n", encoding="utf-8")
+    replacement = json.loads(json.dumps(runtime))
+    expected = json.loads(json.dumps(expected_runtime))
+    legacy_seed_any = config.get(SECTION)
+    legacy_seed = legacy_seed_any if isinstance(legacy_seed_any, dict) else {}
+    transaction_legacy_seed = legacy_seed
+    transaction_legacy_authoritative = False
+
+    def fingerprint(value: dict[str, Any]) -> str:
+        return json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+    def require_expected(current: dict[str, Any]) -> None:
+        if fingerprint(current) != fingerprint(expected):
+            raise ConfigTransactionError(
+                "plan_runtime_stale",
+                "plan execution runtime changed after it was loaded",
+                phase="mutate",
+            )
+
+    def replace_runtime(current: dict[str, Any]) -> None:
+        if not transaction_legacy_authoritative:
+            require_expected(current if current else transaction_legacy_seed)
+        current.clear()
+        current.update(replacement)
 
     legacy_env_path = os.environ.get(LEGACY_CONFIG_ENV_VAR, "").strip()
-    if legacy_env_path:
-        config[SECTION] = runtime
-        save_config_file(config, write_path)
-        return runtime_path
 
-    if SECTION in config:
-        del config[SECTION]
-        save_config_file(config, write_path)
+    def mutate_layered(current: dict[str, Any]) -> None:
+        nonlocal transaction_legacy_authoritative, transaction_legacy_seed
+        current_runtime = current.get(SECTION)
+        transaction_legacy_seed = (
+            current_runtime if isinstance(current_runtime, dict) else {}
+        )
+        transaction_legacy_authoritative = bool(
+            legacy_env_path and isinstance(current_runtime, dict)
+        )
+        if legacy_env_path:
+            if transaction_legacy_authoritative:
+                require_expected(transaction_legacy_seed)
+            current[SECTION] = replacement
+        else:
+            current.pop(SECTION, None)
+
+    edit_layered_config(
+        mutate_layered,
+        direct_participants=(
+            ConfigFileParticipant(runtime_path, replace_runtime),
+        ),
+    )
 
     return runtime_path

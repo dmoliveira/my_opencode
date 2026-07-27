@@ -1,4 +1,5 @@
 export interface GatewayLoopState {
+    [key: string]: unknown;
     active: boolean;
     sessionId: string;
     objective: string;
@@ -11,6 +12,7 @@ export interface GatewayLoopState {
     startedAt: string;
 }
 export interface GatewayConciseModeState {
+    [key: string]: unknown;
     mode: "off" | "lite" | "full" | "ultra" | "review" | "commit";
     source: string;
     sessionId: string;
@@ -18,6 +20,7 @@ export interface GatewayConciseModeState {
     updatedAt: string;
 }
 export interface GatewayState {
+    [key: string]: unknown;
     activeLoop: GatewayLoopState | null;
     conciseMode?: GatewayConciseModeState | null;
     lastUpdatedAt: string;

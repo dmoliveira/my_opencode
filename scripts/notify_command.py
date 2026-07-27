@@ -11,9 +11,10 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 from policy_command import main as policy_main  # type: ignore
 
@@ -230,9 +231,8 @@ def load_config_from_dict(data: dict) -> dict:
     return state
 
 
-def write_config(config_path: Path, state: dict) -> None:
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config = {
+def persisted_state(state: dict) -> dict:
+    return {
         "enabled": state["enabled"],
         "sound": {
             "enabled": state["sound"]["enabled"],
@@ -249,35 +249,54 @@ def write_config(config_path: Path, state: dict) -> None:
         "events": state["events"],
         "channels": state["channels"],
     }
-    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+def edit_state(mutator) -> tuple[dict, Path]:
+    global CONFIG_PATH
+    CONFIG_PATH = resolve_write_path()
+    state: dict = {}
+
+    if LEGACY_ENV_SET:
+        def mutate_legacy(data: dict) -> None:
+            nonlocal state
+            state = load_config_from_dict(data)
+            mutator(state)
+            data.clear()
+            data.update(persisted_state(state))
+
+        result = edit_layered_config(
+            lambda _data: None,
+            direct_participants=(
+                ConfigFileParticipant(DEFAULT_CONFIG_PATH, mutate_legacy),
+            ),
+        )
+        return state, result.files[-1].path
+
+    def mutate_layered(data: dict) -> None:
+        nonlocal state
+        section = data.get(SECTION)
+        if isinstance(section, dict):
+            state = load_config_from_dict(section)
+        elif DEFAULT_CONFIG_PATH.exists():
+            state = load_config(DEFAULT_CONFIG_PATH)
+        else:
+            state = default_state()
+        mutator(state)
+        data[SECTION] = persisted_state(state)
+
+    result = edit_layered_config(mutate_layered)
+    CONFIG_PATH = result.files[0].path
+    return state, CONFIG_PATH
 
 
 def save_state(state: dict) -> None:
-    global CONFIG_PATH
-    CONFIG_PATH = resolve_write_path()
-    if LEGACY_ENV_SET:
-        write_config(DEFAULT_CONFIG_PATH, state)
-        return
+    replacement = json.loads(json.dumps(state))
 
-    data, _ = load_layered_config()
-    data[SECTION] = {
-        "enabled": state["enabled"],
-        "sound": {
-            "enabled": state["sound"]["enabled"],
-            "theme": state["sound"]["theme"],
-            "eventThemes": state["sound"]["eventThemes"],
-            "customFiles": state["sound"]["customFiles"],
-        },
-        "visual": {"enabled": state["visual"]["enabled"]},
-        "icons": {
-            "enabled": state["icons"]["enabled"],
-            "version": state["icons"]["version"],
-            "mode": state["icons"]["mode"],
-        },
-        "events": state["events"],
-        "channels": state["channels"],
-    }
-    save_config_file(data, CONFIG_PATH)
+    def replace(current: dict) -> None:
+        current.clear()
+        current.update(replacement)
+
+    edit_state(replace)
 
 
 def usage() -> int:
@@ -702,6 +721,17 @@ def set_icon_version(state: dict, version: str) -> int:
     return 0
 
 
+def apply_state_edit(operation) -> int:
+    code = 0
+
+    def mutate(state: dict) -> None:
+        nonlocal code
+        code = operation(state)
+
+    edit_state(mutate)
+    return code
+
+
 def main(argv: list[str]) -> int:
     state = load_state()
     config_path = DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH
@@ -730,10 +760,9 @@ def main(argv: list[str]) -> int:
     if argv[0] == "profile":
         if len(argv) < 2:
             return usage()
-        code = apply_profile(state, argv[1])
+        code = apply_state_edit(lambda current: apply_profile(current, argv[1]))
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
@@ -743,50 +772,51 @@ def main(argv: list[str]) -> int:
     if argv[0] in ("enable", "disable"):
         if len(argv) < 2:
             return usage()
-        code = set_toggle(state, argv[0], argv[1])
+        code = apply_state_edit(
+            lambda current: set_toggle(current, argv[0], argv[1])
+        )
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     if argv[0] == "channel":
         if len(argv) < 4:
             return usage()
-        code = set_channel(state, argv[1], argv[2], argv[3])
+        code = apply_state_edit(
+            lambda current: set_channel(current, argv[1], argv[2], argv[3])
+        )
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     if argv[0] == "sound-theme":
         if len(argv) < 2:
             return usage()
-        code = set_sound_theme(state, argv[1])
+        code = apply_state_edit(lambda current: set_sound_theme(current, argv[1]))
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     if argv[0] == "event-sound":
         if len(argv) < 3:
             return usage()
-        code = set_event_sound_theme(state, argv[1], argv[2])
+        code = apply_state_edit(
+            lambda current: set_event_sound_theme(current, argv[1], argv[2])
+        )
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 
     if argv[0] == "icon-version":
         if len(argv) < 2:
             return usage()
-        code = set_icon_version(state, argv[1])
+        code = apply_state_edit(lambda current: set_icon_version(current, argv[1]))
         if code != 0:
             return code
-        save_state(state)
         print(f"config: {DEFAULT_CONFIG_PATH if LEGACY_ENV_SET else CONFIG_PATH}")
         return 0
 

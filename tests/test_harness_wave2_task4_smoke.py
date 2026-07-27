@@ -67,6 +67,283 @@ def write_successful_audit(path: Path) -> None:
 
 
 class HarnessWave2Task4SmokeTest(unittest.TestCase):
+    def test_output_authority_creates_private_marked_absent_path(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            repo = Path(raw_tmp) / "repo"
+            runtime = repo / "runtime"
+            runtime.mkdir(parents=True)
+            output, authority = harness.prepare_output_directory(
+                repo, runtime / "evidence"
+            )
+
+            marker = output / harness.OUTPUT_MARKER_NAME
+            self.assertEqual(0o700, stat.S_IMODE(output.stat().st_mode))
+            self.assertEqual(0o600, stat.S_IMODE(marker.stat().st_mode))
+            self.assertEqual(harness.OUTPUT_MARKER_CONTENT, marker.read_bytes())
+            self.assertEqual(harness.OUTPUT_MARKER_NAME, authority["marker"])
+
+    def test_output_authority_rejects_attacks_without_mutating_victims(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = Path(raw_tmp)
+            repo = root / "repo"
+            runtime = repo / "runtime"
+            runtime.mkdir(parents=True)
+            victim = root / "victim"
+            victim.mkdir()
+            victim_file = victim / "keep.txt"
+            victim_file.write_text("unchanged", encoding="utf-8")
+            victim_before = victim_file.stat()
+
+            existing = runtime / "existing"
+            existing.mkdir()
+            existing_file = existing / "keep.txt"
+            existing_file.write_text("existing", encoding="utf-8")
+            (runtime / "leaf-link").symlink_to(victim, target_is_directory=True)
+            (runtime / "ancestor-link").symlink_to(victim, target_is_directory=True)
+            unsafe = runtime / "unsafe"
+            unsafe.mkdir(mode=0o777)
+            unsafe.chmod(0o777)
+
+            attacks = (
+                repo,
+                runtime,
+                root / "outside",
+                existing,
+                runtime / "leaf-link",
+                runtime / "ancestor-link" / "child",
+                runtime / "unsafe" / "child",
+                runtime / "missing" / "child",
+                Path("runtime/../victim"),
+            )
+            for candidate in attacks:
+                with self.subTest(candidate=candidate):
+                    with self.assertRaises(
+                        (FileExistsError, OSError, RuntimeError, ValueError)
+                    ):
+                        harness.prepare_output_directory(repo, candidate)
+
+            victim_after = victim_file.stat()
+            self.assertEqual("unchanged", victim_file.read_text(encoding="utf-8"))
+            self.assertEqual(victim_before.st_ino, victim_after.st_ino)
+            self.assertEqual("existing", existing_file.read_text(encoding="utf-8"))
+
+            repo_without_runtime = root / "repo-without-runtime"
+            repo_without_runtime.mkdir()
+            with self.assertRaises(ValueError):
+                harness.prepare_output_directory(
+                    repo_without_runtime, root / "still-outside"
+                )
+            self.assertFalse((repo_without_runtime / "runtime").exists())
+            with self.assertRaises(FileNotFoundError):
+                harness.prepare_output_directory(
+                    repo_without_runtime,
+                    repo_without_runtime / "runtime" / "missing" / "child",
+                )
+            self.assertFalse((repo_without_runtime / "runtime").exists())
+
+    def test_unsupported_platform_fails_before_output_or_spawn(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            repo = Path(raw_tmp) / "repo"
+            (repo / "runtime").mkdir(parents=True)
+            with (
+                patch.object(harness.sys, "platform", "win32"),
+                patch.object(harness.subprocess, "Popen") as popen,
+            ):
+                with self.assertRaises(RuntimeError):
+                    harness.prepare_output_directory(repo, None)
+                with self.assertRaises(RuntimeError):
+                    harness.run_process(
+                        [sys.executable, "-c", "pass"],
+                        cwd=repo,
+                        env=os.environ.copy(),
+                        timeout=1,
+                    )
+            popen.assert_not_called()
+            self.assertEqual([], list((repo / "runtime").iterdir()))
+
+    def test_bounded_process_capture_records_truncation_and_eof(self) -> None:
+        fixture = REPO_ROOT / "tests" / "fixtures" / "fake_harness_process.py"
+        normal = harness.run_process(
+            [sys.executable, str(fixture), "normal"],
+            cwd=REPO_ROOT,
+            env=os.environ.copy(),
+            timeout=2,
+            stdout_limit=1024,
+            stderr_limit=1024,
+        )
+        self.assertEqual(0, normal["returncode"])
+        self.assertTrue(normal["stream_metadata"]["stdout"]["eof"])
+        self.assertFalse(normal["stream_metadata"]["stdout"]["truncated"])
+
+        flood = harness.run_process(
+            [sys.executable, str(fixture), "stdout-flood", "4096"],
+            cwd=REPO_ROOT,
+            env=os.environ.copy(),
+            timeout=2,
+            stdout_limit=1024,
+            stderr_limit=1024,
+        )
+        self.assertEqual(125, flood["returncode"])
+        self.assertEqual(4096, flood["stdout_total_bytes"])
+        self.assertEqual(1024, len(flood["stdout"].encode("utf-8")))
+        self.assertTrue(flood["stdout_truncated"])
+
+    def test_process_deadline_contains_term_resistance_and_inherited_pipe(self) -> None:
+        fixture = REPO_ROOT / "tests" / "fixtures" / "fake_harness_process.py"
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            marker = Path(raw_tmp) / "term-observed"
+            started = time.monotonic()
+            resistant = harness.run_process(
+                [sys.executable, str(fixture), "ignore-term", str(marker)],
+                cwd=REPO_ROOT,
+                env=os.environ.copy(),
+                timeout=1,
+            )
+            self.assertLess(time.monotonic() - started, 1.3)
+            self.assertEqual(124, resistant["returncode"])
+            self.assertEqual("TERM\n", marker.read_text(encoding="utf-8"))
+            self.assertIn("TERM", resistant["signals_sent"])
+            self.assertIn("KILL", resistant["signals_sent"])
+
+        started = time.monotonic()
+        inherited = harness.run_process(
+            [sys.executable, str(fixture), "inherited-pipe"],
+            cwd=REPO_ROOT,
+            env=os.environ.copy(),
+            timeout=1,
+        )
+        self.assertLess(time.monotonic() - started, 1.3)
+        self.assertEqual(124, inherited["returncode"])
+        self.assertIn("child=", inherited["stdout"])
+        deadline = time.monotonic() + 1
+        while (
+            harness._process_group_members(inherited["process_group"])
+            and time.monotonic() < deadline
+        ):
+            time.sleep(0.02)
+        self.assertEqual(
+            set(), harness._process_group_members(inherited["process_group"])
+        )
+
+    def test_json_line_decoder_enforces_line_queue_and_eof_bounds(self) -> None:
+        message = b'{"jsonrpc":"2.0","id":1,"result":{}}'
+        exact = harness._JsonLineDecoder(max_line_bytes=len(message))
+        exact.feed(message + b"\n")
+        self.assertEqual(1, exact.response(1)["id"])
+        exact.finish()
+        self.assertFalse(exact.error)
+
+        oversized = harness._JsonLineDecoder(max_line_bytes=len(message) - 1)
+        oversized.feed(message)
+        self.assertIn("line exceeded", oversized.error)
+        invalid = harness._JsonLineDecoder()
+        invalid.feed(b"\xff\n")
+        self.assertIn("invalid UTF-8 JSON", invalid.error)
+        partial = harness._JsonLineDecoder()
+        partial.feed(b'{"jsonrpc":')
+        partial.finish()
+        self.assertIn("partial JSON line", partial.error)
+        queue_limited = harness._JsonLineDecoder(max_queue_items=1)
+        queue_limited.feed(message + b"\n" + message.replace(b"1", b"2") + b"\n")
+        self.assertIn("queue exceeded", queue_limited.error)
+        byte_limited = harness._JsonLineDecoder(max_queue_bytes=len(message))
+        byte_limited.feed(message + b"\n")
+        self.assertIn("queue exceeded", byte_limited.error)
+        non_object = harness._JsonLineDecoder()
+        non_object.feed(b"[]\n")
+        self.assertIn("must be objects", non_object.error)
+
+    def test_mcp_selector_transport_uses_one_deadline_and_cleans_group(self) -> None:
+        fixture = REPO_ROOT / "tests" / "fixtures" / "fake_harness_process.py"
+        process = harness.subprocess.Popen(
+            [sys.executable, str(fixture), "mcp"],
+            cwd=REPO_ROOT,
+            env=os.environ.copy(),
+            stdin=harness.subprocess.PIPE,
+            stdout=harness.subprocess.PIPE,
+            stderr=harness.subprocess.PIPE,
+            text=False,
+            bufsize=0,
+            start_new_session=True,
+        )
+        selector, captures = harness._register_process_streams(
+            process, stdout_limit=4096, stderr_limit=4096
+        )
+        decoder = harness._JsonLineDecoder()
+        deadline = time.monotonic() + 2
+        assert process.stdin is not None
+        harness._write_pipe_with_deadline(
+            process.stdin,
+            b'{"jsonrpc":"2.0","id":1,"method":"initialize"}\n',
+            deadline,
+        )
+        response = harness._wait_for_mcp_response(
+            process=process,
+            selector=selector,
+            captures=captures,
+            decoder=decoder,
+            response_id=1,
+            deadline=deadline,
+        )
+        signals = harness._shutdown_mcp_process(
+            process=process,
+            selector=selector,
+            captures=captures,
+            decoder=decoder,
+            deadline=deadline,
+        )
+        self.assertEqual(1, response["result"]["request_id"])
+        self.assertTrue(captures["stdout"].eof)
+        self.assertFalse(captures["stdout"].truncated)
+        self.assertIn("TERM", signals)
+        self.assertLess(time.monotonic(), deadline + 0.1)
+        self.assertEqual(set(), harness._process_group_members(process.pid))
+
+    def test_bounded_tree_rejects_symlink_hardlink_fifo_and_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = Path(raw_tmp)
+            (root / "safe.txt").write_text("safe", encoding="utf-8")
+            exact = harness._scan_bounded_tree(
+                root,
+                max_entries=1,
+                max_files=1,
+                max_file_bytes=4,
+                max_total_bytes=4,
+            )
+            self.assertEqual(1, exact["file_count"])
+            self.assertEqual(4, exact["total_bytes"])
+
+            (root / "link").symlink_to(root / "safe.txt")
+            with self.assertRaises(RuntimeError):
+                harness._scan_bounded_tree(root)
+            (root / "link").unlink()
+            os.link(root / "safe.txt", root / "hardlink")
+            with self.assertRaises(RuntimeError):
+                harness._scan_bounded_tree(root)
+            (root / "hardlink").unlink()
+            if hasattr(os, "mkfifo"):
+                os.mkfifo(root / "fifo")
+                started = time.monotonic()
+                with self.assertRaises(RuntimeError):
+                    harness._scan_bounded_tree(root)
+                self.assertLess(time.monotonic() - started, 0.5)
+                (root / "fifo").unlink()
+            (root / "too-large.txt").write_bytes(b"12345")
+            with self.assertRaises(RuntimeError):
+                harness._scan_bounded_tree(root, max_file_bytes=4)
+
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = Path(raw_tmp)
+            nested = root / "a" / "b"
+            nested.mkdir(parents=True)
+            (nested / "value.txt").write_text("12", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "depth exceeded"):
+                harness._scan_bounded_tree(root, max_depth=1)
+            with self.assertRaisesRegex(RuntimeError, "entry count exceeded"):
+                harness._scan_bounded_tree(root, max_entries=1)
+            with self.assertRaisesRegex(RuntimeError, "aggregate size exceeded"):
+                harness._scan_bounded_tree(root, max_total_bytes=1)
+
     def test_cli_mode_is_explicit_and_all_keeps_legacy_components(self) -> None:
         args = harness.parse_args(["cli", "--scenario-label", "wave6-check"])
         self.assertEqual("cli", args.mode)

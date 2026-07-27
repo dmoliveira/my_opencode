@@ -13,9 +13,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-    save_config as save_config_file,
 )
 
 SECTION = "tmux_visual"
@@ -75,9 +75,17 @@ def load_state() -> tuple[dict[str, Any], dict[str, Any], Path]:
     return config, state, write_path
 
 
-def save_state(config: dict[str, Any], state: dict[str, Any], write_path: Path) -> None:
-    config[SECTION] = state
-    save_config_file(config, write_path)
+def edit_state(mutator) -> tuple[dict[str, Any], Path]:
+    state: dict[str, Any] = {}
+
+    def mutate(config: dict[str, Any]) -> None:
+        nonlocal state
+        state = normalize_state(config.get(SECTION))
+        mutator(state)
+        config[SECTION] = state
+
+    result = edit_layered_config(mutate)
+    return state, result.files[0].path
 
 
 def _runtime_cache_summary() -> dict[str, Any]:
@@ -159,16 +167,15 @@ def command_config(argv: list[str]) -> int:
         return usage()
     key = argv[0].strip().lower()
     value = argv[1].strip()
-    config, state, write_path = load_state()
-
+    parsed_value: Any
     if key == "enabled":
         if value not in {"true", "false"}:
             return usage()
-        state["enabled"] = value == "true"
+        state_key, parsed_value = "enabled", value == "true"
     elif key == "layout":
         if value not in ALLOWED_LAYOUTS:
             return usage()
-        state["layout"] = value
+        state_key, parsed_value = "layout", value
     elif key == "max-panes":
         try:
             parsed = int(value)
@@ -176,20 +183,22 @@ def command_config(argv: list[str]) -> int:
             return usage()
         if parsed < 1:
             return usage()
-        state["max_panes"] = parsed
+        state_key, parsed_value = "max_panes", parsed
     elif key == "safe-panes":
         if value not in {"true", "false"}:
             return usage()
-        state["require_safe_panes"] = value == "true"
+        state_key, parsed_value = "require_safe_panes", value == "true"
     elif key == "session-prefix":
         normalized = "-".join(part for part in value.replace("_", "-").split() if part)
         if not normalized:
             return usage()
-        state["session_prefix"] = normalized
+        state_key, parsed_value = "session_prefix", normalized
     else:
         return usage()
 
-    save_state(config, state, write_path)
+    _state, write_path = edit_state(
+        lambda state: state.update({state_key: parsed_value})
+    )
     print(f"config: {write_path}")
     print(f"updated: {key}")
     return 0

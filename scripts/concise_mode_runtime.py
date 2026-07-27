@@ -8,6 +8,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from gateway_state_protocol import (
+    DomainMutation,
+    load_gateway_state as load_gateway_state_protocol,
+    mutate_gateway_state_domain,
+    update_gateway_state_domain,
+)
+
 UTC = getattr(datetime, "UTC", timezone.utc)
 VALID_CONCISE_MODES = ("off", "lite", "full", "ultra", "review", "commit")
 DEFAULT_CONCISE_MODE = "off"
@@ -66,11 +73,22 @@ def save_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def load_gateway_state(cwd: Path) -> dict[str, Any]:
-    return load_json(resolve_state_path(cwd))
+    return load_gateway_state_protocol(cwd)
 
 
 def save_gateway_state(cwd: Path, payload: dict[str, Any]) -> None:
-    save_json(resolve_state_path(cwd), payload)
+    root_updates = {
+        key: payload[key]
+        for key in ("lastUpdatedAt", "source")
+        if key in payload
+    }
+    update_gateway_state_domain(
+        cwd,
+        "conciseMode",
+        payload.get("conciseMode"),
+        mode="replace",
+        root_updates=root_updates,
+    )
 
 
 def load_sidecar_config(cwd: Path) -> tuple[dict[str, Any], Path]:
@@ -139,26 +157,29 @@ def effective_concise_mode(cwd: Path) -> dict[str, Any]:
 
 def set_active_mode(cwd: Path, mode: str, *, source: str, session_id: str) -> dict[str, Any]:
     normalized = normalize_mode(mode)
-    state = load_gateway_state(cwd)
-    activated_at = now_iso()
-    existing = state.get("conciseMode")
-    if (
-        isinstance(existing, dict)
-        and normalize_mode(existing.get("mode")) == normalized
-        and str(existing.get("sessionId") or "") == session_id
-    ):
-        activated_at = str(existing.get("activatedAt") or activated_at)
-    state["conciseMode"] = {
-        "mode": normalized,
-        "source": source,
-        "sessionId": session_id,
-        "activatedAt": activated_at,
-        "updatedAt": now_iso(),
-    }
-    state["lastUpdatedAt"] = now_iso()
-    if "activeLoop" not in state:
-        state["activeLoop"] = None
-    save_gateway_state(cwd, state)
+    timestamp = now_iso()
+
+    def concise_mutator(existing: Any, _state: dict[str, Any]) -> DomainMutation:
+        activated_at = timestamp
+        if (
+            isinstance(existing, dict)
+            and normalize_mode(existing.get("mode")) == normalized
+            and str(existing.get("sessionId") or "") == session_id
+        ):
+            activated_at = str(existing.get("activatedAt") or activated_at)
+        return DomainMutation(
+            {
+                "mode": normalized,
+                "source": source,
+                "sessionId": session_id,
+                "activatedAt": activated_at,
+                "updatedAt": timestamp,
+            },
+            mode="replace",
+            root_updates={"lastUpdatedAt": timestamp},
+        )
+
+    mutate_gateway_state_domain(cwd, "conciseMode", concise_mutator)
     return effective_concise_mode(cwd)
 
 

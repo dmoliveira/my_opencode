@@ -437,6 +437,14 @@ Autopilot gateway telemetry fields (`--json`):
 | `gateway_orphan_cleanup.changed` | `boolean` | `true` when stale/invalid active loop was deactivated and state file was updated. |
 | `gateway_orphan_cleanup.reason` | `string` | Cleanup outcome reason: `state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, or `stale_loop_deactivated`. |
 | `gateway_orphan_cleanup.state_path` | `string|null` | State file path only when cleanup mutated persisted bridge state. |
+| `gateway_orphan_cleanup.error` | `object|null` | Structured gateway-state protocol error when cleanup cannot acquire or safely inspect state. |
+
+Gateway status and doctor also expose `gateway_state_lock` and
+`state_protocol_errors`. The fixed lock is
+`.opencode/gateway-core.state.json.lock`; it is never reclaimed from PID or age
+heuristics. If a lock remains, stop its owner first, then remove it manually.
+Malformed, unsafe, or contended state is reported with a stable reason code
+instead of being overwritten.
 
 ```bash
 # Quick-fix objective (single-script scope)
@@ -585,14 +593,10 @@ openchamber stop --port 3111
 Recommended baseline stack:
 
 - `ripgrep` (`rg`) for fast repo-wide text and symbol discovery.
-- `ast-grep` (`sg`) for structural search, lint, and safe codemod-style rewrites.
-- `tree-sitter-cli` for language-aware parsing experiments and syntax-aware tooling.
 - `direnv` for per-project environment auto-loading (`.envrc`).
-- `gh-dash` for terminal-native GitHub issue/PR/check workflow.
-- `ripgrep-all` (`rga`) for broad content search beyond plain source files.
 - `watchexec` for auto-rerun loops while iterating on tests, lint, or docs.
 - `tmux` for persistent multi-pane agent sessions when you need visible parallel work.
-- `pre-commit` + `lefthook` for fast local hooks aligned with CI checks.
+- `pre-commit` for local hooks aligned with CI checks.
 
 Optional/manual add-ons:
 
@@ -605,7 +609,8 @@ Use these directly in OpenCode:
 /devtools status
 /devtools help
 /devtools install all
-/devtools install ast-grep ripgrep tree-sitter-cli watchexec tmux
+/devtools install ast-grep
+/devtools install playwright-cli
 /devtools doctor
 /devtools doctor --json
 /devtools hooks-install
@@ -629,13 +634,13 @@ direnv allow
 ```
 
 Notes:
-- `/devtools` installs Homebrew-friendly local binaries; browser-use and Context7 remain manual/opt-in because they need SDK/API-key or CLI-specific setup outside the default brew path.
-- This repo ships `lefthook.yml` and `.pre-commit-config.yaml`.
-- `gh-dash` is installed as a GitHub CLI extension (`gh extension install dlvhdr/gh-dash`).
-- `tree-sitter` the library may already exist as a dependency on some systems; use `tree-sitter-cli` when you want the `tree-sitter` executable.
+- On Darwin arm64, `/devtools install ast-grep` and `install all` can install pinned `ast-grep 0.45.0` into pre-existing absolute owner-only (`0700`) roots selected with `OPENCODE_DEVTOOLS_CACHE_ROOT` and `OPENCODE_DEVTOOLS_BIN_ROOT`. Deprecated `sg` is never installed.
+- `/devtools` observes all other host-managed tools and gives manual guidance without invoking a host package manager.
+- `playwright-cli` remains an exact explicit install and is never included in `install all`.
+- `.pre-commit-config.yaml` is the canonical local hook configuration; `/devtools hooks-install` invokes the resolved local `pre-commit` executable with a finite deadline.
+- Browser-use and Context7 remain manual/opt-in because they need SDK/API-key or CLI-specific setup outside the default host-tool path.
 - Prefer tmux session names with an AI/OpenCode prefix such as `ai-oc-<task>` so cleanup and resume targeting stay obvious.
 - Before leaving a tmux-heavy session behind, run `/tmux doctor --json` and close panes/sessions you no longer need so background state does not drift.
-- For Node-only repositories, Husky is also a valid alternative to Lefthook.
 
 ## Quick install (popular way) ⚡
 

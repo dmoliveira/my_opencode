@@ -44,6 +44,19 @@ npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
 
 The devtools command verifies the exact package version, license, integrity, Node requirement, and lifecycle-script posture before it executes package code. It uses an isolated npm config and owner-only cache; `install all` never includes this optional target.
 
+On Darwin arm64, opt into the exact managed `ast-grep 0.45.0` binary with dedicated private roots:
+
+```bash
+export OPENCODE_DEVTOOLS_CACHE_ROOT="$HOME/.cache/my_opencode/devtools"
+export OPENCODE_DEVTOOLS_BIN_ROOT="$HOME/.local/share/my_opencode/bin"
+install -d -m 700 "$OPENCODE_DEVTOOLS_CACHE_ROOT" "$OPENCODE_DEVTOOLS_BIN_ROOT"
+export PATH="$OPENCODE_DEVTOOLS_BIN_ROOT:$PATH"
+```
+
+Then run `/devtools install ast-grep` or `/devtools install all`. The installer accepts only the pinned Apple Silicon release, installs `ast-grep` but not deprecated `sg`, refuses existing unmanaged destinations, and rehashes the managed binary on every doctor call. Unsupported platforms fail before creating install state.
+
+All remaining host tools are observation-only. Manage them with your trusted host workflow; `/devtools install all` manages exact ast-grep only and reports other tool state without invoking a package manager. Git hooks use the resolved local `pre-commit` executable only.
+
 Reuse the same session for each command, then close only that session:
 
 ```text

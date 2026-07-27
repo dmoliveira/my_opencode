@@ -9,11 +9,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    edit_layered_config,
     load_layered_config,
     resolve_write_path,
-)
-from config_layering import (
-    save_config as save_config_file,
 )
 from playwright_defaults import (  # type: ignore
     PLAYWRIGHT_MCP_CAPABILITIES,
@@ -120,10 +118,10 @@ def load_config() -> dict:
     return data
 
 
-def save_config(data: dict) -> None:
+def edit_config(mutator) -> None:
     global CONFIG_PATH
-    CONFIG_PATH = resolve_write_path()
-    save_config_file(data, CONFIG_PATH)
+    result = edit_layered_config(mutator)
+    CONFIG_PATH = result.files[0].path
 
 
 def status_line(entry: dict) -> str:
@@ -313,19 +311,22 @@ def print_doctor(mcp: dict, json_output: bool = False) -> int:
     return 0
 
 
-def apply_profile(data: dict, mcp: dict, profile: str) -> int:
+def apply_profile(profile: str) -> int:
     if profile not in PROFILE_MAP:
         return usage()
 
     enable_set = set(PROFILE_MAP[profile])
-    for name in ACTIVE_SERVERS:
-        entry = ensure_server_entry(mcp, name)
-        entry["enabled"] = name in enable_set
-    for name in RETIRED_SERVERS:
-        disable_retired_entry(mcp, name)
 
-    data["mcp"] = mcp
-    save_config(data)
+    def mutate(data: dict) -> None:
+        mcp = data.setdefault("mcp", {})
+        for name in ACTIVE_SERVERS:
+            entry = ensure_server_entry(mcp, name)
+            entry["enabled"] = name in enable_set
+        for name in RETIRED_SERVERS:
+            disable_retired_entry(mcp, name)
+        data["mcp"] = mcp
+
+    edit_config(mutate)
 
     print(f"profile: {profile}")
     print("enabled servers:")
@@ -339,16 +340,22 @@ def apply_profile(data: dict, mcp: dict, profile: str) -> int:
     return 0
 
 
-def set_enabled(data: dict, mcp: dict, action: str, target: str) -> int:
+def set_enabled(action: str, target: str) -> int:
     normalized = normalized_target(target)
     if normalized in RETIRED_SERVERS:
         if action == "enable":
             print(f"error: {normalized} is retired and cannot be enabled")
             return 1
-        changed = disable_retired_entry(mcp, normalized)
-        if changed:
+        changed = False
+
+        def mutate(data: dict) -> None:
+            nonlocal changed
+            mcp = data.setdefault("mcp", {})
+            changed = disable_retired_entry(mcp, normalized)
             data["mcp"] = mcp
-            save_config(data)
+
+        edit_config(mutate)
+        if changed:
             print(f"{normalized}: disabled")
             print(f"config: {CONFIG_PATH}")
         else:
@@ -360,17 +367,20 @@ def set_enabled(data: dict, mcp: dict, action: str, target: str) -> int:
         return usage()
 
     value = action == "enable"
-    for name in targets:
-        entry = ensure_server_entry(mcp, name)
-        entry["enabled"] = value
     retired_disabled: list[str] = []
-    if normalized == "all" and action == "disable":
-        for name in RETIRED_SERVERS:
-            if disable_retired_entry(mcp, name):
-                retired_disabled.append(name)
 
-    data["mcp"] = mcp
-    save_config(data)
+    def mutate(data: dict) -> None:
+        mcp = data.setdefault("mcp", {})
+        for name in targets:
+            entry = ensure_server_entry(mcp, name)
+            entry["enabled"] = value
+        if normalized == "all" and action == "disable":
+            for name in RETIRED_SERVERS:
+                if disable_retired_entry(mcp, name):
+                    retired_disabled.append(name)
+        data["mcp"] = mcp
+
+    edit_config(mutate)
     state = "enabled" if value else "disabled"
     for name in targets:
         print(f"{name}: {state}")
@@ -403,7 +413,7 @@ def main(argv: list[str]) -> int:
     if argv[0] == "profile":
         if len(argv) < 2:
             return usage()
-        return apply_profile(data, mcp, argv[1])
+        return apply_profile(argv[1])
 
     if len(argv) < 2:
         return usage()
@@ -412,7 +422,7 @@ def main(argv: list[str]) -> int:
     if action not in ("enable", "disable"):
         return usage()
 
-    return set_enabled(data, mcp, action, target)
+    return set_enabled(action, target)
 
 
 if __name__ == "__main__":

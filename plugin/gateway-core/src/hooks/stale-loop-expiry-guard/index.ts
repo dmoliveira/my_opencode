@@ -1,6 +1,6 @@
 import { REASON_CODES } from "../../bridge/reason-codes.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
-import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js"
+import { nowIso, transactGatewayStateDomain } from "../../state/storage.js"
 import type { GatewayHook } from "../registry.js"
 
 interface SessionIdlePayload {
@@ -41,28 +41,41 @@ export function createStaleLoopExpiryGuardHook(options: {
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
           : options.directory
-      const state = loadGatewayState(directory)
-      const active = state?.activeLoop
-      if (!state || !active || active.active !== true) {
-        return
-      }
       const sessionId = resolveSessionId(eventPayload)
-      if (!sessionId || sessionId !== active.sessionId) {
+      const expired = transactGatewayStateDomain(directory, "activeLoop", (current) => {
+        const active =
+          current && typeof current === "object" && !Array.isArray(current)
+            ? (current as Record<string, unknown>)
+            : null
+        if (
+          !active ||
+          active.active !== true ||
+          !sessionId ||
+          String(active.sessionId ?? "") !== sessionId
+        ) {
+          return null
+        }
+        const startedAt = Date.parse(String(active.startedAt ?? ""))
+        if (!Number.isFinite(startedAt)) {
+          return null
+        }
+        const ageMs = Date.now() - startedAt
+        const maxAgeMs = maxAgeMinutes * 60 * 1000
+        if (ageMs <= maxAgeMs) {
+          return null
+        }
+        return {
+          value: { active: false },
+          mode: "patch",
+          rootUpdates: {
+            lastUpdatedAt: nowIso(),
+            source: REASON_CODES.LOOP_ORPHAN_CLEANED,
+          },
+        }
+      })
+      if (!expired.changed) {
         return
       }
-      const startedAt = Date.parse(active.startedAt)
-      if (!Number.isFinite(startedAt)) {
-        return
-      }
-      const ageMs = Date.now() - startedAt
-      const maxAgeMs = maxAgeMinutes * 60 * 1000
-      if (ageMs <= maxAgeMs) {
-        return
-      }
-      active.active = false
-      state.lastUpdatedAt = nowIso()
-      state.source = REASON_CODES.LOOP_ORPHAN_CLEANED
-      saveGatewayState(directory, state)
       writeGatewayEventAudit(directory, {
         hook: "stale-loop-expiry-guard",
         stage: "state",
