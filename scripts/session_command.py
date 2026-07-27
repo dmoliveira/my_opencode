@@ -74,7 +74,11 @@ RUNTIME_DB_SIZE_WARN_BYTES = max(
 RUNTIME_DB_SCAN_WARN_MS = max(
     1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SCAN_WARN_MS", "1000"))
 )
-RUNTIME_DB_BUSY_TIMEOUT_MS = 5_000
+RUNTIME_DB_SCAN_TIMEOUT_MS = max(
+    1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SCAN_TIMEOUT_MS", "5000"))
+)
+RUNTIME_DB_BUSY_TIMEOUT_MS = min(5_000, RUNTIME_DB_SCAN_TIMEOUT_MS)
+RUNTIME_DB_PROGRESS_OPCODES = 1_000
 
 DEFAULT_STALE_SESSION_SECONDS = max(
     60,
@@ -450,6 +454,18 @@ def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
     connection.execute(f"PRAGMA busy_timeout = {RUNTIME_DB_BUSY_TIMEOUT_MS}")
     return connection
+
+
+class _RuntimeScanBudget:
+    def __init__(self, timeout_ms: int) -> None:
+        self.deadline = time.monotonic() + (max(1, timeout_ms) / 1000.0)
+        self.timed_out = False
+
+    def progress(self) -> int:
+        if time.monotonic() < self.deadline:
+            return 0
+        self.timed_out = True
+        return 1
 
 
 
@@ -1097,32 +1113,62 @@ def _scan_runtime_stuck_sessions(
     scan_now_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
     warnings: list[str] = []
     problems: list[str] = []
+    remediation_codes: list[str] = []
     runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     runtime_db_wal_path = Path(f"{db_path}-wal")
-    runtime_db_wal_bytes = runtime_db_wal_path.stat().st_size if runtime_db_wal_path.exists() else 0
+    runtime_db_wal_bytes = (
+        runtime_db_wal_path.stat().st_size if runtime_db_wal_path.exists() else 0
+    )
     if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
         warnings.append(
             f"runtime database footprint exceeds configured budget {RUNTIME_DB_SIZE_WARN_BYTES} bytes"
         )
+        remediation_codes.append("runtime_storage_budget_exceeded")
+
     findings: list[dict] = []
     generic_stale_findings: list[dict] = []
+    generic_stale_count = 0
     runtime_db_journal_mode: str | None = None
     runtime_db_sqlite_version: str | None = None
     runtime_db_missing_tables: list[str] = []
     runtime_db_json1_available = False
+    runtime_db_json1_checked = False
     runtime_db_indexes: dict[str, list[str]] = {}
     runtime_db_index_columns: dict[str, dict[str, list[str]]] = {}
     runtime_db_scan_mode = "unavailable"
-    if not db_path.exists():
-        warnings.append("runtime session database does not exist yet")
+    runtime_db_query_only = False
+    runtime_db_snapshot_started = False
+    runtime_db_scan_complete = False
+
+    def add_remediation(code: str) -> None:
+        if code not in remediation_codes:
+            remediation_codes.append(code)
+
+    def result() -> dict:
+        runtime_db_scan_duration_ms = round(
+            (time.perf_counter() - started_at) * 1000, 2
+        )
+        latency_warning = (
+            f"runtime diagnostic scan exceeds configured latency budget {RUNTIME_DB_SCAN_WARN_MS} ms"
+        )
+        if (
+            runtime_db_scan_duration_ms >= RUNTIME_DB_SCAN_WARN_MS
+            and latency_warning not in warnings
+        ):
+            warnings.append(latency_warning)
         return {
             "warnings": warnings,
             "problems": problems,
+            "remediation_codes": remediation_codes,
             "stuck_findings": findings,
             "generic_stale_findings": generic_stale_findings,
-            "generic_stale_count": 0,
+            "generic_stale_count": generic_stale_count,
             "generic_stale_problem_threshold": generic_stale_problem_threshold,
             "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
+            "runtime_db_scan_timeout_ms": RUNTIME_DB_SCAN_TIMEOUT_MS,
+            "runtime_db_query_only": runtime_db_query_only,
+            "runtime_db_snapshot_started": runtime_db_snapshot_started,
+            "runtime_db_scan_complete": runtime_db_scan_complete,
             "runtime_db_journal_mode": runtime_db_journal_mode,
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
@@ -1133,21 +1179,51 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_size_bytes": runtime_db_size_bytes,
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
         }
 
-    conn: sqlite3.Connection | None = None
+    if not db_path.exists():
+        warnings.append("runtime session database does not exist yet")
+        return result()
+
+    budget: _RuntimeScanBudget | None = None
     try:
         conn = _connect_runtime_database_readonly(db_path)
+    except Exception as exc:
+        problems.append(f"failed to open runtime session database: {exc}")
+        add_remediation("runtime_db_open_failed")
+        return result()
+
+    try:
+        try:
+            conn.execute("PRAGMA query_only = ON")
+            query_only_row = conn.execute("PRAGMA query_only").fetchone()
+            runtime_db_query_only = bool(
+                query_only_row is not None and int(query_only_row[0]) == 1
+            )
+        except Exception as exc:
+            problems.append(f"failed to enable query-only runtime diagnosis: {exc}")
+            add_remediation("runtime_query_only_unavailable")
+            return result()
+        if not runtime_db_query_only:
+            problems.append("runtime database query-only mode could not be verified")
+            add_remediation("runtime_query_only_unavailable")
+            return result()
+
+        budget = _RuntimeScanBudget(RUNTIME_DB_SCAN_TIMEOUT_MS)
+        conn.set_progress_handler(budget.progress, RUNTIME_DB_PROGRESS_OPCODES)
+        conn.execute("BEGIN")
+        runtime_db_snapshot_started = True
         conn.row_factory = sqlite3.Row
-        journal_row = conn.execute("PRAGMA journal_mode").fetchone()
-        runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
-        version_row = conn.execute("SELECT sqlite_version()").fetchone()
-        runtime_db_sqlite_version = str(version_row[0]) if version_row else None
+
         tables = {
             str(row[0])
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
+        journal_row = conn.execute("PRAGMA journal_mode").fetchone()
+        runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
+        version_row = conn.execute("SELECT sqlite_version()").fetchone()
+        runtime_db_sqlite_version = str(version_row[0]) if version_row else None
         runtime_db_missing_tables = sorted({"session", "message", "part"} - tables)
         runtime_db_indexes = {
             table: [str(row[1]) for row in conn.execute(f"PRAGMA index_list({table})")]
@@ -1165,69 +1241,82 @@ def _scan_runtime_stuck_sessions(
             lambda: scan_now_ms,
             deterministic=True,
         )
-        runtime_db_json1_available = bool(
-            conn.execute("SELECT json_valid('{}')").fetchone()[0]
-        )
+        try:
+            json1_row = conn.execute("SELECT json_valid('{}')").fetchone()
+            runtime_db_json1_checked = True
+            runtime_db_json1_available = bool(json1_row and json1_row[0])
+        except sqlite3.OperationalError as exc:
+            if "no such function" not in str(exc).lower() or "json_valid" not in str(exc).lower():
+                raise
+            runtime_db_json1_checked = True
+            runtime_db_json1_available = False
+
         if runtime_db_missing_tables:
             problems.append(
                 "runtime session database is missing required table(s): "
                 + ", ".join(runtime_db_missing_tables)
             )
-        if not runtime_db_json1_available:
+            add_remediation("runtime_schema_incompatible")
+        if runtime_db_json1_checked and not runtime_db_json1_available:
             problems.append("runtime session database SQLite build lacks JSON1 support")
-    except Exception as exc:
-        if conn is not None:
-            conn.close()
-        problems.append(f"failed to open runtime session database: {exc}")
-        return {
-            "warnings": warnings,
-            "problems": problems,
-            "stuck_findings": findings,
-            "generic_stale_findings": generic_stale_findings,
-            "generic_stale_count": 0,
-            "generic_stale_problem_threshold": generic_stale_problem_threshold,
-            "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
-            "runtime_db_journal_mode": runtime_db_journal_mode,
-            "runtime_db_sqlite_version": runtime_db_sqlite_version,
-            "runtime_db_missing_tables": runtime_db_missing_tables,
-            "runtime_db_json1_available": runtime_db_json1_available,
-            "runtime_db_indexes": runtime_db_indexes,
-            "runtime_db_index_columns": runtime_db_index_columns,
-            "runtime_db_scan_mode": runtime_db_scan_mode,
-            "runtime_db_size_bytes": runtime_db_size_bytes,
-            "runtime_db_wal_bytes": runtime_db_wal_bytes,
-            "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-            "runtime_db_scan_duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
-        }
+            add_remediation("runtime_json1_unavailable")
 
-    try:
-        missing_index_prefixes = _missing_runtime_index_prefixes(
-            runtime_db_index_columns
-        )
-        if missing_index_prefixes:
-            runtime_db_scan_mode = "legacy_fallback"
-            warnings.append(
-                "runtime diagnostic indexed snapshot unavailable; using compatibility scan "
-                f"(missing index prefixes: {', '.join(missing_index_prefixes)})"
-            )
-            findings, generic_stale_findings, generic_stale_count = (
-                _scan_runtime_stuck_sessions_legacy_queries(conn, stale_seconds)
-            )
+        if runtime_db_missing_tables or not runtime_db_json1_available:
+            runtime_db_scan_mode = "incompatible"
         else:
-            runtime_db_scan_mode = "indexed_snapshot"
-            findings, generic_stale_findings, generic_stale_count = (
-                _scan_runtime_stuck_sessions_indexed_queries(
-                    conn,
-                    stale_seconds=stale_seconds,
-                    now_ms=scan_now_ms,
-                )
+            missing_index_prefixes = _missing_runtime_index_prefixes(
+                runtime_db_index_columns
             )
+            if missing_index_prefixes:
+                runtime_db_scan_mode = "legacy_fallback"
+                warnings.append(
+                    "runtime diagnostic indexed snapshot unavailable; using compatibility scan "
+                    f"(missing index prefixes: {', '.join(missing_index_prefixes)})"
+                )
+                findings, generic_stale_findings, generic_stale_count = (
+                    _scan_runtime_stuck_sessions_legacy_queries(conn, stale_seconds)
+                )
+            else:
+                runtime_db_scan_mode = "indexed_snapshot"
+                findings, generic_stale_findings, generic_stale_count = (
+                    _scan_runtime_stuck_sessions_indexed_queries(
+                        conn,
+                        stale_seconds=stale_seconds,
+                        now_ms=scan_now_ms,
+                    )
+                )
+            runtime_db_scan_complete = True
     except sqlite3.DatabaseError as exc:
-        problems.append(f"failed to query runtime session database: {exc}")
+        findings = []
         generic_stale_findings = []
         generic_stale_count = 0
+        if budget is not None and budget.timed_out:
+            runtime_db_scan_mode = "timeout"
+            problems.append(
+                f"runtime session database scan exceeded {RUNTIME_DB_SCAN_TIMEOUT_MS} ms execution budget"
+            )
+            add_remediation("runtime_scan_timeout")
+        else:
+            runtime_db_scan_mode = "query_failed"
+            problems.append(f"failed to query runtime session database: {exc}")
+            add_remediation("runtime_query_failed")
+    except Exception as exc:
+        findings = []
+        generic_stale_findings = []
+        generic_stale_count = 0
+        runtime_db_scan_mode = "query_failed"
+        problems.append(f"failed to query runtime session database: {exc}")
+        add_remediation("runtime_query_failed")
     finally:
-        conn.close()
+        try:
+            conn.set_progress_handler(None, 0)
+        except Exception:
+            pass
+        try:
+            if conn.in_transaction:
+                conn.rollback()
+        finally:
+            conn.close()
 
     findings = _annotate_stale_findings(findings)
     generic_stale_findings = _annotate_stale_findings(generic_stale_findings)
@@ -1242,11 +1331,11 @@ def _scan_runtime_stuck_sessions(
     findings = findings[:MAX_RUNTIME_STALE_FINDINGS]
     generic_stale_findings = generic_stale_findings[:MAX_RUNTIME_STALE_FINDINGS]
 
-    if findings:
+    if runtime_db_scan_complete and findings:
         problems.append(
             f"detected {len(findings)} stuck session health finding(s) older than {stale_seconds}s"
         )
-    elif generic_stale_count > 0:
+    elif runtime_db_scan_complete and generic_stale_count > 0:
         generic_stale_message = f"detected {generic_stale_count} stale incomplete assistant session(s) older than {stale_seconds}s"
         if generic_stale_count >= generic_stale_problem_threshold:
             problems.append(
@@ -1255,38 +1344,7 @@ def _scan_runtime_stuck_sessions(
         else:
             warnings.append(generic_stale_message)
 
-    runtime_db_scan_duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-    if runtime_db_scan_duration_ms >= RUNTIME_DB_SCAN_WARN_MS:
-        warnings.append(f"runtime diagnostic scan exceeds configured latency budget {RUNTIME_DB_SCAN_WARN_MS} ms")
-    remediation_codes = []
-    if runtime_db_missing_tables:
-        remediation_codes.append("runtime_schema_incompatible")
-    if runtime_db_size_bytes + runtime_db_wal_bytes >= RUNTIME_DB_SIZE_WARN_BYTES:
-        remediation_codes.append("runtime_storage_budget_exceeded")
-    if not runtime_db_json1_available:
-        remediation_codes.append("runtime_json1_unavailable")
-    return {
-        "warnings": warnings,
-        "problems": problems,
-        "remediation_codes": remediation_codes,
-        "stuck_findings": findings,
-        "generic_stale_findings": generic_stale_findings,
-        "generic_stale_count": generic_stale_count,
-        "generic_stale_problem_threshold": generic_stale_problem_threshold,
-        "runtime_db_busy_timeout_ms": RUNTIME_DB_BUSY_TIMEOUT_MS,
-        "runtime_db_journal_mode": runtime_db_journal_mode,
-        "runtime_db_sqlite_version": runtime_db_sqlite_version,
-        "runtime_db_missing_tables": runtime_db_missing_tables,
-        "runtime_db_json1_available": runtime_db_json1_available,
-        "runtime_db_indexes": runtime_db_indexes,
-        "runtime_db_index_columns": runtime_db_index_columns,
-        "runtime_db_scan_mode": runtime_db_scan_mode,
-        "runtime_db_size_bytes": runtime_db_size_bytes,
-        "runtime_db_wal_bytes": runtime_db_wal_bytes,
-        "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
-        "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
-    }
-
+    return result()
 
 def _repair_message_and_tool(
     conn: sqlite3.Connection,
@@ -2265,6 +2323,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                     "generic_stale_problem_threshold"
                 ],
                 "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+                "runtime_db_scan_timeout_ms": runtime["runtime_db_scan_timeout_ms"],
+                "runtime_db_query_only": runtime["runtime_db_query_only"],
+                "runtime_db_snapshot_started": runtime["runtime_db_snapshot_started"],
+                "runtime_db_scan_complete": runtime["runtime_db_scan_complete"],
                 "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
                 "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
                 "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
@@ -2335,6 +2397,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "generic_stale_problem_threshold"
             ],
             "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
+            "runtime_db_scan_timeout_ms": runtime["runtime_db_scan_timeout_ms"],
+            "runtime_db_query_only": runtime["runtime_db_query_only"],
+            "runtime_db_snapshot_started": runtime["runtime_db_snapshot_started"],
+            "runtime_db_scan_complete": runtime["runtime_db_scan_complete"],
             "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
             "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
             "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
