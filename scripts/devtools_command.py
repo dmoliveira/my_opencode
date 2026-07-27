@@ -27,21 +27,18 @@ from playwright_defaults import (
 )
 
 TOOLS = {
-    "ast-grep": {"bin": "sg", "brew": "ast-grep"},
-    "direnv": {"bin": "direnv", "brew": "direnv"},
-    "gh-dash": {"bin": "gh", "gh_extension": "dlvhdr/gh-dash"},
-    "ripgrep": {"bin": "rg", "brew": "ripgrep"},
-    "ripgrep-all": {"bin": "rga", "brew": "ripgrep-all"},
-    "tree-sitter-cli": {"bin": "tree-sitter", "brew": "tree-sitter-cli"},
-    "pre-commit": {"bin": "pre-commit", "brew": "pre-commit"},
-    "lefthook": {"bin": "lefthook", "brew": "lefthook"},
-    "tmux": {"bin": "tmux", "brew": "tmux"},
-    "watchexec": {"bin": "watchexec", "brew": "watchexec"},
+    "ast-grep": {"bin": "sg"},
+    "direnv": {"bin": "direnv"},
+    "ripgrep": {"bin": "rg"},
+    "pre-commit": {"bin": "pre-commit"},
+    "tmux": {"bin": "tmux"},
+    "watchexec": {"bin": "watchexec"},
 }
 PLAYWRIGHT_CLI_TARGET = "playwright-cli"
 PLAYWRIGHT_CLI_CACHE_ENV = "OPENCODE_DEVTOOLS_CACHE_ROOT"
 PLAYWRIGHT_CLI_ATTESTATION = "provenance.json"
 PLAYWRIGHT_CLI_COMMAND_TIMEOUT = 180
+HOOK_INSTALL_TIMEOUT_SECONDS = 30
 
 
 def usage() -> int:
@@ -49,10 +46,10 @@ def usage() -> int:
         "usage: /devtools status | /devtools help | /devtools doctor [--json] | /devtools install [all|playwright-cli|<tool> ...] | /devtools hooks-install"
     )
     print(
-        "tools: ast-grep, direnv, gh-dash, ripgrep, ripgrep-all, tree-sitter-cli, pre-commit, lefthook, tmux, watchexec; optional: playwright-cli"
+        "observed tools: ast-grep, direnv, ripgrep, pre-commit, tmux, watchexec; optional exact installer: playwright-cli"
     )
     print(
-        "notes: install all stays Homebrew/gh-only; playwright-cli is an exact, provenance-checked on-demand npm target"
+        "notes: host tools are managed manually; install all is observation-only; playwright-cli requires an explicit exact install"
     )
     return 2
 
@@ -61,20 +58,7 @@ def installed_path(name: str) -> str | None:
     return shutil.which(TOOLS[name]["bin"])
 
 
-def gh_extension_installed(repo: str) -> bool:
-    if not shutil.which("gh"):
-        return False
-    out = subprocess.run(
-        ["gh", "extension", "list"], capture_output=True, text=True, check=False
-    )
-    if out.returncode != 0:
-        return False
-    return repo in out.stdout
-
-
 def tool_installed(name: str) -> bool:
-    if name == "gh-dash":
-        return gh_extension_installed(TOOLS[name]["gh_extension"])
     return bool(installed_path(name))
 
 
@@ -251,8 +235,13 @@ def print_status() -> int:
     print(f"  expected integrity: {cli['expected_integrity']}")
     if cli["missing_binaries"]:
         print(f"  missing binaries: {', '.join(cli['missing_binaries'])}")
+    missing = [name for name, data in status.items() if not data["installed"]]
+    if missing:
+        print("manual guidance:")
+        for name in missing:
+            print(f"- install {name} with your trusted host package workflow and expose {TOOLS[name]['bin']} on PATH")
     print("next:")
-    print("- /devtools install all")
+    print("- /devtools doctor --json")
     if not cli["ready"]:
         print("- /devtools install playwright-cli")
     print("- /devtools hooks-install")
@@ -268,15 +257,19 @@ def print_doctor(json_output: bool) -> int:
         optional_warnings.append(
             "optional playwright-cli is not ready; run /devtools install playwright-cli"
         )
+    manual_guidance = [
+        f"install {name} manually and expose {TOOLS[name]['bin']} on PATH"
+        for name in missing
+    ]
     report = {
-        "result": "PASS" if not missing else "FAIL",
+        "result": "PASS",
         "tools": status,
         "optional": {PLAYWRIGHT_CLI_TARGET: cli},
         "missing": missing,
-        "warnings": optional_warnings,
+        "warnings": [*manual_guidance, *optional_warnings],
         "quick_fixes": [
-            "run /devtools install all",
-            "run /devtools hooks-install",
+            *manual_guidance,
+            "run /devtools hooks-install after pre-commit is available",
             'enable direnv hook in your shell: eval "$(direnv hook zsh)"',
             "for browser-use, install browser-use-sdk manually and export BROWSER_USE_API_KEY before use",
             "for Context7, prefer a local CLI install only when you need it and keep remote MCP disabled by default",
@@ -291,7 +284,7 @@ def print_doctor(json_output: bool) -> int:
         print("devtools doctor")
         print("--------------")
         for name, data in status.items():
-            state = "PASS" if data["installed"] else "FAIL"
+            state = "PASS" if data["installed"] else "MISSING (manual)"
             suffix = data["path"] if data["path"] else "not installed"
             print(f"- {name}: {state} ({suffix})")
         print(f"result: {report['result']}")
@@ -302,25 +295,7 @@ def print_doctor(json_output: bool) -> int:
             for item in report["quick_fixes"]:
                 print(f"- {item}")
 
-    return 0 if report["result"] == "PASS" else 1
-
-
-def brew_install(formula: str) -> int:
-    return subprocess.run(["brew", "install", formula], check=False).returncode
-
-
-def install_gh_dash() -> int:
-    if not shutil.which("gh"):
-        print("error: gh CLI is required for gh-dash extension install")
-        return 1
-    if gh_extension_installed(TOOLS["gh-dash"]["gh_extension"]):
-        return subprocess.run(
-            ["gh", "extension", "upgrade", "gh-dash"], check=False
-        ).returncode
-    return subprocess.run(
-        ["gh", "extension", "install", TOOLS["gh-dash"]["gh_extension"]],
-        check=False,
-    ).returncode
+    return 0
 
 
 def _parse_metadata(stdout: str) -> dict[str, Any]:
@@ -422,7 +397,8 @@ def install_playwright_cli() -> int:
 
 
 def install_tools(targets: list[str]) -> int:
-    names = list(TOOLS.keys()) if not targets or targets == ["all"] else targets
+    observe_all = not targets or targets == ["all"]
+    names = list(TOOLS.keys()) if observe_all else targets
     valid_targets = {*TOOLS, PLAYWRIGHT_CLI_TARGET}
     invalid = [name for name in names if name not in valid_targets]
     if invalid:
@@ -435,44 +411,43 @@ def install_tools(targets: list[str]) -> int:
         names = [name for name in names if name != PLAYWRIGHT_CLI_TARGET]
     if not names:
         return 0
-    if not shutil.which("brew"):
-        print("error: Homebrew is required for automated install")
-        return 1
-
-    failed = []
+    missing = []
     for name in names:
         if tool_installed(name):
-            print(f"{name}: already installed")
+            print(f"{name}: observed ({installed_path(name)})")
             continue
-        if name == "gh-dash":
-            print("installing gh-dash via gh extension...")
-            if install_gh_dash() != 0:
-                failed.append(name)
-            continue
+        missing.append(name)
+        print(
+            f"{name}: not installed; manage it manually and expose "
+            f"{TOOLS[name]['bin']} on PATH"
+        )
 
-        print(f"installing {name} via brew...")
-        if brew_install(TOOLS[name]["brew"]) != 0:
-            failed.append(name)
-
-    if failed:
-        print(f"failed installs: {', '.join(failed)}")
+    if missing and not observe_all:
         return 1
-
-    return print_status()
+    return 0
 
 
 def hooks_install() -> int:
-    if not shutil.which("lefthook"):
-        print("error: lefthook is missing; run /devtools install lefthook")
-        return 1
-    if not shutil.which("pre-commit"):
-        print("error: pre-commit is missing; run /devtools install pre-commit")
+    pre_commit = shutil.which("pre-commit")
+    if not pre_commit:
+        print("error: pre-commit is missing; install it with your trusted host workflow")
         return 1
 
-    installed = subprocess.run(["lefthook", "install"], check=False)
+    try:
+        installed = subprocess.run(
+            [pre_commit, "install"],
+            timeout=HOOK_INSTALL_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        print("error: pre-commit hook installation timed out")
+        return 1
+    except OSError as error:
+        print(f"error: unable to run pre-commit: {error}")
+        return 1
     if installed.returncode != 0:
         return 1
-    print("git hooks installed: lefthook (pre-commit managed via lefthook.yml)")
+    print("git hooks installed: pre-commit")
     return 0
 
 

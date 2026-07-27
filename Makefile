@@ -128,7 +128,7 @@ doctor-json: ## Run plugin diagnostics (JSON)
 devtools-status: ## Show external productivity tooling status
 	$(PYTHON) scripts/devtools_command.py status
 
-hooks-install: ## Install pre-commit and lefthook git hooks
+hooks-install: ## Install pre-commit git hooks
 	$(PYTHON) scripts/devtools_command.py hooks-install
 
 install-test: ## Run installer smoke test in temp HOME

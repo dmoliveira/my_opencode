@@ -108,9 +108,7 @@ INTENT_RULES = {
             "devtools",
             "tooling",
             "pre-commit",
-            "lefthook",
             "direnv",
-            "gh-dash",
             "ripgrep",
             "hooks",
             "install",
@@ -313,10 +311,8 @@ def _resolve_args(command: str, tokens: set[str], prompt_lower: str) -> list[str
                 name
                 for name in [
                     "direnv",
-                    "gh-dash",
-                    "ripgrep-all",
+                    "ripgrep",
                     "pre-commit",
-                    "lefthook",
                 ]
                 if name in tokens
             ]

@@ -44,6 +44,8 @@ npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
 
 The devtools command verifies the exact package version, license, integrity, Node requirement, and lifecycle-script posture before it executes package code. It uses an isolated npm config and owner-only cache; `install all` never includes this optional target.
 
+All other host tools are observation-only. Manage them with your trusted host workflow; `/devtools install all` reports their state without invoking a package manager. Git hooks use the resolved local `pre-commit` executable only.
+
 Reuse the same session for each command, then close only that session:
 
 ```text

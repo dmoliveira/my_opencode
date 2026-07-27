@@ -593,14 +593,10 @@ openchamber stop --port 3111
 Recommended baseline stack:
 
 - `ripgrep` (`rg`) for fast repo-wide text and symbol discovery.
-- `ast-grep` (`sg`) for structural search, lint, and safe codemod-style rewrites.
-- `tree-sitter-cli` for language-aware parsing experiments and syntax-aware tooling.
 - `direnv` for per-project environment auto-loading (`.envrc`).
-- `gh-dash` for terminal-native GitHub issue/PR/check workflow.
-- `ripgrep-all` (`rga`) for broad content search beyond plain source files.
 - `watchexec` for auto-rerun loops while iterating on tests, lint, or docs.
 - `tmux` for persistent multi-pane agent sessions when you need visible parallel work.
-- `pre-commit` + `lefthook` for fast local hooks aligned with CI checks.
+- `pre-commit` for local hooks aligned with CI checks.
 
 Optional/manual add-ons:
 
@@ -613,7 +609,7 @@ Use these directly in OpenCode:
 /devtools status
 /devtools help
 /devtools install all
-/devtools install ast-grep ripgrep tree-sitter-cli watchexec tmux
+/devtools install playwright-cli
 /devtools doctor
 /devtools doctor --json
 /devtools hooks-install
@@ -637,13 +633,12 @@ direnv allow
 ```
 
 Notes:
-- `/devtools` installs Homebrew-friendly local binaries; browser-use and Context7 remain manual/opt-in because they need SDK/API-key or CLI-specific setup outside the default brew path.
-- This repo ships `lefthook.yml` and `.pre-commit-config.yaml`.
-- `gh-dash` is installed as a GitHub CLI extension (`gh extension install dlvhdr/gh-dash`).
-- `tree-sitter` the library may already exist as a dependency on some systems; use `tree-sitter-cli` when you want the `tree-sitter` executable.
+- `/devtools` observes host-managed tools and gives manual guidance; it does not invoke a host package manager. `/devtools install all` is observation-only.
+- `playwright-cli` is the only exact opt-in install in this slice and is never included in `install all`.
+- `.pre-commit-config.yaml` is the canonical local hook configuration; `/devtools hooks-install` invokes the resolved local `pre-commit` executable with a finite deadline.
+- Browser-use and Context7 remain manual/opt-in because they need SDK/API-key or CLI-specific setup outside the default host-tool path.
 - Prefer tmux session names with an AI/OpenCode prefix such as `ai-oc-<task>` so cleanup and resume targeting stay obvious.
 - Before leaving a tmux-heavy session behind, run `/tmux doctor --json` and close panes/sessions you no longer need so background state does not drift.
-- For Node-only repositories, Husky is also a valid alternative to Lefthook.
 
 ## Quick install (popular way) ⚡
 
