@@ -57,3 +57,41 @@ test("stale-loop-expiry-guard deactivates stale active loop", async () => {
     }
   }
 })
+
+test("stale-loop-expiry-guard preserves another session's stale loop", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-stale-loop-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-owner",
+        objective: "owner work",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 5,
+        maxIterations: 0,
+        startedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test",
+    })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["stale-loop-expiry-guard"],
+          disabled: ["continuation"],
+        },
+        staleLoopExpiryGuard: { enabled: true, maxAgeMinutes: 60 },
+      },
+    })
+    await plugin.event({
+      event: { type: "session.idle", properties: { sessionID: "session-other" } },
+    })
+    assert.equal(loadGatewayState(directory)?.activeLoop?.active, true)
+    assert.equal(loadGatewayState(directory)?.activeLoop?.sessionId, "session-owner")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

@@ -437,6 +437,14 @@ Autopilot gateway telemetry fields (`--json`):
 | `gateway_orphan_cleanup.changed` | `boolean` | `true` when stale/invalid active loop was deactivated and state file was updated. |
 | `gateway_orphan_cleanup.reason` | `string` | Cleanup outcome reason: `state_missing`, `not_active`, `within_age_limit`, `invalid_started_at`, or `stale_loop_deactivated`. |
 | `gateway_orphan_cleanup.state_path` | `string|null` | State file path only when cleanup mutated persisted bridge state. |
+| `gateway_orphan_cleanup.error` | `object|null` | Structured gateway-state protocol error when cleanup cannot acquire or safely inspect state. |
+
+Gateway status and doctor also expose `gateway_state_lock` and
+`state_protocol_errors`. The fixed lock is
+`.opencode/gateway-core.state.json.lock`; it is never reclaimed from PID or age
+heuristics. If a lock remains, stop its owner first, then remove it manually.
+Malformed, unsafe, or contended state is reported with a stable reason code
+instead of being overwritten.
 
 ```bash
 # Quick-fix objective (single-script scope)

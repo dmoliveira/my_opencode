@@ -12747,6 +12747,50 @@ exit 0
             is False,
             "gateway status should persist inactive loop after orphan cleanup",
         )
+        expect(
+            stale_loop_state_path.stat().st_mode & 0o777 == 0o600,
+            "gateway state mutation should migrate legacy state files to owner-only mode",
+        )
+
+        gateway_state_lock = Path(str(stale_loop_state_path) + ".lock")
+        gateway_state_lock.mkdir(mode=0o700)
+        gateway_state_lock_token = gateway_state_lock / "owner-token"
+        gateway_state_lock_token.write_text("a" * 64 + "\n", encoding="ascii")
+        gateway_state_lock_token.chmod(0o600)
+        result = run_gateway("status", "--json")
+        expect(
+            result.returncode == 0,
+            f"gateway status lock diagnostics failed: {result.stderr}",
+        )
+        gateway_status_locked = parse_json_output(result.stdout)
+        expect(
+            gateway_status_locked.get("gateway_state_lock", {}).get("present")
+            is True
+            and gateway_status_locked.get("gateway_state_lock", {}).get("safe")
+            is True,
+            "gateway status should report safe lock presence without stale/PID claims",
+        )
+        expect(
+            gateway_status_locked.get("orphan_cleanup", {}).get("reason")
+            == "gateway_state_lock_timeout"
+            and any(
+                item.get("reason_code") == "gateway_state_lock_timeout"
+                for item in gateway_status_locked.get("state_protocol_errors", [])
+                if isinstance(item, dict)
+            ),
+            "gateway status should surface lock timeout as structured state protocol telemetry",
+        )
+        expect(
+            "stop the gateway state owner"
+            in str(
+                gateway_status_locked.get("gateway_state_lock", {}).get(
+                    "recovery_guidance"
+                )
+            ),
+            "gateway lock diagnostics should require owner stop before manual removal",
+        )
+        gateway_state_lock_token.unlink()
+        gateway_state_lock.rmdir()
 
         result = run_gateway(
             "enable",
@@ -12802,6 +12846,12 @@ exit 0
         expect(
             isinstance(gateway_doctor.get("status", {}).get("hook_diagnostics"), dict),
             "gateway doctor should include hook diagnostics in status",
+        )
+        expect(
+            isinstance(
+                gateway_doctor.get("status", {}).get("gateway_state_lock"), dict
+            ),
+            "gateway doctor should include gateway state lock diagnostics",
         )
 
         gateway_runtime_db_path = tmp / "gateway-doctor-runtime.db"

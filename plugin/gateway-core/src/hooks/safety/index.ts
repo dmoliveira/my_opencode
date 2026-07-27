@@ -2,8 +2,8 @@ import { REASON_CODES } from "../../bridge/reason-codes.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import {
   cleanupOrphanGatewayLoop,
-  deactivateGatewayLoop,
-  loadGatewayState,
+  nowIso,
+  transactGatewayStateDomain,
 } from "../../state/storage.js"
 import type { GatewayHook } from "../registry.js"
 
@@ -58,29 +58,37 @@ export function createSafetyHook(options: {
         return
       }
 
-      const state = loadGatewayState(directory)
-      const active = state?.activeLoop
-      if (!state || !active || active.active !== true) {
-        writeGatewayEventAudit(directory, {
-          hook: "safety",
-          stage: "skip",
-          reason_code: "no_active_loop",
-        })
-        return
-      }
-
       const sessionId = resolveSessionId(eventPayload)
-      if (!sessionId || sessionId !== active.sessionId) {
+      let skipReason = "no_active_loop"
+      const deactivated = transactGatewayStateDomain(directory, "activeLoop", (current) => {
+        const active =
+          current && typeof current === "object" && !Array.isArray(current)
+            ? (current as Record<string, unknown>)
+            : null
+        if (!active || active.active !== true) {
+          skipReason = "no_active_loop"
+          return null
+        }
+        if (!sessionId || String(active.sessionId ?? "") !== sessionId) {
+          skipReason = "session_mismatch"
+          return null
+        }
+        return {
+          value: { active: false },
+          mode: "patch",
+          rootUpdates: { lastUpdatedAt: nowIso(), source: REASON_CODES.LOOP_STOPPED },
+        }
+      })
+      if (!deactivated.changed) {
         writeGatewayEventAudit(directory, {
           hook: "safety",
           stage: "skip",
-          reason_code: "session_mismatch",
+          reason_code: skipReason,
           has_session_id: sessionId.length > 0,
         })
         return
       }
 
-      deactivateGatewayLoop(directory, REASON_CODES.LOOP_STOPPED)
       writeGatewayEventAudit(directory, {
         hook: "safety",
         stage: "state",

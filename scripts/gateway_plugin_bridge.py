@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from gateway_state_protocol import (
+    DomainMutation,
+    gateway_state_path,
+    load_gateway_state,
+    mutate_gateway_state_domain,
+    update_gateway_state_domain,
+)
 
 
 # Returns current UTC timestamp in ISO-8601 Z format.
@@ -105,27 +112,27 @@ def set_plugin_enabled(config: dict[str, Any], home: Path, enabled: bool) -> Non
 
 # Returns gateway loop bridge state file for current working directory.
 def gateway_loop_state_path(cwd: Path) -> Path:
-    return cwd / ".opencode" / "gateway-core.state.json"
+    return gateway_state_path(cwd)
 
 
 # Loads gateway loop bridge state if available.
 def load_gateway_loop_state(cwd: Path) -> dict[str, Any]:
-    path = gateway_loop_state_path(cwd)
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
+    return load_gateway_state(cwd)
 
 
 # Persists gateway loop bridge state to disk.
 def save_gateway_loop_state(cwd: Path, state: dict[str, Any]) -> Path:
-    path = gateway_loop_state_path(cwd)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    return path
+    root_updates = {
+        key: state[key] for key in ("lastUpdatedAt", "source") if key in state
+    }
+    result = update_gateway_state_domain(
+        cwd,
+        "activeLoop",
+        state.get("activeLoop"),
+        mode="replace",
+        root_updates=root_updates,
+    )
+    return result.commit.path if result.commit else gateway_loop_state_path(cwd)
 
 
 # Initializes or refreshes active gateway loop bridge state.
@@ -162,44 +169,58 @@ def bridge_start_loop(
 
 # Marks bridge loop state inactive while preserving metadata.
 def bridge_stop_loop(cwd: Path) -> Path | None:
-    state = load_gateway_loop_state(cwd)
-    if not state:
-        return None
-    active_any = state.get("activeLoop")
-    active = active_any if isinstance(active_any, dict) else {}
-    if active:
-        active["active"] = False
-        state["activeLoop"] = active
-    state["lastUpdatedAt"] = now_iso()
-    return save_gateway_loop_state(cwd, state)
+    timestamp = now_iso()
+
+    def stop_mutator(active: Any, state: dict[str, Any]) -> DomainMutation | None:
+        if not state:
+            return None
+        if isinstance(active, dict):
+            return DomainMutation(
+                {"active": False},
+                mode="patch",
+                root_updates={"lastUpdatedAt": timestamp},
+            )
+        return DomainMutation(
+            None,
+            root_updates={"lastUpdatedAt": timestamp},
+        )
+
+    result = mutate_gateway_state_domain(cwd, "activeLoop", stop_mutator)
+    return result.commit.path if result.commit else None
 
 
 # Disables stale active loop state when it exceeds age threshold.
 def cleanup_orphan_loop(
     cwd: Path, *, max_age_hours: int = 12
 ) -> tuple[Path | None, bool, str]:
-    state = load_gateway_loop_state(cwd)
-    if not state:
-        return None, False, "state_missing"
-    active_any = state.get("activeLoop")
-    active = active_any if isinstance(active_any, dict) else {}
-    if not active or active.get("active") is not True:
-        return None, False, "not_active"
+    outcome = {"reason": "state_missing"}
 
-    started = parse_iso(active.get("startedAt"))
-    if started is None:
-        active["active"] = False
-        state["activeLoop"] = active
-        state["lastUpdatedAt"] = now_iso()
-        path = save_gateway_loop_state(cwd, state)
-        return path, True, "invalid_started_at"
+    def cleanup_mutator(active: Any, state: dict[str, Any]) -> DomainMutation | None:
+        if not state:
+            outcome["reason"] = "state_missing"
+            return None
+        if not isinstance(active, dict) or active.get("active") is not True:
+            outcome["reason"] = "not_active"
+            return None
+        started = parse_iso(active.get("startedAt"))
+        if started is None:
+            outcome["reason"] = "invalid_started_at"
+            return DomainMutation(
+                {"active": False},
+                mode="patch",
+                root_updates={"lastUpdatedAt": now_iso()},
+            )
+        age_hours = (datetime.now(UTC) - started).total_seconds() / 3600.0
+        if age_hours <= max_age_hours:
+            outcome["reason"] = "within_age_limit"
+            return None
+        outcome["reason"] = "stale_loop_deactivated"
+        return DomainMutation(
+            {"active": False},
+            mode="patch",
+            root_updates={"lastUpdatedAt": now_iso()},
+        )
 
-    age_hours = (datetime.now(UTC) - started).total_seconds() / 3600.0
-    if age_hours <= max_age_hours:
-        return None, False, "within_age_limit"
-
-    active["active"] = False
-    state["activeLoop"] = active
-    state["lastUpdatedAt"] = now_iso()
-    path = save_gateway_loop_state(cwd, state)
-    return path, True, "stale_loop_deactivated"
+    result = mutate_gateway_state_domain(cwd, "activeLoop", cleanup_mutator)
+    path = result.commit.path if result.commit else None
+    return path, result.changed, outcome["reason"]

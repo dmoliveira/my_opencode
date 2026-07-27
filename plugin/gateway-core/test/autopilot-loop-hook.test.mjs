@@ -197,6 +197,44 @@ test("autopilot-loop pause preserves objective and resume restores it", async ()
   }
 })
 
+test("autopilot-loop stop does not deactivate another session", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
+  try {
+    const hook = createAutopilotLoopHook({
+      directory,
+      defaults: {
+        enabled: true,
+        maxIterations: 0,
+        completionMode: "promise",
+        completionPromise: "DONE",
+      },
+    })
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-owner",
+        args: { command: '/autopilot go --goal "owned work"' },
+      },
+      output: {},
+      directory,
+    })
+    await hook.event("tool.execute.before", {
+      input: {
+        tool: "slashcommand",
+        sessionID: "session-other",
+        args: { command: "/autopilot stop" },
+      },
+      output: {},
+      directory,
+    })
+    const state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, true)
+    assert.equal(state?.activeLoop?.sessionId, "session-owner")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("autopilot-loop registers objective summary with stable context id", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-loop-hook-"))
   try {

@@ -2,8 +2,27 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js";
+import { GatewayStateProtocolError, loadGatewayState, nowIso, saveGatewayState, transactGatewayStateDomain, } from "../../state/storage.js";
 import { injectHookMessage, inspectHookMessageSafety } from "../hook-message-injector/index.js";
+function saveContinuationState(directory, state, sessionId) {
+    try {
+        saveGatewayState(directory, state);
+        return true;
+    }
+    catch (error) {
+        if (error instanceof GatewayStateProtocolError &&
+            error.reasonCode === "gateway_state_target_changed") {
+            writeGatewayEventAudit(directory, {
+                hook: "continuation",
+                stage: "skip",
+                reason_code: "continuation_state_changed",
+                session_id: sessionId,
+            });
+            return false;
+        }
+        throw error;
+    }
+}
 // Resolves active session id from event payload.
 function resolveSessionId(payload) {
     const direct = payload.properties?.sessionID;
@@ -143,23 +162,34 @@ function bootstrapLoopFromRuntime(directory, sessionId) {
     const progress = runtime.progress && typeof runtime.progress === "object" ? runtime.progress : {};
     const completedCycles = Number.parseInt(String(progress.completed_cycles ?? "0"), 10);
     const iteration = Number.isFinite(completedCycles) && completedCycles >= 0 ? completedCycles + 1 : 1;
-    const state = {
-        activeLoop: {
-            active: true,
-            sessionId,
-            objective: goal,
-            doneCriteria,
-            completionMode,
-            completionPromise,
-            iteration,
-            maxIterations: 0,
-            startedAt: nowIso(),
-        },
-        lastUpdatedAt: nowIso(),
-        source: REASON_CODES.LOOP_RUNTIME_BOOTSTRAPPED,
+    const activeLoop = {
+        active: true,
+        sessionId,
+        objective: goal,
+        doneCriteria,
+        completionMode,
+        completionPromise,
+        iteration,
+        maxIterations: 0,
+        startedAt: nowIso(),
     };
-    saveGatewayState(directory, state);
-    return state;
+    const result = transactGatewayStateDomain(directory, "activeLoop", (current) => {
+        const currentLoop = current && typeof current === "object" && !Array.isArray(current)
+            ? current
+            : null;
+        if (currentLoop?.active === true) {
+            return null;
+        }
+        return {
+            value: activeLoop,
+            mode: "replace",
+            rootUpdates: {
+                lastUpdatedAt: nowIso(),
+                source: REASON_CODES.LOOP_RUNTIME_BOOTSTRAPPED,
+            },
+        };
+    });
+    return result.changed ? loadGatewayState(directory) : null;
 }
 // Builds continuation prompt for active gateway loop iteration.
 function continuationPrompt(state, mode) {
@@ -274,7 +304,8 @@ export function createContinuationHook(options) {
                             active.active = false;
                             state.lastUpdatedAt = nowIso();
                             state.source = REASON_CODES.LOOP_COMPLETION_STALLED_RUNTIME;
-                            saveGatewayState(directory, state);
+                            if (!saveContinuationState(directory, state, sessionId))
+                                return;
                             writeGatewayEventAudit(directory, {
                                 hook: "continuation",
                                 stage: "state",
@@ -285,7 +316,8 @@ export function createContinuationHook(options) {
                             return;
                         }
                         state.lastUpdatedAt = nowIso();
-                        saveGatewayState(directory, state);
+                        if (!saveContinuationState(directory, state, sessionId))
+                            return;
                     }
                     else {
                         active.active = false;
@@ -294,7 +326,8 @@ export function createContinuationHook(options) {
                             active.completionMode === "objective"
                                 ? REASON_CODES.LOOP_COMPLETED_OBJECTIVE
                                 : REASON_CODES.LOOP_COMPLETED_PROMISE;
-                        saveGatewayState(directory, state);
+                        if (!saveContinuationState(directory, state, sessionId))
+                            return;
                         writeGatewayEventAudit(directory, {
                             hook: "continuation",
                             stage: "state",
@@ -308,7 +341,8 @@ export function createContinuationHook(options) {
                     if ((active.ignoredCompletionCycles ?? 0) > 0) {
                         active.ignoredCompletionCycles = 0;
                         state.lastUpdatedAt = nowIso();
-                        saveGatewayState(directory, state);
+                        if (!saveContinuationState(directory, state, sessionId))
+                            return;
                     }
                 }
             }
@@ -316,7 +350,8 @@ export function createContinuationHook(options) {
                 active.active = false;
                 state.lastUpdatedAt = nowIso();
                 state.source = REASON_CODES.LOOP_MAX_ITERATIONS;
-                saveGatewayState(directory, state);
+                if (!saveContinuationState(directory, state, sessionId))
+                    return;
                 writeGatewayEventAudit(directory, {
                     hook: "continuation",
                     stage: "state",
@@ -328,7 +363,8 @@ export function createContinuationHook(options) {
             active.iteration += 1;
             state.lastUpdatedAt = nowIso();
             state.source = REASON_CODES.LOOP_IDLE_CONTINUED;
-            saveGatewayState(directory, state);
+            if (!saveContinuationState(directory, state, sessionId))
+                return;
             writeGatewayEventAudit(directory, {
                 hook: "continuation",
                 stage: "state",

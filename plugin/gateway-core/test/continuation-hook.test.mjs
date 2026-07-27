@@ -5,7 +5,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import { createContinuationHook } from "../dist/hooks/continuation/index.js"
-import { loadGatewayState, saveGatewayState } from "../dist/state/storage.js"
+import { loadGatewayState, saveGatewayState, updateGatewayStateDomain } from "../dist/state/storage.js"
 
 test("continuation hook keeps looping when maxIterations is zero", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
@@ -56,6 +56,60 @@ test("continuation hook keeps looping when maxIterations is zero", async () => {
     assert.equal(state?.activeLoop?.active, true)
     assert.equal(state?.activeLoop?.iteration, 2)
     assert.equal(promptCalls, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("continuation hook yields when the loop stops during message fetch", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-continuation-"))
+  try {
+    saveGatewayState(directory, {
+      activeLoop: {
+        active: true,
+        sessionId: "session-stop-race",
+        objective: "do not resurrect",
+        completionMode: "promise",
+        completionPromise: "DONE",
+        iteration: 1,
+        maxIterations: 0,
+        startedAt: new Date().toISOString(),
+      },
+      lastUpdatedAt: new Date().toISOString(),
+      source: "test-fixture",
+    })
+    let promptCalls = 0
+    const hook = createContinuationHook({
+      directory,
+      client: {
+        session: {
+          async messages() {
+            updateGatewayStateDomain(
+              directory,
+              "activeLoop",
+              { active: false },
+              { mode: "patch", rootUpdates: { lastUpdatedAt: new Date().toISOString() } },
+            )
+            return {
+              data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "still working" }] }],
+            }
+          },
+          async promptAsync() {
+            promptCalls += 1
+          },
+        },
+      },
+    })
+
+    await hook.event("session.idle", {
+      directory,
+      properties: { sessionID: "session-stop-race" },
+    })
+
+    const state = loadGatewayState(directory)
+    assert.equal(state?.activeLoop?.active, false)
+    assert.equal(state?.activeLoop?.iteration, 1)
+    assert.equal(promptCalls, 0)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

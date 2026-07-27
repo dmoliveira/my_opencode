@@ -1,5 +1,6 @@
 // Declares persisted gateway loop state for one active session.
 export interface GatewayLoopState {
+  [key: string]: unknown
   active: boolean
   sessionId: string
   objective: string
@@ -13,6 +14,7 @@ export interface GatewayLoopState {
 }
 
 export interface GatewayConciseModeState {
+  [key: string]: unknown
   mode: "off" | "lite" | "full" | "ultra" | "review" | "commit"
   source: string
   sessionId: string
@@ -22,6 +24,7 @@ export interface GatewayConciseModeState {
 
 // Declares persisted gateway-wide runtime state shape.
 export interface GatewayState {
+  [key: string]: unknown
   activeLoop: GatewayLoopState | null
   conciseMode?: GatewayConciseModeState | null
   lastUpdatedAt: string

@@ -1,7 +1,7 @@
 import { canonicalAutopilotCommandName, parseAutopilotTemplateCommand, parseCompletionMode, parseCompletionPromise, parseDoneCriteria, parseGoal, parseMaxIterations, parseSlashCommand, resolveAutopilotAction, } from "../../bridge/commands.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
-import { loadGatewayState, nowIso, saveGatewayState } from "../../state/storage.js";
+import { nowIso, saveGatewayState, transactGatewayStateDomain } from "../../state/storage.js";
 // Resolves session id across plugin host payload variants.
 function resolveSessionId(payload) {
     const candidates = [
@@ -119,30 +119,40 @@ export function createAutopilotLoopHook(options) {
                 return;
             }
             if (action === "stop") {
-                const previousState = loadGatewayState(scopedDir);
-                const previousLoop = previousState?.activeLoop;
                 const pauseMode = isPauseCommand(parsed.name, parsed.args);
-                const nextLoop = previousLoop && previousLoop.sessionId === sessionId
-                    ? {
-                        ...previousLoop,
-                        active: false,
+                const stopped = transactGatewayStateDomain(scopedDir, "activeLoop", (current) => {
+                    const previousLoop = current && typeof current === "object" && !Array.isArray(current)
+                        ? current
+                        : null;
+                    if (previousLoop && String(previousLoop.sessionId ?? "") !== sessionId) {
+                        return null;
                     }
-                    : {
-                        active: false,
-                        sessionId,
-                        objective: "stop requested",
-                        completionMode: options.defaults.completionMode,
-                        completionPromise: options.defaults.completionPromise,
-                        iteration: 1,
-                        maxIterations: options.defaults.maxIterations,
-                        startedAt: nowIso(),
+                    return {
+                        value: previousLoop
+                            ? { active: false }
+                            : {
+                                active: false,
+                                sessionId,
+                                objective: "stop requested",
+                                completionMode: options.defaults.completionMode,
+                                completionPromise: options.defaults.completionPromise,
+                                iteration: 1,
+                                maxIterations: options.defaults.maxIterations,
+                                startedAt: nowIso(),
+                            },
+                        mode: previousLoop ? "patch" : "replace",
+                        rootUpdates: { lastUpdatedAt: nowIso(), source: REASON_CODES.LOOP_STOPPED },
                     };
-                const state = {
-                    activeLoop: nextLoop,
-                    lastUpdatedAt: nowIso(),
-                    source: REASON_CODES.LOOP_STOPPED,
-                };
-                saveGatewayState(scopedDir, state);
+                });
+                if (!stopped.changed) {
+                    writeGatewayEventAudit(scopedDir, {
+                        hook: "autopilot-loop",
+                        stage: "skip",
+                        reason_code: "session_mismatch",
+                        session_id: sessionId,
+                    });
+                    return;
+                }
                 writeGatewayEventAudit(scopedDir, {
                     hook: "autopilot-loop",
                     stage: "state",
@@ -164,18 +174,22 @@ export function createAutopilotLoopHook(options) {
             }
             const resumeMode = isResumeCommand(parsed.name, parsed.args);
             if (resumeMode && !hasExplicitGoalArg(parsed.args)) {
-                const previousState = loadGatewayState(scopedDir);
-                const previousLoop = previousState?.activeLoop;
-                if (previousLoop && previousLoop.sessionId === sessionId && previousLoop.active !== true) {
-                    const resumedState = {
-                        activeLoop: {
-                            ...previousLoop,
-                            active: true,
-                        },
-                        lastUpdatedAt: nowIso(),
-                        source: REASON_CODES.LOOP_STARTED,
+                const resumed = transactGatewayStateDomain(scopedDir, "activeLoop", (current) => {
+                    const previousLoop = current && typeof current === "object" && !Array.isArray(current)
+                        ? current
+                        : null;
+                    if (!previousLoop ||
+                        String(previousLoop.sessionId ?? "") !== sessionId ||
+                        previousLoop.active === true) {
+                        return null;
+                    }
+                    return {
+                        value: { active: true },
+                        mode: "patch",
+                        rootUpdates: { lastUpdatedAt: nowIso(), source: REASON_CODES.LOOP_STARTED },
                     };
-                    saveGatewayState(scopedDir, resumedState);
+                });
+                if (resumed.changed) {
                     writeGatewayEventAudit(scopedDir, {
                         hook: "autopilot-loop",
                         stage: "state",
@@ -186,6 +200,7 @@ export function createAutopilotLoopHook(options) {
                     });
                     return;
                 }
+                return;
             }
             const completionMode = parsed.name === "autopilot-objective"
                 ? "objective"
