@@ -1,5 +1,5 @@
 ---
-status: doing
+status: done
 priority: high
 updated: 2026-07-28
 ---
@@ -374,6 +374,12 @@ native Darwin `RENAME_EXCL` checks, sandbox-confined production download, and
 network-denied offline owner-host replay passed. Sanitized evidence is recorded
 at `runtime/harness-wave-8/task46/owner-host-report.json` during validation; the
 runtime artifact is intentionally ignored and is re-created by the live gate.
+
+Task 47 outcome: **PASS** on 2026-07-28. All five manifest-guarded closure
+bundles, dual-Node matrices, package parity, provider and gateway runtime probes,
+ast-grep replay, and exact-model Python/Node E2E passed on committed candidate
+`feabc6f`. The tracked closure record is
+`docs/opencode-hardening-wave-8-audit-2026-07-28.md`.
 
 ## Slice Gates
 

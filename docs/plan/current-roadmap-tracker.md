@@ -18,7 +18,8 @@ Tracks the active `my_opencode` improvement wave so any AI can recover context q
 
 ## Active PRs
 
-None for this wave right now. Most recent merges are `#406`, `#409`, and `#414`.
+GitHub is authoritative for active PR state. The Done Recently table records
+merged milestones without duplicating a second, easily stale PR list here.
 
 ## Current Epics
 
@@ -171,12 +172,12 @@ Remaining:
 | Gateway E2E parity refinements | doing | Tighten fail-closed behavior for critical hooks, isolate hook execution failures, align continuity wording with canonical commands, and remove hard-coded agent metadata discovery. |
 | E13 lane lease identity | doing | Active implementation tracker lives at `docs/plan/e13-shared-memory-swarm-plugin-ops-plan.md`; current slice adds lane-level lease identity to writer activation. |
 | E13 ops automation readiness diagnostics | doing | First E4 slice adds `/ship doctor`, umbrella `/doctor` coverage, and refreshed handbook/quickstart guidance so canonical issue/PR/release/hotfix automation can be audited before deeper automation lands. |
-| OpenCode hardening Wave 8 | doing | Active plan lives at `docs/plan/doing/opencode-hardening-wave-8.md`; `task_40` through `task_47` cover hermetic validation, model-harness containment, durable gateway/config writes, devtool retirement, exact ast-grep gating, and closure. |
 
 ## Done Recently
 
 | Item | Status | Notes |
 |---|---|---|
+| OpenCode hardening Wave 8 | done | Completed `task_40` through `task_47`; the reviewed plan is under `docs/plan/done/`, and `docs/opencode-hardening-wave-8-audit-2026-07-28.md` records the hermetic validation, model-harness containment, durable gateway/config writes, devtool retirement, exact ast-grep adoption, and closure evidence. |
 | Reconstructed current initiative from git/OpenCode history | done | Reviewed reflog, prompt history, logs, and checkpoints. |
 | Merged model routing entrypoint PR | done | `#406` merged after refresh-from-main and CI pass. |
 | Merged selftest follow-up PR | done | `#409` merged after refresh-from-main and CI pass. |
