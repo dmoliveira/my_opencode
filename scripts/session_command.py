@@ -9,6 +9,7 @@ import sqlite3
 import sys
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -244,6 +245,27 @@ def _emit(payload: dict, json_output: bool) -> int:
     if json_output:
         print(json.dumps(payload, indent=2))
         return 0 if payload.get("result") == "PASS" else 1
+    command = payload.get("command")
+    if payload.get("redacted") is True and command in {"search", "handoff"}:
+        if payload.get("result") != "PASS":
+            print(f"error_code: {payload.get('error_code', 'session_redacted_failure')}")
+            return 1
+        print(f"session {command} (redacted)")
+        print("--------------------------")
+        if command == "search":
+            print(f"count: {payload.get('count', 0)}")
+            for row in payload.get("sessions", []):
+                print(
+                    "- "
+                    f"started={row.get('started_at')} "
+                    f"last={row.get('last_event_at')} "
+                    f"events={row.get('event_count')}"
+                )
+        else:
+            print(f"started_at: {payload.get('started_at')}")
+            print(f"last_event_at: {payload.get('last_event_at')}")
+            print(f"event_count: {payload.get('event_count')}")
+        return 0
     if payload.get("command") == "current":
         row = payload.get("session", {})
         print(f"session_id: {row.get('session_id')}")
@@ -2085,30 +2107,64 @@ def _command_show(argv: list[str], index_path: Path) -> int:
     )
 
 
+def _redaction_enabled(argv: list[str]) -> bool:
+    return "--redact" in argv or os.environ.get(
+        "MY_OPENCODE_SESSION_REDACT_DEFAULT", ""
+    ).lower() in {"1", "true", "yes"}
+
+
+def _redacted_timestamp(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > 64:
+        return None
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return value
+
+
+def _redacted_event_count(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
 def _redact_session_record(record: dict) -> dict:
-    omitted = {
-        item.strip()
-        for item in os.environ.get("MY_OPENCODE_SESSION_REDACT_FIELDS", "").split(",")
-        if item.strip()
-    }
     return {
-        key: record.get(key)
-        for key in ("session_id", "started_at", "last_event_at", "event_count")
-        if key not in omitted
+        "started_at": _redacted_timestamp(record.get("started_at")),
+        "last_event_at": _redacted_timestamp(record.get("last_event_at")),
+        "event_count": _redacted_event_count(record.get("event_count")),
+    }
+
+
+def _redacted_failure(command: str, error_code: str) -> dict:
+    return {
+        "result": "FAIL",
+        "command": command,
+        "redacted": True,
+        "error_code": error_code,
     }
 
 
 def _command_search(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
+    redact = _redaction_enabled(argv)
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     if not args:
+        if redact:
+            return _emit(
+                _redacted_failure("search", "session_search_query_required"),
+                json_output,
+            )
         return _usage()
     query = args[0].strip().lower()
     try:
         limit = _parse_limit(argv)
         rows = _session_rows(_load_index(index_path))
     except Exception as exc:
+        if redact:
+            return _emit(
+                _redacted_failure("search", "session_index_unavailable"),
+                json_output,
+            )
         return _emit(
             {
                 "result": "FAIL",
@@ -2125,6 +2181,17 @@ def _command_search(argv: list[str], index_path: Path) -> int:
         or query in str(row.get("cwd", "")).lower()
         or query in str(row.get("last_reason", "")).lower()
     ][:limit]
+    if redact:
+        return _emit(
+            {
+                "result": "PASS",
+                "command": "search",
+                "redacted": True,
+                "count": len(matches),
+                "sessions": [_redact_session_record(row) for row in matches],
+            },
+            json_output,
+        )
     return _emit(
         {
             "result": "PASS",
@@ -2132,8 +2199,8 @@ def _command_search(argv: list[str], index_path: Path) -> int:
             "index_path": str(index_path),
             "query": query,
             "count": len(matches),
-            "redacted": redact,
-            "sessions": [_redact_session_record(row) for row in matches] if redact else matches,
+            "redacted": False,
+            "sessions": matches,
         },
         json_output,
     )
@@ -2282,7 +2349,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
 
 def _command_handoff(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
-    redact = "--redact" in argv or os.environ.get("MY_OPENCODE_SESSION_REDACT_DEFAULT", "").lower() in {"1", "true", "yes"}
+    redact = _redaction_enabled(argv)
     args = [arg for arg in argv if arg not in {"--json", "--redact"}]
     target_id: str | None = None
     launch_cwd: str | None = None
@@ -2292,12 +2359,26 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         token = args[cursor]
         if token == "--id":
             if cursor + 1 >= len(args):
+                if redact:
+                    return _emit(
+                        _redacted_failure(
+                            "handoff", "session_handoff_arguments_invalid"
+                        ),
+                        json_output,
+                    )
                 return _usage()
             target_id = args[cursor + 1]
             cursor += 2
             continue
         if token == "--launch-cwd":
             if cursor + 1 >= len(args):
+                if redact:
+                    return _emit(
+                        _redacted_failure(
+                            "handoff", "session_handoff_arguments_invalid"
+                        ),
+                        json_output,
+                    )
                 return _usage()
             launch_cwd = args[cursor + 1]
             cursor += 2
@@ -2306,11 +2387,21 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             fork = True
             cursor += 1
             continue
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_handoff_arguments_invalid"),
+                json_output,
+            )
         return _usage()
 
     try:
         rows = _session_rows(_load_index(index_path))
     except Exception as exc:
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_index_unavailable"),
+                json_output,
+            )
         return _emit(
             {
                 "result": "FAIL",
@@ -2322,6 +2413,11 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         )
 
     if not rows and not target_id:
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_index_empty"),
+                json_output,
+            )
         return _emit(
             {
                 "result": "FAIL",
@@ -2338,6 +2434,11 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             None,
         )
         if not isinstance(selected_match, dict):
+            if redact:
+                return _emit(
+                    _redacted_failure("handoff", "session_not_found"),
+                    json_output,
+                )
             return _emit(
                 {
                     "result": "FAIL",
@@ -2350,6 +2451,11 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         selected = selected_match
     else:
         if source == "env_only":
+            if redact:
+                return _emit(
+                    _redacted_failure("handoff", "session_not_indexed"),
+                    json_output,
+                )
             return _emit(
                 {
                     "result": "FAIL",
@@ -2361,6 +2467,18 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             )
         if not isinstance(selected, dict):
             selected = rows[0] if rows else {}
+
+    if redact:
+        projected = _redact_session_record(selected)
+        return _emit(
+            {
+                "result": "PASS",
+                "command": "handoff",
+                "redacted": True,
+                **projected,
+            },
+            json_output,
+        )
 
     digest = _load_digest(DEFAULT_DIGEST_PATH)
     raw_git = digest.get("git")
@@ -2388,24 +2506,17 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         next_actions.insert(0, launch_command)
         next_actions.insert(1, resume_command)
 
-    if redact:
-        resolved_launch_cwd = None
-        launch_command = ""
-        resume_command = ""
-        next_actions = ["/doctor run", "/session show <session_id> --json"]
-        git = {}
-
     payload = {
         "result": "PASS",
         "command": "handoff",
-        "redacted": redact,
+        "redacted": False,
         "session_id": selected.get("session_id"),
         "cwd": selected.get("cwd"),
         "launch_cwd": resolved_launch_cwd,
         "started_at": selected.get("started_at"),
         "last_event_at": selected.get("last_event_at"),
         "event_count": selected.get("event_count"),
-        "last_reason": None if redact else selected.get("last_reason"),
+        "last_reason": selected.get("last_reason"),
         "digest_path": str(DEFAULT_DIGEST_PATH),
         "git_branch": git.get("branch"),
         "git_status_count": git.get("status_count"),
@@ -2416,7 +2527,6 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         "next_actions": next_actions,
     }
     return _emit(payload, json_output)
-
 
 def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     del index_path

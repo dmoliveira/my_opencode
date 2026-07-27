@@ -153,7 +153,7 @@ A local incident bundle should contain machine-readable doctor output, store pat
 
 ## Support export
 
-Before sharing diagnostics, enable `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`, run the consolidated doctor JSON, inspect it locally, and remove any store path or identifier not required for the support case. Share only the redacted incident bundle and checksums; never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
+Only `/session search --redact` and `/session handoff --redact` (or those commands with `MY_OPENCODE_SESSION_REDACT_DEFAULT=true`) have a share-safe output contract. The consolidated doctor output remains local and sensitive: it can contain store paths and runtime identifiers, so do not share it directly. Build support artifacts from the allowlisted redacted search/handoff fields, inspect them locally, and remove anything not required for the case. Never send a live database, SQLite WAL/SHM file, session index, digest, backup, or encryption metadata unless an approved secure transfer and explicit operator authorization exist.
 
 ## Storage telemetry history
 
