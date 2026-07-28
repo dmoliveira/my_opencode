@@ -1171,6 +1171,123 @@
   },
   {
     "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "isolated_env",
+    "kind": "path.chmod",
+    "destination": "home",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "isolated_env",
+    "kind": "path.mkdir",
+    "destination": "home",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "isolated_env",
+    "kind": "path.mkdir",
+    "destination": "sandbox_tmp",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "mutate_export",
+    "kind": "os.open",
+    "destination": "fixture_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "private_json_output",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "run_probe",
+    "kind": "path.mkdir",
+    "destination": "project_a",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "run_probe",
+    "kind": "path.mkdir",
+    "destination": "project_b",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "write_runtime_config",
+    "kind": "path.chmod",
+    "destination": "config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "write_runtime_config",
+    "kind": "path.chmod",
+    "destination": "gateway_config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "write_runtime_config",
+    "kind": "path.mkdir",
+    "destination": "config_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "write_runtime_config",
+    "kind": "path.mkdir",
+    "destination": "project_config_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "write_runtime_config",
+    "kind": "path.write_text",
+    "destination": "config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_resume_redaction_e2e.py",
+    "function": "write_runtime_config",
+    "kind": "path.write_text",
+    "destination": "gateway_config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
     "file": "gateway_secret_redaction_live_smoke.py",
     "function": "prepare_private_output_dir",
     "kind": "path.chmod",
