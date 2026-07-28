@@ -213,6 +213,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
         injectSessionIdContext: true,
         injectSessionIdWhenConciseModeOnly: false,
     },
+    promptCache: {
+        stableKeyEnabled: true,
+        shardCount: 1,
+    },
     conciseMode: {
         enabled: false,
         defaultMode: "off",

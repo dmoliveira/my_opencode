@@ -108,6 +108,10 @@ export interface SessionRuntimeSystemContextConfig {
     injectSessionIdContext: boolean;
     injectSessionIdWhenConciseModeOnly: boolean;
 }
+export interface PromptCacheConfig {
+    stableKeyEnabled: boolean;
+    shardCount: number;
+}
 export interface ConciseModeConfig {
     enabled: boolean;
     defaultMode: "off" | "lite" | "full" | "ultra";
@@ -464,6 +468,7 @@ export interface GatewayConfig {
     pressureEscalationGuard: PressureEscalationGuardConfig;
     sessionRecovery: SessionRecoveryConfig;
     sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
+    promptCache: PromptCacheConfig;
     conciseMode: ConciseModeConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;

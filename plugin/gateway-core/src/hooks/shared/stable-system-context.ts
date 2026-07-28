@@ -1,11 +1,19 @@
-const RUNTIME_SYSTEM_MARKERS = ["runtime_session_context:", "runtime_concise_mode:"]
+export const RUNTIME_SESSION_CONTEXT_MARKER = "runtime_session_context:"
+export const RUNTIME_CONCISE_CONTEXT_MARKER = "runtime_concise_mode:"
+const RUNTIME_SYSTEM_MARKERS = [
+  RUNTIME_SESSION_CONTEXT_MARKER,
+  RUNTIME_CONCISE_CONTEXT_MARKER,
+]
+
+export function managedRuntimeSystemMarker(entry: string): string | null {
+  const firstLine = entry.split("\n", 1)[0] ?? ""
+  return RUNTIME_SYSTEM_MARKERS.find((marker) => firstLine.startsWith(marker)) ?? null
+}
 
 // Inserts stable repository guidance before per-session runtime context so providers
 // can reuse the longest common system-prompt prefix across sessions and worktrees.
 export function insertStableSystemContext(system: string[], context: string): void {
-  const insertionIndex = system.findIndex((entry) =>
-    RUNTIME_SYSTEM_MARKERS.some((marker) => entry.includes(marker)),
-  )
+  const insertionIndex = system.findIndex((entry) => managedRuntimeSystemMarker(entry) !== null)
   if (insertionIndex < 0) {
     system.push(context)
     return

@@ -282,6 +282,10 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
       nested: { token: "nested-token-canary" },
       hook_count: 3,
       critical: false,
+      cacheable_system_prefix_sha256: "cache-fingerprint-canary",
+      prompt_cache_strategy: "cache-strategy-canary",
+      prompt_cache_shard_count: 1,
+      prompt_cache_shard: 0,
     });
     await flushGatewayEventAuditExportsForTest();
 
@@ -298,6 +302,8 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
       "error-canary",
       "authorization-canary",
       "nested-token-canary",
+      "cache-fingerprint-canary",
+      "cache-strategy-canary",
     ]) {
       assert.equal(
         requestBody.includes(canary),
@@ -305,6 +311,8 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
         `unexpected OTLP canary: ${canary}`,
       );
     }
+    assert.equal(localBody.includes("cache-fingerprint-canary"), true);
+    assert.equal(localBody.includes("cache-strategy-canary"), true);
     for (const canary of [
       "command-canary",
       "message-canary",
@@ -331,6 +339,10 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
     assert.equal(keys.has("message"), false);
     assert.equal(keys.has("error_message"), false);
     assert.equal(keys.has("nested"), false);
+    assert.equal(keys.has("cacheable_system_prefix_sha256"), false);
+    assert.equal(keys.has("prompt_cache_strategy"), false);
+    assert.equal(keys.has("prompt_cache_shard_count"), false);
+    assert.equal(keys.has("prompt_cache_shard"), false);
     assert.equal(
       requests[0].init?.headers?.["content-type"],
       "application/json",

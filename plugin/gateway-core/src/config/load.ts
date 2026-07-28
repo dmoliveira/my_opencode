@@ -325,6 +325,18 @@ function positiveInt(value: unknown, fallback: number): number {
   return parsed;
 }
 
+function boundedInteger(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const parsed = typeof value === "number" ? value : Number.NaN;
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max
+    ? parsed
+    : fallback;
+}
+
 function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -509,6 +521,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     source.sessionRuntimeSystemContext &&
     typeof source.sessionRuntimeSystemContext === "object"
       ? (source.sessionRuntimeSystemContext as Record<string, unknown>)
+      : {};
+  const promptCacheSource =
+    source.promptCache && typeof source.promptCache === "object"
+      ? (source.promptCache as Record<string, unknown>)
       : {};
   const conciseModeSource =
     source.conciseMode && typeof source.conciseMode === "object"
@@ -1217,6 +1233,18 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           ? sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly
           : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext
               .injectSessionIdWhenConciseModeOnly,
+    },
+    promptCache: {
+      stableKeyEnabled:
+        typeof promptCacheSource.stableKeyEnabled === "boolean"
+          ? promptCacheSource.stableKeyEnabled
+          : DEFAULT_GATEWAY_CONFIG.promptCache.stableKeyEnabled,
+      shardCount: boundedInteger(
+        promptCacheSource.shardCount,
+        1,
+        64,
+        DEFAULT_GATEWAY_CONFIG.promptCache.shardCount,
+      ),
     },
     conciseMode: {
       enabled:

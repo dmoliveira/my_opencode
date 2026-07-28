@@ -1,4 +1,5 @@
 import { loadGatewayConfig, loadGatewayConfigSourceWithMeta, } from "./config/load.js";
+import { cacheableSystemPrefixObservation, resolvePromptCacheScopeIdentity, stablePromptCacheKey, } from "./cache/prompt-cache.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
@@ -850,6 +851,9 @@ function configuredHooks(ctx, runtime) {
 export default function GatewayCorePlugin(ctx, options) {
     const runtime = resolveGatewayRuntime(ctx, options);
     const { directory, cfg } = runtime;
+    const promptCacheScopeIdentity = cfg.promptCache.stableKeyEnabled
+        ? resolvePromptCacheScopeIdentity(directory)
+        : "";
     const providerBoundaryFinalizer = cfg.secretLeakGuard.enabled && cfg.secretLeakGuard.providerBoundaryEnabled
         ? createProviderBoundarySecretFinalizer({
             directory,
@@ -1143,6 +1147,44 @@ export default function GatewayCorePlugin(ctx, options) {
         unwrapAutoSlashCommandParts(output?.parts);
     }
     async function chatParams(input, output) {
+        const modelProviderID = String(input.model?.providerID ?? "").trim().toLowerCase();
+        const providerID = String(input.provider?.id ?? "").trim().toLowerCase();
+        const modelID = String(input.model?.modelID ?? input.model?.id ?? "").trim();
+        const sessionID = String(input.sessionID ?? "").trim();
+        const agent = String(input.agent ?? "").trim();
+        const currentPromptCacheKey = Object.prototype.hasOwnProperty.call(output.options, "promptCacheKey")
+            ? output.options.promptCacheKey
+            : undefined;
+        let promptCacheStrategy = cfg.promptCache.stableKeyEnabled
+            ? "upstream_key_preserved"
+            : "disabled";
+        let promptCacheShard;
+        if (cfg.promptCache.stableKeyEnabled &&
+            modelProviderID === "openai" &&
+            (!providerID || providerID === "openai") &&
+            typeof currentPromptCacheKey === "string" &&
+            currentPromptCacheKey === sessionID) {
+            const stable = stablePromptCacheKey({
+                scopeIdentity: promptCacheScopeIdentity,
+                providerID: modelProviderID,
+                modelID,
+                agent,
+                sessionID,
+                shardCount: cfg.promptCache.shardCount,
+            });
+            if (stable) {
+                output.options.promptCacheKey = stable.key;
+                promptCacheStrategy = "stable_sharded";
+                promptCacheShard = stable.shard;
+            }
+            else {
+                promptCacheStrategy = "invalid_context";
+            }
+        }
+        else if (cfg.promptCache.stableKeyEnabled &&
+            (modelProviderID !== "openai" || (providerID && providerID !== "openai"))) {
+            promptCacheStrategy = "unsupported_provider";
+        }
         const actualModel = normalizeModelRef(input.model?.providerID ?? input.provider?.id, input.model?.modelID ?? input.model?.id);
         const expected = expectedAgentModel(directory, input.agent);
         if (actualModel) {
@@ -1155,6 +1197,9 @@ export default function GatewayCorePlugin(ctx, options) {
                 actual_model: actualModel,
                 expected_category: expected?.category,
                 expected_model: expected?.model,
+                prompt_cache_strategy: promptCacheStrategy,
+                prompt_cache_shard_count: cfg.promptCache.shardCount,
+                prompt_cache_shard: promptCacheShard,
             });
         }
         if (expected && actualModel && expected.model !== actualModel) {
@@ -1267,6 +1312,20 @@ export default function GatewayCorePlugin(ctx, options) {
             }
         }
         providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
+        if (Array.isArray(output.system)) {
+            const observation = cacheableSystemPrefixObservation(output.system);
+            writeGatewayEventAudit(directory, {
+                hook: "gateway-core",
+                stage: "state",
+                reason_code: "prompt_cache_prefix_observed",
+                session_id: input.sessionID,
+                actual_model: actualModel,
+                cacheable_system_prefix_sha256: observation.sha256,
+                cacheable_system_prefix_entry_count: observation.entryCount,
+                cacheable_system_prefix_char_count: observation.charCount,
+                runtime_session_marker_present: observation.sessionMarkerPresent,
+            });
+        }
     }
     async function textComplete(input, output) {
         writeGatewayEventAudit(directory, {

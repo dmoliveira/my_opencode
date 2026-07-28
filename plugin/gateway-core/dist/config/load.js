@@ -216,6 +216,12 @@ function positiveInt(value, fallback) {
     }
     return parsed;
 }
+function boundedInteger(value, min, max, fallback) {
+    const parsed = typeof value === "number" ? value : Number.NaN;
+    return Number.isInteger(parsed) && parsed >= min && parsed <= max
+        ? parsed
+        : fallback;
+}
 function hasOwn(record, key) {
     return Object.prototype.hasOwnProperty.call(record, key);
 }
@@ -343,6 +349,9 @@ export function loadGatewayConfig(raw) {
     const sessionRuntimeSystemContextSource = source.sessionRuntimeSystemContext &&
         typeof source.sessionRuntimeSystemContext === "object"
         ? source.sessionRuntimeSystemContext
+        : {};
+    const promptCacheSource = source.promptCache && typeof source.promptCache === "object"
+        ? source.promptCache
         : {};
     const conciseModeSource = source.conciseMode && typeof source.conciseMode === "object"
         ? source.conciseMode
@@ -778,6 +787,12 @@ export function loadGatewayConfig(raw) {
                 ? sessionRuntimeSystemContextSource.injectSessionIdWhenConciseModeOnly
                 : DEFAULT_GATEWAY_CONFIG.sessionRuntimeSystemContext
                     .injectSessionIdWhenConciseModeOnly,
+        },
+        promptCache: {
+            stableKeyEnabled: typeof promptCacheSource.stableKeyEnabled === "boolean"
+                ? promptCacheSource.stableKeyEnabled
+                : DEFAULT_GATEWAY_CONFIG.promptCache.stableKeyEnabled,
+            shardCount: boundedInteger(promptCacheSource.shardCount, 1, 64, DEFAULT_GATEWAY_CONFIG.promptCache.shardCount),
         },
         conciseMode: {
             enabled: typeof conciseModeSource.enabled === "boolean"
