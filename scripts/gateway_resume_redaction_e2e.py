@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import signal
 import stat
@@ -675,7 +676,9 @@ def iter_strings(value: Any) -> Iterator[str]:
             yield from iter_strings(item)
 
 
-def validate_native_wire(payload: dict[str, Any]) -> dict[str, int | bool]:
+def validate_native_wire(
+    payload: dict[str, Any], forbidden_session_ids: set[str]
+) -> dict[str, int | bool]:
     input_items = payload.get("input")
     require(isinstance(input_items, list), "native_input_not_array")
     items = [item for item in input_items if isinstance(item, dict)]
@@ -751,6 +754,17 @@ def validate_native_wire(payload: dict[str, Any]) -> dict[str, int | bool]:
         "native_function_output_invalid",
     )
 
+    prompt_cache_key = payload.get("prompt_cache_key")
+    require(isinstance(prompt_cache_key, str), "prompt_cache_key_missing")
+    require(
+        re.fullmatch(r"ocpc-v1:[a-f0-9]{24}:n1:s0", prompt_cache_key) is not None,
+        "prompt_cache_key_shape_invalid",
+    )
+    require(
+        prompt_cache_key not in forbidden_session_ids,
+        "prompt_cache_key_uses_session_id",
+    )
+
     wire_text = json.dumps(payload, separators=(",", ":"))
     return {
         "wire_chars": len(wire_text),
@@ -764,6 +778,7 @@ def validate_native_wire(payload: dict[str, Any]) -> dict[str, int | bool]:
             marker in wire_text for marker in (UI_ONLY_CANARY, UI_PREVIEW_CANARY)
         ),
         "provider_controls_present": True,
+        "prompt_cache_key_stable": True,
     }
 
 
@@ -812,6 +827,9 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         "redaction_token_present_on_wire": False,
         "ui_only_metadata_absent_on_wire": False,
         "provider_controls_present": False,
+        "prompt_cache_key_stable": False,
+        "prompt_cache_routing_audit_seen": False,
+        "prompt_cache_prefix_audit_seen": False,
         "runtime_bootstrap_seen": False,
         "redaction_audit_seen": False,
         "redaction_scanned_chars": 0,
@@ -1069,7 +1087,12 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 require(request.authorization_expected, "native_authorization_invalid")
                 require(request.peer_is_loopback, "native_peer_not_loopback")
                 require(request.payload.get("model") == "mock", "native_model_invalid")
-                report.update(validate_native_wire(request.payload))
+                report.update(
+                    validate_native_wire(
+                        request.payload,
+                        {imported_session_id, resume_session_id},
+                    )
+                )
                 require(report["wire_exceeds_legacy_limit"], "wire_below_legacy_limit")
                 require(
                     report["ciphertext_preserved_on_wire"], "ciphertext_missing_on_wire"
@@ -1091,6 +1114,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 require(
                     report["provider_controls_present"], "provider_controls_missing"
                 )
+                require(report["prompt_cache_key_stable"], "prompt_cache_key_unstable")
 
                 audit_rows = parse_audit(native_audit)
                 report["runtime_bootstrap_seen"] = any(
@@ -1113,6 +1137,21 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     == "provider_boundary_secret_dispatch_blocked"
                     for row in audit_rows
                 )
+                cache_routing_rows = [
+                    row
+                    for row in audit_rows
+                    if row.get("reason_code") == "agent_runtime_model_observed"
+                    and row.get("session_id") == resume_session_id
+                    and row.get("prompt_cache_strategy") == "stable_sharded"
+                ]
+                cache_prefix_rows = [
+                    row
+                    for row in audit_rows
+                    if row.get("reason_code") == "prompt_cache_prefix_observed"
+                    and row.get("session_id") == resume_session_id
+                ]
+                report["prompt_cache_routing_audit_seen"] = len(cache_routing_rows) == 1
+                report["prompt_cache_prefix_audit_seen"] = len(cache_prefix_rows) == 1
                 audit_text = native_audit.read_text(encoding="utf-8", errors="strict")
                 require(
                     not any(marker in audit_text for marker in PRIVATE_FIXTURE_MARKERS),
@@ -1120,6 +1159,64 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 require(
                     report["runtime_bootstrap_seen"], "runtime_bootstrap_audit_missing"
+                )
+                require(
+                    report["prompt_cache_routing_audit_seen"],
+                    "prompt_cache_routing_audit_missing",
+                )
+                require(
+                    report["prompt_cache_prefix_audit_seen"],
+                    "prompt_cache_prefix_audit_missing",
+                )
+                cache_routing = cache_routing_rows[0]
+                require(
+                    cache_routing.get("prompt_cache_shard_count") == 1
+                    and cache_routing.get("prompt_cache_shard") == 0,
+                    "prompt_cache_routing_audit_invalid",
+                )
+                cache_prefix = cache_prefix_rows[0]
+                require(
+                    re.fullmatch(
+                        r"[a-f0-9]{64}",
+                        str(cache_prefix.get("cacheable_system_prefix_sha256") or ""),
+                    )
+                    is not None,
+                    "prompt_cache_prefix_fingerprint_invalid",
+                )
+                require(
+                    int(cache_prefix.get("cacheable_system_prefix_entry_count") or 0)
+                    > 0
+                    and int(cache_prefix.get("cacheable_system_prefix_char_count") or 0)
+                    > 0,
+                    "prompt_cache_prefix_counts_invalid",
+                )
+                require(
+                    cache_prefix.get("runtime_session_marker_present") is False,
+                    "prompt_cache_prefix_marker_state_invalid",
+                )
+                forbidden_cache_fields = {
+                    "prompt_cache_key",
+                    "promptCacheKey",
+                    "prompt_cache_scope",
+                    "prompt_cache_scope_digest",
+                    "directory",
+                    "path",
+                }
+                require(
+                    all(
+                        forbidden_cache_fields.isdisjoint(row)
+                        for row in (cache_routing, cache_prefix)
+                    ),
+                    "prompt_cache_audit_leaked_scope",
+                )
+                wire_cache_key = str(request.payload["prompt_cache_key"])
+                scope_digest = wire_cache_key.split(":", 2)[1]
+                require(
+                    wire_cache_key not in audit_text, "prompt_cache_key_leaked_to_audit"
+                )
+                require(
+                    scope_digest not in audit_text,
+                    "prompt_cache_scope_digest_leaked_to_audit",
                 )
                 require(report["redaction_audit_seen"], "redaction_audit_missing")
                 redaction_row = redaction_rows[0]

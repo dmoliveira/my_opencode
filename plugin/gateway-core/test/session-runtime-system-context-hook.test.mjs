@@ -147,6 +147,10 @@ test("session-runtime-system-context injects active concise mode from gateway st
     })
     assert.match(output.system.join("\n"), /runtime_concise_mode: full/)
     assert.match(output.system.join("\n"), /Respond terse\. Keep technical terms exact\./)
+    assert.ok(
+      output.system.findIndex((line) => line.startsWith("runtime_concise_mode:")) <
+        output.system.findIndex((line) => line.startsWith("runtime_session_context:")),
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -312,10 +316,66 @@ test("session-runtime-system-context concise-only scope injects when concise is 
 })
 
 
-test("stablePromptFingerprint ignores line ending and boundary whitespace churn", () => {
+test("session-runtime-system-context repairs managed block order without touching marker mentions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
+  try {
+    const hook = createSessionRuntimeSystemContextHook({
+      directory,
+      enabled: true,
+      injectSessionIdContext: true,
+      conciseModeEnabled: true,
+      conciseDefaultMode: "lite",
+    })
+    const markerMention = "Unmanaged guidance\nmentions runtime_session_context: only as prose."
+    const output = {
+      system: [
+        "baseline",
+        "runtime_session_context: stale-one",
+        markerMention,
+        "runtime_concise_mode: stale",
+        "runtime_session_context: stale-two",
+      ],
+    }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-order-repair" },
+      output,
+      directory,
+    })
+
+    assert.equal(output.system[0], "baseline")
+    assert.equal(output.system[1], markerMention)
+    assert.equal(output.system.filter((line) => line.startsWith("runtime_concise_mode:")).length, 1)
+    assert.equal(output.system.filter((line) => line.startsWith("runtime_session_context:")).length, 1)
+    assert.equal(output.system.at(-2).startsWith("runtime_concise_mode: lite"), true)
+    assert.equal(output.system.at(-1).startsWith("runtime_session_context: session-order-repair"), true)
+
+    output.system.push("late stable guidance")
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-order-repair" },
+      output,
+      directory,
+    })
+    assert.equal(output.system.at(-3), "late stable guidance")
+    assert.equal(output.system.at(-2).startsWith("runtime_concise_mode: lite"), true)
+    assert.equal(output.system.at(-1).startsWith("runtime_session_context: session-order-repair"), true)
+
+    const stable = structuredClone(output.system)
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-order-repair" },
+      output,
+      directory,
+    })
+    assert.deepEqual(output.system, stable)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("stablePromptFingerprint is exact across line endings and boundary whitespace", () => {
   const canonical = stablePromptFingerprint(["system instruction", "second instruction"])
   const formatted = stablePromptFingerprint(["  system instruction\r\n", "\nsecond instruction  "])
-  assert.equal(formatted, canonical)
+  assert.equal(canonical, "0fb4f58ddeab825fb407971be73611fcf8549cd246b7c38acf7dc17d24a486a3")
+  assert.notEqual(formatted, canonical)
 })
 
 test("stablePromptFingerprint changes for semantic prompt changes", () => {

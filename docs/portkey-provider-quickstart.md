@@ -81,6 +81,9 @@ For all providers, keep reusable instructions and tools at the start of the requ
 
 Before claiming savings, collect provider usage fields for input, cache-read, and cache-write tokens. Portkey response-cache hits alone are not evidence of prompt-cache savings.
 
+The implementation evidence and dynamic-hook review are recorded in
+`docs/prompt-cache-dynamic-injection-audit-2026-07-28.md`.
+
 ## Rate-limit mitigation for OpenAI route
 
 OpenCode may issue a hidden `title` generation request using the configured `small_model` before/around the main `build` request. If both share the same constrained OpenAI virtual key, you can see intermittent `too_many_requests` even on early turns.
@@ -124,9 +127,33 @@ Create or edit `.opencode/gateway-core.config.json`:
 If you also define `contextInjector` in repo-root `opencode.json`, root config values take precedence over sidecar defaults.
 
 - Set `dedupeEnabled: false` to disable dedupe quickly.
-- Increase `minDeltaChars` to skip more small context deltas.
+- Increase `minDeltaChars` only with stale-context tests: differences below the
+  threshold are consumed rather than deferred.
 - Set `minDeltaChars: 0` to only skip exact duplicates.
 - Keep `dedupeNormalizeWhitespace: true` (default) to treat formatting-only drift as duplicate.
+
+### Stable OpenAI cache routing (default)
+
+The gateway replaces only OpenCode's session-scoped default
+`prompt_cache_key`. Custom, absent, non-string, conflicting-provider, and
+non-OpenAI keys are preserved.
+
+```json
+{
+  "promptCache": {
+    "stableKeyEnabled": true,
+    "shardCount": 1
+  }
+}
+```
+
+- `stableKeyEnabled: true` is the default.
+- Linked Git worktrees share a hashed repository scope; paths and cache keys are
+  not written to gateway audit.
+- Keep one shard until measured traffic approaches OpenAI's per-key routing
+  guidance. Valid values are integers from `1` through `64`.
+- Set `stableKeyEnabled: false` and restart OpenCode to restore the upstream
+  session key.
 
 ### Session runtime context cache tuning (toggle)
 
@@ -145,6 +172,7 @@ To reduce cross-session cache fragmentation, you can disable runtime session-id 
 - `injectSessionIdContext: true` (default): preserve strict runtime session-id guidance in system prompt.
 - `injectSessionIdContext: false`: remove that per-session marker from system prompt to improve cache reuse across sessions.
 - `injectSessionIdWhenConciseModeOnly: true`: inject runtime session-id context only when concise mode context is active.
+- Restart OpenCode after saving these settings.
 
 ### Cache-optimized sidecar profile (recommended baseline)
 
@@ -157,6 +185,10 @@ Use this when your priority is prompt-cache hit rate over strict per-session run
     "minDeltaChars": 120,
     "dedupeNormalizeWhitespace": true
   },
+  "promptCache": {
+    "stableKeyEnabled": true,
+    "shardCount": 1
+  },
   "sessionRuntimeSystemContext": {
     "enabled": true,
     "injectSessionIdContext": false,
@@ -165,7 +197,7 @@ Use this when your priority is prompt-cache hit rate over strict per-session run
 }
 ```
 
-Save this in `.opencode/gateway-core.config.json`.
+Save this in `.opencode/gateway-core.config.json`, then restart OpenCode.
 
 If root `opencode.json` also sets the same keys, root values still win.
 
@@ -173,9 +205,16 @@ Quick rollback profile (strict runtime id semantics):
 
 ```json
 {
+  "promptCache": {
+    "stableKeyEnabled": false,
+    "shardCount": 1
+  },
   "sessionRuntimeSystemContext": {
     "enabled": true,
-    "injectSessionIdContext": true
+    "injectSessionIdContext": true,
+    "injectSessionIdWhenConciseModeOnly": false
   }
 }
 ```
+
+Restart OpenCode after applying the rollback profile.

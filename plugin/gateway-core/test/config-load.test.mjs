@@ -64,6 +64,8 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.sessionRuntimeSystemContext.enabled, true)
   assert.equal(config.sessionRuntimeSystemContext.injectSessionIdContext, true)
   assert.equal(config.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly, false)
+  assert.equal(config.promptCache.stableKeyEnabled, true)
+  assert.equal(config.promptCache.shardCount, 1)
   assert.equal(config.thinkMode.enabled, true)
   assert.equal(config.thinkingBlockValidator.enabled, true)
   assert.equal(config.directoryAgentsInjector.maxChars, 1000)
@@ -129,6 +131,16 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("loadGatewayConfig bounds prompt cache routing config strictly", () => {
+  assert.deepEqual(loadGatewayConfig({ promptCache: { stableKeyEnabled: false, shardCount: 64 } }).promptCache, {
+    stableKeyEnabled: false,
+    shardCount: 64,
+  })
+  for (const shardCount of [0, 65, 1.5, "16", null]) {
+    assert.equal(loadGatewayConfig({ promptCache: { shardCount } }).promptCache.shardCount, 1)
+  }
 })
 
 test("loadGatewayConfig preserves legacy provider limits until new limits opt in", () => {

@@ -139,6 +139,12 @@ export interface SessionRuntimeSystemContextConfig {
   injectSessionIdWhenConciseModeOnly: boolean;
 }
 
+// Declares OpenAI prompt-cache routing settings for stable cross-session prefixes.
+export interface PromptCacheConfig {
+  stableKeyEnabled: boolean;
+  shardCount: number;
+}
+
 export interface ConciseModeConfig {
   enabled: boolean;
   defaultMode: "off" | "lite" | "full" | "ultra";
@@ -618,6 +624,7 @@ export interface GatewayConfig {
   pressureEscalationGuard: PressureEscalationGuardConfig;
   sessionRecovery: SessionRecoveryConfig;
   sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
+  promptCache: PromptCacheConfig;
   conciseMode: ConciseModeConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
   providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
@@ -903,6 +910,10 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     injectSessionIdContext: true,
     injectSessionIdWhenConciseModeOnly: false,
+  },
+  promptCache: {
+    stableKeyEnabled: true,
+    shardCount: 1,
   },
   conciseMode: {
     enabled: false,

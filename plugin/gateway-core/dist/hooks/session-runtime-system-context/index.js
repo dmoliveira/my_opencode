@@ -1,12 +1,13 @@
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { REASON_CODES } from "../../bridge/reason-codes.js";
+import { exactPromptFingerprint } from "../../cache/prompt-cache.js";
 import { loadGatewayState } from "../../state/storage.js";
-const SYSTEM_CONTEXT_MARKER = "runtime_session_context:";
-const CONCISE_CONTEXT_MARKER = "runtime_concise_mode:";
+import { managedRuntimeSystemMarker, RUNTIME_CONCISE_CONTEXT_MARKER, RUNTIME_SESSION_CONTEXT_MARKER, } from "../shared/stable-system-context.js";
+const SYSTEM_CONTEXT_MARKER = RUNTIME_SESSION_CONTEXT_MARKER;
+const CONCISE_CONTEXT_MARKER = RUNTIME_CONCISE_CONTEXT_MARKER;
 const VALID_MODES = new Set(["off", "lite", "full", "ultra", "review", "commit"]);
 const DEFAULT_CONCISE_SKILL_BODY = [
     "Use concise/caveman-style communication only when active.",
@@ -23,9 +24,6 @@ function resolveSessionId(payload) {
     }
     return "";
 }
-function runtimeContextEntryIndex(system, marker) {
-    return system.findIndex((entry) => typeof entry === "string" && entry.includes(marker));
-}
 function pathSignature(path) {
     if (!existsSync(path)) {
         return "missing";
@@ -39,8 +37,7 @@ function pathSignature(path) {
     }
 }
 export function stablePromptFingerprint(entries) {
-    const normalized = entries.map((entry) => entry.replace(/\r\n/g, "\n").trim());
-    return createHash("sha256").update(normalized.join("\n\u0000\n"), "utf8").digest("hex");
+    return exactPromptFingerprint(entries);
 }
 function buildSystemContext(sessionId) {
     return [
@@ -48,6 +45,31 @@ function buildSystemContext(sessionId) {
         "Use this exact runtime session id for commits, logs, telemetry, and external tooling created during this session.",
         "If the user asks for the current runtime session id, return it exactly.",
     ].join("\n");
+}
+function reconcileRuntimeContexts(system, conciseContext, sessionContext) {
+    const managed = system.filter((entry) => managedRuntimeSystemMarker(entry) !== null);
+    const currentConcise = managed.filter((entry) => managedRuntimeSystemMarker(entry) === CONCISE_CONTEXT_MARKER);
+    const currentSession = managed.filter((entry) => managedRuntimeSystemMarker(entry) === SYSTEM_CONTEXT_MARKER);
+    const desired = [conciseContext, sessionContext].filter((entry) => typeof entry === "string");
+    const conciseChanged = currentConcise.length !== (conciseContext ? 1 : 0) ||
+        (conciseContext !== null && currentConcise[0] !== conciseContext);
+    const sessionChanged = currentSession.length !== (sessionContext ? 1 : 0) ||
+        (sessionContext !== null && currentSession[0] !== sessionContext);
+    const managedTail = desired.length === 0 ? [] : system.slice(-desired.length);
+    const changed = conciseChanged ||
+        sessionChanged ||
+        managed.length !== desired.length ||
+        managedTail.some((entry, index) => entry !== desired[index]);
+    if (!changed) {
+        return { changed: false, conciseChanged: false, sessionChanged: false };
+    }
+    const unmanaged = system.filter((entry) => managedRuntimeSystemMarker(entry) === null);
+    system.splice(0, system.length, ...unmanaged, ...desired);
+    return {
+        changed: true,
+        conciseChanged: conciseChanged || conciseContext !== null,
+        sessionChanged: sessionChanged || sessionContext !== null,
+    };
 }
 function resolveConfiguredConciseMode(options) {
     const state = loadGatewayState(options.directory);
@@ -167,41 +189,21 @@ export function createSessionRuntimeSystemContextHook(options) {
             const injectSessionIdContext = options.injectSessionIdContext !== false;
             const shouldInjectSessionId = injectSessionIdContext &&
                 (!options.injectSessionIdWhenConciseModeOnly || (concise && concise.mode !== "off"));
-            const existingIndex = runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER);
-            let sessionContextChanged = false;
-            if (shouldInjectSessionId) {
-                const nextContext = buildSystemContext(sessionId);
-                if (existingIndex >= 0 && system[existingIndex] !== nextContext) {
-                    system.splice(existingIndex, 1);
-                    sessionContextChanged = true;
-                }
-                if (runtimeContextEntryIndex(system, SYSTEM_CONTEXT_MARKER) < 0) {
-                    // Keep per-session data after stable system instructions for prompt-cache reuse.
-                    system.push(nextContext);
-                    sessionContextChanged = true;
-                }
-            }
-            else if (existingIndex >= 0) {
-                system.splice(existingIndex, 1);
-                sessionContextChanged = true;
-            }
-            const conciseIndex = runtimeContextEntryIndex(system, CONCISE_CONTEXT_MARKER);
-            const currentConcise = conciseIndex >= 0 ? system[conciseIndex] : "";
-            if (!concise || concise.mode === "off") {
-                let conciseContextChanged = false;
-                if (conciseIndex >= 0) {
-                    system.splice(conciseIndex, 1);
-                    conciseContextChanged = true;
-                }
+            const nextConcise = concise && concise.mode !== "off"
+                ? buildConciseModeContext(directory, concise.mode, concise.source, conciseSkillCandidateCacheByDirectory, conciseSkillBodyCacheByPath)
+                : null;
+            const nextSession = shouldInjectSessionId ? buildSystemContext(sessionId) : null;
+            const reconciliation = reconcileRuntimeContexts(system, nextConcise, nextSession);
+            if (!nextConcise) {
                 const reasonCode = shouldInjectSessionId
-                    ? sessionContextChanged || conciseContextChanged
+                    ? reconciliation.changed
                         ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_INJECTED
                         : null
                     : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
-                        ? sessionContextChanged || conciseContextChanged
+                        ? reconciliation.changed
                             ? REASON_CODES.SESSION_RUNTIME_SKIPPED_CONCISE_SCOPE
                             : null
-                        : sessionContextChanged || conciseContextChanged
+                        : reconciliation.changed
                             ? REASON_CODES.SESSION_RUNTIME_WITHOUT_CONCISE_REMOVED
                             : null;
                 if (reasonCode) {
@@ -214,23 +216,13 @@ export function createSessionRuntimeSystemContextHook(options) {
                 }
                 return;
             }
-            const nextConcise = buildConciseModeContext(directory, concise.mode, concise.source, conciseSkillCandidateCacheByDirectory, conciseSkillBodyCacheByPath);
-            let conciseContextChanged = false;
-            if (currentConcise !== nextConcise) {
-                if (conciseIndex >= 0) {
-                    system.splice(conciseIndex, 1);
-                }
-                // Keep runtime mode context after stable system instructions for prompt-cache reuse.
-                system.push(nextConcise);
-                conciseContextChanged = true;
-            }
             const reasonCode = shouldInjectSessionId
-                ? sessionContextChanged || conciseContextChanged
+                ? reconciliation.changed
                     ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_INJECTED
                     : null
                 : injectSessionIdContext && options.injectSessionIdWhenConciseModeOnly
                     ? null
-                    : sessionContextChanged || conciseContextChanged
+                    : reconciliation.changed
                         ? REASON_CODES.SESSION_RUNTIME_WITH_CONCISE_SKIPPED
                         : null;
             if (!reasonCode) {
@@ -241,8 +233,8 @@ export function createSessionRuntimeSystemContextHook(options) {
                 stage: "inject",
                 reason_code: reasonCode,
                 session_id: sessionId,
-                concise_mode: concise.mode,
-                concise_mode_source: concise.source,
+                concise_mode: concise?.mode,
+                concise_mode_source: concise?.source,
             });
         },
     };
