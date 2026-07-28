@@ -5,6 +5,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
 
 function secretConfig(overrides = {}) {
   return {
@@ -31,6 +32,44 @@ function pluginFor(directory, config = {}) {
       ...config,
     },
   })
+}
+
+function directRedactor({ limits = {}, providerLimits = {} } = {}) {
+  return createSecretRedactor({
+    patterns: secretConfig().patterns,
+    redactionToken: "[REDACTED]",
+    limits: {
+      maxDepth: 12,
+      maxNodes: 20000,
+      maxChars: 2097152,
+      ...limits,
+    },
+    providerLimits: {
+      maxMessages: 20000,
+      maxNodes: 1000000,
+      maxChars: 134217728,
+      maxMessageChars: 16777216,
+      ...providerLimits,
+    },
+  })
+}
+
+function reasoningMessage(ciphertext) {
+  return {
+    info: { role: "assistant", providerID: "openai" },
+    parts: [
+      {
+        type: "reasoning",
+        text: "token=MutableReasoningSecret_123456",
+        metadata: {
+          openai: {
+            itemId: "rs_0123456789abcdef",
+            reasoningEncryptedContent: ciphertext,
+          },
+        },
+      },
+    ],
+  }
 }
 
 test("secret-leak-guard redacts all structured tool output channels", async () => {
@@ -334,6 +373,360 @@ test("provider block diagnostics expose only allowlisted structural fields", asy
     else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = previousPath
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("provider redactor preserves exact OpenAI reasoning ciphertext and scans siblings", () => {
+  const ciphertext = `${"A".repeat(4000)}sk-ciphertext-collision-1234567890`
+  const message = reasoningMessage(ciphertext)
+  const stats = directRedactor().redactProviderMessages([message])
+
+  assert.equal(message.parts[0].metadata.openai.reasoningEncryptedContent, ciphertext)
+  assert.equal(message.parts[0].text, "[REDACTED]")
+  assert.equal(stats.matches, 1)
+  assert.equal(stats.redactedFields, 1)
+  assert.equal(stats.scannedChars < ciphertext.length, true)
+  assert.equal(stats.scannedNodes > 1, true)
+})
+
+test("provider redactor projects only tool state metadata that OpenCode dispatches", () => {
+  const completedMetadata = {
+    files: [{ patch: "sk-internal-patch-secret-1234567890" }],
+    display: { path: "token=InternalDisplaySecret_123456" },
+    preview: "password=InternalPreviewSecret_123456",
+  }
+  const completed = {
+    info: { role: "assistant", providerID: "openai" },
+    parts: [
+      {
+        type: "tool",
+        tool: "bash",
+        callID: "call-safe",
+        state: {
+          status: "completed",
+          input: { command: "token=ToolInputSecret_123456" },
+          output: "password=ToolOutputSecret_123456",
+          metadata: completedMetadata,
+        },
+      },
+    ],
+  }
+  directRedactor().redactProviderMessages([completed])
+  assert.equal(completed.parts[0].state.input.command, "[REDACTED]")
+  assert.equal(completed.parts[0].state.output, "[REDACTED]")
+  assert.equal(completed.parts[0].state.metadata, completedMetadata)
+  assert.equal(completedMetadata.files[0].patch, "sk-internal-patch-secret-1234567890")
+  assert.equal(completedMetadata.preview, "password=InternalPreviewSecret_123456")
+
+  const interrupted = {
+    info: { role: "assistant", providerID: "openai" },
+    parts: [
+      {
+        type: "tool",
+        tool: "bash",
+        callID: "call-interrupted",
+        state: {
+          status: "error",
+          input: { command: "safe" },
+          error: "secret=ToolErrorSecret_123456",
+          metadata: {
+            interrupted: true,
+            output: "token=InterruptedOutputSecret_123456",
+            preview: "sk-internal-preview-secret-1234567890",
+          },
+        },
+      },
+    ],
+  }
+  directRedactor().redactProviderMessages([interrupted])
+  assert.equal(interrupted.parts[0].state.error, "[REDACTED]")
+  assert.equal(interrupted.parts[0].state.metadata.output, "[REDACTED]")
+  assert.equal(
+    interrupted.parts[0].state.metadata.preview,
+    "sk-internal-preview-secret-1234567890",
+  )
+
+  const missingInterruptedOutput = structuredClone(interrupted)
+  missingInterruptedOutput.parts[0].state.error = "secret=MissingOutputErrorSecret_123456"
+  missingInterruptedOutput.parts[0].state.metadata = { interrupted: true }
+  directRedactor().redactProviderMessages([missingInterruptedOutput])
+  assert.equal(missingInterruptedOutput.parts[0].state.error, "[REDACTED]")
+
+  const notInterrupted = structuredClone(interrupted)
+  notInterrupted.parts[0].state.metadata = {
+    interrupted: false,
+    output: "token=UndispatchedOutputSecret_123456",
+  }
+  directRedactor().redactProviderMessages([notInterrupted])
+  assert.equal(
+    notInterrupted.parts[0].state.metadata.output,
+    "token=UndispatchedOutputSecret_123456",
+  )
+})
+
+test("tool state metadata projection rejects malformed control properties", () => {
+  function errorMessage(metadata, status = "error") {
+    return {
+      info: { role: "assistant", providerID: "openai" },
+      parts: [
+        {
+          type: "tool",
+          tool: "bash",
+          callID: "call-error",
+          state: { status, input: {}, error: "safe", metadata },
+        },
+      ],
+    }
+  }
+
+  const inheritedInterrupted = Object.assign(Object.create({ interrupted: true }), {
+    output: "token=InheritedControlSecret_123456",
+  })
+  const accessorInterrupted = { output: "token=AccessorControlSecret_123456" }
+  Object.defineProperty(accessorInterrupted, "interrupted", {
+    enumerable: true,
+    get: () => true,
+  })
+  const accessorOutput = { interrupted: true }
+  Object.defineProperty(accessorOutput, "output", {
+    enumerable: true,
+    get: () => "token=AccessorOutputSecret_123456",
+  })
+
+  for (const message of [
+    errorMessage(inheritedInterrupted),
+    errorMessage(accessorInterrupted),
+    errorMessage(accessorOutput),
+    errorMessage({ interrupted: true, output: { text: "safe" } }),
+    errorMessage({ preview: "safe" }, "future-status"),
+  ]) {
+    assert.throws(
+      () => directRedactor().redactProviderMessages([message]),
+      (error) => error.code === "malformed_provider_metadata",
+    )
+  }
+})
+
+test("nondispatched tool metadata aliases remain scanned through dispatched paths", () => {
+  for (const metadataFirst of [true, false]) {
+    const shared = { preview: "token=AliasedMetadataSecret_123456" }
+    const state = metadataFirst
+      ? { status: "completed", metadata: shared, input: shared, output: "safe" }
+      : { status: "completed", input: shared, output: "safe", metadata: shared }
+    const message = {
+      info: { role: "assistant", providerID: "openai" },
+      parts: [{ type: "tool", tool: "bash", callID: "call-alias", state }],
+    }
+    directRedactor().redactProviderMessages([message])
+    assert.equal(shared.preview, "[REDACTED]")
+  }
+
+  const providerMetadata = {
+    info: { role: "assistant", providerID: "openai" },
+    parts: [
+      {
+        type: "tool",
+        tool: "bash",
+        callID: "call-provider-metadata",
+        metadata: { preview: "sk-provider-metadata-secret-1234567890" },
+        state: { status: "completed", input: {}, output: "safe", metadata: {} },
+      },
+    ],
+  }
+  assert.throws(
+    () => directRedactor().redactProviderMessages([providerMetadata]),
+    (error) => error.code === "immutable_match",
+  )
+})
+
+test("reasoning ciphertext exemption requires exact own provider provenance", () => {
+  const ciphertext = "sk-provider-ciphertext-collision-1234567890"
+  const cases = []
+
+  const wrongRole = reasoningMessage(ciphertext)
+  wrongRole.info.role = "user"
+  cases.push(wrongRole)
+
+  const wrongProvider = reasoningMessage(ciphertext)
+  wrongProvider.info.providerID = "other"
+  cases.push(wrongProvider)
+
+  const wrongPart = reasoningMessage(ciphertext)
+  wrongPart.parts[0].type = "text"
+  cases.push(wrongPart)
+
+  const wrongItem = reasoningMessage(ciphertext)
+  wrongItem.parts[0].metadata.openai.itemId = "fc_0123456789abcdef"
+  cases.push(wrongItem)
+
+  const wrongKey = reasoningMessage(ciphertext)
+  wrongKey.parts[0].metadata.openai.encryptedContent = ciphertext
+  delete wrongKey.parts[0].metadata.openai.reasoningEncryptedContent
+  cases.push(wrongKey)
+
+  const inheritedRole = reasoningMessage(ciphertext)
+  inheritedRole.info = Object.assign(Object.create({ role: "assistant" }), {
+    providerID: "openai",
+  })
+  cases.push(inheritedRole)
+
+  const accessorItem = reasoningMessage(ciphertext)
+  Object.defineProperty(accessorItem.parts[0].metadata.openai, "itemId", {
+    configurable: true,
+    enumerable: true,
+    get: () => "rs_0123456789abcdef",
+  })
+  cases.push(accessorItem)
+
+  for (const message of cases) {
+    assert.throws(
+      () => directRedactor().redactProviderMessages([message]),
+      (error) => error.code === "immutable_match",
+    )
+  }
+})
+
+test("provider traversal revisits qualified aliases under every current path", () => {
+  const ciphertext = "sk-provider-ciphertext-collision-1234567890"
+  for (const trustedFirst of [true, false]) {
+    const trusted = reasoningMessage(ciphertext)
+    trusted.parts[0].text = "safe"
+    const shared = trusted.parts[0].metadata.openai
+    const message = trustedFirst
+      ? { ...trusted, shadow: { metadata: { openai: shared } } }
+      : {
+          info: trusted.info,
+          shadow: { metadata: { openai: shared } },
+          parts: trusted.parts,
+        }
+    assert.throws(
+      () => directRedactor().redactProviderMessages([message]),
+      (error) => error.code === "immutable_match",
+    )
+  }
+
+  const trusted = reasoningMessage(ciphertext)
+  trusted.parts[0].text = "safe"
+  const shared = trusted.parts[0].metadata.openai
+  const untrusted = {
+    info: { role: "assistant", providerID: "openai" },
+    parts: [{ type: "reasoning", metadata: { other: shared } }],
+  }
+  assert.throws(
+    () => directRedactor().redactProviderMessages([trusted, untrusted]),
+    (error) => error.code === "immutable_match",
+  )
+})
+
+test("provider history limits are global, per-message, and exactly accounted", () => {
+  const exact = directRedactor({
+    limits: { maxNodes: 1, maxChars: 1 },
+    providerLimits: {
+      maxMessages: 2,
+      maxNodes: 3,
+      maxChars: 6,
+      maxMessageChars: 3,
+    },
+  }).redactProviderMessages(["abc", "def"])
+  assert.deepEqual(exact, {
+    matches: 0,
+    redactedFields: 0,
+    scannedChars: 6,
+    scannedNodes: 3,
+  })
+
+  for (const providerLimits of [
+    { maxMessages: 1, maxNodes: 3, maxChars: 6, maxMessageChars: 3 },
+    { maxMessages: 2, maxNodes: 2, maxChars: 6, maxMessageChars: 3 },
+  ]) {
+    assert.throws(
+      () => directRedactor({ providerLimits }).redactProviderMessages(["abc", "def"]),
+      (error) => error.code === "node_limit",
+    )
+  }
+  for (const providerLimits of [
+    { maxMessages: 2, maxNodes: 3, maxChars: 5, maxMessageChars: 3 },
+    { maxMessages: 2, maxNodes: 3, maxChars: 6, maxMessageChars: 2 },
+  ]) {
+    assert.throws(
+      () => directRedactor({ providerLimits }).redactProviderMessages(["abc", "def"]),
+      (error) => error.code === "text_limit",
+    )
+  }
+
+  const sparse = []
+  sparse.length = 3
+  assert.throws(
+    () =>
+      directRedactor({
+        providerLimits: {
+          maxMessages: 2,
+          maxNodes: 100,
+          maxChars: 100,
+          maxMessageChars: 100,
+        },
+      }).redactProviderMessages(sparse),
+    (error) => error.code === "node_limit",
+  )
+  assert.throws(
+    () =>
+      directRedactor({
+        limits: { maxNodes: 1 },
+        providerLimits: {
+          maxMessages: 2,
+          maxNodes: 100,
+          maxChars: 100,
+          maxMessageChars: 100,
+        },
+      }).redactProviderMessages([{ safe: "x" }]),
+    (error) => error.code === "node_limit",
+  )
+})
+
+test("qualified ciphertext charges bounded raw history budgets without regex scanning", () => {
+  const first = reasoningMessage(`${"A".repeat(400)}sk-first-collision-1234567890`)
+  const second = reasoningMessage(`${"B".repeat(400)}sk-second-collision-1234567890`)
+  const stats = directRedactor({
+    limits: { maxChars: 100 },
+    providerLimits: {
+      maxMessages: 2,
+      maxNodes: 1000,
+      maxChars: 2000,
+      maxMessageChars: 800,
+    },
+  }).redactProviderMessages([first, second])
+  assert.equal(stats.matches, 2)
+  assert.equal(stats.redactedFields, 2)
+  assert.equal(stats.scannedChars < 1000, true)
+
+  assert.throws(
+    () =>
+      directRedactor({
+        providerLimits: {
+          maxMessages: 2,
+          maxNodes: 1000,
+          maxChars: 1000,
+          maxMessageChars: 800,
+        },
+      }).redactProviderMessages([
+        reasoningMessage(`${"A".repeat(400)}sk-first-collision-1234567890`),
+        reasoningMessage(`${"B".repeat(400)}sk-second-collision-1234567890`),
+      ]),
+    (error) => error.code === "text_limit",
+  )
+  assert.throws(
+    () =>
+      directRedactor({
+        providerLimits: {
+          maxMessages: 1,
+          maxNodes: 1000,
+          maxChars: 2000,
+          maxMessageChars: 500,
+        },
+      }).redactProviderMessages([
+        reasoningMessage(`${"A".repeat(400)}sk-message-collision-1234567890`),
+      ]),
+    (error) => error.code === "text_limit",
+  )
 })
 
 test("shared provider references remain valid while cycles and limits reject dispatch", async () => {

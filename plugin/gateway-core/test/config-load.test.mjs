@@ -16,6 +16,10 @@ import {
 test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   const config = loadGatewayConfig({})
   assert.equal(config.secretCommitGuard.enabled, true)
+  assert.equal(config.secretLeakGuard.providerMaxMessages, 20000)
+  assert.equal(config.secretLeakGuard.providerMaxNodes, 1000000)
+  assert.equal(config.secretLeakGuard.providerMaxChars, 134217728)
+  assert.equal(config.secretLeakGuard.providerMaxMessageChars, 16777216)
   assert.equal(config.prBodyEvidenceGuard.requireSummarySection, true)
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
   assert.equal(config.postMergeSyncGuard.requireDeleteBranch, true)
@@ -125,6 +129,70 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("loadGatewayConfig preserves legacy provider limits until new limits opt in", () => {
+  const legacy = loadGatewayConfig({
+    secretLeakGuard: { maxNodes: 123, maxChars: 456 },
+  }).secretLeakGuard
+  assert.equal(legacy.providerMaxMessages, 123)
+  assert.equal(legacy.providerMaxNodes, 123)
+  assert.equal(legacy.providerMaxChars, 456)
+  assert.equal(legacy.providerMaxMessageChars, 456)
+
+  const provider = loadGatewayConfig({
+    secretLeakGuard: {
+      providerMaxMessages: 300,
+      providerMaxNodes: 400,
+      providerMaxChars: 500,
+      providerMaxMessageChars: 450,
+    },
+  }).secretLeakGuard
+  assert.equal(provider.providerMaxMessages, 300)
+  assert.equal(provider.providerMaxNodes, 400)
+  assert.equal(provider.providerMaxChars, 500)
+  assert.equal(provider.providerMaxMessageChars, 450)
+
+  const mixed = loadGatewayConfig({
+    secretLeakGuard: {
+      maxNodes: 123,
+      maxChars: 456,
+      providerMaxMessages: 700,
+      providerMaxNodes: 800,
+      providerMaxChars: 900,
+      providerMaxMessageChars: 850,
+    },
+  }).secretLeakGuard
+  assert.equal(mixed.providerMaxMessages, 700)
+  assert.equal(mixed.providerMaxNodes, 800)
+  assert.equal(mixed.providerMaxChars, 900)
+  assert.equal(mixed.providerMaxMessageChars, 850)
+
+  const invalid = loadGatewayConfig({
+    secretLeakGuard: {
+      maxNodes: 123,
+      maxChars: 456,
+      providerMaxMessages: 0,
+      providerMaxNodes: 0,
+      providerMaxChars: 0,
+      providerMaxMessageChars: 0,
+    },
+  }).secretLeakGuard
+  assert.equal(invalid.providerMaxMessages, 123)
+  assert.equal(invalid.providerMaxNodes, 123)
+  assert.equal(invalid.providerMaxChars, 456)
+  assert.equal(invalid.providerMaxMessageChars, 456)
+
+  const capped = loadGatewayConfig({
+    secretLeakGuard: {
+      providerMaxMessages: 1000,
+      providerMaxNodes: 10,
+      providerMaxChars: 100,
+      providerMaxMessageChars: 200,
+    },
+  }).secretLeakGuard
+  assert.equal(capped.providerMaxMessages, 10)
+  assert.equal(capped.providerMaxMessageChars, 100)
 })
 
 test("loadGatewayConfig normalizes enabled summarizer ordering", () => {

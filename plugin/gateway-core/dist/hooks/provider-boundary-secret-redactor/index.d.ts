@@ -1,4 +1,4 @@
-import { type SecretRedactionLimits } from "../shared/secret-redaction.js";
+import { type ProviderSecretRedactionLimits, type SecretRedactionLimits } from "../shared/secret-redaction.js";
 export interface ProviderBoundarySecretFinalizer {
     finalizeMessages(payload: {
         input?: {
@@ -24,4 +24,5 @@ export declare function createProviderBoundarySecretFinalizer(options: {
     patterns: string[];
     redactionToken: string;
     limits: SecretRedactionLimits;
+    providerLimits: ProviderSecretRedactionLimits;
 }): ProviderBoundarySecretFinalizer;

@@ -860,6 +860,12 @@ export default function GatewayCorePlugin(ctx, options) {
                 maxNodes: cfg.secretLeakGuard.maxNodes,
                 maxChars: cfg.secretLeakGuard.maxChars,
             },
+            providerLimits: {
+                maxMessages: cfg.secretLeakGuard.providerMaxMessages,
+                maxNodes: cfg.secretLeakGuard.providerMaxNodes,
+                maxChars: cfg.secretLeakGuard.providerMaxChars,
+                maxMessageChars: cfg.secretLeakGuard.providerMaxMessageChars,
+            },
         })
         : null;
     const hooks = configuredHooks(ctx, runtime);
