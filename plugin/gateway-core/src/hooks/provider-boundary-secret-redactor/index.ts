@@ -2,6 +2,7 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import {
   createSecretRedactor,
   SecretRedactionError,
+  type ProviderSecretRedactionLimits,
   type SecretRedactionLimits,
   type SecretRedactionStats,
 } from "../shared/secret-redaction.js"
@@ -66,6 +67,7 @@ export function createProviderBoundarySecretFinalizer(options: {
   patterns: string[]
   redactionToken: string
   limits: SecretRedactionLimits
+  providerLimits: ProviderSecretRedactionLimits
 }): ProviderBoundarySecretFinalizer {
   const redactor = createSecretRedactor(options)
 

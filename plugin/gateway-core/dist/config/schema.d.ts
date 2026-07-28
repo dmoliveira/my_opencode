@@ -304,6 +304,10 @@ export interface SecretLeakGuardConfig {
     maxDepth: number;
     maxNodes: number;
     maxChars: number;
+    providerMaxMessages: number;
+    providerMaxNodes: number;
+    providerMaxChars: number;
+    providerMaxMessageChars: number;
 }
 export interface WorkflowConformanceGuardConfig {
     enabled: boolean;

@@ -216,6 +216,9 @@ function positiveInt(value, fallback) {
     }
     return parsed;
 }
+function hasOwn(record, key) {
+    return Object.prototype.hasOwnProperty.call(record, key);
+}
 // Coerces unknown value into bounded float fallback.
 function boundedFloat(value, min, max, fallback) {
     const parsed = Number.parseFloat(String(value ?? ""));
@@ -598,6 +601,20 @@ export function loadGatewayConfig(raw) {
         : DEFAULT_GATEWAY_CONFIG.semanticOutputSummarizer.enabled;
     const hookOrder = semanticSummarizerHookOrder(exactHookIdentityList(hooksSource.order, "hooks.order"), semanticOutputSummarizerEnabled);
     const disabledHooks = exactHookIdentityList(hooksSource.disabled, "hooks.disabled");
+    const secretMaxNodes = positiveInt(secretLeakSource.maxNodes, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxNodes);
+    const secretMaxChars = positiveInt(secretLeakSource.maxChars, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxChars);
+    const providerMaxNodesFallback = hasOwn(secretLeakSource, "maxNodes")
+        ? secretMaxNodes
+        : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerMaxNodes;
+    const providerMaxCharsFallback = hasOwn(secretLeakSource, "maxChars")
+        ? secretMaxChars
+        : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerMaxChars;
+    const providerMaxNodes = positiveInt(secretLeakSource.providerMaxNodes, providerMaxNodesFallback);
+    const providerMaxChars = positiveInt(secretLeakSource.providerMaxChars, providerMaxCharsFallback);
+    const providerMaxMessages = Math.min(positiveInt(secretLeakSource.providerMaxMessages, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerMaxMessages), providerMaxNodes);
+    const providerMaxMessageChars = Math.min(positiveInt(secretLeakSource.providerMaxMessageChars, hasOwn(secretLeakSource, "maxChars")
+        ? secretMaxChars
+        : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerMaxMessageChars), providerMaxChars);
     return {
         hooks: {
             enabled: typeof hooksSource.enabled === "boolean"
@@ -1158,8 +1175,12 @@ export function loadGatewayConfig(raw) {
                 ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
                 : stringList(secretLeakSource.patterns),
             maxDepth: positiveInt(secretLeakSource.maxDepth, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxDepth),
-            maxNodes: positiveInt(secretLeakSource.maxNodes, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxNodes),
-            maxChars: positiveInt(secretLeakSource.maxChars, DEFAULT_GATEWAY_CONFIG.secretLeakGuard.maxChars),
+            maxNodes: secretMaxNodes,
+            maxChars: secretMaxChars,
+            providerMaxMessages,
+            providerMaxNodes,
+            providerMaxChars,
+            providerMaxMessageChars,
         },
         primaryWorktreeGuard: {
             enabled: typeof primaryWorktreeSource.enabled === "boolean"

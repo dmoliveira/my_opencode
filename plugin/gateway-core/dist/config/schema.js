@@ -500,6 +500,10 @@ export const DEFAULT_GATEWAY_CONFIG = {
         maxDepth: 12,
         maxNodes: 20000,
         maxChars: 2097152,
+        providerMaxMessages: 20000,
+        providerMaxNodes: 1000000,
+        providerMaxChars: 134217728,
+        providerMaxMessageChars: 16777216,
     },
     primaryWorktreeGuard: {
         enabled: true,

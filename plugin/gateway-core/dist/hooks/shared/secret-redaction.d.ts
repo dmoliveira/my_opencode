@@ -1,4 +1,4 @@
-export type SecretRedactionErrorCode = "invalid_pattern" | "immutable_match" | "cycle_detected" | "depth_limit" | "node_limit" | "text_limit" | "mutation_failed" | "unexpected_failure";
+export type SecretRedactionErrorCode = "invalid_pattern" | "immutable_match" | "cycle_detected" | "depth_limit" | "node_limit" | "text_limit" | "malformed_provider_metadata" | "mutation_failed" | "unexpected_failure";
 export type SecretRedactionMatchTarget = "key" | "value";
 export type SecretRedactionLocationCode = "provider_metadata_openai_item_id" | "provider_metadata_openai_other" | "immutable_protocol_field" | "unknown_field";
 interface SecretRedactionMatchDiagnostics {
@@ -17,6 +17,12 @@ export interface SecretRedactionLimits {
     maxDepth: number;
     maxNodes: number;
     maxChars: number;
+}
+export interface ProviderSecretRedactionLimits {
+    maxMessages: number;
+    maxNodes: number;
+    maxChars: number;
+    maxMessageChars: number;
 }
 export interface SecretRedactionStats {
     matches: number;
@@ -37,5 +43,6 @@ export declare function createSecretRedactor(options: {
     patterns: string[];
     redactionToken: string;
     limits: SecretRedactionLimits;
+    providerLimits?: ProviderSecretRedactionLimits;
 }): SecretRedactor;
 export {};
