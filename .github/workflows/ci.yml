@@ -49,6 +49,14 @@ jobs:
           npm --prefix plugin/gateway-core run lint
           npm --prefix plugin/gateway-core run test
 
+      - name: Install pinned OpenCode resume-test runtime
+        run: |
+          npm install --global opencode-ai@1.18.5 --no-audit --no-fund
+
+      - name: Gate provider-boundary session resume regressions
+        run: |
+          make gateway-resume-redaction-e2e OPENCODE_BIN="$(command -v opencode)"
+
       - name: Gate deterministic gateway workflows
         run: |
           node scripts/gateway_workflow_scenario_report.mjs --fail-below 100

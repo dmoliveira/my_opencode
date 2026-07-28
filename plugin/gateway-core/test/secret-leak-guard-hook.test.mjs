@@ -206,6 +206,89 @@ test("provider finalizer redacts runtime-shaped mutable content and preserves pr
   }
 })
 
+test("assembled provider finalizer accepts the resumed-history regression fixture with defaults", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-resume-defaults-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: false, order: [], disabled: ["secret-leak-guard"] },
+      },
+    })
+    const ciphertext = `${"A".repeat(128)}sk-opaque-ciphertext-collision-1234567890`
+    const uiOnlyMetadata = {
+      files: [{ patch: "sk-ui-only-patch-collision-1234567890" }],
+      preview: "token=UiOnlyPreviewSecret_123456",
+    }
+    const largeHistory = `resume-history-control:${"H".repeat(2_097_152)}`
+    const messages = [
+      {
+        info: { role: "user", sessionID: "session-resume-regression" },
+        parts: [{ type: "text", text: largeHistory }],
+      },
+      reasoningMessage(ciphertext),
+      {
+        info: {
+          role: "assistant",
+          providerID: "openai",
+          sessionID: "session-resume-regression",
+        },
+        parts: [
+          {
+            type: "tool",
+            tool: "bash",
+            callID: "call-resume-regression",
+            state: {
+              status: "completed",
+              input: { command: "safe" },
+              output: "safe",
+              metadata: uiOnlyMetadata,
+            },
+          },
+        ],
+      },
+    ]
+
+    await plugin["experimental.chat.messages.transform"]({}, { messages })
+
+    assert.equal(messages[0].parts[0].text, largeHistory)
+    assert.equal(
+      messages[1].parts[0].metadata.openai.reasoningEncryptedContent,
+      ciphertext,
+    )
+    assert.equal(messages[1].parts[0].text, "[REDACTED_SECRET]")
+    assert.equal(messages[2].parts[0].state.metadata, uiOnlyMetadata)
+    assert.equal(
+      uiOnlyMetadata.files[0].patch,
+      "sk-ui-only-patch-collision-1234567890",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("assembled provider finalizer keeps explicit legacy history limits fail closed", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-resume-legacy-"))
+  try {
+    const plugin = pluginFor(directory, {
+      hooks: { enabled: false, order: [], disabled: ["secret-leak-guard"] },
+    })
+    const messages = [
+      {
+        info: { role: "user", sessionID: "session-resume-legacy" },
+        parts: [{ type: "text", text: "H".repeat(2_097_153) }],
+      },
+    ]
+
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"]({}, { messages }),
+      /text_limit/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("provider finalizer redacts system context after generic hooks are disabled", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-secret-system-"))
   try {
