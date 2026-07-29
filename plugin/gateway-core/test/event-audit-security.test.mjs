@@ -286,6 +286,7 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
       prompt_cache_strategy: "cache-strategy-canary",
       prompt_cache_shard_count: 1,
       prompt_cache_shard: 0,
+      omitted_match_count: 7,
     });
     await flushGatewayEventAuditExportsForTest();
 
@@ -313,6 +314,7 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
     }
     assert.equal(localBody.includes("cache-fingerprint-canary"), true);
     assert.equal(localBody.includes("cache-strategy-canary"), true);
+    assert.equal(localBody.includes('"omitted_match_count":7'), true);
     for (const canary of [
       "command-canary",
       "message-canary",
@@ -343,6 +345,7 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
     assert.equal(keys.has("prompt_cache_strategy"), false);
     assert.equal(keys.has("prompt_cache_shard_count"), false);
     assert.equal(keys.has("prompt_cache_shard"), false);
+    assert.equal(keys.has("omitted_match_count"), false);
     assert.equal(
       requests[0].init?.headers?.["content-type"],
       "application/json",

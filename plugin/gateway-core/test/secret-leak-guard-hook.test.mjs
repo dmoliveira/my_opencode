@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
+import { crc32, deflateSync } from "node:zlib"
 
 import GatewayCorePlugin from "../dist/index.js"
 import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
@@ -66,6 +67,77 @@ function reasoningMessage(ciphertext) {
             itemId: "rs_0123456789abcdef",
             reasoningEncryptedContent: ciphertext,
           },
+        },
+      },
+    ],
+  }
+}
+
+const GOOGLE_KEY_COLLISION = `AIza${"A".repeat(20)}`
+
+function pngChunk(type, data = Buffer.alloc(0)) {
+  const typeBytes = Buffer.from(type, "ascii")
+  const header = Buffer.alloc(4)
+  header.writeUInt32BE(data.length)
+  const checksum = Buffer.alloc(4)
+  checksum.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])) >>> 0)
+  return Buffer.concat([header, typeBytes, data, checksum])
+}
+
+function pngCollisionDataUrl() {
+  const headerData = Buffer.alloc(13)
+  headerData.writeUInt32BE(1, 0)
+  headerData.writeUInt32BE(1, 4)
+  headerData[8] = 8
+  headerData[9] = 6
+  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
+  assert.equal(collisionBytes.toString("base64"), GOOGLE_KEY_COLLISION)
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", headerData),
+    pngChunk("ruSt", Buffer.concat([Buffer.from([0]), collisionBytes])),
+    pngChunk("IDAT", deflateSync(Buffer.from([0, 0, 0, 0, 255]))),
+    pngChunk("IEND"),
+  ])
+  const url = `data:image/png;base64,${png.toString("base64")}`
+  assert.equal(url.includes(GOOGLE_KEY_COLLISION), true)
+  return url
+}
+
+function pngAttachmentMessage(url = pngCollisionDataUrl()) {
+  const sessionID = "ses_png_attachment"
+  const messageID = "msg_png_attachment"
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "assistant",
+      providerID: "openai",
+      modelID: "gpt-5.6-sol",
+    },
+    parts: [
+      {
+        id: "prt_png_tool",
+        sessionID,
+        messageID,
+        type: "tool",
+        tool: "read",
+        callID: "call_png_attachment",
+        state: {
+          status: "completed",
+          input: { filePath: "/tmp/screenshot.png" },
+          output: "token=MutablePngSiblingSecret_123456",
+          time: { start: 1, end: 2 },
+          attachments: [
+            {
+              id: "prt_png_file",
+              sessionID,
+              messageID,
+              type: "file",
+              mime: "image/png",
+              url,
+            },
+          ],
         },
       },
     ],
@@ -458,6 +530,51 @@ test("provider block diagnostics expose only allowlisted structural fields", asy
   }
 })
 
+test("provider session audit fallback never invokes message accessors or proxies", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-session-fallback-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false, order: [], disabled: [] } },
+    })
+    let accessorCalls = 0
+    const accessorMessage = {}
+    Object.defineProperty(accessorMessage, "info", {
+      enumerable: true,
+      get: () => {
+        accessorCalls += 1
+        throw new Error("message info accessor invoked")
+      },
+    })
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"]({}, { messages: [accessorMessage] }),
+      (error) => error.code === "malformed_provider_object",
+    )
+    assert.equal(accessorCalls, 0)
+
+    let proxyTrapCalls = 0
+    const proxyInfo = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor: () => {
+          proxyTrapCalls += 1
+          throw new Error("message info proxy trap invoked")
+        },
+      },
+    )
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"](
+        {},
+        { messages: [{ info: proxyInfo }] },
+      ),
+      (error) => error.code === "malformed_provider_object",
+    )
+    assert.equal(proxyTrapCalls, 0)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("provider redactor preserves exact OpenAI reasoning ciphertext and scans siblings", () => {
   const ciphertext = `${"A".repeat(4000)}sk-ciphertext-collision-1234567890`
   const message = reasoningMessage(ciphertext)
@@ -469,6 +586,490 @@ test("provider redactor preserves exact OpenAI reasoning ciphertext and scans si
   assert.equal(stats.redactedFields, 1)
   assert.equal(stats.scannedChars < ciphertext.length, true)
   assert.equal(stats.scannedNodes > 1, true)
+})
+
+test("provider redactor preserves a canonical PNG Google-key collision and scans siblings", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-png-attachment-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false, order: [], disabled: [] } },
+    })
+    const message = pngAttachmentMessage()
+    const originalUrl = message.parts[0].state.attachments[0].url
+
+    await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
+
+    assert.equal(message.parts[0].state.attachments[0].url, originalUrl)
+    assert.equal(message.parts[0].state.output, "[REDACTED_SECRET]")
+
+    const wrongMime = pngAttachmentMessage()
+    wrongMime.parts[0].state.attachments[0].mime = "image/jpeg"
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"]({}, { messages: [wrongMime] }),
+      (error) => {
+        assert.equal(error.code, "immutable_match")
+        assert.equal(error.patternIndex, 3)
+        assert.equal(error.locationCode, "immutable_protocol_field")
+        return true
+      },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("provider PNG exception is unavailable to an exact configured pattern override", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-png-custom-pattern-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: false, order: [], disabled: [] },
+        secretLeakGuard: {
+          patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+        },
+      },
+    })
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"](
+        {},
+        { messages: [pngAttachmentMessage()] },
+      ),
+      (error) => {
+        assert.equal(error.code, "immutable_match")
+        assert.equal(error.patternIndex, 0)
+        return true
+      },
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("provider PNG exception omits only the built-in Google detector", () => {
+  const message = pngAttachmentMessage()
+  const redactor = createSecretRedactor({
+    patterns: [
+      "AIza[0-9A-Za-z\\-_]{20,}",
+      "iVBORw0KGgo[A-Za-z0-9+/=]{10,}",
+    ],
+    omittableOpaquePngPatternIndex: 0,
+    redactionToken: "[REDACTED]",
+    limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+    providerLimits: {
+      maxMessages: 20_000,
+      maxNodes: 1_000_000,
+      maxChars: 134_217_728,
+      maxMessageChars: 16_777_216,
+    },
+  })
+
+  assert.throws(
+    () => redactor.redactProviderMessages([message]),
+    (error) => {
+      assert.equal(error.code, "immutable_match")
+      assert.equal(error.patternIndex, 1)
+      return true
+    },
+  )
+})
+
+test("provider PNG exception fails closed for wrong provenance and malformed envelopes", () => {
+  const url = pngCollisionDataUrl()
+  const variants = []
+  const addVariant = (mutate) => {
+    const message = pngAttachmentMessage(url)
+    mutate(message)
+    variants.push(message)
+  }
+  addVariant((message) => {
+    message.info.role = "user"
+  })
+  addVariant((message) => {
+    message.info.providerID = "anthropic"
+  })
+  addVariant((message) => {
+    message.parts[0].state.status = "error"
+  })
+  addVariant((message) => {
+    delete message.parts[0].tool
+  })
+  addVariant((message) => {
+    delete message.parts[0].callID
+  })
+  addVariant((message) => {
+    delete message.parts[0].id
+  })
+  addVariant((message) => {
+    message.parts[0].sessionID = "ses_other"
+  })
+  addVariant((message) => {
+    delete message.parts[0].state.time
+  })
+  addVariant((message) => {
+    message.parts[0].state.time.compacted = 3
+  })
+  addVariant((message) => {
+    message.parts[0].state.attachments[0].type = "future-file"
+  })
+  addVariant((message) => {
+    message.parts[0].state.attachments[0].mime = "image/jpeg"
+  })
+  addVariant((message) => {
+    delete message.info.id
+  })
+  addVariant((message) => {
+    message.parts[0].messageID = "msg_other"
+  })
+  addVariant((message) => {
+    delete message.parts[0].state.attachments[0].id
+  })
+  addVariant((message) => {
+    delete message.parts[0].state.attachments[0].messageID
+  })
+  addVariant((message) => {
+    delete message.parts[0].state.attachments[0].sessionID
+  })
+  addVariant((message) => {
+    message.parts[0].state.attachments[0].url = `${url}AAAA`
+  })
+  for (const message of variants) {
+    const redactor = createSecretRedactor({
+      patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+      omittableOpaquePngPatternIndex: 0,
+      redactionToken: "[REDACTED]",
+      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+      providerLimits: {
+        maxMessages: 20_000,
+        maxNodes: 1_000_000,
+        maxChars: 134_217_728,
+        maxMessageChars: 16_777_216,
+      },
+    })
+    assert.throws(
+      () => redactor.redactProviderMessages([message]),
+      (error) => {
+        assert.equal(error.code, "immutable_match")
+        assert.equal(error.patternIndex, 0)
+        return true
+      },
+    )
+  }
+})
+
+test("provider traversal rejects exotic property graphs without invoking accessors", () => {
+  const url = pngCollisionDataUrl()
+  let getterCalls = 0
+  const variants = []
+
+  {
+    const message = pngAttachmentMessage(url)
+    const attachment = message.parts[0].state.attachments[0]
+    const inherited = Object.assign(Object.create({ url }), attachment)
+    delete inherited.url
+    message.parts[0].state.attachments[0] = inherited
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    Object.defineProperty(message.parts[0].state.attachments[0], "url", {
+      configurable: true,
+      enumerable: false,
+      value: url,
+      writable: true,
+    })
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    const attachment = message.parts[0].state.attachments[0]
+    delete attachment.url
+    Object.defineProperty(attachment, "url", {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        getterCalls += 1
+        return getterCalls === 1 ? "safe" : url
+      },
+    })
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    message.parts[0].state.attachments[0] = new Proxy(
+      message.parts[0].state.attachments[0],
+      {},
+    )
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    message.parts[0].state.attachments[0][Symbol("hidden")] = "safe"
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    message.parts[0].state.attachments.extra = "safe"
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    message.parts[0].state.attachments[0] = Object.assign(
+      () => undefined,
+      message.parts[0].state.attachments[0],
+    )
+    variants.push(message)
+  }
+  {
+    const source = pngAttachmentMessage(url)
+    variants.push(Object.assign(() => undefined, source))
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    message.parts[0].state = Object.assign(() => undefined, message.parts[0].state)
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    message.parts[0].state.status = "error"
+    message.parts[0].state.attachments = []
+    message.parts[0].state.metadata = Object.assign(() => undefined, {
+      interrupted: true,
+      output: url,
+    })
+    variants.push(message)
+  }
+  {
+    const message = pngAttachmentMessage(url)
+    const callable = Object.assign(
+      () => undefined,
+      message.parts[0].state.attachments[0],
+    )
+    message.parts[0].state.attachments[0] = new Proxy(callable, {})
+    variants.push(message)
+  }
+
+  for (const [variantIndex, message] of variants.entries()) {
+    const redactor = createSecretRedactor({
+      patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+      omittableOpaquePngPatternIndex: 0,
+      redactionToken: "[REDACTED]",
+      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+      providerLimits: {
+        maxMessages: 20_000,
+        maxNodes: 1_000_000,
+        maxChars: 134_217_728,
+        maxMessageChars: 16_777_216,
+      },
+    })
+    assert.throws(
+      () => redactor.redactProviderMessages([message]),
+      (error) => {
+        assert.equal(error.code, "malformed_provider_object", `variant ${variantIndex}`)
+        return true
+      },
+    )
+  }
+  const sparseMessages = new Array(1)
+  for (const malformedMessages of [
+    sparseMessages,
+    [undefined],
+    [Symbol("provider-value")],
+    [1n],
+    [Number.NaN],
+    [Number.POSITIVE_INFINITY],
+  ]) {
+    assert.throws(
+      () =>
+        createSecretRedactor({
+          patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+          omittableOpaquePngPatternIndex: 0,
+          redactionToken: "[REDACTED]",
+          limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+        }).redactProviderMessages(malformedMessages),
+      (error) => error.code === "malformed_provider_object",
+    )
+  }
+
+  Object.defineProperty(Object.prototype, "url", {
+    configurable: true,
+    enumerable: false,
+    value: url,
+  })
+  try {
+    assert.throws(
+      () =>
+        createSecretRedactor({
+          patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+          omittableOpaquePngPatternIndex: 0,
+          redactionToken: "[REDACTED]",
+          limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+        }).redactProviderMessages([pngAttachmentMessage(url)]),
+      (error) => error.code === "malformed_provider_object",
+    )
+  } finally {
+    delete Object.prototype.url
+  }
+  assert.equal(getterCalls, 0)
+})
+
+test("provider PNG exception requires one explicitly designated default detector", () => {
+  const options = {
+    redactionToken: "[REDACTED]",
+    limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+    providerLimits: {
+      maxMessages: 20_000,
+      maxNodes: 1_000_000,
+      maxChars: 134_217_728,
+      maxMessageChars: 16_777_216,
+    },
+  }
+  const exactPattern = "AIza[0-9A-Za-z\\-_]{20,}"
+
+  assert.throws(
+    () =>
+      createSecretRedactor({ patterns: [exactPattern], ...options }).redactProviderMessages([
+        pngAttachmentMessage(),
+      ]),
+    (error) => {
+      assert.equal(error.code, "immutable_match")
+      assert.equal(error.patternIndex, 0)
+      return true
+    },
+  )
+
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        patterns: [exactPattern, exactPattern],
+        omittableOpaquePngPatternIndex: 0,
+        ...options,
+      }).redactProviderMessages([pngAttachmentMessage()]),
+    (error) => {
+      assert.equal(error.code, "immutable_match")
+      assert.equal(error.patternIndex, 1)
+      return true
+    },
+  )
+
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        patterns: [`(?i)${exactPattern}`],
+        omittableOpaquePngPatternIndex: 0,
+        ...options,
+      }).redactProviderMessages([pngAttachmentMessage()]),
+    (error) => {
+      assert.equal(error.code, "immutable_match")
+      assert.equal(error.patternIndex, 0)
+      return true
+    },
+  )
+
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        patterns: ["AIza[0-9A-Za-z_-]{20,}"],
+        omittableOpaquePngPatternIndex: 0,
+        ...options,
+      }).redactProviderMessages([pngAttachmentMessage()]),
+    (error) => {
+      assert.equal(error.code, "immutable_match")
+      assert.equal(error.patternIndex, 0)
+      return true
+    },
+  )
+})
+
+test("provider PNG exception tolerates stale nested references after import and fork", () => {
+  const message = pngAttachmentMessage()
+  message.parts[0].state.attachments[0].messageID = "msg_source_before_fork"
+  message.parts[0].state.attachments[0].sessionID = "ses_source_before_fork"
+
+  const redactor = createSecretRedactor({
+    patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+    omittableOpaquePngPatternIndex: 0,
+    redactionToken: "[REDACTED]",
+    limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+    providerLimits: {
+      maxMessages: 20_000,
+      maxNodes: 1_000_000,
+      maxChars: 134_217_728,
+      maxMessageChars: 16_777_216,
+    },
+  })
+
+  assert.doesNotThrow(() => redactor.redactProviderMessages([message]))
+})
+
+test("provider PNG exception revisits trusted attachment aliases through untrusted paths", () => {
+  for (const trustedFirst of [true, false]) {
+    const base = pngAttachmentMessage()
+    const alias = base.parts[0].state.attachments[0]
+    const message = trustedFirst
+      ? { ...base, future: alias }
+      : { future: alias, ...base }
+    const redactor = createSecretRedactor({
+      patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
+      omittableOpaquePngPatternIndex: 0,
+      redactionToken: "[REDACTED]",
+      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+      providerLimits: {
+        maxMessages: 20_000,
+        maxNodes: 1_000_000,
+        maxChars: 134_217_728,
+        maxMessageChars: 16_777_216,
+      },
+    })
+    assert.throws(
+      () => redactor.redactProviderMessages([message]),
+      (error) => {
+        assert.equal(error.code, "immutable_match")
+        assert.equal(error.patternIndex, 0)
+        return true
+      },
+    )
+  }
+})
+
+test("provider PNG exception charges valid envelopes exactly once", () => {
+  const makeRedactor = (maxMessageChars) =>
+    createSecretRedactor({
+      patterns: [
+        "AIza[0-9A-Za-z\\-_]{20,}",
+        "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*[A-Za-z0-9_\\-]{12,}",
+      ],
+      omittableOpaquePngPatternIndex: 0,
+      redactionToken: "[REDACTED]",
+      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+      providerLimits: {
+        maxMessages: 20_000,
+        maxNodes: 1_000_000,
+        maxChars: 134_217_728,
+        maxMessageChars,
+      },
+    })
+
+  const baseline = makeRedactor(16_777_216).redactProviderMessages([
+    pngAttachmentMessage(),
+  ])
+  assert.equal(baseline.matches, 1)
+  assert.equal(baseline.redactedFields, 1)
+  assert.equal(baseline.omittedOpaquePngMatches, 1)
+
+  assert.doesNotThrow(() =>
+    makeRedactor(baseline.scannedChars).redactProviderMessages([
+      pngAttachmentMessage(),
+    ]),
+  )
+  assert.throws(
+    () =>
+      makeRedactor(baseline.scannedChars - 1).redactProviderMessages([
+        pngAttachmentMessage(),
+      ]),
+    /text_limit/,
+  )
 })
 
 test("provider redactor projects only tool state metadata that OpenCode dispatches", () => {
@@ -575,16 +1176,19 @@ test("tool state metadata projection rejects malformed control properties", () =
     get: () => "token=AccessorOutputSecret_123456",
   })
 
-  for (const message of [
-    errorMessage(inheritedInterrupted),
-    errorMessage(accessorInterrupted),
-    errorMessage(accessorOutput),
-    errorMessage({ interrupted: true, output: { text: "safe" } }),
-    errorMessage({ preview: "safe" }, "future-status"),
+  for (const [message, expectedCode] of [
+    [errorMessage(inheritedInterrupted), "malformed_provider_object"],
+    [errorMessage(accessorInterrupted), "malformed_provider_object"],
+    [errorMessage(accessorOutput), "malformed_provider_object"],
+    [
+      errorMessage({ interrupted: true, output: { text: "safe" } }),
+      "malformed_provider_metadata",
+    ],
+    [errorMessage({ preview: "safe" }, "future-status"), "malformed_provider_metadata"],
   ]) {
     assert.throws(
       () => directRedactor().redactProviderMessages([message]),
-      (error) => error.code === "malformed_provider_metadata",
+      (error) => error.code === expectedCode,
     )
   }
 })
@@ -660,10 +1264,11 @@ test("reasoning ciphertext exemption requires exact own provider provenance", ()
   })
   cases.push(accessorItem)
 
-  for (const message of cases) {
+  for (const [index, message] of cases.entries()) {
     assert.throws(
       () => directRedactor().redactProviderMessages([message]),
-      (error) => error.code === "immutable_match",
+      (error) =>
+        error.code === (index < cases.length - 2 ? "immutable_match" : "malformed_provider_object"),
     )
   }
 })
@@ -715,6 +1320,7 @@ test("provider history limits are global, per-message, and exactly accounted", (
     redactedFields: 0,
     scannedChars: 6,
     scannedNodes: 3,
+    omittedOpaquePngMatches: 0,
   })
 
   for (const providerLimits of [

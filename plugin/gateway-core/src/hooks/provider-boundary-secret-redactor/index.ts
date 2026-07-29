@@ -1,3 +1,5 @@
+import { isProxy } from "node:util/types"
+
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import {
   createSecretRedactor,
@@ -21,23 +23,28 @@ export interface ProviderBoundarySecretFinalizer {
 }
 
 function messageSessionId(messages: unknown): string {
-  if (!Array.isArray(messages)) {
+  if (!Array.isArray(messages) || isProxy(messages)) {
     return ""
   }
-  for (const message of messages) {
-    if (!message || typeof message !== "object") {
-      continue
-    }
-    const info = (message as Record<string, unknown>).info
-    if (!info || typeof info !== "object") {
-      continue
-    }
-    const sessionID = (info as Record<string, unknown>).sessionID
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = ownDataValue(messages, index)
+    const info = ownDataValue(message, "info")
+    const sessionID = ownDataValue(info, "sessionID")
     if (typeof sessionID === "string" && sessionID.trim()) {
       return sessionID
     }
   }
   return ""
+}
+
+function ownDataValue(value: unknown, key: PropertyKey): unknown {
+  if (!value || typeof value !== "object" || isProxy(value)) return undefined
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    return descriptor && "value" in descriptor ? descriptor.value : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function auditRedaction(
@@ -62,12 +69,30 @@ function auditRedaction(
   })
 }
 
+function auditOpaquePngOmission(
+  directory: string,
+  surface: "messages" | "system",
+  sessionId: string,
+  stats: SecretRedactionStats,
+): void {
+  if (stats.omittedOpaquePngMatches === 0) return
+  writeGatewayEventAudit(directory, {
+    hook: "provider-boundary-secret-redactor",
+    stage: "state",
+    reason_code: "provider_boundary_opaque_png_collision_omitted",
+    surface,
+    session_id: sessionId,
+    omitted_match_count: stats.omittedOpaquePngMatches,
+  })
+}
+
 export function createProviderBoundarySecretFinalizer(options: {
   directory: string
   patterns: string[]
   redactionToken: string
   limits: SecretRedactionLimits
   providerLimits: ProviderSecretRedactionLimits
+  omittableOpaquePngPatternIndex?: number | null
 }): ProviderBoundarySecretFinalizer {
   const redactor = createSecretRedactor(options)
 
@@ -111,6 +136,7 @@ export function createProviderBoundarySecretFinalizer(options: {
       const sessionId = payload.input?.sessionID?.trim() || messageSessionId(messages)
       try {
         const stats = redactor.redactProviderMessages(messages)
+        auditOpaquePngOmission(directory, "messages", sessionId, stats)
         auditRedaction(directory, "messages", sessionId, stats)
       } catch (error) {
         blockAudit(directory, "messages", sessionId, error)

@@ -1,3 +1,7 @@
+import { isProxy } from "node:util/types"
+
+import { isCanonicalStructurallyValidPngDataUrl } from "./provider-attachment-data-url.js"
+
 export type SecretRedactionErrorCode =
   | "invalid_pattern"
   | "immutable_match"
@@ -5,6 +9,7 @@ export type SecretRedactionErrorCode =
   | "depth_limit"
   | "node_limit"
   | "text_limit"
+  | "malformed_provider_object"
   | "malformed_provider_metadata"
   | "mutation_failed"
   | "unexpected_failure"
@@ -61,9 +66,11 @@ export interface SecretRedactionStats {
   redactedFields: number
   scannedChars: number
   scannedNodes: number
+  omittedOpaquePngMatches: number
 }
 
 interface CompiledPattern {
+  index: number
   source: string
   flags: string
 }
@@ -71,6 +78,11 @@ interface CompiledPattern {
 interface PatternApplication {
   text: string
   firstPatternIndex: number | null
+}
+
+interface PatternApplicationOptions {
+  charge?: boolean
+  omitPattern?: (pattern: CompiledPattern) => boolean
 }
 
 type VisitMode = "redact" | "scan"
@@ -90,6 +102,7 @@ interface TraversalState {
   active: WeakSet<object>
   visited: WeakSet<object>
   revisitAliases: boolean
+  strictProviderObjects: boolean
 }
 
 type ToolStateMetadataProjection =
@@ -98,6 +111,22 @@ type ToolStateMetadataProjection =
   | null
 
 const MISSING_OWN_VALUE = Symbol("missing-own-value")
+const OPAQUE_PNG_FALSE_POSITIVE_PATTERN_SOURCE = "AIza[0-9A-Za-z\\-_]{20,}"
+const OPAQUE_PNG_FALSE_POSITIVE_PATTERN_FLAGS = "g"
+const STANDARD_OBJECT_PROTOTYPE_KEYS = new Set<PropertyKey>([
+  "constructor",
+  "__defineGetter__",
+  "__defineSetter__",
+  "hasOwnProperty",
+  "__lookupGetter__",
+  "__lookupSetter__",
+  "isPrototypeOf",
+  "propertyIsEnumerable",
+  "toString",
+  "valueOf",
+  "__proto__",
+  "toLocaleString",
+])
 
 const MUTABLE_CONTENT_KEYS = new Set([
   "after",
@@ -145,7 +174,7 @@ function ownDataValue(
   value: unknown,
   key: PropertyKey,
 ): unknown | typeof MISSING_OWN_VALUE {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== "object" || isProxy(value)) {
     return MISSING_OWN_VALUE
   }
   const descriptor = Object.getOwnPropertyDescriptor(value, key)
@@ -182,11 +211,17 @@ function compilePattern(rawPattern: string, index: number): CompiledPattern {
   } catch {
     throw new SecretRedactionError("invalid_pattern", `index=${index}`)
   }
-  return { source, flags: normalizedFlags }
+  return { index, source, flags: normalizedFlags }
 }
 
 function emptyStats(): SecretRedactionStats {
-  return { matches: 0, redactedFields: 0, scannedChars: 0, scannedNodes: 0 }
+  return {
+    matches: 0,
+    redactedFields: 0,
+    scannedChars: 0,
+    scannedNodes: 0,
+    omittedOpaquePngMatches: 0,
+  }
 }
 
 export interface SecretRedactor {
@@ -201,8 +236,14 @@ export function createSecretRedactor(options: {
   redactionToken: string
   limits: SecretRedactionLimits
   providerLimits?: ProviderSecretRedactionLimits
+  omittableOpaquePngPatternIndex?: number | null
 }): SecretRedactor {
   const patterns = options.patterns.map(compilePattern)
+  const omittableOpaquePngPatternIndex = Number.isInteger(
+    options.omittableOpaquePngPatternIndex,
+  )
+    ? (options.omittableOpaquePngPatternIndex as number)
+    : null
   const limits = {
     maxDepth: normalizedLimit(options.limits.maxDepth, 12),
     maxNodes: normalizedLimit(options.limits.maxNodes, 20_000),
@@ -266,12 +307,16 @@ export function createSecretRedactor(options: {
     stats: SecretRedactionStats,
     budget: ResourceBudget,
     localBudget?: ResourceBudget,
+    applicationOptions: PatternApplicationOptions = {},
   ): PatternApplication {
-    chargeChars(text, budget, localBudget)
+    if (applicationOptions.charge !== false) {
+      chargeChars(text, budget, localBudget)
+    }
     stats.scannedChars += text.length
     let next = text
     let firstPatternIndex: number | null = null
     for (const [patternIndex, pattern] of patterns.entries()) {
+      if (applicationOptions.omitPattern?.(pattern)) continue
       const regex = new RegExp(pattern.source, pattern.flags)
       next = next.replace(regex, () => {
         firstPatternIndex ??= patternIndex
@@ -363,6 +408,128 @@ export function createSecretRedactor(options: {
       typeof itemId === "string" &&
       /^rs_.+$/.test(itemId) &&
       ownDataValue(openai, "reasoningEncryptedContent") === value
+    )
+  }
+
+  function qualifiedOpenAIPngAttachment(options: {
+    messageRoot: unknown
+    parent: Record<string, unknown> | unknown[] | null
+    key: string | number | null
+    path: PropertyPath
+    value: string
+  }): boolean {
+    const { messageRoot, parent, key, path, value } = options
+    if (
+      key !== "url" ||
+      path.length !== 6 ||
+      path[0] !== "parts" ||
+      !Number.isInteger(path[1]) ||
+      path[2] !== "state" ||
+      path[3] !== "attachments" ||
+      !Number.isInteger(path[4]) ||
+      path[5] !== "url"
+    ) {
+      return false
+    }
+
+    const info = ownDataRecord(messageRoot, "info")
+    const parts = ownDataValue(messageRoot, "parts")
+    const partIndex = path[1] as number
+    const attachmentIndex = path[4] as number
+    if (
+      !info ||
+      ownDataValue(info, "role") !== "assistant" ||
+      ownDataValue(info, "providerID") !== "openai" ||
+      !Array.isArray(parts) ||
+      partIndex < 0 ||
+      partIndex >= parts.length
+    ) {
+      return false
+    }
+
+    const messageId = ownDataValue(info, "id")
+    const sessionId = ownDataValue(info, "sessionID")
+    const part = ownDataValue(parts, partIndex)
+    if (
+      typeof messageId !== "string" ||
+      !messageId ||
+      typeof sessionId !== "string" ||
+      !sessionId ||
+      !part ||
+      typeof part !== "object" ||
+      Array.isArray(part) ||
+      ownDataValue(part, "type") !== "tool" ||
+      typeof ownDataValue(part, "tool") !== "string" ||
+      !(ownDataValue(part, "tool") as string) ||
+      typeof ownDataValue(part, "callID") !== "string" ||
+      !(ownDataValue(part, "callID") as string) ||
+      typeof ownDataValue(part, "id") !== "string" ||
+      !(ownDataValue(part, "id") as string) ||
+      ownDataValue(part, "messageID") !== messageId ||
+      ownDataValue(part, "sessionID") !== sessionId
+    ) {
+      return false
+    }
+
+    const state = ownDataRecord(part, "state")
+    const attachments = ownDataValue(state, "attachments")
+    const stateTime = ownDataRecord(state, "time")
+    if (
+      !state ||
+      ownDataValue(state, "status") !== "completed" ||
+      !stateTime ||
+      ownDataValue(stateTime, "compacted") !== MISSING_OWN_VALUE ||
+      "compacted" in stateTime ||
+      !Array.isArray(attachments) ||
+      attachmentIndex < 0 ||
+      attachmentIndex >= attachments.length
+    ) {
+      return false
+    }
+    const attachment = ownDataValue(attachments, attachmentIndex)
+    return (
+      Boolean(attachment) &&
+      typeof attachment === "object" &&
+      !Array.isArray(attachment) &&
+      parent === attachment &&
+      ownDataValue(attachment, "type") === "file" &&
+      ownDataValue(attachment, "mime") === "image/png" &&
+      typeof ownDataValue(attachment, "id") === "string" &&
+      Boolean(ownDataValue(attachment, "id")) &&
+      typeof ownDataValue(attachment, "messageID") === "string" &&
+      Boolean(ownDataValue(attachment, "messageID")) &&
+      typeof ownDataValue(attachment, "sessionID") === "string" &&
+      Boolean(ownDataValue(attachment, "sessionID")) &&
+      ownDataValue(attachment, "url") === value
+    )
+  }
+
+  function isOmittableOpaquePngPattern(pattern: CompiledPattern): boolean {
+    return (
+      pattern.index === omittableOpaquePngPatternIndex &&
+      pattern.source === OPAQUE_PNG_FALSE_POSITIVE_PATTERN_SOURCE &&
+      pattern.flags === OPAQUE_PNG_FALSE_POSITIVE_PATTERN_FLAGS
+    )
+  }
+
+  function opaquePngCollisionCount(value: string): number {
+    let count = 0
+    for (const pattern of patterns) {
+      if (!isOmittableOpaquePngPattern(pattern)) continue
+      const regex = new RegExp(pattern.source, pattern.flags)
+      while (regex.exec(value)) count += 1
+    }
+    return count
+  }
+
+  function canChargeChars(
+    value: string,
+    budget: ResourceBudget,
+    localBudget?: ResourceBudget,
+  ): boolean {
+    return (
+      value.length <= budget.maxChars - budget.chars &&
+      (!localBudget || value.length <= localBudget.maxChars - localBudget.chars)
     )
   }
 
@@ -479,7 +646,17 @@ export function createSecretRedactor(options: {
   function createTraversalState(
     traversalLimits: SecretRedactionLimits,
     revisitAliases: boolean,
+    strictProviderObjects = false,
   ): TraversalState {
+    if (strictProviderObjects) {
+      const prototypeKeys = Reflect.ownKeys(Object.prototype)
+      if (
+        prototypeKeys.length !== STANDARD_OBJECT_PROTOTYPE_KEYS.size ||
+        prototypeKeys.some((key) => !STANDARD_OBJECT_PROTOTYPE_KEYS.has(key))
+      ) {
+        throw new SecretRedactionError("malformed_provider_object")
+      }
+    }
     return {
       stats: emptyStats(),
       budget: createBudget(traversalLimits.maxNodes, traversalLimits.maxChars),
@@ -487,7 +664,84 @@ export function createSecretRedactor(options: {
       active: new WeakSet<object>(),
       visited: new WeakSet<object>(),
       revisitAliases,
+      strictProviderObjects,
     }
+  }
+
+  function providerOwnDataChildren(
+    value: object,
+    maxChildren: number,
+  ): Array<[string | number, unknown]> {
+    if (isProxy(value)) {
+      throw new SecretRedactionError("malformed_provider_object")
+    }
+    const prototype = Object.getPrototypeOf(value)
+    const isArray = Array.isArray(value)
+    if (
+      (isArray && prototype !== Array.prototype) ||
+      (!isArray && prototype !== Object.prototype && prototype !== null)
+    ) {
+      throw new SecretRedactionError("malformed_provider_object")
+    }
+
+    const ownKeys = Reflect.ownKeys(value)
+    if (isArray) {
+      const array = value as unknown[]
+      if (array.length > maxChildren || ownKeys.length !== array.length + 1) {
+        throw new SecretRedactionError(
+          array.length > maxChildren ? "node_limit" : "malformed_provider_object",
+        )
+      }
+      const children: Array<[number, unknown]> = []
+      for (let index = 0; index < array.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(array, String(index))
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+          throw new SecretRedactionError("malformed_provider_object")
+        }
+        children.push([index, descriptor.value])
+      }
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(array, "length")
+      if (
+        !lengthDescriptor ||
+        !("value" in lengthDescriptor) ||
+        lengthDescriptor.value !== array.length ||
+        ownKeys.some(
+          (key) =>
+            typeof key !== "string" ||
+            (key !== "length" &&
+              (!/^(?:0|[1-9][0-9]*)$/.test(key) || Number(key) >= array.length)),
+        )
+      ) {
+        throw new SecretRedactionError("malformed_provider_object")
+      }
+      return children
+    }
+
+    if (ownKeys.length > maxChildren) {
+      throw new SecretRedactionError("node_limit")
+    }
+    const children: Array<[string, unknown]> = []
+    for (const childKey of ownKeys) {
+      if (typeof childKey !== "string") {
+        throw new SecretRedactionError("malformed_provider_object")
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(value, childKey)
+      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+        throw new SecretRedactionError("malformed_provider_object")
+      }
+      children.push([childKey, descriptor.value])
+    }
+    return children
+  }
+
+  function remainingNodeBudget(
+    state: TraversalState,
+    localBudget?: ResourceBudget,
+  ): number {
+    return Math.min(
+      state.budget.maxNodes - state.budget.nodes,
+      localBudget ? localBudget.maxNodes - localBudget.nodes : Number.POSITIVE_INFINITY,
+    )
   }
 
   function visit(
@@ -508,6 +762,17 @@ export function createSecretRedactor(options: {
       throw new SecretRedactionError("depth_limit")
     }
 
+    if (
+      state.strictProviderObjects &&
+      (value === undefined ||
+        typeof value === "function" ||
+        typeof value === "symbol" ||
+        typeof value === "bigint" ||
+        (typeof value === "number" && !Number.isFinite(value)))
+    ) {
+      throw new SecretRedactionError("malformed_provider_object")
+    }
+
     if (typeof value === "string") {
       if (
         messageRoot !== undefined &&
@@ -515,6 +780,34 @@ export function createSecretRedactor(options: {
       ) {
         chargeChars(value, state.budget, localBudget)
         return
+      }
+      if (
+        messageRoot !== undefined &&
+        qualifiedOpenAIPngAttachment({ messageRoot, parent, key, path, value })
+      ) {
+        if (!canChargeChars(value, state.budget, localBudget)) {
+          chargeChars(value, state.budget, localBudget)
+        }
+        const omittedCollisionCount = opaquePngCollisionCount(value)
+        if (
+          omittedCollisionCount > 0 &&
+          isCanonicalStructurallyValidPngDataUrl(value)
+        ) {
+          chargeChars(value, state.budget, localBudget)
+          state.stats.omittedOpaquePngMatches += omittedCollisionCount
+          const applied = applyPatterns(value, state.stats, state.budget, localBudget, {
+            charge: false,
+            omitPattern: isOmittableOpaquePngPattern,
+          })
+          if (applied.text === value) return
+          throw immutableMatchError({
+            matchTarget: "value",
+            patternIndex: applied.firstPatternIndex,
+            key,
+            parentKey,
+            grandparentKey,
+          })
+        }
       }
       const applied = applyPatterns(value, state.stats, state.budget, localBudget)
       if (applied.text === value) {
@@ -533,6 +826,10 @@ export function createSecretRedactor(options: {
       state.stats.redactedFields += 1
       return
     }
+    const strictChildren =
+      state.strictProviderObjects && value && typeof value === "object"
+        ? providerOwnDataChildren(value, remainingNodeBudget(state, localBudget))
+        : null
     if (messageRoot !== undefined) {
       const projection = toolStateMetadataProjection({ messageRoot, parent, path, value })
       if (projection) {
@@ -582,24 +879,50 @@ export function createSecretRedactor(options: {
     state.active.add(value)
 
     if (Array.isArray(value)) {
-      for (let index = 0; index < value.length; index += 1) {
-        visit(
-          value[index],
-          value,
-          index,
-          mode,
-          depth + 1,
-          key,
-          parentKey,
-          [...path, index],
-          state,
-          localBudget,
-          messageRoot,
-        )
+      if (strictChildren) {
+        for (const [index, child] of strictChildren) {
+          visit(
+            child,
+            value,
+            index,
+            mode,
+            depth + 1,
+            key,
+            parentKey,
+            [...path, index],
+            state,
+            localBudget,
+            messageRoot,
+          )
+        }
+      } else {
+        for (let index = 0; index < value.length; index += 1) {
+          visit(
+            value[index],
+            value,
+            index,
+            mode,
+            depth + 1,
+            key,
+            parentKey,
+            [...path, index],
+            state,
+            localBudget,
+            messageRoot,
+          )
+        }
       }
     } else {
       const record = value as Record<string, unknown>
-      for (const childKey of Object.keys(record)) {
+      const children =
+        strictChildren ??
+        Object.keys(record).map(
+          (childKey) => [childKey, record[childKey]] as [string, unknown],
+        )
+      for (const [childKey, child] of children) {
+        if (typeof childKey !== "string") {
+          throw new SecretRedactionError("malformed_provider_object")
+        }
         const keyProbe = applyPatterns(
           childKey,
           state.stats,
@@ -616,7 +939,7 @@ export function createSecretRedactor(options: {
           })
         }
         visit(
-          record[childKey],
+          child,
           record,
           childKey,
           childMode(mode, childKey),
@@ -634,8 +957,12 @@ export function createSecretRedactor(options: {
     state.visited.add(value)
   }
 
-  function traverse(root: unknown, initialMode: VisitMode): SecretRedactionStats {
-    const state = createTraversalState(limits, false)
+  function traverse(
+    root: unknown,
+    initialMode: VisitMode,
+    strictProviderObjects = false,
+  ): SecretRedactionStats {
+    const state = createTraversalState(limits, false, strictProviderObjects)
     try {
       visit(root, null, null, initialMode, 0, null, null, [], state)
       return state.stats
@@ -648,8 +975,11 @@ export function createSecretRedactor(options: {
   }
 
   function traverseProviderMessages(messages: unknown): SecretRedactionStats {
+    if (messages && typeof messages === "object" && isProxy(messages)) {
+      throw new SecretRedactionError("malformed_provider_object")
+    }
     if (!Array.isArray(messages)) {
-      return traverse(messages, "scan")
+      return traverse(messages, "scan", true)
     }
     if (messages.length > providerLimits.maxMessages) {
       throw new SecretRedactionError("node_limit")
@@ -661,12 +991,16 @@ export function createSecretRedactor(options: {
         maxChars: providerLimits.maxChars,
       },
       true,
+      true,
     )
     try {
       chargeNode(state)
+      const messageEntries = providerOwnDataChildren(
+        messages,
+        state.budget.maxNodes - state.budget.nodes,
+      )
       state.active.add(messages)
-      for (let index = 0; index < messages.length; index += 1) {
-        const message = messages[index]
+      for (const [index, message] of messageEntries) {
         const localBudget = createBudget(limits.maxNodes, providerLimits.maxMessageChars)
         visit(
           message,
@@ -710,7 +1044,7 @@ export function createSecretRedactor(options: {
       return traverseProviderMessages(messages)
     },
     redactProviderSystem(system: unknown): SecretRedactionStats {
-      return traverse(system, "redact")
+      return traverse(system, "redact", true)
     },
   }
 }
