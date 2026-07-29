@@ -308,6 +308,8 @@ Use these directly in OpenCode:
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
+If `/digest run` detects a corrupt session index, it leaves the active bytes unchanged and exits nonzero. When source and destination safety checks pass, it stores an owner-only hash-addressed copy under `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index` and reports stable recovery metadata; collisions or unsafe paths fail closed without claiming preservation. Set `MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR` only to another private location outside active configuration. Stop index writers, inspect any reported local copy/checksum, repair or replace the active index from a verified source, then run `/digest run --reason manual` and `/session doctor --json`. Session readers never create quarantine artifacts; `--redact` failures expose only `session_index_unavailable`.
+
 If you inspect the runtime SQLite store directly, see `docs/runtime-db-schema.md` for the current table layout, JSON paths, and safe query patterns.
 
 ## Shared memory inside OpenCode 🧠
@@ -625,7 +627,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /delivery - Run unified delivery transactions (start|status|handoff|close|doctor)
 /delegation-health - Summarize delegation health and detect routing drift (status|doctor)
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
-/digest - Generate or show session digests (run|show)
+/digest - Generate, show, or diagnose session digests (run|show|doctor)
 /doctor - Run diagnostics and reason-code registry export
 /gateway - Manage gateway runtime controls (status|enable|disable|doctor|watchdog|continuation report|tune memory|recover memory|protection)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
