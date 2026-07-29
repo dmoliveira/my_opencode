@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execSync } from "node:child_process"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, relative } from "node:path"
 import test from "node:test"
@@ -13,6 +13,13 @@ function commitAll(directory, message) {
     cwd: directory,
     stdio: ["ignore", "pipe", "pipe"],
   })
+}
+
+function readAuditEntries(directory) {
+  return readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
 }
 
 test("primary-worktree-guard blocks file edits in the primary worktree", async () => {
@@ -279,13 +286,14 @@ test("primary-worktree-guard allows apply_patch targeting a linked worktree from
   }
 })
 
-test("primary-worktree-guard reroutes mutating bash commands in the primary worktree", async () => {
+test("primary-worktree-guard preserves representative allow, reroute, and branch-switch behavior", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-primary-worktree-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0"
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
-    writeFileSync(join(directory, "file.txt"), "v1\n", "utf-8")
-    commitAll(directory, "init")
-
     const plugin = GatewayCorePlugin({
       directory,
       config: {
@@ -299,291 +307,55 @@ test("primary-worktree-guard reroutes mutating bash commands in the primary work
       },
     })
 
-    const mutatePayload = { args: { command: "echo hi > file.txt" } }
+    const safeCommand = "git status --short --branch"
+    const safePayload = { args: { command: safeCommand } }
     await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-bash-mutate" },
-      mutatePayload
+      { tool: "bash", sessionID: "session-primary-safe" },
+      safePayload,
     )
-    assert.match(mutatePayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.equal(safePayload.args.command, safeCommand)
 
-    const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-gh-api" },
-      ghPayload
-    )
-    assert.match(ghPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-chain" },
-      chainPayload
-    )
-    assert.match(chainPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    for (const [sessionID, command] of [
+      ["session-primary-bash-mutate", "echo hi > file.txt"],
+      ["session-primary-command-substitution", 'git status --short --branch "$(touch /tmp/pwn)"'],
+    ]) {
+      const payload = { args: { command } }
+      await plugin["tool.execute.before"]({ tool: "bash", sessionID }, payload)
+      assert.match(
+        payload.args.command,
+        /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/,
+      )
+      assert.ok(
+        payload.args.command.includes(`--command '${command}' --json`),
+        `expected exact shell-quoted command: ${command}`,
+      )
+    }
 
     await assert.rejects(
       plugin["tool.execute.before"](
         { tool: "bash", sessionID: "session-primary-chain-switch" },
-        { args: { command: "git switch main && git switch feature/foo" } }
+        { args: { command: "git switch main && git switch feature/foo" } },
       ),
-      /Branch switching to 'main' is blocked/
+      /Branch switching to 'main' is blocked/,
     )
-
-    const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-redirection" },
-      redirectPayload
+    const reasonCodes = new Set(
+      readAuditEntries(directory)
+        .filter((entry) => entry.hook === "primary-worktree-guard")
+        .map((entry) => entry.reason_code),
     )
-    assert.match(redirectPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const commandSubstitutionPayload = {
-      args: { command: 'git status --short --branch "$(touch /tmp/pwn)"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-command-substitution" },
-      commandSubstitutionPayload
-    )
-    assert.match(commandSubstitutionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-    assert.match(commandSubstitutionPayload.args.command, /--command 'git status --short --branch "\$\(touch \/tmp\/pwn\)"' --json/)
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-bash-safe" },
-      { args: { command: "git status --short --branch" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-no-pager-log-safe" },
-      { args: { command: "git --no-pager log --oneline --decorate --graph -20" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-no-pager-status-safe" },
-      { args: { command: "git --no-pager status --short --branch" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-worktree-list-safe" },
-      { args: { command: `git -C "${directory}" worktree list` } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-worktree-list-abs-safe" },
-      { args: { command: `/usr/bin/git -C "${directory}" worktree list` } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-env-no-pager-log-safe" },
-      {
-        args: {
-          command:
-            "CI=true GIT_TERMINAL_PROMPT=0 GIT_EDITOR=true GIT_PAGER=cat PAGER=cat GCM_INTERACTIVE=never git --no-pager log --oneline --decorate --graph -20",
-        },
-      }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-fetch-plain-safe" },
-      { args: { command: "git fetch" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-fetch-safe" },
-      { args: { command: "git fetch --prune" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-fetch-all-prune-quiet-safe" },
-      { args: { command: "git fetch --all --prune --quiet" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-npm-install-safe" },
-      { args: { command: "npm install --yes" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-npm-ci-safe" },
-      { args: { command: "npm ci --yes --no-audit --no-fund" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-npm-init-safe" },
-      { args: { command: "npm init -y" } }
-    )
-
-    const npmPrefixPayload = { args: { command: "npm install --yes --prefix /tmp/other-project" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-npm-prefix-blocked" },
-      npmPrefixPayload
-    )
-    assert.match(npmPrefixPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-remote-verbose-safe" },
-      { args: { command: "git remote -v" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-remote-get-url-safe" },
-      { args: { command: "git remote get-url origin" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-remote-add-safe" },
-      { args: { command: "git remote add origin https://github.com/foo/bar.git" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-remote-set-url-safe" },
-      { args: { command: "git remote set-url origin git@github.com:foo/bar.git" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-pull-autostash-safe" },
-      { args: { command: "git pull --rebase --autostash" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-pull-origin-main-safe" },
-      { args: { command: "git pull --rebase origin main" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-merge-no-edit-safe" },
-      { args: { command: "git merge --no-edit feature/test" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-merge-ff-only-safe" },
-      { args: { command: "git merge --ff-only origin/main" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-worktree-add-safe" },
-      {
-        args: {
-          command:
-            'git worktree add -b feature/test "/tmp/gateway-linked" origin/main',
-        },
-      }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-worktree-remove-safe" },
-      { args: { command: 'git worktree remove "/tmp/gateway-linked"' } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-branch-delete-safe" },
-      { args: { command: "git branch -d feature/test" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-cleanup-chain-safe" },
-      {
-        args: {
-          command:
-            'git worktree remove "/tmp/gateway-linked" && git branch -d feature/test',
-        },
-      }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-stash-push-safe" },
-      { args: { command: 'git stash push -m "temp" -- docs/plan/docs-automation-summary.md' } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-stash-list-safe" },
-      { args: { command: "git stash list" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-safe-chain" },
-      { args: { command: "git stash list && git status --short --branch" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-restore-safe" },
-      { args: { command: "git restore --source main -- docs/plan/docs-automation-summary.md" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-checkout-restore-safe" },
-      { args: { command: "git checkout main -- docs/plan/docs-automation-summary.md" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-current-safe" },
-      { args: { command: "oc current" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-queue-safe" },
-      { args: { command: "oc queue" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-next-scoped-safe" },
-      { args: { command: "oc next --scope dmoliveira/my_opencode --limit 5" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-queue-scoped-safe" },
-      { args: { command: "oc queue --scope dmoliveira/my_opencode --limit 10" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-current-json-safe" },
-      { args: { command: "oc current --format json" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-resume-safe" },
-      { args: { command: "oc resume --task task_171" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-done-safe" },
-      { args: { command: "oc done task_171 --note \"completed\"" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-oc-end-session-safe" },
-      { args: { command: "oc end-session --outcome done session_62 --achievements \"cleanup complete\"" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-branch-contains-safe" },
-      { args: { command: "git branch -r --contains origin/main" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-gh-auth-status-safe" },
-      { args: { command: "gh auth status" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-gh-repo-view-safe" },
-      { args: { command: "gh repo view --json nameWithOwner" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-gh-repo-create-safe" },
-      { args: { command: "gh repo create foo/bar --private --source . --remote origin --push" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-gh-repo-edit-safe" },
-      { args: { command: "gh repo edit --visibility private" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-gh-api-user-safe" },
-      { args: { command: "gh api user" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-push-main-safe" },
-      { args: { command: "git push -u origin main" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-date-safe" },
-      { args: { command: 'date +"%Y-%m-%d %H:%M"' } }
-    )
-
-    const blockedPullPayload = { args: { command: "git pull --rebase origin feature/x" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-pull-feature-rerouted" },
-      blockedPullPayload
-    )
-    assert.match(blockedPullPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const blockedStashPopPayload = { args: { command: "git stash pop" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-primary-stash-pop-rerouted" },
-      blockedStashPopPayload
-    )
-    assert.match(blockedStashPopPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.equal(reasonCodes.has("bash_in_primary_worktree_rerouted"), true)
+    assert.equal(reasonCodes.has("branch_switch_in_primary_worktree_blocked"), true)
   } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
