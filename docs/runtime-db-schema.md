@@ -92,7 +92,7 @@ This repository operates separate local stores with different ownership and safe
 | OpenCode runtime history | platform-specific `opencode.db` | OpenCode | Inspect read-only; use `/session repair-stale` only with preview, scope, backup, and explicit apply. |
 | Shared memory | `~/.config/opencode/my_opencode/runtime/shared_memory.db` | my_opencode | Use lifecycle commands; export before import/cleanup/compression. |
 | Codememory task graph | `.codememory/codememory.sqlite3` | Codememory | Use `oc`; do not hand-edit or mix it with runtime-history recovery. |
-| Session sidecars | `~/.config/opencode/sessions/index.json` and digests | my_opencode | Owner-only files; recover malformed data before rewriting. |
+| Session sidecars | `~/.config/opencode/sessions/index.json`, digests, and `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index` | my_opencode | Owner-only files; recover malformed data before rewriting. |
 
 A backup or restore applies to exactly one store. Never replace the OpenCode runtime DB with shared-memory or Codememory artifacts, and do not run destructive operations while the owning process is active.
 
@@ -101,7 +101,7 @@ A backup or restore applies to exactly one store. Never replace the OpenCode run
 1. Stop the process that owns the affected store; do not delete WAL/SHM files by hand.
 2. Record `/session doctor --json` output and copy the affected database using SQLite `.backup`.
 3. Run `PRAGMA integrity_check` on the backup. If it fails, quarantine the original with owner-only permissions and restore the latest verified backup.
-4. For a malformed session index, preserve the file unchanged, repair or replace it from a known-good copy, then run `/digest run` and `/session doctor --json`.
+4. For a malformed session index, inspect the hash-addressed quarantine copy reported by `/digest run`, leave the active file unchanged until writers are stopped, repair or replace it from a known-good copy, then rerun `/digest run --reason manual` and `/session doctor --json`.
 5. For a failed shared-memory import or lifecycle operation, export the current store first, restore the pre-operation export, and verify recall/order before re-enabling writers.
 6. Confirm recovery with the owner command (`/session doctor`, shared-memory status, or `oc plan doctor`) and record the incident without copying sensitive runtime content into tickets.
 
@@ -113,7 +113,7 @@ For runtime history, use an isolated copy to test a query or restoration path be
 
 ## Operator dashboard fields
 
-Use `/doctor run --json` for the consolidated session and shared-memory checks. The session check exposes `runtime_db_path`, `runtime_db_size_bytes`, `runtime_db_scan_duration_ms`, `runtime_db_scan_timeout_ms`, query-only verification, snapshot/scan completion, remediation codes, journal mode, SQLite version, JSON1 support, required-table compatibility, and stale finding counts. Missing schema or JSON1 support skips stale queries instead of returning partial findings. The shared-memory check reports its store path and active/archive counts. Session-index update output reports its path, retention policy, and pruning totals. These fields are designed for automation-safe dashboards; do not scrape human-formatted output.
+Use `/doctor run --json` for the consolidated session and shared-memory checks. The session check exposes `runtime_db_path`, `runtime_db_size_bytes`, `runtime_db_scan_duration_ms`, `runtime_db_scan_timeout_ms`, query-only verification, snapshot/scan completion, remediation codes, journal mode, SQLite version, JSON1 support, required-table compatibility, and stale finding counts. Missing schema or JSON1 support skips stale queries instead of returning partial findings. The shared-memory check reports its store path and active/archive counts. Session-index update output reports its result, stable reason code, corruption kind, active path, quarantine path/checksum/byte count/reuse state, recovery steps, retention policy, and pruning totals. These fields are designed for automation-safe local dashboards; do not scrape human-formatted output or publish local paths and hashes.
 
 ## Backup retention policy
 
@@ -129,7 +129,11 @@ Verify every restore against a disposable copy before touching the live runtime 
 
 ## Corruption quarantine
 
-When a local store is malformed, preserve it before any recovery write: remove group/world access, copy it to an incident-specific quarantine path outside active configuration, record its SHA-256 checksum and integrity-check output, then restore only from a verified backup. Do not rename or delete `-wal`/`-shm` files while the owning process is running. Session-index updates already fail closed on malformed JSON to make this procedure possible.
+When a local store is malformed, preserve it before any recovery write: remove group/world access from the recovery copy, place it outside active configuration, record its SHA-256 checksum and integrity-check output, then restore only from a verified backup. Do not rename or delete `-wal`/`-shm` files while the owning process is running.
+
+Session-index writers classify invalid UTF-8, malformed JSON, invalid v1 containers, and invalid v1 session records as corruption. Every existing index is opened without following the final path component and must be a stable, current-user-owned regular single-link file before parsing. While holding the cooperative index lock, a corrupt source that passes those checks is copied byte-for-byte and published as one `0600` hash-addressed artifact in a `0700` quarantine directory. The default directory is `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index`; set `MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR` to use another private path outside active configuration. Existing byte-identical artifacts are reused; collisions, unsafe paths, and unsupported security primitives fail closed without claiming preservation. The active corrupt file is never moved, deleted, reset, or rebuilt automatically. Unsupported versions and ordinary I/O failures are reported without quarantine. Reader commands stay read-only and never create quarantine artifacts.
+
+Successful preservation still returns `FAIL`: stop session-index writers, inspect the reported quarantine path and checksum locally, repair or replace the active index from a verified source, run `/digest run --reason manual`, and finish with `/session doctor --json`. `/digest show` remains observational, while `/digest run`, `/digest doctor`, session readers, and the consolidated doctor return nonzero for an unavailable corrupt index. Redacted search and handoff expose only the fixed `session_index_unavailable` code.
 
 ## Shared-memory retention profiles
 

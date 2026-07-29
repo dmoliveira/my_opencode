@@ -2586,15 +2586,6 @@
     "language": "python",
     "file": "session_metadata_index.py",
     "function": "_atomic_write_json",
-    "kind": "os.chmod",
-    "destination": "path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_atomic_write_json",
     "kind": "os.open",
     "destination": "path.parent",
     "count": 1,
@@ -2630,9 +2621,72 @@
   {
     "language": "python",
     "file": "session_metadata_index.py",
+    "function": "_cleanup_owned_temporary",
+    "kind": "os.unlink",
+    "destination": "temporary_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
     "function": "_index_write_lock",
     "kind": "path.open",
     "destination": "lock_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_open_quarantine_directory",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_open_quarantine_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_publish_quarantine_artifact",
+    "kind": "os.link",
+    "destination": "artifact_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_publish_quarantine_artifact",
+    "kind": "os.open",
+    "destination": "temporary_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_read_existing_artifact",
+    "kind": "os.open",
+    "destination": "artifact_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_metadata_index.py",
+    "function": "_secure_read_path",
+    "kind": "os.open",
+    "destination": "path",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },

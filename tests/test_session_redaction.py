@@ -296,14 +296,13 @@ class SessionRedactionTest(unittest.TestCase):
         self.assertIn(LAUNCH_CANARY, handoff_payload["resume_command"])
         self.assertIn("next_actions", handoff_payload)
 
-    def test_invalid_record_fields_are_safely_normalized(self) -> None:
+    def test_invalid_redacted_timestamps_are_safely_normalized(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             index_path, _ = self._fixture(root)
             payload = json.loads(index_path.read_text(encoding="utf-8"))
             payload["sessions"][0]["started_at"] = MALFORMED_CANARY
             payload["sessions"][0]["last_event_at"] = MALFORMED_CANARY
-            payload["sessions"][0]["event_count"] = MALFORMED_CANARY
             index_path.write_text(json.dumps(payload), encoding="utf-8")
             env = {
                 **os.environ,
@@ -326,7 +325,7 @@ class SessionRedactionTest(unittest.TestCase):
         redacted = json.loads(result.stdout)
         self.assertIsNone(redacted["started_at"])
         self.assertIsNone(redacted["last_event_at"])
-        self.assertEqual(0, redacted["event_count"])
+        self.assertEqual(7, redacted["event_count"])
 
 
 if __name__ == "__main__":

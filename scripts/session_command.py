@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from session_metadata_index import SessionIndexError, load_session_index  # type: ignore
+
 
 DEFAULT_INDEX_PATH = Path(
     os.environ.get(
@@ -145,18 +147,21 @@ def _parse_path_option(argv: list[str], name: str, default: Path) -> Path:
 
 
 def _load_index(path: Path) -> dict:
-    if not path.exists():
-        return {"version": 1, "generated_at": None, "sessions": []}
-    loaded = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(loaded, dict):
-        raise ValueError("session index root must be object")
-    sessions = loaded.get("sessions")
-    if sessions is not None and not isinstance(sessions, list):
-        raise ValueError("session index sessions must be list")
+    return load_session_index(path)
+
+
+def _index_failure_fields(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, SessionIndexError):
+        fields: dict[str, Any] = {
+            "reason_code": exc.reason_code,
+            "error": str(exc),
+        }
+        if exc.corruption_kind:
+            fields["corruption_kind"] = exc.corruption_kind
+        return fields
     return {
-        "version": loaded.get("version", 1),
-        "generated_at": loaded.get("generated_at"),
-        "sessions": sessions if isinstance(sessions, list) else [],
+        "reason_code": "session_index_unavailable",
+        "error": "session index is unavailable",
     }
 
 
@@ -283,6 +288,15 @@ def _emit(payload: dict, json_output: bool) -> int:
             print(f"last_event_at: {payload.get('last_event_at')}")
             print(f"event_count: {payload.get('event_count')}")
         return 0
+    if payload.get("result") != "PASS" and command not in {
+        "doctor",
+        "repair-stale",
+    }:
+        print("result: FAIL")
+        if payload.get("reason_code"):
+            print(f"reason_code: {payload.get('reason_code')}")
+        print(f"error: {payload.get('error', 'session command failed')}")
+        return 1
     if payload.get("command") == "current":
         row = payload.get("session", {})
         print(f"session_id: {row.get('session_id')}")
@@ -326,6 +340,10 @@ def _emit(payload: dict, json_output: bool) -> int:
         if payload.get("runtime_db_path"):
             print(f"runtime_db: {payload.get('runtime_db_path')}")
         print(f"exists: {'yes' if payload.get('exists') else 'no'}")
+        if payload.get("reason_code"):
+            print(f"reason_code: {payload.get('reason_code')}")
+        if payload.get("error"):
+            print(f"error: {payload.get('error')}")
         if payload.get("warnings"):
             print("warnings:")
             for warning in payload.get("warnings", []):
@@ -413,9 +431,6 @@ def _emit(payload: dict, json_output: bool) -> int:
                 print(f"- {fix}")
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
-    if payload.get("result") != "PASS":
-        print(f"error: {payload.get('error', 'session command failed')}")
-        return 1
     if payload.get("command") == "handoff":
         print("session handoff")
         print("---------------")
@@ -2080,8 +2095,8 @@ def _command_current(argv: list[str], index_path: Path) -> int:
             {
                 "result": "FAIL",
                 "command": "current",
-                "error": str(exc),
                 "index_path": str(index_path),
+                **_index_failure_fields(exc),
             },
             json_output,
         )
@@ -2121,8 +2136,8 @@ def _command_list(argv: list[str], index_path: Path) -> int:
             {
                 "result": "FAIL",
                 "command": "list",
-                "error": str(exc),
                 "index_path": str(index_path),
+                **_index_failure_fields(exc),
             },
             json_output,
         )
@@ -2151,8 +2166,8 @@ def _command_show(argv: list[str], index_path: Path) -> int:
             {
                 "result": "FAIL",
                 "command": "show",
-                "error": str(exc),
                 "index_path": str(index_path),
+                **_index_failure_fields(exc),
             },
             json_output,
         )
@@ -2240,8 +2255,8 @@ def _command_search(argv: list[str], index_path: Path) -> int:
             {
                 "result": "FAIL",
                 "command": "search",
-                "error": str(exc),
                 "index_path": str(index_path),
+                **_index_failure_fields(exc),
             },
             json_output,
         )
@@ -2351,7 +2366,6 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             {
                 "result": "FAIL",
                 "command": "doctor",
-                "error": f"failed to parse index: {exc}",
                 "index_path": str(index_path),
                 "runtime_db_path": str(db_path),
                 "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
@@ -2366,6 +2380,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "generic_stale_problem_threshold": generic_stale_problem_threshold,
                 "stale_seconds": stale_seconds,
                 "quick_fixes": [],
+                **_index_failure_fields(exc),
             },
             json_output,
         )
@@ -2485,8 +2500,8 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             {
                 "result": "FAIL",
                 "command": "handoff",
-                "error": f"failed to load session index: {exc}",
                 "index_path": str(index_path),
+                **_index_failure_fields(exc),
             },
             json_output,
         )

@@ -341,8 +341,19 @@ def print_summary(path: Path, digest: dict) -> None:
         else {}
     )
     if session_index:
+        print(f"session_index_result: {session_index.get('result', 'unknown')}")
+        if session_index.get("reason_code"):
+            print(f"session_index_reason: {session_index.get('reason_code')}")
         print(f"session_id: {session_index.get('session_id')}")
         print(f"session_index: {session_index.get('path')}")
+        quarantine = (
+            session_index.get("quarantine")
+            if isinstance(session_index.get("quarantine"), dict)
+            else {}
+        )
+        if quarantine:
+            print(f"session_index_quarantine: {quarantine.get('path')}")
+            print(f"session_index_sha256: {quarantine.get('sha256')}")
 
 
 def usage() -> int:
@@ -382,8 +393,13 @@ def command_run(argv: list[str]) -> int:
     try:
         digest["session_index"] = update_session_index(digest)
         write_digest(path, digest)
-    except Exception as exc:
-        digest["session_index"] = {"result": "FAIL", "error": str(exc)}
+    except Exception:
+        digest["session_index"] = {
+            "result": "FAIL",
+            "reason_code": "session_index_io_error",
+            "quarantine": None,
+            "error": "session index update failed unexpectedly",
+        }
         write_digest(path, digest)
     print_summary(path, digest)
 
@@ -397,9 +413,15 @@ def command_run(argv: list[str]) -> int:
     if hook_value:
         code = run_hook(hook_value, path)
         print(f"hook: exited with code {code}")
-        return code if code != 0 else post_exit
+        if code != 0:
+            return code
+        if post_exit != 0:
+            return post_exit
+        return 0 if digest.get("session_index", {}).get("result") == "PASS" else 1
 
-    return post_exit
+    if post_exit != 0:
+        return post_exit
+    return 0 if digest.get("session_index", {}).get("result") == "PASS" else 1
 
 
 def command_show(argv: list[str]) -> int:
@@ -463,13 +485,24 @@ def collect_doctor(path: Path) -> dict:
         if git_block.get("branch") is None:
             warnings.append("git branch is unknown")
 
+    raw_session_index = digest.get("session_index")
+    session_index = raw_session_index if isinstance(raw_session_index, dict) else {}
+    if not session_index:
+        warnings.append("session_index result is missing or invalid")
+    elif session_index.get("result") != "PASS":
+        reason_code = str(session_index.get("reason_code") or "session_index_unknown_failure")
+        problems.append(f"session index update failed: {reason_code}")
+
     return {
         "result": "PASS" if not problems else "FAIL",
         "path": str(path),
         "exists": True,
         "warnings": warnings,
         "problems": problems,
-        "quick_fixes": ["run /digest run --reason manual"] if warnings else [],
+        "session_index": session_index,
+        "quick_fixes": ["run /digest run --reason manual"]
+        if warnings or problems
+        else [],
     }
 
 
