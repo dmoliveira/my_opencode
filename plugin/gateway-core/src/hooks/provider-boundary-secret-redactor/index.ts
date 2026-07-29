@@ -69,20 +69,20 @@ function auditRedaction(
   })
 }
 
-function auditOpaquePngOmission(
+function auditOpaqueAttachmentOmission(
   directory: string,
   surface: "messages" | "system",
   sessionId: string,
   stats: SecretRedactionStats,
 ): void {
-  if (stats.omittedOpaquePngMatches === 0) return
+  if (stats.omittedOpaqueAttachmentMatches === 0) return
   writeGatewayEventAudit(directory, {
     hook: "provider-boundary-secret-redactor",
     stage: "state",
-    reason_code: "provider_boundary_opaque_png_collision_omitted",
+    reason_code: "provider_boundary_opaque_attachment_collision_omitted",
     surface,
     session_id: sessionId,
-    omitted_match_count: stats.omittedOpaquePngMatches,
+    omitted_match_count: stats.omittedOpaqueAttachmentMatches,
   })
 }
 
@@ -92,7 +92,7 @@ export function createProviderBoundarySecretFinalizer(options: {
   redactionToken: string
   limits: SecretRedactionLimits
   providerLimits: ProviderSecretRedactionLimits
-  omittableOpaquePngPatternIndex?: number | null
+  omittableOpaqueAttachmentPatternIndex?: number | null
 }): ProviderBoundarySecretFinalizer {
   const redactor = createSecretRedactor(options)
 
@@ -136,7 +136,7 @@ export function createProviderBoundarySecretFinalizer(options: {
       const sessionId = payload.input?.sessionID?.trim() || messageSessionId(messages)
       try {
         const stats = redactor.redactProviderMessages(messages)
-        auditOpaquePngOmission(directory, "messages", sessionId, stats)
+        auditOpaqueAttachmentOmission(directory, "messages", sessionId, stats)
         auditRedaction(directory, "messages", sessionId, stats)
       } catch (error) {
         blockAudit(directory, "messages", sessionId, error)

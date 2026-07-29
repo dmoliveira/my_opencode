@@ -39,7 +39,7 @@ RESUME_CONTROL = "RESUME_E2E_TRANSPORT_CONTROL"
 MUTABLE_SECRET = "MutableResumeSecret_123456"
 UI_ONLY_CANARY = "sk-ui-only-patch-collision-1234567890"
 UI_PREVIEW_CANARY = "token=UiOnlyResumeSecret_123456"
-CIPHERTEXT = f"{'A' * 128}sk-e2e-ciphertext-collision-1234567890"
+CIPHERTEXT = f"{'A' * 128}-sk-e2e-ciphertext-collision-1234567890"
 REDACTION_TOKEN = "[REDACTED_SECRET]"
 EXPECTED_PROVIDER_ERROR = "EXPECTED_RESUME_E2E_CAPTURE_400"
 SEED_API_KEY = "resume-e2e-local-seed-key"
@@ -79,6 +79,24 @@ def build_png_collision_data_url() -> str:
 
 
 PNG_ATTACHMENT_DATA_URL = build_png_collision_data_url()
+
+
+def build_binary_collision_data_url(mime: str, prefix: bytes, suffix: bytes) -> str:
+    if len(prefix) % 3 != 0:
+        raise RuntimeError("binary_collision_prefix_unaligned")
+    collision_bytes = base64.b64decode(GOOGLE_KEY_COLLISION, validate=True)
+    encoded = base64.b64encode(prefix + collision_bytes + suffix).decode("ascii")
+    if GOOGLE_KEY_COLLISION not in encoded:
+        raise RuntimeError("binary_collision_missing_from_transport")
+    return f"data:{mime};base64,{encoded}"
+
+
+JPEG_ATTACHMENT_DATA_URL = build_binary_collision_data_url(
+    "image/jpeg", b"\xff\xd8\xff", b"\xff\xd9"
+)
+PDF_ATTACHMENT_DATA_URL = build_binary_collision_data_url(
+    "application/pdf", b"%PDF-1.7\n", b"\n%%EOF\n"
+)
 PRIVATE_FIXTURE_MARKERS = (
     CIPHERTEXT,
     MUTABLE_SECRET,
@@ -88,6 +106,8 @@ PRIVATE_FIXTURE_MARKERS = (
     OPENAI_API_KEY,
     GOOGLE_KEY_COLLISION,
     PNG_ATTACHMENT_DATA_URL,
+    JPEG_ATTACHMENT_DATA_URL,
+    PDF_ATTACHMENT_DATA_URL,
 )
 
 
@@ -98,6 +118,14 @@ class HarnessFailure(RuntimeError):
 def require(condition: bool, reason: str) -> None:
     if not condition:
         raise HarnessFailure(reason)
+
+
+def resolve_opencode_binary(value: Path) -> Path:
+    expanded = value.expanduser()
+    if not expanded.is_absolute() and expanded.parent == Path("."):
+        resolved = shutil.which(str(expanded))
+        return Path(resolved).resolve() if resolved else expanded.resolve()
+    return expanded.resolve()
 
 
 def parse_args() -> argparse.Namespace:
@@ -610,7 +638,6 @@ def mutate_export(source_path: Path, fixture_path: Path) -> str:
         "text": REASONING_CONTROL,
         "metadata": {
             "openai": {
-                "itemId": "rs_resume_e2e_0123456789",
                 "reasoningEncryptedContent": CIPHERTEXT,
             }
         },
@@ -641,7 +668,23 @@ def mutate_export(source_path: Path, fixture_path: Path) -> str:
                     "id": derive_part_id(base_part_id, "a01"),
                     "sessionID": session_id,
                     "messageID": message_id,
-                }
+                },
+                {
+                    "type": "file",
+                    "mime": "image/jpeg",
+                    "url": JPEG_ATTACHMENT_DATA_URL,
+                    "id": derive_part_id(base_part_id, "a02"),
+                    "sessionID": session_id,
+                    "messageID": message_id,
+                },
+                {
+                    "type": "file",
+                    "mime": "application/pdf",
+                    "url": PDF_ATTACHMENT_DATA_URL,
+                    "id": derive_part_id(base_part_id, "a03"),
+                    "sessionID": session_id,
+                    "messageID": message_id,
+                },
             ],
         },
         "id": derive_part_id(base_part_id, "t01"),
@@ -665,6 +708,8 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
     ciphertext_found = False
     ui_metadata_found = False
     png_attachment_found = False
+    jpeg_attachment_found = False
+    pdf_attachment_found = False
     mutable_secret_found = False
     coherent_references = True
 
@@ -696,7 +741,7 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
                     openai = metadata.get("openai")
                     if isinstance(openai, dict):
                         ciphertext_found = (
-                            openai.get("itemId") == "rs_resume_e2e_0123456789"
+                            "itemId" not in openai
                             and openai.get("reasoningEncryptedContent") == CIPHERTEXT
                         )
             if part.get("type") == "tool":
@@ -717,12 +762,28 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
                             and attachment.get("url") == PNG_ATTACHMENT_DATA_URL
                             for attachment in attachments
                         )
+                        jpeg_attachment_found = any(
+                            isinstance(attachment, dict)
+                            and attachment.get("type") == "file"
+                            and attachment.get("mime") == "image/jpeg"
+                            and attachment.get("url") == JPEG_ATTACHMENT_DATA_URL
+                            for attachment in attachments
+                        )
+                        pdf_attachment_found = any(
+                            isinstance(attachment, dict)
+                            and attachment.get("type") == "file"
+                            and attachment.get("mime") == "application/pdf"
+                            and attachment.get("url") == PDF_ATTACHMENT_DATA_URL
+                            for attachment in attachments
+                        )
 
     require(coherent_references, "fixture_references_incoherent")
     require(large_text_found, "large_history_fixture_missing")
     require(ciphertext_found, "ciphertext_fixture_missing")
     require(ui_metadata_found, "ui_metadata_fixture_missing")
     require(png_attachment_found, "png_attachment_fixture_missing")
+    require(jpeg_attachment_found, "jpeg_attachment_fixture_missing")
+    require(pdf_attachment_found, "pdf_attachment_fixture_missing")
     require(mutable_secret_found, "mutable_secret_fixture_missing")
     return messages
 
@@ -813,7 +874,7 @@ def validate_native_wire(
     )
     output_parts = function_output.get("output")
     require(isinstance(output_parts, list), "native_function_output_not_array")
-    require(len(output_parts) == 2, "native_function_output_part_count_invalid")
+    require(len(output_parts) == 4, "native_function_output_part_count_invalid")
     output_text = [
         part
         for part in output_parts
@@ -824,20 +885,47 @@ def validate_native_wire(
         for part in output_parts
         if isinstance(part, dict) and part.get("type") == "input_image"
     ]
+    output_files = [
+        part
+        for part in output_parts
+        if isinstance(part, dict) and part.get("type") == "input_file"
+    ]
     require(
         output_text == [{"type": "input_text", "text": TOOL_OUTPUT_CONTROL}],
         "native_function_output_text_invalid",
     )
-    require(len(output_images) == 1, "native_function_output_image_count_invalid")
+    require(len(output_images) == 2, "native_function_output_image_count_invalid")
     require(
-        set(output_images[0]) == {"type", "image_url"}
-        and output_images[0].get("image_url") == PNG_ATTACHMENT_DATA_URL,
+        {json.dumps(item, sort_keys=True) for item in output_images}
+        == {
+            json.dumps(
+                {"type": "input_image", "image_url": PNG_ATTACHMENT_DATA_URL},
+                sort_keys=True,
+            ),
+            json.dumps(
+                {"type": "input_image", "image_url": JPEG_ATTACHMENT_DATA_URL},
+                sort_keys=True,
+            ),
+        },
         "native_function_output_image_invalid",
     )
     require(
-        list(iter_strings(payload)).count(PNG_ATTACHMENT_DATA_URL) == 1,
-        "native_png_attachment_count_invalid",
+        output_files
+        == [
+            {
+                "type": "input_file",
+                "filename": "data",
+                "file_data": PDF_ATTACHMENT_DATA_URL,
+            }
+        ],
+        "native_function_output_file_invalid",
     )
+    for marker, reason in (
+        (PNG_ATTACHMENT_DATA_URL, "native_png_attachment_count_invalid"),
+        (JPEG_ATTACHMENT_DATA_URL, "native_jpeg_attachment_count_invalid"),
+        (PDF_ATTACHMENT_DATA_URL, "native_pdf_attachment_count_invalid"),
+    ):
+        require(list(iter_strings(payload)).count(marker) == 1, reason)
 
     prompt_cache_key = payload.get("prompt_cache_key")
     require(isinstance(prompt_cache_key, str), "prompt_cache_key_missing")
@@ -864,6 +952,9 @@ def validate_native_wire(
         ),
         "provider_controls_present": True,
         "png_attachment_preserved_on_wire": True,
+        "jpeg_attachment_preserved_on_wire": True,
+        "pdf_attachment_preserved_on_wire": True,
+        "reasoning_without_item_id_on_wire": "id" not in reasoning,
         "prompt_cache_key_stable": True,
     }
 
@@ -914,7 +1005,10 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         "ui_only_metadata_absent_on_wire": False,
         "provider_controls_present": False,
         "png_attachment_preserved_on_wire": False,
-        "png_collision_omission_audit_seen": False,
+        "jpeg_attachment_preserved_on_wire": False,
+        "pdf_attachment_preserved_on_wire": False,
+        "reasoning_without_item_id_on_wire": False,
+        "opaque_attachment_collision_omission_audit_seen": False,
         "prompt_cache_key_stable": False,
         "prompt_cache_routing_audit_seen": False,
         "prompt_cache_prefix_audit_seen": False,
@@ -933,7 +1027,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         repo_root = args.repo_root.resolve()
         dist_entry = repo_root / "plugin" / "gateway-core" / "dist" / "index.js"
         require(dist_entry.is_file(), "gateway_dist_missing")
-        opencode_bin = args.opencode_bin.expanduser().resolve()
+        opencode_bin = resolve_opencode_binary(args.opencode_bin)
         require(opencode_bin.is_file(), "opencode_binary_missing")
         deadline = time.monotonic() + max(30, args.timeout_seconds)
         version_env = {
@@ -1207,6 +1301,18 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     report["png_attachment_preserved_on_wire"],
                     "png_attachment_missing_on_wire",
                 )
+                require(
+                    report["jpeg_attachment_preserved_on_wire"],
+                    "jpeg_attachment_missing_on_wire",
+                )
+                require(
+                    report["pdf_attachment_preserved_on_wire"],
+                    "pdf_attachment_missing_on_wire",
+                )
+                require(
+                    report["reasoning_without_item_id_on_wire"],
+                    "reasoning_item_id_unexpected_on_wire",
+                )
 
                 audit_rows = parse_audit(native_audit)
                 report["runtime_bootstrap_seen"] = any(
@@ -1219,16 +1325,16 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     if row.get("reason_code") == "provider_boundary_secrets_redacted"
                     and row.get("surface") == "messages"
                 ]
-                png_omission_rows = [
+                attachment_omission_rows = [
                     row
                     for row in audit_rows
                     if row.get("reason_code")
-                    == "provider_boundary_opaque_png_collision_omitted"
+                    == "provider_boundary_opaque_attachment_collision_omitted"
                     and row.get("surface") == "messages"
                 ]
                 report["redaction_audit_seen"] = len(redaction_rows) == 1
-                report["png_collision_omission_audit_seen"] = (
-                    len(png_omission_rows) == 1
+                report["opaque_attachment_collision_omission_audit_seen"] = (
+                    len(attachment_omission_rows) == 1
                 )
                 report["redaction_scanned_chars"] = max(
                     (int(row.get("scanned_chars") or 0) for row in redaction_rows),
@@ -1322,12 +1428,12 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 require(report["redaction_audit_seen"], "redaction_audit_missing")
                 require(
-                    report["png_collision_omission_audit_seen"],
-                    "png_collision_omission_audit_missing",
+                    report["opaque_attachment_collision_omission_audit_seen"],
+                    "opaque_attachment_collision_omission_audit_missing",
                 )
                 require(
-                    png_omission_rows[0].get("omitted_match_count") == 1,
-                    "png_collision_omission_count_invalid",
+                    attachment_omission_rows[0].get("omitted_match_count") == 3,
+                    "opaque_attachment_collision_omission_count_invalid",
                 )
                 redaction_row = redaction_rows[0]
                 require(

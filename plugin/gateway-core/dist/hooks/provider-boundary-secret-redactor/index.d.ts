@@ -25,5 +25,5 @@ export declare function createProviderBoundarySecretFinalizer(options: {
     redactionToken: string;
     limits: SecretRedactionLimits;
     providerLimits: ProviderSecretRedactionLimits;
-    omittableOpaquePngPatternIndex?: number | null;
+    omittableOpaqueAttachmentPatternIndex?: number | null;
 }): ProviderBoundarySecretFinalizer;
