@@ -1387,7 +1387,7 @@ export default function GatewayCorePlugin(
           directory,
           redactionToken: cfg.secretLeakGuard.redactionToken,
           patterns: cfg.secretLeakGuard.patterns,
-          omittableOpaquePngPatternIndex:
+          omittableOpaqueAttachmentPatternIndex:
             cfg.secretLeakGuard.patterns ===
             DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
               ? cfg.secretLeakGuard.patterns.indexOf(

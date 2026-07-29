@@ -1,11 +1,42 @@
-const PNG_DATA_URL_PREFIX = "data:image/png;base64,";
-export const MAX_OPAQUE_PNG_DATA_URL_CHARS = 16 * 1024 * 1024;
-export const MAX_OPAQUE_PNG_DECODED_BYTES = 12 * 1024 * 1024;
+export const OPAQUE_PROVIDER_ATTACHMENT_MIME_TYPES = [
+    "image/png",
+    "image/jpeg",
+    "application/pdf",
+];
+export const MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS = 16 * 1024 * 1024;
+export const MAX_OPAQUE_ATTACHMENT_DECODED_BYTES = 12 * 1024 * 1024;
+export const MAX_OPAQUE_PNG_DATA_URL_CHARS = MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS;
+export const MAX_OPAQUE_PNG_DECODED_BYTES = MAX_OPAQUE_ATTACHMENT_DECODED_BYTES;
 export const MAX_OPAQUE_PNG_CHUNKS = 16_384;
 export const MAX_OPAQUE_PNG_DIMENSION = 32_768;
 export const MAX_OPAQUE_PNG_PIXELS = 100_000_000;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const CANONICAL_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+function isBase64Alphabet(value) {
+    return ((value >= 0x41 && value <= 0x5a) ||
+        (value >= 0x61 && value <= 0x7a) ||
+        (value >= 0x30 && value <= 0x39) ||
+        value === 0x2b ||
+        value === 0x2f);
+}
+function isCanonicalBase64Text(value) {
+    if (!value || value.length % 4 !== 0)
+        return false;
+    let padding = 0;
+    if (value.endsWith("="))
+        padding += 1;
+    if (value.endsWith("=="))
+        padding += 1;
+    const contentEnd = value.length - padding;
+    for (let index = 0; index < contentEnd; index += 1) {
+        if (!isBase64Alphabet(value.charCodeAt(index)))
+            return false;
+    }
+    for (let index = contentEnd; index < value.length; index += 1) {
+        if (value.charCodeAt(index) !== 0x3d)
+            return false;
+    }
+    return true;
+}
 const KNOWN_CRITICAL_CHUNKS = new Set(["IHDR", "PLTE", "IDAT", "IEND"]);
 const PNG_CRC_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
     let value = index;
@@ -144,24 +175,37 @@ export function isStructurallyValidPngContainer(bytes) {
         return false;
     }
 }
-export function isCanonicalStructurallyValidPngDataUrl(value) {
+export function parseCanonicalProviderAttachmentDataUrl(value, expectedMime) {
     try {
-        if (value.length > MAX_OPAQUE_PNG_DATA_URL_CHARS ||
-            !value.startsWith(PNG_DATA_URL_PREFIX)) {
-            return false;
+        if (!OPAQUE_PROVIDER_ATTACHMENT_MIME_TYPES.includes(expectedMime) ||
+            value.length > MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS) {
+            return null;
         }
-        const payload = value.slice(PNG_DATA_URL_PREFIX.length);
-        if (!payload || !CANONICAL_BASE64.test(payload))
-            return false;
+        const mime = expectedMime;
+        const prefix = `data:${mime};base64,`;
+        if (!value.startsWith(prefix))
+            return null;
+        const payload = value.slice(prefix.length);
+        if (!isCanonicalBase64Text(payload))
+            return null;
         const decoded = Buffer.from(payload, "base64");
         if (decoded.length === 0 ||
-            decoded.length > MAX_OPAQUE_PNG_DECODED_BYTES ||
-            decoded.toString("base64") !== payload) {
-            return false;
+            decoded.length > MAX_OPAQUE_ATTACHMENT_DECODED_BYTES ||
+            decoded.toString("base64") !== payload ||
+            (mime === "image/png" && !isStructurallyValidPngContainer(decoded))) {
+            return null;
         }
-        return isStructurallyValidPngContainer(decoded);
+        return {
+            mime,
+            payloadStart: prefix.length,
+            payloadEnd: value.length,
+            decodedBytes: decoded.length,
+        };
     }
     catch {
-        return false;
+        return null;
     }
+}
+export function isCanonicalStructurallyValidPngDataUrl(value) {
+    return parseCanonicalProviderAttachmentDataUrl(value, "image/png") !== null;
 }

@@ -5,6 +5,9 @@ import test from "node:test"
 import {
   isCanonicalStructurallyValidPngDataUrl,
   isStructurallyValidPngContainer,
+  MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS,
+  OPAQUE_PROVIDER_ATTACHMENT_MIME_TYPES,
+  parseCanonicalProviderAttachmentDataUrl,
   MAX_OPAQUE_PNG_CHUNKS,
   MAX_OPAQUE_PNG_DATA_URL_CHARS,
   MAX_OPAQUE_PNG_DECODED_BYTES,
@@ -194,4 +197,86 @@ test("near-limit container validation remains bounded", () => {
   const oneOver = Buffer.concat([nearLimit, Buffer.from([0])])
   assert.equal(oneOver.length, MAX_OPAQUE_PNG_DECODED_BYTES + 1)
   assert.equal(isStructurallyValidPngContainer(oneOver), false)
+})
+
+
+test("canonical provider attachment parser returns exact payload bounds", () => {
+  const fixtures = [
+    ["image/jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+    ["application/pdf", Buffer.from("%PDF-1.7\n%%EOF\n", "ascii")],
+  ]
+  assert.deepEqual(OPAQUE_PROVIDER_ATTACHMENT_MIME_TYPES, [
+    "image/png",
+    "image/jpeg",
+    "application/pdf",
+  ])
+  for (const [mime, bytes] of fixtures) {
+    const prefix = `data:${mime};base64,`
+    const url = `${prefix}${bytes.toString("base64")}`
+    assert.deepEqual(parseCanonicalProviderAttachmentDataUrl(url, mime), {
+      mime,
+      payloadStart: prefix.length,
+      payloadEnd: url.length,
+      decodedBytes: bytes.length,
+    })
+  }
+})
+
+test("provider attachment parser rejects MIME and Base64 ambiguity", () => {
+  const payload = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64")
+  assert.equal(
+    parseCanonicalProviderAttachmentDataUrl(`data:image/jpeg;base64,${payload}`, "image/png"),
+    null,
+  )
+  assert.equal(
+    parseCanonicalProviderAttachmentDataUrl(`data:image/jpg;base64,${payload}`, "image/jpg"),
+    null,
+  )
+  assert.equal(
+    parseCanonicalProviderAttachmentDataUrl(
+      `data:image/jpeg;charset=utf-8;base64,${payload}`,
+      "image/jpeg",
+    ),
+    null,
+  )
+  assert.equal(
+    parseCanonicalProviderAttachmentDataUrl(`data:image/gif;base64,${payload}`, "image/gif"),
+    null,
+  )
+  assert.equal(parseCanonicalProviderAttachmentDataUrl("data:image/jpeg;base64,", "image/jpeg"), null)
+  assert.equal(
+    parseCanonicalProviderAttachmentDataUrl(
+      `data:image/jpeg;base64,${payload.slice(0, -1)}`,
+      "image/jpeg",
+    ),
+    null,
+  )
+  assert.equal(
+    parseCanonicalProviderAttachmentDataUrl(
+      `data:image/jpeg;base64,${payload.replace("/", "_")}`,
+      "image/jpeg",
+    ),
+    null,
+  )
+})
+
+test("provider attachment URL limit is exact and bounded", () => {
+  const mime = "application/pdf"
+  const prefix = `data:${mime};base64,`
+  const payloadChars =
+    Math.floor((MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS - prefix.length) / 4) * 4
+  const decodedBytes = (payloadChars / 4) * 3
+  const atLimit = `${prefix}${Buffer.alloc(decodedBytes).toString("base64")}`
+  assert.equal(atLimit.length <= MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS, true)
+  const durations = []
+  for (let index = 0; index < 3; index += 1) {
+    const start = performance.now()
+    assert.notEqual(parseCanonicalProviderAttachmentDataUrl(atLimit, mime), null)
+    durations.push(performance.now() - start)
+  }
+  assert.equal(Math.max(...durations) < 2_000, true)
+
+  const oneOver = `${prefix}${Buffer.alloc(decodedBytes + 3).toString("base64")}`
+  assert.equal(oneOver.length > MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS, true)
+  assert.equal(parseCanonicalProviderAttachmentDataUrl(oneOver, mime), null)
 })

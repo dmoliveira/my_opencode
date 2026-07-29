@@ -860,7 +860,7 @@ export default function GatewayCorePlugin(ctx, options) {
             directory,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
-            omittableOpaquePngPatternIndex: cfg.secretLeakGuard.patterns ===
+            omittableOpaqueAttachmentPatternIndex: cfg.secretLeakGuard.patterns ===
                 DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
                 ? cfg.secretLeakGuard.patterns.indexOf("AIza[0-9A-Za-z\\-_]{20,}")
                 : null,

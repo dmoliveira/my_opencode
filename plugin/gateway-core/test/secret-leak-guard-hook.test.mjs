@@ -287,7 +287,7 @@ test("assembled provider finalizer accepts the resumed-history regression fixtur
         hooks: { enabled: false, order: [], disabled: ["secret-leak-guard"] },
       },
     })
-    const ciphertext = `${"A".repeat(128)}sk-opaque-ciphertext-collision-1234567890`
+    const ciphertext = `${"A".repeat(128)}-sk-opaque-ciphertext-collision-1234567890`
     const uiOnlyMetadata = {
       files: [{ patch: "sk-ui-only-patch-collision-1234567890" }],
       preview: "token=UiOnlyPreviewSecret_123456",
@@ -619,7 +619,7 @@ test("provider redactor preserves a canonical PNG Google-key collision and scans
   }
 })
 
-test("provider PNG exception is unavailable to an exact configured pattern override", async () => {
+test("provider attachment exception is unavailable to an exact configured pattern override", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-secret-png-custom-pattern-"))
   try {
     const plugin = GatewayCorePlugin({
@@ -647,14 +647,14 @@ test("provider PNG exception is unavailable to an exact configured pattern overr
   }
 })
 
-test("provider PNG exception omits only the built-in Google detector", () => {
+test("provider attachment exception omits only the built-in Google detector", () => {
   const message = pngAttachmentMessage()
   const redactor = createSecretRedactor({
     patterns: [
       "AIza[0-9A-Za-z\\-_]{20,}",
       "iVBORw0KGgo[A-Za-z0-9+/=]{10,}",
     ],
-    omittableOpaquePngPatternIndex: 0,
+    omittableOpaqueAttachmentPatternIndex: 0,
     redactionToken: "[REDACTED]",
     limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
     providerLimits: {
@@ -675,7 +675,7 @@ test("provider PNG exception omits only the built-in Google detector", () => {
   )
 })
 
-test("provider PNG exception fails closed for wrong provenance and malformed envelopes", () => {
+test("provider attachment exception fails closed for wrong provenance and malformed envelopes", () => {
   const url = pngCollisionDataUrl()
   const variants = []
   const addVariant = (mutate) => {
@@ -737,7 +737,7 @@ test("provider PNG exception fails closed for wrong provenance and malformed env
   for (const message of variants) {
     const redactor = createSecretRedactor({
       patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-      omittableOpaquePngPatternIndex: 0,
+      omittableOpaqueAttachmentPatternIndex: 0,
       redactionToken: "[REDACTED]",
       limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
       providerLimits: {
@@ -853,7 +853,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
   for (const [variantIndex, message] of variants.entries()) {
     const redactor = createSecretRedactor({
       patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-      omittableOpaquePngPatternIndex: 0,
+      omittableOpaqueAttachmentPatternIndex: 0,
       redactionToken: "[REDACTED]",
       limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
       providerLimits: {
@@ -884,7 +884,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
       () =>
         createSecretRedactor({
           patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-          omittableOpaquePngPatternIndex: 0,
+          omittableOpaqueAttachmentPatternIndex: 0,
           redactionToken: "[REDACTED]",
           limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
         }).redactProviderMessages(malformedMessages),
@@ -902,7 +902,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
       () =>
         createSecretRedactor({
           patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-          omittableOpaquePngPatternIndex: 0,
+          omittableOpaqueAttachmentPatternIndex: 0,
           redactionToken: "[REDACTED]",
           limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
         }).redactProviderMessages([pngAttachmentMessage(url)]),
@@ -914,7 +914,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
   assert.equal(getterCalls, 0)
 })
 
-test("provider PNG exception requires one explicitly designated default detector", () => {
+test("provider attachment exception requires one explicitly designated default detector", () => {
   const options = {
     redactionToken: "[REDACTED]",
     limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
@@ -943,7 +943,7 @@ test("provider PNG exception requires one explicitly designated default detector
     () =>
       createSecretRedactor({
         patterns: [exactPattern, exactPattern],
-        omittableOpaquePngPatternIndex: 0,
+        omittableOpaqueAttachmentPatternIndex: 0,
         ...options,
       }).redactProviderMessages([pngAttachmentMessage()]),
     (error) => {
@@ -957,7 +957,7 @@ test("provider PNG exception requires one explicitly designated default detector
     () =>
       createSecretRedactor({
         patterns: [`(?i)${exactPattern}`],
-        omittableOpaquePngPatternIndex: 0,
+        omittableOpaqueAttachmentPatternIndex: 0,
         ...options,
       }).redactProviderMessages([pngAttachmentMessage()]),
     (error) => {
@@ -971,7 +971,7 @@ test("provider PNG exception requires one explicitly designated default detector
     () =>
       createSecretRedactor({
         patterns: ["AIza[0-9A-Za-z_-]{20,}"],
-        omittableOpaquePngPatternIndex: 0,
+        omittableOpaqueAttachmentPatternIndex: 0,
         ...options,
       }).redactProviderMessages([pngAttachmentMessage()]),
     (error) => {
@@ -982,14 +982,14 @@ test("provider PNG exception requires one explicitly designated default detector
   )
 })
 
-test("provider PNG exception tolerates stale nested references after import and fork", () => {
+test("provider attachment exception tolerates stale nested references after import and fork", () => {
   const message = pngAttachmentMessage()
   message.parts[0].state.attachments[0].messageID = "msg_source_before_fork"
   message.parts[0].state.attachments[0].sessionID = "ses_source_before_fork"
 
   const redactor = createSecretRedactor({
     patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-    omittableOpaquePngPatternIndex: 0,
+    omittableOpaqueAttachmentPatternIndex: 0,
     redactionToken: "[REDACTED]",
     limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
     providerLimits: {
@@ -1003,7 +1003,7 @@ test("provider PNG exception tolerates stale nested references after import and 
   assert.doesNotThrow(() => redactor.redactProviderMessages([message]))
 })
 
-test("provider PNG exception revisits trusted attachment aliases through untrusted paths", () => {
+test("provider attachment exception revisits trusted attachment aliases through untrusted paths", () => {
   for (const trustedFirst of [true, false]) {
     const base = pngAttachmentMessage()
     const alias = base.parts[0].state.attachments[0]
@@ -1012,7 +1012,7 @@ test("provider PNG exception revisits trusted attachment aliases through untrust
       : { future: alias, ...base }
     const redactor = createSecretRedactor({
       patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-      omittableOpaquePngPatternIndex: 0,
+      omittableOpaqueAttachmentPatternIndex: 0,
       redactionToken: "[REDACTED]",
       limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
       providerLimits: {
@@ -1033,14 +1033,14 @@ test("provider PNG exception revisits trusted attachment aliases through untrust
   }
 })
 
-test("provider PNG exception charges valid envelopes exactly once", () => {
+test("provider attachment exception charges valid envelopes exactly once", () => {
   const makeRedactor = (maxMessageChars) =>
     createSecretRedactor({
       patterns: [
         "AIza[0-9A-Za-z\\-_]{20,}",
         "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*[A-Za-z0-9_\\-]{12,}",
       ],
-      omittableOpaquePngPatternIndex: 0,
+      omittableOpaqueAttachmentPatternIndex: 0,
       redactionToken: "[REDACTED]",
       limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
       providerLimits: {
@@ -1056,7 +1056,7 @@ test("provider PNG exception charges valid envelopes exactly once", () => {
   ])
   assert.equal(baseline.matches, 1)
   assert.equal(baseline.redactedFields, 1)
-  assert.equal(baseline.omittedOpaquePngMatches, 1)
+  assert.equal(baseline.omittedOpaqueAttachmentMatches, 1)
 
   assert.doesNotThrow(() =>
     makeRedactor(baseline.scannedChars).redactProviderMessages([
@@ -1245,6 +1245,14 @@ test("reasoning ciphertext exemption requires exact own provider provenance", ()
   wrongItem.parts[0].metadata.openai.itemId = "fc_0123456789abcdef"
   cases.push(wrongItem)
 
+  const nullItem = reasoningMessage(ciphertext)
+  nullItem.parts[0].metadata.openai.itemId = null
+  cases.push(nullItem)
+
+  const emptyItem = reasoningMessage(ciphertext)
+  emptyItem.parts[0].metadata.openai.itemId = ""
+  cases.push(emptyItem)
+
   const wrongKey = reasoningMessage(ciphertext)
   wrongKey.parts[0].metadata.openai.encryptedContent = ciphertext
   delete wrongKey.parts[0].metadata.openai.reasoningEncryptedContent
@@ -1320,7 +1328,7 @@ test("provider history limits are global, per-message, and exactly accounted", (
     redactedFields: 0,
     scannedChars: 6,
     scannedNodes: 3,
-    omittedOpaquePngMatches: 0,
+    omittedOpaqueAttachmentMatches: 0,
   })
 
   for (const providerLimits of [

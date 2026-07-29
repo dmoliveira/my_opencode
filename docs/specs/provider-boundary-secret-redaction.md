@@ -8,6 +8,13 @@ redacted in place. Except for the bounded opaque envelopes defined below,
 secret-pattern matches in protocol identifiers, URLs, metadata, unknown fields,
 or object keys block dispatch without logging the matched value.
 
+The built-in OpenAI-key detector is left-token-bounded as
+`\bsk-[A-Za-z0-9_\-]{20,}`. It detects keys at the start of a value or after
+punctuation or whitespace, but does not mistake an `sk-...` suffix inside an
+ordinary identifier such as `task-validation-accounting` for a secret. Explicit
+custom patterns are not boundary-rewritten and can intentionally retain broader
+matching.
+
 Provider messages and system values must be JSON-shaped data: records use the
 ordinary or null prototype, arrays use the standard array prototype, the global
 `Object.prototype` has its standard unextended key set, and every traversed child
@@ -28,15 +35,16 @@ shape:
 - `info.role` is `assistant`;
 - `info.providerID` is `openai`;
 - the part type is `reasoning`;
-- `metadata.openai.itemId` matches `rs_.+`; and
+- `metadata.openai.itemId` is genuinely absent or is an own string matching
+  `rs_.+`; and
 - the encrypted content is a non-empty own string value.
 
 This field is opaque provider-produced replay state. It must remain unchanged;
 regex replacement would corrupt subsequent OpenAI requests, while token-shaped
 substrings occur naturally in ciphertext. The ciphertext still consumes all
-resource budgets. Wrong paths, malformed shapes, inherited qualifiers,
-accessors, aliases visited through an untrusted path, and neighboring metadata
-remain scanned and fail closed.
+resource budgets. A null, empty, wrong-prefix, inherited, or accessor-backed
+item ID does not qualify. Wrong paths, malformed shapes, aliases visited through
+an untrusted path, and neighboring metadata remain scanned and fail closed.
 
 OpenCode tool-state UI metadata is also projected according to the reviewed
 OpenCode `1.18.5` conversion contract (tag commit
@@ -58,22 +66,25 @@ projection. `state.input`,
 provider-bound and scanned. Aliasing skipped metadata into one of those paths
 causes it to be scanned through that path.
 
-### Canonical PNG attachment envelope
+### Canonical provider attachment envelope
 
-A completed OpenAI tool-result PNG can contain a Google-key-shaped substring in
-its Base64 transport by chance. The affected production history contained one
-such attachment, so the finalizer blocked before making any provider request.
-The same owner-only history replay produced one 3.89 MB `/v1/responses` request
-when the guard was disabled, proving that request size was not the blocker.
+A completed OpenAI tool-result attachment can contain a Google-key-shaped
+substring in its Base64 transport by chance. The first affected production
+history contained two such matches across PNG attachments, so the finalizer
+blocked before making any provider request. A second audit round confirmed that
+the pinned converter uses the same transport for JPEG images and PDF files.
 
 The gateway omits only the one explicitly designated detector at the built-in
 default-pattern index, and only when it is exactly
-`AIza[0-9A-Za-z\-_]{20,}`, for one canonical, structurally valid PNG container.
-An explicit pattern-list override receives no designation, even if it contains
-that exact expression. A duplicate, equivalent-source, or differently flagged
-detector also remains enforcing. Every other configured detector still scans
-the URL. The exception requires own data properties and identity checks proving
-this shape:
+`AIza[0-9A-Za-z\-_]{20,}`. Each omitted match must lie wholly inside the
+canonical Base64 payload of an allowed attachment. A match in or crossing the
+header remains blocking. An explicit pattern-list override receives no
+designation, even if it contains that exact expression. A duplicate,
+equivalent-source, or differently flagged detector also remains enforcing.
+Every other configured detector still scans the complete URL.
+
+The exception requires own data properties and identity checks proving this
+shape:
 
 - an assistant message routed through provider `openai` with non-empty message
   and session IDs;
@@ -81,34 +92,47 @@ this shape:
   session IDs, and the part references match the containing message;
 - the tool state is `completed`, has an own time record, and has not been
   compacted; and
-- `state.attachments[index]` is an own file attachment with non-empty IDs,
-  `mime: image/png`, and an exact canonical `data:image/png;base64,...` URL.
+- `state.attachments[index]` is an own file attachment with non-empty IDs and an
+  exact `data:<mime>;base64,<payload>` URL whose header MIME equals the declared
+  attachment MIME.
+
+The only allowed MIME values are `image/png`, `image/jpeg`, and
+`application/pdf`. Parameters, aliases such as `image/jpg`, unknown MIME values,
+header mismatches, empty payloads, URL-safe Base64, malformed padding, and
+noncanonical encodings fail closed. PNG additionally requires the reviewed
+structural container validation. JPEG and PDF receive transport validation only;
+the gateway does not claim their bytes form a semantically valid image or
+document.
 
 OpenCode import and fork remap the containing message and tool-part references
-but can retain the source IDs inside nested attachment records. The reviewed
+but can retain source IDs inside nested attachment records. The reviewed
 converter does not use those nested IDs for dispatch, so they must be present
-but are not required to equal the remapped message. All other container
-identities are checked exactly. Proxies, custom prototypes, accessors,
-non-enumerable or inherited qualifiers, malformed shapes, compacted tool states,
-other media types, and aliases reached through an unqualified path fail closed.
+but need not equal the remapped message. All other container identities are
+checked exactly. Proxies, custom prototypes, accessors, non-enumerable or
+inherited qualifiers, malformed shapes, compacted tool states, unsupported media,
+and aliases reached through an unqualified path fail closed.
 
-The URL validator caps the complete URL at `16,777,216` characters, decoded
-bytes at `12,582,912`, chunks at `16,384`, each dimension at `32,768`, and total
-pixels at `100,000,000`. It requires canonical standard Base64, exact
-round-trip encoding, PNG signature and chunk boundaries, CRCs, valid IHDR and
-PLTE controls, contiguous IDAT chunks, known critical chunks, and a unique final
-IEND with no trailing bytes. It validates a PNG container, not decompressed
-pixels or image meaning: IDAT inflation, textual metadata, OCR-visible secrets,
-steganography, and authenticated attachment origin remain outside this regex
-DLP guarantee. CRC establishes transport integrity, not trust.
+The transport validator caps the complete URL at `16,777,216` characters and
+decoded bytes at `12,582,912`. It requires canonical standard Base64 and exact
+round-trip encoding. PNG validation additionally caps chunks at `16,384`, each
+dimension at `32,768`, and total pixels at `100,000,000`; it checks signature,
+chunk boundaries, CRCs, IHDR and PLTE controls, contiguous IDAT chunks, known
+critical chunks, and one final IEND with no trailing bytes. It validates a PNG
+container, not decompressed pixels or image meaning. OCR-visible secrets,
+steganography, malware, decoded-content DLP, and authenticated attachment origin
+remain outside this regex DLP guarantee.
 
 This path is pinned to OpenCode `1.18.5` and its reviewed `message-v2.ts`
-converter above. OpenCode pins `@ai-sdk/openai` `3.0.84`; the reviewed Responses
-converter is
+converter above. OpenCode pins `ai` `6.0.168`; the reviewed media mapping is
+`packages/ai/src/prompt/convert-to-language-model-prompt.ts` at commit
+`c38119a2e3df201a95a9979580f2c7a3c1b319ab`, blob
+`4fedd90b17f82c24cff7fd41b7f4872412a8a7d0`. It maps tool-result `image/*` data
+to image content and other media to file content. OpenCode also pins
+`@ai-sdk/openai` `3.0.84`; the reviewed Responses converter is
 `packages/openai/src/responses/convert-to-openai-responses-input.ts` at commit
-`da385f747e8277411d8b49c65e8a22c3bf158f4c`. It serializes tool-result image
-data as one `input_image` inside `function_call_output.output`. Converter drift
-must fail closed until this contract is reverified.
+`da385f747e8277411d8b49c65e8a22c3bf158f4c`. It serializes JPEG and PNG as
+`input_image` and PDF as `input_file` inside `function_call_output.output`.
+Converter drift must fail closed until all three layers are reverified.
 
 ## Resource limits
 
@@ -123,11 +147,12 @@ tool result:
 - `providerMaxMessageChars`: `16,777,216`
 
 `providerMaxChars` and `providerMaxMessageChars` include traversed regex-scanned
-text, preserved ciphertext, and qualified PNG URLs. Local UI-only tool metadata
-is not traversed or charged because the reviewed converter does not dispatch
-it. Public `scannedChars` telemetry counts the PNG URL once because every
-configured detector except the one transport-incompatible Google detector still
-checks it. Provider traversal revisits shared objects at each path, so a
+text, preserved ciphertext, and qualified attachment URLs. Local UI-only tool
+metadata is not traversed or charged because the reviewed converter does not
+dispatch it. Public `scannedChars` telemetry counts each qualified URL once
+because every configured detector except the one transport-incompatible Google
+detector still checks it. Provider traversal revisits shared objects at each
+path, so a
 qualified-path visit cannot hide an unqualified alias; every revisit is charged
 to the same bounded call.
 
@@ -143,9 +168,13 @@ becomes the `providerMaxNodes` fallback and caps the default
 
 - exact and one-over resource-boundary tests;
 - positive and negative OpenAI replay-shape tests;
-- canonical PNG collision, provenance, alias, parser, resource, and performance
-  boundary tests, including exact overrides, duplicate/equivalent detectors,
-  and other custom detectors that must still block;
+- a frozen six-default-detector compatibility manifest with mutation
+  sensitivity, synthetic matching samples, and an ordinary task-path negative
+  regression for the left-token-bounded `sk-` detector;
+- canonical PNG, JPEG, and PDF collision, provenance, MIME/header, payload-range,
+  alias, parser, resource, and performance boundary tests, including exact
+  overrides, duplicate/equivalent detectors, and other custom detectors that
+  must still block;
 - alias, cycle, depth, proxy/callable, custom/prototype-polluted, accessor,
   non-enumerable, symbol, sparse/extended-array, malformed-primitive,
   malformed-property, and unknown-field tests;
@@ -153,9 +182,11 @@ becomes the `providerMaxNodes` fallback and caps the default
 - gateway lint, build, full tests, and provider-boundary live smoke;
 - credential-free `make gateway-resume-redaction-e2e`, which imports a private
   synthetic large session, forks it through OpenCode `1.18.5`, and requires
-  native OpenAI localhost dispatch with exact ciphertext, redaction, metadata
-  projection, one exact PNG `input_image`, source-integrity, audit, and cleanup
-  assertions; and
+  native OpenAI localhost dispatch with absent-item-ID ciphertext, redaction,
+  metadata projection, exact PNG and JPEG `input_image` entries, one PDF
+  `input_file`, source-integrity, audit, and cleanup assertions;
+- static release-contract coverage proving `release-check` depends on the
+  unsuppressed native resume gate; and
 - an owner-only export/import replay of the affected session using the candidate
   build and localhost capture, requiring one image-bearing provider request,
   unchanged source message/part digest, no host credentials, and complete

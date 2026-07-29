@@ -1,5 +1,5 @@
 import { isProxy } from "node:util/types";
-import { isCanonicalStructurallyValidPngDataUrl } from "./provider-attachment-data-url.js";
+import { parseCanonicalProviderAttachmentDataUrl } from "./provider-attachment-data-url.js";
 export class SecretRedactionError extends Error {
     code;
     matchTarget;
@@ -15,8 +15,8 @@ export class SecretRedactionError extends Error {
     }
 }
 const MISSING_OWN_VALUE = Symbol("missing-own-value");
-const OPAQUE_PNG_FALSE_POSITIVE_PATTERN_SOURCE = "AIza[0-9A-Za-z\\-_]{20,}";
-const OPAQUE_PNG_FALSE_POSITIVE_PATTERN_FLAGS = "g";
+const OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_SOURCE = "AIza[0-9A-Za-z\\-_]{20,}";
+const OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_FLAGS = "g";
 const STANDARD_OBJECT_PROTOTYPE_KEYS = new Set([
     "constructor",
     "__defineGetter__",
@@ -115,13 +115,13 @@ function emptyStats() {
         redactedFields: 0,
         scannedChars: 0,
         scannedNodes: 0,
-        omittedOpaquePngMatches: 0,
+        omittedOpaqueAttachmentMatches: 0,
     };
 }
 export function createSecretRedactor(options) {
     const patterns = options.patterns.map(compilePattern);
-    const omittableOpaquePngPatternIndex = Number.isInteger(options.omittableOpaquePngPatternIndex)
-        ? options.omittableOpaquePngPatternIndex
+    const omittableOpaqueAttachmentPatternIndex = Number.isInteger(options.omittableOpaqueAttachmentPatternIndex)
+        ? options.omittableOpaqueAttachmentPatternIndex
         : null;
     const limits = {
         maxDepth: normalizedLimit(options.limits.maxDepth, 12),
@@ -172,8 +172,6 @@ export function createSecretRedactor(options) {
         let next = text;
         let firstPatternIndex = null;
         for (const [patternIndex, pattern] of patterns.entries()) {
-            if (applicationOptions.omitPattern?.(pattern))
-                continue;
             const regex = new RegExp(pattern.source, pattern.flags);
             next = next.replace(regex, () => {
                 firstPatternIndex ??= patternIndex;
@@ -234,13 +232,14 @@ export function createSecretRedactor(options) {
         const metadata = ownDataRecord(part, "metadata");
         const openai = ownDataRecord(metadata, "openai");
         const itemId = ownDataValue(openai, "itemId");
+        const validItemId = itemId === MISSING_OWN_VALUE ||
+            (typeof itemId === "string" && /^rs_.+$/.test(itemId));
         return (Boolean(openai) &&
             parent === openai &&
-            typeof itemId === "string" &&
-            /^rs_.+$/.test(itemId) &&
+            validItemId &&
             ownDataValue(openai, "reasoningEncryptedContent") === value);
     }
-    function qualifiedOpenAIPngAttachment(options) {
+    function qualifiedOpenAIAttachmentMime(options) {
         const { messageRoot, parent, key, path, value } = options;
         if (key !== "url" ||
             path.length !== 6 ||
@@ -250,7 +249,7 @@ export function createSecretRedactor(options) {
             path[3] !== "attachments" ||
             !Number.isInteger(path[4]) ||
             path[5] !== "url") {
-            return false;
+            return null;
         }
         const info = ownDataRecord(messageRoot, "info");
         const parts = ownDataValue(messageRoot, "parts");
@@ -262,7 +261,7 @@ export function createSecretRedactor(options) {
             !Array.isArray(parts) ||
             partIndex < 0 ||
             partIndex >= parts.length) {
-            return false;
+            return null;
         }
         const messageId = ownDataValue(info, "id");
         const sessionId = ownDataValue(info, "sessionID");
@@ -283,7 +282,7 @@ export function createSecretRedactor(options) {
             !ownDataValue(part, "id") ||
             ownDataValue(part, "messageID") !== messageId ||
             ownDataValue(part, "sessionID") !== sessionId) {
-            return false;
+            return null;
         }
         const state = ownDataRecord(part, "state");
         const attachments = ownDataValue(state, "attachments");
@@ -296,38 +295,71 @@ export function createSecretRedactor(options) {
             !Array.isArray(attachments) ||
             attachmentIndex < 0 ||
             attachmentIndex >= attachments.length) {
-            return false;
+            return null;
         }
         const attachment = ownDataValue(attachments, attachmentIndex);
-        return (Boolean(attachment) &&
+        const mime = ownDataValue(attachment, "mime");
+        return Boolean(attachment) &&
             typeof attachment === "object" &&
             !Array.isArray(attachment) &&
             parent === attachment &&
             ownDataValue(attachment, "type") === "file" &&
-            ownDataValue(attachment, "mime") === "image/png" &&
+            typeof mime === "string" &&
+            mime.length > 0 &&
             typeof ownDataValue(attachment, "id") === "string" &&
             Boolean(ownDataValue(attachment, "id")) &&
             typeof ownDataValue(attachment, "messageID") === "string" &&
             Boolean(ownDataValue(attachment, "messageID")) &&
             typeof ownDataValue(attachment, "sessionID") === "string" &&
             Boolean(ownDataValue(attachment, "sessionID")) &&
-            ownDataValue(attachment, "url") === value);
+            ownDataValue(attachment, "url") === value
+            ? mime
+            : null;
     }
-    function isOmittableOpaquePngPattern(pattern) {
-        return (pattern.index === omittableOpaquePngPatternIndex &&
-            pattern.source === OPAQUE_PNG_FALSE_POSITIVE_PATTERN_SOURCE &&
-            pattern.flags === OPAQUE_PNG_FALSE_POSITIVE_PATTERN_FLAGS);
+    function isOmittableOpaqueAttachmentPattern(pattern) {
+        return (pattern.index === omittableOpaqueAttachmentPatternIndex &&
+            pattern.source === OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_SOURCE &&
+            pattern.flags === OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_FLAGS);
     }
-    function opaquePngCollisionCount(value) {
+    function opaqueAttachmentCollisionCount(value) {
         let count = 0;
         for (const pattern of patterns) {
-            if (!isOmittableOpaquePngPattern(pattern))
+            if (!isOmittableOpaqueAttachmentPattern(pattern))
                 continue;
             const regex = new RegExp(pattern.source, pattern.flags);
-            while (regex.exec(value))
+            for (let match = regex.exec(value); match; match = regex.exec(value)) {
                 count += 1;
+                if (match[0].length === 0)
+                    regex.lastIndex += 1;
+            }
         }
         return count;
+    }
+    function scanQualifiedOpaqueAttachment(options) {
+        const { value, payloadStart, payloadEnd, stats, budget, localBudget } = options;
+        chargeChars(value, budget, localBudget);
+        stats.scannedChars += value.length;
+        let omittedMatches = 0;
+        for (const pattern of patterns) {
+            const regex = new RegExp(pattern.source, pattern.flags);
+            for (let match = regex.exec(value); match; match = regex.exec(value)) {
+                const start = match.index;
+                const end = start + match[0].length;
+                if (isOmittableOpaqueAttachmentPattern(pattern) &&
+                    start >= payloadStart &&
+                    end <= payloadEnd) {
+                    omittedMatches += 1;
+                }
+                else {
+                    stats.matches += 1;
+                    return pattern.index;
+                }
+                if (match[0].length === 0)
+                    regex.lastIndex += 1;
+            }
+        }
+        stats.omittedOpaqueAttachmentMatches += omittedMatches;
+        return null;
     }
     function canChargeChars(value, budget, localBudget) {
         return (value.length <= budget.maxChars - budget.chars &&
@@ -515,29 +547,32 @@ export function createSecretRedactor(options) {
                 chargeChars(value, state.budget, localBudget);
                 return;
             }
-            if (messageRoot !== undefined &&
-                qualifiedOpenAIPngAttachment({ messageRoot, parent, key, path, value })) {
-                if (!canChargeChars(value, state.budget, localBudget)) {
-                    chargeChars(value, state.budget, localBudget);
-                }
-                const omittedCollisionCount = opaquePngCollisionCount(value);
-                if (omittedCollisionCount > 0 &&
-                    isCanonicalStructurallyValidPngDataUrl(value)) {
-                    chargeChars(value, state.budget, localBudget);
-                    state.stats.omittedOpaquePngMatches += omittedCollisionCount;
-                    const applied = applyPatterns(value, state.stats, state.budget, localBudget, {
-                        charge: false,
-                        omitPattern: isOmittableOpaquePngPattern,
-                    });
-                    if (applied.text === value)
-                        return;
-                    throw immutableMatchError({
-                        matchTarget: "value",
-                        patternIndex: applied.firstPatternIndex,
-                        key,
-                        parentKey,
-                        grandparentKey,
-                    });
+            if (messageRoot !== undefined) {
+                const mime = qualifiedOpenAIAttachmentMime({ messageRoot, parent, key, path, value });
+                if (mime && canChargeChars(value, state.budget, localBudget)) {
+                    const omittedCollisionCount = opaqueAttachmentCollisionCount(value);
+                    const envelope = omittedCollisionCount > 0
+                        ? parseCanonicalProviderAttachmentDataUrl(value, mime)
+                        : null;
+                    if (envelope) {
+                        const blockingPatternIndex = scanQualifiedOpaqueAttachment({
+                            value,
+                            payloadStart: envelope.payloadStart,
+                            payloadEnd: envelope.payloadEnd,
+                            stats: state.stats,
+                            budget: state.budget,
+                            localBudget,
+                        });
+                        if (blockingPatternIndex === null)
+                            return;
+                        throw immutableMatchError({
+                            matchTarget: "value",
+                            patternIndex: blockingPatternIndex,
+                            key,
+                            parentKey,
+                            grandparentKey,
+                        });
+                    }
                 }
             }
             const applied = applyPatterns(value, state.stats, state.budget, localBudget);

@@ -1192,7 +1192,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     providerBoundaryEnabled: true,
     redactionToken: "[REDACTED_SECRET]",
     patterns: [
-      "sk-[A-Za-z0-9_\\-]{20,}",
+      "\\bsk-[A-Za-z0-9_\\-]{20,}",
       "ghp_[A-Za-z0-9]{20,}",
       "github_pat_[A-Za-z0-9_]{20,}",
       "AIza[0-9A-Za-z\\-_]{20,}",

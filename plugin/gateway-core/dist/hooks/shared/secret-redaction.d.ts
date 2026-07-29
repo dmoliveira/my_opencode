@@ -29,7 +29,7 @@ export interface SecretRedactionStats {
     redactedFields: number;
     scannedChars: number;
     scannedNodes: number;
-    omittedOpaquePngMatches: number;
+    omittedOpaqueAttachmentMatches: number;
 }
 export interface SecretRedactor {
     redactText(text: string): {
@@ -45,6 +45,6 @@ export declare function createSecretRedactor(options: {
     redactionToken: string;
     limits: SecretRedactionLimits;
     providerLimits?: ProviderSecretRedactionLimits;
-    omittableOpaquePngPatternIndex?: number | null;
+    omittableOpaqueAttachmentPatternIndex?: number | null;
 }): SecretRedactor;
 export {};

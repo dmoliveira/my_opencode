@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
+import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +26,11 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
         self.assertEqual(version, "1.18.5")
         self.assertIn('"autoupdate": False', script)
         self.assertIn('"postflight_opencode_version"', script)
+        self.assertIn("JPEG_ATTACHMENT_DATA_URL", script)
+        self.assertIn("PDF_ATTACHMENT_DATA_URL", script)
+        self.assertIn('"reasoning_without_item_id_on_wire"', script)
+        self.assertIn("provider_boundary_opaque_attachment_collision_omitted", script)
+        self.assertNotIn("provider_boundary_opaque_png_collision_omitted", script)
 
         makefile = MAKEFILE.read_text(encoding="utf-8")
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
@@ -36,6 +44,27 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
             install_lines,
             [f"npm install --global opencode-ai@{version} --no-audit --no-fund"],
         )
+
+    def test_opencode_binary_resolution_supports_basename_and_absolute_path(self) -> None:
+        spec = importlib.util.spec_from_file_location("gateway_resume_e2e_contract", SCRIPT)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader if spec else None)
+        module = importlib.util.module_from_spec(spec) if spec else None
+        if module is None or spec is None or spec.loader is None:
+            self.fail("unable to load resume E2E module")
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.modules.pop(spec.name, None)
+
+        with mock.patch.object(module.shutil, "which", return_value="/tmp/pinned-opencode"):
+            self.assertEqual(
+                module.resolve_opencode_binary(Path("opencode")),
+                Path("/tmp/pinned-opencode").resolve(),
+            )
+        absolute = ROOT / "runtime" / "pinned-opencode"
+        self.assertEqual(module.resolve_opencode_binary(absolute), absolute.resolve())
 
     def test_ci_requires_the_live_resume_transport_gate(self) -> None:
         makefile = MAKEFILE.read_text(encoding="utf-8")
@@ -69,6 +98,18 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
         )
         self.assertNotRegex(gate_body, r"(?m)^\s*-\s*make gateway-resume-redaction-e2e")
         self.assertNotIn("continue-on-error", workflow)
+
+        release_match = re.search(
+            r"^release-check:\s*(?P<dependencies>[^#\n]+)",
+            makefile,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(release_match)
+        release_dependencies = (
+            release_match.group("dependencies").split() if release_match else []
+        )
+        self.assertIn("gateway-resume-redaction-e2e", release_dependencies)
+
         help_result = subprocess.run(
             ["make", "--no-print-directory", "help"],
             cwd=ROOT,
@@ -87,7 +128,12 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
         self.assertIn("eb116f6b960f6da4115ffb262695af6162ac2045", spec)
         self.assertIn("@ai-sdk/openai` `3.0.84", spec)
         self.assertIn("da385f747e8277411d8b49c65e8a22c3bf158f4c", spec)
-        self.assertIn("canonical, structurally valid PNG", spec)
+        self.assertIn("ai` `6.0.168", spec)
+        self.assertIn("c38119a2e3df201a95a9979580f2c7a3c1b319ab", spec)
+        self.assertIn("4fedd90b17f82c24cff7fd41b7f4872412a8a7d0", spec)
+        self.assertIn("Canonical provider attachment envelope", spec)
+        self.assertIn("`image/png`, `image/jpeg`, and", spec)
+        self.assertIn("`application/pdf`", spec)
         self.assertIn("credential-free resume gate is mandatory CI", spec)
 
 

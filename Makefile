@@ -192,7 +192,7 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/install_wizard.py" --non-interactive --skip-extras --plugin-profile lean --mcp-profile research --policy-profile balanced --notify-profile skip --telemetry-profile local --post-session-profile manual-validate; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json
 
-release-check: validate selftest ## Verify release prerequisites
+release-check: validate selftest gateway-resume-redaction-e2e ## Verify release prerequisites
 	@test -n "$(VERSION)" || (echo "VERSION is required, eg: make release-check VERSION=0.1.1" && exit 2)
 	@git diff --quiet && git diff --cached --quiet || (echo "working tree must be clean before release" && exit 1)
 	@git ls-files --error-unmatch CHANGELOG.md >/dev/null 2>&1 || (echo "CHANGELOG.md is missing" && exit 1)
