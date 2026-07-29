@@ -9,6 +9,30 @@ import { fileURLToPath } from "node:url"
 const helperPath = fileURLToPath(new URL("../../../scripts/worktree_helper_command.py", import.meta.url))
 const repoDirectory = fileURLToPath(new URL("../../../", import.meta.url))
 
+const classifierScript = `
+import json
+import runpy
+import sys
+
+classify = runpy.run_path(sys.argv[1], run_name="worktree_helper_command_test")["is_direct_allowed_protected_main_command"]
+commands = json.load(sys.stdin)
+print(json.dumps([classify(command) for command in commands]))
+`
+
+function assertCommandClassifications(cases) {
+  const results = JSON.parse(
+    execFileSync("python3", ["-c", classifierScript, helperPath], {
+      encoding: "utf-8",
+      input: JSON.stringify(cases.map(([command]) => command)),
+    }),
+  )
+
+  assert.equal(results.length, cases.length)
+  for (const [index, [command, expected]] of cases.entries()) {
+    assert.equal(results[index], expected, `unexpected classification for: ${command}`)
+  }
+}
+
 function runHelper(blockedCommand) {
   try {
     return JSON.parse(
@@ -112,215 +136,92 @@ test("worktree helper treats scoped oc status commands as direct-run safe guidan
 })
 
 test("worktree helper treats protected-main bootstrap commands as direct-run safe guidance", () => {
-  const fetchReport = runHelper("git fetch --all --prune --quiet")
-  const fetchOriginReport = runHelper("git fetch --prune origin")
-  const pullReport = runHelper("git pull --rebase --autostash")
-  const pullOriginMainReport = runHelper("git pull --rebase origin main")
-  const mergeReport = runHelper("git merge --no-edit feature-branch")
-  const remoteGetUrlReport = runHelper("git remote get-url origin")
-  const switchDetachReport = runHelper("git switch --detach origin/main")
-  const checkoutDetachReport = runHelper("git checkout --detach main")
-  const restoreReport = runHelper("git restore --source main -- README.md")
-  const checkoutFileReport = runHelper("git checkout main -- README.md")
-  const stashListReport = runHelper("git stash list")
-  const pwdReport = runHelper("pwd")
-  const lsReport = runHelper("ls -la")
-  const makeValidateReport = runHelper("make validate")
-  const npmInstallReport = runHelper("npm install --yes")
-  const npmCiReport = runHelper("npm ci --yes --no-audit --no-fund")
-  const npmInitReport = runHelper("npm init -y")
-  const npmTestReport = runHelper("npm test")
-  const pnpmTestReport = runHelper("pnpm test")
-  const yarnLintReport = runHelper("yarn lint")
-  const bunBuildReport = runHelper("bun run build")
-  const pythonPytestReport = runHelper("python3 -m pytest tests/test_sample.py")
-  const nodeTestReport = runHelper("node --test test/worktree-helper-command.test.mjs")
-  const preCommitReport = runHelper("pre-commit run --files scripts/worktree_helper_command.py")
-  const eslintReport = runHelper("eslint src/index.ts")
-  const tscReport = runHelper("tsc -p tsconfig.json")
-  const ruffReport = runHelper("ruff check src")
-  const ghReport = runHelper("gh auth status")
-  const ghPrViewReport = runHelper("gh pr view --json number")
-  const ghRepoViewReport = runHelper("gh repo view --json name")
-  const dateReport = runHelper('date +"%Y-%m-%d %H:%M"')
-  const envBypassReport = runHelper("BASH_ENV=/tmp/evil.sh gh auth status")
-  const remoteSetUrlReport = runHelper("git remote set-url origin git@github.com:foo/bar.git")
-  const pushReport = runHelper("git push origin main")
-  const worktreeAddReport = runHelper("git worktree add ../repo-wt test")
-  const branchDeleteReport = runHelper("git branch -d stale-branch")
-  const stashPushReport = runHelper("git stash push --include-untracked")
-  const ghRepoEditReport = runHelper("gh repo edit --visibility private")
-
-  assert.equal(fetchReport.result, "PASS")
-  assert.equal(fetchReport.mode, "direct_run")
-  assert.equal(fetchOriginReport.result, "PASS")
-  assert.equal(fetchOriginReport.mode, "direct_run")
-  assert.equal(pullReport.result, "PASS")
-  assert.equal(pullReport.mode, "direct_run")
-  assert.equal(pullOriginMainReport.result, "PASS")
-  assert.equal(pullOriginMainReport.mode, "direct_run")
-  assert.equal(mergeReport.result, "PASS")
-  assert.equal(mergeReport.mode, "direct_run")
-  assert.equal(remoteGetUrlReport.result, "PASS")
-  assert.equal(remoteGetUrlReport.mode, "direct_run")
-  assert.equal(switchDetachReport.result, "PASS")
-  assert.equal(switchDetachReport.mode, "direct_run")
-  assert.equal(checkoutDetachReport.result, "PASS")
-  assert.equal(checkoutDetachReport.mode, "direct_run")
-  assert.equal(restoreReport.result, "PASS")
-  assert.equal(restoreReport.mode, "direct_run")
-  assert.equal(checkoutFileReport.result, "PASS")
-  assert.equal(checkoutFileReport.mode, "direct_run")
-  assert.equal(stashListReport.result, "PASS")
-  assert.equal(stashListReport.mode, "direct_run")
-  assert.equal(pwdReport.result, "PASS")
-  assert.equal(pwdReport.mode, "direct_run")
-  assert.equal(lsReport.result, "PASS")
-  assert.equal(lsReport.mode, "direct_run")
-  assert.equal(makeValidateReport.result, "PASS")
-  assert.equal(makeValidateReport.mode, "direct_run")
-  assert.equal(npmInstallReport.result, "PASS")
-  assert.equal(npmInstallReport.mode, "direct_run")
-  assert.equal(npmCiReport.result, "PASS")
-  assert.equal(npmCiReport.mode, "direct_run")
-  assert.equal(npmInitReport.result, "PASS")
-  assert.equal(npmInitReport.mode, "direct_run")
-  assert.equal(npmTestReport.result, "PASS")
-  assert.equal(npmTestReport.mode, "direct_run")
-  assert.equal(pnpmTestReport.result, "PASS")
-  assert.equal(pnpmTestReport.mode, "direct_run")
-  assert.equal(yarnLintReport.result, "PASS")
-  assert.equal(yarnLintReport.mode, "direct_run")
-  assert.equal(bunBuildReport.result, "PASS")
-  assert.equal(bunBuildReport.mode, "direct_run")
-  assert.equal(pythonPytestReport.result, "PASS")
-  assert.equal(pythonPytestReport.mode, "direct_run")
-  assert.equal(nodeTestReport.result, "PASS")
-  assert.equal(nodeTestReport.mode, "direct_run")
-  assert.equal(preCommitReport.result, "PASS")
-  assert.equal(preCommitReport.mode, "direct_run")
-  assert.equal(eslintReport.result, "PASS")
-  assert.equal(eslintReport.mode, "direct_run")
-  assert.equal(tscReport.result, "PASS")
-  assert.equal(tscReport.mode, "direct_run")
-  assert.equal(ruffReport.result, "PASS")
-  assert.equal(ruffReport.mode, "direct_run")
-  assert.equal(ghReport.result, "PASS")
-  assert.equal(ghReport.mode, "direct_run")
-  assert.equal(ghPrViewReport.result, "PASS")
-  assert.equal(ghPrViewReport.mode, "direct_run")
-  assert.equal(ghRepoViewReport.result, "PASS")
-  assert.equal(ghRepoViewReport.mode, "direct_run")
-  assert.equal(dateReport.result, "PASS")
-  assert.equal(dateReport.mode, "direct_run")
-  assert.equal(envBypassReport.result, "FAIL")
-  assert.equal(envBypassReport.mode, "maintenance_worktree")
-  assert.equal(remoteSetUrlReport.result, "PASS")
-  assert.equal(remoteSetUrlReport.mode, "direct_run")
-  assert.equal(pushReport.result, "PASS")
-  assert.equal(pushReport.mode, "direct_run")
-  assert.equal(worktreeAddReport.result, "PASS")
-  assert.equal(worktreeAddReport.mode, "direct_run")
-  assert.equal(branchDeleteReport.result, "PASS")
-  assert.equal(branchDeleteReport.mode, "direct_run")
-  assert.equal(stashPushReport.result, "PASS")
-  assert.equal(stashPushReport.mode, "direct_run")
-  assert.equal(ghRepoEditReport.result, "PASS")
-  assert.equal(ghRepoEditReport.mode, "direct_run")
+  assertCommandClassifications([
+    ["git fetch --all --prune --quiet", true],
+    ["git fetch --prune origin", true],
+    ["git pull --rebase --autostash", true],
+    ["git pull --rebase origin main", true],
+    ["git merge --no-edit feature-branch", true],
+    ["git remote get-url origin", true],
+    ["git switch --detach origin/main", true],
+    ["git checkout --detach main", true],
+    ["git restore --source main -- README.md", true],
+    ["git checkout main -- README.md", true],
+    ["git stash list", true],
+    ["pwd", true],
+    ["ls -la", true],
+    ["make validate", true],
+    ["npm install --yes", true],
+    ["npm ci --yes --no-audit --no-fund", true],
+    ["npm init -y", true],
+    ["npm test", true],
+    ["pnpm test", true],
+    ["yarn lint", true],
+    ["bun run build", true],
+    ["python3 -m pytest tests/test_sample.py", true],
+    ["node --test test/worktree-helper-command.test.mjs", true],
+    ["pre-commit run --files scripts/worktree_helper_command.py", true],
+    ["eslint src/index.ts", true],
+    ["tsc -p tsconfig.json", true],
+    ["ruff check src", true],
+    ["gh auth status", true],
+    ["gh pr view --json number", true],
+    ["gh repo view --json name", true],
+    ['date +"%Y-%m-%d %H:%M"', true],
+    ["BASH_ENV=/tmp/evil.sh gh auth status", false],
+    ["git remote set-url origin git@github.com:foo/bar.git", true],
+    ["git push origin main", true],
+    ["git worktree add ../repo-wt test", true],
+    ["git branch -d stale-branch", true],
+    ["git stash push --include-untracked", true],
+    ["gh repo edit --visibility private", true],
+  ])
 })
 
 test("worktree helper keeps direct-run guidance for wrapper and env-prefixed safe commands", () => {
-  const rtkGitReport = runHelper("rtk git status --short --branch")
-  const pathGitReport = runHelper("/usr/bin/git diff --stat HEAD~1")
-  const noPagerGitReport = runHelper("git --no-pager log --oneline -n 1")
-  const gitWithCwdReport = runHelper(`git -C ${repoDirectory} status --short --branch`)
-  const rtkGhReport = runHelper("rtk gh pr view --json number")
-  const envGhReport = runHelper("env CI=true gh auth status")
-  const envGitReport = runHelper("env GIT_PAGER=cat git log --oneline -n 1")
-
-  assert.equal(rtkGitReport.result, "PASS")
-  assert.equal(rtkGitReport.mode, "direct_run")
-  assert.equal(pathGitReport.result, "PASS")
-  assert.equal(pathGitReport.mode, "direct_run")
-  assert.equal(noPagerGitReport.result, "PASS")
-  assert.equal(noPagerGitReport.mode, "direct_run")
-  assert.equal(gitWithCwdReport.result, "PASS")
-  assert.equal(gitWithCwdReport.mode, "direct_run")
-  assert.equal(rtkGhReport.result, "PASS")
-  assert.equal(rtkGhReport.mode, "direct_run")
-  assert.equal(envGhReport.result, "PASS")
-  assert.equal(envGhReport.mode, "direct_run")
-  assert.equal(envGitReport.result, "PASS")
-  assert.equal(envGitReport.mode, "direct_run")
+  assertCommandClassifications([
+    ["rtk git status --short --branch", true],
+    ["/usr/bin/git diff --stat HEAD~1", true],
+    ["git --no-pager log --oneline -n 1", true],
+    [`git -C ${repoDirectory} status --short --branch`, true],
+    ["rtk gh pr view --json number", true],
+    ["env CI=true gh auth status", true],
+    ["env GIT_PAGER=cat git log --oneline -n 1", true],
+  ])
 })
 
 test("worktree helper stays aligned with newly allowed read-only git inspection commands", () => {
-  const statusArgsReport = runHelper("git status --short --branch")
-  const diffArgsReport = runHelper("git diff --stat HEAD~1")
-  const logArgsReport = runHelper("git log --oneline -n 5")
-  const diffOutputReport = runHelper("git diff --output=/tmp/worktree-helper-out")
-  const extDiffReport = runHelper("git diff --ext-diff HEAD~1")
-  const textconvReport = runHelper("git show --textconv HEAD")
-  const mergeBaseReport = runHelper("git merge-base HEAD main")
-  const revListReport = runHelper("git rev-list --count main..HEAD")
-  const showReport = runHelper("git show --stat HEAD")
-  const symbolicRefReport = runHelper("git symbolic-ref --short HEAD")
-  const branchListReport = runHelper("git branch --list feature/*")
-  const worktreeListReport = runHelper("git worktree list --porcelain")
-
-  assert.equal(statusArgsReport.result, "PASS")
-  assert.equal(statusArgsReport.mode, "direct_run")
-  assert.equal(diffArgsReport.result, "PASS")
-  assert.equal(diffArgsReport.mode, "direct_run")
-  assert.equal(logArgsReport.result, "PASS")
-  assert.equal(logArgsReport.mode, "direct_run")
-  assert.equal(diffOutputReport.result, "FAIL")
-  assert.equal(diffOutputReport.mode, "maintenance_worktree")
-  assert.equal(extDiffReport.result, "FAIL")
-  assert.equal(extDiffReport.mode, "maintenance_worktree")
-  assert.equal(textconvReport.result, "FAIL")
-  assert.equal(textconvReport.mode, "maintenance_worktree")
-  assert.equal(mergeBaseReport.result, "PASS")
-  assert.equal(mergeBaseReport.mode, "direct_run")
-  assert.equal(revListReport.result, "PASS")
-  assert.equal(revListReport.mode, "direct_run")
-  assert.equal(showReport.result, "PASS")
-  assert.equal(showReport.mode, "direct_run")
-  assert.equal(symbolicRefReport.result, "PASS")
-  assert.equal(symbolicRefReport.mode, "direct_run")
-  assert.equal(branchListReport.result, "PASS")
-  assert.equal(branchListReport.mode, "direct_run")
-  assert.equal(worktreeListReport.result, "PASS")
-  assert.equal(worktreeListReport.mode, "direct_run")
+  assertCommandClassifications([
+    ["git status --short --branch", true],
+    ["git diff --stat HEAD~1", true],
+    ["git log --oneline -n 5", true],
+    ["git diff --output=/tmp/worktree-helper-out", false],
+    ["git diff --ext-diff HEAD~1", false],
+    ["git show --textconv HEAD", false],
+    ["git merge-base HEAD main", true],
+    ["git rev-list --count main..HEAD", true],
+    ["git show --stat HEAD", true],
+    ["git symbolic-ref --short HEAD", true],
+    ["git branch --list feature/*", true],
+    ["git worktree list --porcelain", true],
+  ])
 })
 
 test("worktree helper stays aligned with allowed readonly sqlite inspection commands", () => {
-  const tablesReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" ".tables"')
-  const pragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"')
-  const selectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"')
-  const withSelectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"')
-  const lowercasePragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "pragma table_info(session);"')
-  const lowercaseSelectReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "select id, title from session"')
-  const mutatingPragmaReport = runHelper('sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"')
-  const multilineSelectReport = runHelper(`sqlite3 -readonly "/tmp/runtime.db" "SELECT 1
-.shell touch /tmp/pwn"`)
-
-  assert.equal(tablesReport.result, "PASS")
-  assert.equal(tablesReport.mode, "direct_run")
-  assert.equal(pragmaReport.result, "PASS")
-  assert.equal(pragmaReport.mode, "direct_run")
-  assert.equal(selectReport.result, "PASS")
-  assert.equal(selectReport.mode, "direct_run")
-  assert.equal(withSelectReport.result, "PASS")
-  assert.equal(withSelectReport.mode, "direct_run")
-  assert.equal(lowercasePragmaReport.result, "PASS")
-  assert.equal(lowercasePragmaReport.mode, "direct_run")
-  assert.equal(lowercaseSelectReport.result, "PASS")
-  assert.equal(lowercaseSelectReport.mode, "direct_run")
-  assert.equal(mutatingPragmaReport.result, "FAIL")
-  assert.equal(mutatingPragmaReport.mode, "maintenance_worktree")
-  assert.equal(multilineSelectReport.result, "FAIL")
-  assert.equal(multilineSelectReport.mode, "maintenance_worktree")
+  assertCommandClassifications([
+    ['sqlite3 -readonly "/tmp/runtime.db" ".tables"', true],
+    ['sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"', true],
+    ['sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"', true],
+    ['sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"', true],
+    ['sqlite3 -readonly "/tmp/runtime.db" "pragma table_info(session);"', true],
+    ['sqlite3 -readonly "/tmp/runtime.db" "select id, title from session"', true],
+    ['sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"', false],
+    [
+      `sqlite3 -readonly "/tmp/runtime.db" "SELECT 1
+.shell touch /tmp/pwn"`,
+      false,
+    ],
+  ])
 })
 
 test("worktree helper treats chained oc status bundles as direct-run safe guidance", () => {
