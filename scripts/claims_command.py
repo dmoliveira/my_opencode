@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from atomic_json_state import atomic_write_json, json_state_write_lock  # type: ignore
 from runtime_audit import append_event  # type: ignore
-
 
 DEFAULT_STATE_PATH = Path(
     os.environ.get(
@@ -52,8 +53,7 @@ def load_state(path: Path) -> dict[str, Any]:
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, state)
 
 
 def claims_map(state: dict[str, Any]) -> dict[str, Any]:
@@ -78,8 +78,7 @@ def load_agent_pool(path: Path) -> dict[str, Any]:
 
 
 def save_agent_pool(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, payload)
 
 
 def pool_agents_list(pool_state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -180,7 +179,7 @@ def emit(payload: dict[str, Any], as_json: bool) -> int:
 
 def normalize_claimant(raw: str) -> str:
     text = raw.strip()
-    if text.startswith("human:") or text.startswith("agent:"):
+    if text.startswith(("human:", "agent:")):
         return text
     return f"human:{text}"
 
@@ -603,18 +602,22 @@ def main(argv: list[str]) -> int:
     rest = argv[1:]
     if command in {"help", "-h", "--help"}:
         return usage()
-    if command == "claim":
-        return cmd_claim(rest, DEFAULT_STATE_PATH)
-    if command == "handoff":
-        return cmd_handoff(rest, DEFAULT_STATE_PATH)
-    if command == "accept-handoff":
-        return cmd_accept_handoff(rest, DEFAULT_STATE_PATH)
-    if command == "reject-handoff":
-        return cmd_reject_handoff(rest, DEFAULT_STATE_PATH)
-    if command == "release":
-        return cmd_release(rest, DEFAULT_STATE_PATH)
-    if command == "expire-stale":
-        return cmd_expire_stale(rest, DEFAULT_STATE_PATH)
+    mutating_handlers = {
+        "claim": cmd_claim,
+        "handoff": cmd_handoff,
+        "accept-handoff": cmd_accept_handoff,
+        "reject-handoff": cmd_reject_handoff,
+        "release": cmd_release,
+        "expire-stale": cmd_expire_stale,
+    }
+    mutating_handler = mutating_handlers.get(command)
+    if mutating_handler is not None:
+        with ExitStack() as locks:
+            for lock_path in sorted(
+                {DEFAULT_STATE_PATH, DEFAULT_AGENT_POOL_PATH}, key=str
+            ):
+                locks.enter_context(json_state_write_lock(lock_path))
+            return mutating_handler(rest, DEFAULT_STATE_PATH)
     if command == "status":
         return cmd_status(rest, DEFAULT_STATE_PATH)
     if command == "list":
