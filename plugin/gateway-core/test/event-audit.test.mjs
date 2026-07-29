@@ -4,15 +4,39 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
-import { writeGatewayEventAudit } from "../dist/audit/event-audit.js"
+import {
+  flushGatewayEventAuditExportsForTest,
+  resetGatewayEventAuditStateForTest,
+  writeGatewayEventAudit,
+} from "../dist/audit/event-audit.js"
 import GatewayCorePlugin from "../dist/index.js"
+
+const inheritedOtelToggle = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+
+const createAuditOnlyPlugin = (directory) =>
+  GatewayCorePlugin({ directory, config: { hooks: { enabled: false } } })
+
+test.beforeEach(() => {
+  resetGatewayEventAuditStateForTest()
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0"
+})
+
+test.afterEach(async () => {
+  await flushGatewayEventAuditExportsForTest()
+  resetGatewayEventAuditStateForTest()
+  if (inheritedOtelToggle === undefined) {
+    delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  } else {
+    process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = inheritedOtelToggle
+  }
+})
 
 test("gateway event audit writes dispatch entries when enabled", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-event-audit-"))
   const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin.event({ event: { type: "session.idle", properties: {} } })
 
     const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
@@ -165,7 +189,7 @@ test("gateway event audit writes command.execute.after dispatch entries", async 
   const previous = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin["command.execute.after"](
       { command: "gateway", arguments: "doctor", sessionID: "session-1" },
       { output: "ok" },
@@ -198,7 +222,7 @@ test("gateway event audit samples noisy dispatch events", async () => {
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
   process.env.MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE = "5"
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     for (let i = 0; i < 6; i += 1) {
       await plugin.event({ event: { type: "session.updated", properties: { i } } })
     }
@@ -238,7 +262,7 @@ test("gateway event audit rotates file when max bytes threshold is exceeded", as
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES = "200"
   process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS = "2"
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     for (let i = 0; i < 10; i += 1) {
       await plugin.event({ event: { type: "session.idle", properties: { i } } })
     }
@@ -475,14 +499,16 @@ test("gateway event audit re-resolves provider-specific export settings across c
 
   try {
     process.env.OPENCODE_CONFIG_PATH = join(directoryA, "opencode.json")
-    await GatewayCorePlugin({ directory: directoryA, config: {} }).event({
+    await createAuditOnlyPlugin(directoryA).event({
       event: { type: "session.idle", properties: { probe: "langfuse-switch" } },
     })
+    await flushGatewayEventAuditExportsForTest()
 
     process.env.OPENCODE_CONFIG_PATH = join(directoryB, "opencode.json")
-    await GatewayCorePlugin({ directory: directoryB, config: {} }).event({
+    await createAuditOnlyPlugin(directoryB).event({
       event: { type: "session.idle", properties: { probe: "otlp-switch" } },
     })
+    await flushGatewayEventAuditExportsForTest()
 
     const langfuseRequest = requests.find(
       (request) => request.url === "http://localhost:3005/api/public/otel/v1/traces",
@@ -568,8 +594,9 @@ test("gateway event audit exports OTLP span when observability enabled", async (
   )
 
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin.event({ event: { type: "session.idle", properties: { probe: true } } })
+    await flushGatewayEventAuditExportsForTest()
 
     assert.ok(requests.length >= 1)
     assert.equal(requests[0].url, "http://localhost:3005/api/public/otel/v1/traces")
@@ -652,6 +679,7 @@ test("gateway event audit dedupes opt-in benign skip exports when file audit is 
       audit_dedupe_key: "otel-skip",
       audit_dedupe_window_ms: 30000,
     })
+    await flushGatewayEventAuditExportsForTest()
 
     assert.equal(requests.length, 1)
     assert.equal(requests[0]?.url, "http://localhost:3005/api/public/otel/v1/traces")
@@ -717,8 +745,9 @@ test("gateway event audit derives OTLP auth header from Langfuse keys", async ()
   )
 
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin.event({ event: { type: "session.idle", properties: { probe: "keys" } } })
+    await flushGatewayEventAuditExportsForTest()
 
     assert.ok(requests.length >= 1)
     const headers = requests[0].init?.headers ?? {}
@@ -796,8 +825,9 @@ test("gateway event audit exports to plain OTLP collector without auth headers",
   )
 
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin.event({ event: { type: "session.idle", properties: { probe: "otlp" } } })
+    await flushGatewayEventAuditExportsForTest()
 
     assert.ok(requests.length >= 1)
     assert.equal(requests[0].url, "http://localhost:4318/v1/traces")
@@ -857,7 +887,7 @@ test("gateway event audit skips config reads when export is explicitly disabled"
   }
 
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin.event({ event: { type: "session.idle", properties: { probe: "disabled" } } })
     assert.equal(requests.length, 0)
   } finally {
@@ -908,7 +938,7 @@ test("gateway event audit returns early when fetch is unavailable", async () => 
   )
 
   try {
-    const plugin = GatewayCorePlugin({ directory, config: {} })
+    const plugin = createAuditOnlyPlugin(directory)
     await plugin.event({ event: { type: "session.idle", properties: { probe: "no-fetch" } } })
     const auditPath = join(directory, ".opencode", "gateway-events.jsonl")
     const lines = readFileSync(auditPath, "utf-8").split(/\r?\n/).filter(Boolean)
