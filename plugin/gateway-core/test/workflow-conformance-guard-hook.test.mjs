@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execSync } from "node:child_process"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, relative } from "node:path"
 import test from "node:test"
@@ -15,8 +15,19 @@ function commitAll(directory, message) {
   })
 }
 
+function readAuditEntries(directory) {
+  return readFileSync(join(directory, ".opencode", "gateway-events.jsonl"), "utf-8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+}
+
 test("workflow-conformance-guard reroutes git commit on protected branch", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0"
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
     const plugin = GatewayCorePlugin({
@@ -38,7 +49,24 @@ test("workflow-conformance-guard reroutes git commit on protected branch", async
     )
     assert.match(payload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
     assert.match(payload.args.command, /--command 'git commit -m "msg"' --json/)
+    assert.ok(
+      readAuditEntries(directory).some(
+        (entry) =>
+          entry.hook === "workflow-conformance-guard" &&
+          entry.reason_code === "commit_on_protected_branch_rerouted",
+      ),
+    )
   } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
@@ -104,7 +132,7 @@ test("workflow-conformance-guard blocks direct maintenance-helper execute mode o
   }
 })
 
-test("workflow-conformance-guard allows safe inspection bash commands on protected branches", async () => {
+test("workflow-conformance-guard keeps an allowed bash command unchanged on protected branches", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -119,333 +147,16 @@ test("workflow-conformance-guard allows safe inspection bash commands on protect
         },
       },
     })
+    const command =
+      "CI=true GIT_TERMINAL_PROMPT=0 GIT_EDITOR=true GIT_PAGER=cat PAGER=cat GCM_INTERACTIVE=never git --no-pager log --oneline --decorate --graph -20"
+    const payload = { args: { command } }
 
     await plugin["tool.execute.before"](
       { tool: "bash", sessionID: "session-workflow-safe" },
-      { args: { command: "git status --short --branch" } }
+      payload,
     )
 
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-rtk-safe" },
-      { args: { command: "rtk git status --short --branch" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-no-pager-log-safe" },
-      { args: { command: "git --no-pager log --oneline --decorate --graph -20" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-no-pager-status-safe" },
-      { args: { command: "git --no-pager status --short --branch" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-worktree-list-safe" },
-      { args: { command: `git -C "${directory}" worktree list` } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-worktree-list-abs-safe" },
-      { args: { command: `/usr/bin/git -C "${directory}" worktree list` } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-env-no-pager-log-safe" },
-      {
-        args: {
-          command:
-            "CI=true GIT_TERMINAL_PROMPT=0 GIT_EDITOR=true GIT_PAGER=cat PAGER=cat GCM_INTERACTIVE=never git --no-pager log --oneline --decorate --graph -20",
-        },
-      }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-readonly-safe" },
-      { args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".tables"' } }
-    )
-
-    const sqliteSchemaPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".schema session"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-dot-schema-safe" },
-      sqliteSchemaPayload
-    )
-    assert.equal(
-      sqliteSchemaPayload.args.command,
-      'sqlite3 -readonly "/tmp/runtime.db" ".schema session"',
-    )
-
-    const sqlitePragmaPayload = {
-      args: {
-        command:
-          'CI=true OPENCODE_SESSION_ID=demo sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"',
-      },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-schema-safe" },
-      sqlitePragmaPayload
-    )
-    assert.equal(
-      sqlitePragmaPayload.args.command,
-      'CI=true OPENCODE_SESSION_ID=demo sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session);"',
-    )
-
-    const sqliteSelectPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-select-safe" },
-      sqliteSelectPayload
-    )
-    assert.equal(
-      sqliteSelectPayload.args.command,
-      'sqlite3 -readonly "/tmp/runtime.db" "SELECT id, title FROM session"',
-    )
-
-    const sqliteWithPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-with-safe" },
-      sqliteWithPayload,
-    )
-    assert.equal(
-      sqliteWithPayload.args.command,
-      'sqlite3 -readonly "/tmp/runtime.db" "WITH hits AS (SELECT 1 AS id) SELECT id FROM hits;"',
-    )
-
-    const ocBundlePayload = {
-      args: { command: "oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true" },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-bundle-safe" },
-      ocBundlePayload,
-    )
-    assert.equal(
-      ocBundlePayload.args.command,
-      "oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true",
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-abs-safe" },
-      { args: { command: "/usr/bin/gh pr view --json number" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-fetch-safe" },
-      { args: { command: "git fetch" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-fetch-prune-safe" },
-      { args: { command: "git fetch --prune" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-fetch-prune-origin-safe" },
-      { args: { command: "git fetch --prune origin" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-fetch-all-prune-quiet-safe" },
-      { args: { command: "git fetch --all --prune --quiet" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-remote-verbose-safe" },
-      { args: { command: "git remote -v" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-remote-get-url-safe" },
-      { args: { command: "git remote get-url origin" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-remote-add-safe" },
-      { args: { command: "git remote add origin https://github.com/foo/bar.git" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-remote-set-url-safe" },
-      { args: { command: "git remote set-url origin git@github.com:foo/bar.git" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-merge-base-safe" },
-      { args: { command: "git merge-base HEAD main" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-rev-list-safe" },
-      { args: { command: "git rev-list --count main..HEAD" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-show-safe" },
-      { args: { command: "git show --stat HEAD" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-symbolic-ref-safe" },
-      { args: { command: "git symbolic-ref --short HEAD" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-detach-main-safe" },
-      { args: { command: "git switch --detach origin/main" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-push-main-safe" },
-      { args: { command: "git push -u origin main" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-pull-autostash-safe" },
-      { args: { command: "git pull --rebase --autostash" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-pull-origin-main-safe" },
-      { args: { command: "git pull --rebase origin main" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-merge-no-edit-safe" },
-      { args: { command: "git merge --no-edit feature/test" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-merge-ff-only-safe" },
-      { args: { command: "git merge --ff-only origin/main" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-worktree-add-safe" },
-      {
-        args: {
-          command:
-            'git worktree add -b feature/test "/tmp/gateway-linked" origin/main',
-        },
-      }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-worktree-remove-safe" },
-      { args: { command: 'git worktree remove "/tmp/gateway-linked"' } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-branch-delete-safe" },
-      { args: { command: "git branch -d feature/test" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-cleanup-chain-safe" },
-      {
-        args: {
-          command:
-            'git worktree remove "/tmp/gateway-linked" && git branch -d feature/test',
-        },
-      }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-stash-push-safe" },
-      { args: { command: 'git stash push -m "temp" -- docs/plan/docs-automation-summary.md' } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-stash-list-safe" },
-      { args: { command: "git stash list" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-safe-chain" },
-      { args: { command: "git stash list && git status --short --branch" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-restore-safe" },
-      { args: { command: "git restore --source main -- docs/plan/docs-automation-summary.md" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-checkout-restore-safe" },
-      { args: { command: "git checkout main -- docs/plan/docs-automation-summary.md" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-current-safe" },
-      { args: { command: "oc current" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-next-safe" },
-      { args: { command: "oc next" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-next-scoped-safe" },
-      { args: { command: "oc next --scope dmoliveira/my_opencode --limit 5" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-queue-scoped-safe" },
-      { args: { command: "oc queue --scope dmoliveira/my_opencode --limit 10" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-current-json-safe" },
-      { args: { command: "oc current --format json" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-resume-safe" },
-      { args: { command: "oc resume --task task_171" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-done-safe" },
-      { args: { command: "oc done task_171 --note \"completed\"" } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-oc-end-session-safe" },
-      { args: { command: "oc end-session --outcome done session_62 --achievements \"cleanup complete\"" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-branch-contains-safe" },
-      { args: { command: "git branch -r --contains origin/main" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-auth-status-safe" },
-      { args: { command: "gh auth status" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-repo-view-safe" },
-      { args: { command: "gh repo view --json nameWithOwner" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-repo-create-safe" },
-      { args: { command: "gh repo create foo/bar --private --source . --remote origin --push" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-repo-edit-safe" },
-      { args: { command: "gh repo edit --visibility private" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-api-user-safe" },
-      { args: { command: "gh api user" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-date-safe" },
-      { args: { command: 'date +"%Y-%m-%d %H:%M"' } }
-    )
-
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-npm-install-safe" },
-      { args: { command: "npm install --yes" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-npm-ci-safe" },
-      { args: { command: "npm ci --yes --no-audit --no-fund" } }
-    )
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-npm-init-safe" },
-      { args: { command: "npm init -y" } }
-    )
-
-    const npmPrefixPayload = { args: { command: "npm install --yes --prefix /tmp/other-project" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-npm-prefix-blocked" },
-      npmPrefixPayload
-    )
-    assert.match(npmPrefixPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
+    assert.equal(payload.args.command, command)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -566,8 +277,12 @@ test("workflow-conformance-guard allows apply_patch targeting a linked worktree 
   }
 })
 
-test("workflow-conformance-guard reroutes mutating bash commands on protected branches", async () => {
+test("workflow-conformance-guard reroutes representative unsafe bash commands on protected branches", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-workflow-guard-"))
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousOtel = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0"
   try {
     execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
     const plugin = GatewayCorePlugin({
@@ -581,153 +296,46 @@ test("workflow-conformance-guard reroutes mutating bash commands on protected br
         },
       },
     })
+    const cases = [
+      ["session-workflow-bash-mutate", "echo hi > file.txt"],
+      ["session-workflow-command-substitution", 'git status --short --branch "$(touch /tmp/pwn)"'],
+      ["session-workflow-env-expansion", 'CI="$(id)" git fetch'],
+      [
+        "session-workflow-sqlite-env-bypass",
+        'BASH_ENV=/tmp/evil.sh sqlite3 -readonly "/tmp/runtime.db" ".tables"',
+      ],
+    ]
 
-    const mutatePayload = { args: { command: "echo hi > file.txt" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-bash-mutate" },
-      mutatePayload
-    )
-    assert.match(mutatePayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-    assert.match(mutatePayload.args.command, /--command 'echo hi > file\.txt' --json/)
-
-    const ghPayload = { args: { command: "gh api -X POST repos/foo/bar/issues" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-gh-api" },
-      ghPayload
-    )
-    assert.match(ghPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const chainPayload = { args: { command: "git status --short --branch && echo hi > file.txt" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-chain" },
-      chainPayload
-    )
-    assert.match(chainPayload.args.command, /--command 'git status --short --branch && echo hi > file\.txt' --json/)
-
-    const pullPayload = { args: { command: "git pull --rebase origin feature/x" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-refspec-pull" },
-      pullPayload
-    )
-    assert.match(pullPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const fetchPayload = { args: { command: "git fetch origin +feature/x:main" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-fetch-refspec" },
-      fetchPayload
-    )
-    assert.match(fetchPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const stashPopPayload = { args: { command: "git stash pop" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-stash-pop-rerouted" },
-      stashPopPayload
-    )
-    assert.match(stashPopPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const redirectPayload = { args: { command: "git status --short --branch > file.txt" } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-redirection" },
-      redirectPayload
-    )
-    assert.match(redirectPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const commandSubstitutionPayload = {
-      args: { command: 'git status --short --branch "$(touch /tmp/pwn)"' },
+    for (const [sessionID, command] of cases) {
+      const payload = { args: { command } }
+      await plugin["tool.execute.before"]({ tool: "bash", sessionID }, payload)
+      assert.match(
+        payload.args.command,
+        /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/,
+      )
+      assert.ok(
+        payload.args.command.includes(`--command '${command}' --json`),
+        `expected exact shell-quoted command: ${command}`,
+      )
     }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-command-substitution" },
-      commandSubstitutionPayload
+    assert.ok(
+      readAuditEntries(directory).some(
+        (entry) =>
+          entry.hook === "workflow-conformance-guard" &&
+          entry.reason_code === "bash_on_protected_branch_rerouted",
+      ),
     )
-    assert.match(commandSubstitutionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-    assert.match(commandSubstitutionPayload.args.command, /--command 'git status --short --branch "\$\(touch \/tmp\/pwn\)"' --json/)
-
-    const envExpansionPayload = { args: { command: 'CI="$(id)" git fetch' } }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-env-expansion" },
-      envExpansionPayload
-    )
-    assert.match(envExpansionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-    assert.match(envExpansionPayload.args.command, /--command 'CI="\$\(id\)" git fetch' --json/)
-
-    const sqliteShellPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" -cmd ".shell touch /tmp/pwn" ".tables"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-shell" },
-      sqliteShellPayload
-    )
-    assert.match(sqliteShellPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqliteOutputPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" ".output /tmp/dump.txt"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-output" },
-      sqliteOutputPayload
-    )
-    assert.match(sqliteOutputPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqlitePragmaMutatePayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "PRAGMA journal_mode=WAL;"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-pragma-mutate" },
-      sqlitePragmaMutatePayload
-    )
-    assert.match(sqlitePragmaMutatePayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqliteWithInsertPayload = {
-      args: {
-        command:
-          'sqlite3 -readonly "/tmp/runtime.db" "WITH recent AS (SELECT 1) INSERT INTO audit_log SELECT * FROM recent;"',
-      },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-with-insert" },
-      sqliteWithInsertPayload
-    )
-    assert.match(sqliteWithInsertPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqliteSelectBypassPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT 1; DELETE FROM audit_log;"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-select-bypass" },
-      sqliteSelectBypassPayload
-    )
-    assert.match(sqliteSelectBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqlitePragmaBypassPayload = {
-      args: {
-        command:
-          'sqlite3 -readonly "/tmp/runtime.db" "PRAGMA table_info(session); INSERT INTO audit_log VALUES (1);"',
-      },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-pragma-bypass" },
-      sqlitePragmaBypassPayload
-    )
-    assert.match(sqlitePragmaBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqliteLoadExtensionPayload = {
-      args: { command: 'sqlite3 -readonly "/tmp/runtime.db" "SELECT load_extension(\"/tmp/pwn\");"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-load-extension" },
-      sqliteLoadExtensionPayload
-    )
-    assert.match(sqliteLoadExtensionPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
-
-    const sqliteEnvBypassPayload = {
-      args: { command: 'BASH_ENV=/tmp/evil.sh sqlite3 -readonly "/tmp/runtime.db" ".tables"' },
-    }
-    await plugin["tool.execute.before"](
-      { tool: "bash", sessionID: "session-workflow-sqlite-env-bypass" },
-      sqliteEnvBypassPayload
-    )
-    assert.match(sqliteEnvBypassPayload.args.command, /python3 ['"].*scripts\/worktree_helper_command\.py['"] maintenance --directory/)
   } finally {
+    if (previousAudit === undefined) {
+      delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    } else {
+      process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    }
+    if (previousOtel === undefined) {
+      delete process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED
+    } else {
+      process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = previousOtel
+    }
     rmSync(directory, { recursive: true, force: true })
   }
 })
