@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from atomic_json_state import atomic_write_json, json_state_write_lock  # type: ignore
 from governance_policy import check_operation  # type: ignore
-
 
 DEFAULT_POOL_PATH = Path(
     os.environ.get(
@@ -56,8 +56,7 @@ def load_pool(path: Path) -> dict[str, Any]:
 
 
 def save_pool(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(path, payload)
 
 
 def emit(payload: dict[str, Any], as_json: bool) -> int:
@@ -301,13 +300,15 @@ def main(argv: list[str]) -> int:
     if command in {"help", "-h", "--help"}:
         return usage()
     if command == "spawn":
-        return cmd_spawn(rest)
+        with json_state_write_lock(DEFAULT_POOL_PATH):
+            return cmd_spawn(rest)
     if command == "list":
         return cmd_list(rest)
     if command == "health":
         return cmd_health(rest)
     if command == "drain":
-        return cmd_drain(rest)
+        with json_state_write_lock(DEFAULT_POOL_PATH):
+            return cmd_drain(rest)
     if command == "logs":
         return cmd_logs(rest)
     if command == "doctor":
