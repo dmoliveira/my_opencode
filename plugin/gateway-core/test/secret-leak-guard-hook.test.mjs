@@ -3,10 +3,16 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
-import { crc32, deflateSync } from "node:zlib"
 
 import GatewayCorePlugin from "../dist/index.js"
 import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
+import {
+  attachmentCollisionFixtures,
+  collisionBase64Payload,
+  collisionPngBuffer,
+  GOOGLE_KEY_COLLISION,
+  pngDataUrl,
+} from "./fixtures/provider-boundary-fixtures.mjs"
 
 function secretConfig(overrides = {}) {
   return {
@@ -73,35 +79,50 @@ function reasoningMessage(ciphertext) {
   }
 }
 
-const GOOGLE_KEY_COLLISION = `AIza${"A".repeat(20)}`
-
-function pngChunk(type, data = Buffer.alloc(0)) {
-  const typeBytes = Buffer.from(type, "ascii")
-  const header = Buffer.alloc(4)
-  header.writeUInt32BE(data.length)
-  const checksum = Buffer.alloc(4)
-  checksum.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])) >>> 0)
-  return Buffer.concat([header, typeBytes, data, checksum])
-}
+const GOOGLE_KEY_PATTERN = "AIza[0-9A-Za-z\\-_]{20,}"
 
 function pngCollisionDataUrl() {
-  const headerData = Buffer.alloc(13)
-  headerData.writeUInt32BE(1, 0)
-  headerData.writeUInt32BE(1, 4)
-  headerData[8] = 8
-  headerData[9] = 6
-  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
-  assert.equal(collisionBytes.toString("base64"), GOOGLE_KEY_COLLISION)
-  const png = Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", headerData),
-    pngChunk("ruSt", Buffer.concat([Buffer.from([0]), collisionBytes])),
-    pngChunk("IDAT", deflateSync(Buffer.from([0, 0, 0, 0, 255]))),
-    pngChunk("IEND"),
-  ])
-  const url = `data:image/png;base64,${png.toString("base64")}`
+  const url = pngDataUrl(collisionPngBuffer())
   assert.equal(url.includes(GOOGLE_KEY_COLLISION), true)
   return url
+}
+
+function attachmentRedactor({
+  patterns = [GOOGLE_KEY_PATTERN],
+  omittablePatternIndex = 0,
+  limits = {},
+  providerLimits = {},
+} = {}) {
+  return createSecretRedactor({
+    patterns,
+    omittableOpaqueAttachmentPatternIndex: omittablePatternIndex,
+    redactionToken: "[REDACTED]",
+    limits: {
+      maxDepth: 12,
+      maxNodes: 20_000,
+      maxChars: 2_097_152,
+      ...limits,
+    },
+    providerLimits: {
+      maxMessages: 20_000,
+      maxNodes: 1_000_000,
+      maxChars: 134_217_728,
+      maxMessageChars: 16_777_216,
+      ...providerLimits,
+    },
+  })
+}
+
+function jsonStringChars(value) {
+  if (typeof value === "string") return value.length
+  if (Array.isArray(value)) {
+    return value.reduce((total, child) => total + jsonStringChars(child), 0)
+  }
+  if (!value || typeof value !== "object") return 0
+  return Object.entries(value).reduce(
+    (total, [key, child]) => total + key.length + jsonStringChars(child),
+    0,
+  )
 }
 
 function pngAttachmentMessage(url = pngCollisionDataUrl()) {
@@ -649,20 +670,8 @@ test("provider attachment exception is unavailable to an exact configured patter
 
 test("provider attachment exception omits only the built-in Google detector", () => {
   const message = pngAttachmentMessage()
-  const redactor = createSecretRedactor({
-    patterns: [
-      "AIza[0-9A-Za-z\\-_]{20,}",
-      "iVBORw0KGgo[A-Za-z0-9+/=]{10,}",
-    ],
-    omittableOpaqueAttachmentPatternIndex: 0,
-    redactionToken: "[REDACTED]",
-    limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-    providerLimits: {
-      maxMessages: 20_000,
-      maxNodes: 1_000_000,
-      maxChars: 134_217_728,
-      maxMessageChars: 16_777_216,
-    },
+  const redactor = attachmentRedactor({
+    patterns: [GOOGLE_KEY_PATTERN, "iVBORw0KGgo[A-Za-z0-9+/=]{10,}"],
   })
 
   assert.throws(
@@ -735,18 +744,7 @@ test("provider attachment exception fails closed for wrong provenance and malfor
     message.parts[0].state.attachments[0].url = `${url}AAAA`
   })
   for (const message of variants) {
-    const redactor = createSecretRedactor({
-      patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-      omittableOpaqueAttachmentPatternIndex: 0,
-      redactionToken: "[REDACTED]",
-      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-      providerLimits: {
-        maxMessages: 20_000,
-        maxNodes: 1_000_000,
-        maxChars: 134_217_728,
-        maxMessageChars: 16_777_216,
-      },
-    })
+    const redactor = attachmentRedactor()
     assert.throws(
       () => redactor.redactProviderMessages([message]),
       (error) => {
@@ -851,18 +849,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
   }
 
   for (const [variantIndex, message] of variants.entries()) {
-    const redactor = createSecretRedactor({
-      patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-      omittableOpaqueAttachmentPatternIndex: 0,
-      redactionToken: "[REDACTED]",
-      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-      providerLimits: {
-        maxMessages: 20_000,
-        maxNodes: 1_000_000,
-        maxChars: 134_217_728,
-        maxMessageChars: 16_777_216,
-      },
-    })
+    const redactor = attachmentRedactor()
     assert.throws(
       () => redactor.redactProviderMessages([message]),
       (error) => {
@@ -882,12 +869,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
   ]) {
     assert.throws(
       () =>
-        createSecretRedactor({
-          patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-          omittableOpaqueAttachmentPatternIndex: 0,
-          redactionToken: "[REDACTED]",
-          limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-        }).redactProviderMessages(malformedMessages),
+        attachmentRedactor().redactProviderMessages(malformedMessages),
       (error) => error.code === "malformed_provider_object",
     )
   }
@@ -900,12 +882,7 @@ test("provider traversal rejects exotic property graphs without invoking accesso
   try {
     assert.throws(
       () =>
-        createSecretRedactor({
-          patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-          omittableOpaqueAttachmentPatternIndex: 0,
-          redactionToken: "[REDACTED]",
-          limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-        }).redactProviderMessages([pngAttachmentMessage(url)]),
+        attachmentRedactor().redactProviderMessages([pngAttachmentMessage(url)]),
       (error) => error.code === "malformed_provider_object",
     )
   } finally {
@@ -987,18 +964,7 @@ test("provider attachment exception tolerates stale nested references after impo
   message.parts[0].state.attachments[0].messageID = "msg_source_before_fork"
   message.parts[0].state.attachments[0].sessionID = "ses_source_before_fork"
 
-  const redactor = createSecretRedactor({
-    patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-    omittableOpaqueAttachmentPatternIndex: 0,
-    redactionToken: "[REDACTED]",
-    limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-    providerLimits: {
-      maxMessages: 20_000,
-      maxNodes: 1_000_000,
-      maxChars: 134_217_728,
-      maxMessageChars: 16_777_216,
-    },
-  })
+  const redactor = attachmentRedactor()
 
   assert.doesNotThrow(() => redactor.redactProviderMessages([message]))
 })
@@ -1010,18 +976,7 @@ test("provider attachment exception revisits trusted attachment aliases through 
     const message = trustedFirst
       ? { ...base, future: alias }
       : { future: alias, ...base }
-    const redactor = createSecretRedactor({
-      patterns: ["AIza[0-9A-Za-z\\-_]{20,}"],
-      omittableOpaqueAttachmentPatternIndex: 0,
-      redactionToken: "[REDACTED]",
-      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
-      providerLimits: {
-        maxMessages: 20_000,
-        maxNodes: 1_000_000,
-        maxChars: 134_217_728,
-        maxMessageChars: 16_777_216,
-      },
-    })
+    const redactor = attachmentRedactor()
     assert.throws(
       () => redactor.redactProviderMessages([message]),
       (error) => {
@@ -1033,43 +988,57 @@ test("provider attachment exception revisits trusted attachment aliases through 
   }
 })
 
-test("provider attachment exception charges valid envelopes exactly once", () => {
-  const makeRedactor = (maxMessageChars) =>
-    createSecretRedactor({
-      patterns: [
-        "AIza[0-9A-Za-z\\-_]{20,}",
-        "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*[A-Za-z0-9_\\-]{12,}",
-      ],
-      omittableOpaqueAttachmentPatternIndex: 0,
-      redactionToken: "[REDACTED]",
-      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+test("provider attachment accounting charges each envelope exactly once", () => {
+  const shortFixture = attachmentCollisionFixtures().find(
+    (fixture) => fixture.mime === "application/pdf",
+  )
+  assert.ok(shortFixture)
+  const longPayload = collisionBase64Payload(
+    Buffer.from("%PDF-1.7\n", "ascii"),
+    Buffer.concat([Buffer.from("\n%%EOF\n", "ascii"), Buffer.alloc(3)]),
+  )
+  const longFixture = {
+    ...shortFixture,
+    url: `data:application/pdf;base64,${longPayload}`,
+  }
+  assert.equal(longFixture.url.length - shortFixture.url.length, 4)
+
+  const messageFor = (fixture) => {
+    const message = pngAttachmentMessage(fixture.url)
+    message.parts[0].state.attachments[0].mime = fixture.mime
+    return message
+  }
+  const cases = [shortFixture, longFixture].map((fixture) => {
+    const message = messageFor(fixture)
+    return { fixture, expectedChars: jsonStringChars(message) }
+  })
+  assert.equal(cases[1].expectedChars - cases[0].expectedChars, 4)
+
+  for (const { fixture, expectedChars } of cases) {
+    const exactStats = attachmentRedactor({
       providerLimits: {
-        maxMessages: 20_000,
-        maxNodes: 1_000_000,
-        maxChars: 134_217_728,
-        maxMessageChars,
+        maxChars: expectedChars,
+        maxMessageChars: expectedChars,
       },
-    })
+    }).redactProviderMessages([messageFor(fixture)])
+    assert.equal(exactStats.scannedChars, expectedChars)
+    assert.equal(exactStats.omittedOpaqueAttachmentMatches, 1)
+    assert.equal(exactStats.matches, 0)
 
-  const baseline = makeRedactor(16_777_216).redactProviderMessages([
-    pngAttachmentMessage(),
-  ])
-  assert.equal(baseline.matches, 1)
-  assert.equal(baseline.redactedFields, 1)
-  assert.equal(baseline.omittedOpaqueAttachmentMatches, 1)
-
-  assert.doesNotThrow(() =>
-    makeRedactor(baseline.scannedChars).redactProviderMessages([
-      pngAttachmentMessage(),
-    ]),
-  )
-  assert.throws(
-    () =>
-      makeRedactor(baseline.scannedChars - 1).redactProviderMessages([
-        pngAttachmentMessage(),
-      ]),
-    /text_limit/,
-  )
+    for (const constrainedLimit of ["maxChars", "maxMessageChars"]) {
+      assert.throws(
+        () =>
+          attachmentRedactor({
+            providerLimits: {
+              maxChars: expectedChars,
+              maxMessageChars: expectedChars,
+              [constrainedLimit]: expectedChars - 1,
+            },
+          }).redactProviderMessages([messageFor(fixture)]),
+        (error) => error.code === "text_limit",
+      )
+    }
+  }
 })
 
 test("provider redactor projects only tool state metadata that OpenCode dispatches", () => {
@@ -1310,6 +1279,15 @@ test("provider traversal revisits qualified aliases under every current path", (
   assert.throws(
     () => directRedactor().redactProviderMessages([trusted, untrusted]),
     (error) => error.code === "immutable_match",
+  )
+})
+
+test("provider depth limit accepts the exact boundary and rejects one level over", () => {
+  const redactor = directRedactor({ limits: { maxDepth: 2 } })
+  assert.doesNotThrow(() => redactor.redactProviderMessages([{ future: "safe" }]))
+  assert.throws(
+    () => redactor.redactProviderMessages([{ future: { text: "safe" } }]),
+    (error) => error.code === "depth_limit",
   )
 })
 
