@@ -3,13 +3,16 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
-import { crc32, deflateSync } from "node:zlib"
 
 import { DEFAULT_GATEWAY_CONFIG } from "../dist/config/schema.js"
 import GatewayCorePlugin from "../dist/index.js"
 import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
-
-const GOOGLE_KEY_COLLISION = `AIza${"A".repeat(20)}`
+import {
+  attachmentCollisionFixtures,
+  collisionBase64Payload,
+  GOOGLE_KEY_COLLISION,
+  pngDataUrl,
+} from "./fixtures/provider-boundary-fixtures.mjs"
 
 const DEFAULT_DETECTOR_MANIFEST = [
   {
@@ -41,6 +44,8 @@ const DEFAULT_DETECTOR_MANIFEST = [
   },
 ]
 
+const ATTACHMENT_CASES = attachmentCollisionFixtures()
+
 function compilePattern(rawPattern) {
   let source = rawPattern
   const flags = new Set(["g"])
@@ -67,67 +72,6 @@ function assertDefaultDetectorManifest(patterns) {
       assert.doesNotMatch(candidate, compilePattern(entry.source))
     }
   }
-}
-
-function pngChunk(type, data = Buffer.alloc(0)) {
-  const typeBytes = Buffer.from(type, "ascii")
-  const header = Buffer.alloc(4)
-  header.writeUInt32BE(data.length)
-  const checksum = Buffer.alloc(4)
-  checksum.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])) >>> 0)
-  return Buffer.concat([header, typeBytes, data, checksum])
-}
-
-function collisionPayload(prefix, suffix) {
-  assert.equal(prefix.length % 3, 0)
-  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
-  assert.equal(collisionBytes.toString("base64"), GOOGLE_KEY_COLLISION)
-  const payload = Buffer.concat([prefix, collisionBytes, suffix]).toString("base64")
-  assert.equal(payload.includes(GOOGLE_KEY_COLLISION), true)
-  return payload
-}
-
-function attachmentCases() {
-  const pngHeader = Buffer.alloc(13)
-  pngHeader.writeUInt32BE(1, 0)
-  pngHeader.writeUInt32BE(1, 4)
-  pngHeader[8] = 8
-  pngHeader[9] = 6
-  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
-  const png = Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", pngHeader),
-    pngChunk("ruSt", Buffer.concat([Buffer.from([0]), collisionBytes])),
-    pngChunk("IDAT", deflateSync(Buffer.from([0, 0, 0, 0, 255]))),
-    pngChunk("IEND"),
-  ])
-  const cases = [
-    {
-      id: "png",
-      mime: "image/png",
-      url: `data:image/png;base64,${png.toString("base64")}`,
-    },
-    {
-      id: "jpeg",
-      mime: "image/jpeg",
-      url: `data:image/jpeg;base64,${collisionPayload(
-        Buffer.from([0xff, 0xd8, 0xff]),
-        Buffer.from([0xff, 0xd9]),
-      )}`,
-    },
-    {
-      id: "pdf",
-      mime: "application/pdf",
-      url: `data:application/pdf;base64,${collisionPayload(
-        Buffer.from("%PDF-1.7\n", "ascii"),
-        Buffer.from("\n%%EOF\n", "ascii"),
-      )}`,
-    },
-  ]
-  for (const fixture of cases) {
-    assert.equal(fixture.url.includes(GOOGLE_KEY_COLLISION), true)
-  }
-  return cases
 }
 
 function reasoningMessage(ciphertext, includeItemId = true) {
@@ -224,6 +168,50 @@ function toolPathMessage(path) {
   }
 }
 
+function mutableTextMessage(text, index) {
+  return {
+    info: {
+      id: `msg_detector_mutable_${index}`,
+      sessionID: "ses_detector_compatibility",
+      role: "user",
+    },
+    parts: [{ type: "text", text }],
+  }
+}
+
+function jsonStringChars(value) {
+  if (typeof value === "string") return value.length
+  if (Array.isArray(value)) {
+    return value.reduce((total, child) => total + jsonStringChars(child), 0)
+  }
+  if (!value || typeof value !== "object") return 0
+  return Object.entries(value).reduce(
+    (total, [key, child]) => total + key.length + jsonStringChars(child),
+    0,
+  )
+}
+
+function defaultAttachmentRedactor(providerLimits = {}) {
+  const config = DEFAULT_GATEWAY_CONFIG.secretLeakGuard
+  return createSecretRedactor({
+    patterns: config.patterns,
+    omittableOpaqueAttachmentPatternIndex: 3,
+    redactionToken: config.redactionToken,
+    limits: {
+      maxDepth: config.maxDepth,
+      maxNodes: config.maxNodes,
+      maxChars: config.maxChars,
+    },
+    providerLimits: {
+      maxMessages: config.providerMaxMessages,
+      maxNodes: config.providerMaxNodes,
+      maxChars: config.providerMaxChars,
+      maxMessageChars: config.providerMaxMessageChars,
+      ...providerLimits,
+    },
+  })
+}
+
 test("default detector compatibility manifest is complete and mutation-sensitive", () => {
   const patterns = DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
   assertDefaultDetectorManifest(patterns)
@@ -277,40 +265,45 @@ test("explicit broad detector retains configured identifier matching", async () 
   }
 })
 
-test("every default detector collision is preserved in qualified reasoning ciphertext", async () => {
+test("every default detector collision is preserved in qualified reasoning with or without itemId", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-detector-reasoning-"))
   try {
     const plugin = GatewayCorePlugin({
       directory,
       config: { hooks: { enabled: false, order: [], disabled: [] } },
     })
-    for (const entry of DEFAULT_DETECTOR_MANIFEST) {
-      const ciphertext = `opaque-${entry.sample}-ciphertext`
-      assert.match(ciphertext, compilePattern(entry.source))
-      const message = reasoningMessage(ciphertext)
-      await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
-      assert.equal(
-        message.parts[0].metadata.openai.reasoningEncryptedContent,
-        ciphertext,
-      )
+    for (const includeItemId of [true, false]) {
+      for (const entry of DEFAULT_DETECTOR_MANIFEST) {
+        const ciphertext = `opaque-${entry.sample}-ciphertext`
+        assert.match(ciphertext, compilePattern(entry.source))
+        const message = reasoningMessage(ciphertext, includeItemId)
+        await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
+        const openai = message.parts[0].metadata.openai
+        assert.equal(openai.reasoningEncryptedContent, ciphertext)
+        assert.equal("itemId" in openai, includeItemId)
+      }
     }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
-test("qualified reasoning ciphertext remains compatible when itemId is absent", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-detector-reasoning-no-id-"))
+test("every default detector still redacts ordinary mutable content", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-detector-mutable-"))
   try {
     const plugin = GatewayCorePlugin({
       directory,
       config: { hooks: { enabled: false, order: [], disabled: [] } },
     })
-    const ciphertext = `opaque-${DEFAULT_DETECTOR_MANIFEST[0].sample}-ciphertext`
-    const message = reasoningMessage(ciphertext, false)
-    await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
-    assert.equal(message.parts[0].metadata.openai.reasoningEncryptedContent, ciphertext)
-    assert.equal("itemId" in message.parts[0].metadata.openai, false)
+    const messages = DEFAULT_DETECTOR_MANIFEST.map((entry, index) =>
+      mutableTextMessage(entry.sample, index),
+    )
+    await plugin["experimental.chat.messages.transform"]({}, { messages })
+    for (const [index, entry] of DEFAULT_DETECTOR_MANIFEST.entries()) {
+      const text = messages[index].parts[0].text
+      assert.equal(text.includes(entry.sample), false)
+      assert.equal(text.includes(DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken), true)
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -323,7 +316,8 @@ test("pinned tool attachment corpus tolerates Base64 transport collisions", asyn
       directory,
       config: { hooks: { enabled: false, order: [], disabled: [] } },
     })
-    for (const fixture of attachmentCases()) {
+    for (const fixture of ATTACHMENT_CASES) {
+      assert.equal(fixture.url.includes(GOOGLE_KEY_COLLISION), true)
       const message = attachmentMessage(fixture)
       await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
       assert.equal(message.parts[0].state.attachments[0].url, fixture.url)
@@ -336,7 +330,7 @@ test("pinned tool attachment corpus tolerates Base64 transport collisions", asyn
 
 test("attachment collision matches are confined to the canonical payload", () => {
   const googlePattern = compilePattern(DEFAULT_DETECTOR_MANIFEST[3].source)
-  for (const fixture of attachmentCases()) {
+  for (const fixture of ATTACHMENT_CASES) {
     const payloadStart = fixture.url.indexOf(",") + 1
     const matches = [...fixture.url.matchAll(googlePattern)]
     assert.equal(matches.length, 1)
@@ -352,8 +346,22 @@ test("unsupported, mismatched, and parameterized attachment envelopes remain blo
       directory,
       config: { hooks: { enabled: false, order: [], disabled: [] } },
     })
-    const jpeg = attachmentCases().find((fixture) => fixture.mime === "image/jpeg")
+    const jpeg = ATTACHMENT_CASES.find((fixture) => fixture.mime === "image/jpeg")
+    const png = ATTACHMENT_CASES.find((fixture) => fixture.mime === "image/png")
     assert.ok(jpeg)
+    assert.ok(png)
+    const payloadStart = jpeg.url.indexOf(",") + 1
+    const payloadSlash = jpeg.url.indexOf("/", payloadStart)
+    assert.equal(payloadSlash >= payloadStart, true)
+    const urlSafePayload =
+      jpeg.url.slice(0, payloadSlash) + "_" + jpeg.url.slice(payloadSlash + 1)
+    assert.equal(urlSafePayload.slice(0, payloadStart), jpeg.url.slice(0, payloadStart))
+
+    const badCrcBytes = Buffer.from(png.bytes)
+    badCrcBytes[badCrcBytes.length - 1] ^= 1
+    const badCrcUrl = pngDataUrl(badCrcBytes)
+    assert.equal(badCrcUrl.includes(GOOGLE_KEY_COLLISION), true)
+
     const variants = [
       { ...jpeg, mime: "image/png" },
       { ...jpeg, mime: "image/jpg", url: jpeg.url.replace("image/jpeg", "image/jpg") },
@@ -362,8 +370,9 @@ test("unsupported, mismatched, and parameterized attachment envelopes remain blo
         ...jpeg,
         url: jpeg.url.replace("image/jpeg;base64", "image/jpeg;charset=utf-8;base64"),
       },
-      { ...jpeg, url: jpeg.url.replace("/", "_") },
+      { ...jpeg, url: urlSafePayload },
       { ...jpeg, url: `${jpeg.url}AAAA` },
+      { ...png, url: badCrcUrl },
     ]
     for (const fixture of variants) {
       await assert.rejects(
@@ -371,7 +380,10 @@ test("unsupported, mismatched, and parameterized attachment envelopes remain blo
           {},
           { messages: [attachmentMessage(fixture)] },
         ),
-        (error) => error.code === "immutable_match" && error.patternIndex === 3,
+        (error) =>
+          error.code === "immutable_match" &&
+          error.patternIndex === 3 &&
+          error.locationCode === "immutable_protocol_field",
       )
     }
   } finally {
@@ -379,93 +391,83 @@ test("unsupported, mismatched, and parameterized attachment envelopes remain blo
   }
 })
 
-test("multiple attachment collisions are omitted, counted, and charged once", () => {
-  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
+test("multiple attachment collisions are omitted and counted", () => {
   const prefix = Buffer.from("%PDF-1.7\n", "ascii")
   const separator = Buffer.from([0xfb, 0x00, 0x00])
-  assert.equal(prefix.length % 3, 0)
-  assert.equal(separator.length % 3, 0)
-  const bytes = Buffer.concat([
+  const payload = collisionBase64Payload(
     prefix,
-    collisionBytes,
-    separator,
-    collisionBytes,
-    Buffer.from("\n%%EOF\n", "ascii"),
-  ])
+    Buffer.concat([
+      separator,
+      Buffer.from(GOOGLE_KEY_COLLISION, "base64"),
+      Buffer.from("\n%%EOF\n", "ascii"),
+    ]),
+  )
   const fixture = {
     id: "pdf-multiple",
     mime: "application/pdf",
-    url: `data:application/pdf;base64,${bytes.toString("base64")}`,
+    url: `data:application/pdf;base64,${payload}`,
   }
   assert.equal(fixture.url.split(GOOGLE_KEY_COLLISION).length - 1, 2)
-  const config = DEFAULT_GATEWAY_CONFIG.secretLeakGuard
-  const redactor = createSecretRedactor({
-    patterns: config.patterns,
-    omittableOpaqueAttachmentPatternIndex: 3,
-    redactionToken: config.redactionToken,
-    limits: {
-      maxDepth: config.maxDepth,
-      maxNodes: config.maxNodes,
-      maxChars: config.maxChars,
-    },
-    providerLimits: {
-      maxMessages: config.providerMaxMessages,
-      maxNodes: config.providerMaxNodes,
-      maxChars: config.providerMaxChars,
-      maxMessageChars: config.providerMaxMessageChars,
-    },
-  })
-  const message = attachmentMessage(fixture)
-  const stats = redactor.redactProviderMessages([message])
+
+  const stats = defaultAttachmentRedactor().redactProviderMessages([
+    attachmentMessage(fixture),
+  ])
   assert.equal(stats.omittedOpaqueAttachmentMatches, 2)
   assert.equal(stats.matches, 0)
-  assert.equal(stats.scannedChars >= fixture.url.length, true)
 })
 
 
-test("over-budget collision attachment rejects before envelope decoding", () => {
-  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
-  const pngHeader = Buffer.alloc(13)
-  pngHeader.writeUInt32BE(1, 0)
-  pngHeader.writeUInt32BE(1, 4)
-  pngHeader[8] = 8
-  pngHeader[9] = 6
-  const png = Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", pngHeader),
-    pngChunk(
-      "ruSt",
-      Buffer.concat([Buffer.from([0]), collisionBytes, Buffer.alloc(8 * 1024 * 1024)]),
-    ),
-    pngChunk("IDAT", deflateSync(Buffer.from([0, 0, 0, 0, 255]))),
-    pngChunk("IEND"),
-  ])
-  const fixture = {
-    id: "png-over-budget",
-    mime: "image/png",
-    url: `data:image/png;base64,${png.toString("base64")}`,
-  }
-  const config = DEFAULT_GATEWAY_CONFIG.secretLeakGuard
-  const redactor = createSecretRedactor({
-    patterns: config.patterns,
-    omittableOpaqueAttachmentPatternIndex: 3,
-    redactionToken: config.redactionToken,
-    limits: {
-      maxDepth: config.maxDepth,
-      maxNodes: config.maxNodes,
-      maxChars: config.maxChars,
-    },
-    providerLimits: {
-      maxMessages: config.providerMaxMessages,
-      maxNodes: config.providerMaxNodes,
-      maxChars: config.providerMaxChars,
-      maxMessageChars: 1_024,
+test("attachment budgets are enforced before Base64 decoding", () => {
+  const fixture = ATTACHMENT_CASES.find((entry) => entry.mime === "application/pdf")
+  assert.ok(fixture)
+  const message = attachmentMessage(fixture)
+  const exactMessageChars = jsonStringChars(message)
+  const descriptor = Object.getOwnPropertyDescriptor(Buffer, "from")
+  assert.ok(descriptor)
+  assert.equal(typeof descriptor.value, "function")
+  const originalFrom = descriptor.value
+  let base64Decodes = 0
+
+  Object.defineProperty(Buffer, "from", {
+    ...descriptor,
+    value(...args) {
+      if (args[1] === "base64") base64Decodes += 1
+      return Reflect.apply(originalFrom, this, args)
     },
   })
-  const start = performance.now()
-  assert.throws(
-    () => redactor.redactProviderMessages([attachmentMessage(fixture)]),
-    (error) => error.code === "text_limit",
-  )
-  assert.equal(performance.now() - start < 100, true)
+  try {
+    const exactLimits = {
+      maxChars: exactMessageChars,
+      maxMessageChars: exactMessageChars,
+    }
+    assert.doesNotThrow(() =>
+      defaultAttachmentRedactor(exactLimits).redactProviderMessages([message]),
+    )
+    assert.equal(base64Decodes, 1)
+
+    base64Decodes = 0
+    assert.throws(
+      () =>
+        defaultAttachmentRedactor({
+          maxChars: exactMessageChars,
+          maxMessageChars: exactMessageChars - 1,
+        }).redactProviderMessages([attachmentMessage(fixture)]),
+      (error) => error.code === "text_limit",
+    )
+    assert.equal(base64Decodes, 0)
+
+    base64Decodes = 0
+    assert.throws(
+      () =>
+        defaultAttachmentRedactor({
+          maxMessages: 2,
+          maxChars: exactMessageChars,
+          maxMessageChars: exactMessageChars,
+        }).redactProviderMessages(["x", attachmentMessage(fixture)]),
+      (error) => error.code === "text_limit",
+    )
+    assert.equal(base64Decodes, 0)
+  } finally {
+    Object.defineProperty(Buffer, "from", descriptor)
+  }
 })

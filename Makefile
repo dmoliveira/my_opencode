@@ -5,12 +5,12 @@ PYTHON_MIN_VERSION := 3.11
 OPENCODE_BIN ?= opencode
 OPENCODE_RESUME_E2E_VERSION := 1.18.5
 
-.PHONY: python-check help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test release-check release
+.PHONY: python-check help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-PYTHON_TARGETS := validate build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status selftest doctor doctor-json devtools-status hooks-install install-test release-check release
+PYTHON_TARGETS := validate build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status selftest doctor doctor-json devtools-status hooks-install install-test release-check release
 
 $(PYTHON_TARGETS): python-check
 
@@ -98,8 +98,11 @@ gateway-doctor: ## Run gateway plugin diagnostics
 gateway-secret-redaction-smoke: ## Verify provider-boundary redaction against localhost
 	$(PYTHON) scripts/gateway_secret_redaction_live_smoke.py --repo-root "$(CURDIR)" --json
 
-gateway-resume-redaction-e2e: ## Gate large-session resume redaction on OpenCode $(OPENCODE_RESUME_E2E_VERSION)
+gateway-resume-redaction-e2e: ## Build and gate large-session resume redaction on OpenCode $(OPENCODE_RESUME_E2E_VERSION)
 	npm --prefix plugin/gateway-core run build
+	$(MAKE) --no-print-directory gateway-resume-redaction-e2e-prebuilt OPENCODE_BIN="$(OPENCODE_BIN)"
+
+gateway-resume-redaction-e2e-prebuilt: ## Gate resume redaction using the existing gateway build
 	$(PYTHON) scripts/gateway_resume_redaction_e2e.py --repo-root "$(CURDIR)" --opencode-bin "$(OPENCODE_BIN)" --json
 
 gateway-turn-watch: ## Stream long-turn alerts from gateway audit

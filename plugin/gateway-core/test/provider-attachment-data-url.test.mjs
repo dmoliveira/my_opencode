@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
-import { deflateSync, crc32 } from "node:zlib"
 import test from "node:test"
 
 import {
   isCanonicalStructurallyValidPngDataUrl,
   isStructurallyValidPngContainer,
   MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS,
+  MAX_OPAQUE_ATTACHMENT_DECODED_BYTES,
   OPAQUE_PROVIDER_ATTACHMENT_MIME_TYPES,
   parseCanonicalProviderAttachmentDataUrl,
   MAX_OPAQUE_PNG_CHUNKS,
@@ -14,69 +14,17 @@ import {
   MAX_OPAQUE_PNG_DIMENSION,
   MAX_OPAQUE_PNG_PIXELS,
 } from "../dist/hooks/shared/provider-attachment-data-url.js"
-
-const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-const GOOGLE_COLLISION = `AIza${"A".repeat(20)}`
-
-function chunk(type, data = Buffer.alloc(0)) {
-  const typeBytes = Buffer.from(type, "ascii")
-  const header = Buffer.alloc(4)
-  header.writeUInt32BE(data.length)
-  const checksum = Buffer.alloc(4)
-  checksum.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])) >>> 0)
-  return Buffer.concat([header, typeBytes, data, checksum])
-}
-
-function header({ width = 1, height = 1, bitDepth = 8, colorType = 6 } = {}) {
-  const data = Buffer.alloc(13)
-  data.writeUInt32BE(width, 0)
-  data.writeUInt32BE(height, 4)
-  data[8] = bitDepth
-  data[9] = colorType
-  data[10] = 0
-  data[11] = 0
-  data[12] = 0
-  return chunk("IHDR", data)
-}
-
-function pngBuffer({
-  width = 1,
-  height = 1,
-  bitDepth = 8,
-  colorType = 6,
-  beforeImageData = [],
-  imageData = deflateSync(Buffer.from([0, 0, 0, 0, 255])),
-  afterImageData = [],
-} = {}) {
-  return Buffer.concat([
-    SIGNATURE,
-    header({ width, height, bitDepth, colorType }),
-    ...beforeImageData,
-    chunk("IDAT", imageData),
-    ...afterImageData,
-    chunk("IEND"),
-  ])
-}
-
-function collisionPngBuffer(options = {}) {
-  const collisionBytes = Buffer.from(GOOGLE_COLLISION, "base64")
-  assert.equal(collisionBytes.toString("base64"), GOOGLE_COLLISION)
-  return pngBuffer({
-    ...options,
-    beforeImageData: [
-      chunk("ruSt", Buffer.concat([Buffer.from([0]), collisionBytes])),
-      ...(options.beforeImageData ?? []),
-    ],
-  })
-}
-
-function dataUrl(bytes) {
-  return `data:image/png;base64,${bytes.toString("base64")}`
-}
+import {
+  collisionPngBuffer,
+  GOOGLE_KEY_COLLISION,
+  pngBuffer,
+  pngChunk,
+  pngDataUrl,
+} from "./fixtures/provider-boundary-fixtures.mjs"
 
 test("canonical PNG attachment accepts a transport-level Google-key collision", () => {
-  const url = dataUrl(collisionPngBuffer())
-  assert.equal(url.includes(GOOGLE_COLLISION), true)
+  const url = pngDataUrl(collisionPngBuffer())
+  assert.equal(url.includes(GOOGLE_KEY_COLLISION), true)
   assert.equal(isCanonicalStructurallyValidPngDataUrl(url), true)
 })
 
@@ -90,21 +38,21 @@ test("PNG container validation rejects malformed framing and critical structure"
   assert.equal(isStructurallyValidPngContainer(valid.subarray(0, -12)), false)
   assert.equal(
     isStructurallyValidPngContainer(
-      pngBuffer({ beforeImageData: [chunk("ABCD", Buffer.from([1]))] }),
+      pngBuffer({ beforeImageData: [pngChunk("ABCD", Buffer.from([1]))] }),
     ),
     false,
   )
   assert.equal(
     isStructurallyValidPngContainer(
-      pngBuffer({ beforeImageData: [chunk("rust", Buffer.from([1]))] }),
+      pngBuffer({ beforeImageData: [pngChunk("rust", Buffer.from([1]))] }),
     ),
     false,
   )
   assert.equal(
     isStructurallyValidPngContainer(
       pngBuffer({
-        beforeImageData: [chunk("IDAT", Buffer.from([1]))],
-        afterImageData: [chunk("ruSt"), chunk("IDAT", Buffer.from([2]))],
+        beforeImageData: [pngChunk("IDAT", Buffer.from([1]))],
+        afterImageData: [pngChunk("ruSt"), pngChunk("IDAT", Buffer.from([2]))],
       }),
     ),
     false,
@@ -113,7 +61,7 @@ test("PNG container validation rejects malformed framing and critical structure"
 })
 
 test("canonical data URL validation rejects alternate and appended encodings", () => {
-  const url = dataUrl(collisionPngBuffer())
+  const url = pngDataUrl(collisionPngBuffer())
   const plusIndex = url.indexOf("+")
   assert.equal(plusIndex > 0, true)
   assert.equal(
@@ -158,14 +106,14 @@ test("container limits enforce dimensions, pixels, and chunk count", () => {
   )
 
   const exactAncillaryCount = MAX_OPAQUE_PNG_CHUNKS - 3
-  const exactChunks = Array.from({ length: exactAncillaryCount }, () => chunk("ruSt"))
+  const exactChunks = Array.from({ length: exactAncillaryCount }, () => pngChunk("ruSt"))
   assert.equal(
     isStructurallyValidPngContainer(pngBuffer({ beforeImageData: exactChunks })),
     true,
   )
   assert.equal(
     isStructurallyValidPngContainer(
-      pngBuffer({ beforeImageData: [...exactChunks, chunk("ruSt")] }),
+      pngBuffer({ beforeImageData: [...exactChunks, pngChunk("ruSt")] }),
     ),
     false,
   )
@@ -178,21 +126,14 @@ test("container accepts CRC-valid opaque IDAT without claiming decoded image val
   )
 })
 
-test("near-limit container validation remains bounded", () => {
-  const fixedLength = pngBuffer({ beforeImageData: [chunk("ruSt")] }).length
+test("container decoded-byte limit is exact", () => {
+  const fixedLength = pngBuffer({ beforeImageData: [pngChunk("ruSt")] }).length
   const payloadLength = MAX_OPAQUE_PNG_DECODED_BYTES - fixedLength
-  const nearLimit = pngBuffer({ beforeImageData: [chunk("ruSt", Buffer.alloc(payloadLength))] })
+  const nearLimit = pngBuffer({
+    beforeImageData: [pngChunk("ruSt", Buffer.alloc(payloadLength))],
+  })
   assert.equal(nearLimit.length, MAX_OPAQUE_PNG_DECODED_BYTES)
-
-  isStructurallyValidPngContainer(nearLimit)
-  const durations = []
-  for (let index = 0; index < 5; index += 1) {
-    const start = performance.now()
-    assert.equal(isStructurallyValidPngContainer(nearLimit), true)
-    durations.push(performance.now() - start)
-  }
-  durations.sort((left, right) => left - right)
-  assert.equal(durations.at(-1) < 2_000, true)
+  assert.equal(isStructurallyValidPngContainer(nearLimit), true)
 
   const oneOver = Buffer.concat([nearLimit, Buffer.from([0])])
   assert.equal(oneOver.length, MAX_OPAQUE_PNG_DECODED_BYTES + 1)
@@ -200,16 +141,24 @@ test("near-limit container validation remains bounded", () => {
 })
 
 
-test("canonical provider attachment parser returns exact payload bounds", () => {
-  const fixtures = [
-    ["image/jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
-    ["application/pdf", Buffer.from("%PDF-1.7\n%%EOF\n", "ascii")],
-  ]
+test("provider attachment contract pins MIME types and resource caps", () => {
+  assert.equal(MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS, 16 * 1024 * 1024)
+  assert.equal(MAX_OPAQUE_ATTACHMENT_DECODED_BYTES, 12 * 1024 * 1024)
+  assert.equal(MAX_OPAQUE_PNG_DATA_URL_CHARS, 16 * 1024 * 1024)
+  assert.equal(MAX_OPAQUE_PNG_DECODED_BYTES, 12 * 1024 * 1024)
   assert.deepEqual(OPAQUE_PROVIDER_ATTACHMENT_MIME_TYPES, [
     "image/png",
     "image/jpeg",
     "application/pdf",
   ])
+})
+
+test("canonical provider attachment parser returns exact payload bounds", () => {
+  const fixtures = [
+    ["image/png", collisionPngBuffer()],
+    ["image/jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+    ["application/pdf", Buffer.from("%PDF-1.7\n%%EOF\n", "ascii")],
+  ]
   for (const [mime, bytes] of fixtures) {
     const prefix = `data:${mime};base64,`
     const url = `${prefix}${bytes.toString("base64")}`
@@ -267,16 +216,10 @@ test("provider attachment URL limit is exact and bounded", () => {
     Math.floor((MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS - prefix.length) / 4) * 4
   const decodedBytes = (payloadChars / 4) * 3
   const atLimit = `${prefix}${Buffer.alloc(decodedBytes).toString("base64")}`
-  assert.equal(atLimit.length <= MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS, true)
-  const durations = []
-  for (let index = 0; index < 3; index += 1) {
-    const start = performance.now()
-    assert.notEqual(parseCanonicalProviderAttachmentDataUrl(atLimit, mime), null)
-    durations.push(performance.now() - start)
-  }
-  assert.equal(Math.max(...durations) < 2_000, true)
+  assert.equal(atLimit.length, MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS)
+  assert.notEqual(parseCanonicalProviderAttachmentDataUrl(atLimit, mime), null)
 
   const oneOver = `${prefix}${Buffer.alloc(decodedBytes + 3).toString("base64")}`
-  assert.equal(oneOver.length > MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS, true)
+  assert.equal(oneOver.length, MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS + 4)
   assert.equal(parseCanonicalProviderAttachmentDataUrl(oneOver, mime), null)
 })

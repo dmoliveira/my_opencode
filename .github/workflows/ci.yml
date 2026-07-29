@@ -55,7 +55,7 @@ jobs:
 
       - name: Gate provider-boundary session resume regressions
         run: |
-          make gateway-resume-redaction-e2e OPENCODE_BIN="$(command -v opencode)"
+          make gateway-resume-redaction-e2e-prebuilt OPENCODE_BIN="$(command -v opencode)"
 
       - name: Gate deterministic gateway workflows
         run: |
