@@ -2,16 +2,20 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import re
 import shutil
 import signal
 import stat
+import struct
 import subprocess
 import tempfile
 import threading
 import time
+import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -40,6 +44,41 @@ REDACTION_TOKEN = "[REDACTED_SECRET]"
 EXPECTED_PROVIDER_ERROR = "EXPECTED_RESUME_E2E_CAPTURE_400"
 SEED_API_KEY = "resume-e2e-local-seed-key"
 OPENAI_API_KEY = "resume-e2e-local-openai-key"
+GOOGLE_KEY_COLLISION = f"AIza{'A' * 20}"
+
+
+def png_chunk(chunk_type: str, data: bytes = b"") -> bytes:
+    chunk_type_bytes = chunk_type.encode("ascii")
+    checksum = binascii.crc32(chunk_type_bytes + data) & 0xFFFFFFFF
+    return (
+        struct.pack(">I", len(data))
+        + chunk_type_bytes
+        + data
+        + struct.pack(">I", checksum)
+    )
+
+
+def build_png_collision_data_url() -> str:
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+    collision_bytes = base64.b64decode(GOOGLE_KEY_COLLISION, validate=True)
+    if base64.b64encode(collision_bytes).decode("ascii") != GOOGLE_KEY_COLLISION:
+        raise RuntimeError("png_collision_not_canonical_base64")
+    png = b"".join(
+        [
+            b"\x89PNG\r\n\x1a\n",
+            png_chunk("IHDR", header),
+            png_chunk("ruSt", b"\x00" + collision_bytes),
+            png_chunk("IDAT", zlib.compress(b"\x00\x00\x00\x00\xff")),
+            png_chunk("IEND"),
+        ]
+    )
+    encoded = base64.b64encode(png).decode("ascii")
+    if GOOGLE_KEY_COLLISION not in encoded:
+        raise RuntimeError("png_collision_missing_from_transport")
+    return f"data:image/png;base64,{encoded}"
+
+
+PNG_ATTACHMENT_DATA_URL = build_png_collision_data_url()
 PRIVATE_FIXTURE_MARKERS = (
     CIPHERTEXT,
     MUTABLE_SECRET,
@@ -47,6 +86,8 @@ PRIVATE_FIXTURE_MARKERS = (
     UI_PREVIEW_CANARY,
     SEED_API_KEY,
     OPENAI_API_KEY,
+    GOOGLE_KEY_COLLISION,
+    PNG_ATTACHMENT_DATA_URL,
 )
 
 
@@ -592,6 +633,16 @@ def mutate_export(source_path: Path, fixture_path: Path) -> str:
                 "preview": UI_PREVIEW_CANARY,
             },
             "time": {"start": now, "end": now + 1},
+            "attachments": [
+                {
+                    "type": "file",
+                    "mime": "image/png",
+                    "url": PNG_ATTACHMENT_DATA_URL,
+                    "id": derive_part_id(base_part_id, "a01"),
+                    "sessionID": session_id,
+                    "messageID": message_id,
+                }
+            ],
         },
         "id": derive_part_id(base_part_id, "t01"),
         "sessionID": session_id,
@@ -613,6 +664,7 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
     large_text_found = False
     ciphertext_found = False
     ui_metadata_found = False
+    png_attachment_found = False
     mutable_secret_found = False
     coherent_references = True
 
@@ -656,11 +708,21 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
                         marker in metadata_text
                         for marker in (UI_ONLY_CANARY, UI_PREVIEW_CANARY)
                     )
+                    attachments = state.get("attachments")
+                    if isinstance(attachments, list):
+                        png_attachment_found = any(
+                            isinstance(attachment, dict)
+                            and attachment.get("type") == "file"
+                            and attachment.get("mime") == "image/png"
+                            and attachment.get("url") == PNG_ATTACHMENT_DATA_URL
+                            for attachment in attachments
+                        )
 
     require(coherent_references, "fixture_references_incoherent")
     require(large_text_found, "large_history_fixture_missing")
     require(ciphertext_found, "ciphertext_fixture_missing")
     require(ui_metadata_found, "ui_metadata_fixture_missing")
+    require(png_attachment_found, "png_attachment_fixture_missing")
     require(mutable_secret_found, "mutable_secret_fixture_missing")
     return messages
 
@@ -749,9 +811,32 @@ def validate_native_wire(
         function_output.get("call_id") == "call_resume_e2e_0123456789",
         "native_function_output_id_invalid",
     )
+    output_parts = function_output.get("output")
+    require(isinstance(output_parts, list), "native_function_output_not_array")
+    require(len(output_parts) == 2, "native_function_output_part_count_invalid")
+    output_text = [
+        part
+        for part in output_parts
+        if isinstance(part, dict) and part.get("type") == "input_text"
+    ]
+    output_images = [
+        part
+        for part in output_parts
+        if isinstance(part, dict) and part.get("type") == "input_image"
+    ]
     require(
-        function_output.get("output") == TOOL_OUTPUT_CONTROL,
-        "native_function_output_invalid",
+        output_text == [{"type": "input_text", "text": TOOL_OUTPUT_CONTROL}],
+        "native_function_output_text_invalid",
+    )
+    require(len(output_images) == 1, "native_function_output_image_count_invalid")
+    require(
+        set(output_images[0]) == {"type", "image_url"}
+        and output_images[0].get("image_url") == PNG_ATTACHMENT_DATA_URL,
+        "native_function_output_image_invalid",
+    )
+    require(
+        list(iter_strings(payload)).count(PNG_ATTACHMENT_DATA_URL) == 1,
+        "native_png_attachment_count_invalid",
     )
 
     prompt_cache_key = payload.get("prompt_cache_key")
@@ -778,6 +863,7 @@ def validate_native_wire(
             marker in wire_text for marker in (UI_ONLY_CANARY, UI_PREVIEW_CANARY)
         ),
         "provider_controls_present": True,
+        "png_attachment_preserved_on_wire": True,
         "prompt_cache_key_stable": True,
     }
 
@@ -827,6 +913,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         "redaction_token_present_on_wire": False,
         "ui_only_metadata_absent_on_wire": False,
         "provider_controls_present": False,
+        "png_attachment_preserved_on_wire": False,
+        "png_collision_omission_audit_seen": False,
         "prompt_cache_key_stable": False,
         "prompt_cache_routing_audit_seen": False,
         "prompt_cache_prefix_audit_seen": False,
@@ -1115,6 +1203,10 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     report["provider_controls_present"], "provider_controls_missing"
                 )
                 require(report["prompt_cache_key_stable"], "prompt_cache_key_unstable")
+                require(
+                    report["png_attachment_preserved_on_wire"],
+                    "png_attachment_missing_on_wire",
+                )
 
                 audit_rows = parse_audit(native_audit)
                 report["runtime_bootstrap_seen"] = any(
@@ -1127,7 +1219,17 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     if row.get("reason_code") == "provider_boundary_secrets_redacted"
                     and row.get("surface") == "messages"
                 ]
+                png_omission_rows = [
+                    row
+                    for row in audit_rows
+                    if row.get("reason_code")
+                    == "provider_boundary_opaque_png_collision_omitted"
+                    and row.get("surface") == "messages"
+                ]
                 report["redaction_audit_seen"] = len(redaction_rows) == 1
+                report["png_collision_omission_audit_seen"] = (
+                    len(png_omission_rows) == 1
+                )
                 report["redaction_scanned_chars"] = max(
                     (int(row.get("scanned_chars") or 0) for row in redaction_rows),
                     default=0,
@@ -1219,6 +1321,14 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     "prompt_cache_scope_digest_leaked_to_audit",
                 )
                 require(report["redaction_audit_seen"], "redaction_audit_missing")
+                require(
+                    report["png_collision_omission_audit_seen"],
+                    "png_collision_omission_audit_missing",
+                )
+                require(
+                    png_omission_rows[0].get("omitted_match_count") == 1,
+                    "png_collision_omission_count_invalid",
+                )
                 redaction_row = redaction_rows[0]
                 require(
                     redaction_row.get("session_id") == resume_session_id,

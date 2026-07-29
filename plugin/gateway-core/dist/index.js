@@ -1,4 +1,5 @@
 import { loadGatewayConfig, loadGatewayConfigSourceWithMeta, } from "./config/load.js";
+import { DEFAULT_GATEWAY_CONFIG } from "./config/schema.js";
 import { cacheableSystemPrefixObservation, resolvePromptCacheScopeIdentity, stablePromptCacheKey, } from "./cache/prompt-cache.js";
 import { writeGatewayEventAudit } from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
@@ -859,6 +860,10 @@ export default function GatewayCorePlugin(ctx, options) {
             directory,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
+            omittableOpaquePngPatternIndex: cfg.secretLeakGuard.patterns ===
+                DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
+                ? cfg.secretLeakGuard.patterns.indexOf("AIza[0-9A-Za-z\\-_]{20,}")
+                : null,
             limits: {
                 maxDepth: cfg.secretLeakGuard.maxDepth,
                 maxNodes: cfg.secretLeakGuard.maxNodes,

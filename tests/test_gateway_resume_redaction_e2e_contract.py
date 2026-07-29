@@ -85,6 +85,9 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
         self.assertIn("e5cc278dec9294a627a7b05f47ce6a564408c1a2", spec)
         self.assertIn("1bea9f52c3ec6afec280e176a930c747c72091b7", spec)
         self.assertIn("eb116f6b960f6da4115ffb262695af6162ac2045", spec)
+        self.assertIn("@ai-sdk/openai` `3.0.84", spec)
+        self.assertIn("da385f747e8277411d8b49c65e8a22c3bf158f4c", spec)
+        self.assertIn("canonical, structurally valid PNG", spec)
         self.assertIn("credential-free resume gate is mandatory CI", spec)
 
 

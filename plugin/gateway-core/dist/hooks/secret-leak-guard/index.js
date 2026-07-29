@@ -5,6 +5,7 @@ function mergeStats(target, source) {
     target.redactedFields += source.redactedFields;
     target.scannedChars += source.scannedChars;
     target.scannedNodes += source.scannedNodes;
+    target.omittedOpaquePngMatches += source.omittedOpaquePngMatches;
 }
 // Creates secret leak guard hook that redacts likely secrets from every tool output channel.
 export function createSecretLeakGuardHook(options) {
@@ -28,6 +29,7 @@ export function createSecretLeakGuardHook(options) {
                 redactedFields: 0,
                 scannedChars: 0,
                 scannedNodes: 0,
+                omittedOpaquePngMatches: 0,
             };
             const outputShape = typeof rawOutput === "string" ? "string" : "structured";
             if (typeof rawOutput === "string") {
