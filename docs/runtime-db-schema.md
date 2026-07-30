@@ -92,9 +92,27 @@ This repository operates separate local stores with different ownership and safe
 | OpenCode runtime history | platform-specific `opencode.db` | OpenCode | Inspect read-only; use `/session repair-stale` only with preview, scope, backup, and explicit apply. |
 | Shared memory | `~/.config/opencode/my_opencode/runtime/shared_memory.db` | my_opencode | Use lifecycle commands; export before import/cleanup/compression. |
 | Codememory task graph | `.codememory/codememory.sqlite3` | Codememory | Use `oc`; do not hand-edit or mix it with runtime-history recovery. |
-| Session sidecars | `~/.config/opencode/sessions/index.json`, digests, and `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index` | my_opencode | Owner-only files; recover malformed data before rewriting. |
+| Session sidecars | `~/.config/opencode/sessions/index.json`, `~/.config/opencode/digests/last-session.json`, and `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index` | my_opencode | Require current-user-owned regular single-link `0600` files; preview permission repair before explicit apply. |
 
 A backup or restore applies to exactly one store. Never replace the OpenCode runtime DB with shared-memory or Codememory artifacts, and do not run destructive operations while the owning process is active.
+
+## Session-sidecar privacy
+
+The session index and last-session digest are local-sensitive state. New parent directories are created as `0700`; sidecars, persistent lock files, and quarantine artifacts are `0600`. Reads are bounded to 16 MiB for the index and 1 MiB for the digest. Readers reject symlinks, hard links, non-regular files, foreign ownership, permissive modes, unsafe ancestors, and identity changes before parsing content. Unsupported platforms fail closed.
+
+Treat these persisted values as sensitive:
+
+- working directories, session IDs, plan IDs, plan paths, and digest/index/quarantine paths;
+- reasons, branches, branch headers, Git status previews, and change counts;
+- plan status, resume hints, interruption details, timestamps, and event history;
+- post-session command text and results;
+- quarantine checksums, byte counts, and local recovery metadata.
+
+Local doctor and recovery output may include paths, modes, reason codes, quarantine checksums, and byte counts. It is intended for the operator on the same machine. Only the fixed projections from `/session search --redact` and `/session handoff --redact` are share-safe. Do not copy unredacted doctor, digest, index, handoff, or quarantine output into tickets or chat.
+
+`/session doctor` is observation-only. Use `/session repair-sidecars --json` for a mutation-free preview and add `--apply` only after reviewing both active targets. Apply narrows safe permissions in place and preserves bytes and inode identity. Missing and already-private files are no-ops. Aliased, linked, foreign-owned, non-regular, unsafe, or permission-adding repairs are blocked before either target changes. The command never repairs lock files, directories, or quarantine artifacts.
+
+A permissive corrupt index is not parsed or quarantined. First narrow it explicitly with `/session repair-sidecars --apply --json`; then rerun `/digest run --reason manual`. The second command can classify the unchanged bytes and publish an independent private quarantine artifact. Never replace, reset, delete, or rebuild a corrupt active index automatically.
 
 ## Recovery drill checklist
 

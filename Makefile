@@ -154,6 +154,9 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_digest.py" run --reason install-test; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_digest.py" show; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_digest.py" doctor --json; \
+	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_command.py" doctor --json; \
+	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/session_command.py" repair-sidecars --json; \
+	HOME="$$TMP_HOME" $(PYTHON) -c 'from pathlib import Path; root = Path.home() / ".config" / "opencode"; digest = root / "digests" / "last-session.json"; index = root / "sessions" / "index.json"; paths = [digest, index, digest.with_name(digest.name + ".lock"), index.with_name(index.name + ".lock")]; assert all((path.stat().st_mode & 0o777) == 0o600 for path in paths); assert (digest.parent.stat().st_mode & 0o777) == 0o700; assert (index.parent.stat().st_mode & 0o777) == 0o700'; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/telemetry_command.py" status; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/telemetry_command.py" doctor --json; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/post_session_command.py" status; \

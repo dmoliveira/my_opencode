@@ -61,6 +61,7 @@ class SessionRedactionTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        index_path.chmod(0o600)
         digest_path.write_text(
             json.dumps(
                 {
@@ -70,6 +71,7 @@ class SessionRedactionTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        digest_path.chmod(0o600)
         return index_path, digest_path
 
     def _run(

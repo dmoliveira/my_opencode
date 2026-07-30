@@ -2192,6 +2192,7 @@ exit 0
             + "\n",
             encoding="utf-8",
         )
+        session_index_path.chmod(0o600)
         digest_env = os.environ.copy()
         digest_env["MY_OPENCODE_DIGEST_PATH"] = str(digest_path)
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
@@ -2222,6 +2223,28 @@ exit 0
         expect(
             session_index_result.get("result") == "PASS",
             "digest run should persist session metadata index",
+        )
+        expect(
+            digest_path.stat().st_mode & 0o777 == 0o600,
+            "digest run should publish digest as 0600",
+        )
+        expect(
+            session_index_path.stat().st_mode & 0o777 == 0o600,
+            "digest run should publish session index as 0600",
+        )
+        expect(
+            digest_path.with_name(f"{digest_path.name}.lock").stat().st_mode
+            & 0o777
+            == 0o600,
+            "digest run should keep the digest lock private",
+        )
+        expect(
+            session_index_path.with_name(
+                f"{session_index_path.name}.lock"
+            ).stat().st_mode
+            & 0o777
+            == 0o600,
+            "digest run should keep the session-index lock private",
         )
 
         raw_session_index = load_json_file(session_index_path)
@@ -2331,6 +2354,77 @@ exit 0
         expect(
             session_doctor_payload.get("result") == "PASS",
             "session doctor should pass when index is readable",
+        )
+
+        sidecar_bytes = {
+            "index": session_index_path.read_bytes(),
+            "digest": digest_path.read_bytes(),
+        }
+        sidecar_identities = {
+            "index": (session_index_path.stat().st_dev, session_index_path.stat().st_ino),
+            "digest": (digest_path.stat().st_dev, digest_path.stat().st_ino),
+        }
+        session_index_path.chmod(0o644)
+        digest_path.chmod(0o700)
+        result = subprocess.run(
+            [sys.executable, str(SESSION_SCRIPT), "repair-sidecars", "--json"],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "session repair-sidecars preview should fail while repair is required",
+        )
+        repair_preview = parse_json_output(result.stdout)
+        expect(
+            repair_preview.get("reason_code") == "session_sidecar_repair_required"
+            and repair_preview.get("changed_count") == 0,
+            "session repair-sidecars preview should report zero-mutation candidates",
+        )
+        expect(
+            session_index_path.stat().st_mode & 0o777 == 0o644
+            and digest_path.stat().st_mode & 0o777 == 0o700,
+            "session repair-sidecars preview should not change modes",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-sidecars",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=digest_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"session repair-sidecars apply failed: {result.stderr}",
+        )
+        repair_apply = parse_json_output(result.stdout)
+        expect(
+            repair_apply.get("result") == "PASS"
+            and repair_apply.get("changed_count") == 2
+            and repair_apply.get("partial") is False,
+            "session repair-sidecars apply should narrow both active sidecars",
+        )
+        expect(
+            session_index_path.read_bytes() == sidecar_bytes["index"]
+            and digest_path.read_bytes() == sidecar_bytes["digest"],
+            "session repair-sidecars should preserve sidecar bytes",
+        )
+        expect(
+            (session_index_path.stat().st_dev, session_index_path.stat().st_ino)
+            == sidecar_identities["index"]
+            and (digest_path.stat().st_dev, digest_path.stat().st_ino)
+            == sidecar_identities["digest"],
+            "session repair-sidecars should preserve sidecar inode identity",
         )
 
         runtime_db_path = Path(tmpdir) / "opencode.db"
@@ -12056,6 +12150,7 @@ exit 0
             + "\n",
             encoding="utf-8",
         )
+        promotion_digest_path.chmod(0o600)
         promotion_session_index_path = tmp / "promotion-session-index.json"
         promotion_session_index_path.write_text(
             json.dumps(
@@ -12080,6 +12175,7 @@ exit 0
             + "\n",
             encoding="utf-8",
         )
+        promotion_session_index_path.chmod(0o600)
         promotion_workflow_path = tmp / "promotion-workflow-state.json"
         promotion_workflow_path.write_text(
             json.dumps(
@@ -12130,6 +12226,56 @@ exit 0
         )
         promotion_env["MY_OPENCODE_WORKFLOW_STATE_PATH"] = str(promotion_workflow_path)
         promotion_env["MY_OPENCODE_CLAIMS_PATH"] = str(promotion_claims_path)
+
+        shared_memory_path = Path(productivity_env["MY_OPENCODE_SHARED_MEMORY_PATH"])
+        shared_memory_namespace = [
+            shared_memory_path,
+            Path(f"{shared_memory_path}-wal"),
+            Path(f"{shared_memory_path}-shm"),
+            Path(f"{shared_memory_path}-journal"),
+        ]
+        namespace_before = {
+            str(path): path.read_bytes()
+            for path in shared_memory_namespace
+            if path.exists()
+        }
+        promotion_digest_path.chmod(0o644)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_SCRIPT),
+                "promote",
+                "--source",
+                "all",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=promotion_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 1,
+            "memory promote should fail before SQLite for an insecure digest",
+        )
+        unsafe_promote = parse_json_output(result.stdout)
+        expect(
+            unsafe_promote.get("reason_code")
+            == "session_sidecar_insecure_permissions"
+            and unsafe_promote.get("count") == 0,
+            "memory promote should report a stable sidecar preflight failure",
+        )
+        namespace_after = {
+            str(path): path.read_bytes()
+            for path in shared_memory_namespace
+            if path.exists()
+        }
+        expect(
+            namespace_after == namespace_before,
+            "failed memory sidecar preflight should not change SQLite namespace files",
+        )
+        promotion_digest_path.chmod(0o600)
 
         result = subprocess.run(
             [

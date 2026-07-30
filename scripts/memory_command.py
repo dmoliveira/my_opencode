@@ -7,6 +7,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from session_metadata_index import (  # type: ignore
+    SessionIndexError,
+    load_session_index,
+)
+from session_sidecar_security import (  # type: ignore
+    SidecarSecurityError,
+    assert_distinct_sidecars,
+    read_private_json,
+)
 from shared_memory_runtime import (  # type: ignore
     active_memory_records,
     DEFAULT_DB_PATH,
@@ -56,6 +65,7 @@ DEFAULT_DOCTOR_REPORT_PATH = Path(
     )
 ).expanduser()
 PROMOTION_SOURCES = {"digest", "session", "workflow", "claims", "doctor", "all"}
+DIGEST_MAX_BYTES = 1024 * 1024
 
 
 def usage() -> int:
@@ -338,8 +348,13 @@ def cmd_summarize(argv: list[str]) -> int:
     )
 
 
-def promote_digest(conn, *, cwd: Path) -> list[dict[str, Any]]:
-    digest = load_json_file(DEFAULT_DIGEST_PATH)
+def promote_digest(
+    conn,
+    *,
+    cwd: Path,
+    payload: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    digest = load_json_file(DEFAULT_DIGEST_PATH) if payload is None else payload
     if not digest:
         return []
     raw_git = digest.get("git")
@@ -389,8 +404,14 @@ def promote_digest(conn, *, cwd: Path) -> list[dict[str, Any]]:
     return [record.to_payload()]
 
 
-def promote_sessions(conn, *, cwd: Path, limit: int) -> list[dict[str, Any]]:
-    payload = load_json_file(DEFAULT_SESSION_INDEX_PATH)
+def promote_sessions(
+    conn,
+    *,
+    cwd: Path,
+    limit: int,
+    payload: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    payload = load_json_file(DEFAULT_SESSION_INDEX_PATH) if payload is None else payload
     session_rows: list[dict[str, Any]] = (
         [item for item in payload.get("sessions", []) if isinstance(item, dict)]
         if isinstance(payload.get("sessions"), list)
@@ -616,6 +637,59 @@ def promote_doctor(conn, *, cwd: Path, limit: int) -> list[dict[str, Any]]:
     return items
 
 
+def _promotion_alias_paths() -> dict[str, Path]:
+    db_path = DEFAULT_DB_PATH.resolve(strict=False)
+    return {
+        "digest": DEFAULT_DIGEST_PATH,
+        "digest_lock": DEFAULT_DIGEST_PATH.with_name(
+            f"{DEFAULT_DIGEST_PATH.name}.lock"
+        ),
+        "index": DEFAULT_SESSION_INDEX_PATH,
+        "index_lock": DEFAULT_SESSION_INDEX_PATH.with_name(
+            f"{DEFAULT_SESSION_INDEX_PATH.name}.lock"
+        ),
+        "memory_db": db_path,
+        "memory_db_wal": Path(f"{db_path}-wal"),
+        "memory_db_shm": Path(f"{db_path}-shm"),
+        "memory_db_journal": Path(f"{db_path}-journal"),
+    }
+
+
+def _materialize_promotion_sidecars(
+    selected: set[str],
+) -> dict[str, dict[str, Any]]:
+    assert_distinct_sidecars(_promotion_alias_paths())
+    materialized: dict[str, dict[str, Any]] = {}
+    if "digest" in selected:
+        loaded = read_private_json(
+            DEFAULT_DIGEST_PATH,
+            max_bytes=DIGEST_MAX_BYTES,
+            allow_missing=True,
+        )
+        materialized["digest"] = loaded.payload if loaded is not None else {}
+    if "session" in selected:
+        materialized["session"] = load_session_index(DEFAULT_SESSION_INDEX_PATH)
+    return materialized
+
+
+def _promotion_sidecar_failure(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, SidecarSecurityError):
+        reason_code = exc.reason_code
+    elif isinstance(exc, SessionIndexError):
+        reason_code = exc.reason_code
+    else:
+        reason_code = "session_sidecar_unsafe_target"
+    return {
+        "result": "FAIL",
+        "command": "promote",
+        "reason_code": reason_code,
+        "error": "promotion sidecar preflight failed",
+        "count": 0,
+        "relationships_updated": 0,
+        "memories": [],
+    }
+
+
 def cmd_promote(argv: list[str]) -> int:
     as_json = "--json" in argv
     argv = [arg for arg in argv if arg != "--json"]
@@ -627,43 +701,65 @@ def cmd_promote(argv: list[str]) -> int:
     if argv or source not in PROMOTION_SOURCES:
         return usage()
     cwd = Path.cwd()
-    conn = connect()
-    promoted: list[dict[str, Any]] = []
     selected = (
         {source}
         if source != "all"
         else {"digest", "session", "workflow", "claims", "doctor"}
     )
-    if "digest" in selected:
-        promoted.extend(promote_digest(conn, cwd=cwd))
-    if "session" in selected:
-        promoted.extend(promote_sessions(conn, cwd=cwd, limit=limit))
-    if "workflow" in selected:
-        promoted.extend(promote_workflows(conn, cwd=cwd, limit=limit))
-    if "claims" in selected:
-        promoted.extend(promote_claims(conn, cwd=cwd, limit=limit))
-    if "doctor" in selected:
-        promoted.extend(promote_doctor(conn, cwd=cwd, limit=limit))
-    relationships_updated = derive_relationship_links(conn)
-    refreshed_records = active_memory_records(conn)
-    refreshed_by_id = {record.memory_id: record for record in refreshed_records}
-    promoted = [
-        refreshed_by_id.get(str(item.get("id") or ""), item).to_payload()
-        if hasattr(refreshed_by_id.get(str(item.get("id") or ""), item), "to_payload")
-        else item
-        for item in promoted
-    ]
-    return emit(
-        {
-            "result": "PASS",
-            "command": "promote",
-            "source": source,
-            "count": len(promoted),
-            "relationships_updated": relationships_updated,
-            "memories": promoted,
-        },
-        as_json,
-    )
+    try:
+        materialized = _materialize_promotion_sidecars(selected)
+    except (SidecarSecurityError, SessionIndexError) as exc:
+        return emit(
+            {"source": source, **_promotion_sidecar_failure(exc)},
+            as_json,
+        )
+    conn = connect()
+    try:
+        promoted: list[dict[str, Any]] = []
+        if "digest" in selected:
+            promoted.extend(
+                promote_digest(conn, cwd=cwd, payload=materialized.get("digest", {}))
+            )
+        if "session" in selected:
+            promoted.extend(
+                promote_sessions(
+                    conn,
+                    cwd=cwd,
+                    limit=limit,
+                    payload=materialized.get("session", {}),
+                )
+            )
+        if "workflow" in selected:
+            promoted.extend(promote_workflows(conn, cwd=cwd, limit=limit))
+        if "claims" in selected:
+            promoted.extend(promote_claims(conn, cwd=cwd, limit=limit))
+        if "doctor" in selected:
+            promoted.extend(promote_doctor(conn, cwd=cwd, limit=limit))
+        relationships_updated = derive_relationship_links(conn)
+        refreshed_records = active_memory_records(conn)
+        refreshed_by_id = {record.memory_id: record for record in refreshed_records}
+        promoted = [
+            refreshed_by_id.get(str(item.get("id") or ""), item).to_payload()
+            if hasattr(
+                refreshed_by_id.get(str(item.get("id") or ""), item),
+                "to_payload",
+            )
+            else item
+            for item in promoted
+        ]
+        return emit(
+            {
+                "result": "PASS",
+                "command": "promote",
+                "source": source,
+                "count": len(promoted),
+                "relationships_updated": relationships_updated,
+                "memories": promoted,
+            },
+            as_json,
+        )
+    finally:
+        conn.close()
 
 
 def cmd_doctor(argv: list[str]) -> int:

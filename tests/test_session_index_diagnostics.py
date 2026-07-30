@@ -31,6 +31,7 @@ class SessionIndexDiagnosticsTest(unittest.TestCase):
             index_path = root / "index.json"
             quarantine = root / "quarantine"
             index_path.write_bytes(b"{malformed-reader-canary")
+            index_path.chmod(0o600)
             commands = [
                 ("current", module._command_current, []),
                 ("list", module._command_list, []),
@@ -69,6 +70,7 @@ class SessionIndexDiagnosticsTest(unittest.TestCase):
                 json.dumps({"version": 2, "sessions": "future-schema"}),
                 encoding="utf-8",
             )
+            index_path.chmod(0o600)
             with contextlib.redirect_stdout(io.StringIO()) as output:
                 code = module._command_list(["--json"], index_path)
             self.assertEqual(1, code)
@@ -85,6 +87,7 @@ class SessionIndexDiagnosticsTest(unittest.TestCase):
             index_path.parent.mkdir(parents=True)
             original = b"{digest-malformed-canary"
             index_path.write_bytes(original)
+            index_path.chmod(0o600)
             env = {
                 **os.environ,
                 "CI": "true",
