@@ -1843,19 +1843,22 @@ def _child_session_still_stale_incomplete(
 def _backup_runtime_database(db_path: Path) -> Path:
     """Create a transactionally consistent SQLite backup before runtime repair."""
     backup_path = db_path.with_name(f"{db_path.name}.pre-repair-{uuid.uuid4().hex}.sqlite3")
-    source = _connect_runtime_database_readonly(db_path)
-    destination = sqlite3.connect(str(backup_path))
+    source: sqlite3.Connection | None = None
+    destination: sqlite3.Connection | None = None
     try:
+        source = _connect_runtime_database_readonly(db_path)
+        destination = sqlite3.connect(str(backup_path))
         source.backup(destination)
     except Exception:
-        destination.close()
         backup_path.unlink(missing_ok=True)
         raise
     else:
-        destination.close()
         return backup_path
     finally:
-        source.close()
+        if destination is not None:
+            destination.close()
+        if source is not None:
+            source.close()
 
 
 def _repair_runtime_stuck_sessions(
@@ -1951,10 +1954,11 @@ def _repair_runtime_stuck_sessions(
             if not remaining_candidates:
                 break
             progress_this_round = 0
+            round_repairs: list[dict] = []
             conn.execute("BEGIN IMMEDIATE")
-            for finding in remaining_candidates:
+            for candidate_index, finding in enumerate(remaining_candidates):
                 # Savepoint identifiers cannot be bound parameters; keep them internal and fixed-format.
-                savepoint_name = f"repair_{len(repairs)}"
+                savepoint_name = f"repair_{candidate_index}"
                 conn.execute(f"SAVEPOINT {savepoint_name}")
                 repaired = False
                 issue_type = str(finding.get("issue_type") or "")
@@ -1984,7 +1988,7 @@ def _repair_runtime_stuck_sessions(
                         reason_code="stale_parent_reconciled_from_child_completion",
                     )
                     if repaired:
-                        repairs.append(
+                        round_repairs.append(
                             {
                                 "issue_type": issue_type,
                                 "parent_session_id": session_id,
@@ -2018,7 +2022,7 @@ def _repair_runtime_stuck_sessions(
                         reason_code="silent_parent_after_delegation_abort_repaired",
                     )
                     if repaired:
-                        repairs.append(
+                        round_repairs.append(
                             {
                                 "issue_type": issue_type,
                                 "parent_session_id": session_id,
@@ -2052,7 +2056,7 @@ def _repair_runtime_stuck_sessions(
                         reason_code="stale_delegated_child_runtime_recovery_missed",
                     )
                     if repaired:
-                        repairs.append(
+                        round_repairs.append(
                             {
                                 "issue_type": issue_type,
                                 "parent_session_id": session_id,
@@ -2074,7 +2078,7 @@ def _repair_runtime_stuck_sessions(
                         reason_code="stale_running_tool_repaired",
                     )
                     if repaired:
-                        repairs.append(
+                        round_repairs.append(
                             {
                                 "issue_type": issue_type,
                                 "session_id": session_id,
@@ -2098,7 +2102,7 @@ def _repair_runtime_stuck_sessions(
                         ),
                     )
                     if repaired:
-                        repairs.append(
+                        round_repairs.append(
                             {
                                 "issue_type": issue_type,
                                 "session_id": session_id,
@@ -2111,6 +2115,7 @@ def _repair_runtime_stuck_sessions(
                     progress_this_round += 1
                 conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             conn.commit()
+            repairs.extend(round_repairs)
             if progress_this_round <= 0:
                 break
             scan = _scan_runtime_stuck_sessions(db_path, stale_seconds)
