@@ -115,6 +115,336 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             "generic_stale_count": 0,
         }
 
+    def _create_tied_family_fixture(
+        self,
+        db_path: Path,
+        *,
+        family: str,
+        indexes: bool,
+        now_ms: int,
+        count: int = 22,
+    ) -> dict:
+        stale = now_ms - 1_000_000
+        width = max(2, len(str(max(0, count - 1))))
+        connection = sqlite3.connect(db_path)
+        connection.executescript(
+            """
+            CREATE TABLE session (
+              id TEXT PRIMARY KEY,
+              parent_id TEXT,
+              title TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              time_updated INTEGER NOT NULL
+            );
+            CREATE TABLE message (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              data TEXT NOT NULL
+            );
+            CREATE TABLE part (
+              id TEXT PRIMARY KEY,
+              message_id TEXT NOT NULL,
+              session_id TEXT NOT NULL,
+              time_created INTEGER NOT NULL,
+              data TEXT NOT NULL
+            );
+            """
+        )
+        if indexes:
+            connection.executescript(
+                """
+                CREATE INDEX deterministic_parent_cover
+                  ON session(parent_id, time_updated);
+                CREATE INDEX deterministic_message_cover
+                  ON message(session_id, time_created, id, data);
+                CREATE INDEX deterministic_part_cover
+                  ON part(message_id, id);
+                """
+            )
+
+        active_message = {"role": "assistant", "time": {}}
+        completed_message = {
+            "role": "assistant",
+            "time": {"completed": stale + 1},
+        }
+        aborted_message = {
+            "role": "assistant",
+            "time": {},
+            "error": {
+                "name": "MessageAbortedError",
+                "message": "The operation was aborted.",
+            },
+        }
+
+        def add_session(
+            session_id: str,
+            *,
+            parent_id: str | None = None,
+            updated: int = stale,
+        ) -> None:
+            connection.execute(
+                "INSERT INTO session VALUES (?, ?, ?, ?, ?)",
+                (session_id, parent_id, session_id, updated, updated),
+            )
+
+        def add_message(session_id: str, message_id: str, payload: dict) -> None:
+            connection.execute(
+                "INSERT INTO message VALUES (?, ?, ?, ?)",
+                (message_id, session_id, stale, json.dumps(payload)),
+            )
+
+        def add_part(
+            session_id: str,
+            message_id: str,
+            part_id: str,
+            payload: dict,
+        ) -> None:
+            connection.execute(
+                "INSERT INTO part VALUES (?, ?, ?, ?, ?)",
+                (part_id, message_id, session_id, stale, json.dumps(payload)),
+            )
+
+        def tool_part(tool: str, status: str) -> dict:
+            return {"type": "tool", "tool": tool, "state": {"status": status}}
+
+        positive_ids: list[str] = []
+        evidence: dict[str, dict[str, str]] = {}
+        loser_ids: dict[str, dict[str, str]] = {}
+
+        for index in range(count):
+            suffix = f"{index:0{width}d}"
+            if family in {
+                "parent_child_mismatch",
+                "silent_parent_after_delegation_abort",
+                "stale_delegated_child_runtime_recovery_missed",
+            }:
+                prefix = {
+                    "parent_child_mismatch": "mismatch",
+                    "silent_parent_after_delegation_abort": "abort",
+                    "stale_delegated_child_runtime_recovery_missed": "delegated",
+                }[family]
+                parent_id = f"{prefix}-parent-{suffix}"
+                child_id = f"{prefix}-child-{suffix}"
+                positive_ids.append(parent_id)
+                add_session(parent_id)
+                add_session(child_id, parent_id=parent_id, updated=stale + 1_000)
+
+                low_parent_message = f"a-{prefix}-parent-message-{suffix}"
+                high_parent_message = f"z-{prefix}-parent-message-{suffix}"
+                low_parent_part = f"a-{prefix}-parent-part-{suffix}"
+                high_parent_part = f"z-{prefix}-parent-part-{suffix}"
+                low_child_message = f"a-{prefix}-child-message-{suffix}"
+                high_child_message = f"z-{prefix}-child-message-{suffix}"
+                low_child_part = f"a-{prefix}-child-part-{suffix}"
+                high_child_part = f"z-{prefix}-child-part-{suffix}"
+
+                if family == "parent_child_mismatch":
+                    add_message(parent_id, low_parent_message, completed_message)
+                    add_message(parent_id, high_parent_message, active_message)
+                    add_part(
+                        parent_id,
+                        high_parent_message,
+                        low_parent_part,
+                        tool_part("task", "failed"),
+                    )
+                    add_part(
+                        parent_id,
+                        high_parent_message,
+                        high_parent_part,
+                        tool_part("task", "running"),
+                    )
+                    add_message(child_id, low_child_message, active_message)
+                    add_message(child_id, high_child_message, completed_message)
+                elif family == "silent_parent_after_delegation_abort":
+                    add_message(parent_id, low_parent_message, active_message)
+                    add_message(parent_id, high_parent_message, aborted_message)
+                    add_part(
+                        parent_id,
+                        high_parent_message,
+                        low_parent_part,
+                        tool_part("task", "running"),
+                    )
+                    add_part(
+                        parent_id,
+                        high_parent_message,
+                        high_parent_part,
+                        tool_part("task", "failed"),
+                    )
+                    add_message(child_id, low_child_message, active_message)
+                    add_message(child_id, high_child_message, completed_message)
+                else:
+                    add_message(parent_id, low_parent_message, completed_message)
+                    add_message(parent_id, high_parent_message, active_message)
+                    add_part(
+                        parent_id,
+                        high_parent_message,
+                        low_parent_part,
+                        tool_part("task", "failed"),
+                    )
+                    add_part(
+                        parent_id,
+                        high_parent_message,
+                        high_parent_part,
+                        tool_part("task", "running"),
+                    )
+                    add_message(child_id, low_child_message, completed_message)
+                    add_message(child_id, high_child_message, active_message)
+
+                add_part(
+                    child_id,
+                    high_child_message,
+                    low_child_part,
+                    {"type": "text", "text": "lower child evidence"},
+                )
+                add_part(
+                    child_id,
+                    high_child_message,
+                    high_child_part,
+                    tool_part("sentinel-child", "running"),
+                )
+                evidence[parent_id] = {
+                    "parent_message_id": high_parent_message,
+                    "parent_part_id": high_parent_part,
+                    "child_session_id": child_id,
+                    "child_message_id": high_child_message,
+                }
+                loser_ids[parent_id] = {
+                    "message_id": low_parent_message,
+                    "part_id": low_parent_part,
+                }
+            else:
+                prefix = "tool" if family == "stale_running_tool" else "generic"
+                session_id = f"{prefix}-session-{suffix}"
+                positive_ids.append(session_id)
+                add_session(session_id)
+                low_message = f"a-{prefix}-message-{suffix}"
+                high_message = f"z-{prefix}-message-{suffix}"
+                low_part = f"a-{prefix}-part-{suffix}"
+                high_part = f"z-{prefix}-part-{suffix}"
+                add_message(session_id, low_message, completed_message)
+                add_message(session_id, high_message, active_message)
+                if family == "stale_running_tool":
+                    add_part(
+                        session_id,
+                        high_message,
+                        low_part,
+                        tool_part("question", "failed"),
+                    )
+                    add_part(
+                        session_id,
+                        high_message,
+                        high_part,
+                        tool_part("question", "running"),
+                    )
+                else:
+                    add_part(
+                        session_id,
+                        high_message,
+                        low_part,
+                        tool_part("task", "completed"),
+                    )
+                    add_part(
+                        session_id,
+                        high_message,
+                        high_part,
+                        {"type": "text", "text": "generic winner"},
+                    )
+                evidence[session_id] = {
+                    "message_id": high_message,
+                    "part_id": high_part,
+                }
+                loser_ids[session_id] = {
+                    "message_id": low_message,
+                    "part_id": low_part,
+                }
+
+        negative_id = f"{family}-negative"
+        if family in {
+            "parent_child_mismatch",
+            "silent_parent_after_delegation_abort",
+            "stale_delegated_child_runtime_recovery_missed",
+        }:
+            negative_parent = negative_id
+            negative_child = f"{family}-negative-child"
+            add_session(negative_parent)
+            add_session(
+                negative_child,
+                parent_id=negative_parent,
+                updated=stale + 1_000,
+            )
+            low_message = f"a-{family}-negative-parent-message"
+            high_message = f"z-{family}-negative-parent-message"
+            low_part = f"a-{family}-negative-parent-part"
+            if family == "silent_parent_after_delegation_abort":
+                add_message(negative_parent, low_message, aborted_message)
+                add_part(
+                    negative_parent,
+                    low_message,
+                    low_part,
+                    tool_part("task", "failed"),
+                )
+                add_message(negative_parent, high_message, active_message)
+            else:
+                add_message(negative_parent, low_message, active_message)
+                add_part(
+                    negative_parent,
+                    low_message,
+                    low_part,
+                    tool_part("task", "running"),
+                )
+                add_message(negative_parent, high_message, completed_message)
+            add_message(
+                negative_child,
+                f"z-{family}-negative-child-message",
+                (
+                    active_message
+                    if family
+                    == "stale_delegated_child_runtime_recovery_missed"
+                    else completed_message
+                ),
+            )
+        else:
+            add_session(negative_id)
+            low_message = f"a-{family}-negative-message"
+            high_message = f"z-{family}-negative-message"
+            low_part = f"a-{family}-negative-part"
+            high_part = f"z-{family}-negative-part"
+            if family == "stale_running_tool":
+                add_message(negative_id, low_message, active_message)
+                add_part(
+                    negative_id,
+                    low_message,
+                    low_part,
+                    tool_part("question", "running"),
+                )
+                add_message(negative_id, high_message, completed_message)
+            else:
+                add_message(negative_id, low_message, active_message)
+                add_part(
+                    negative_id,
+                    low_message,
+                    low_part,
+                    {"type": "text", "text": "losing generic evidence"},
+                )
+                add_message(negative_id, high_message, active_message)
+                add_part(
+                    negative_id,
+                    high_message,
+                    high_part,
+                    tool_part("question", "running"),
+                )
+
+        connection.commit()
+        connection.close()
+        return {
+            "positive_ids": positive_ids,
+            "negative_id": negative_id,
+            "evidence": evidence,
+            "loser_ids": loser_ids,
+            "width": width,
+        }
+
     def test_runtime_diagnostic_connection_uses_readonly_uri(self) -> None:
         module = self._module()
         with tempfile.TemporaryDirectory() as tmp:
@@ -634,6 +964,336 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                     for item in result["generic_stale_findings"]
                 )
             )
+
+    def test_tied_evidence_has_identical_raw_order_in_indexed_and_fallback_scans(
+        self,
+    ) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        families = (
+            "parent_child_mismatch",
+            "silent_parent_after_delegation_abort",
+            "stale_delegated_child_runtime_recovery_missed",
+            "stale_running_tool",
+            "generic_stale_incomplete_assistant",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            for family in families:
+                with self.subTest(family=family):
+                    indexed_path = Path(tmp) / f"{family}-indexed.db"
+                    fallback_path = Path(tmp) / f"{family}-fallback.db"
+                    indexed_fixture = self._create_tied_family_fixture(
+                        indexed_path,
+                        family=family,
+                        indexes=True,
+                        now_ms=now_ms,
+                    )
+                    fallback_fixture = self._create_tied_family_fixture(
+                        fallback_path,
+                        family=family,
+                        indexes=False,
+                        now_ms=now_ms,
+                    )
+                    self.assertEqual(indexed_fixture, fallback_fixture)
+                    before = self._quiescent_snapshot(fallback_path)
+
+                    indexed = module._scan_runtime_stuck_sessions(
+                        indexed_path, 300, now_ms=now_ms
+                    )
+                    fallback = module._scan_runtime_stuck_sessions(
+                        fallback_path, 300, now_ms=now_ms
+                    )
+
+                    self.assertEqual(
+                        "indexed_snapshot", indexed["runtime_db_scan_mode"]
+                    )
+                    self.assertEqual(
+                        "legacy_fallback", fallback["runtime_db_scan_mode"]
+                    )
+                    self.assertEqual(before, self._quiescent_snapshot(fallback_path))
+                    expected_ids = sorted(
+                        indexed_fixture["positive_ids"], reverse=True
+                    )[:20]
+
+                    if family == "generic_stale_incomplete_assistant":
+                        indexed_rows = indexed["generic_stale_findings"]
+                        fallback_rows = fallback["generic_stale_findings"]
+                        owner_field = "session_id"
+                        self.assertEqual(22, indexed["generic_stale_count"])
+                        self.assertEqual(22, fallback["generic_stale_count"])
+                    else:
+                        indexed_rows = [
+                            item
+                            for item in indexed["stuck_findings"]
+                            if item["issue_type"] == family
+                        ]
+                        fallback_rows = [
+                            item
+                            for item in fallback["stuck_findings"]
+                            if item["issue_type"] == family
+                        ]
+                        owner_field = (
+                            "session_id"
+                            if family == "stale_running_tool"
+                            else "parent_session_id"
+                        )
+
+                    self.assertEqual(20, len(indexed_rows))
+                    self.assertEqual(20, len(fallback_rows))
+                    self.assertEqual(
+                        expected_ids,
+                        [str(item[owner_field]) for item in indexed_rows],
+                    )
+                    self.assertEqual(
+                        expected_ids,
+                        [str(item[owner_field]) for item in fallback_rows],
+                    )
+
+                    evidence_keys = (
+                        ("message_id", "part_id")
+                        if owner_field == "session_id"
+                        else (
+                            "parent_message_id",
+                            "parent_part_id",
+                            "child_session_id",
+                            "child_message_id",
+                        )
+                    )
+                    indexed_identity = [
+                        (
+                            str(item[owner_field]),
+                            *(str(item.get(key) or "") for key in evidence_keys),
+                        )
+                        for item in indexed_rows
+                    ]
+                    fallback_identity = [
+                        (
+                            str(item[owner_field]),
+                            *(str(item.get(key) or "") for key in evidence_keys),
+                        )
+                        for item in fallback_rows
+                    ]
+                    self.assertEqual(indexed_identity, fallback_identity)
+
+                    for item in fallback_rows:
+                        expected = fallback_fixture["evidence"][item[owner_field]]
+                        for key in evidence_keys:
+                            self.assertEqual(expected[key], item[key])
+                        if family in {
+                            "parent_child_mismatch",
+                            "silent_parent_after_delegation_abort",
+                        }:
+                            self.assertEqual("tool", item["child_last_part_type"])
+                        if (
+                            family
+                            == "stale_delegated_child_runtime_recovery_missed"
+                        ):
+                            self.assertEqual("sentinel-child", item["child_last_tool"])
+                            self.assertEqual(
+                                "running", item["child_last_tool_status"]
+                            )
+                        if family == "silent_parent_after_delegation_abort":
+                            self.assertEqual(
+                                "The operation was aborted.",
+                                item["parent_error_message"],
+                            )
+
+                    self.assertNotIn(
+                        fallback_fixture["negative_id"],
+                        {str(item[owner_field]) for item in fallback_rows},
+                    )
+                    if family == "generic_stale_incomplete_assistant":
+                        stuck_sessions = {
+                            str(item.get("session_id") or "")
+                            for item in fallback["stuck_findings"]
+                        }
+                        self.assertTrue(
+                            set(fallback_fixture["positive_ids"]).isdisjoint(
+                                stuck_sessions
+                            )
+                        )
+                        self.assertIn(
+                            fallback_fixture["negative_id"], stuck_sessions
+                        )
+                    else:
+                        generic_sessions = {
+                            str(item.get("session_id") or "")
+                            for item in fallback["generic_stale_findings"]
+                        }
+                        self.assertTrue(
+                            set(fallback_fixture["positive_ids"]).isdisjoint(
+                                generic_sessions
+                            )
+                        )
+
+    def test_no_index_tied_history_completes_within_scan_budget(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            fixture = self._create_tied_family_fixture(
+                db_path,
+                family="generic_stale_incomplete_assistant",
+                indexes=False,
+                now_ms=now_ms,
+                count=100,
+            )
+            result = module._scan_runtime_stuck_sessions(
+                db_path, 300, now_ms=now_ms
+            )
+            self.assertEqual("legacy_fallback", result["runtime_db_scan_mode"])
+            self.assertTrue(result["runtime_db_scan_complete"])
+            self.assertNotIn("runtime_scan_timeout", result["remediation_codes"])
+            self.assertEqual(100, result["generic_stale_count"])
+            self.assertEqual(
+                sorted(fixture["positive_ids"], reverse=True)[:20],
+                [
+                    item["session_id"]
+                    for item in result["generic_stale_findings"]
+                ],
+            )
+
+    def test_fallback_repair_preview_uses_deterministic_tied_evidence(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        structural_families = (
+            "parent_child_mismatch",
+            "silent_parent_after_delegation_abort",
+            "stale_delegated_child_runtime_recovery_missed",
+            "stale_running_tool",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            for family in structural_families:
+                with self.subTest(family=family):
+                    db_path = Path(tmp) / f"{family}.db"
+                    fixture = self._create_tied_family_fixture(
+                        db_path,
+                        family=family,
+                        indexes=False,
+                        now_ms=now_ms,
+                        count=1,
+                    )
+                    owner_id = fixture["positive_ids"][0]
+                    with patch.object(module, "_backup_runtime_database") as backup:
+                        result = module._repair_runtime_stuck_sessions(
+                            db_path,
+                            stale_seconds=300,
+                            apply_changes=False,
+                            include_generic=False,
+                            scope_session_id=owner_id,
+                        )
+                    backup.assert_not_called()
+                    self.assertEqual(1, result["candidate_count"])
+                    self.assertEqual(0, result["repaired_count"])
+                    candidate = result["preview"][0]
+                    self.assertEqual(family, candidate["issue_type"])
+                    expected = fixture["evidence"][owner_id]
+                    for key, value in expected.items():
+                        self.assertEqual(value, candidate[key])
+
+            generic_path = Path(tmp) / "generic.db"
+            generic_fixture = self._create_tied_family_fixture(
+                generic_path,
+                family="generic_stale_incomplete_assistant",
+                indexes=False,
+                now_ms=now_ms,
+                count=1,
+            )
+            generic_id = generic_fixture["positive_ids"][0]
+            excluded = module._repair_runtime_stuck_sessions(
+                generic_path,
+                stale_seconds=300,
+                apply_changes=False,
+                include_generic=False,
+                scope_session_id=generic_id,
+            )
+            included = module._repair_runtime_stuck_sessions(
+                generic_path,
+                stale_seconds=300,
+                apply_changes=False,
+                include_generic=True,
+                scope_session_id=generic_id,
+            )
+            self.assertEqual(0, excluded["candidate_count"])
+            self.assertEqual(1, included["candidate_count"])
+            self.assertEqual(
+                "generic_stale_incomplete_assistant",
+                included["preview"][0]["issue_type"],
+            )
+
+    def test_fallback_scoped_apply_mutates_only_selected_tied_evidence(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            fixture = self._create_tied_family_fixture(
+                db_path,
+                family="stale_running_tool",
+                indexes=False,
+                now_ms=now_ms,
+                count=1,
+            )
+            owner_id = fixture["positive_ids"][0]
+            selected = fixture["evidence"][owner_id]
+            before_rows = self._canonical_rows(db_path)
+
+            result = module._repair_runtime_stuck_sessions(
+                db_path,
+                stale_seconds=300,
+                apply_changes=True,
+                include_generic=False,
+                scope_session_id=owner_id,
+            )
+
+            self.assertEqual(1, result["candidate_count"])
+            self.assertEqual(1, result["repaired_count"])
+            backup_path = Path(result["backup_path"])
+            backup = sqlite3.connect(backup_path)
+            try:
+                self.assertEqual(
+                    "ok", backup.execute("PRAGMA integrity_check").fetchone()[0]
+                )
+            finally:
+                backup.close()
+            self.assertEqual(before_rows, self._canonical_rows(backup_path))
+
+            after_rows = self._canonical_rows(db_path)
+            changed_ids = {
+                "session": {owner_id},
+                "message": {selected["message_id"]},
+                "part": {selected["part_id"]},
+            }
+            for table in ("session", "message", "part"):
+                before_unchanged = [
+                    row
+                    for row in before_rows[table]
+                    if row[0] not in changed_ids[table]
+                ]
+                after_unchanged = [
+                    row
+                    for row in after_rows[table]
+                    if row[0] not in changed_ids[table]
+                ]
+                self.assertEqual(before_unchanged, after_unchanged)
+
+            connection = sqlite3.connect(db_path)
+            try:
+                repaired_message = json.loads(
+                    connection.execute(
+                        "SELECT data FROM message WHERE id = ?",
+                        (selected["message_id"],),
+                    ).fetchone()[0]
+                )
+                repaired_part = json.loads(
+                    connection.execute(
+                        "SELECT data FROM part WHERE id = ?",
+                        (selected["part_id"],),
+                    ).fetchone()[0]
+                )
+            finally:
+                connection.close()
+            self.assertIsNotNone(repaired_message["time"]["completed"])
+            self.assertEqual("failed", repaired_part["state"]["status"])
 
     def test_scan_enforces_query_only_snapshot_and_budget(self) -> None:
         module = self._module()

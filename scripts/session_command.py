@@ -882,6 +882,37 @@ def _scan_runtime_stuck_sessions_indexed_queries(
     return findings, generic_stale_findings, generic_stale_count
 
 
+_LEGACY_LATEST_MESSAGE_CTE_SQL = """
+    latest_message AS (
+      SELECT id, session_id FROM (
+        SELECT
+          id,
+          session_id,
+          ROW_NUMBER() OVER (
+            PARTITION BY session_id
+            ORDER BY time_created DESC, id DESC
+          ) AS row_number
+        FROM message
+      ) WHERE row_number = 1
+    )
+"""
+
+_LEGACY_LATEST_PART_CTE_SQL = """
+    latest_part AS (
+      SELECT id, message_id FROM (
+        SELECT
+          id,
+          message_id,
+          ROW_NUMBER() OVER (
+            PARTITION BY message_id
+            ORDER BY time_created DESC, id DESC
+          ) AS row_number
+        FROM part
+      ) WHERE row_number = 1
+    )
+"""
+
+
 def _scan_runtime_stuck_sessions_legacy_queries(
     conn: sqlite3.Connection,
     stale_seconds: int,
@@ -889,21 +920,9 @@ def _scan_runtime_stuck_sessions_legacy_queries(
     findings: list[dict[str, Any]] = []
     generic_stale_findings: list[dict[str, Any]] = []
     parent_child_rows = conn.execute(
-        """
-        WITH parent_last_msg AS (
-          SELECT id, session_id FROM (
-            SELECT id, session_id,
-              ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created DESC, id DESC) AS row_number
-            FROM message
-          ) WHERE row_number = 1
-        ),
-        child_last_msg AS (
-          SELECT id, session_id FROM (
-            SELECT id, session_id,
-              ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY time_created DESC, id DESC) AS row_number
-            FROM message
-          ) WHERE row_number = 1
-        )
+        f"""
+        WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
+             {_LEGACY_LATEST_PART_CTE_SQL}
         SELECT
           p.id AS parent_session_id,
           pm.id AS parent_message_id,
@@ -927,16 +946,14 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           END AS child_state
         FROM session p
         JOIN session c ON c.parent_id = p.id
-        JOIN parent_last_msg plm ON plm.session_id = p.id
+        JOIN latest_message plm ON plm.session_id = p.id
         JOIN message pm ON pm.id = plm.id
-        LEFT JOIN part pp ON pp.id = (
-          SELECT id FROM part WHERE message_id = pm.id ORDER BY time_created DESC, id DESC LIMIT 1
-        )
-        LEFT JOIN child_last_msg clm ON clm.session_id = c.id
+        LEFT JOIN latest_part plp ON plp.message_id = pm.id
+        LEFT JOIN part pp ON pp.id = plp.id
+        LEFT JOIN latest_message clm ON clm.session_id = c.id
         LEFT JOIN message cm ON cm.id = clm.id
-        LEFT JOIN part cp ON cp.id = (
-          SELECT id FROM part WHERE message_id = cm.id ORDER BY time_created DESC, id DESC LIMIT 1
-        )
+        LEFT JOIN latest_part clp ON clp.message_id = cm.id
+        LEFT JOIN part cp ON cp.id = clp.id
         WHERE json_extract(pm.data,'$.role') = 'assistant'
           AND json_extract(pm.data,'$.time.completed') IS NULL
           AND p.time_updated <= (_runtime_scan_now_ms() - (? * 1000))
@@ -949,7 +966,7 @@ def _scan_runtime_stuck_sessions_legacy_queries(
             json_extract(cm.data,'$.time.completed') IS NOT NULL
             OR json_extract(cm.data,'$.error') IS NOT NULL
           )
-        ORDER BY p.time_updated DESC
+        ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
         LIMIT 20
         """,
         (stale_seconds, stale_seconds),
@@ -960,13 +977,9 @@ def _scan_runtime_stuck_sessions_legacy_queries(
         findings.append(item)
 
     silent_abort_rows = conn.execute(
-        """
-        WITH parent_last_msg AS (
-          SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-        ),
-        child_last_msg AS (
-          SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-        )
+        f"""
+        WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
+             {_LEGACY_LATEST_PART_CTE_SQL}
         SELECT
           p.id AS parent_session_id,
           pm.id AS parent_message_id,
@@ -995,16 +1008,14 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           END AS child_state
         FROM session p
         JOIN session c ON c.parent_id = p.id
-        JOIN parent_last_msg plm ON plm.session_id = p.id
-        JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
-        LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
-          SELECT MAX(time_created) FROM part WHERE message_id = pm.id
-        )
-        LEFT JOIN child_last_msg clm ON clm.session_id = c.id
-        LEFT JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
-        LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
-          SELECT MAX(time_created) FROM part WHERE message_id = cm.id
-        )
+        JOIN latest_message plm ON plm.session_id = p.id
+        JOIN message pm ON pm.id = plm.id
+        LEFT JOIN latest_part plp ON plp.message_id = pm.id
+        LEFT JOIN part pp ON pp.id = plp.id
+        LEFT JOIN latest_message clm ON clm.session_id = c.id
+        LEFT JOIN message cm ON cm.id = clm.id
+        LEFT JOIN latest_part clp ON clp.message_id = cm.id
+        LEFT JOIN part cp ON cp.id = clp.id
         WHERE json_extract(pm.data,'$.role') = 'assistant'
           AND json_extract(pm.data,'$.error') IS NOT NULL
           AND (
@@ -1030,7 +1041,7 @@ def _scan_runtime_stuck_sessions_legacy_queries(
             json_extract(cm.data,'$.time.completed') IS NOT NULL
             OR json_extract(cm.data,'$.error') IS NOT NULL
           )
-        ORDER BY p.time_updated DESC
+        ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
         LIMIT 20
         """,
         (stale_seconds, stale_seconds),
@@ -1041,13 +1052,9 @@ def _scan_runtime_stuck_sessions_legacy_queries(
         findings.append(item)
 
     stale_delegated_child_rows = conn.execute(
-        """
-        WITH parent_last_msg AS (
-          SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-        ),
-        child_last_msg AS (
-          SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-        )
+        f"""
+        WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
+             {_LEGACY_LATEST_PART_CTE_SQL}
         SELECT
           p.id AS parent_session_id,
           pm.id AS parent_message_id,
@@ -1073,16 +1080,14 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           END AS child_state
         FROM session p
         JOIN session c ON c.parent_id = p.id
-        JOIN parent_last_msg plm ON plm.session_id = p.id
-        JOIN message pm ON pm.session_id = p.id AND pm.time_created = plm.max_time
-        LEFT JOIN part pp ON pp.message_id = pm.id AND pp.time_created = (
-          SELECT MAX(time_created) FROM part WHERE message_id = pm.id
-        )
-        JOIN child_last_msg clm ON clm.session_id = c.id
-        JOIN message cm ON cm.session_id = c.id AND cm.time_created = clm.max_time
-        LEFT JOIN part cp ON cp.message_id = cm.id AND cp.time_created = (
-          SELECT MAX(time_created) FROM part WHERE message_id = cm.id
-        )
+        JOIN latest_message plm ON plm.session_id = p.id
+        JOIN message pm ON pm.id = plm.id
+        LEFT JOIN latest_part plp ON plp.message_id = pm.id
+        LEFT JOIN part pp ON pp.id = plp.id
+        JOIN latest_message clm ON clm.session_id = c.id
+        JOIN message cm ON cm.id = clm.id
+        LEFT JOIN latest_part clp ON clp.message_id = cm.id
+        LEFT JOIN part cp ON cp.id = clp.id
         WHERE json_extract(pm.data,'$.role') = 'assistant'
           AND json_extract(pm.data,'$.time.completed') IS NULL
           AND p.time_updated <= (_runtime_scan_now_ms() - (? * 1000))
@@ -1094,7 +1099,7 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           AND json_extract(cm.data,'$.time.completed') IS NULL
           AND json_extract(cm.data,'$.error') IS NULL
           AND c.time_updated > p.time_updated
-        ORDER BY p.time_updated DESC
+        ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
         LIMIT 20
         """,
         (stale_seconds, stale_seconds),
@@ -1105,10 +1110,9 @@ def _scan_runtime_stuck_sessions_legacy_queries(
         findings.append(item)
 
     stale_tool_rows = conn.execute(
-        """
-        WITH last_msg AS (
-          SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-        )
+        f"""
+        WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
+             {_LEGACY_LATEST_PART_CTE_SQL}
         SELECT
           s.id AS session_id,
           m.id AS message_id,
@@ -1120,18 +1124,17 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           COALESCE(json_extract(p.data,'$.tool'),'') AS last_tool,
           COALESCE(json_extract(p.data,'$.state.status'),'') AS last_tool_status
         FROM session s
-        JOIN last_msg lm ON lm.session_id = s.id
-        JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
-        LEFT JOIN part p ON p.message_id = m.id AND p.time_created = (
-          SELECT MAX(time_created) FROM part WHERE message_id = m.id
-        )
+        JOIN latest_message lm ON lm.session_id = s.id
+        JOIN message m ON m.id = lm.id
+        LEFT JOIN latest_part lp ON lp.message_id = m.id
+        LEFT JOIN part p ON p.id = lp.id
         WHERE json_extract(m.data,'$.role') = 'assistant'
           AND json_extract(m.data,'$.time.completed') IS NULL
           AND s.time_updated <= (_runtime_scan_now_ms() - (? * 1000))
           AND COALESCE(json_extract(p.data,'$.type'),'') = 'tool'
           AND COALESCE(json_extract(p.data,'$.state.status'),'') = 'running'
           AND COALESCE(json_extract(p.data,'$.tool'),'') IN ('question', 'apply_patch')
-        ORDER BY s.time_updated DESC
+        ORDER BY s.time_updated DESC, s.id DESC
         LIMIT 20
         """,
         (stale_seconds,),
@@ -1141,20 +1144,16 @@ def _scan_runtime_stuck_sessions_legacy_queries(
         item["issue_type"] = "stale_running_tool"
         findings.append(item)
 
-    generic_stale_with_sql = """
-        WITH last_msg AS (
-          SELECT session_id, MAX(time_created) AS max_time FROM message GROUP BY session_id
-        ),
-        last_part AS (
-          SELECT message_id, MAX(time_created) AS max_time FROM part GROUP BY message_id
-        )
+    generic_stale_with_sql = f"""
+        WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
+             {_LEGACY_LATEST_PART_CTE_SQL}
     """
     generic_stale_from_sql = """
         FROM session s
-        JOIN last_msg lm ON lm.session_id = s.id
-        JOIN message m ON m.session_id = s.id AND m.time_created = lm.max_time
-        LEFT JOIN last_part lp ON lp.message_id = m.id
-        LEFT JOIN part p ON p.message_id = m.id AND p.time_created = lp.max_time
+        JOIN latest_message lm ON lm.session_id = s.id
+        JOIN message m ON m.id = lm.id
+        LEFT JOIN latest_part lp ON lp.message_id = m.id
+        LEFT JOIN part p ON p.id = lp.id
         WHERE json_extract(m.data,'$.role') = 'assistant'
           AND json_extract(m.data,'$.time.completed') IS NULL
           AND json_extract(m.data,'$.error') IS NULL
@@ -1186,7 +1185,7 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           COALESCE(json_extract(p.data,'$.tool'),'') AS last_tool,
           COALESCE(json_extract(p.data,'$.state.status'),'') AS last_tool_status
         {generic_stale_from_sql}
-        ORDER BY s.time_updated DESC
+        ORDER BY s.time_updated DESC, s.id DESC
         LIMIT 20
         """,
         (stale_seconds,),
