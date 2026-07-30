@@ -14,6 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from session_metadata_index import SessionIndexError, load_session_index  # type: ignore
+from session_sidecar_security import (  # type: ignore
+    SidecarInspection,
+    SidecarSecurityError,
+    assert_distinct_sidecars,
+    inspect_sidecar,
+    read_private_json,
+    repair_sidecar_mode,
+)
 
 
 DEFAULT_INDEX_PATH = Path(
@@ -27,6 +35,7 @@ DEFAULT_DIGEST_PATH = Path(
         "MY_OPENCODE_DIGEST_PATH", "~/.config/opencode/digests/last-session.json"
     )
 ).expanduser()
+DIGEST_MAX_BYTES = 1024 * 1024
 
 def _runtime_db_candidates() -> list[Path]:
     configured = os.environ.get("MY_OPENCODE_RUNTIME_DB_PATH", "").strip()
@@ -96,7 +105,7 @@ DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD = max(
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -290,6 +299,7 @@ def _emit(payload: dict, json_output: bool) -> int:
         return 0
     if payload.get("result") != "PASS" and command not in {
         "doctor",
+        "repair-sidecars",
         "repair-stale",
     }:
         print("result: FAIL")
@@ -352,6 +362,17 @@ def _emit(payload: dict, json_output: bool) -> int:
             print("problems:")
             for problem in payload.get("problems", []):
                 print(f"- {problem}")
+        sidecar_findings = payload.get("sidecar_findings") or []
+        if sidecar_findings:
+            print("sidecar_findings:")
+            for finding in sidecar_findings:
+                print(
+                    "- "
+                    f"target={finding.get('target')} "
+                    f"state={finding.get('state')} "
+                    f"mode={finding.get('before_mode')} "
+                    f"reason={finding.get('reason_code') or 'none'}"
+                )
         findings = payload.get("stuck_findings") or []
         if findings:
             print("stuck_findings:")
@@ -431,6 +452,25 @@ def _emit(payload: dict, json_output: bool) -> int:
                 print(f"- {fix}")
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("command") == "repair-sidecars":
+        print("session repair-sidecars")
+        print("-----------------------")
+        print(f"apply: {'yes' if payload.get('apply') else 'no'}")
+        if payload.get("reason_code"):
+            print(f"reason_code: {payload.get('reason_code')}")
+        for item in payload.get("sidecars", []):
+            print(
+                "- "
+                f"target={item.get('target')} "
+                f"state={item.get('state')} "
+                f"before={item.get('before_mode')} "
+                f"after={item.get('after_mode')} "
+                f"changed={'yes' if item.get('changed') else 'no'}"
+            )
+        print(f"changed_count: {payload.get('changed_count', 0)}")
+        print(f"partial: {'yes' if payload.get('partial') else 'no'}")
+        print(f"result: {payload.get('result')}")
+        return 0 if payload.get("result") == "PASS" else 1
     if payload.get("command") == "handoff":
         print("session handoff")
         print("---------------")
@@ -457,11 +497,64 @@ def _emit(payload: dict, json_output: bool) -> int:
     return 0
 
 
+def _active_sidecar_paths(index_path: Path) -> dict[str, Path]:
+    return {
+        "index": index_path,
+        "index_lock": index_path.with_name(f"{index_path.name}.lock"),
+        "digest": DEFAULT_DIGEST_PATH,
+        "digest_lock": DEFAULT_DIGEST_PATH.with_name(
+            f"{DEFAULT_DIGEST_PATH.name}.lock"
+        ),
+    }
+
+
+def _sidecar_failure_fields(exc: SidecarSecurityError) -> dict[str, Any]:
+    return {
+        "reason_code": exc.reason_code,
+        "error": "session sidecar safety check failed",
+    }
+
+
 def _load_digest(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    loaded = json.loads(path.read_text(encoding="utf-8"))
-    return loaded if isinstance(loaded, dict) else {}
+    loaded = read_private_json(
+        path,
+        max_bytes=DIGEST_MAX_BYTES,
+        allow_missing=True,
+    )
+    return loaded.payload if loaded is not None else {}
+
+
+def _blocked_inspection(target: str, path: Path, reason_code: str) -> dict[str, Any]:
+    return {
+        "target": target,
+        "path": str(path),
+        "state": "blocked",
+        "exists": False,
+        "before_mode": None,
+        "after_mode": None,
+        "reason_code": reason_code,
+        "changed": False,
+    }
+
+
+def _inspect_active_sidecars(
+    index_path: Path,
+) -> tuple[list[dict[str, Any]], SidecarSecurityError | None]:
+    paths = _active_sidecar_paths(index_path)
+    alias_error: SidecarSecurityError | None = None
+    try:
+        assert_distinct_sidecars(paths)
+    except SidecarSecurityError as exc:
+        alias_error = exc
+    findings: list[dict[str, Any]] = []
+    for target in ("index", "digest"):
+        try:
+            findings.append(
+                inspect_sidecar(paths[target], target=target).to_payload()
+            )
+        except SidecarSecurityError as exc:
+            findings.append(_blocked_inspection(target, paths[target], exc.reason_code))
+    return findings, alias_error
 
 
 def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
@@ -2308,11 +2401,47 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
         return _usage()
     warnings: list[str] = []
     problems: list[str] = []
-    exists = index_path.exists()
-    index_permission_mode = (index_path.stat().st_mode & 0o777) if exists else None
-    if exists and index_permission_mode != 0o600:
-        warnings.append("session index permissions should be 0600")
-    if not exists:
+    sidecar_findings, alias_error = _inspect_active_sidecars(index_path)
+    index_sidecar = next(
+        (item for item in sidecar_findings if item.get("target") == "index"),
+        _blocked_inspection("index", index_path, "session_sidecar_unsafe_target"),
+    )
+    index_state = str(index_sidecar.get("state") or "blocked")
+    exists = index_state != "missing"
+    index_permission_mode = index_sidecar.get("before_mode")
+    repair_needed = any(
+        item.get("state") == "repairable" for item in sidecar_findings
+    )
+    sidecar_reason_code = (
+        alias_error.reason_code
+        if alias_error is not None
+        else next(
+            (
+                str(item.get("reason_code"))
+                for item in sidecar_findings
+                if item.get("state") == "blocked" and item.get("reason_code")
+            ),
+            None,
+        )
+    )
+    sidecar_quick_fixes = (
+        ["/session repair-sidecars --json"] if repair_needed else []
+    )
+    if alias_error is not None:
+        problems.append("session sidecar paths are aliased or unsafe")
+    for finding in sidecar_findings:
+        target = str(finding.get("target") or "sidecar")
+        state = str(finding.get("state") or "blocked")
+        if state == "repairable":
+            if target == "index":
+                warnings.append("session index permissions should be 0600")
+            else:
+                warnings.append(f"{target} sidecar permissions should be 0600")
+        elif state == "blocked":
+            problems.append(f"{target} sidecar safety check failed")
+        elif state == "missing" and target == "digest":
+            warnings.append("digest does not exist yet; run /digest run first")
+    if index_state == "missing":
         warnings.append("session index does not exist yet; run /digest run first")
         runtime = _scan_runtime_stuck_sessions(
             db_path, stale_seconds, generic_stale_problem_threshold
@@ -2328,6 +2457,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
                 "exists": False,
                 "index_permission_mode": index_permission_mode,
+                "sidecar_findings": sidecar_findings,
+                "sidecar_reason_code": sidecar_reason_code,
                 "warnings": warnings,
                 "problems": problems,
                 "remediation_codes": runtime.get("remediation_codes", []),
@@ -2355,7 +2486,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
                 "count": 0,
                 "stale_seconds": stale_seconds,
-                "quick_fixes": [],
+                "quick_fixes": sidecar_quick_fixes,
             },
             json_output,
         )
@@ -2371,6 +2502,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
                 "exists": True,
                 "index_permission_mode": index_permission_mode,
+                "sidecar_findings": sidecar_findings,
+                "sidecar_reason_code": sidecar_reason_code,
                 "warnings": warnings,
                 "problems": problems,
                 "count": 0,
@@ -2379,7 +2512,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "generic_stale_count": 0,
                 "generic_stale_problem_threshold": generic_stale_problem_threshold,
                 "stale_seconds": stale_seconds,
-                "quick_fixes": [],
+                "quick_fixes": sidecar_quick_fixes,
                 **_index_failure_fields(exc),
             },
             json_output,
@@ -2401,6 +2534,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "runtime_db_candidates": [str(candidate) for candidate in _runtime_db_candidates()],
             "exists": True,
             "index_permission_mode": index_permission_mode,
+            "sidecar_findings": sidecar_findings,
+            "sidecar_reason_code": sidecar_reason_code,
             "warnings": warnings,
             "problems": problems,
             "remediation_codes": runtime.get("remediation_codes", []),
@@ -2428,14 +2563,17 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
             "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
-            "quick_fixes": [
-                "/doctor run",
-                f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
-                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
-                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
-            ]
-            if problems
-            else [],
+            "quick_fixes": (
+                [
+                    "/doctor run",
+                    f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
+                    f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
+                    f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
+                ]
+                if problems
+                else []
+            )
+            + sidecar_quick_fixes,
         },
         json_output,
     )
@@ -2574,7 +2712,18 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             json_output,
         )
 
-    digest = _load_digest(DEFAULT_DIGEST_PATH)
+    try:
+        digest = _load_digest(DEFAULT_DIGEST_PATH)
+    except SidecarSecurityError as exc:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "handoff",
+                "digest_path": str(DEFAULT_DIGEST_PATH),
+                **_sidecar_failure_fields(exc),
+            },
+            json_output,
+        )
     raw_git = digest.get("git")
     git: dict = raw_git if isinstance(raw_git, dict) else {}
     raw_plan = digest.get("plan_execution")
@@ -2621,6 +2770,171 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
         "next_actions": next_actions,
     }
     return _emit(payload, json_output)
+
+
+def _repair_inspection_payload(inspection: SidecarInspection) -> dict[str, Any]:
+    return {
+        "target": inspection.target,
+        "before_mode": inspection.before_mode,
+        "after_mode": inspection.after_mode,
+        "reason_code": inspection.reason_code,
+        "changed": inspection.changed,
+        "state": inspection.state,
+    }
+
+
+def _failed_repair_payload(
+    inspection: SidecarInspection,
+    reason_code: str,
+    *,
+    changed: bool = False,
+) -> dict[str, Any]:
+    return {
+        "target": inspection.target,
+        "before_mode": inspection.before_mode,
+        "after_mode": 0o600 if changed else inspection.after_mode,
+        "reason_code": reason_code,
+        "changed": changed,
+        "state": "failed" if changed else "blocked",
+    }
+
+
+def _command_repair_sidecars(argv: list[str], index_path: Path) -> int:
+    json_output = "--json" in argv
+    apply_changes = "--apply" in argv
+    args = [arg for arg in argv if arg not in {"--json", "--apply"}]
+    if args:
+        return _usage()
+
+    paths = _active_sidecar_paths(index_path)
+    alias_error: SidecarSecurityError | None = None
+    try:
+        assert_distinct_sidecars(paths)
+    except SidecarSecurityError as exc:
+        alias_error = exc
+
+    inspections: list[SidecarInspection] = []
+    for target in ("index", "digest"):
+        try:
+            inspections.append(inspect_sidecar(paths[target], target=target))
+        except SidecarSecurityError as exc:
+            inspections.append(
+                SidecarInspection(
+                    target=target,
+                    path=paths[target],
+                    state="blocked",
+                    exists=False,
+                    before_mode=None,
+                    after_mode=None,
+                    reason_code=exc.reason_code,
+                )
+            )
+
+    if alias_error is not None:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "repair-sidecars",
+                "apply": apply_changes,
+                "reason_code": alias_error.reason_code,
+                "partial": False,
+                "changed_count": 0,
+                "sidecars": [
+                    _failed_repair_payload(item, alias_error.reason_code)
+                    for item in inspections
+                ],
+            },
+            json_output,
+        )
+
+    blocked = [item for item in inspections if item.state == "blocked"]
+    if blocked:
+        reason_code = (
+            blocked[0].reason_code or "session_sidecar_repair_failed"
+        )
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "repair-sidecars",
+                "apply": apply_changes,
+                "reason_code": reason_code,
+                "partial": False,
+                "changed_count": 0,
+                "sidecars": [
+                    _repair_inspection_payload(item) for item in inspections
+                ],
+            },
+            json_output,
+        )
+
+    repairable = [item for item in inspections if item.state == "repairable"]
+    if not apply_changes:
+        return _emit(
+            {
+                "result": "FAIL" if repairable else "PASS",
+                "command": "repair-sidecars",
+                "apply": False,
+                "reason_code": "session_sidecar_repair_required"
+                if repairable
+                else None,
+                "partial": False,
+                "changed_count": 0,
+                "sidecars": [
+                    _repair_inspection_payload(item) for item in inspections
+                ],
+            },
+            json_output,
+        )
+
+    results = [_repair_inspection_payload(item) for item in inspections]
+    changed_count = 0
+    failure_code: str | None = None
+    for item in repairable:
+        result_index = next(
+            index
+            for index, payload in enumerate(results)
+            if payload.get("target") == item.target
+        )
+        try:
+            assert_distinct_sidecars(paths)
+            repaired = repair_sidecar_mode(
+                paths[item.target],
+                target=item.target,
+                expected_snapshot=item.snapshot,
+            )
+            results[result_index] = _repair_inspection_payload(repaired)
+            if repaired.changed:
+                changed_count += 1
+        except SidecarSecurityError as exc:
+            failure_code = exc.reason_code
+            changed = False
+            try:
+                after = inspect_sidecar(paths[item.target], target=item.target)
+                changed = after.state == "private" and item.before_mode != 0o600
+            except SidecarSecurityError:
+                pass
+            if changed:
+                changed_count += 1
+            results[result_index] = _failed_repair_payload(
+                item,
+                exc.reason_code,
+                changed=changed,
+            )
+            break
+
+    return _emit(
+        {
+            "result": "FAIL" if failure_code else "PASS",
+            "command": "repair-sidecars",
+            "apply": True,
+            "reason_code": failure_code,
+            "partial": bool(failure_code and changed_count),
+            "changed_count": changed_count,
+            "sidecars": results,
+        },
+        json_output,
+    )
+
 
 def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     del index_path
@@ -2723,6 +3037,8 @@ def main(argv: list[str]) -> int:
         return _command_handoff(rest, index_path)
     if command == "doctor":
         return _command_doctor(rest, index_path)
+    if command == "repair-sidecars":
+        return _command_repair_sidecars(rest, index_path)
     if command == "repair-stale":
         return _command_repair_stale(rest, index_path)
     return _usage()

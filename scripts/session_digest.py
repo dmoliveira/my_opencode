@@ -22,7 +22,20 @@ from recovery_engine import (  # type: ignore
     evaluate_resume_eligibility,
     explain_resume_reason,
 )
-from session_metadata_index import update_session_index  # type: ignore
+from session_metadata_index import (  # type: ignore
+    DEFAULT_INDEX_PATH,
+    update_session_index,
+)
+from session_sidecar_security import (  # type: ignore
+    PublicationResult,
+    SidecarSecurityError,
+    SidecarSnapshot,
+    assert_distinct_sidecars,
+    atomic_write_private_json,
+    inspect_sidecar,
+    read_private_json,
+    secure_sidecar_lock,
+)
 from todo_enforcement import normalize_todo_state  # type: ignore
 
 
@@ -38,6 +51,8 @@ SESSION_CONFIG_PATH = Path(
     )
 ).expanduser()
 SESSION_ENV_SET = "MY_OPENCODE_SESSION_CONFIG_PATH" in os.environ
+DIGEST_MAX_BYTES = 1024 * 1024
+_EXPECTED_SNAPSHOT_UNSET = object()
 
 
 def now_iso() -> str:
@@ -177,10 +192,123 @@ def collect_plan_execution_snapshot() -> dict:
     }
 
 
-def write_digest(path: Path, digest: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(digest, indent=2) + "\n", encoding="utf-8")
-    path.chmod(0o600)
+def _digest_lock_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.lock")
+
+
+def _index_lock_path() -> Path:
+    return DEFAULT_INDEX_PATH.with_name(f"{DEFAULT_INDEX_PATH.name}.lock")
+
+
+def _transaction_sidecars(path: Path) -> dict[str, Path]:
+    return {
+        "digest": path,
+        "digest_lock": _digest_lock_path(path),
+        "index": DEFAULT_INDEX_PATH,
+        "index_lock": _index_lock_path(),
+    }
+
+
+def _raise_preflight_failure(reason_code: str, message: str) -> None:
+    raise SidecarSecurityError(reason_code, message, phase="preflight")
+
+
+def _preflight_digest_transaction(path: Path) -> bool:
+    sidecars = _transaction_sidecars(path)
+    assert_distinct_sidecars(sidecars)
+    digest_exists = False
+    for target in ("digest", "index"):
+        inspection = inspect_sidecar(sidecars[target], target=target)
+        if target == "digest":
+            digest_exists = inspection.exists
+        if inspection.state in {"missing", "private"}:
+            continue
+        reason_code = inspection.reason_code or "session_sidecar_unsafe_target"
+        if inspection.state == "repairable":
+            reason_code = "session_sidecar_insecure_permissions"
+        _raise_preflight_failure(
+            reason_code,
+            f"{target} sidecar failed private-file preflight",
+        )
+    for target in ("digest_lock", "index_lock"):
+        inspection = inspect_sidecar(sidecars[target], target=target)
+        if inspection.state in {"missing", "private", "repairable"}:
+            continue
+        _raise_preflight_failure(
+            inspection.reason_code or "session_sidecar_unsafe_target",
+            f"{target} failed stable-lock preflight",
+        )
+    return digest_exists
+
+
+def _read_digest(path: Path, *, allow_missing: bool) -> tuple[dict, SidecarSnapshot] | None:
+    loaded = read_private_json(
+        path,
+        max_bytes=DIGEST_MAX_BYTES,
+        allow_missing=allow_missing,
+    )
+    if loaded is None:
+        return None
+    return loaded.payload, loaded.snapshot
+
+
+def _revalidate_after_hook(
+    path: Path,
+    *,
+    required: bool,
+) -> tuple[dict, SidecarSnapshot] | None:
+    _preflight_digest_transaction(path)
+    loaded = _read_digest(path, allow_missing=not required)
+    if required and loaded is None:
+        raise SidecarSecurityError(
+            "session_sidecar_unsafe_target",
+            "digest disappeared after external hook",
+            phase="hook_revalidation",
+        )
+    return loaded
+
+
+def write_digest(
+    path: Path,
+    digest: dict,
+    *,
+    expected_snapshot: SidecarSnapshot | None | object = _EXPECTED_SNAPSHOT_UNSET,
+) -> PublicationResult:
+    if expected_snapshot is _EXPECTED_SNAPSHOT_UNSET:
+        return atomic_write_private_json(
+            path,
+            digest,
+            max_bytes=DIGEST_MAX_BYTES,
+        )
+    return atomic_write_private_json(
+        path,
+        digest,
+        max_bytes=DIGEST_MAX_BYTES,
+        expected_snapshot=expected_snapshot,
+    )
+
+
+def _print_sidecar_failure(
+    path: Path,
+    exc: SidecarSecurityError,
+    *,
+    generation: str,
+    digest_committed: bool = False,
+    session_index: dict | None = None,
+) -> int:
+    print("result: FAIL")
+    print(f"digest: {path}")
+    print(f"reason_code: {exc.reason_code}")
+    print(f"phase: {exc.phase}")
+    print(f"generation: {generation}")
+    print(f"committed: {'yes' if exc.committed else 'no'}")
+    print(f"durability: {exc.durability}")
+    print(f"digest_committed: {'yes' if digest_committed or exc.committed else 'no'}")
+    if isinstance(session_index, dict):
+        print(f"session_index_result: {session_index.get('result', 'unknown')}")
+        if session_index.get("reason_code"):
+            print(f"session_index_reason: {session_index.get('reason_code')}")
+    return 1
 
 
 def run_hook(command: str, digest_path: Path) -> int:
@@ -381,27 +509,66 @@ def command_run(argv: list[str]) -> int:
     path = Path(path_value).expanduser() if path_value else DEFAULT_DIGEST_PATH
     cwd = Path.cwd()
 
-    digest = build_digest(reason=reason, cwd=cwd)
-
     post_result = None
-    if run_post:
-        post_config = load_post_session_config()
-        post_result = run_post_session(post_config, reason=reason, digest_path=path)
-        digest["post_session"] = post_result
-
-    write_digest(path, digest)
     try:
-        digest["session_index"] = update_session_index(digest)
-        write_digest(path, digest)
-    except Exception:
-        digest["session_index"] = {
-            "result": "FAIL",
-            "reason_code": "session_index_io_error",
-            "quarantine": None,
-            "error": "session index update failed unexpectedly",
-        }
-        write_digest(path, digest)
+        digest_existed_before_post = _preflight_digest_transaction(path)
+        digest = build_digest(reason=reason, cwd=cwd)
+        if run_post:
+            post_config = load_post_session_config()
+            post_result = run_post_session(post_config, reason=reason, digest_path=path)
+            digest["post_session"] = post_result
+            _revalidate_after_hook(path, required=digest_existed_before_post)
+    except SidecarSecurityError as exc:
+        return _print_sidecar_failure(path, exc, generation="preflight")
+
+    try:
+        timeout_ms = max(
+            0,
+            min(
+                60_000,
+                int(os.environ.get("MY_OPENCODE_DIGEST_LOCK_TIMEOUT_MS", "5000")),
+            ),
+        )
+    except ValueError:
+        timeout_ms = 5_000
+
+    initial_publication: PublicationResult
+    final_publication: PublicationResult
+    session_index: dict | None = None
+    try:
+        with secure_sidecar_lock(
+            _digest_lock_path(path),
+            timeout_seconds=timeout_ms / 1000.0,
+        ):
+            _preflight_digest_transaction(path)
+            initial_publication = write_digest(path, digest)
+            try:
+                session_index = update_session_index(digest)
+            except Exception:
+                session_index = {
+                    "result": "FAIL",
+                    "reason_code": "session_index_io_error",
+                    "quarantine": None,
+                    "error": "session index update failed unexpectedly",
+                }
+            digest["session_index"] = session_index
+            final_publication = write_digest(
+                path,
+                digest,
+                expected_snapshot=initial_publication.snapshot,
+            )
+    except SidecarSecurityError as exc:
+        return _print_sidecar_failure(
+            path,
+            exc,
+            generation="final" if session_index is not None else "initial",
+            digest_committed="initial_publication" in locals(),
+            session_index=session_index,
+        )
+
     print_summary(path, digest)
+    print(f"digest_initial_durability: {initial_publication.durability}")
+    print(f"digest_final_durability: {final_publication.durability}")
 
     post_exit = 0
     if isinstance(post_result, dict) and post_result.get("attempted"):
@@ -413,11 +580,35 @@ def command_run(argv: list[str]) -> int:
     if hook_value:
         code = run_hook(hook_value, path)
         print(f"hook: exited with code {code}")
+        try:
+            observed = _revalidate_after_hook(path, required=True)
+        except SidecarSecurityError as exc:
+            return _print_sidecar_failure(
+                path,
+                exc,
+                generation="post_hook",
+                digest_committed=True,
+                session_index=session_index,
+            )
+        assert observed is not None
+        observed_digest, observed_snapshot = observed
+        if observed_snapshot != final_publication.snapshot:
+            print("hook_digest_superseded: yes")
+            print_summary(path, observed_digest)
         if code != 0:
             return code
         if post_exit != 0:
             return post_exit
-        return 0 if digest.get("session_index", {}).get("result") == "PASS" else 1
+        observed_session_index = observed_digest.get("session_index")
+        if not isinstance(observed_session_index, dict):
+            print("result: FAIL")
+            print("reason_code: session_sidecar_malformed_json")
+            return 1
+        return (
+            0
+            if observed_session_index.get("result") == "PASS"
+            else 1
+        )
 
     if post_exit != 0:
         return post_exit
@@ -427,11 +618,15 @@ def command_run(argv: list[str]) -> int:
 def command_show(argv: list[str]) -> int:
     path_value = parse_option(argv, "--path")
     path = Path(path_value).expanduser() if path_value else DEFAULT_DIGEST_PATH
-    if not path.exists():
+    try:
+        loaded = _read_digest(path, allow_missing=True)
+    except SidecarSecurityError as exc:
+        return _print_sidecar_failure(path, exc, generation="show")
+    if loaded is None:
         print(f"error: digest file not found: {path}")
         return 1
 
-    digest = json.loads(path.read_text(encoding="utf-8"))
+    digest, _ = loaded
     print_summary(path, digest)
 
     preview = digest.get("git", {}).get("status_preview", [])
@@ -446,7 +641,20 @@ def collect_doctor(path: Path) -> dict:
     problems: list[str] = []
     warnings: list[str] = []
 
-    if not path.exists():
+    try:
+        inspection = inspect_sidecar(path, target="digest")
+    except SidecarSecurityError as exc:
+        return {
+            "result": "FAIL",
+            "path": str(path),
+            "exists": False,
+            "reason_code": exc.reason_code,
+            "warnings": warnings,
+            "problems": ["digest sidecar safety check failed"],
+            "quick_fixes": ["run /session repair-sidecars --json"],
+        }
+
+    if not inspection.exists:
         warnings.append("digest file does not exist yet")
         return {
             "result": "PASS",
@@ -455,19 +663,38 @@ def collect_doctor(path: Path) -> dict:
             "warnings": warnings,
             "problems": problems,
             "quick_fixes": ["run /digest run --reason manual"],
+            "sidecar": inspection.to_payload(),
         }
 
-    try:
-        digest = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        problems.append(f"failed to parse digest JSON: {exc}")
+    if inspection.state != "private":
+        reason_code = inspection.reason_code or "session_sidecar_unsafe_target"
+        problems.append("digest sidecar is not private and safe")
         return {
             "result": "FAIL",
             "path": str(path),
             "exists": True,
+            "reason_code": reason_code,
             "warnings": warnings,
             "problems": problems,
-            "quick_fixes": ["run /digest run --reason manual to regenerate"],
+            "sidecar": inspection.to_payload(),
+            "quick_fixes": ["run /session repair-sidecars --json"],
+        }
+
+    try:
+        loaded = _read_digest(path, allow_missing=False)
+        assert loaded is not None
+        digest, _ = loaded
+    except SidecarSecurityError as exc:
+        problems.append("digest sidecar could not be loaded securely")
+        return {
+            "result": "FAIL",
+            "path": str(path),
+            "exists": True,
+            "reason_code": exc.reason_code,
+            "warnings": warnings,
+            "problems": problems,
+            "sidecar": inspection.to_payload(),
+            "quick_fixes": ["inspect the local digest before regenerating it"],
         }
 
     for field in ("timestamp", "reason", "cwd", "git"):
@@ -500,6 +727,7 @@ def collect_doctor(path: Path) -> dict:
         "warnings": warnings,
         "problems": problems,
         "session_index": session_index,
+        "sidecar": inspection.to_payload(),
         "quick_fixes": ["run /digest run --reason manual"]
         if warnings or problems
         else [],

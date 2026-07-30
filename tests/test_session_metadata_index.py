@@ -60,6 +60,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             quarantine = Path(tmp) / "quarantine"
             original = b"{not json"
             path.write_bytes(original)
+            path.chmod(0o600)
             original_identity = (path.stat().st_dev, path.stat().st_ino)
             with patch.dict(
                 os.environ,
@@ -92,6 +93,32 @@ class SessionMetadataIndexTest(unittest.TestCase):
             self.assertEqual([quarantine_path], list(quarantine.glob("*.bin")))
             self.assertFalse(list(quarantine.glob("*.tmp")))
 
+    def test_active_index_cannot_be_its_own_quarantine_artifact(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original = b"{self-quarantine-canary"
+            artifact_name = f"{hashlib.sha256(original).hexdigest()}.bin"
+            path = root / artifact_name
+            path.write_bytes(original)
+            path.chmod(0o600)
+            identity = (path.stat().st_dev, path.stat().st_ino)
+            with patch.dict(
+                os.environ,
+                {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(root)},
+            ):
+                result = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("FAIL", result["result"])
+            self.assertEqual(
+                "session_index_quarantine_collision",
+                result["reason_code"],
+            )
+            self.assertEqual("collision", result["quarantine"]["status"])
+            self.assertEqual(original, path.read_bytes())
+            self.assertEqual(identity, (path.stat().st_dev, path.stat().st_ino))
+
     def test_invalid_utf8_is_preserved_byte_exactly(self) -> None:
         if str(SCRIPTS_DIR) not in sys.path:
             sys.path.insert(0, str(SCRIPTS_DIR))
@@ -102,6 +129,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             quarantine = root / "quarantine"
             original = b'\xff\xfe{"version": 1, "sessions": []}'
             path.write_bytes(original)
+            path.chmod(0o600)
             with patch.dict(
                 os.environ,
                 {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(quarantine)},
@@ -147,6 +175,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
                     path = root / f"{corruption_kind}.json"
                     original = json.dumps(payload).encode("utf-8")
                     path.write_bytes(original)
+                    path.chmod(0o600)
                     with patch.dict(
                         os.environ,
                         {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(quarantine)},
@@ -167,6 +196,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             quarantine = root / "quarantine"
             original = b'{"version": 2, "sessions": "future-schema"}'
             path.write_bytes(original)
+            path.chmod(0o600)
             with patch.dict(
                 os.environ,
                 {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(quarantine)},
@@ -198,6 +228,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            path.chmod(0o600)
             with patch.dict(os.environ, {"OPENCODE_SESSION_ID": "legacy"}):
                 result = module.update_session_index(
                     {
@@ -235,6 +266,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
                 ],
             }
             path.write_text(json.dumps(historical), encoding="utf-8")
+            path.chmod(0o600)
             loaded = module.load_session_index(path)
             self.assertEqual("historical", loaded["sessions"][0]["session_id"])
             self.assertEqual(["main"], loaded["sessions"][0]["branches"])
@@ -295,6 +327,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             target = root / "target.json"
             original = b"{malformed"
             target.write_bytes(original)
+            target.chmod(0o600)
 
             symlink_path = root / "symlink.json"
             symlink_path.symlink_to(target)
@@ -328,6 +361,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             quarantine.mkdir(mode=0o700)
             original = b"{malformed"
             path.write_bytes(original)
+            path.chmod(0o600)
             artifact = quarantine / f"{hashlib.sha256(original).hexdigest()}.bin"
             artifact.write_bytes(b"different")
             artifact.chmod(0o600)
@@ -342,6 +376,51 @@ class SessionMetadataIndexTest(unittest.TestCase):
             self.assertNotIn("sha256", result["quarantine"])
             self.assertEqual(original, path.read_bytes())
             self.assertEqual(b"different", artifact.read_bytes())
+
+    def test_existing_quarantine_name_swap_is_detected(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "index.json"
+            expected = b"{malformed"
+            source.write_bytes(expected)
+            source.chmod(0o600)
+            _, source_snapshot = module._secure_read_source(source, expected)
+            quarantine = root / "quarantine"
+            quarantine.mkdir(mode=0o700)
+            artifact_name = f"{hashlib.sha256(expected).hexdigest()}.bin"
+            artifact = quarantine / artifact_name
+            artifact.write_bytes(expected)
+            artifact.chmod(0o600)
+            replacement = quarantine / "replacement.bin"
+            replacement.write_bytes(expected)
+            replacement.chmod(0o600)
+            directory_fd = module._open_quarantine_directory(quarantine)
+            real_read = module._read_descriptor
+
+            def read_then_swap(descriptor: int, max_bytes: int) -> bytes:
+                data = real_read(descriptor, max_bytes)
+                os.replace(replacement, artifact)
+                return data
+
+            try:
+                with patch.object(module, "_read_descriptor", side_effect=read_then_swap):
+                    with self.assertRaises(module.SessionIndexError) as raised:
+                        module._read_existing_artifact(
+                            directory_fd,
+                            quarantine,
+                            artifact_name,
+                            expected,
+                            source_snapshot,
+                        )
+            finally:
+                os.close(directory_fd)
+            self.assertEqual(
+                "session_index_quarantine_collision",
+                raised.exception.reason_code,
+            )
 
     def test_ordinary_read_error_and_insecure_quarantine_directory_do_not_copy(self) -> None:
         if str(SCRIPTS_DIR) not in sys.path:
@@ -363,6 +442,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
 
             corrupt_path = root / "corrupt.json"
             corrupt_path.write_bytes(b"{malformed")
+            corrupt_path.chmod(0o600)
             quarantine.mkdir(mode=0o700)
             quarantine.chmod(0o755)
             with patch.dict(
@@ -391,6 +471,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             quarantine.mkdir(mode=0o700)
             original = b"{malformed"
             path.write_bytes(original)
+            path.chmod(0o600)
             target = root / "artifact-target"
             target.write_bytes(b"private-target")
             artifact = quarantine / f"{hashlib.sha256(original).hexdigest()}.bin"
@@ -418,6 +499,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             valid = root / "valid.json"
             original = b'{"version": 1, "sessions": []}'
             valid.write_bytes(original)
+            valid.chmod(0o600)
 
             symlink_path = root / "valid-symlink.json"
             symlink_path.symlink_to(valid)
@@ -445,6 +527,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             path = Path(tmp) / "index.json"
             original = b'{"version": 1, "sessions": []}'
             path.write_bytes(original)
+            path.chmod(0o600)
             with patch.object(module.os, "supports_dir_fd", set()):
                 result = module.update_session_index({"cwd": "/repo"}, path)
             self.assertEqual("session_index_security_unsupported", result["reason_code"])
@@ -459,19 +542,34 @@ class SessionMetadataIndexTest(unittest.TestCase):
             root = Path(tmp)
             path = root / "index.json"
             path.write_text('{"version": 1, "sessions": []}', encoding="utf-8")
+            path.chmod(0o600)
             victim = root / "victim"
             victim.write_text("victim", encoding="utf-8")
             victim.chmod(0o640)
             real_replace = os.replace
 
-            def replace_then_swap(source: Path, destination: Path) -> None:
-                real_replace(source, destination)
-                Path(destination).unlink()
-                Path(destination).symlink_to(victim)
+            def replace_then_swap(
+                source: Path,
+                destination: Path,
+                *,
+                src_dir_fd: int | None = None,
+                dst_dir_fd: int | None = None,
+            ) -> None:
+                real_replace(
+                    source,
+                    destination,
+                    src_dir_fd=src_dir_fd,
+                    dst_dir_fd=dst_dir_fd,
+                )
+                path.unlink()
+                path.symlink_to(victim)
 
             with patch.object(module.os, "replace", side_effect=replace_then_swap):
                 result = module.update_session_index({"cwd": "/repo"}, path)
-            self.assertEqual("session_index_write_race", result["reason_code"])
+            self.assertEqual(
+                "session_index_durability_uncertain",
+                result["reason_code"],
+            )
             self.assertTrue(path.is_symlink())
             self.assertEqual("victim", victim.read_text(encoding="utf-8"))
             self.assertEqual(0o640, victim.stat().st_mode & 0o777)
@@ -486,6 +584,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             quarantine = root / "quarantine"
             original = b"{malformed"
             path.write_bytes(original)
+            path.chmod(0o600)
             real_link = os.link
 
             def link_then_interrupt(*args, **kwargs) -> None:
@@ -505,6 +604,111 @@ class SessionMetadataIndexTest(unittest.TestCase):
             self.assertEqual(1, artifact.stat().st_nlink)
             self.assertFalse(list(quarantine.glob("*.tmp")))
             self.assertEqual(original, path.read_bytes())
+
+    def test_permissive_corruption_requires_mode_repair_before_quarantine(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        security = importlib.import_module("session_sidecar_security")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "index.json"
+            quarantine = root / "quarantine"
+            original = b"{malformed-private-index"
+            path.write_bytes(original)
+            path.chmod(0o644)
+            identity = (path.stat().st_dev, path.stat().st_ino)
+            with patch.dict(
+                os.environ,
+                {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(quarantine)},
+            ):
+                blocked = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("session_index_insecure_permissions", blocked["reason_code"])
+            self.assertIsNone(blocked["quarantine"])
+            self.assertFalse(quarantine.exists())
+
+            repaired = security.repair_sidecar_mode(path, target="index")
+            self.assertEqual("repaired", repaired.state)
+            self.assertEqual(identity, (path.stat().st_dev, path.stat().st_ino))
+            self.assertEqual(original, path.read_bytes())
+            with patch.dict(
+                os.environ,
+                {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(quarantine)},
+            ):
+                corrupt = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("session_index_corrupt", corrupt["reason_code"])
+            self.assertEqual(original, path.read_bytes())
+            self.assertEqual(original, Path(corrupt["quarantine"]["path"]).read_bytes())
+
+    def test_legacy_index_lock_is_narrowed_without_inode_replacement(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "index.json"
+            lock_path = path.with_name("index.json.lock")
+            lock_path.write_text("0", encoding="utf-8")
+            lock_path.chmod(0o644)
+            identity = (lock_path.stat().st_dev, lock_path.stat().st_ino)
+            result = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("PASS", result["result"])
+            self.assertEqual(0o600, lock_path.stat().st_mode & 0o777)
+            self.assertEqual(identity, (lock_path.stat().st_dev, lock_path.stat().st_ino))
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlinks unsupported")
+    def test_unsafe_index_lock_never_mutates_victim(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "index.json"
+            victim = root / "victim"
+            victim.write_text("victim", encoding="utf-8")
+            victim.chmod(0o640)
+            lock_path = path.with_name("index.json.lock")
+            lock_path.symlink_to(victim)
+            result = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("session_index_unsafe_source", result["reason_code"])
+            self.assertEqual("victim", victim.read_text(encoding="utf-8"))
+            self.assertEqual(0o640, victim.stat().st_mode & 0o777)
+            self.assertFalse(path.exists())
+
+    def test_oversized_index_fails_before_parse_or_quarantine(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "index.json"
+            quarantine = root / "quarantine"
+            path.write_bytes(b"x" * (module.SESSION_INDEX_MAX_BYTES + 1))
+            path.chmod(0o600)
+            with patch.dict(
+                os.environ,
+                {"MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR": str(quarantine)},
+            ):
+                result = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("session_index_too_large", result["reason_code"])
+            self.assertIsNone(result["quarantine"])
+            self.assertFalse(quarantine.exists())
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symlinks unsupported")
+    def test_symlinked_index_parent_fails_before_lock_or_write(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        module = importlib.reload(importlib.import_module("session_metadata_index"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_parent = root / "real"
+            real_parent.mkdir(mode=0o700)
+            alias_parent = root / "alias"
+            alias_parent.symlink_to(real_parent, target_is_directory=True)
+            path = alias_parent / "index.json"
+            result = module.update_session_index({"cwd": "/repo"}, path)
+            self.assertEqual("session_index_unsafe_source", result["reason_code"])
+            self.assertFalse((real_parent / "index.json").exists())
+            self.assertFalse((real_parent / "index.json.lock").exists())
 
     def test_pruning_interprets_legacy_naive_timestamps_as_utc(self) -> None:
         if str(SCRIPTS_DIR) not in sys.path:

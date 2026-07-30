@@ -413,7 +413,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/image_command.py\" --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "session": {
-      "description": "Inspect current/indexed sessions (current|list|show|search|handoff|doctor)",
+      "description": "Inspect and repair session state (current|list|show|search|handoff|doctor|repair-sidecars|repair-stale)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before session --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "digest": {

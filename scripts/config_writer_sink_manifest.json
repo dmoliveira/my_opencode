@@ -2557,69 +2557,6 @@
   },
   {
     "language": "python",
-    "file": "session_digest.py",
-    "function": "write_digest",
-    "kind": "path.chmod",
-    "destination": "path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_digest.py",
-    "function": "write_digest",
-    "kind": "path.mkdir",
-    "destination": "path.parent",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_digest.py",
-    "function": "write_digest",
-    "kind": "path.write_text",
-    "destination": "path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_atomic_write_json",
-    "kind": "os.open",
-    "destination": "path.parent",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_atomic_write_json",
-    "kind": "os.replace",
-    "destination": "path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_atomic_write_json",
-    "kind": "path.unlink",
-    "destination": "temporary_path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_atomic_write_json",
-    "kind": "tempfile.mkstemp",
-    "destination": "path.parent",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
     "file": "session_metadata_index.py",
     "function": "_cleanup_owned_temporary",
     "kind": "os.unlink",
@@ -2630,26 +2567,8 @@
   {
     "language": "python",
     "file": "session_metadata_index.py",
-    "function": "_index_write_lock",
-    "kind": "path.open",
-    "destination": "lock_path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
     "function": "_open_quarantine_directory",
     "kind": "os.open",
-    "destination": "path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_open_quarantine_directory",
-    "kind": "path.mkdir",
     "destination": "path",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
@@ -2683,8 +2602,17 @@
   },
   {
     "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_secure_read_path",
+    "file": "session_sidecar_security.py",
+    "function": "_cleanup_owned_name",
+    "kind": "os.unlink",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "_open_verified_directory",
     "kind": "os.open",
     "destination": "path",
     "count": 1,
@@ -2692,20 +2620,65 @@
   },
   {
     "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "_update_session_index_unlocked",
-    "kind": "path.mkdir",
-    "destination": "index_path.parent",
+    "file": "session_sidecar_security.py",
+    "function": "_sidecar_authority",
+    "kind": "os.mkdir",
+    "destination": "component",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
   {
     "language": "python",
-    "file": "session_metadata_index.py",
-    "function": "update_session_index",
-    "kind": "path.mkdir",
-    "destination": "index_path.parent",
+    "file": "session_sidecar_security.py",
+    "function": "_sidecar_authority",
+    "kind": "os.open",
+    "destination": "component",
     "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "atomic_write_private_json",
+    "kind": "os.open",
+    "destination": "temporary_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "atomic_write_private_json",
+    "kind": "os.replace",
+    "destination": "authority.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "read_private_bytes",
+    "kind": "os.open",
+    "destination": "authority.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "repair_sidecar_mode",
+    "kind": "os.open",
+    "destination": "authority.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "_secure_sidecar_file_lock",
+    "kind": "os.open",
+    "destination": "authority.name",
+    "count": 3,
     "classification": "runtime_or_artifact_exemption"
   },
   {

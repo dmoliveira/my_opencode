@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import json
 import os
 import stat
-import tempfile
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -15,6 +13,15 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from config_layering import load_layered_config  # type: ignore
+from session_sidecar_security import (  # type: ignore
+    SidecarSecurityError,
+    SidecarSnapshot,
+    assert_distinct_sidecars,
+    atomic_write_private_json,
+    ensure_private_directory,
+    read_private_bytes,
+    secure_sidecar_lock,
+)
 
 
 class SessionIndexError(ValueError):
@@ -48,6 +55,7 @@ class SessionIndexCorruption(SessionIndexError):
 SESSION_INDEX_VERSION = 1
 QUARANTINE_ENV = "MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR"
 QUARANTINE_SUFFIX = ".bin"
+SESSION_INDEX_MAX_BYTES = 16 * 1024 * 1024
 
 CORRUPTION_RECOVERY_STEPS = [
     "stop session-index writers",
@@ -56,6 +64,33 @@ CORRUPTION_RECOVERY_STEPS = [
     "run /digest run --reason manual",
     "run /session doctor --json",
 ]
+
+
+def _map_sidecar_error(exc: SidecarSecurityError) -> SessionIndexError:
+    reason_map = {
+        "session_sidecar_insecure_permissions": "session_index_insecure_permissions",
+        "session_sidecar_too_large": "session_index_too_large",
+        "session_sidecar_lock_timeout": "session_index_lock_timeout",
+        "session_sidecar_snapshot_changed": "session_index_source_changed",
+        "session_sidecar_alias": "session_index_alias",
+        "session_sidecar_unsupported_platform": "session_index_security_unsupported",
+        "session_sidecar_write_error": "session_index_io_error",
+        "session_sidecar_durability_uncertain": "session_index_durability_uncertain",
+    }
+    if exc.reason_code in {
+        "session_sidecar_unsafe_ancestor",
+        "session_sidecar_unsafe_parent",
+        "session_sidecar_unsafe_target",
+    }:
+        reason_code = "session_index_unsafe_source"
+    else:
+        reason_code = reason_map.get(exc.reason_code, "session_index_io_error")
+    error = SessionIndexError(
+        "session index sidecar safety check failed",
+        reason_code=reason_code,
+    )
+    error.__cause__ = exc
+    return error
 
 
 DEFAULT_INDEX_PATH = Path(
@@ -123,28 +158,24 @@ def _load_policy() -> dict[str, int]:
 def _index_write_lock(path: Path) -> Iterator[None]:
     """Serialize the sidecar load-modify-write transaction across supported hosts."""
     lock_path = path.with_name(f"{path.name}.lock")
-    with lock_path.open("a+", encoding="utf-8") as handle:
-        if os.name == "nt":
-            import msvcrt
-
-            handle.seek(0)
-            handle.write("0")
-            handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-            try:
-                yield
-            finally:
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    try:
+        timeout_ms = max(
+            0,
+            min(
+                60_000,
+                int(os.environ.get("MY_OPENCODE_SESSION_INDEX_LOCK_TIMEOUT_MS", "5000")),
+            ),
+        )
+    except ValueError:
+        timeout_ms = 5_000
+    try:
+        with secure_sidecar_lock(
+            lock_path,
+            timeout_seconds=timeout_ms / 1000.0,
+        ):
+            yield
+    except SidecarSecurityError as exc:
+        raise _map_sidecar_error(exc) from exc
 
 
 def _raise_corruption(kind: str, raw_bytes: bytes) -> None:
@@ -223,7 +254,7 @@ def _parse_index_bytes(raw_bytes: bytes) -> dict[str, Any]:
 
 def _read_index_snapshot(
     path: Path,
-) -> tuple[dict[str, Any], os.stat_result | None]:
+) -> tuple[dict[str, Any], SidecarSnapshot | None]:
     snapshot = _secure_read_path(path, missing_ok=True)
     if snapshot is None:
         return (
@@ -287,13 +318,16 @@ def _require_secure_index_primitives() -> None:
         )
 
 
-def _read_descriptor(descriptor: int) -> bytes:
+def _read_descriptor(descriptor: int, max_bytes: int) -> bytes:
     chunks: list[bytes] = []
-    while True:
-        chunk = os.read(descriptor, 1024 * 1024)
+    remaining = max_bytes + 1
+    while remaining > 0:
+        chunk = os.read(descriptor, min(1024 * 1024, remaining))
         if not chunk:
             return b"".join(chunks)
         chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
 
 
 def _secure_read_path(
@@ -301,87 +335,28 @@ def _secure_read_path(
     *,
     expected_bytes: bytes | None = None,
     missing_ok: bool = False,
-) -> tuple[bytes, os.stat_result] | None:
+) -> tuple[bytes, SidecarSnapshot] | None:
     try:
-        path_stat = os.lstat(path)
-    except FileNotFoundError:
-        if missing_ok:
-            return None
-        _raise_index_error(
-            "session_index_source_changed",
-            "session index changed before quarantine could preserve it",
+        loaded = read_private_bytes(
+            path,
+            max_bytes=SESSION_INDEX_MAX_BYTES,
+            allow_missing=missing_ok,
         )
-    except (OSError, NotImplementedError) as exc:
-        raise SessionIndexError(
-            "session index source safety could not be verified",
-            reason_code="session_index_unsafe_source",
-        ) from exc
-
-    _require_secure_index_primitives()
-
-    if (
-        not stat.S_ISREG(path_stat.st_mode)
-        or path_stat.st_uid != os.geteuid()
-        or path_stat.st_nlink != 1
-    ):
-        _raise_index_error(
-            "session_index_unsafe_source",
-            "session index source is not a current-user-owned regular single-link file",
-        )
-
-    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
-    try:
-        descriptor = os.open(path, flags)
-    except (OSError, NotImplementedError) as exc:
-        reason_code = (
-            "session_index_source_changed"
-            if isinstance(exc, OSError) and exc.errno == errno.ENOENT
-            else "session_index_unsafe_source"
-        )
-        raise SessionIndexError(
-            "session index source safety could not be verified",
-            reason_code=reason_code,
-        ) from exc
-    try:
-        opened_stat = os.fstat(descriptor)
-        if _stat_signature(path_stat) != _stat_signature(opened_stat):
-            _raise_index_error(
-                "session_index_source_changed",
-                "session index changed before quarantine could preserve it",
-            )
-        data = _read_descriptor(descriptor)
-        completed_stat = os.fstat(descriptor)
-    finally:
-        os.close(descriptor)
-
-    if _stat_signature(opened_stat) != _stat_signature(completed_stat):
-        _raise_index_error(
-            "session_index_source_changed",
-            "session index changed while quarantine read it",
-        )
-    try:
-        final_path_stat = os.lstat(path)
-    except (OSError, NotImplementedError) as exc:
-        raise SessionIndexError(
-            "session index changed while it was being read",
-            reason_code="session_index_source_changed",
-        ) from exc
-    if _stat_signature(completed_stat) != _stat_signature(final_path_stat):
-        _raise_index_error(
-            "session_index_source_changed",
-            "session index path changed while it was being read",
-        )
-    if expected_bytes is not None and data != expected_bytes:
+    except SidecarSecurityError as exc:
+        raise _map_sidecar_error(exc) from exc
+    if loaded is None:
+        return None
+    if expected_bytes is not None and loaded.data != expected_bytes:
         _raise_index_error(
             "session_index_source_changed",
             "session index changed after corruption was detected",
         )
-    return data, completed_stat
+    return loaded.data, loaded.snapshot
 
 
 def _secure_read_source(
     path: Path, expected_bytes: bytes
-) -> tuple[bytes, os.stat_result]:
+) -> tuple[bytes, SidecarSnapshot]:
     snapshot = _secure_read_path(path, expected_bytes=expected_bytes)
     if snapshot is None:
         raise AssertionError("required source snapshot unexpectedly missing")
@@ -390,9 +365,9 @@ def _secure_read_source(
 
 def _open_quarantine_directory(path: Path) -> int:
     try:
-        path.mkdir(parents=True, mode=0o700, exist_ok=True)
+        ensure_private_directory(path)
         path_stat = os.lstat(path)
-    except OSError as exc:
+    except (OSError, SidecarSecurityError) as exc:
         raise SessionIndexError(
             "session-index quarantine directory could not be created",
             reason_code="session_index_quarantine_error",
@@ -457,6 +432,7 @@ def _read_existing_artifact(
     directory: Path,
     artifact_name: str,
     expected_bytes: bytes,
+    source_snapshot: SidecarSnapshot,
 ) -> dict[str, Any] | None:
     flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
@@ -476,19 +452,34 @@ def _read_existing_artifact(
             or opened_stat.st_uid != os.geteuid()
             or opened_stat.st_nlink != 1
             or stat.S_IMODE(opened_stat.st_mode) != 0o600
+            or (int(opened_stat.st_dev), int(opened_stat.st_ino))
+            == (source_snapshot.dev, source_snapshot.ino)
         ):
             _raise_index_error(
                 "session_index_quarantine_collision",
                 "session-index quarantine artifact has unsafe metadata",
                 quarantine=_collision_details(directory, artifact_name, expected_bytes),
             )
-        data = _read_descriptor(descriptor)
+        data = _read_descriptor(descriptor, len(expected_bytes))
         os.fsync(descriptor)
         completed_stat = os.fstat(descriptor)
     finally:
         os.close(descriptor)
+    try:
+        named_stat = os.stat(
+            artifact_name,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except OSError as exc:
+        raise SessionIndexError(
+            "session-index quarantine artifact changed while reading",
+            reason_code="session_index_quarantine_collision",
+            quarantine=_collision_details(directory, artifact_name, expected_bytes),
+        ) from exc
     if (
         _stat_signature(opened_stat) != _stat_signature(completed_stat)
+        or _stat_signature(completed_stat) != _stat_signature(named_stat)
         or data != expected_bytes
     ):
         _raise_index_error(
@@ -504,11 +495,16 @@ def _confirm_durable_artifact(
     directory: Path,
     artifact_name: str,
     expected_bytes: bytes,
+    source_snapshot: SidecarSnapshot,
 ) -> dict[str, Any]:
     try:
         os.fsync(directory_fd)
         confirmed = _read_existing_artifact(
-            directory_fd, directory, artifact_name, expected_bytes
+            directory_fd,
+            directory,
+            artifact_name,
+            expected_bytes,
+            source_snapshot,
         )
     except (OSError, NotImplementedError) as exc:
         raise SessionIndexError(
@@ -559,13 +555,22 @@ def _publish_quarantine_artifact(
     directory: Path,
     artifact_name: str,
     data: bytes,
+    source_snapshot: SidecarSnapshot,
 ) -> dict[str, Any]:
     existing = _read_existing_artifact(
-        directory_fd, directory, artifact_name, data
+        directory_fd,
+        directory,
+        artifact_name,
+        data,
+        source_snapshot,
     )
     if existing is not None:
         return _confirm_durable_artifact(
-            directory_fd, directory, artifact_name, data
+            directory_fd,
+            directory,
+            artifact_name,
+            data,
+            source_snapshot,
         )
 
     temporary_name = f".{artifact_name}.{uuid.uuid4().hex}.tmp"
@@ -623,7 +628,11 @@ def _publish_quarantine_artifact(
                     "temporary quarantine artifact could not be safely removed",
                 )
             existing = _read_existing_artifact(
-                directory_fd, directory, artifact_name, data
+                directory_fd,
+                directory,
+                artifact_name,
+                data,
+                source_snapshot,
             )
             if existing is None:
                 _raise_index_error(
@@ -631,7 +640,11 @@ def _publish_quarantine_artifact(
                     "session-index quarantine artifact disappeared during publication",
                 )
             return _confirm_durable_artifact(
-                directory_fd, directory, artifact_name, data
+                directory_fd,
+                directory,
+                artifact_name,
+                data,
+                source_snapshot,
             )
 
         if not _cleanup_owned_temporary(
@@ -643,7 +656,11 @@ def _publish_quarantine_artifact(
             )
         os.fsync(directory_fd)
         verified = _read_existing_artifact(
-            directory_fd, directory, artifact_name, data
+            directory_fd,
+            directory,
+            artifact_name,
+            data,
+            source_snapshot,
         )
         if verified is None:
             _raise_index_error(
@@ -669,15 +686,13 @@ def _publish_quarantine_artifact(
         raise
 
 
-def _recheck_source(path: Path, expected_stat: os.stat_result) -> None:
-    try:
-        current = os.lstat(path)
-    except OSError as exc:
-        raise SessionIndexError(
-            "session index changed after quarantine preservation",
-            reason_code="session_index_source_changed",
-        ) from exc
-    if _stat_signature(current) != _stat_signature(expected_stat):
+def _recheck_source(
+    path: Path,
+    expected_stat: SidecarSnapshot,
+    expected_bytes: bytes,
+) -> None:
+    current = _secure_read_path(path, expected_bytes=expected_bytes)
+    if current is None or current[1] != expected_stat:
         _raise_index_error(
             "session_index_source_changed",
             "session index changed after quarantine preservation",
@@ -685,9 +700,21 @@ def _recheck_source(path: Path, expected_stat: os.stat_result) -> None:
 
 
 def _quarantine_corrupt_index(path: Path, expected_bytes: bytes) -> dict[str, Any]:
+    _require_secure_index_primitives()
     source_bytes, source_stat = _secure_read_source(path, expected_bytes)
     directory = _quarantine_directory()
     artifact_name = f"{hashlib.sha256(source_bytes).hexdigest()}{QUARANTINE_SUFFIX}"
+    artifact_path = directory / artifact_name
+    try:
+        assert_distinct_sidecars(
+            {"index": path, "quarantine_artifact": artifact_path}
+        )
+    except SidecarSecurityError as exc:
+        raise SessionIndexError(
+            "active session index cannot serve as its own quarantine artifact",
+            reason_code="session_index_quarantine_collision",
+            quarantine=_collision_details(directory, artifact_name, source_bytes),
+        ) from exc
     directory_fd = _open_quarantine_directory(directory)
     try:
         details = _publish_quarantine_artifact(
@@ -695,11 +722,12 @@ def _quarantine_corrupt_index(path: Path, expected_bytes: bytes) -> dict[str, An
             directory,
             artifact_name,
             source_bytes,
+            source_stat,
         )
     finally:
         os.close(directory_fd)
     try:
-        _recheck_source(path, source_stat)
+        _recheck_source(path, source_stat, source_bytes)
     except SessionIndexError as exc:
         exc.quarantine = details
         raise
@@ -709,96 +737,18 @@ def _quarantine_corrupt_index(path: Path, expected_bytes: bytes) -> dict[str, An
 def _atomic_write_json(
     path: Path,
     payload: dict[str, Any],
-    expected_source: os.stat_result | None,
+    expected_source: SidecarSnapshot | None,
 ) -> None:
     """Persist sidecar JSON without exposing a partially written index."""
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary_path = Path(temporary_name)
-    temporary_identity: tuple[int, int] | None = None
     try:
-        temporary_stat = os.fstat(descriptor)
-        temporary_identity = (
-            int(temporary_stat.st_dev),
-            int(temporary_stat.st_ino),
+        atomic_write_private_json(
+            path,
+            payload,
+            max_bytes=SESSION_INDEX_MAX_BYTES,
+            expected_snapshot=expected_source,
         )
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8", closefd=False) as handle:
-            json.dump(payload, handle, indent=2)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        completed_stat = os.fstat(descriptor)
-        named_temporary = os.lstat(temporary_path)
-        if (
-            (int(named_temporary.st_dev), int(named_temporary.st_ino))
-            != temporary_identity
-            or not stat.S_ISREG(completed_stat.st_mode)
-            or completed_stat.st_uid != os.geteuid()
-            or completed_stat.st_nlink != 1
-            or stat.S_IMODE(completed_stat.st_mode) != 0o600
-            or _stat_signature(completed_stat) != _stat_signature(named_temporary)
-        ):
-            _raise_index_error(
-                "session_index_write_race",
-                "temporary session index changed before publication",
-            )
-
-        try:
-            current_source = os.lstat(path)
-        except FileNotFoundError:
-            current_source = None
-        if expected_source is None:
-            if current_source is not None:
-                _raise_index_error(
-                    "session_index_source_changed",
-                    "session index appeared before publication",
-                )
-        elif current_source is None or _stat_signature(
-            current_source
-        ) != _stat_signature(expected_source):
-            _raise_index_error(
-                "session_index_source_changed",
-                "session index changed before publication",
-            )
-
-        os.replace(temporary_path, path)
-        published_stat = os.lstat(path)
-        if (
-            (int(published_stat.st_dev), int(published_stat.st_ino))
-            != temporary_identity
-            or not stat.S_ISREG(published_stat.st_mode)
-            or published_stat.st_uid != os.geteuid()
-            or published_stat.st_nlink != 1
-            or stat.S_IMODE(published_stat.st_mode) != 0o600
-            or published_stat.st_size != completed_stat.st_size
-        ):
-            _raise_index_error(
-                "session_index_write_race",
-                "published session index identity could not be verified",
-            )
-        directory_fd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        final_stat = os.lstat(path)
-        if (int(final_stat.st_dev), int(final_stat.st_ino)) != temporary_identity:
-            _raise_index_error(
-                "session_index_write_race",
-                "published session index changed before durability verification",
-            )
-    finally:
-        os.close(descriptor)
-        try:
-            remaining = os.lstat(temporary_path)
-        except FileNotFoundError:
-            remaining = None
-        if temporary_identity is not None and remaining is not None and (
-            int(remaining.st_dev), int(remaining.st_ino)
-        ) == temporary_identity:
-            temporary_path.unlink()
+    except SidecarSecurityError as exc:
+        raise _map_sidecar_error(exc) from exc
 
 
 def _event_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
@@ -884,9 +834,12 @@ def update_session_index(
 ) -> dict[str, Any]:
     index_path = path or DEFAULT_INDEX_PATH
     try:
-        index_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = index_path.with_name(f"{index_path.name}.lock")
+        assert_distinct_sidecars({"index": index_path, "index_lock": lock_path})
         with _index_write_lock(index_path):
             return _update_session_index_unlocked(digest, index_path)
+    except SidecarSecurityError as exc:
+        return _failure_result(index_path, _map_sidecar_error(exc))
     except SessionIndexError as exc:
         return _failure_result(index_path, exc)
     except OSError as exc:
@@ -1000,7 +953,6 @@ def _update_session_index_unlocked(
     index["generated_at"] = _utc_now().isoformat()
 
     try:
-        index_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write_json(index_path, index, source_stat)
     except SessionIndexError as exc:
         return _failure_result(index_path, exc)

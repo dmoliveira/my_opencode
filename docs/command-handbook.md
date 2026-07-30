@@ -303,10 +303,16 @@ Use these directly in OpenCode:
 /session handoff --json
 /session handoff --launch-cwd ../my_opencode-wt-task --fork --json
 /session doctor --json
+/session repair-sidecars --json
+/session repair-sidecars --apply --json
 ```
 
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
+
+`/session doctor` inspects the active digest and session index without changing them. `/session repair-sidecars` previews permission repairs and exits nonzero while a repair is needed. Add `--apply` to narrow a safe current-user-owned regular single-link file to `0600`. The command never changes content, inode identity, quarantine artifacts, lock files, or directories. It refuses aliases, unsafe targets, and modes such as `0400` that would require adding owner permissions. If one target changes before a later repair fails, the result reports `partial=true` and does not restore permissive bits.
+
+Digest and index readers require private sidecars before parsing them. A permissive corrupt index therefore needs two explicit steps: run `/session repair-sidecars --apply --json` to narrow its mode, then run `/digest run --reason manual` to classify and preserve the unchanged corrupt bytes. Digest publication uses two atomic generations around the independent index update; a final digest failure does not roll back an index that already committed. External post-session and final hooks are rechecked afterward, but the built-in flow never rewrites or tightens a hook-modified file.
 
 If `/digest run` detects a corrupt session index, it leaves the active bytes unchanged and exits nonzero. When source and destination safety checks pass, it stores an owner-only hash-addressed copy under `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index` and reports stable recovery metadata; collisions or unsafe paths fail closed without claiming preservation. Set `MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR` only to another private location outside active configuration. Stop index writers, inspect any reported local copy/checksum, repair or replace the active index from a verified source, then run `/digest run --reason manual` and `/session doctor --json`. Session readers never create quarantine artifacts; `--redact` failures expose only `session_index_unavailable`.
 
@@ -328,7 +334,7 @@ Use these directly in OpenCode:
 
 `/memory` stores durable local shared memory in `~/.config/opencode/my_opencode/runtime/shared_memory.db` by default. `/memory-lifecycle` now operates on that same SQLite-backed shared-memory runtime for stats, export, import, cleanup, compress, and doctor flows.
 
-`/memory promote` ingests high-signal local artifacts into shared memory from digests, session index state, workflow history, claims state, and saved doctor reports without calling external services. It also derives internal `memory-ref:` links between related promoted memories where shared session context is available, so recall and handoff flows can carry deterministic session-linked relationships in the returned payloads.
+`/memory promote` ingests high-signal local artifacts into shared memory from digests, session index state, workflow history, claims state, and saved doctor reports without calling external services. Selected digest and session-index inputs are securely loaded before the shared-memory database is opened. Unsafe, malformed, oversized, or database-aliased sidecars fail before SQLite creates or changes the database, WAL, SHM, or journal. The command also derives internal `memory-ref:` links between related promoted memories where shared session context is available, so recall and handoff flows can carry deterministic session-linked relationships in the returned payloads.
 
 ## Claims and workflow coordination 🧩
 
