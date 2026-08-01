@@ -64,6 +64,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 - 🧾 Built-in `/digest` command for session snapshots and optional exit hooks.
 - 🪨 Built-in `/gateway concise` controls for concise/caveman-style communication mode, terse review/commit variants, and memory compression aliasing.
 - 🧠 Built-in `/memory` command for local shared-memory capture, retrieval, recall, and summarization.
+- 🧹 Built-in `/memory-lifecycle` previews and scoped cleanup/compression with explicit single-memory restore guidance.
 - 📡 Built-in `/telemetry` command to manage LangGraph/local event forwarding.
 - ✅ Built-in `/post-session` command to configure auto test/lint hooks on session end.
 - 🛡️ Policy profiles available via `/notify policy profile <strict|balanced|fast>`.

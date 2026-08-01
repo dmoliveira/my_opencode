@@ -11825,6 +11825,41 @@ exit 0
                 "cleanup",
                 "--older-days",
                 "1",
+                "--scope",
+                "repo",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory-lifecycle cleanup preview failed: {result.stderr}",
+        )
+        cleanup_preview = parse_json_output(result.stdout)
+        expect(
+            cleanup_preview.get("candidate_count") == 1
+            and cleanup_preview.get("changed_count") == 0
+            and cleanup_preview.get("moved") == 1
+            and cleanup_preview.get("archive_count") == 0
+            and cleanup_preview.get("scope") == "repo"
+            and cleanup_preview.get("transaction_outcome") == "not_started",
+            "memory-lifecycle cleanup preview should report one scoped candidate without mutation",
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "cleanup",
+                "--older-days",
+                "1",
+                "--scope",
+                "repo",
                 "--json",
             ],
             capture_output=True,
@@ -11838,8 +11873,37 @@ exit 0
         )
         cleanup_payload = parse_json_output(result.stdout)
         expect(
-            cleanup_payload.get("archive_count", 0) >= 1,
-            "memory-lifecycle cleanup should archive old memories",
+            cleanup_payload.get("archive_count", 0) >= 1
+            and cleanup_payload.get("changed_count") == 1
+            and cleanup_payload.get("moved") == 1
+            and cleanup_payload.get("transaction_outcome") == "committed",
+            "memory-lifecycle cleanup should atomically archive its scoped candidate",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "restore",
+                "--id",
+                cleanup_memory_id,
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=cleanup_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory-lifecycle restore failed: {result.stderr}",
+        )
+        cleanup_restore = parse_json_output(result.stdout)
+        expect(
+            cleanup_restore.get("reason_code") == "memory_restored"
+            and cleanup_restore.get("restored") == 1
+            and cleanup_restore.get("transaction_outcome") == "committed",
+            "memory-lifecycle restore should explicitly undo one archived candidate",
         )
 
         pinned_cleanup_env = productivity_env.copy()
@@ -11971,7 +12035,44 @@ exit 0
             result.returncode == 0, f"compress seed second add failed: {result.stderr}"
         )
         result = subprocess.run(
-            [sys.executable, str(MEMORY_LIFECYCLE_SCRIPT), "compress", "--json"],
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "compress",
+                "--scope",
+                "repo",
+                "--dry-run",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=compress_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        expect(
+            result.returncode == 0,
+            f"memory-lifecycle compress preview failed: {result.stderr}",
+        )
+        compress_preview = parse_json_output(result.stdout)
+        expect(
+            int(compress_preview.get("candidate_count") or 0) >= 1
+            and compress_preview.get("changed_count") == 0
+            and compress_preview.get("before") == compress_preview.get("after")
+            and compress_preview.get("removed")
+            == compress_preview.get("candidate_count")
+            and compress_preview.get("transaction_outcome") == "not_started",
+            "memory-lifecycle compress preview should preserve actual counts and expose its projection",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(MEMORY_LIFECYCLE_SCRIPT),
+                "compress",
+                "--scope",
+                "repo",
+                "--json",
+            ],
             capture_output=True,
             text=True,
             env=compress_env,
@@ -11983,7 +12084,8 @@ exit 0
         )
         compress_payload = parse_json_output(result.stdout)
         expect(
-            compress_payload.get("removed", 0) >= 1,
+            compress_payload.get("removed", 0) >= 1
+            and compress_payload.get("transaction_outcome") == "committed",
             "memory-lifecycle compress should archive duplicate memories",
         )
 

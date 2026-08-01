@@ -768,8 +768,11 @@ def cmd_doctor(argv: list[str]) -> int:
     if args:
         return usage()
     conn = connect()
-    report = doctor_report(conn)
-    return emit({"command": "doctor", **report}, as_json)
+    try:
+        report = doctor_report(conn)
+        return emit({"command": "doctor", **report}, as_json)
+    finally:
+        conn.close()
 
 
 def main(argv: list[str]) -> int:

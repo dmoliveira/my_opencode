@@ -4,12 +4,19 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import stat
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - connect_readonly rejects non-Unix hosts
+    fcntl = None  # type: ignore[assignment]
 
 
 DEFAULT_DB_PATH = Path(
@@ -218,6 +225,410 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=5000")
     initialize(conn)
     return conn
+
+
+def _entry_stat(path: Path) -> os.stat_result | None:
+    try:
+        return path.lstat()
+    except FileNotFoundError:
+        return None
+
+
+def _require_regular_entry(path: Path, label: str) -> os.stat_result | None:
+    details = _entry_stat(path)
+    if details is None:
+        return None
+    if not stat.S_ISREG(details.st_mode) or details.st_nlink != 1:
+        raise RuntimeError(f"read-only preview rejects unsupported {label} entry")
+    return details
+
+
+def _canonical_preview_path(path: Path) -> tuple[Path, os.stat_result]:
+    source_details = _entry_stat(path)
+    if source_details is None:
+        orphan_paths = [
+            Path(f"{path}{suffix}") for suffix in ("-wal", "-shm", "-journal")
+        ]
+        if any(_entry_stat(sidecar) is not None for sidecar in orphan_paths):
+            raise RuntimeError("read-only preview refuses orphaned SQLite sidecars")
+        raise FileNotFoundError(path)
+    try:
+        canonical = path.resolve(strict=True)
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise RuntimeError("read-only preview refuses a dangling database path") from exc
+    details = _require_regular_entry(canonical, "database")
+    if details is None:  # pragma: no cover - resolve(strict=True) established existence
+        raise FileNotFoundError(canonical)
+    return canonical, details
+
+
+def _sidecar_state(
+    canonical: Path,
+) -> tuple[os.stat_result | None, os.stat_result | None]:
+    journal_path = Path(f"{canonical}-journal")
+    if _entry_stat(journal_path) is not None:
+        raise RuntimeError("read-only preview refuses an active rollback journal")
+    wal_path = Path(f"{canonical}-wal")
+    shm_path = Path(f"{canonical}-shm")
+    wal_details = _require_regular_entry(wal_path, "WAL sidecar")
+    shm_details = _require_regular_entry(shm_path, "SHM sidecar")
+    if (wal_details is None) != (shm_details is None):
+        raise RuntimeError(
+            "read-only WAL preview requires existing WAL and SHM sidecars"
+        )
+    return wal_details, shm_details
+
+
+def _same_identity(left: os.stat_result, right: os.stat_result) -> bool:
+    return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
+
+
+def _read_fd_bytes(descriptor: int, size: int) -> bytes:
+    chunks: list[bytes] = []
+    offset = 0
+    while offset < size:
+        chunk = os.pread(descriptor, min(1024 * 1024, size - offset), offset)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        offset += len(chunk)
+    if offset != size:
+        raise RuntimeError("shared-memory database changed while snapshotting")
+    return b"".join(chunks)
+
+
+def _read_entry_prefix(
+    path: Path, expected: os.stat_result, size: int, label: str
+) -> tuple[bytes, os.stat_result]:
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("read-only WAL preview requires no-follow file opens")
+    descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(descriptor)
+        if not _same_identity(expected, before):
+            raise RuntimeError(f"shared-memory {label} identity changed while opening")
+        payload = os.pread(descriptor, size, 0)
+        after = os.fstat(descriptor)
+        stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            raise RuntimeError(f"shared-memory {label} changed while validating")
+        if len(payload) != size:
+            raise RuntimeError(f"shared-memory {label} has an invalid header")
+        return payload, after
+    finally:
+        os.close(descriptor)
+
+
+def _sqlite_checksum(
+    data: bytes, byteorder: str, seed: tuple[int, int] = (0, 0)
+) -> tuple[int, int]:
+    first, second = seed
+    for offset in range(0, len(data), 8):
+        left = int.from_bytes(data[offset : offset + 4], byteorder)
+        right = int.from_bytes(data[offset + 4 : offset + 8], byteorder)
+        first = (first + left + second) & 0xFFFFFFFF
+        second = (second + right + first) & 0xFFFFFFFF
+    return first, second
+
+
+def _validate_committed_wal_frames(
+    wal_path: Path,
+    expected: os.stat_result,
+    *,
+    wal_header: bytes,
+    page_size: int,
+    checksum_order: str,
+    max_frame: int,
+    shm_frame_checksum: tuple[int, int],
+) -> None:
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("read-only WAL preview requires no-follow file opens")
+    descriptor = os.open(wal_path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(descriptor)
+        if not _same_identity(expected, before):
+            raise RuntimeError("shared-memory WAL identity changed while validating")
+        frame_size = page_size + 24
+        available_frames = (before.st_size - 32) // frame_size
+        if max_frame > available_frames:
+            raise RuntimeError("shared-memory SHM sidecar references a missing WAL frame")
+        rolling = (
+            int.from_bytes(wal_header[24:28], "big"),
+            int.from_bytes(wal_header[28:32], "big"),
+        )
+        checksum_at_snapshot = rolling
+        for frame_number in range(1, max_frame + 1):
+            offset = 32 + (frame_number - 1) * frame_size
+            frame = os.pread(descriptor, frame_size, offset)
+            if len(frame) != frame_size:
+                raise RuntimeError("shared-memory WAL sidecar has a partial frame")
+            page_number = int.from_bytes(frame[0:4], "big")
+            database_size = int.from_bytes(frame[4:8], "big")
+            if page_number == 0 or frame[8:16] != wal_header[16:24]:
+                raise RuntimeError("shared-memory WAL frame has invalid page or salt data")
+            rolling = _sqlite_checksum(
+                frame[:8] + frame[24:], checksum_order, rolling
+            )
+            stored = (
+                int.from_bytes(frame[16:20], "big"),
+                int.from_bytes(frame[20:24], "big"),
+            )
+            if rolling != stored:
+                raise RuntimeError("shared-memory WAL frame failed its checksum")
+            if frame_number == max_frame:
+                if database_size == 0:
+                    raise RuntimeError(
+                        "shared-memory SHM sidecar references an uncommitted WAL frame"
+                    )
+                checksum_at_snapshot = rolling
+        after = os.fstat(descriptor)
+        stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            raise RuntimeError("shared-memory WAL changed while validating frames")
+        if max_frame and checksum_at_snapshot != shm_frame_checksum:
+            raise RuntimeError("shared-memory WAL and SHM frame checksums do not match")
+    finally:
+        os.close(descriptor)
+
+
+def _validate_active_wal_headers(
+    wal_path: Path,
+    shm_path: Path,
+    wal_details: os.stat_result,
+    shm_details: os.stat_result,
+) -> None:
+    wal_header, current_wal = _read_entry_prefix(
+        wal_path, wal_details, 32, "WAL sidecar"
+    )
+    shm_headers, current_shm = _read_entry_prefix(
+        shm_path, shm_details, 96, "SHM sidecar"
+    )
+    magic = int.from_bytes(wal_header[0:4], "big")
+    if magic not in {0x377F0682, 0x377F0683}:
+        raise RuntimeError("shared-memory WAL sidecar has an invalid magic value")
+    version = int.from_bytes(wal_header[4:8], "big")
+    page_size = int.from_bytes(wal_header[8:12], "big")
+    if page_size == 1:
+        page_size = 65536
+    if (
+        version != 3007000
+        or page_size < 512
+        or page_size > 65536
+        or page_size & (page_size - 1)
+    ):
+        raise RuntimeError("shared-memory WAL sidecar has an invalid format")
+    checksum_order = "big" if magic & 1 else "little"
+    expected_checksum = _sqlite_checksum(wal_header[:24], checksum_order)
+    stored_checksum = (
+        int.from_bytes(wal_header[24:28], "big"),
+        int.from_bytes(wal_header[28:32], "big"),
+    )
+    if expected_checksum != stored_checksum:
+        raise RuntimeError("shared-memory WAL sidecar failed its header checksum")
+    frame_size = page_size + 24
+    if current_wal.st_size < 32 or (current_wal.st_size - 32) % frame_size:
+        raise RuntimeError("shared-memory WAL sidecar has a partial frame")
+
+    first_header = shm_headers[:48]
+    second_header = shm_headers[48:96]
+    if current_shm.st_size < 96 or first_header != second_header:
+        raise RuntimeError("shared-memory SHM sidecar has inconsistent headers")
+    native = sys.byteorder
+    shm_version = int.from_bytes(first_header[0:4], native)
+    initialized = first_header[12]
+    checksum_endianness = first_header[13]
+    shm_page_size = int.from_bytes(first_header[14:16], native)
+    if shm_page_size == 1:
+        shm_page_size = 65536
+    if (
+        shm_version != version
+        or initialized != 1
+        or checksum_endianness != (magic & 1)
+        or shm_page_size != page_size
+    ):
+        raise RuntimeError("shared-memory SHM sidecar has an invalid format")
+    expected_shm_checksum = _sqlite_checksum(first_header[:40], native)
+    stored_shm_checksum = (
+        int.from_bytes(first_header[40:44], native),
+        int.from_bytes(first_header[44:48], native),
+    )
+    if expected_shm_checksum != stored_shm_checksum:
+        raise RuntimeError("shared-memory SHM sidecar failed its header checksum")
+    if wal_header[16:24] != first_header[32:40]:
+        raise RuntimeError("shared-memory WAL and SHM sidecars do not match")
+    max_frame = int.from_bytes(first_header[16:20], native)
+    available_frames = (current_wal.st_size - 32) // frame_size
+    if max_frame > available_frames:
+        raise RuntimeError("shared-memory SHM sidecar references a missing WAL frame")
+    shm_frame_checksum = (
+        int.from_bytes(first_header[24:28], native),
+        int.from_bytes(first_header[28:32], native),
+    )
+    _validate_committed_wal_frames(
+        wal_path,
+        current_wal,
+        wal_header=wal_header,
+        page_size=page_size,
+        checksum_order=checksum_order,
+        max_frame=max_frame,
+        shm_frame_checksum=shm_frame_checksum,
+    )
+
+
+def _checkpointed_database_image(
+    canonical: Path, expected: os.stat_result
+) -> bytearray:
+    if fcntl is None or not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("read-only checkpointed preview requires POSIX file locks")
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    descriptor = os.open(canonical, flags)
+    locked = False
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or not _same_identity(expected, opened)
+        ):
+            raise RuntimeError("shared-memory database identity changed before snapshot")
+        try:
+            fcntl.lockf(
+                descriptor,
+                fcntl.LOCK_SH | fcntl.LOCK_NB,
+                0,
+                0,
+                os.SEEK_SET,
+            )
+            locked = True
+        except OSError as exc:
+            raise RuntimeError(
+                "shared-memory database is busy; checkpointed preview could not lock it"
+            ) from exc
+        wal_details, shm_details = _sidecar_state(canonical)
+        if wal_details is not None or shm_details is not None:
+            raise RuntimeError("shared-memory sidecar appeared while snapshotting")
+        before = os.fstat(descriptor)
+        image = bytearray(_read_fd_bytes(descriptor, before.st_size))
+        after = os.fstat(descriptor)
+        stable_fields = (
+            "st_dev",
+            "st_ino",
+            "st_nlink",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            raise RuntimeError("shared-memory database changed while snapshotting")
+        named = canonical.stat(follow_symlinks=False)
+        if not _same_identity(after, named):
+            raise RuntimeError("shared-memory database path changed while snapshotting")
+        wal_details, shm_details = _sidecar_state(canonical)
+        if wal_details is not None or shm_details is not None:
+            raise RuntimeError("shared-memory sidecar appeared while snapshotting")
+        return image
+    finally:
+        if locked:
+            fcntl.lockf(descriptor, fcntl.LOCK_UN, 0, 0, os.SEEK_SET)
+        os.close(descriptor)
+
+
+def connect_readonly(db_path: Path | None = None) -> sqlite3.Connection:
+    """Open one coherent shared-memory snapshot without initializing the store."""
+    path = (db_path or DEFAULT_DB_PATH).expanduser()
+    if not (sys.platform.startswith("darwin") or sys.platform.startswith("linux")):
+        raise RuntimeError("read-only shared-memory preview requires the Unix VFS")
+    if sqlite3.sqlite_version_info < (3, 22, 0):
+        raise RuntimeError("read-only WAL preview requires SQLite 3.22 or newer")
+
+    canonical, database_details = _canonical_preview_path(path)
+    wal_path = Path(f"{canonical}-wal")
+    shm_path = Path(f"{canonical}-shm")
+    wal_details, shm_details = _sidecar_state(canonical)
+    active_wal = wal_details is not None and shm_details is not None
+
+    if active_wal:
+        uri = (
+            f"{canonical.as_uri()}"
+            "?mode=ro&cache=private&vfs=unix&readonly_shm=1"
+        )
+        conn = sqlite3.connect(uri, uri=True)
+    else:
+        if not hasattr(sqlite3.Connection, "deserialize"):
+            raise RuntimeError(
+                "read-only checkpointed preview requires SQLite deserialize support"
+            )
+        image = _checkpointed_database_image(canonical, database_details)
+        if len(image) < 100 or bytes(image[:16]) != b"SQLite format 3\x00":
+            raise RuntimeError("shared-memory snapshot has an invalid SQLite header")
+        # A checkpointed WAL database can retain WAL read/write header bytes even
+        # after its sidecars disappear. Normalize only the private in-memory copy
+        # so deserialize never tries to recover sidecars beside the source path.
+        image[18] = 1
+        image[19] = 1
+        conn = sqlite3.connect(":memory:")
+        try:
+            conn.deserialize(bytes(image))
+        except Exception:
+            conn.close()
+            raise
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA query_only=ON")
+        query_only = conn.execute("PRAGMA query_only").fetchone()
+        if query_only is None or int(query_only[0]) != 1:
+            raise RuntimeError("shared-memory preview could not verify query-only mode")
+        conn.execute("BEGIN")
+        if active_wal:
+            current_database = _require_regular_entry(canonical, "database")
+            current_wal, current_shm = _sidecar_state(canonical)
+            if (
+                current_database is None
+                or current_wal is None
+                or current_shm is None
+                or not _same_identity(database_details, current_database)
+                or not _same_identity(wal_details, current_wal)
+                or not _same_identity(shm_details, current_shm)
+            ):
+                raise RuntimeError(
+                    "shared-memory database sidecars changed while opening preview"
+                )
+            _validate_active_wal_headers(
+                wal_path,
+                shm_path,
+                current_wal,
+                current_shm,
+            )
+        tables = {
+            str(row[0])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        missing_tables = sorted({"meta", "memories"} - tables)
+        if missing_tables:
+            raise RuntimeError(
+                "shared-memory preview is missing required table(s): "
+                + ", ".join(missing_tables)
+            )
+        version_row = conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()
+        if version_row is None or str(version_row["value"]) != str(SCHEMA_VERSION):
+            found = str(version_row["value"]) if version_row is not None else "missing"
+            raise RuntimeError(
+                f"shared-memory schema version {found} is incompatible with supported version {SCHEMA_VERSION}"
+            )
+        quick_check = conn.execute("PRAGMA quick_check").fetchone()
+        if quick_check is None or str(quick_check[0]).lower() != "ok":
+            raise RuntimeError("shared-memory snapshot failed SQLite quick_check")
+        return conn
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        conn.close()
+        raise
 
 
 def initialize(conn: sqlite3.Connection) -> None:
@@ -895,6 +1306,10 @@ def doctor_report(
             "SELECT COUNT(*) AS count FROM memories WHERE archived = 0"
         ).fetchone()["count"]
     )
+    total_memory_count = int(
+        conn.execute("SELECT COUNT(*) AS count FROM memories").fetchone()["count"]
+    )
+    archive_count = total_memory_count - memory_count
     pinned_count = int(
         conn.execute(
             "SELECT COUNT(*) AS count FROM memories WHERE pinned = 1 AND archived = 0"
@@ -906,7 +1321,7 @@ def doctor_report(
         warnings.append("fts5_unavailable_falling_back_to_like_search")
     else:
         fts_count = int(conn.execute("SELECT COUNT(*) AS count FROM memory_fts").fetchone()["count"])
-        if fts_count != memory_count:
+        if fts_count != total_memory_count:
             fts_status = "stale"
             warnings.append("fts_record_count_mismatch")
         else:
@@ -918,6 +1333,8 @@ def doctor_report(
         "path": path,
         "schema_version": schema_version,
         "memory_count": memory_count,
+        "archive_count": archive_count,
+        "total_memory_count": total_memory_count,
         "pinned_count": pinned_count,
         "fts_count": fts_count,
         "fts_status": fts_status,
