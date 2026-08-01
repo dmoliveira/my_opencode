@@ -6,6 +6,7 @@ import os
 import stat
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import uuid
@@ -28,6 +29,7 @@ from config_layering import (  # noqa: E402
     ConfigTransactionError,
     _load_json_or_jsonc,
     _acquire_lock,
+    _inspect_lock,
     _lock_name,
     _lock_registry,
     _release_lock,
@@ -197,6 +199,126 @@ class LayeredConfigTransactionTest(unittest.TestCase):
             payload = json.loads(config.read_text(encoding="utf-8"))
             self.assertEqual({"alpha", "beta"}, set(payload["domains"]))
             self.assertTrue(payload["unknown"]["keep"])
+
+    def test_partial_lock_token_publication_waits_for_owner(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            lock_path = Path(raw_tmp) / "config.lock"
+            write_entered = threading.Event()
+            allow_write = threading.Event()
+            contender_observed_initializing = threading.Event()
+            owner_acquired = threading.Event()
+            release_owner = threading.Event()
+            contender_acquired = threading.Event()
+            results: list[tuple[str, str]] = []
+            original_write = os.write
+            original_inspect = _inspect_lock
+
+            def delayed_write(descriptor: int, payload: bytes | memoryview) -> int:
+                if threading.current_thread().name == "config-lock-owner":
+                    write_entered.set()
+                    if not allow_write.wait(timeout=5):
+                        raise TimeoutError("owner token publication barrier timed out")
+                return original_write(descriptor, payload)
+
+            def observing_inspect(path: Path) -> str:
+                state = original_inspect(path)
+                if (
+                    threading.current_thread().name == "config-lock-contender"
+                    and state == "initializing"
+                ):
+                    contender_observed_initializing.set()
+                return state
+
+            def owner_worker() -> None:
+                try:
+                    lock = _acquire_lock(lock_path, time.monotonic() + 5)
+                    results.append(("owner", "acquired"))
+                    owner_acquired.set()
+                    if not release_owner.wait(timeout=5):
+                        raise TimeoutError("owner release barrier timed out")
+                    _release_lock(lock)
+                    results.append(("owner", "released"))
+                except BaseException as error:  # pragma: no cover - asserted below.
+                    results.append(("owner", f"{type(error).__name__}:{error}"))
+
+            def contender_worker() -> None:
+                try:
+                    lock = _acquire_lock(lock_path, time.monotonic() + 5)
+                    results.append(("contender", "acquired"))
+                    contender_acquired.set()
+                    _release_lock(lock)
+                    results.append(("contender", "released"))
+                except BaseException as error:  # pragma: no cover - asserted below.
+                    results.append(("contender", f"{type(error).__name__}:{error}"))
+
+            with mock.patch("config_layering.os.write", side_effect=delayed_write), mock.patch(
+                "config_layering._inspect_lock", side_effect=observing_inspect
+            ):
+                owner = threading.Thread(target=owner_worker, name="config-lock-owner")
+                contender = threading.Thread(
+                    target=contender_worker, name="config-lock-contender"
+                )
+                owner.start()
+                self.assertTrue(write_entered.wait(timeout=2))
+                contender.start()
+                self.assertTrue(contender_observed_initializing.wait(timeout=2))
+                self.assertFalse(contender_acquired.is_set())
+                allow_write.set()
+                self.assertTrue(owner_acquired.wait(timeout=2))
+                release_owner.set()
+                owner.join(timeout=5)
+                contender.join(timeout=5)
+
+            self.assertFalse(owner.is_alive())
+            self.assertFalse(contender.is_alive())
+            self.assertEqual(("owner", "acquired"), results[0])
+            self.assertCountEqual(
+                [
+                    ("owner", "acquired"),
+                    ("owner", "released"),
+                    ("contender", "acquired"),
+                    ("contender", "released"),
+                ],
+                results,
+            )
+            self.assertFalse(lock_path.exists())
+
+    def test_lock_token_rejects_stable_unsafe_and_malformed_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = Path(raw_tmp)
+            cases = ("nonregular", "hardlink", "accessible", "oversized", "malformed")
+            for case in cases:
+                with self.subTest(case=case):
+                    lock_path = root / case
+                    lock_path.mkdir(mode=PRIVATE_DIRECTORY_MODE)
+                    token_path = lock_path / LOCK_OWNER_TOKEN
+                    extra_link = root / f"{case}.link"
+                    if case == "nonregular":
+                        token_path.mkdir(mode=PRIVATE_DIRECTORY_MODE)
+                    else:
+                        payload = b"a" * 64 + b"\n"
+                        if case == "oversized":
+                            payload += b"x"
+                        elif case == "malformed":
+                            payload = b"z" * 64 + b"\n"
+                        token_path.write_bytes(payload)
+                        token_path.chmod(
+                            0o640 if case == "accessible" else PRIVATE_FILE_MODE
+                        )
+                        if case == "hardlink":
+                            os.link(token_path, extra_link)
+
+                    with self.assertRaises(ConfigTransactionError) as raised:
+                        _inspect_lock(lock_path)
+                    self.assertEqual("config_lock_unsafe", raised.exception.reason_code)
+
+                    if extra_link.exists():
+                        extra_link.unlink()
+                    if token_path.is_dir():
+                        token_path.rmdir()
+                    else:
+                        token_path.unlink()
+                    lock_path.rmdir()
 
     def test_parent_and_final_symlinks_are_preserved(self) -> None:
         with self.isolated() as (root, home, project):
