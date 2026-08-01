@@ -1,7 +1,7 @@
 ---
-status: doing
+status: done
 priority: high
-updated: 2026-07-30
+updated: 2026-08-01
 ---
 
 # Safe Scoped Shared-Memory Lifecycle
@@ -133,3 +133,9 @@ Complete Codememory `task_28` by making shared-memory cleanup and compression pr
 4. Ship gate: Python compile, focused shared-memory suites, `git diff --check`, `make validate`, `make selftest`, `make install-test`, pre-commit, independent verifier, critical full-diff review, PR CI, and post-merge CI pass.
 
 Review budget: three to five changed-evidence review/fix passes. Stop once all required checks are green and the latest critical review has no blocker.
+
+## Completion evidence
+
+- Implemented in commit `15b0c47` and delivered through PR #677.
+- `make validate` passed with 324 tests and one skip; `make selftest`, `make install-test`, and pre-commit passed.
+- Independent verification passed and the final critical review approved with no blocker findings.
