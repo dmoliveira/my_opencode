@@ -2,6 +2,7 @@
 description: >-
   Read-only plan reviewer focused on feasibility, risk coverage, and testability before execution.
 mode: subagent
+model: openai/gpt-5.6-sol
 tools:
   bash: false
   read: true

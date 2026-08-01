@@ -2,6 +2,7 @@
 description: >-
   Read-only planning specialist for sequencing, milestones, and execution structure.
 mode: subagent
+model: openai/gpt-5.6-sol
 tools:
   bash: false
   read: true

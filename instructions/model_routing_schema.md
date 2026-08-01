@@ -40,10 +40,10 @@ Task 5.2 adds deterministic settings resolution:
 
 Current default model targets:
 
-- `quick` -> `openai/gpt-5.1-codex-mini`
-- `balanced` -> `openai/gpt-5.4`
-- `deep` -> `openai/gpt-5.4`
-- `critical` -> `openai/gpt-5.4`
+- `quick` -> `openai/gpt-5.6-luna`
+- `balanced` -> `openai/gpt-5.6-terra`
+- `deep` -> `openai/gpt-5.6-sol`
+- `critical` -> `openai/gpt-5.6-sol`
 
 Resolution order is:
 
