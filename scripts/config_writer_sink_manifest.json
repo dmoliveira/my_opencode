@@ -2684,6 +2684,33 @@
   {
     "language": "python",
     "file": "shared_memory_runtime.py",
+    "function": "_checkpointed_database_image",
+    "kind": "os.open",
+    "destination": "canonical",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "shared_memory_runtime.py",
+    "function": "_read_entry_prefix",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "shared_memory_runtime.py",
+    "function": "_validate_committed_wal_frames",
+    "kind": "os.open",
+    "destination": "wal_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "shared_memory_runtime.py",
     "function": "connect",
     "kind": "path.mkdir",
     "destination": "path.parent",

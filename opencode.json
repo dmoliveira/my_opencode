@@ -233,7 +233,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before agent-pool --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "memory-lifecycle": {
-      "description": "Manage memory lifecycle ops (stats|cleanup|compress|export|import|doctor)",
+      "description": "Manage memory lifecycle ops (stats|cleanup|compress|restore|export|import|doctor) with scoped dry-run previews",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before memory-lifecycle --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "memory": {

@@ -157,11 +157,11 @@ Successful preservation still returns `FAIL`: stop session-index writers, inspec
 
 ## Shared-memory retention profiles
 
-Use `memory-lifecycle cleanup --older-days <n> --scope <scope> --dry-run --json` before archival. A conservative profile keeps 30 days of unpinned records; a focused project profile can use a shorter period only after exporting a verified recovery artifact. Pinned records are excluded from cleanup. Apply the exact same scope and age shown by dry-run, then use `memory-lifecycle restore --id <id>` for an explicit undo.
+Use `memory-lifecycle cleanup --older-days <n> --scope <scope> --namespace <exact-name> --dry-run --json` before archival. A conservative profile keeps 30 days of unpinned records; a focused project profile can use a shorter period only after exporting a verified recovery artifact. Pinned records are excluded from cleanup. Dry-run opens an existing store without initialization or command-authored source writes, reports actual and projected counts, and returns at most 20 content-free candidate records; the unredacted output remains local-sensitive because it contains IDs and exact filter metadata. Apply the exact same filters and age shown by preview, then use `memory-lifecycle restore --id <id>` for an explicit single-record undo.
 
 ## Pinned-memory lifecycle
 
-Pin only durable, high-signal records needed across sessions. Cleanup never archives pinned records; compression retains a pinned duplicate over unpinned copies. Review pins periodically, export before unpinning a record with recovery value, and use explicit restore rather than repinning stale copies.
+Pin only durable, high-signal records needed across sessions. Cleanup never archives pinned records; compression preserves every pinned duplicate and archives only eligible unpinned copies. Cleanup and compression acquire one immediate transaction before planning any apply, then commit once or roll back completely. A failure with `transaction_outcome=unknown` means the commit may already be durable; inspect and export current state before retrying. Lifecycle operations do not create automatic exports: export to a private path before broad apply, use explicit restore for one ID, and import the verified export for full rollback.
 
 ## Temporary-file policy
 
