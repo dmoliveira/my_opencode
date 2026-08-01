@@ -854,6 +854,38 @@ def _inspect_lock(path: Path) -> str:
         opened = os.fstat(lock_fd)
         if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
             return "initializing"
+        try:
+            token_metadata = os.stat(
+                LOCK_OWNER_TOKEN,
+                dir_fd=lock_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return "initializing"
+        except OSError as cause:
+            raise _transaction_error(
+                "config_lock_unsafe",
+                "unable to open config lock token",
+                phase="lock_acquire",
+                cause=cause,
+            )
+        if (
+            not stat.S_ISREG(token_metadata.st_mode)
+            or token_metadata.st_uid != os.geteuid()
+            or token_metadata.st_nlink != 1
+            or stat.S_IMODE(token_metadata.st_mode) & 0o077
+            or token_metadata.st_size > 65
+        ):
+            raise _transaction_error(
+                "config_lock_unsafe",
+                "config lock token is unsafe",
+                phase="lock_acquire",
+            )
+        if (
+            stat.S_IMODE(token_metadata.st_mode) != PRIVATE_FILE_MODE
+            or token_metadata.st_size < 65
+        ):
+            return "initializing"
         token_fd = -1
         try:
             token_fd = os.open(
@@ -873,20 +905,14 @@ def _inspect_lock(path: Path) -> str:
                 cause=cause,
             )
         try:
-            token_metadata = os.fstat(token_fd)
-            if (
-                not stat.S_ISREG(token_metadata.st_mode)
-                or token_metadata.st_uid != os.geteuid()
-                or token_metadata.st_nlink != 1
-                or stat.S_IMODE(token_metadata.st_mode) != PRIVATE_FILE_MODE
-                or token_metadata.st_size != 65
-            ):
-                raise _transaction_error(
-                    "config_lock_unsafe",
-                    "config lock token is unsafe",
-                    phase="lock_acquire",
-                )
-            token = os.read(token_fd, 66)
+            if _identity(os.fstat(token_fd)) != _identity(token_metadata):
+                return "initializing"
+            token = b""
+            while len(token) < 66:
+                chunk = os.read(token_fd, 66 - len(token))
+                if not chunk:
+                    break
+                token += chunk
             if _identity(os.fstat(token_fd)) != _identity(token_metadata):
                 return "initializing"
         finally:
