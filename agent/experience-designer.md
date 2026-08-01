@@ -2,6 +2,7 @@
 description: >-
   Read-only UX/UI specialist for browser-first experience audits, interaction design refinement, design artifact planning, and accessibility-minded polish.
 mode: subagent
+model: openai/gpt-5.6-terra
 tools:
   bash: true
   read: true

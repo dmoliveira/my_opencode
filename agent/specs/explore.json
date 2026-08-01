@@ -1,6 +1,7 @@
 {
   "name": "explore",
   "mode": "subagent",
+  "model": "openai/gpt-5.6-luna",
   "description_template": "Read-only internal codebase scout for fast discovery of implementation locations and local patterns.",
   "tools": {
     "bash": false,

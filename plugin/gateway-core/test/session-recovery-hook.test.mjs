@@ -1286,7 +1286,7 @@ test("session-recovery downgrades repeated provider header timeouts to a lighter
                   info: {
                     role: "user",
                     agent: "build",
-                    model: { providerID: "openai", modelID: "gpt-5.4" },
+                    model: { providerID: "openai", modelID: "gpt-5.6-sol" },
                   },
                 },
               ],
@@ -1313,7 +1313,7 @@ test("session-recovery downgrades repeated provider header timeouts to a lighter
     })
 
     assert.equal(lastPromptBody?.model?.providerID, "openai")
-    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.4-mini")
+    assert.equal(lastPromptBody?.model?.modelID, "gpt-5.6-terra")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

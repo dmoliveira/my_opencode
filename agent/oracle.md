@@ -2,6 +2,7 @@
 description: >-
   Read-only technical advisor for hard architecture and debugging decisions under uncertainty.
 mode: subagent
+model: openai/gpt-5.6-sol
 tools:
   bash: false
   read: true

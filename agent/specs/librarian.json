@@ -1,6 +1,7 @@
 {
   "name": "librarian",
   "mode": "subagent",
+  "model": "openai/gpt-5.6-terra",
   "description_template": "Read-only external research specialist for official docs, upstream implementations, and evidence-backed guidance.",
   "tools": {
     "bash": false,

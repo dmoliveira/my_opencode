@@ -39,7 +39,7 @@ _DEFAULT_CATEGORY_SETTINGS = _DEFAULT_SCHEMA.get("categories", {}).get(_DEFAULT_
 DEFAULT_STATE = {
     "active_category": _DEFAULT_CATEGORY,
     "system_defaults": {
-        "model": _DEFAULT_CATEGORY_SETTINGS.get("model", "openai/gpt-5.4"),
+        "model": _DEFAULT_CATEGORY_SETTINGS.get("model", "openai/gpt-5.6-terra"),
         "temperature": _DEFAULT_CATEGORY_SETTINGS.get("temperature", 0.2),
         "reasoning": _DEFAULT_CATEGORY_SETTINGS.get("reasoning", "medium"),
         "verbosity": _DEFAULT_CATEGORY_SETTINGS.get("verbosity", "medium"),

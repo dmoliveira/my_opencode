@@ -18210,15 +18210,78 @@ jobs:
             and "balanced" in routing_categories
             and "critical" in routing_categories
             and routing_categories.get("quick", {}).get("model")
-            == "openai/gpt-5.4-mini",
-            "model routing schema should define balanced/critical categories and quick mini profile",
+            == "openai/gpt-5.6-luna",
+            "model routing schema should define balanced/critical categories and quick Luna profile",
         )
         expect(
-            routing_categories.get("deep", {}).get("model") == "openai/gpt-5.4"
+            routing_categories.get("balanced", {}).get("model")
+            == "openai/gpt-5.6-terra"
+            and routing_categories.get("visual", {}).get("model")
+            == "openai/gpt-5.6-terra"
+            and routing_categories.get("deep", {}).get("model")
+            == "openai/gpt-5.6-sol"
             and routing_categories.get("critical", {}).get("model")
+            == "openai/gpt-5.6-sol"
+            and routing_categories.get("writing", {}).get("model")
             == "openai/gpt-5.4",
-            "model routing schema should route deep/critical categories to GPT-5.4",
+            "model routing schema should use Luna, Terra, and Sol for subagent categories while preserving writing",
         )
+
+        expected_subagent_models = {
+            "ambiguity-analyst": ("deep", "openai/gpt-5.6-sol"),
+            "experience-designer": ("visual", "openai/gpt-5.6-terra"),
+            "explore": ("quick", "openai/gpt-5.6-luna"),
+            "librarian": ("balanced", "openai/gpt-5.6-terra"),
+            "oracle": ("critical", "openai/gpt-5.6-sol"),
+            "plan-critic": ("critical", "openai/gpt-5.6-sol"),
+            "release-scribe": ("quick", "openai/gpt-5.6-luna"),
+            "reviewer": ("critical", "openai/gpt-5.6-sol"),
+            "strategic-planner": ("deep", "openai/gpt-5.6-sol"),
+            "verifier": ("quick", "openai/gpt-5.6-luna"),
+        }
+        subagent_specs = {}
+        for spec_path in sorted((AGENT_DIR / "specs").glob("*.json")):
+            spec_payload = load_json_file(spec_path)
+            if spec_payload.get("mode") == "subagent":
+                subagent_specs[str(spec_payload.get("name") or "")] = spec_payload
+        expect(
+            set(subagent_specs) == set(expected_subagent_models),
+            "every custom subagent should be covered by the GPT-5.6 model matrix",
+        )
+        for agent_name, (expected_category, expected_model) in expected_subagent_models.items():
+            spec_payload = subagent_specs[agent_name]
+            actual_category = spec_payload.get("metadata", {}).get("default_category")
+            expect(
+                actual_category == expected_category,
+                f"{agent_name} should keep its expected routing category",
+            )
+            expect(
+                spec_payload.get("model") == expected_model,
+                f"{agent_name} should explicitly pin its expected GPT-5.6 model",
+            )
+            expect(
+                routing_categories.get(expected_category, {}).get("model")
+                == expected_model,
+                f"{agent_name} model pin should agree with shared category routing",
+            )
+            generated_agent = (AGENT_DIR / f"{agent_name}.md").read_text(
+                encoding="utf-8"
+            )
+            expect(
+                f"model: {expected_model}" in generated_agent,
+                f"{agent_name} generated markdown should include its model pin",
+            )
+
+        for primary_name in ("orchestrator", "tasker"):
+            primary_spec = load_json_file(AGENT_DIR / "specs" / f"{primary_name}.json")
+            primary_category = primary_spec.get("metadata", {}).get("default_category")
+            effective_primary_model = primary_spec.get("model") or routing_categories.get(
+                primary_category, {}
+            ).get("model")
+            expect(
+                effective_primary_model == "openai/gpt-5.4",
+                f"primary {primary_name} should remain on GPT-5.4",
+            )
 
         strategic_planner_recommend = subprocess.run(
             [
@@ -18303,8 +18366,8 @@ jobs:
         )
         expect(
             resolved_requested.get("settings", {}).get("model")
-            == "openai/gpt-5.4",
-            "deep category should resolve to GPT-5.4 by default",
+            == "openai/gpt-5.6-sol",
+            "deep category should resolve to GPT-5.6 Sol by default",
         )
 
         resolved_missing = resolve_category(routing_schema, "unknown")
@@ -18317,7 +18380,7 @@ jobs:
         resolved_unavailable = resolve_category(
             routing_schema,
             "deep",
-            available_models={"openai/gpt-5.4-mini"},
+            available_models={"openai/gpt-5.6-luna"},
         )
         expect(
             resolved_unavailable.get("category")
@@ -18331,16 +18394,20 @@ jobs:
             requested_category="deep",
             user_overrides={"verbosity": "high", "model": "openai/custom-unavailable"},
             system_defaults={
-                "model": "openai/gpt-5.4",
+                "model": "openai/gpt-5.6-terra",
                 "temperature": 0.3,
                 "reasoning": "medium",
                 "verbosity": "low",
             },
-            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.4"},
+            available_models={
+                "openai/gpt-5.6-luna",
+                "openai/gpt-5.6-terra",
+                "openai/gpt-5.6-sol",
+            },
         )
         expect(
             resolved_with_precedence.get("settings", {}).get("model")
-            == "openai/gpt-5.4",
+            == "openai/gpt-5.6-sol",
             "model routing should fallback to available category/system model deterministically",
         )
         expect(
@@ -18379,7 +18446,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.4",
+                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18405,7 +18472,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.4",
+                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18422,7 +18489,7 @@ jobs:
         expect(
             model_routing_report.get("category") == "balanced"
             and model_routing_report.get("settings", {}).get("model")
-            == "openai/gpt-5.4",
+            == "openai/gpt-5.6-terra",
             "model-routing resolve should recover from a valid empty object by falling back to defaults and applying model fallback",
         )
         expect(
@@ -18449,7 +18516,7 @@ jobs:
         )
         expect(
             model_routing_trace_report.get("trace", {}).get("selected", {}).get("model")
-            == "openai/gpt-5.4",
+            == "openai/gpt-5.6-terra",
             "model-routing trace should expose selected model from latest resolve",
         )
 
@@ -18530,7 +18597,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.4",
+                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18542,7 +18609,7 @@ jobs:
         expect(routing_explain.returncode == 0, "routing explain should succeed")
         routing_explain_report = parse_json_output(routing_explain.stdout)
         expect(
-            routing_explain_report.get("selected_model") == "openai/gpt-5.4",
+            routing_explain_report.get("selected_model") == "openai/gpt-5.6-sol",
             "routing explain should expose selected model",
         )
         expect(
@@ -18563,7 +18630,7 @@ jobs:
                 "--category",
                 "quick",
                 "--available-models",
-                "openai/gpt-5.4-mini,openai/gpt-5.4",
+                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18653,24 +18720,32 @@ jobs:
             requested_category="deep",
             user_overrides={"model": "openai/nonexistent"},
             system_defaults={
-                "model": "openai/gpt-5.4",
+                "model": "openai/gpt-5.6-terra",
                 "temperature": 0.2,
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.4"},
+            available_models={
+                "openai/gpt-5.6-luna",
+                "openai/gpt-5.6-terra",
+                "openai/gpt-5.6-sol",
+            },
         )
         deterministic_trace_b = resolve_model_settings(
             schema=routing_schema,
             requested_category="deep",
             user_overrides={"model": "openai/nonexistent"},
             system_defaults={
-                "model": "openai/gpt-5.4",
+                "model": "openai/gpt-5.6-terra",
                 "temperature": 0.2,
                 "reasoning": "medium",
                 "verbosity": "medium",
             },
-            available_models={"openai/gpt-5.4-mini", "openai/gpt-5.4"},
+            available_models={
+                "openai/gpt-5.6-luna",
+                "openai/gpt-5.6-terra",
+                "openai/gpt-5.6-sol",
+            },
         )
         expect(
             deterministic_trace_a.get("resolution_trace")

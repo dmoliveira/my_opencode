@@ -2,6 +2,7 @@
 description: >-
   Read-only external research specialist for official docs, upstream implementations, and evidence-backed guidance.
 mode: subagent
+model: openai/gpt-5.6-terra
 tools:
   bash: false
   read: true

@@ -133,7 +133,7 @@ test("agent-model-resolver sets default category for explicit subagent", async (
   await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-librarian" }, output)
 
   assert.equal(output.args.category, "balanced")
-  assert.match(output.args.prompt, /model=openai\/gpt-5.4/)
+  assert.match(output.args.prompt, /model=openai\/gpt-5.6-terra/)
 })
 
 test("agent-model-resolver preserves explicit category and injects tool surface", async () => {

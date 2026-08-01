@@ -2,7 +2,7 @@
 description: >-
   Read-only implementation reviewer focused on correctness, maintainability, safety, and regressions.
 mode: subagent
-model: openai/gpt-5.4
+model: openai/gpt-5.6-sol
 tools:
   bash: false
   read: true
