@@ -4,6 +4,7 @@ import {
   loadAgentMetadata,
   type AgentRoutingMetadata,
 } from "../shared/agent-metadata.js";
+import { upsertDelegationPromptBlock } from "../shared/delegation-context.js";
 import {
   annotateDelegationMetadata,
   extractDelegationSubagentType,
@@ -123,8 +124,6 @@ function buildTaskFocusReminder(context: StoredContext): string {
       : "scope drift or unrelated follow-up work";
   return [
     "[agent-context-shaper] delegated task focus",
-    `- subagent: ${context.subagentType}`,
-    `- category: ${context.category}`,
     "- execute one delegated objective for this task call before returning control",
     `- prioritize: ${trigger}`,
     `- avoid: ${avoid}`,
@@ -197,19 +196,21 @@ export function createAgentContextShaperHook(options: {
           metadata,
         });
         const prompt = String(eventPayload.output?.args?.prompt ?? "");
-        if (
-          prompt &&
-          !prompt.includes("[agent-context-shaper] delegated task focus")
-        ) {
-          eventPayload.output = eventPayload.output ?? {};
-          eventPayload.output.args = eventPayload.output.args ?? {};
-          eventPayload.output.args.prompt = `${buildTaskFocusReminder({
+        const nextPrompt = upsertDelegationPromptBlock(
+          prompt,
+          "[agent-context-shaper] delegated task focus",
+          buildTaskFocusReminder({
             sessionId: sid,
             traceId,
             subagentType,
             category,
             metadata,
-          })}\n\n${prompt}`;
+          }),
+        );
+        eventPayload.output = eventPayload.output ?? {};
+        eventPayload.output.args = eventPayload.output.args ?? {};
+        eventPayload.output.args.prompt = nextPrompt;
+        if (nextPrompt !== prompt) {
           writeGatewayEventAudit(options.directory, {
             hook: "agent-context-shaper",
             stage: "before",

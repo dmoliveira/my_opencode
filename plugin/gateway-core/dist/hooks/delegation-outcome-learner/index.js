@@ -1,17 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { getRecentDelegationOutcomes, registerDelegationPolicyProposal, } from "../shared/delegation-runtime-state.js";
 import { extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
-}
-function prependHint(original, hint) {
-    if (!original.trim()) {
-        return hint;
-    }
-    if (original.includes(hint)) {
-        return original;
-    }
-    return `${hint}\n\n${original}`;
 }
 export function createDelegationOutcomeLearnerHook(options) {
     return {
@@ -65,8 +57,7 @@ export function createDelegationOutcomeLearnerHook(options) {
                 if (adaptedCategory !== currentCategory) {
                     args.category = adaptedCategory;
                 }
-                args.prompt = prependHint(String(args.prompt ?? ""), hint);
-                args.description = prependHint(String(args.description ?? ""), hint);
+                args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[DELEGATION LEARNER]", hint);
             }
             registerDelegationPolicyProposal({
                 sessionId: sessionId(eventPayload),

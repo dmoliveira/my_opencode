@@ -1,16 +1,8 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
-}
-function prependHint(original, hint) {
-    if (!original.trim()) {
-        return hint;
-    }
-    if (original.includes(hint)) {
-        return original;
-    }
-    return `${hint}\n\n${original}`;
 }
 const SEMANTIC_MAP = [
     { upstream: /\bsisyphus\b/i, local: "orchestrator", key: "sisyphus" },
@@ -54,8 +46,7 @@ export function createHookSemanticBridgeHook(options) {
             }
             const mapping = matches.map((entry) => `${entry.key}->${entry.local}`).join("; ");
             const hint = `[HOOK SEMANTIC BRIDGE] Upstream semantics detected. Local runtime mappings: ${mapping}.`;
-            args.prompt = prependHint(String(args.prompt ?? ""), hint);
-            args.description = prependHint(String(args.description ?? ""), hint);
+            args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[HOOK SEMANTIC BRIDGE]", hint);
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;

@@ -43,6 +43,11 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
       triggers: ["map implementation locations"],
       avoid_when: ["scope expands into code changes"],
     });
+    seedAgent(directory, "reviewer", {
+      default_category: "critical",
+      triggers: ["final correctness review"],
+      avoid_when: ["initial codebase discovery"],
+    });
     const plugin = createPlugin(directory);
     const output = {
       args: {
@@ -61,6 +66,8 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
     assert.match(text, /\[agent-context-shaper\] delegated task focus/);
     assert.match(text, /execute one delegated objective/i);
     assert.match(text, /prioritize: map implementation locations/);
+    assert.doesNotMatch(text, /- subagent:/);
+    assert.doesNotMatch(text, /- category:/);
 
     await plugin["tool.execute.before"](
       { tool: "task", sessionID: "session-shaper-1" },
@@ -70,6 +77,17 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
       (String(output.args.prompt).match(/delegated task focus/g) ?? []).length,
       1,
     );
+
+    output.args.subagent_type = "reviewer";
+    output.args.category = "critical";
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-shaper-1" },
+      output,
+    );
+    const rerouted = String(output.args.prompt);
+    assert.equal((rerouted.match(/delegated task focus/g) ?? []).length, 1);
+    assert.match(rerouted, /prioritize: final correctness review/);
+    assert.doesNotMatch(rerouted, /map implementation locations/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

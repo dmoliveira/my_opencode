@@ -121,6 +121,8 @@ export function createAgentDeniedToolEnforcerHook(options) {
             if (!args || typeof args !== "object") {
                 return;
             }
+            const originalPrompt = String(args.prompt ?? "");
+            const originalDescription = String(args.description ?? "");
             const traceId = resolveDelegationTraceId(args);
             const subagentType = String(args.subagent_type ?? "").toLowerCase().trim();
             if (!subagentType) {
@@ -133,11 +135,11 @@ export function createAgentDeniedToolEnforcerHook(options) {
                 return;
             }
             const combinedText = collectStrings({
-                prompt: args.prompt,
-                description: args.description,
+                prompt: originalPrompt,
+                description: originalDescription,
             }).join("\n");
-            const promptText = String(args.prompt ?? "");
-            const descriptionText = String(args.description ?? "");
+            const promptText = originalPrompt;
+            const descriptionText = originalDescription;
             const mutatingSignals = detectMutatingIntent(combinedText);
             const readOnlySurface = enforcesReadOnlySurface(denied);
             if (mutatingSignals.length > 0 &&

@@ -1,4 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
 import { annotateDelegationMetadata, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 const FAILURE_REASON_BY_CHAR = {
@@ -67,15 +68,6 @@ function buildFailureContext(output, prompt, description) {
         `description=${sanitizeFailureText(description) || "(empty)"}`,
     ].join(" ");
 }
-function prependHint(original, hint) {
-    if (!original.trim()) {
-        return hint;
-    }
-    if (original.includes(hint)) {
-        return original;
-    }
-    return `${hint}\n\n${original}`;
-}
 export function createDelegationFallbackOrchestratorHook(options) {
     const lastFailureByDelegation = new Map();
     return {
@@ -119,8 +111,7 @@ export function createDelegationFallbackOrchestratorHook(options) {
                 const fallbackHint = "[delegation-fallback-orchestrator] previous delegation failed; applying fallback route category=general and removing explicit subagent_type.";
                 delete args.subagent_type;
                 args.category = "general";
-                args.prompt = prependHint(String(args.prompt ?? ""), fallbackHint);
-                args.description = prependHint(String(args.description ?? ""), fallbackHint);
+                args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[delegation-fallback-orchestrator]", fallbackHint);
                 lastFailureByDelegation.delete(delegationKey(sid, failure.traceId));
                 writeGatewayEventAudit(directory, {
                     hook: "delegation-fallback-orchestrator",

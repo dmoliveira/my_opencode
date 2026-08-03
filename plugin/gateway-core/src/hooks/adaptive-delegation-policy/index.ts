@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
 import {
   getDelegationFailureStats,
 } from "../shared/delegation-runtime-state.js"
@@ -24,16 +25,6 @@ interface ToolPayload {
 
 function sessionId(payload: ToolPayload): string {
   return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim()
-}
-
-function prependHint(original: string, hint: string): string {
-  if (!original.trim()) {
-    return hint
-  }
-  if (original.includes(hint)) {
-    return original
-  }
-  return `${hint}\n\n${original}`
 }
 
 function isExpensiveCategory(category: string): boolean {
@@ -114,8 +105,11 @@ export function createAdaptiveDelegationPolicyHook(options: {
       }
 
       const hint = `[adaptive-delegation-policy] cooldown active; recent_failures=${stats.failed}/${stats.total}; prefer low-risk scoped delegation and explicit validation steps.`
-      args.prompt = prependHint(String(args.prompt ?? ""), hint)
-      args.description = prependHint(String(args.description ?? ""), hint)
+      args.prompt = upsertDelegationPromptLine(
+        String(args.prompt ?? ""),
+        "[adaptive-delegation-policy]",
+        hint,
+      )
     },
   }
 }

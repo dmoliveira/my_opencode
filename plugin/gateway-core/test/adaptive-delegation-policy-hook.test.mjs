@@ -60,6 +60,21 @@ test("adaptive-delegation-policy blocks critical category during cooldown", asyn
       { metadata: secondOutput.metadata, output: "[ERROR] Failed delegation" },
     )
 
+    const quickOutput = {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: "scoped discovery",
+        description: "Map code paths",
+      },
+    }
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-adapt-quick" },
+      quickOutput,
+    )
+    assert.match(quickOutput.args.prompt, /\[adaptive-delegation-policy\]/)
+    assert.equal(quickOutput.args.description, "Map code paths")
+
     await assert.rejects(
       () =>
         plugin["tool.execute.before"](

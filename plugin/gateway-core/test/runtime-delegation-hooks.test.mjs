@@ -362,6 +362,7 @@ test("delegation outcome learner adapts risky category after repeated failures",
   })
   assert.equal(output.args.category, "balanced")
   assert.match(output.args.prompt, /\[DELEGATION LEARNER\]/)
+  assert.equal(output.args.description, "third description")
   const proposal = getRecentDelegationPolicyProposals(60000)
     .filter((item) => item.sessionId === "session-learn-3")
     .at(-1)
@@ -621,6 +622,7 @@ test("hook semantic bridge maps upstream semantics to local runtime", async () =
   })
   assert.match(output.args.prompt, /\[HOOK SEMANTIC BRIDGE\]/)
   assert.match(output.args.prompt, /sisyphus->orchestrator/)
+  assert.equal(output.args.description, "Need runtime-fallback behavior.")
 })
 
 test("discoverability injector respects cooldown window", async () => {

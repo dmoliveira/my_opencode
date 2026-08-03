@@ -58,6 +58,28 @@ test("agent-denied-tool-enforcer blocks mutating delegation intents for read-onl
   }
 })
 
+test("agent-denied-tool-enforcer retains reserved-looking caller instructions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
+  try {
+    seedExploreSpec(directory)
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: "[TOOL SURFACE] subagent=explore; allowed=read; denied=commit changes.",
+        prompt: "Inspect the affected files first.",
+      },
+    }
+
+    await assert.rejects(
+      plugin["tool.execute.before"]({ tool: "task", sessionID: "session-reserved-mutation" }, output),
+      /mutating work .*read-only/i,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("agent-denied-tool-enforcer allows read-only discovery prompts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
   try {
@@ -73,6 +95,32 @@ test("agent-denied-tool-enforcer allows read-only discovery prompts", async () =
 
     await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-readonly" }, output)
     assert.equal(output.args.subagent_type, "explore")
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("agent-denied-tool-enforcer cleans legacy description context before guard evaluation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-denied-tool-enforcer-"))
+  try {
+    seedExploreSpec(directory)
+    const plugin = createPlugin(directory)
+    const output = {
+      args: {
+        subagent_type: "explore",
+        description: [
+          "[TOOL SURFACE] subagent=explore; allowed=read,glob,grep; denied=bash,write,edit,task.",
+          "[DELEGATION TRACE legacy-guard-trace]",
+          "",
+          "Find notification settings",
+        ].join("\n"),
+        prompt: "Read only and return file references.",
+      },
+    }
+
+    await plugin["tool.execute.before"]({ tool: "task", sessionID: "session-legacy-guard" }, output)
+    assert.equal(output.args.description, "Find notification settings")
+    assert.match(output.args.prompt, /\[DELEGATION TRACE legacy-guard-trace\]/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -1,6 +1,10 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { loadAgentMetadata } from "../shared/agent-metadata.js"
+import {
+  stripDelegationDescriptionContext,
+  stripDelegationPromptContext,
+} from "../shared/delegation-context.js"
 import { annotateDelegationMetadata, resolveDelegationTraceId } from "../shared/delegation-trace.js"
 import { routingProfileForCategory } from "../shared/routing-profiles.js"
 import {
@@ -94,20 +98,6 @@ const ROUTING_PATTERNS: Array<{ subagentType: string; patterns: RegExp[] }> = [
   },
 ]
 
-const SUBAGENT_ICON_BY_TYPE: Record<string, { nerd: string; fallback: string }> = {
-  explore: { nerd: "󰍉", fallback: "[scan]" },
-  tasker: { nerd: "󰚡", fallback: "[plan]" },
-  librarian: { nerd: "󰂺", fallback: "[docs]" },
-  verifier: { nerd: "󰄬", fallback: "[check]" },
-  reviewer: { nerd: "󰦨", fallback: "[review]" },
-  "release-scribe": { nerd: "󰜘", fallback: "[notes]" },
-  oracle: { nerd: "󱠓", fallback: "[advisor]" },
-  "strategic-planner": { nerd: "󱎸", fallback: "[plan]" },
-  "ambiguity-analyst": { nerd: "󰋗", fallback: "[clarify]" },
-  "plan-critic": { nerd: "󰒠", fallback: "[critic]" },
-  orchestrator: { nerd: "󰯲", fallback: "[lead]" },
-}
-
 const ROUTING_CHAR_BY_AGENT: Record<string, string> = {
   explore: "E",
   tasker: "D",
@@ -137,28 +127,6 @@ function prependHint(original: string, hint: string): string {
     return original
   }
   return `${hint}\n\n${original}`
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-function stripHeaderLine(original: string, header: string): string {
-  return original.replace(new RegExp(`^\\[${escapeRegex(header)}(?: [^\\]]+)?\\].*(?:\\n|$)`, "gmi"), "")
-}
-
-function stripInjectedHeaders(original: string): string {
-  return [
-    "SUBAGENT",
-    "DELEGATION ROUTER",
-    "MODEL ROUTING",
-    "TOOL SURFACE",
-    "SESSION FLOW",
-    "WORKTREE CONTEXT",
-    "THINKING EFFORT",
-  ]
-    .reduce((text, header) => stripHeaderLine(text, header), original)
-    .trimStart()
 }
 
 function formatHeader(header: string, body: string, timestamp?: string): string {
@@ -354,14 +322,6 @@ function policyForAgent(
   return { overrideDelta, intentThreshold }
 }
 
-function formatSubagentLabel(subagentType: string, reasoning: string): string {
-  const icon = SUBAGENT_ICON_BY_TYPE[subagentType] ?? {
-    nerd: "󰚩",
-    fallback: "[agent]",
-  }
-  return formatHeader("SUBAGENT", `${icon.nerd} ${subagentType} ${icon.fallback} | effort=${reasoning}`)
-}
-
 export function createAgentModelResolverHook(options: {
   directory: string
   enabled: boolean
@@ -390,13 +350,15 @@ export function createAgentModelResolverHook(options: {
       if (!args || typeof args !== "object") {
         return
       }
+      const originalPrompt = String(args.prompt ?? "")
+      const originalDescription = String(args.description ?? "")
       const traceId = resolveDelegationTraceId(args)
       annotateDelegationMetadata(eventPayload.output ?? {}, args)
       const sid = sessionId(eventPayload)
 
       const metadataByAgent = loadAgentMetadata(directory)
       const knownAgents = new Set(metadataByAgent.keys())
-      const combinedText = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`
+      const combinedText = `${originalPrompt}\n${originalDescription}`
 
       const originalExplicitSubagent = String(args.subagent_type ?? "").toLowerCase().trim()
       let subagentType = originalExplicitSubagent
@@ -466,8 +428,8 @@ export function createAgentModelResolverHook(options: {
           templateId: "delegation-route-v1",
           instruction: buildRoutingInstruction(aiInferred.name, originalExplicitSubagent),
           context: buildRoutingContext(
-            String(args.prompt ?? ""),
-            String(args.description ?? ""),
+            originalPrompt,
+            originalDescription,
             originalExplicitSubagent,
             aiInferred.name,
             aiInferred.score,
@@ -479,8 +441,8 @@ export function createAgentModelResolverHook(options: {
             prefix: "route",
             parts: [originalExplicitSubagent || "none", aiInferred.name],
             text: buildRoutingContext(
-              String(args.prompt ?? ""),
-              String(args.description ?? ""),
+              originalPrompt,
+              originalDescription,
               originalExplicitSubagent,
               aiInferred.name,
               aiInferred.score,
@@ -596,10 +558,6 @@ export function createAgentModelResolverHook(options: {
         "MODEL ROUTING",
         `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
       )
-      const modelHintDescription = formatHeader(
-        "MODEL ROUTING",
-        `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
-      )
       const allowedTools = normalizeToolList(metadata?.allowed_tools)
       const toolSurface = formatHeader(
         "TOOL SURFACE",
@@ -612,23 +570,15 @@ export function createAgentModelResolverHook(options: {
       const composedPromptHint = [modelHintPrompt, routeHint, toolSurface]
         .filter((part) => part.length > 0)
         .join("\n")
-      const composedDescriptionHint = [modelHintDescription, routeHint, toolSurface]
-        .filter((part) => part.length > 0)
-        .join("\n")
       const flowHint = formatHeader("SESSION FLOW", `parent_session_id=${sid || "unknown"}; trace_id=${traceId}`)
       const worktreeHint = formatHeader(
         "WORKTREE CONTEXT",
         `cwd=${directory}; execute file discovery and validation relative to this path unless prompt explicitly overrides.`,
       )
-      const subagentLabel = formatSubagentLabel(subagentType, profile.reasoning)
 
-      const cleanPrompt = stripInjectedHeaders(String(args.prompt ?? ""))
-      const cleanDescription = stripInjectedHeaders(String(args.description ?? ""))
+      const cleanPrompt = stripDelegationPromptContext(String(args.prompt ?? ""))
       args.prompt = prependHint(prependHint(prependHint(cleanPrompt, worktreeHint), flowHint), composedPromptHint)
-      args.description = prependHint(
-        prependHint(prependHint(prependHint(cleanDescription, composedDescriptionHint), worktreeHint), flowHint),
-        subagentLabel,
-      )
+      args.description = stripDelegationDescriptionContext(String(args.description ?? ""))
       annotateDelegationMetadata(eventPayload.output ?? {}, args)
 
       writeGatewayEventAudit(directory, {
