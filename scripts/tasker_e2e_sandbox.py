@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,12 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ID_RE = re.compile(r"\b(?P<kind>task|epic|memory|doc|link)_\d+\b")
+TASKER_MODEL = "openai/gpt-5.4"
+SHELL_OPERATOR_CHARS = frozenset(";&|<>")
+TASKER_READ_ONLY_SUBCOMMANDS = frozenset(
+    {"config", "current", "find", "get", "help", "list", "next", "queue"}
+)
+TASKER_WRITE_SUBCOMMANDS = frozenset({"add", "link", "set"})
 
 
 @dataclass(frozen=True)
@@ -39,7 +46,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def run_process(
-    command: list[str], *, cwd: Path, timeout_ms: int
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout_ms: int,
+    env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.setdefault("CI", "true")
@@ -48,6 +59,8 @@ def run_process(
     env.setdefault("GIT_PAGER", "cat")
     env.setdefault("PAGER", "cat")
     env.setdefault("GCM_INTERACTIVE", "never")
+    if env_overrides:
+        env.update(env_overrides)
     return subprocess.run(
         command,
         cwd=cwd,
@@ -57,6 +70,111 @@ def run_process(
         env=env,
         timeout=timeout_ms / 1000,
     )
+
+
+def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
+    config_root = config_home / "opencode"
+    agent_dir = config_root / "agent"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / "tasker.md").symlink_to(REPO_ROOT / "agent" / "tasker.md")
+    (config_root / "opencode.json").write_text(
+        json.dumps(
+            {
+                "$schema": "https://opencode.ai/config.json",
+                "permission": {
+                    "bash": "allow",
+                    "read": "allow",
+                    "glob": "allow",
+                    "grep": "allow",
+                    "list": "allow",
+                    "edit": "deny",
+                    "webfetch": "deny",
+                    "task": "deny",
+                    "todowrite": "deny",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "XDG_CONFIG_HOME": str(config_home),
+        "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+        "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "1",
+    }
+
+
+def _oc_subcommand(tokens: list[str]) -> str:
+    index = 1
+    options_with_values = {"--config", "--format"}
+    while index < len(tokens):
+        token = tokens[index]
+        if token in options_with_values:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return token
+    return ""
+
+
+def validate_tasker_shell_command(command: str) -> None:
+    if not command.strip():
+        raise AssertionError("Tasker emitted an empty shell command")
+    if "\n" in command or "\r" in command or "$(" in command or "`" in command:
+        raise AssertionError(f"Tasker emitted compound shell syntax: {command}")
+
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        tokens = list(lexer)
+    except ValueError as exc:
+        raise AssertionError(f"Tasker emitted invalid shell syntax: {command}") from exc
+    if not tokens:
+        raise AssertionError("Tasker emitted an empty shell command")
+
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        if token == "&&":
+            if not segments[-1]:
+                raise AssertionError(f"Tasker emitted invalid shell chaining: {command}")
+            segments.append([])
+            continue
+        if token and set(token) <= SHELL_OPERATOR_CHARS:
+            raise AssertionError(
+                f"Tasker emitted unsafe chained or redirected shell syntax: {command}"
+            )
+        segments[-1].append(token)
+    if not segments[-1]:
+        raise AssertionError(f"Tasker emitted invalid shell chaining: {command}")
+
+    write_count = 0
+    for segment in segments:
+        if segment == ["command", "-v", "oc"]:
+            continue
+        if segment[0] != "oc":
+            raise AssertionError(
+                f"Tasker emitted non-Codememory shell command: {command}"
+            )
+        subcommand = _oc_subcommand(segment)
+        if "--help" in segment or subcommand == "help":
+            continue
+        if subcommand in TASKER_READ_ONLY_SUBCOMMANDS:
+            continue
+        if subcommand in TASKER_WRITE_SUBCOMMANDS:
+            write_count += 1
+            continue
+        raise AssertionError(
+            f"Tasker emitted unapproved Codememory subcommand: {command}"
+        )
+    if write_count > 1 or (write_count and len(segments) > 1):
+        raise AssertionError(
+            f"Tasker combined a backend write with another shell command: {command}"
+        )
 
 
 def oc_json(*args: str) -> dict[str, Any]:
@@ -125,16 +243,26 @@ def title_for(identifier: str) -> str:
 
 
 def links_for(identifier: str) -> set[tuple[str, str, str]]:
-    payload = oc_json("get", identifier, "--view", "links", "--format", "json")
-    return {
-        (
-            str(link.get("direction") or ""),
-            str(link.get("edge_type") or ""),
-            str(link.get("target_id") or ""),
-        )
-        for link in payload.get("links", [])
-        if isinstance(link, dict)
-    }
+    entity = oc_json("get", identifier, "--view", "full", "--format", "json")
+    scope = str(entity.get("scope_key") or "")
+    if not scope:
+        raise AssertionError(f"entity {identifier} has no scope")
+    listed = oc_json(
+        "list", "link", "--scope", scope, "--format", "json", "--limit", "100"
+    )
+    resolved: set[tuple[str, str, str]] = set()
+    for item in listed.get("items", []):
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            continue
+        link = oc_json("get", item["id"], "--view", "full", "--format", "json")
+        from_id = str(link.get("from_id") or "")
+        to_id = str(link.get("to_id") or "")
+        edge_type = str(link.get("edge_type") or "")
+        if from_id == identifier:
+            resolved.add(("outgoing", edge_type, to_id))
+        if to_id == identifier:
+            resolved.add(("incoming", edge_type, from_id))
+    return resolved
 
 
 def choose_id(found: dict[str, set[str]], kind: str, title: str) -> str:
@@ -269,6 +397,9 @@ def build_scenarios(total_runs: int) -> list[Scenario]:
 
 
 def validate_commands(scenario: Scenario, commands: list[str]) -> None:
+    for command in commands:
+        validate_tasker_shell_command(command)
+
     add_commands = [
         cmd
         for cmd in commands
@@ -288,27 +419,6 @@ def validate_commands(scenario: Scenario, commands: list[str]) -> None:
         and "--help" not in cmd
     ]
     if scenario.mode == "refusal":
-        forbidden = [
-            cmd
-            for cmd in commands
-            if any(
-                token in cmd
-                for token in (
-                    " git ",
-                    " gh ",
-                    "pytest",
-                    "make validate",
-                    "npm test",
-                    "pnpm test",
-                    "ruff",
-                    "cargo test",
-                )
-            )
-        ]
-        if forbidden:
-            raise AssertionError(
-                f"refusal scenario emitted execution command: {forbidden[0]}"
-            )
         return
     if scenario.mode == "duplicate":
         if add_commands:
@@ -444,7 +554,9 @@ def validate_scenario(
     return {"name": scenario.name, "resolved_ids": resolved, "warnings": warnings}
 
 
-def run_scenario(scenario: Scenario, *, timeout_ms: int) -> dict[str, Any]:
+def run_scenario(
+    scenario: Scenario, *, timeout_ms: int, runtime_env: dict[str, str]
+) -> dict[str, Any]:
     run_count = 2 if scenario.mode == "duplicate" else 1
     last_events: list[dict[str, Any]] = []
     for _ in range(run_count):
@@ -452,6 +564,8 @@ def run_scenario(scenario: Scenario, *, timeout_ms: int) -> dict[str, Any]:
             [
                 "opencode",
                 "run",
+                "--model",
+                TASKER_MODEL,
                 "--agent",
                 "tasker",
                 "--format",
@@ -462,6 +576,7 @@ def run_scenario(scenario: Scenario, *, timeout_ms: int) -> dict[str, Any]:
             ],
             cwd=REPO_ROOT,
             timeout_ms=timeout_ms,
+            env_overrides=runtime_env,
         )
         last_events = parse_events(result.stdout)
         if result.returncode != 0:
@@ -475,18 +590,28 @@ def main(argv: list[str]) -> int:
     scenarios = build_scenarios(args.runs)
     passed: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
-    for scenario in scenarios:
-        try:
-            passed.append(run_scenario(scenario, timeout_ms=args.timeout_ms))
-        except Exception as exc:  # noqa: BLE001
-            failures.append({"name": scenario.name, "error": str(exc)})
-            break
+    with tempfile.TemporaryDirectory(prefix="tasker-e2e-config-") as config_home:
+        runtime_env = prepare_tasker_runtime(Path(config_home))
+        for scenario in scenarios:
+            try:
+                passed.append(
+                    run_scenario(
+                        scenario,
+                        timeout_ms=args.timeout_ms,
+                        runtime_env=runtime_env,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                failures.append({"name": scenario.name, "error": str(exc)})
+                break
+    warning_count = sum(len(item.get("warnings", [])) for item in passed)
+    clean_run = not failures and warning_count == 0 and len(passed) == args.runs
     payload = {
-        "result": "PASS" if not failures else "FAIL",
+        "result": "PASS" if clean_run else "FAIL",
         "requested_runs": args.runs,
         "completed_runs": len(passed),
         "failed_runs": len(failures),
-        "warning_count": sum(len(item.get("warnings", [])) for item in passed),
+        "warning_count": warning_count,
         "duration_seconds": round(time.time() - started, 2),
         "passed": passed,
         "failures": failures,
@@ -502,7 +627,7 @@ def main(argv: list[str]) -> int:
         print(f"duration_seconds: {payload['duration_seconds']}")
         for failure in failures:
             print(f"- FAIL {failure['name']}: {failure['error']}")
-    return 0 if not failures else 1
+    return 0 if clean_run else 1
 
 
 if __name__ == "__main__":

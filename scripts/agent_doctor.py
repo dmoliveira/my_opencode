@@ -92,6 +92,50 @@ ORCHESTRATOR_TEMPLATE_ONLY_MARKERS = [
     "{{QUALITY_POSTURE}}",
 ]
 
+TASKER_BODY_WORD_BASELINE = 1154
+TASKER_BODY_WORD_LIMIT = 850
+TASKER_SHARED_CONTRACT_MARKERS = [
+    "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
+    "Never delegate implementation or validation work.",
+    "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
+    "initiative, work item, durable note, reference brief, relation, and planning session",
+    "`--format json`",
+    "`oc add task \"<title>\" --kind chore --priority P2`",
+    "`--goal` and `--summary`",
+    "`oc add epic \"<title>\" --summary \"...\"`",
+    "`oc add memory \"<title>\" --kind note --body \"...\"`",
+    "`--label planning`",
+    "`oc add doc \"<title>\" --type spec|runbook|brief ...`",
+    "`oc link <epic_id> parent-of <task_id>`",
+    "`oc link <blocked_task_id> depends-on <prereq_task_id>`",
+    "`blocked-by`",
+    "`oc link <memory_id> about <task_id>`",
+    "`captured`",
+    "`--scope`, `--worktree`, and `--branch`",
+    "one backend write per bash call",
+    "`oc set`",
+    "`oc get --view links`",
+    "do not fall back to OpenCode todo/memory state",
+    "return a blocker with exact evidence and the install/repair command needed",
+    "3+ related tasks",
+    "`depends on`, `blocked by`, `after`, `before`, `later`, `do next`, and `only after`",
+    "exact created artifact ids",
+    "blocker reason + evidence + next best action",
+    "ask follow-up questions only when ambiguity would materially change the artifact graph or persistence target",
+]
+TASKER_TEMPLATE_CONTRACT_MARKERS = [
+    *TASKER_SHARED_CONTRACT_MARKERS,
+    "Current backend adapter: {{BACKEND_NAME}} via `{{BACKEND_CLI}}`.",
+    "Read existing state with {{READ_DISCOVERY}}.",
+    "verify backend availability in this order: (1) `command -v oc`, (2) `oc config --doctor`, (3) repo-local scope defaults from {{REPO_SCOPE_CONFIG}}, (4) repo-local backend checkout discovery at {{BACKEND_LOCAL_REPO}} if the alias is missing, and then (5) install or symlink repair guidance if the repo exists but the launcher is missing.",
+]
+TASKER_RENDERED_CONTRACT_MARKERS = [
+    *TASKER_SHARED_CONTRACT_MARKERS,
+    "Current backend adapter: Codememory via `oc`.",
+    "Read existing state with `oc current`, `oc next`, `oc queue`, `oc find`, `oc list`, and `oc get`.",
+    "verify backend availability in this order: (1) `command -v oc`, (2) `oc config --doctor`, (3) repo-local scope defaults from `.codememory/config.yaml`, (4) repo-local backend checkout discovery at `~/Codes/Projects/codememory` if the alias is missing, and then (5) install or symlink repair guidance if the repo exists but the launcher is missing.",
+]
+
 REQUIRED_AGENTS: dict[str, dict[str, str]] = {
     "orchestrator": {"mode": "primary"},
     "tasker": {"mode": "primary"},
@@ -117,9 +161,7 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
         "bash: true",
         "write: false",
         "edit: false",
-        "Current backend adapter: Codememory via `oc`.",
-        "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
-        "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
+        *TASKER_RENDERED_CONTRACT_MARKERS,
     ],
     "explore.md": [
         "mode: subagent",
@@ -294,6 +336,54 @@ def _check_orchestrator_prompt_contract(
         checks.append(
             {
                 "name": f"spec_orchestrator_contract_{marker}",
+                "ok": marker in body,
+                "reason": "" if marker in body else f"missing marker: {marker}",
+                "path": str(path),
+            }
+        )
+    return checks
+
+
+def _check_tasker_prompt_contract(
+    spec: dict[str, Any], path: Path
+) -> list[dict[str, Any]]:
+    body = spec.get("body_template")
+    if not isinstance(body, str) or not body.strip():
+        return [
+            {
+                "name": "spec_tasker_body_template",
+                "ok": False,
+                "reason": "body_template must be a non-empty string",
+                "path": str(path),
+            }
+        ]
+
+    actual = count_prompt_words(body)
+    reduction_limit = int(TASKER_BODY_WORD_BASELINE * 0.75)
+    checks = [
+        prompt_body_budget_check(
+            "tasker",
+            body,
+            baseline=TASKER_BODY_WORD_BASELINE,
+            limit=TASKER_BODY_WORD_LIMIT,
+            path=path,
+        ),
+        {
+            "name": "spec_tasker_body_word_reduction",
+            "ok": actual <= reduction_limit,
+            "reason": ""
+            if actual <= reduction_limit
+            else f"body has {actual} words; 25% reduction requires <= {reduction_limit}",
+            "path": str(path),
+            "baseline": TASKER_BODY_WORD_BASELINE,
+            "actual": actual,
+            "limit": reduction_limit,
+        },
+    ]
+    for marker in TASKER_TEMPLATE_CONTRACT_MARKERS:
+        checks.append(
+            {
+                "name": f"spec_tasker_contract_{marker}",
                 "ok": marker in body,
                 "reason": "" if marker in body else f"missing marker: {marker}",
                 "path": str(path),
@@ -553,6 +643,8 @@ def _check_agent_spec_metadata() -> list[dict[str, Any]]:
 
         if agent == "orchestrator":
             checks.extend(_check_orchestrator_prompt_contract(spec, path))
+        if agent == "tasker":
+            checks.extend(_check_tasker_prompt_contract(spec, path))
 
         metadata = spec.get("metadata")
         checks.append(
