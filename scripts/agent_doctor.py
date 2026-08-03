@@ -61,6 +61,40 @@ ALLOWED_DEFAULT_CATEGORIES = {
     "writing",
 }
 
+ORCHESTRATOR_BODY_WORD_BASELINE = 687
+ORCHESTRATOR_BODY_WORD_LIMIT = 450
+ORCHESTRATOR_RENDERED_CONTRACT_MARKERS = [
+    "Low risk (",
+    "Medium risk (",
+    "High risk (",
+    "Use `explore`",
+    "Use `librarian`",
+    "Use `oracle`",
+    "Use `verifier` before claiming done",
+    "Use `reviewer` for final quality/safety pass",
+    "Use `release-scribe`",
+    "Use `tasker`",
+    "Use `/model-routing set-category quick`",
+    "Use `/model-routing set-category balanced`",
+    "Use `/model-routing set-category deep` for planner-heavy work (`strategic-planner`, `ambiguity-analyst`)",
+    "Use `/model-routing set-category critical`",
+    "Keep at most 2 concurrent subagents",
+    "Do not run duplicate `reviewer` or `verifier` passes on unchanged diffs",
+    "Default to a single writer",
+    "objective, scoped ownership, constrained file paths, acceptance criteria, required checks, and expected output format",
+    "Docs-only",
+    "Tests-only",
+    "Runtime/core",
+    "Release/config",
+    "Completion gates",
+    "Blocker contract",
+    "Anti-loop guard",
+]
+ORCHESTRATOR_TEMPLATE_ONLY_MARKERS = [
+    "{{FAILED_ATTEMPTS}}",
+    "{{QUALITY_POSTURE}}",
+]
+
 REQUIRED_AGENTS: dict[str, dict[str, str]] = {
     "orchestrator": {"mode": "primary"},
     "tasker": {"mode": "primary"},
@@ -78,9 +112,7 @@ REQUIRED_AGENTS: dict[str, dict[str, str]] = {
 REQUIRED_MARKERS: dict[str, list[str]] = {
     "orchestrator.md": [
         "mode: primary",
-        "Use `verifier` before claiming done",
-        "Use `reviewer` for final quality/safety pass",
-        "Anti-loop guard",
+        *ORCHESTRATOR_RENDERED_CONTRACT_MARKERS,
     ],
     "tasker.md": [
         "mode: primary",
@@ -210,6 +242,66 @@ def _parse_agent_list_output(text: str) -> dict[str, str]:
             continue
         found[match.group(1)] = match.group(2)
     return found
+
+
+def count_prompt_words(body: str) -> int:
+    """Count prompt words as deterministic non-whitespace runs."""
+    return len(re.findall(r"\S+", body.strip()))
+
+
+def prompt_body_budget_check(
+    agent: str, body: str, *, baseline: int, limit: int, path: Path
+) -> dict[str, Any]:
+    actual = count_prompt_words(body)
+    return {
+        "name": f"spec_{agent}_body_word_budget",
+        "ok": actual <= limit,
+        "reason": ""
+        if actual <= limit
+        else f"body has {actual} words; limit is {limit}",
+        "path": str(path),
+        "baseline": baseline,
+        "actual": actual,
+        "limit": limit,
+    }
+
+
+def _check_orchestrator_prompt_contract(
+    spec: dict[str, Any], path: Path
+) -> list[dict[str, Any]]:
+    body = spec.get("body_template")
+    if not isinstance(body, str):
+        return [
+            {
+                "name": "spec_orchestrator_body_template",
+                "ok": False,
+                "reason": "body_template must be a string",
+                "path": str(path),
+            }
+        ]
+
+    checks = [
+        prompt_body_budget_check(
+            "orchestrator",
+            body,
+            baseline=ORCHESTRATOR_BODY_WORD_BASELINE,
+            limit=ORCHESTRATOR_BODY_WORD_LIMIT,
+            path=path,
+        )
+    ]
+    for marker in (
+        *ORCHESTRATOR_RENDERED_CONTRACT_MARKERS,
+        *ORCHESTRATOR_TEMPLATE_ONLY_MARKERS,
+    ):
+        checks.append(
+            {
+                "name": f"spec_orchestrator_contract_{marker}",
+                "ok": marker in body,
+                "reason": "" if marker in body else f"missing marker: {marker}",
+                "path": str(path),
+            }
+        )
+    return checks
 
 
 def _check_runtime_discovery() -> list[dict[str, Any]]:
@@ -358,6 +450,9 @@ def _check_agent_spec_metadata() -> list[dict[str, Any]]:
                 "path": str(path),
             }
         )
+
+        if agent == "orchestrator":
+            checks.extend(_check_orchestrator_prompt_contract(spec, path))
 
         metadata = spec.get("metadata")
         checks.append(
