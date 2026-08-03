@@ -36,7 +36,7 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | `oracle` | critical | `critical` |
 | `plan-critic` | critical | `critical` |
 
-Subagent specs explicitly pin the category model. The primary `orchestrator` and `tasker` remain on `openai/gpt-5.4`; the `writing` category is unchanged to preserve that primary-agent contract.
+Agent specs explicitly pin category models when a fixed model is required. The primary `orchestrator` pins `openai/gpt-5.6-terra` to match `balanced`; `tasker` remains unpinned and inherits `openai/gpt-5.4` from `writing`.
 
 ## Fallback Guidance
 
