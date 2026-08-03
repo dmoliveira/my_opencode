@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto"
 
+import {
+  stripDelegationDescriptionContext,
+  upsertDelegationPromptLine,
+} from "./delegation-context.js"
+
 interface TraceArgs {
   [key: string]: unknown
   prompt?: string
@@ -21,16 +26,6 @@ interface GatewayDelegationMetadata {
 
 const TRACE_PATTERN = /\[DELEGATION TRACE ([A-Za-z0-9_-]+)\]/
 const CHILD_RUN_PREFIX = "subagent-run/"
-
-function prependHint(original: string, hint: string): string {
-  if (!original.trim()) {
-    return hint
-  }
-  if (original.includes(hint)) {
-    return original
-  }
-  return `${hint}\n\n${original}`
-}
 
 function parseTrace(text: string): string | null {
   const match = text.match(TRACE_PATTERN)
@@ -117,15 +112,12 @@ function newTraceId(): string {
 }
 
 export function resolveDelegationTraceId(args: TraceArgs): string {
-  const combined = `${String(args.prompt ?? "")}\n${String(args.description ?? "")}`
-  const existing = parseTrace(combined)
-  if (existing) {
-    return existing
-  }
-  const traceId = newTraceId()
+  const prompt = String(args.prompt ?? "")
+  const description = String(args.description ?? "")
+  const traceId = parseTrace(prompt) ?? parseTrace(description) ?? newTraceId()
   const marker = `[DELEGATION TRACE ${traceId}]`
-  args.prompt = prependHint(String(args.prompt ?? ""), marker)
-  args.description = prependHint(String(args.description ?? ""), marker)
+  args.prompt = upsertDelegationPromptLine(prompt, "[DELEGATION TRACE ", marker)
+  args.description = stripDelegationDescriptionContext(description)
   return traceId
 }
 

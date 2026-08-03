@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js"
 
 interface ToolPayload {
@@ -19,16 +20,6 @@ interface ToolPayload {
 
 function sessionId(payload: ToolPayload): string {
   return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim()
-}
-
-function prependHint(original: string, hint: string): string {
-  if (!original.trim()) {
-    return hint
-  }
-  if (original.includes(hint)) {
-    return original
-  }
-  return `${hint}\n\n${original}`
 }
 
 const SEMANTIC_MAP: Array<{ upstream: RegExp; local: string; key: string }> = [
@@ -77,8 +68,7 @@ export function createHookSemanticBridgeHook(options: {
       }
       const mapping = matches.map((entry) => `${entry.key}->${entry.local}`).join("; ")
       const hint = `[HOOK SEMANTIC BRIDGE] Upstream semantics detected. Local runtime mappings: ${mapping}.`
-      args.prompt = prependHint(String(args.prompt ?? ""), hint)
-      args.description = prependHint(String(args.description ?? ""), hint)
+      args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[HOOK SEMANTIC BRIDGE]", hint)
       const directory =
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory

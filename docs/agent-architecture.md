@@ -55,6 +55,14 @@ Task-graph-aware default:
 - Assumption and ambiguity surfacing: `ambiguity-analyst`
 - Plan risk and missing gates: `plan-critic`
 
+## Delegation Context Contract
+
+- Keep task `description` caller-authored, concise, and suitable for a child-session title. Gateway routing, tool, session, worktree, trace, retry, and policy context belongs in `prompt` or structured delegation metadata, never duplicated into `description`.
+- Treat gateway header names as reserved. When legacy generated headers are found in a description, remove them before routing and preserve the remaining caller text.
+- The prompt trace is authoritative when prompt and description carry conflicting legacy trace IDs. Migrate a description-only trace into the prompt and structured metadata.
+- Upsert generated prompt lines and focus blocks by stable header identity so rerouting or changed failure statistics replace stale context instead of accumulating copies.
+- Keep stable role/routing/focus guidance ahead of volatile session, worktree, and trace values to maximize provider prefix-cache reuse.
+
 ## Tool Restriction Contract
 
 Read-only agents must keep write/edit disabled and must not be granted escalation via delegation loops.

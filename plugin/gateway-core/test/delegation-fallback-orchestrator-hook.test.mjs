@@ -55,6 +55,7 @@ test("delegation-fallback-orchestrator applies fallback only to matching failed 
         subagent_type: "reviewer",
         category: "critical",
         prompt: "[DELEGATION TRACE failed-trace] retry delegation",
+        description: "Retry failed review",
       },
     }
     await plugin["tool.execute.before"](
@@ -63,6 +64,7 @@ test("delegation-fallback-orchestrator applies fallback only to matching failed 
     )
     assert.equal(fallback.args.category, "general")
     assert.match(String(fallback.args.prompt), /delegation-fallback-orchestrator/i)
+    assert.equal(fallback.args.description, "Retry failed review")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

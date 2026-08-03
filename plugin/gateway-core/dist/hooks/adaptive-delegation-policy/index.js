@@ -1,17 +1,9 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { getDelegationFailureStats, } from "../shared/delegation-runtime-state.js";
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
-}
-function prependHint(original, hint) {
-    if (!original.trim()) {
-        return hint;
-    }
-    if (original.includes(hint)) {
-        return original;
-    }
-    return `${hint}\n\n${original}`;
 }
 function isExpensiveCategory(category) {
     return category === "critical" || category === "deep";
@@ -72,8 +64,7 @@ export function createAdaptiveDelegationPolicyHook(options) {
                 throw new Error(`Blocked delegation: adaptive cooldown active due to recent failures; category=${category} is temporarily restricted.`);
             }
             const hint = `[adaptive-delegation-policy] cooldown active; recent_failures=${stats.failed}/${stats.total}; prefer low-risk scoped delegation and explicit validation steps.`;
-            args.prompt = prependHint(String(args.prompt ?? ""), hint);
-            args.description = prependHint(String(args.description ?? ""), hint);
+            args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[adaptive-delegation-policy]", hint);
         },
     };
 }

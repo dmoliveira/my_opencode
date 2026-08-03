@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
 import {
   getRecentDelegationOutcomes,
   registerDelegationPolicyProposal,
@@ -28,16 +29,6 @@ interface ToolPayload {
 
 function sessionId(payload: ToolPayload): string {
   return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim()
-}
-
-function prependHint(original: string, hint: string): string {
-  if (!original.trim()) {
-    return hint
-  }
-  if (original.includes(hint)) {
-    return original
-  }
-  return `${hint}\n\n${original}`
 }
 
 export function createDelegationOutcomeLearnerHook(options: {
@@ -110,8 +101,11 @@ export function createDelegationOutcomeLearnerHook(options: {
         if (adaptedCategory !== currentCategory) {
           args.category = adaptedCategory
         }
-        args.prompt = prependHint(String(args.prompt ?? ""), hint)
-        args.description = prependHint(String(args.description ?? ""), hint)
+        args.prompt = upsertDelegationPromptLine(
+          String(args.prompt ?? ""),
+          "[DELEGATION LEARNER]",
+          hint,
+        )
       }
 
       registerDelegationPolicyProposal({

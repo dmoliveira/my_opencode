@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
+import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
 import {
   buildCompactDecisionCacheKey,
   type LlmDecisionRuntime,
@@ -122,16 +123,6 @@ function buildFailureContext(output: string, prompt: string, description: string
   ].join(" ")
 }
 
-function prependHint(original: string, hint: string): string {
-  if (!original.trim()) {
-    return hint
-  }
-  if (original.includes(hint)) {
-    return original
-  }
-  return `${hint}\n\n${original}`
-}
-
 export function createDelegationFallbackOrchestratorHook(options: {
   directory: string
   enabled: boolean
@@ -182,8 +173,11 @@ export function createDelegationFallbackOrchestratorHook(options: {
           "[delegation-fallback-orchestrator] previous delegation failed; applying fallback route category=general and removing explicit subagent_type."
         delete args.subagent_type
         args.category = "general"
-        args.prompt = prependHint(String(args.prompt ?? ""), fallbackHint)
-        args.description = prependHint(String(args.description ?? ""), fallbackHint)
+        args.prompt = upsertDelegationPromptLine(
+          String(args.prompt ?? ""),
+          "[delegation-fallback-orchestrator]",
+          fallbackHint,
+        )
         lastFailureByDelegation.delete(delegationKey(sid, failure.traceId))
         writeGatewayEventAudit(directory, {
           hook: "delegation-fallback-orchestrator",

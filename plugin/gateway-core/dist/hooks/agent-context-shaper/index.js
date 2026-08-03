@@ -1,5 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata, } from "../shared/agent-metadata.js";
+import { upsertDelegationPromptBlock } from "../shared/delegation-context.js";
 import { annotateDelegationMetadata, extractDelegationSubagentType, extractDelegationSubagentTypeFromOutput, extractDelegationTraceId, resolveDelegationTraceId, } from "../shared/delegation-trace.js";
 function delegationKey(sessionId, traceId, subagentType) {
     if (traceId) {
@@ -45,8 +46,6 @@ function buildTaskFocusReminder(context) {
         : "scope drift or unrelated follow-up work";
     return [
         "[agent-context-shaper] delegated task focus",
-        `- subagent: ${context.subagentType}`,
-        `- category: ${context.category}`,
         "- execute one delegated objective for this task call before returning control",
         `- prioritize: ${trigger}`,
         `- avoid: ${avoid}`,
@@ -105,17 +104,17 @@ export function createAgentContextShaperHook(options) {
                     metadata,
                 });
                 const prompt = String(eventPayload.output?.args?.prompt ?? "");
-                if (prompt &&
-                    !prompt.includes("[agent-context-shaper] delegated task focus")) {
-                    eventPayload.output = eventPayload.output ?? {};
-                    eventPayload.output.args = eventPayload.output.args ?? {};
-                    eventPayload.output.args.prompt = `${buildTaskFocusReminder({
-                        sessionId: sid,
-                        traceId,
-                        subagentType,
-                        category,
-                        metadata,
-                    })}\n\n${prompt}`;
+                const nextPrompt = upsertDelegationPromptBlock(prompt, "[agent-context-shaper] delegated task focus", buildTaskFocusReminder({
+                    sessionId: sid,
+                    traceId,
+                    subagentType,
+                    category,
+                    metadata,
+                }));
+                eventPayload.output = eventPayload.output ?? {};
+                eventPayload.output.args = eventPayload.output.args ?? {};
+                eventPayload.output.args.prompt = nextPrompt;
+                if (nextPrompt !== prompt) {
                     writeGatewayEventAudit(options.directory, {
                         hook: "agent-context-shaper",
                         stage: "before",
