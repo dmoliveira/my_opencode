@@ -17,11 +17,16 @@ REPO_ROOT = SCRIPT_DIR.parent
 SOURCE_AGENT_DIR = REPO_ROOT / "agent"
 SPEC_DIR = SOURCE_AGENT_DIR / "specs"
 INSTALLED_AGENT_DIR = Path.home() / ".config" / "opencode" / "agent"
+ROUTING_PROFILES_PATH = (
+    REPO_ROOT / "plugin" / "gateway-core" / "routing-profiles.data.json"
+)
 
 REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
     "docs/model-allocation-policy.md": [
         "## Effort-Band Fallback Chains",
         "## Provider Outage Behavior",
+        "The primary `orchestrator` pins `openai/gpt-5.6-terra` to match `balanced`",
+        "`tasker` remains unpinned and inherits `openai/gpt-5.4` from `writing`.",
     ],
     "docs/agent-architecture.md": [
         "## Inventory",
@@ -52,14 +57,6 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
 }
 
 ALLOWED_COST_TIERS = {"free", "cheap", "expensive"}
-ALLOWED_DEFAULT_CATEGORIES = {
-    "quick",
-    "balanced",
-    "deep",
-    "critical",
-    "visual",
-    "writing",
-}
 
 ORCHESTRATOR_BODY_WORD_BASELINE = 687
 ORCHESTRATOR_BODY_WORD_LIMIT = 450
@@ -98,6 +95,7 @@ ORCHESTRATOR_TEMPLATE_ONLY_MARKERS = [
 REQUIRED_AGENTS: dict[str, dict[str, str]] = {
     "orchestrator": {"mode": "primary"},
     "tasker": {"mode": "primary"},
+    "experience-designer": {"mode": "subagent"},
     "explore": {"mode": "subagent"},
     "librarian": {"mode": "subagent"},
     "oracle": {"mode": "subagent"},
@@ -304,6 +302,68 @@ def _check_orchestrator_prompt_contract(
     return checks
 
 
+def load_routing_categories(
+    path: Path = ROUTING_PROFILES_PATH,
+) -> dict[str, dict[str, Any]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    profiles = payload.get("profiles") if isinstance(payload, dict) else None
+    if not isinstance(profiles, dict) or not profiles:
+        raise ValueError("routing profiles must define a non-empty profiles object")
+    categories: dict[str, dict[str, Any]] = {}
+    for name, profile in profiles.items():
+        if not isinstance(name, str) or not name or not isinstance(profile, dict):
+            raise ValueError("routing profile entries must map names to objects")
+        categories[name] = profile
+    return categories
+
+
+def agent_model_policy_check(
+    spec: dict[str, Any], routing_categories: dict[str, dict[str, Any]], path: Path
+) -> dict[str, Any]:
+    name = str(spec.get("name") or path.stem).strip() or path.stem
+    metadata = spec.get("metadata")
+    category = metadata.get("default_category") if isinstance(metadata, dict) else None
+    profile = routing_categories.get(category) if isinstance(category, str) else None
+    expected_model = profile.get("model") if isinstance(profile, dict) else None
+    has_pin = "model" in spec
+    raw_pinned_model = spec.get("model") if has_pin else None
+    pinned_model = (
+        raw_pinned_model.strip()
+        if isinstance(raw_pinned_model, str) and raw_pinned_model.strip()
+        else raw_pinned_model
+    )
+    problems: list[str] = []
+
+    if not isinstance(category, str) or category not in routing_categories:
+        problems.append(f"unknown routing category: {category}")
+    elif not isinstance(expected_model, str) or not expected_model.strip():
+        problems.append(f"routing category {category} has no model")
+
+    if has_pin:
+        if (
+            not isinstance(pinned_model, str)
+            or not pinned_model
+            or "/" not in pinned_model
+        ):
+            problems.append(f"invalid explicit model pin: {raw_pinned_model}")
+        elif isinstance(expected_model, str) and pinned_model != expected_model:
+            problems.append(
+                f"model pin {pinned_model} does not match {category}: {expected_model}"
+            )
+
+    return {
+        "name": f"spec_{name}_model_policy",
+        "ok": not problems,
+        "reason": "; ".join(problems),
+        "path": str(path),
+        "category": category,
+        "pinned_model": pinned_model,
+        "expected_model": expected_model,
+        "effective_model": pinned_model if has_pin else expected_model,
+        "inherits_category": not has_pin,
+    }
+
+
 def _check_runtime_discovery() -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
     binary = shutil.which("opencode")
@@ -414,6 +474,46 @@ def _check_agent_spec_metadata() -> list[dict[str, Any]]:
     if not SPEC_DIR.exists() or not SPEC_DIR.is_dir():
         return checks
 
+    discovered_agents = {path.stem for path in SPEC_DIR.glob("*.json")}
+    expected_agents = set(REQUIRED_AGENTS)
+    missing_agents = sorted(expected_agents - discovered_agents)
+    unexpected_agents = sorted(discovered_agents - expected_agents)
+    checks.append(
+        {
+            "name": "spec_inventory_exact",
+            "ok": not missing_agents and not unexpected_agents,
+            "reason": ""
+            if not missing_agents and not unexpected_agents
+            else f"missing={missing_agents}; unexpected={unexpected_agents}",
+            "path": str(SPEC_DIR),
+            "expected": sorted(expected_agents),
+            "actual": sorted(discovered_agents),
+        }
+    )
+
+    try:
+        routing_categories = load_routing_categories()
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        routing_categories = {}
+        checks.append(
+            {
+                "name": "routing_profiles_load",
+                "ok": False,
+                "reason": str(exc),
+                "path": str(ROUTING_PROFILES_PATH),
+            }
+        )
+    else:
+        checks.append(
+            {
+                "name": "routing_profiles_load",
+                "ok": True,
+                "reason": "",
+                "path": str(ROUTING_PROFILES_PATH),
+                "categories": sorted(routing_categories),
+            }
+        )
+
     for agent, expected in REQUIRED_AGENTS.items():
         path = SPEC_DIR / f"{agent}.json"
         checks.append(
@@ -484,14 +584,14 @@ def _check_agent_spec_metadata() -> list[dict[str, Any]]:
         checks.append(
             {
                 "name": f"spec_{agent}_default_category",
-                "ok": isinstance(category, str)
-                and category in ALLOWED_DEFAULT_CATEGORIES,
+                "ok": isinstance(category, str) and category in routing_categories,
                 "reason": ""
-                if isinstance(category, str) and category in ALLOWED_DEFAULT_CATEGORIES
+                if isinstance(category, str) and category in routing_categories
                 else f"invalid default_category: {category}",
                 "path": str(path),
             }
         )
+        checks.append(agent_model_policy_check(spec, routing_categories, path))
 
         for list_key in ("triggers", "avoid_when", "denied_tools"):
             value = metadata.get(list_key)

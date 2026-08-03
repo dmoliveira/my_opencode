@@ -18272,16 +18272,59 @@ jobs:
                 f"{agent_name} generated markdown should include its model pin",
             )
 
-        for primary_name in ("orchestrator", "tasker"):
-            primary_spec = load_json_file(AGENT_DIR / "specs" / f"{primary_name}.json")
-            primary_category = primary_spec.get("metadata", {}).get("default_category")
-            effective_primary_model = primary_spec.get("model") or routing_categories.get(
-                primary_category, {}
-            ).get("model")
-            expect(
-                effective_primary_model == "openai/gpt-5.4",
-                f"primary {primary_name} should remain on GPT-5.4",
+        expected_primary_models = {
+            "orchestrator": {
+                "category": "balanced",
+                "model": "openai/gpt-5.6-terra",
+                "pinned": True,
+            },
+            "tasker": {
+                "category": "writing",
+                "model": "openai/gpt-5.4",
+                "pinned": False,
+            },
+        }
+        for primary_name, expected in expected_primary_models.items():
+            primary_spec = load_json_file(
+                AGENT_DIR / "specs" / f"{primary_name}.json"
             )
+            primary_category = primary_spec.get("metadata", {}).get("default_category")
+            category_model = routing_categories.get(primary_category, {}).get("model")
+            has_model_pin = "model" in primary_spec
+            effective_primary_model = primary_spec.get("model") or category_model
+            expect(
+                primary_category == expected["category"],
+                f"primary {primary_name} should keep its expected routing category",
+            )
+            expect(
+                category_model == expected["model"],
+                f"primary {primary_name} category should resolve its expected model",
+            )
+            expect(
+                has_model_pin == expected["pinned"],
+                f"primary {primary_name} explicit pin contract should remain stable",
+            )
+            expect(
+                effective_primary_model == expected["model"],
+                f"primary {primary_name} should resolve its expected model",
+            )
+            generated_primary = (AGENT_DIR / f"{primary_name}.md").read_text(
+                encoding="utf-8"
+            )
+            generated_header = generated_primary.split("---", 2)[1]
+            if expected["pinned"]:
+                expect(
+                    f"model: {expected['model']}" in generated_header,
+                    f"primary {primary_name} generated markdown should include its model pin",
+                )
+            else:
+                expect(
+                    not any(
+                        line.startswith("model:")
+                        for line in generated_header.splitlines()
+                    ),
+                    f"primary {primary_name} should inherit without a generated model pin",
+                )
 
         strategic_planner_recommend = subprocess.run(
             [
