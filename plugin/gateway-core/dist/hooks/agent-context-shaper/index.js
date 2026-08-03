@@ -44,13 +44,7 @@ function buildTaskFocusReminder(context) {
         context.metadata.avoid_when.length > 0
         ? context.metadata.avoid_when[0]
         : "scope drift or unrelated follow-up work";
-    return [
-        "[agent-context-shaper] delegated task focus",
-        "- execute one delegated objective for this task call before returning control",
-        `- prioritize: ${trigger}`,
-        `- avoid: ${avoid}`,
-        "- if you uncover extra work, report it as a follow-up instead of expanding scope in the same delegation",
-    ].join("\n");
+    return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups.`;
 }
 export function createAgentContextShaperHook(options) {
     const contextByDelegation = new Map();
