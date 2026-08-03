@@ -3054,5 +3054,32 @@
     "destination": "JOURNAL_NAME",
     "count": 1,
     "classification": "supply_chain_installer"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.mkdir",
+    "destination": "agent_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.symlink_to",
+    "destination": "agent_dir / 'tasker.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
+    "destination": "config_root / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
   }
 ]

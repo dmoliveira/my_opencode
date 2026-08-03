@@ -54,6 +54,88 @@ class AgentDoctorPromptBudgetTest(unittest.TestCase):
         )
 
 
+class AgentDoctorTaskerPromptTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.path = REPO_ROOT / "agent" / "specs" / "tasker.json"
+        self.spec = json.loads(self.path.read_text(encoding="utf-8"))
+        self.body = self.spec["body_template"]
+
+    def test_tasker_budget_and_contract(self) -> None:
+        checks = agent_doctor._check_tasker_prompt_contract(self.spec, self.path)
+        word_count = agent_doctor.count_prompt_words(self.body)
+
+        self.assertTrue(
+            all(check["ok"] for check in checks),
+            [check for check in checks if not check["ok"]],
+        )
+        self.assertLessEqual(word_count, agent_doctor.TASKER_BODY_WORD_LIMIT)
+        self.assertLessEqual(
+            word_count,
+            int(agent_doctor.TASKER_BODY_WORD_BASELINE * 0.75),
+        )
+
+    def test_tasker_budget_boundary(self) -> None:
+        at_limit = agent_doctor.prompt_body_budget_check(
+            "tasker",
+            "word " * agent_doctor.TASKER_BODY_WORD_LIMIT,
+            baseline=agent_doctor.TASKER_BODY_WORD_BASELINE,
+            limit=agent_doctor.TASKER_BODY_WORD_LIMIT,
+            path=self.path,
+        )
+        over_limit = agent_doctor.prompt_body_budget_check(
+            "tasker",
+            "word " * (agent_doctor.TASKER_BODY_WORD_LIMIT + 1),
+            baseline=agent_doctor.TASKER_BODY_WORD_BASELINE,
+            limit=agent_doctor.TASKER_BODY_WORD_LIMIT,
+            path=self.path,
+        )
+
+        self.assertTrue(at_limit["ok"])
+        self.assertFalse(over_limit["ok"])
+
+    def test_tasker_contract_rejects_each_missing_marker(self) -> None:
+        for marker in agent_doctor.TASKER_TEMPLATE_CONTRACT_MARKERS:
+            with self.subTest(marker=marker):
+                mutated = dict(self.spec)
+                mutated["body_template"] = self.body.replace(marker, "")
+                checks = agent_doctor._check_tasker_prompt_contract(
+                    mutated, self.path
+                )
+                self.assertTrue(
+                    any(
+                        not check["ok"]
+                        and check["reason"] == f"missing marker: {marker}"
+                        for check in checks
+                    ),
+                    marker,
+                )
+
+    def test_tasker_contract_rejects_missing_body(self) -> None:
+        checks = agent_doctor._check_tasker_prompt_contract(
+            {"name": "tasker", "body_template": ""}, self.path
+        )
+
+        self.assertEqual(1, len(checks))
+        self.assertFalse(checks[0]["ok"])
+        self.assertIn("non-empty string", checks[0]["reason"])
+
+    def test_tasker_stays_unpinned_on_writing_model(self) -> None:
+        categories = agent_doctor.load_routing_categories()
+        policy = agent_doctor.agent_model_policy_check(
+            self.spec, categories, self.path
+        )
+        generated = (REPO_ROOT / "agent" / "tasker.md").read_text(encoding="utf-8")
+        generated_header = generated.split("---", 2)[1]
+
+        self.assertNotIn("model", self.spec)
+        self.assertEqual("writing", policy["category"])
+        self.assertTrue(policy["inherits_category"])
+        self.assertEqual("openai/gpt-5.4", policy["effective_model"])
+        self.assertFalse(
+            any(line.startswith("model:") for line in generated_header.splitlines())
+        )
+
+
 class AgentDoctorModelPolicyTest(unittest.TestCase):
     ROUTING_CATEGORIES = {
         "balanced": {"model": "openai/gpt-5.6-terra"},
