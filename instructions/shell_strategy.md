@@ -1,218 +1,79 @@
 # Shell Non-Interactive Strategy (Global)
 
-**Context:** OpenCode's shell environment is strictly **non-interactive**. It lacks a TTY/PTY, meaning any command that waits for user input, confirmation, or launches a UI (editor/pager) will hang indefinitely and timeout.
+## Authority and execution contract
 
-**Goal:** Achieve parity with Claude Code's shell capabilities through internalized knowledge of non-interactive flags and environment variables.
+OpenCode's shell has no TTY/PTTY; commands awaiting stdin, confirmation, editors, pagers, or UIs can stall until timeout.
 
-## Cognitive & Behavioral Standards
+- Follow `AGENTS.md` and user-authorized scope; these defaults never override repository, user, security, or authorization rules.
+- Shell processes never ask interactively; legitimate assistant clarification remains allowed when `AGENTS.md` permits it.
+- After each tool result, analyze it and continue immediately while work remains; stop only when complete or concretely blocked.
+- Pair every prohibition with an executable safe alternative.
+- Preserve authentication, TLS, SSH host-key checks, quoting, and secret boundaries; never bypass or invent them to avoid a prompt.
+- If no safe non-interactive path exists, stop the command and report the exact blocker instead of weakening controls.
 
-To match the high-agency, autonomous capabilities of advanced models (like Claude Sonnet), this strategy enforces strict cognitive patterns. These are not just shell tips; they are **behavioral requirements** for success in this environment.
+## Environment defaults
 
-**Goal:** Eliminate "human-in-the-loop" dependency during task execution.
+Assume `CI=true`. The guard prefixes selected Git/GitHub commands only. These desired defaults are not global; set them as needed.
 
-**Key Behaviors:**
-1. **Process Continuity (Turn-Taking):**
-   - **Rule:** Never stop after a tool output to "wait for instructions" unless the task is complete.
-   - **Why:** The environment is non-interactive. You must drive the workflow.
-   - **Mechanism:** Commands expecting input MUST use timeouts or explicit "yes" pipes.
-
-2. **Explicit Action Framing (Positive Constraints):**
-   - **Rule:** Follow "GOOD" (positive) instructions, ignore "BAD" (negative) assumptions.
-   - **Why:** Models follow explicit directives ("Use -y") better than prohibitions ("Don't prompt").
-   - **Mechanism:** Always preemptively supply non-interactive flags.
-
-3. **Environment Rigor (Context Awareness):**
-   - **Rule:** Assume a headless CI environment where any prompt = failure.
-   - **Why:** There is no TTY. "Asking the user" via a shell prompt causes a hang.
-   - **Mechanism:** Strictly avoid editors, pagers, and interactive modes.
-
-## 1. Core Mandates
-
-1. **Assume `CI=true`**: Act as if running in a headless CI/CD pipeline.
-2. **No Editors/Pagers**: `vim`, `nano`, `less`, `more`, `man` are BANNED.
-3. **Force & Yes**: Always preemptively supply "yes" or "force" flags.
-4. **Use Tools**: Prefer `Read`/`Write`/`Edit` tools over shell manipulation (`sed`, `echo`, `cat`).
-5. **No Interactive Modes**: Never use `-i` or `-p` flags that require user input.
-
-## 2. Environment Variables (Auto-Set)
-
-These environment variables help prevent interactive prompts:
-
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `CI` | `true` | General CI detection |
-| `DEBIAN_FRONTEND` | `noninteractive` | Apt/dpkg prompts |
-| `GIT_TERMINAL_PROMPT` | `0` | Git auth prompts |
-| `GIT_EDITOR` | `true` | Block git editor |
-| `GIT_PAGER` | `cat` | Disable git pager |
-| `PAGER` | `cat` | Disable system pager |
-| `GCM_INTERACTIVE` | `never` | Git credential manager |
-| `HOMEBREW_NO_AUTO_UPDATE` | `1` | Homebrew updates |
-| `npm_config_yes` | `true` | NPM prompts |
-| `PIP_NO_INPUT` | `1` | Pip prompts |
-| `YARN_ENABLE_IMMUTABLE_INSTALLS` | `false` | Yarn lockfile |
-
-## 3. Command Reference
-
-### Package Managers
-
-| Tool | Interactive (BAD) | Non-Interactive (GOOD) |
-|------|-------------------|------------------------|
-| **NPM** | `npm init` | `npm init -y` |
-| **NPM** | `npm install` | `npm install --yes` |
-| **Yarn** | `yarn install` | `yarn install --non-interactive` |
-| **PNPM** | `pnpm install` | `pnpm install --reporter=silent` |
-| **Bun** | `bun init` | `bun init -y` |
-| **APT** | `apt-get install pkg` | `apt-get install -y pkg` |
-| **APT** | `apt-get upgrade` | `apt-get upgrade -y` |
-| **PIP** | `pip install pkg` | `pip install --no-input pkg` |
-| **Homebrew** | `brew install pkg` | `HOMEBREW_NO_AUTO_UPDATE=1 brew install pkg` |
-
-### Git Operations
-
-| Action | Interactive (BAD) | Non-Interactive (GOOD) |
-|--------|-------------------|------------------------|
-| **Commit** | `git commit` | `git commit -m "msg"` |
-| **Merge** | `git merge branch` | `git merge --no-edit branch` |
-| **Pull** | `git pull` | `git pull --no-edit` |
-| **Rebase** | `git rebase -i` | `git rebase` (non-interactive) |
-| **Add** | `git add -p` | `git add .` or `git add <file>` |
-| **Stash** | `git stash pop` (conflicts) | `git stash pop` or handle manually |
-| **Log** | `git log` (pager) | `git log --no-pager` or `git log -n 10` |
-| **Diff** | `git diff` (pager) | `git diff --no-pager` or `git --no-pager diff` |
-
-### System & Files
-
-| Tool | Interactive (BAD) | Non-Interactive (GOOD) |
-|------|-------------------|------------------------|
-| **RM** | `rm file` (prompts) | `rm -f file` |
-| **RM** | `rm -i file` | `rm -f file` |
-| **CP** | `cp -i a b` | `cp -f a b` |
-| **MV** | `mv -i a b` | `mv -f a b` |
-| **Unzip** | `unzip file.zip` | `unzip -o file.zip` |
-| **Tar** | `tar xf file.tar` | `tar xf file.tar` (usually safe) |
-| **SSH** | `ssh host` | `ssh -o BatchMode=yes -o StrictHostKeyChecking=no host` |
-| **SCP** | `scp file host:` | `scp -o BatchMode=yes file host:` |
-| **Curl** | `curl url` | `curl -fsSL url` |
-| **Wget** | `wget url` | `wget -q url` |
-
-### Docker
-
-| Action | Interactive (BAD) | Non-Interactive (GOOD) |
-|--------|-------------------|------------------------|
-| **Run** | `docker run -it image` | `docker run image` |
-| **Exec** | `docker exec -it container bash` | `docker exec container cmd` |
-| **Build** | `docker build .` | `docker build --progress=plain .` |
-| **Compose** | `docker-compose up` | `docker-compose up -d` |
-
-### Python/Node REPLs
-
-| Tool | Interactive (BAD) | Non-Interactive (GOOD) |
-|------|-------------------|------------------------|
-| **Python** | `python` | `python -c "code"` or `python script.py` |
-| **Node** | `node` | `node -e "code"` or `node script.js` |
-| **IPython** | `ipython` | Never use - always `python -c` |
-
-## 4. Banned Commands (Will Always Hang)
-
-These commands **will hang indefinitely** - never use them:
-
-- **Editors**: `vim`, `vi`, `nano`, `emacs`, `pico`, `ed`
-- **Pagers**: `less`, `more`, `most`, `pg`
-- **Manual pages**: `man`
-- **Interactive git**: `git add -p`, `git rebase -i`, `git commit` (without -m)
-- **REPLs**: `python`, `node`, `irb`, `ghci` (without script/command)
-- **Interactive shells**: `bash -i`, `zsh -i`
-
-## 5. Handling Prompts
-
-When a command doesn't have a non-interactive flag:
-
-### The "Yes" Pipe
-```bash
-yes | ./install_script.sh
+```text
+CI=true
+DEBIAN_FRONTEND=noninteractive
+GIT_TERMINAL_PROMPT=0
+GIT_EDITOR=true
+GIT_PAGER=cat
+PAGER=cat
+GCM_INTERACTIVE=never
+HOMEBREW_NO_AUTO_UPDATE=1
+npm_config_yes=true
+PIP_NO_INPUT=1
+YARN_ENABLE_IMMUTABLE_INSTALLS=false
 ```
 
-### Heredoc Input
-```bash
-./configure.sh <<EOF
-option1
-option2
-EOF
-```
+## Command forms
 
-### Echo Pipe
-```bash
-echo "password" | sudo -S command
-```
+Check the installed version's `--help` before using a flag. Prefer documented non-interactive modes; quiet output does not prove prompts are disabled, and `CI=true` grants no destructive authority.
 
-### Timeout Wrapper (last resort)
-```bash
-timeout 30 ./potentially_hanging_script.sh || echo "Timed out"
-```
+### Packages
 
-## 6. Best Practices
+- npm: `npm init -y`; verify installed-version support for `npm install --yes`.
+- Yarn: versions differ; Classic may use `yarn install --non-interactive`.
+- pnpm: use `CI=true pnpm install` with explicit lockfile policy; silent reporters affect output only.
+- Bun: `bun init -y` when supported.
+- Apt: review packages, then use `DEBIAN_FRONTEND=noninteractive apt-get install -y pkg`; review upgrades separately.
+- Pip: `python -m pip install --no-input pkg`.
+- Homebrew: `HOMEBREW_NO_AUTO_UPDATE=1 brew install pkg`.
 
-1. **Always test commands** mentally for interactive prompts before running
-2. **Check man pages** (via web search) for `-y`, `--yes`, `--non-interactive`, `-f`, `--force` flags
-3. **Use `--help`** to discover non-interactive options: `cmd --help | grep -i "non-interactive\|force\|yes"`
-4. **Prefer OpenCode tools** over shell commands for file operations
-5. **Set timeout** for any command that might unexpectedly prompt
+### Git
 
----
+- Commit explicitly: `git commit -m "msg"`.
+- Use `git merge --no-edit branch` and `GIT_EDITOR=true` where an editor might open.
+- Use non-interactive rebase, explicit add paths, and `git --no-pager ...`.
+- Resolve conflicts through explicit file edits; never wait for an editor or prompt.
 
-## 7. Advanced Instruction Patterns (Cognitive Optimization)
+### Files, archives, and network
 
-### The Problem: Implicit Constraints
-Large Language Models (LLMs) often struggle with:
-1. **Negative constraints**: Inverting or ignoring "don't do X" instructions.
-2. **Turn termination**: Stopping after tool execution instead of auto-continuing.
-3. **Context weighting**: Failing to prioritize authoritative instructions over general knowledge.
+- Prefer OpenCode file tools. Use `rm -f`, `cp -f`, `mv -f`, or `unzip -o` only for exact, reviewed, authorized targets.
+- Common forms: `tar xf archive.tar`, `curl -fsSL URL`, `wget -q URL`; validate inputs and destinations.
+- Use `ssh -o BatchMode=yes host command` and `scp -o BatchMode=yes file host:path`; retain normal host-key verification.
 
-### Strategy 1: Explicit Action Framing (BAD vs GOOD)
+### Containers and language runtimes
 
-This plugin uses the **BAD vs GOOD** pattern to enforce positive constraints. Instead of saying "Don't use interactive flags", we provide a concrete "Good" alternative.
+- Use `docker run image`, `docker exec container command`, `docker build --progress=plain .`, or `docker compose up -d`; omit `-it`.
+- Run `python -c "code"`, `python script.py`, `node -e "code"`, or `node script.js`; never launch a bare REPL.
 
-**Why it works:**
-- "BAD: npm init" -> Model identifies the failure pattern.
-- "GOOD: npm init -y" -> Model receives a specific, executable instruction.
-- **Result:** Reduces hallucination of interactive commands by providing a verified substitute.
+## Prohibited interactive forms
 
-### Strategy 2: Process Continuity
+- Editors: `vim`, `vi`, `nano`, `emacs`, `pico`, `ed`.
+- Pagers/manuals: `less`, `more`, `most`, `pg`, `man`; use `--help` or non-interactive docs.
+- Interactive Git: `git add -p`, `git rebase -i`, or `git commit` without `-m`.
+- Bare REPLs and interactive shells: `python`, `node`, `ipython`, `irb`, `ghci`, `bash -i`, `zsh -i`.
+- TTY modes such as Docker `-it`, or an `-i`/`-p` option that requests input.
 
-In non-interactive environments, the agent must drive the process forward.
+## Prompt fallback order
 
-**The Rule:** Never stop after a tool execution unless the task is complete.
+1. Use a documented native non-interactive flag or environment.
+2. If the answers are finite and nonsecret, provide exact stdin with `printf` or a heredoc.
+3. If safe and available on the platform, apply a bounded command-specific timeout; handle timeout as failure, not success.
+4. Otherwise stop and report the blocker.
 
-**Pattern:**
-```
-1. Execute command (e.g., git status)
-2. Analyze output
-3. Explicitly state next step: "Status is clean. Next: I will run tests."
-4. Execute next step immediately
-```
-
-### Strategy 3: Context Hierarchy
-
-When instructions conflict (e.g., generic docs vs this specific strategy), establish precedence:
-
-1. **Cite the Authority:** "Per shell_strategy.md..."
-2. **Follow the Specifics:** Rules in this file override general model training or other documentation.
-
-### Strategy 4: Applying These Patterns Beyond Shell
-
-The cognitive strategies used here (Explicit Action Framing) apply to all coding tasks:
-
-**Instead of:**
-```markdown
-Do not use logging.getLogger()
-Don't create CLI code here
-```
-
-**Use:**
-```markdown
-ALWAYS USE: config.logging_config.get_logger()
-USE THIS REPO FOR: API backend only
-```
-
-By framing instructions as "Actionable Positive Constraints", you reduce hallucination and improve compliance across all models.
+Never use unbounded `yes`, pipe secrets, disable TLS/SSH host-key checks, launch an editor/pager, or equate silence with success.
