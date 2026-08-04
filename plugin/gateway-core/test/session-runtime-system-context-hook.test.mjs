@@ -1,16 +1,62 @@
 import assert from "node:assert/strict"
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 
 import { gatewayEventAuditPath } from "../dist/audit/event-audit.js"
+import { cacheableSystemPrefixObservation, exactPromptFingerprint } from "../dist/cache/prompt-cache.js"
 import GatewayCorePlugin from "../dist/index.js"
 import { createSessionRuntimeSystemContextHook, stablePromptFingerprint } from "../dist/hooks/session-runtime-system-context/index.js"
 import { saveGatewayConciseMode, nowIso } from "../dist/state/storage.js"
 
+const TEST_DIRECTORY = dirname(fileURLToPath(import.meta.url))
+const CANONICAL_CONCISE_BODY = readFileSync(
+  join(TEST_DIRECTORY, "fixtures", "concise-mode-canonical-v1.md"),
+  "utf8",
+).trim()
+const COMPACT_CONCISE_CONTRACT = [
+  "Cut filler, pleasantries, and weak hedging; preserve technical substance.",
+  "Keep code blocks, technical terms, paths, identifiers, commands, flags, and exact errors unchanged.",
+  "lite: concise sentences. full: terse fragments when clear. ultra: strongest safe compression.",
+  "Expand for destructive warnings, security/privacy, blockers, ordered steps, repeated confusion, or requests for detail.",
+  "Pattern: [problem]. [cause]. [fix]. [next step].",
+].join("\n")
+const CANONICAL_CONCISE_FINGERPRINT =
+  "bf27645f37241c9c852c030192f582a341d04376286a90e9c34bf5635d596580"
+
 function saveConciseState(directory, conciseMode) {
   saveGatewayConciseMode(directory, conciseMode, { lastUpdatedAt: nowIso() })
+}
+
+function writeConciseSkill(directory, content) {
+  const skillDirectory = join(directory, "skills", "concise-mode")
+  mkdirSync(skillDirectory, { recursive: true })
+  writeFileSync(join(skillDirectory, "SKILL.md"), content, "utf8")
+}
+
+async function renderDefaultLiteContext(skillContent) {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-render-"))
+  try {
+    writeConciseSkill(directory, skillContent)
+    const hook = createSessionRuntimeSystemContextHook({
+      directory,
+      enabled: true,
+      injectSessionIdContext: true,
+      conciseModeEnabled: true,
+      conciseDefaultMode: "lite",
+    })
+    const output = { system: ["baseline"] }
+    await hook.event("experimental.chat.system.transform", {
+      input: { sessionID: "session-fixed" },
+      output,
+      directory,
+    })
+    return structuredClone(output.system)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 }
 
 test("session-runtime-system-context injects hidden system session id", async () => {
@@ -122,6 +168,99 @@ test("session-runtime-system-context integrates through plugin system transform"
   }
 })
 
+test("session-runtime-system-context compacts canonical lite context with exact budgets", async () => {
+  assert.equal(
+    exactPromptFingerprint([CANONICAL_CONCISE_BODY]),
+    CANONICAL_CONCISE_FINGERPRINT,
+  )
+  const system = await renderDefaultLiteContext(
+    `---\nname: concise-mode\n---\n${CANONICAL_CONCISE_BODY}\n`,
+  )
+  const concise = system.find((entry) => entry.startsWith("runtime_concise_mode:"))
+  const session = system.find((entry) => entry.startsWith("runtime_session_context:"))
+  assert.equal(concise, `runtime_concise_mode: lite\n${COMPACT_CONCISE_CONTRACT}`)
+  assert.equal(
+    session,
+    "runtime_session_context: session-fixed\nUse this exact runtime session ID for session-scoped commits/logs/telemetry/external tooling; if asked for the current runtime session ID, return only it.",
+  )
+  assert.equal(COMPACT_CONCISE_CONTRACT.length, 436)
+  assert.equal(concise.length, 463)
+  assert.equal(session.length, 193)
+  assert.equal(concise.length + session.length, 656)
+  assert.doesNotMatch(concise, /Concise mode active from|Active level: lite|## Persistence/)
+  assert.ok(system.indexOf(concise) < system.indexOf(session))
+  assert.equal(system.at(-1), session)
+
+  const observation = cacheableSystemPrefixObservation(system)
+  assert.equal(observation.entryCount, 2)
+  assert.equal(observation.charCount, "baseline".length + concise.length)
+  assert.equal(observation.sha256, exactPromptFingerprint(["baseline", concise]))
+  assert.equal(observation.sessionMarkerPresent, true)
+})
+
+test("session-runtime-system-context canonical matching follows loader normalization and fails open", async () => {
+  const canonical = `---\nname: concise-mode\n---\n${CANONICAL_CONCISE_BODY}\n`
+  const outerBom = `---\nname: concise-mode\n---\n\uFEFF${CANONICAL_CONCISE_BODY}\uFEFF`
+  for (const content of [canonical, outerBom]) {
+    const system = await renderDefaultLiteContext(content)
+    const concise = system.find((entry) => entry.startsWith("runtime_concise_mode:"))
+    assert.equal(concise, `runtime_concise_mode: lite\n${COMPACT_CONCISE_CONTRACT}`)
+  }
+
+  const passthroughVariants = [
+    `\uFEFF---\nname: concise-mode\n---\n${CANONICAL_CONCISE_BODY}`,
+    canonical.replace(/\n/g, "\r\n"),
+    canonical.replace("weak hedging first", "weak  hedging first"),
+    canonical.replace("technical substance", "technical fidelity"),
+  ]
+  for (const content of passthroughVariants) {
+    const system = await renderDefaultLiteContext(content)
+    const concise = system.find((entry) => entry.startsWith("runtime_concise_mode:"))
+    assert.match(concise, /Active level: lite/)
+    assert.notEqual(concise, `runtime_concise_mode: lite\n${COMPACT_CONCISE_CONTRACT}`)
+  }
+})
+
+test("session-runtime-system-context keeps generic and specialized mode semantics", async () => {
+  for (const mode of ["lite", "full", "ultra", "review", "commit"]) {
+    const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-mode-"))
+    try {
+      saveConciseState(directory, {
+        mode,
+        source: "test",
+        sessionId: `session-${mode}`,
+        activatedAt: nowIso(),
+        updatedAt: nowIso(),
+      })
+      const hook = createSessionRuntimeSystemContextHook({
+        directory,
+        enabled: true,
+        injectSessionIdContext: true,
+        conciseModeEnabled: false,
+        conciseDefaultMode: "off",
+      })
+      const output = { system: ["baseline"] }
+      await hook.event("experimental.chat.system.transform", {
+        input: { sessionID: `session-${mode}` },
+        output,
+        directory,
+      })
+      const concise = output.system.find((entry) => entry.startsWith("runtime_concise_mode:"))
+      assert.match(concise, new RegExp(`^runtime_concise_mode: ${mode}`))
+      assert.match(concise, /Cut filler, pleasantries, and weak hedging/)
+      if (mode === "review") {
+        assert.match(concise, /Put blockers first/)
+      } else if (mode === "commit") {
+        assert.match(concise, /Draft terse commit messages/)
+      } else {
+        assert.doesNotMatch(concise, /Active level:/)
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  }
+})
+
 test("session-runtime-system-context injects active concise mode from gateway state", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-session-runtime-system-"))
   try {
@@ -146,7 +285,9 @@ test("session-runtime-system-context injects active concise mode from gateway st
       directory,
     })
     assert.match(output.system.join("\n"), /runtime_concise_mode: full/)
+    assert.match(output.system.join("\n"), /Active level: full/)
     assert.match(output.system.join("\n"), /Respond terse\. Keep technical terms exact\./)
+    assert.doesNotMatch(output.system.join("\n"), /Concise mode active from/)
     assert.ok(
       output.system.findIndex((line) => line.startsWith("runtime_concise_mode:")) <
         output.system.findIndex((line) => line.startsWith("runtime_session_context:")),
@@ -154,6 +295,15 @@ test("session-runtime-system-context injects active concise mode from gateway st
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("session-runtime-system-context treats compact-contract custom files as passthrough", async () => {
+  const system = await renderDefaultLiteContext(
+    `---\nname: concise-mode\n---\n${COMPACT_CONCISE_CONTRACT}\n`,
+  )
+  const concise = system.find((entry) => entry.startsWith("runtime_concise_mode:"))
+  assert.match(concise, /Active level: lite/)
+  assert.match(concise, /Cut filler, pleasantries, and weak hedging/)
 })
 
 test("session-runtime-system-context reloads changed concise skill body on later transforms", async () => {
@@ -177,6 +327,7 @@ test("session-runtime-system-context reloads changed concise skill body on later
       directory,
     })
     assert.match(first.system.join("\n"), /First concise rules\./)
+    assert.match(first.system.join("\n"), /Active level: full/)
 
     writeFileSync(skillPath, "---\nname: concise-mode\n---\nSecond concise rules are now longer.\n", "utf-8")
     const second = { system: ["baseline"] }
@@ -186,6 +337,7 @@ test("session-runtime-system-context reloads changed concise skill body on later
       directory,
     })
     assert.match(second.system.join("\n"), /Second concise rules are now longer\./)
+    assert.match(second.system.join("\n"), /Active level: full/)
     assert.doesNotMatch(second.system.join("\n"), /First concise rules\./)
   } finally {
     rmSync(directory, { recursive: true, force: true })
