@@ -132,6 +132,22 @@ The direct mutation inventory behind this classification is:
 > recurring input/context reduction, not evidence of cache-hit, latency, cost,
 > or provider-budget improvement.
 
+> **Always-on shell-instruction correction — 2026-08-04:** The configured
+> non-interactive shell strategy was compacted while retaining explicit
+> headless execution, process continuity, package/Git/container/REPL examples,
+> prompt fallbacks, and fail-closed authentication, TLS, SSH host-key, quoting,
+> and secret handling. The pre-edit source at commit `beb57eb` was Git blob
+> `75b68e509200c18c351e12a94a913654c5281f71`, SHA-256
+> `ae9e269119a8327bdd221320c16ae8252fd5c1b6c76efa62f689ea141515722e`,
+> 8,836 UTF-8 bytes, 218 `splitlines()` entries, and one trailing newline. The
+> reviewed source is 3,927 UTF-8 bytes, 79 `splitlines()` entries, and one
+> trailing newline: 4,909 fewer source bytes (55.6%). A mutation-tested static
+> contract now rejects missing policy lines and unsafe password, TLS, SSH, or
+> unbounded-approval examples. Newly started or restarted sessions that load
+> this configured source receive less instruction text. This measurement does
+> not establish per-request or token savings, semantic equivalence, cache-hit
+> improvement, latency, cost, or usable provider-budget improvement.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.
