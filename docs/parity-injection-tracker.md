@@ -148,6 +148,7 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 32. [x] Cross-hook delegation trace correlation parity
     - Pre-check completed: audits were hook-local and session-bound without stable cross-hook correlation id.
     - Delivered: added shared delegation trace utility and propagated `trace_id` across resolver, learner, fallback, telemetry, semantic bridge, and decision-audit hooks.
+    - 2026-08-04 optimization: structured metadata is canonical; one prompt-visible trace marker remains only for lifecycle/fallback compatibility.
 
 33. [x] Structured denied-tool enforcement parity
     - Pre-check completed: denied-tool checks were largely prompt-string based and missed nested/structured payload text.
@@ -156,10 +157,12 @@ Each item requires: pre-check existing implementation, WT flow delivery, tests, 
 34. [x] Discoverability noise-control parity
     - Pre-check completed: discoverability hints could be repeatedly injected within the same session.
     - Delivered: added session-scoped discoverability cooldown control (`discoverabilityCooldownMs`) and cooldown-aware audit fields.
+    - 2026-08-04 optimization: inferred routing no longer emits child-facing router/catalog prose; fallback-triggered and legacy synthetic discoverability behavior remains compatible.
 
 35. [x] Parent session-flow hint propagation parity
     - Pre-check completed: delegated task hints lacked explicit parent-flow metadata for downstream tracking.
     - Delivered: resolver now injects stable session-flow metadata (`parent_session_id`, `trace_id`) and keeps header normalization idempotent across repeated hook passes.
+    - 2026-08-04 optimization: native child `parentID` plus gateway delegation metadata replace parent/session prose in provider prompts; legacy headers are still stripped during migration.
 
 ## Remaining Deferred Gap (Intentional)
 

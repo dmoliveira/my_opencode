@@ -74,7 +74,9 @@ test("delegation confidence gate overrides low-confidence explicit subagent", as
     output,
   })
   assert.equal(output.args.subagent_type, "librarian")
-  assert.match(output.args.prompt, /\[DELEGATION ROUTER(?:\s+[^\]]+)?\]/)
+  assert.equal(output.args.category, "balanced")
+  assert.equal(output.metadata?.gateway?.delegation?.subagentType, "librarian")
+  assert.doesNotMatch(output.args.prompt, /DELEGATION ROUTER|MODEL ROUTING|TOOL SURFACE/)
 })
 
 test("agent model resolver applies enforce-mode LLM route decision for explicit low-confidence route", async () => {
@@ -251,7 +253,7 @@ test("agent model resolver shadow or assist mode does not override explicit rout
   assert.equal(output.args.subagent_type, "explore")
 })
 
-test("agent discoverability injector appends catalog hint only after routing rewrite", async () => {
+test("inferred routing stays structured and skips child catalog prose", async () => {
   const resolver = createAgentModelResolverHook({
     directory: REPO_DIRECTORY,
     enabled: true,
@@ -276,8 +278,10 @@ test("agent discoverability injector appends catalog hint only after routing rew
   }
   await resolver.event("tool.execute.before", payload)
   await discoverability.event("tool.execute.before", payload)
-  assert.match(output.args.prompt, /\[DELEGATION ROUTER(?:\s+[^\]]+)?\]/)
-  assert.match(output.args.prompt, /\/agent-catalog explain explore/)
+  assert.equal(output.args.subagent_type, "explore")
+  assert.equal(output.args.category, "quick")
+  assert.equal(output.metadata?.gateway?.delegation?.subagentType, "explore")
+  assert.doesNotMatch(output.args.prompt, /DELEGATION ROUTER|AGENT CATALOG|\/agent-catalog/)
 })
 
 test("delegation router can infer tasker for planning-only Codememory capture", async () => {
@@ -306,7 +310,8 @@ test("delegation router can infer tasker for planning-only Codememory capture", 
   await resolver.event("tool.execute.before", payload)
   await discoverability.event("tool.execute.before", payload)
   assert.equal(output.args.subagent_type, "tasker")
-  assert.match(output.args.prompt, /\/agent-catalog explain tasker/)
+  assert.equal(output.metadata?.gateway?.delegation?.subagentType, "tasker")
+  assert.doesNotMatch(output.args.prompt, /DELEGATION ROUTER|AGENT CATALOG|\/agent-catalog/)
 })
 
 test("delegation outcome learner adapts risky category after repeated failures", async () => {
@@ -647,6 +652,30 @@ test("discoverability injector respects cooldown window", async () => {
   const second = String(payload.output.args.prompt)
   assert.equal((first.match(/\/agent-catalog/g) ?? []).length, 1)
   assert.equal((second.match(/\/agent-catalog/g) ?? []).length, 1)
+})
+
+test("discoverability injector keeps fallback catalog guidance", async () => {
+  const discoverability = createAgentDiscoverabilityInjectorHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    cooldownMs: 60000,
+  })
+  const payload = {
+    input: { tool: "task", sessionID: "session-discoverability-fallback" },
+    output: {
+      args: {
+        category: "general",
+        prompt:
+          "[delegation-fallback-orchestrator] previous delegation failed; applying fallback route category=general and removing explicit subagent_type.",
+        description: "retry failed delegation",
+      },
+    },
+  }
+
+  await discoverability.event("tool.execute.before", payload)
+
+  assert.match(payload.output.args.prompt, /^\[AGENT CATALOG\].*\/agent-catalog list/m)
+  assert.match(payload.output.args.prompt, /\[delegation-fallback-orchestrator\]/)
 })
 
 
