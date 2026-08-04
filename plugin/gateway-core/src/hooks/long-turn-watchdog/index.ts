@@ -86,14 +86,16 @@ export function createLongTurnWatchdogHook(options: {
   const states = new Map<string, TurnState>()
   const now = options.now ?? (() : number => Date.now())
 
-  function visibleProgressPulseText(args: {
+  function longTurnNoticeText(args: {
+    prefix: string
     elapsedMs: number
     toolCallsThisTurn: number
+    visibleProgressPulse: boolean
   }): string {
-    return [
-      "[runtime progress pulse]",
-      `Still working in this turn after ${formatDuration(args.elapsedMs)} and ${args.toolCallsThisTurn} tool call${args.toolCallsThisTurn === 1 ? "" : "s"}. I will send the final result once I clear the current step.`,
-    ].join("\n")
+    const progress = args.visibleProgressPulse
+      ? "still working; final reply follows when this step clears."
+      : "still working toward the final reply."
+    return `${args.prefix} Long turn (${formatDuration(args.elapsedMs)} since user, ${args.toolCallsThisTurn} tool call${args.toolCallsThisTurn === 1 ? "" : "s"}); ${progress}`
   }
 
   return {
@@ -185,16 +187,14 @@ export function createLongTurnWatchdogHook(options: {
       }
 
       const prefix = options.prefix.trim() || "[Turn Watchdog]:"
-      const warning = `${prefix} Long turn detected (${formatDuration(elapsedMs)} since last user message; threshold ${formatDuration(options.warningThresholdMs)}).`
-      const heartbeat = `${prefix} Still working - collecting results before the final reply.`
       const shouldAppendPulse = state.toolCallsThisTurn >= toolCallThreshold
-      const pulse = visibleProgressPulseText({
+      const notice = longTurnNoticeText({
+        prefix,
         elapsedMs,
         toolCallsThisTurn: state.toolCallsThisTurn,
+        visibleProgressPulse: shouldAppendPulse,
       })
-      const amended = shouldAppendPulse
-        ? `${text}\n\n${warning}\n${heartbeat}\n\n${pulse}`
-        : `${text}\n\n${warning}\n${heartbeat}`
+      const amended = `${text}\n\n${notice}`
       if (!writeToolAfterOutputText(eventPayload.output?.output, amended, channel)) {
         if (typeof eventPayload.output === "object" && eventPayload.output) {
           eventPayload.output.output = amended
