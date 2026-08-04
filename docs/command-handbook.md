@@ -257,7 +257,7 @@ Recommended runtime-injection debug loop:
 - inspect `.opencode/gateway-events.jsonl` for the event type that actually fires on the rendered path you care about
 - if `opencode run` output is the target, start with `experimental.text.complete` before trying lower-level lifecycle events
 
-The terminal timestamp work landed on `experimental.text.complete` in `plugin/gateway-core/src/index.ts` and `plugin/gateway-core/src/hooks/assistant-message-timestamp/index.ts`. Use that pair as the reference example for future runtime output decoration.
+The terminal timestamp work uses `experimental.text.complete` in `plugin/gateway-core/src/index.ts` and `plugin/gateway-core/src/hooks/assistant-message-timestamp/index.ts`. Use that pair as the reference example for future runtime output decoration. As of 2026-08-04, the timestamp hook is render/lifecycle-only: it must not mutate `experimental.chat.messages.transform`, because transform-time clocks mislabel stored replies and add dynamic provider input.
 
 For human-written assistant progress lines in this repo's operating model, prefer host-clock timestamps over inferred timestamps. If you prefix a status line with a time, fetch it from the machine first (for example `date "+%Y-%m-%d %H:%M:%S %Z"`). If that lookup is unavailable, omit the timestamp rather than guessing.
 

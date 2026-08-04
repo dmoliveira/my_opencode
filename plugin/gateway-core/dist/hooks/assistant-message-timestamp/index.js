@@ -1,12 +1,20 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { consumeLlmDecisionFallbackNotice, peekLlmDecisionFallbackNotice, } from "../shared/llm-decision-runtime.js";
 const TIMESTAMP_PREFIX_LABEL = "[";
-const TIMESTAMP_PREFIX_PATTERN = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\](?:\n|$)/;
+const TIMESTAMP_PREFIX_PATTERN = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?\](?:\n|$)/;
 const TARGET_EVENT_TYPES = new Set([
     "message.updated",
     "message.part.updated",
     "message.part.delta",
 ]);
+const ASSISTANT_MESSAGE_TIMESTAMP_EVENTS = [
+    "experimental.text.complete",
+    "message.updated",
+    "message.part.updated",
+    "message.part.delta",
+    "session.idle",
+    "session.deleted",
+];
 export function formatAssistantMessageTimestamp(timestamp) {
     const value = new Date(timestamp);
     const year = value.getFullYear();
@@ -67,25 +75,6 @@ function prependTimestampToParts(parts, timestamp, notice) {
     }
     textPart.text = result.text;
     return { changed: true, noticeApplied: result.noticeApplied };
-}
-function prependTimestampToLatestAssistantMessage(messages, timestamp, notice) {
-    if (!Array.isArray(messages) || messages.length === 0) {
-        return false;
-    }
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const message = messages[index];
-        if (message?.info?.role !== "assistant") {
-            continue;
-        }
-        const parts = Array.isArray(message.parts) ? message.parts : [];
-        if (prependTimestampToParts(parts, timestamp, notice).changed) {
-            return true;
-        }
-        parts.unshift({ type: "text", text: notice ? `${timestamp}\n${notice}` : timestamp });
-        message.parts = parts;
-        return true;
-    }
-    return false;
 }
 function assistantRole(properties) {
     return String(properties?.info?.role ?? properties?.role ?? "").trim();
@@ -205,6 +194,7 @@ export function createAssistantMessageTimestampHook(options) {
     return {
         id: "assistant-message-timestamp",
         priority: 341,
+        events: ASSISTANT_MESSAGE_TIMESTAMP_EVENTS,
         async event(type, payload) {
             if (!options.enabled) {
                 return;
@@ -215,16 +205,16 @@ export function createAssistantMessageTimestampHook(options) {
                 stampedMessageIds.clear();
                 return;
             }
-            const timestamp = formatAssistantMessageTimestamp(now());
-            if (type === "experimental.chat.messages.transform") {
-                const eventPayload = (payload ?? {});
-                prependTimestampToLatestAssistantMessage(eventPayload.output?.messages, timestamp, "");
-                return;
-            }
             if (type === "experimental.text.complete") {
                 const eventPayload = (payload ?? {});
-                if (typeof eventPayload.output?.text === "string") {
-                    eventPayload.output.text = prependTimestampToText(eventPayload.output.text, timestamp);
+                const output = eventPayload.output;
+                const text = output?.text;
+                if (output &&
+                    typeof text === "string" &&
+                    text.trim() &&
+                    !TIMESTAMP_PREFIX_PATTERN.test(text.trim())) {
+                    const timestamp = formatAssistantMessageTimestamp(now());
+                    output.text = prependTimestampToText(text, timestamp);
                 }
                 return;
             }
@@ -239,13 +229,16 @@ export function createAssistantMessageTimestampHook(options) {
                 const notice = directory && sessionId ? peekLlmDecisionFallbackNotice(directory, sessionId) : "";
                 if (type === "message.updated") {
                     const messageId = resolveMessageId(properties);
-                    if (assistantRole(properties) === "assistant" && messageId) {
-                        assistantMessageIds.add(messageId);
-                    }
-                    const result = prependTimestampToAssistantLifecyclePayload(properties, timestamp, notice);
-                    applied = result.changed;
-                    if (result.noticeApplied) {
-                        consumeLlmDecisionFallbackNotice(directory, sessionId);
+                    if (assistantRole(properties) === "assistant") {
+                        if (messageId) {
+                            assistantMessageIds.add(messageId);
+                        }
+                        const timestamp = formatAssistantMessageTimestamp(now());
+                        const result = prependTimestampToAssistantLifecyclePayload(properties, timestamp, notice);
+                        applied = result.changed;
+                        if (result.noticeApplied) {
+                            consumeLlmDecisionFallbackNotice(directory, sessionId);
+                        }
                     }
                 }
                 else if (type === "message.part.updated") {
@@ -256,6 +249,7 @@ export function createAssistantMessageTimestampHook(options) {
                         properties?.part?.type === "text" &&
                         typeof properties.part.text === "string" &&
                         !stampedPartIds.has(partId || messageId)) {
+                        const timestamp = formatAssistantMessageTimestamp(now());
                         const result = decorateAssistantText(properties.part.text, timestamp, notice);
                         if (result.changed) {
                             properties.part.text = result.text;
@@ -277,6 +271,7 @@ export function createAssistantMessageTimestampHook(options) {
                         assistantMessageIds.has(messageId) &&
                         typeof deltaText === "string" &&
                         !stampedPartIds.has(stampKey)) {
+                        const timestamp = formatAssistantMessageTimestamp(now());
                         const result = decorateAssistantText(deltaText, timestamp, notice);
                         if (result.changed && properties) {
                             properties.delta = result.text;
@@ -299,6 +294,7 @@ export function createAssistantMessageTimestampHook(options) {
             if (typeof eventPayload.output?.output !== "string") {
                 return;
             }
+            const timestamp = formatAssistantMessageTimestamp(now());
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : "";

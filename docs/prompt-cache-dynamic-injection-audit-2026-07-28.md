@@ -100,6 +100,13 @@ The direct mutation inventory behind this classification is:
   reminders to the newest tool result or create a new continuation message.
   None insert content ahead of the system prompt.
 
+> **Correction — 2026-08-04:** `assistant-message-timestamp` no longer consumes
+> the messages transform. Transform-time timestamps mislabeled stored assistant
+> replies and introduced avoidable dynamic provider input. The opt-in hook now
+> decorates only terminal/lifecycle output; the `context-injector` and
+> `codex-header-injector` fallback paths remain provider-visible. The validation
+> table below records the original 2026-07-28 slice, not this correction.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.
