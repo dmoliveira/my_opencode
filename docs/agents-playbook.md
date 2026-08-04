@@ -99,8 +99,8 @@ For this runtime, agents should:
 - expect repo-local preferences to make Codex and `cwd-artifacts` the effective local path even though the hardcoded stable defaults remain `openai_api` and `repo-artifacts`
 
 When these hints appear automatically in execution flow:
-- delegation router injects `/agent-catalog explain <subagent>` when it infers or applies routing metadata
-- fallback orchestrator injects `/agent-catalog list` + explain hint when it rewrites a failed delegation path
+- inferred routing stays in structured task metadata and does not add child-facing catalog prose
+- fallback rewrites and legacy discoverability markers can still inject `/agent-catalog list` or explain guidance
 - planning-only prompts that ask to capture backlog items, Codememory tasks, dependencies, epics, or durable notes can now route to `tasker` through the same delegation surface as the other specialists
 
 ---

@@ -119,21 +119,6 @@ function sessionId(payload: ToolBeforePayload): string {
   return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim()
 }
 
-function prependHint(original: string, hint: string): string {
-  if (!original.trim()) {
-    return hint
-  }
-  if (original.includes(hint)) {
-    return original
-  }
-  return `${hint}\n\n${original}`
-}
-
-function formatHeader(header: string, body: string, timestamp?: string): string {
-  const marker = timestamp ? `${header} ${timestamp}` : header
-  return `[${marker}] ${body}`
-}
-
 function inferSubagentType(text: string, available: Set<string>): { name: string; score: number } | null {
   const source = text.trim()
   if (!source) {
@@ -554,37 +539,15 @@ export function createAgentModelResolverHook(options: {
       }
 
       args.category = category
-      const modelHintPrompt = formatHeader(
-        "MODEL ROUTING",
-        `Preferred category=${category}; model=${profile.model}; reasoning=${profile.reasoning}; fallback_policy=${metadata?.fallback_policy ?? "openai-default-with-alt-fallback"}.`,
-      )
-      const allowedTools = normalizeToolList(metadata?.allowed_tools)
-      const toolSurface = formatHeader(
-        "TOOL SURFACE",
-        `subagent=${subagentType}; allowed=${allowedTools.join(",") || "none"}; denied=${deniedTools.join(",") || "none"}.`,
-      )
-      const routeHint =
-        routeSource !== "explicit_subagent_type"
-          ? formatHeader("DELEGATION ROUTER", `inferred subagent_type=${subagentType} from delegation intent.`)
-          : ""
-      const composedPromptHint = [modelHintPrompt, routeHint, toolSurface]
-        .filter((part) => part.length > 0)
-        .join("\n")
-      const flowHint = formatHeader("SESSION FLOW", `parent_session_id=${sid || "unknown"}; trace_id=${traceId}`)
-      const worktreeHint = formatHeader(
-        "WORKTREE CONTEXT",
-        `cwd=${directory}; execute file discovery and validation relative to this path unless prompt explicitly overrides.`,
-      )
-
       const cleanPrompt = stripDelegationPromptContext(String(args.prompt ?? ""))
-      args.prompt = prependHint(prependHint(prependHint(cleanPrompt, worktreeHint), flowHint), composedPromptHint)
+      args.prompt = cleanPrompt
       args.description = stripDelegationDescriptionContext(String(args.description ?? ""))
       annotateDelegationMetadata(eventPayload.output ?? {}, args)
 
       writeGatewayEventAudit(directory, {
         hook: "agent-model-resolver",
         stage: "state",
-        reason_code: "agent_model_routing_hint_injected",
+        reason_code: "agent_model_routing_resolved",
         session_id: sid,
         trace_id: traceId,
         subagent_type: subagentType,
@@ -592,7 +555,9 @@ export function createAgentModelResolverHook(options: {
         model: profile.model,
         reasoning: profile.reasoning,
         route_source: routeSource,
-        tool_surface_injected: "true",
+        resolver_prompt_context: "trace_only",
+        tool_surface_injected: "false",
+        tool_policy_source: "agent_spec",
       })
     },
   }

@@ -107,6 +107,20 @@ The direct mutation inventory behind this classification is:
 > `codex-header-injector` fallback paths remain provider-visible. The validation
 > table below records the original 2026-07-28 slice, not this correction.
 
+> **Delegation correction — 2026-08-04:** `agent-model-resolver` now keeps
+> resolved agent/category/trace identity in task arguments, gateway metadata,
+> and audit events instead of repeating model, tool, parent-session, worktree,
+> and inferred-router prose in the child provider prompt. The trace marker
+> remains for lifecycle/fallback compatibility, and `agent-context-shaper`
+> retains one bounded focus line. In the named fixed fixture (`explore`,
+> `/workspace/project`, `session-parent`, `trace-fixed`, and `Inspect code
+> paths`), resolver-generated provider input falls from 497 to 32 characters:
+> 465 fewer characters (93.6%). The composed fixed fixture has 208 generated
+> characters after the focus line is included. This is a direct input-size
+> reduction; it does not claim a cache-hit or provider-budget improvement.
+> Telemetry reason code `agent_model_routing_hint_injected` is replaced by
+> `agent_model_routing_resolved`, with `resolver_prompt_context=trace_only`.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.
