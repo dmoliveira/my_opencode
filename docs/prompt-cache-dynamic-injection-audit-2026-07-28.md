@@ -148,6 +148,18 @@ The direct mutation inventory behind this classification is:
 > not establish per-request or token savings, semantic equivalence, cache-hit
 > improvement, latency, cost, or usable provider-budget improvement.
 
+> **Long-turn notice correction — 2026-08-04:** The provider-visible watchdog
+> suffix now reports one compact status line while preserving elapsed-since-user
+> provenance, tool-call count, progress/final-reply meaning, custom-prefix
+> behavior, structured output channels, trigger/cooldown state, and local audit
+> telemetry. With the default ASCII prefix, the fixed time-only fixture
+> (`1.2s`, one call) falls from 161 to 98 characters/UTF-8 bytes: 63 fewer
+> (39.1%). The fixed visible-pulse fixture (`1.5s`, one call) falls from 302 to
+> 118: 184 fewer (60.9%); a `90.0s`/20-call fixture is 121 bytes. Configured
+> thresholds remain in local audit/config instead of repeated provider prose.
+> These are fixture-qualified dynamic-tail input reductions, not evidence of
+> token, cache-hit, latency, cost, or provider-budget improvement.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.
