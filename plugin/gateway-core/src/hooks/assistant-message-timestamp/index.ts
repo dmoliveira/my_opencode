@@ -20,18 +20,6 @@ interface ChatMessagePart {
   text?: string;
 }
 
-interface ChatTransformMessage {
-  info?: { role?: string };
-  parts?: ChatMessagePart[];
-}
-
-interface ChatMessagesTransformPayload {
-  output?: {
-    messages?: ChatTransformMessage[];
-  };
-  directory?: string;
-}
-
 interface TextCompletePayload {
   output?: {
     text?: string;
@@ -64,12 +52,21 @@ interface AssistantLifecyclePayload {
 }
 
 const TIMESTAMP_PREFIX_LABEL = "[";
-const TIMESTAMP_PREFIX_PATTERN = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\](?:\n|$)/;
+const TIMESTAMP_PREFIX_PATTERN =
+  /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?\](?:\n|$)/;
 const TARGET_EVENT_TYPES = new Set([
   "message.updated",
   "message.part.updated",
   "message.part.delta",
 ]);
+const ASSISTANT_MESSAGE_TIMESTAMP_EVENTS = [
+  "experimental.text.complete",
+  "message.updated",
+  "message.part.updated",
+  "message.part.delta",
+  "session.idle",
+  "session.deleted",
+] as const;
 
 export function formatAssistantMessageTimestamp(timestamp: number): string {
   const value = new Date(timestamp);
@@ -146,30 +143,6 @@ function prependTimestampToParts(
   }
   textPart.text = result.text;
   return { changed: true, noticeApplied: result.noticeApplied };
-}
-
-function prependTimestampToLatestAssistantMessage(
-  messages: ChatTransformMessage[] | undefined,
-  timestamp: string,
-  notice: string,
-): boolean {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return false;
-  }
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.info?.role !== "assistant") {
-      continue;
-    }
-    const parts = Array.isArray(message.parts) ? message.parts : [];
-    if (prependTimestampToParts(parts, timestamp, notice).changed) {
-      return true;
-    }
-    parts.unshift({ type: "text", text: notice ? `${timestamp}\n${notice}` : timestamp });
-    message.parts = parts;
-    return true;
-  }
-  return false;
 }
 
 function assistantRole(properties: AssistantEventProperties | undefined): string {
@@ -318,6 +291,7 @@ export function createAssistantMessageTimestampHook(options: {
   return {
     id: "assistant-message-timestamp",
     priority: 341,
+    events: ASSISTANT_MESSAGE_TIMESTAMP_EVENTS,
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled) {
         return;
@@ -328,16 +302,18 @@ export function createAssistantMessageTimestampHook(options: {
         stampedMessageIds.clear();
         return;
       }
-      const timestamp = formatAssistantMessageTimestamp(now());
-      if (type === "experimental.chat.messages.transform") {
-        const eventPayload = (payload ?? {}) as ChatMessagesTransformPayload;
-        prependTimestampToLatestAssistantMessage(eventPayload.output?.messages, timestamp, "");
-        return;
-      }
       if (type === "experimental.text.complete") {
         const eventPayload = (payload ?? {}) as TextCompletePayload;
-        if (typeof eventPayload.output?.text === "string") {
-          eventPayload.output.text = prependTimestampToText(eventPayload.output.text, timestamp);
+        const output = eventPayload.output;
+        const text = output?.text;
+        if (
+          output &&
+          typeof text === "string" &&
+          text.trim() &&
+          !TIMESTAMP_PREFIX_PATTERN.test(text.trim())
+        ) {
+          const timestamp = formatAssistantMessageTimestamp(now());
+          output.text = prependTimestampToText(text, timestamp);
         }
         return;
       }
@@ -353,13 +329,16 @@ export function createAssistantMessageTimestampHook(options: {
           directory && sessionId ? peekLlmDecisionFallbackNotice(directory, sessionId) : "";
         if (type === "message.updated") {
           const messageId = resolveMessageId(properties);
-          if (assistantRole(properties) === "assistant" && messageId) {
-            assistantMessageIds.add(messageId);
-          }
-          const result = prependTimestampToAssistantLifecyclePayload(properties, timestamp, notice);
-          applied = result.changed;
-          if (result.noticeApplied) {
-            consumeLlmDecisionFallbackNotice(directory, sessionId);
+          if (assistantRole(properties) === "assistant") {
+            if (messageId) {
+              assistantMessageIds.add(messageId);
+            }
+            const timestamp = formatAssistantMessageTimestamp(now());
+            const result = prependTimestampToAssistantLifecyclePayload(properties, timestamp, notice);
+            applied = result.changed;
+            if (result.noticeApplied) {
+              consumeLlmDecisionFallbackNotice(directory, sessionId);
+            }
           }
         } else if (type === "message.part.updated") {
           const messageId = resolveMessageId(properties);
@@ -371,6 +350,7 @@ export function createAssistantMessageTimestampHook(options: {
             typeof properties.part.text === "string" &&
             !stampedPartIds.has(partId || messageId)
           ) {
+            const timestamp = formatAssistantMessageTimestamp(now());
             const result = decorateAssistantText(properties.part.text, timestamp, notice);
             if (result.changed) {
               properties.part.text = result.text;
@@ -393,6 +373,7 @@ export function createAssistantMessageTimestampHook(options: {
             typeof deltaText === "string" &&
             !stampedPartIds.has(stampKey)
           ) {
+            const timestamp = formatAssistantMessageTimestamp(now());
             const result = decorateAssistantText(deltaText, timestamp, notice);
             if (result.changed && properties) {
               properties.delta = result.text;
@@ -415,6 +396,7 @@ export function createAssistantMessageTimestampHook(options: {
       if (typeof eventPayload.output?.output !== "string") {
         return;
       }
+      const timestamp = formatAssistantMessageTimestamp(now());
       const directory =
         typeof eventPayload.directory === "string" && eventPayload.directory.trim()
           ? eventPayload.directory
